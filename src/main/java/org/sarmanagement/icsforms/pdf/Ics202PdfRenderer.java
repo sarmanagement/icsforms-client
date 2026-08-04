@@ -29,28 +29,33 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     public void render(AppData data, Path outputFile) throws IOException {
         Files.createDirectories(outputFile.getParent());
         try (PDDocument document = new PDDocument()) {
-            List<String> lines = new ArrayList<>();
+            List<List<String>> blocks = new ArrayList<>();
             IncidentContext context = data.getIncidentContext();
             Ics202Form form = data.getForm202();
-            lines.add("Incident Name: " + safe(context.getIncidentName()));
-            lines.add("Operational Period: " + format(context.getOperationalPeriodStart()) + " to " + format(context.getOperationalPeriodEnd()));
-            lines.add("Prepared/Current User: " + safe(context.getCurrentUser()) + " / " + safe(context.getCurrentUserPositionTitle()));
-            lines.add("");
-            lines.add("Objectives:");
+            blocks.add(List.of(
+                    "Incident Name: " + safe(context.getIncidentName()),
+                    "Operational Period: " + format(context.getOperationalPeriodStart()) + " to " + format(context.getOperationalPeriodEnd()),
+                    "Prepared/Current User: " + safe(context.getCurrentUser()) + " / " + safe(context.getCurrentUserPositionTitle())
+            ));
+            List<String> objectivesBlock = new ArrayList<>();
+            objectivesBlock.add("Objectives:");
             int index = 1;
             for (String objective : form.getObjectives()) {
-                lines.add(index++ + ". " + safe(objective));
+                objectivesBlock.add(index++ + ". " + safe(objective));
             }
-            lines.add("");
-            lines.add("Command Emphasis: " + safe(form.getCommandEmphasis()));
-            lines.add("General Situational Awareness: " + safe(form.getSituationalAwareness()));
-            lines.add("Site Safety Plan Required: " + (form.isSiteSafetyPlanRequired() ? "Yes" : "No"));
-            lines.add("Included Forms / Attachments: " + String.join(", ", form.getIncidentActionPlanAttachments()));
-            lines.add("");
-            lines.add("Prepared By: " + safe(form.getPreparedByName()) + " / " + safe(form.getPreparedByPositionTitle()));
-            lines.add("Approved By IC: " + safe(form.getApprovedByIncidentCommanderName()) + " / " + format(form.getApprovedDateTime()));
-            lines.add("IAP Page: " + safe(form.getIapPage()));
-            writeLines(document, "ICS 202 Incident Objectives", lines);
+            blocks.add(objectivesBlock);
+            blocks.add(List.of(
+                    "Command Emphasis: " + safe(form.getCommandEmphasis()),
+                    "General Situational Awareness: " + safe(form.getSituationalAwareness()),
+                    "Site Safety Plan Required: " + (form.isSiteSafetyPlanRequired() ? "Yes" : "No"),
+                    "Included Forms / Attachments: " + String.join(", ", form.getIncidentActionPlanAttachments())
+            ));
+            blocks.add(List.of(
+                    "Prepared By: " + safe(form.getPreparedByName()) + " / " + safe(form.getPreparedByPositionTitle()),
+                    "Approved By IC: " + safe(form.getApprovedByIncidentCommanderName()) + " / " + format(form.getApprovedDateTime()),
+                    "IAP Page: " + safe(form.getIapPage())
+            ));
+            writeDocument(document, "ICS 202", "Incident Objectives", blocks);
             document.save(outputFile.toFile());
         }
     }

@@ -120,6 +120,7 @@ class LocalRepositoryTest {
         assertTrue(Files.size(pdf202) > 0);
         assertTrue(Files.exists(pdf204));
         assertTrue(Files.size(pdf204) > 0);
+        assertTrue(Files.readAllBytes(pdf202).length > 0);
     }
 
     /**

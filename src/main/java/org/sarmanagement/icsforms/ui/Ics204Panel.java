@@ -15,6 +15,7 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.util.ArrayList;
@@ -96,7 +97,10 @@ public class Ics204Panel extends JPanel {
         tablesPanel.add(resourcesPanel);
         tablesPanel.add(communicationsPanel);
 
-        add(new JScrollPane(form), BorderLayout.NORTH);
+        JScrollPane formScrollPane = new JScrollPane(form);
+        formScrollPane.setBorder(BorderFactory.createEmptyBorder());
+        formScrollPane.setPreferredSize(new Dimension(0, 285));
+        add(formScrollPane, BorderLayout.NORTH);
         add(tablesPanel, BorderLayout.CENTER);
     }
 
@@ -179,6 +183,7 @@ public class Ics204Panel extends JPanel {
         JTextField field = UiSupport.textField();
         field.setText(value == null ? "" : value);
         field.setEditable(false);
+        field.setColumns(16);
         return field;
     }
 

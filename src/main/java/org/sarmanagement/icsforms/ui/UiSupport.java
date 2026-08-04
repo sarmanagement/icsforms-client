@@ -10,6 +10,7 @@ import javax.swing.JTextField;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Dimension;
 import java.util.Date;
 
 /**
@@ -25,7 +26,9 @@ final class UiSupport {
      * @return configured panel.
      */
     static JPanel formPanel() {
-        return new JPanel(new GridBagLayout());
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setOpaque(false);
+        return panel;
     }
 
     /**
@@ -41,7 +44,7 @@ final class UiSupport {
         left.gridx = 0;
         left.gridy = row;
         left.anchor = GridBagConstraints.NORTHWEST;
-        left.insets = new Insets(4, 4, 4, 4);
+        left.insets = new Insets(3, 3, 3, 8);
         panel.add(new JLabel(label), left);
 
         GridBagConstraints right = new GridBagConstraints();
@@ -49,7 +52,7 @@ final class UiSupport {
         right.gridy = row;
         right.weightx = 1.0;
         right.fill = GridBagConstraints.HORIZONTAL;
-        right.insets = new Insets(4, 4, 4, 4);
+        right.insets = new Insets(3, 0, 3, 3);
         panel.add(component, right);
     }
 
@@ -63,6 +66,7 @@ final class UiSupport {
         JTextArea area = new JTextArea(rows, 40);
         area.setLineWrap(true);
         area.setWrapStyleWord(true);
+        area.setTabSize(4);
         return area;
     }
 
@@ -72,7 +76,7 @@ final class UiSupport {
      * @return configured text field.
      */
     static JTextField textField() {
-        return new JTextField(30);
+        return new JTextField(24);
     }
 
     /**
@@ -84,6 +88,7 @@ final class UiSupport {
         JSpinner spinner = new JSpinner(new SpinnerDateModel());
         spinner.setEditor(new JSpinner.DateEditor(spinner, "yyyy-MM-dd HH:mm"));
         spinner.setValue(new Date());
+        spinner.setPreferredSize(new Dimension(180, spinner.getPreferredSize().height));
         return spinner;
     }
 }

@@ -33,38 +33,45 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         try (PDDocument document = new PDDocument()) {
             IncidentContext context = data.getIncidentContext();
             Ics204Form form = data.getForm204();
-            List<String> lines = new ArrayList<>();
-            lines.add("Incident Name: " + safe(context.getIncidentName()));
-            lines.add("Operational Period: " + format(context.getOperationalPeriodStart()) + " to " + format(context.getOperationalPeriodEnd()));
-            lines.add("Prepared/Current User: " + safe(context.getCurrentUser()) + " / " + safe(context.getCurrentUserPositionTitle()));
-            lines.add("Context: branch=" + safe(form.getBranch()) + ", division=" + safe(form.getDivision()) + ", group=" + safe(form.getGroup()) + ", staging=" + safe(form.getStagingArea()));
-            lines.add("Operations Section Chief: " + safe(form.getOperationsSectionChiefName()) + " / " + safe(form.getOperationsSectionChiefContact()));
-            lines.add("Branch Director: " + safe(form.getBranchDirectorName()) + " / " + safe(form.getBranchDirectorContact()));
-            lines.add("Division/Group Supervisor: " + safe(form.getDivisionGroupSupervisorName()) + " / " + safe(form.getDivisionGroupSupervisorContact()));
-            lines.add("");
-            lines.add("Resources Assigned:");
+            List<List<String>> blocks = new ArrayList<>();
+            blocks.add(List.of(
+                    "Incident Name: " + safe(context.getIncidentName()),
+                    "Operational Period: " + format(context.getOperationalPeriodStart()) + " to " + format(context.getOperationalPeriodEnd()),
+                    "Prepared/Current User: " + safe(context.getCurrentUser()) + " / " + safe(context.getCurrentUserPositionTitle())
+            ));
+            blocks.add(List.of(
+                    "Context: branch=" + safe(form.getBranch()) + ", division=" + safe(form.getDivision()) + ", group=" + safe(form.getGroup()) + ", staging=" + safe(form.getStagingArea()),
+                    "Operations Section Chief: " + safe(form.getOperationsSectionChiefName()) + " / " + safe(form.getOperationsSectionChiefContact()),
+                    "Branch Director: " + safe(form.getBranchDirectorName()) + " / " + safe(form.getBranchDirectorContact()),
+                    "Division/Group Supervisor: " + safe(form.getDivisionGroupSupervisorName()) + " / " + safe(form.getDivisionGroupSupervisorContact())
+            ));
+            List<String> resourcesBlock = new ArrayList<>();
+            resourcesBlock.add("Resources Assigned:");
             for (ResourceAssignment resource : form.getResourcesAssigned()) {
-                lines.add("- [" + safe(resource.getAssignmentId()) + "] " + safe(resource.getResourceIdentifier())
+                resourcesBlock.add("- [" + safe(resource.getAssignmentId()) + "] " + safe(resource.getResourceIdentifier())
                         + ", leader=" + safe(resource.getLeader())
                         + ", persons=" + resource.getNumberOfPersons()
                         + ", contact=" + safe(resource.getContact()));
-                lines.add("  location=" + safe(resource.getReportingLocation())
+                resourcesBlock.add("  location=" + safe(resource.getReportingLocation())
                         + "; equipment=" + safe(resource.getSpecialEquipment())
                         + "; supplies=" + safe(resource.getSupplies())
                         + "; remarks=" + safe(resource.getRemarks())
                         + "; notes=" + safe(resource.getNotes()));
-                lines.add("  assignment=" + safe(resource.getAssignment() == null || resource.getAssignment().isBlank() ? form.getSharedWorkAssignment() : resource.getAssignment()));
+                resourcesBlock.add("  assignment=" + safe(resource.getAssignment() == null || resource.getAssignment().isBlank() ? form.getSharedWorkAssignment() : resource.getAssignment()));
             }
-            lines.add("");
-            lines.add("Special Instructions: " + safe(form.getSpecialInstructions()));
-            lines.add("Communications:");
+            blocks.add(resourcesBlock);
+            List<String> communicationsBlock = new ArrayList<>();
+            communicationsBlock.add("Special Instructions: " + safe(form.getSpecialInstructions()));
+            communicationsBlock.add("Communications:");
             for (CommunicationEntry entry : form.getCommunications()) {
-                lines.add("- " + safe(entry.getNameOrFunction()) + ": " + safe(entry.getPrimaryContact()));
+                communicationsBlock.add("- " + safe(entry.getNameOrFunction()) + ": " + safe(entry.getPrimaryContact()));
             }
-            lines.add("");
-            lines.add("Prepared By: " + safe(form.getPreparedByName()) + " / " + safe(form.getPreparedByPositionTitle()) + " / " + format(form.getPreparedDateTime()));
-            lines.add("IAP Page: " + safe(form.getIapPage()));
-            writeLines(document, "ICS 204 Assignment List", lines);
+            blocks.add(communicationsBlock);
+            blocks.add(List.of(
+                    "Prepared By: " + safe(form.getPreparedByName()) + " / " + safe(form.getPreparedByPositionTitle()) + " / " + format(form.getPreparedDateTime()),
+                    "IAP Page: " + safe(form.getIapPage())
+            ));
+            writeDocument(document, "ICS 204", "Assignment List", blocks);
             document.save(outputFile.toFile());
         }
     }

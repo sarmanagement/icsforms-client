@@ -56,7 +56,9 @@ public class Ics202Panel extends JPanel {
         UiSupport.addRow(form, 7, "Approved by incident commander", approvedByNameField);
         UiSupport.addRow(form, 8, "Approval date/time", approvedDateTimeField);
         UiSupport.addRow(form, 9, "IAP page", iapPageField);
-        add(new JScrollPane(form), BorderLayout.CENTER);
+        JScrollPane scrollPane = new JScrollPane(form);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        add(scrollPane, BorderLayout.CENTER);
     }
 
     /** Loads values from the model. */
@@ -92,13 +94,17 @@ public class Ics202Panel extends JPanel {
     private JPanel includedFormsPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setOpaque(false);
         JPanel checks = new JPanel(new GridLayout(0, 2, 4, 4));
+        checks.setOpaque(false);
         checks.add(includeIcs202);
         checks.add(includeIcs204);
         checks.add(includeMapPacket);
         panel.add(checks);
         panel.add(Box.createVerticalStrut(4));
-        panel.add(new JScrollPane(additionalFormsArea));
+        JScrollPane scrollPane = new JScrollPane(additionalFormsArea);
+        scrollPane.setPreferredSize(new java.awt.Dimension(100, 60));
+        panel.add(scrollPane);
         return panel;
     }
 

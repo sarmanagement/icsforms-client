@@ -36,7 +36,9 @@ public class IncidentContextPanel extends JPanel {
         UiSupport.addRow(form, 2, "Operational period end", endField);
         UiSupport.addRow(form, 3, "Preparer / current user", currentUserField);
         UiSupport.addRow(form, 4, "Preparer position/title", currentUserPositionField);
-        add(new JScrollPane(form), BorderLayout.CENTER);
+        JScrollPane scrollPane = new JScrollPane(form);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        add(scrollPane, BorderLayout.CENTER);
     }
 
     /**

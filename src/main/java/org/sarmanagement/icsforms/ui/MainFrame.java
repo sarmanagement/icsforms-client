@@ -51,15 +51,15 @@ public class MainFrame extends JFrame {
         this.ics204Panel = new Ics204Panel(controller);
         this.sarTaskPanel = new SarTaskPanel(controller);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setPreferredSize(new Dimension(1200, 850));
+        setPreferredSize(new Dimension(1120, 820));
         setJMenuBar(createMenuBar(defaultDirectory));
         setLayout(new BorderLayout(8, 8));
 
         JPanel content = new JPanel(new BorderLayout(8, 8));
         content.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        content.add(incidentContextPanel, BorderLayout.NORTH);
 
         JTabbedPane tabs = new JTabbedPane();
+        tabs.addTab("Shared", incidentContextPanel);
         tabs.addTab("ICS 202", ics202Panel);
         tabs.addTab("ICS 204", ics204Panel);
         tabs.addTab("SAR Tasks", sarTaskPanel);
