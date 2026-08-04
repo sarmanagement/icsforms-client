@@ -1,6 +1,11 @@
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
@@ -8,6 +13,7 @@ import org.sarmanagement.icsforms.model.IncidentContext;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,7 +22,16 @@ import java.util.List;
  * Structured PDF renderer for the Incident Objectives (ICS 202) form.
  */
 public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRenderer {
-    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    private static final float MARGIN = 36f;
+    private static final float HEADER_HEIGHT = 22f;
+    private static final float BODY_FONT_SIZE = 10f;
+    private static final float HEADING_FONT_SIZE = 10f;
+    private static final float LINE_HEIGHT = 12f;
+    private static final float CELL_PADDING = 4f;
+    private static final float PAGE_BOTTOM_MARGIN = 36f;
+    private static final float PAGE_WIDTH = PDRectangle.LETTER.getWidth() - (MARGIN * 2);
 
     /** {@inheritDoc} */
     @Override
@@ -29,54 +44,290 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     public void render(AppData data, Path outputFile) throws IOException {
         Files.createDirectories(outputFile.getParent());
         try (PDDocument document = new PDDocument()) {
-            List<List<String>> blocks = new ArrayList<>();
-            IncidentContext context = data.getIncidentContext();
-            Ics202Form form = data.getForm202();
-            blocks.add(List.of(
-                    "Incident Name: " + safe(context.getIncidentName()),
-                    "Operational Period: " + format(context.getOperationalPeriodStart()) + " to " + format(context.getOperationalPeriodEnd()),
-                    "Prepared/Current User: " + safe(context.getCurrentUser()) + " / " + safe(context.getCurrentUserPositionTitle())
-            ));
-            List<String> objectivesBlock = new ArrayList<>();
-            objectivesBlock.add("Objectives:");
-            int index = 1;
-            for (String objective : form.getObjectives()) {
-                objectivesBlock.add(index++ + ". " + safe(objective));
-            }
-            blocks.add(objectivesBlock);
-            blocks.add(List.of(
-                    "Command Emphasis: " + safe(form.getCommandEmphasis()),
-                    "General Situational Awareness: " + safe(form.getSituationalAwareness()),
-                    "Site Safety Plan Required: " + (form.isSiteSafetyPlanRequired() ? "Yes" : "No"),
-                    "Included Forms / Attachments: " + String.join(", ", form.getIncidentActionPlanAttachments())
-            ));
-            blocks.add(List.of(
-                    "Prepared By: " + safe(form.getPreparedByName()) + " / " + safe(form.getPreparedByPositionTitle()),
-                    "Approved By IC: " + safe(form.getApprovedByIncidentCommanderName()) + " / " + format(form.getApprovedDateTime()),
-                    "IAP Page: " + safe(form.getIapPage())
-            ));
-            writeDocument(document, "ICS 202", "Incident Objectives", blocks);
+            renderDocument(document, data);
             document.save(outputFile.toFile());
         }
     }
 
-    /**
-     * Formats a date/time for PDF output.
-     *
-     * @param value date/time value.
-     * @return formatted text.
-     */
-    private String format(java.time.LocalDateTime value) {
-        return value == null ? "" : FORMATTER.format(value);
+    private void renderDocument(PDDocument document, AppData data) throws IOException {
+        IncidentContext context = data.getIncidentContext();
+        Ics202Form form = data.getForm202();
+        List<OverflowSection> overflowSections = new ArrayList<>();
+
+        PDPage page = new PDPage(PDRectangle.LETTER);
+        document.addPage(page);
+        try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+            PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+
+            float pageTop = page.getMediaBox().getHeight() - MARGIN;
+            drawCenteredHeader(stream, bold, pageTop, "ICS 202", "INCIDENT OBJECTIVES");
+            float gridTop = pageTop - HEADER_HEIGHT;
+            float gridBottom = PAGE_BOTTOM_MARGIN;
+            float gridHeight = gridTop - gridBottom;
+
+            float row1 = 60f;
+            float row4 = 54f;
+            float row5 = 34f;
+            float row6 = 48f;
+            float row7 = 34f;
+            float row8 = 56f;
+            float row9 = 24f;
+            float row3 = 80f;
+            float row2 = gridHeight - (row1 + row3 + row4 + row4 + row5 + row6 + row7 + row8 + row9);
+            if (row2 < 110f) {
+                row2 = 110f;
+                row3 = Math.max(48f, gridHeight - (row1 + row2 + row4 + row4 + row5 + row6 + row7 + row8 + row9));
+            }
+
+            float y = gridTop;
+            float halfWidth = PAGE_WIDTH / 2f;
+
+            drawCell(stream, MARGIN, y - row1, halfWidth, row1);
+            drawCell(stream, MARGIN + halfWidth, y - row1, halfWidth, row1);
+            overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row1, halfWidth, row1,
+                    "1 INCIDENT NAME", List.of(safe(context.getIncidentName())), "Incident Name"));
+            drawOperationalPeriodSection(stream, bold, regular, MARGIN + halfWidth, y - row1, halfWidth, row1, context);
+            y -= row1;
+
+            drawCell(stream, MARGIN, y - row2, PAGE_WIDTH, row2);
+            List<String> objectiveLines = numberedLines(form.getObjectives());
+            if (objectiveLines.isEmpty()) {
+                objectiveLines = List.of("");
+            }
+            overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row2, PAGE_WIDTH, row2,
+                    "3 OBJECTIVES", objectiveLines, "Objectives"));
+            y -= row2;
+
+            drawCell(stream, MARGIN, y - row3, PAGE_WIDTH, row3);
+            overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row3, PAGE_WIDTH, row3,
+                    "4 OPERATIONAL PERIOD COMMAND EMPHASIS", wrap(form.getCommandEmphasis(), 92), "Operational Period Command Emphasis"));
+            y -= row3;
+
+            drawCell(stream, MARGIN, y - row4, PAGE_WIDTH, row4);
+            overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row4, PAGE_WIDTH, row4,
+                    "GENERAL SITUATIONAL AWARENESS", wrap(form.getSituationalAwareness(), 92), "General Situational Awareness"));
+            y -= row4;
+
+            drawCell(stream, MARGIN, y - row5, PAGE_WIDTH, row5);
+            overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row5, PAGE_WIDTH, row5,
+                    "5 SITE SAFETY PLAN REQUIRED", List.of(form.isSiteSafetyPlanRequired() ? "Yes" : "No"), "Site Safety Plan Required"));
+            y -= row5;
+
+            drawCell(stream, MARGIN, y - row6, PAGE_WIDTH, row6);
+            List<String> formsLines = includedFormsLines(form.getIncidentActionPlanAttachments());
+            overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row6, PAGE_WIDTH, row6,
+                    "6 INCIDENT ACTION PLAN (INCLUDED FORMS)", formsLines, "Incident Action Plan Included Forms"));
+            y -= row6;
+
+            drawCell(stream, MARGIN, y - row7, PAGE_WIDTH, row7);
+            overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row7, PAGE_WIDTH, row7,
+                    "7 PREPARED BY", List.of(joinPreparedBy(context.getCurrentUser(), context.getCurrentUserPositionTitle())), "Prepared By"));
+            y -= row7;
+
+            drawCell(stream, MARGIN, y - row8, PAGE_WIDTH, row8);
+            drawApprovalSection(stream, bold, regular, MARGIN, y - row8, PAGE_WIDTH, row8, form);
+            y -= row8;
+
+            drawCell(stream, MARGIN, y - row9, PAGE_WIDTH / 2f, row9);
+            drawCell(stream, MARGIN + (PAGE_WIDTH / 2f), y - row9, PAGE_WIDTH / 2f, row9);
+            drawSmallFooterCell(stream, bold, regular, MARGIN, y - row9, PAGE_WIDTH / 2f, row9, "FORM NUMBER", "ICS 202");
+            drawSmallFooterCell(stream, bold, regular, MARGIN + (PAGE_WIDTH / 2f), y - row9, PAGE_WIDTH / 2f, row9, "IAP PAGE", safe(form.getIapPage()));
+        }
+
+        for (OverflowSection overflow : overflowSections) {
+            renderOverflowPage(document, overflow);
+        }
     }
 
-    /**
-     * Converts null values to empty text for PDF output.
-     *
-     * @param value value to normalize.
-     * @return safe string.
-     */
+    private void renderOverflowPage(PDDocument document, OverflowSection overflow) throws IOException {
+        PDPage page = new PDPage(PDRectangle.LETTER);
+        document.addPage(page);
+        try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+            PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+            float pageTop = page.getMediaBox().getHeight() - MARGIN;
+            drawCenteredHeader(stream, bold, pageTop, "ICS 202", overflow.heading.toUpperCase());
+            float boxTop = pageTop - HEADER_HEIGHT;
+            float boxHeight = boxTop - PAGE_BOTTOM_MARGIN;
+            drawCell(stream, MARGIN, PAGE_BOTTOM_MARGIN, PAGE_WIDTH, boxHeight);
+            drawTextBlock(stream, bold, regular, MARGIN, PAGE_BOTTOM_MARGIN, PAGE_WIDTH, boxHeight, overflow.heading, overflow.lines);
+        }
+    }
+
+    private void drawCenteredHeader(PDPageContentStream stream, PDType1Font bold, float y, String formNumber, String title)
+            throws IOException {
+        String header = (formNumber + " " + title).toUpperCase();
+        float headerWidth = bold.getStringWidth(header) / 1000f * 14f;
+        stream.beginText();
+        stream.setFont(bold, 14f);
+        stream.newLineAtOffset((PDRectangle.LETTER.getWidth() - headerWidth) / 2f, y);
+        stream.showText(header);
+        stream.endText();
+    }
+
+    private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                              float x, float y, float width, float height, IncidentContext context) throws IOException {
+        drawHeading(stream, bold, x, y, "2 OPERATIONAL PERIOD");
+        float labelY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
+        drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY, "Date From", formatDate(context.getOperationalPeriodStart()));
+        drawInlinePair(stream, bold, regular, x + (width / 2f), labelY, "Date To", formatDate(context.getOperationalPeriodEnd()));
+        drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY - 18f, "Time From", formatTime(context.getOperationalPeriodStart()));
+        drawInlinePair(stream, bold, regular, x + (width / 2f), labelY - 18f, "Time To", formatTime(context.getOperationalPeriodEnd()));
+    }
+
+    private void drawApprovalSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                     float x, float y, float width, float height, Ics202Form form) throws IOException {
+        drawHeading(stream, bold, x, y, "8 APPROVED BY INCIDENT COMMANDER");
+        float textY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
+        drawInlinePair(stream, bold, regular, x + CELL_PADDING, textY, "Name", safe(form.getApprovedByIncidentCommanderName()));
+        drawInlinePair(stream, bold, regular, x + CELL_PADDING, textY - 18f, "Signature", "");
+        drawInlinePair(stream, bold, regular, x + width - 150f, y + CELL_PADDING + 18f, "Date/Time", formatDateTime(form.getApprovedDateTime()));
+    }
+
+    private void drawSmallFooterCell(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                     float x, float y, float width, float height, String heading, String value) throws IOException {
+        drawHeading(stream, bold, x, y, heading);
+        writeLines(stream, regular, x + CELL_PADDING, y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f, List.of(value));
+    }
+
+    private List<OverflowSection> drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                              float x, float y, float width, float height, String heading, List<String> lines,
+                                              String overflowHeading) throws IOException {
+        drawHeading(stream, bold, x, y, heading);
+        float contentTop = y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f;
+        int capacity = contentCapacity(height);
+        List<String> normalized = lines == null || lines.isEmpty() ? List.of("") : lines;
+        List<String> visible = new ArrayList<>(normalized.subList(0, Math.min(capacity, normalized.size())));
+        List<OverflowSection> overflowSections = new ArrayList<>();
+        if (normalized.size() > capacity && !visible.isEmpty()) {
+            visible.set(visible.size() - 1, "See next page");
+            overflowSections.add(new OverflowSection(overflowHeading, normalized.subList(capacity - 1, normalized.size())));
+        }
+        writeLines(stream, regular, x + CELL_PADDING, contentTop, visible);
+        return overflowSections;
+    }
+
+    private void drawTextBlock(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                               float x, float y, float width, float height, String heading, List<String> lines) throws IOException {
+        drawHeading(stream, bold, x, y, heading.toUpperCase());
+        float contentTop = y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f;
+        writeLines(stream, regular, x + CELL_PADDING, contentTop, lines);
+    }
+
+    private void drawHeading(PDPageContentStream stream, PDType1Font bold, float x, float y, String heading) throws IOException {
+        stream.beginText();
+        stream.setFont(bold, HEADING_FONT_SIZE);
+        stream.newLineAtOffset(x + CELL_PADDING, y + CELL_PADDING + 2f);
+        stream.showText(heading);
+        stream.endText();
+    }
+
+    private void writeLines(PDPageContentStream stream, PDType1Font regular, float x, float startY, List<String> lines) throws IOException {
+        stream.beginText();
+        stream.setFont(regular, BODY_FONT_SIZE);
+        stream.newLineAtOffset(x, startY);
+        for (String line : lines) {
+            stream.showText(safe(line));
+            stream.newLineAtOffset(0, -LINE_HEIGHT);
+        }
+        stream.endText();
+    }
+
+    private void drawInlinePair(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                float x, float y, String label, String value) throws IOException {
+        stream.beginText();
+        stream.setFont(bold, BODY_FONT_SIZE);
+        stream.newLineAtOffset(x, y);
+        stream.showText(label + ":");
+        stream.endText();
+
+        stream.beginText();
+        stream.setFont(regular, BODY_FONT_SIZE);
+        stream.newLineAtOffset(x + 52f, y);
+        stream.showText(safe(value));
+        stream.endText();
+    }
+
+    private void drawCell(PDPageContentStream stream, float x, float y, float width, float height) throws IOException {
+        stream.addRect(x, y, width, height);
+        stream.stroke();
+    }
+
+    private int contentCapacity(float height) {
+        return Math.max(1, (int) ((height - (CELL_PADDING * 2) - HEADING_FONT_SIZE - 10f) / LINE_HEIGHT));
+    }
+
+    private List<String> numberedLines(List<String> values) {
+        List<String> lines = new ArrayList<>();
+        int index = 1;
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                lines.addAll(prefixWrapped(index++ + ". ", wrap(value, 90)));
+            }
+        }
+        return lines;
+    }
+
+    private List<String> prefixWrapped(String prefix, List<String> wrapped) {
+        List<String> lines = new ArrayList<>();
+        if (wrapped.isEmpty()) {
+            lines.add(prefix);
+            return lines;
+        }
+        lines.add(prefix + wrapped.get(0));
+        for (int i = 1; i < wrapped.size(); i++) {
+            lines.add("   " + wrapped.get(i));
+        }
+        return lines;
+    }
+
+    private List<String> includedFormsLines(List<String> attachments) {
+        List<String> supported = List.of("ICS 202", "ICS 204", "Map packet");
+        List<String> lines = new ArrayList<>();
+        lines.add(checkLine("ICS 202", attachments));
+        lines.add(checkLine("ICS 204", attachments));
+        lines.add(checkLine("Map packet", attachments));
+        List<String> additional = attachments == null ? List.of() : attachments.stream()
+                .filter(item -> item != null && supported.stream().noneMatch(s -> s.equalsIgnoreCase(item)))
+                .toList();
+        if (!additional.isEmpty()) {
+            lines.add("Additional: " + String.join(", ", additional));
+        }
+        return lines;
+    }
+
+    private String checkLine(String label, List<String> attachments) {
+        boolean included = attachments != null && attachments.stream().anyMatch(item -> label.equalsIgnoreCase(item));
+        return (included ? "[X] " : "[ ] ") + label;
+    }
+
+    private String joinPreparedBy(String name, String title) {
+        if (safe(name).isBlank()) {
+            return safe(title);
+        }
+        if (safe(title).isBlank()) {
+            return safe(name);
+        }
+        return safe(name) + " / " + safe(title);
+    }
+
+    private String formatDate(LocalDateTime value) {
+        return value == null ? "" : DATE_FORMATTER.format(value);
+    }
+
+    private String formatTime(LocalDateTime value) {
+        return value == null ? "" : TIME_FORMATTER.format(value);
+    }
+
+    private String formatDateTime(LocalDateTime value) {
+        return value == null ? "" : formatDate(value) + " " + formatTime(value);
+    }
+
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private record OverflowSection(String heading, List<String> lines) {
     }
 }

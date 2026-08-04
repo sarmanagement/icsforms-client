@@ -14,6 +14,9 @@ import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -100,6 +103,8 @@ class LocalRepositoryTest {
         assertEquals("Search trail segment", task.getAssignment());
         assertEquals("Division A", task.getDivision());
         assertEquals("Tac 1", task.getCommunications().get(0).getPrimaryContact());
+        assertEquals("Team 1 Lead", task.getCommunications().get(0).getName());
+        assertEquals("Medical", task.getCommunications().get(0).getFunction());
     }
 
     /**
@@ -121,6 +126,14 @@ class LocalRepositoryTest {
         assertTrue(Files.exists(pdf204));
         assertTrue(Files.size(pdf204) > 0);
         assertTrue(Files.readAllBytes(pdf202).length > 0);
+
+        try (PDDocument pdf = Loader.loadPDF(pdf202.toFile())) {
+            String text = new PDFTextStripper().getText(pdf);
+            assertTrue(text.contains("ICS 202 INCIDENT OBJECTIVES"));
+            assertTrue(text.contains("1 INCIDENT NAME"));
+            assertTrue(text.contains("2 OPERATIONAL PERIOD"));
+            assertTrue(text.contains("8 APPROVED BY INCIDENT COMMANDER"));
+        }
     }
 
     /**
@@ -155,7 +168,8 @@ class LocalRepositoryTest {
         resource.setAssignment("Search trail segment");
 
         CommunicationEntry communicationEntry = new CommunicationEntry();
-        communicationEntry.setNameOrFunction("Team 1 Lead");
+        communicationEntry.setName("Team 1 Lead");
+        communicationEntry.setFunction("Medical");
         communicationEntry.setPrimaryContact("Tac 1");
 
         Ics204Form form204 = new Ics204Form();

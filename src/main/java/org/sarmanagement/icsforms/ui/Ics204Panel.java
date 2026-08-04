@@ -276,7 +276,7 @@ public class Ics204Panel extends JPanel {
      * Table model for communications rows.
      */
     private static class CommunicationsTableModel extends AbstractTableModel {
-        private final String[] columns = {"Name / Function", "Primary Contact"};
+        private final String[] columns = {"Name", "Function", "Primary Contact (Phone/Radio)"};
         private java.util.List<CommunicationEntry> rows = new java.util.ArrayList<>();
 
         /** @param rows replacement rows. */
@@ -291,10 +291,22 @@ public class Ics204Panel extends JPanel {
         @Override public int getColumnCount() { return columns.length; }
         @Override public String getColumnName(int column) { return columns[column]; }
         @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return true; }
-        @Override public Object getValueAt(int rowIndex, int columnIndex) { return columnIndex == 0 ? rows.get(rowIndex).getNameOrFunction() : rows.get(rowIndex).getPrimaryContact(); }
+        @Override public Object getValueAt(int rowIndex, int columnIndex) {
+            return switch (columnIndex) {
+                case 0 -> rows.get(rowIndex).getName();
+                case 1 -> rows.get(rowIndex).getFunction();
+                default -> rows.get(rowIndex).getPrimaryContact();
+            };
+        }
         @Override public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
             String value = aValue == null ? "" : aValue.toString();
-            if (columnIndex == 0) { rows.get(rowIndex).setNameOrFunction(value); } else { rows.get(rowIndex).setPrimaryContact(value); }
+            if (columnIndex == 0) {
+                rows.get(rowIndex).setName(value);
+            } else if (columnIndex == 1) {
+                rows.get(rowIndex).setFunction(value);
+            } else {
+                rows.get(rowIndex).setPrimaryContact(value);
+            }
             fireTableCellUpdated(rowIndex, columnIndex);
         }
     }

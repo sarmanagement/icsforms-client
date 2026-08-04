@@ -128,8 +128,8 @@ public class IncidentValidator {
         }
         for (int i = 0; i < form.getCommunications().size(); i++) {
             CommunicationEntry entry = form.getCommunications().get(i);
-            if (blank(entry.getNameOrFunction()) || blank(entry.getPrimaryContact())) {
-                messages.add(new ValidationMessage("ics204.communications[" + i + "]", "Communication rows need both name/function and primary contact."));
+            if ((blank(entry.getName()) && blank(entry.getFunction())) || blank(entry.getPrimaryContact())) {
+                messages.add(new ValidationMessage("ics204.communications[" + i + "]", "Communication rows need a name or function and a phone/radio contact."));
             }
         }
         if (form.getPreparedDateTime() == null) {

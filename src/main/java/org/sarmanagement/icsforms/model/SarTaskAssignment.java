@@ -52,7 +52,8 @@ public class SarTaskAssignment {
             List<CommunicationEntry> copied = new ArrayList<>();
             for (CommunicationEntry entry : form204.getCommunications()) {
                 CommunicationEntry clone = new CommunicationEntry();
-                clone.setNameOrFunction(entry.getNameOrFunction());
+                clone.setName(entry.getName());
+                clone.setFunction(entry.getFunction());
                 clone.setPrimaryContact(entry.getPrimaryContact());
                 copied.add(clone);
             }

@@ -64,7 +64,9 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             communicationsBlock.add("Special Instructions: " + safe(form.getSpecialInstructions()));
             communicationsBlock.add("Communications:");
             for (CommunicationEntry entry : form.getCommunications()) {
-                communicationsBlock.add("- " + safe(entry.getNameOrFunction()) + ": " + safe(entry.getPrimaryContact()));
+                communicationsBlock.add("- " + safe(entry.getName())
+                        + (safe(entry.getFunction()).isBlank() ? "" : " (" + safe(entry.getFunction()) + ")")
+                        + ": " + safe(entry.getPrimaryContact()));
             }
             blocks.add(communicationsBlock);
             blocks.add(List.of(
