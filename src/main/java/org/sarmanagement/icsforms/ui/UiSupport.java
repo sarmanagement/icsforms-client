@@ -51,6 +51,7 @@ final class UiSupport {
         right.gridx = 1;
         right.gridy = row;
         right.weightx = 1.0;
+        right.anchor = GridBagConstraints.NORTHWEST;
         right.fill = GridBagConstraints.HORIZONTAL;
         right.insets = new Insets(3, 0, 3, 3);
         panel.add(component, right);
