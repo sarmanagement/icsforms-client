@@ -110,6 +110,13 @@ public class MainFrame extends JFrame {
             refreshStatus();
         }));
 
+        JMenuItem exitItem = new JMenuItem("Exit");
+        exitItem.addActionListener(event -> {
+            pushToModel();
+            controller.save();
+            dispose();
+        });
+
         JMenuItem export202Item = new JMenuItem("Export ICS 202 PDF…");
         export202Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 202"));
 
@@ -134,6 +141,8 @@ public class MainFrame extends JFrame {
         fileMenu.add(openItem);
         fileMenu.add(saveItem);
         fileMenu.add(saveAsItem);
+        fileMenu.addSeparator();
+        fileMenu.add(exitItem);
         exportMenu.add(export202Item);
         exportMenu.add(export204Item);
         exportMenu.add(exportAllItem);
@@ -206,7 +215,13 @@ public class MainFrame extends JFrame {
         if (!messages.isEmpty()) {
             StringBuilder builder = new StringBuilder("Please resolve the following before export:\n\n");
             for (ValidationMessage message : messages) {
-                builder.append("- ").append(message.message()).append('\n');
+                if (message.field().equals("incidentName") || message.field().equals("operationalPeriodStart")
+                        || message.field().equals("operationalPeriodEnd") || message.field().equals("operationalPeriod")) {
+                    builder.append("- ").append(message.message()).append('\n');
+                }
+            }
+            if (builder.toString().equals("Please resolve the following before export:\n\n")) {
+                return true;
             }
             JOptionPane.showMessageDialog(this, builder.toString(), "Validation required", JOptionPane.WARNING_MESSAGE);
             return false;

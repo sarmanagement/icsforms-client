@@ -5,22 +5,21 @@ import org.sarmanagement.icsforms.model.IncidentContext;
 import javax.swing.BorderFactory;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import java.awt.BorderLayout;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.util.Date;
 
 /**
  * Global editor for incident metadata shared by ICS 202, ICS 204, and SAR scaffolding.
  */
 public class IncidentContextPanel extends JPanel {
-    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-
     private final AppController controller;
     private final JTextField incidentNameField = UiSupport.textField();
-    private final JTextField startField = UiSupport.textField();
-    private final JTextField endField = UiSupport.textField();
+    private final JSpinner startField = UiSupport.dateTimeSpinner();
+    private final JSpinner endField = UiSupport.dateTimeSpinner();
     private final JTextField currentUserField = UiSupport.textField();
+    private final JTextField currentUserPositionField = UiSupport.textField();
 
     /**
      * Creates the shared incident context editor.
@@ -33,9 +32,10 @@ public class IncidentContextPanel extends JPanel {
         JPanel form = UiSupport.formPanel();
         form.setBorder(BorderFactory.createTitledBorder("Shared Incident Context"));
         UiSupport.addRow(form, 0, "Incident name", incidentNameField);
-        UiSupport.addRow(form, 1, "Operational period start (yyyy-MM-dd HH:mm)", startField);
-        UiSupport.addRow(form, 2, "Operational period end (yyyy-MM-dd HH:mm)", endField);
+        UiSupport.addRow(form, 1, "Operational period start", startField);
+        UiSupport.addRow(form, 2, "Operational period end", endField);
         UiSupport.addRow(form, 3, "Preparer / current user", currentUserField);
+        UiSupport.addRow(form, 4, "Preparer position/title", currentUserPositionField);
         add(new JScrollPane(form), BorderLayout.CENTER);
     }
 
@@ -45,9 +45,10 @@ public class IncidentContextPanel extends JPanel {
     public void refreshFromModel() {
         IncidentContext context = controller.getData().getIncidentContext();
         incidentNameField.setText(nullSafe(context.getIncidentName()));
-        startField.setText(format(context.getOperationalPeriodStart()));
-        endField.setText(format(context.getOperationalPeriodEnd()));
+        startField.setValue(toDate(context.getOperationalPeriodStart()));
+        endField.setValue(toDate(context.getOperationalPeriodEnd()));
         currentUserField.setText(nullSafe(context.getCurrentUser()));
+        currentUserPositionField.setText(nullSafe(context.getCurrentUserPositionTitle()));
     }
 
     /**
@@ -56,36 +57,14 @@ public class IncidentContextPanel extends JPanel {
     public void pushToModel() {
         IncidentContext context = controller.getData().getIncidentContext();
         context.setIncidentName(incidentNameField.getText().trim());
-        context.setOperationalPeriodStart(parse(startField.getText()));
-        context.setOperationalPeriodEnd(parse(endField.getText()));
+        context.setOperationalPeriodStart(AppController.toLocalDateTime((Date) startField.getValue()));
+        context.setOperationalPeriodEnd(AppController.toLocalDateTime((Date) endField.getValue()));
         context.setCurrentUser(currentUserField.getText().trim());
+        context.setCurrentUserPositionTitle(currentUserPositionField.getText().trim());
     }
 
-    /**
-     * Formats date/time values for display.
-     *
-     * @param value date/time value.
-     * @return formatted text.
-     */
-    private String format(LocalDateTime value) {
-        return value == null ? "" : FORMATTER.format(value);
-    }
-
-    /**
-     * Parses date/time input entered by the user.
-     *
-     * @param value raw field value.
-     * @return parsed date/time or {@code null} if blank/invalid.
-     */
-    private LocalDateTime parse(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalDateTime.parse(value.trim(), FORMATTER);
-        } catch (Exception exception) {
-            return null;
-        }
+    private Date toDate(java.time.LocalDateTime value) {
+        return AppController.toDate(value);
     }
 
     /**

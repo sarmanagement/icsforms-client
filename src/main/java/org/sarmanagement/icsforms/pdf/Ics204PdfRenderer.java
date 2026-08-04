@@ -36,6 +36,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             List<String> lines = new ArrayList<>();
             lines.add("Incident Name: " + safe(context.getIncidentName()));
             lines.add("Operational Period: " + format(context.getOperationalPeriodStart()) + " to " + format(context.getOperationalPeriodEnd()));
+            lines.add("Prepared/Current User: " + safe(context.getCurrentUser()) + " / " + safe(context.getCurrentUserPositionTitle()));
             lines.add("Context: branch=" + safe(form.getBranch()) + ", division=" + safe(form.getDivision()) + ", group=" + safe(form.getGroup()) + ", staging=" + safe(form.getStagingArea()));
             lines.add("Operations Section Chief: " + safe(form.getOperationsSectionChiefName()) + " / " + safe(form.getOperationsSectionChiefContact()));
             lines.add("Branch Director: " + safe(form.getBranchDirectorName()) + " / " + safe(form.getBranchDirectorContact()));
@@ -61,8 +62,8 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                 lines.add("- " + safe(entry.getNameOrFunction()) + ": " + safe(entry.getPrimaryContact()));
             }
             lines.add("");
-            lines.add("Prepared By: " + safe(form.getPreparedByName()) + " / " + safe(form.getPreparedByPositionTitle()) + " / " + safe(form.getPreparedBySignature()) + " / " + format(form.getPreparedDateTime()));
-            lines.add("Form Number: " + safe(form.getFormNumber()) + "    IAP Page: " + safe(form.getIapPage()));
+            lines.add("Prepared By: " + safe(form.getPreparedByName()) + " / " + safe(form.getPreparedByPositionTitle()) + " / " + format(form.getPreparedDateTime()));
+            lines.add("IAP Page: " + safe(form.getIapPage()));
             writeLines(document, "ICS 204 Assignment List", lines);
             document.save(outputFile.toFile());
         }

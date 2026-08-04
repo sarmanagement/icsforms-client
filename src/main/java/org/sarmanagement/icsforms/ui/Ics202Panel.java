@@ -4,13 +4,14 @@ import org.sarmanagement.icsforms.model.Ics202Form;
 
 import javax.swing.BorderFactory;
 import javax.swing.JCheckBox;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import java.awt.BorderLayout;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.awt.GridLayout;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,21 +19,19 @@ import java.util.List;
  * First-cut editor for ICS 202 Incident Objectives content.
  */
 public class Ics202Panel extends JPanel {
-    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-
     private final AppController controller;
     private final JTextArea objectivesArea = UiSupport.textArea(5);
     private final JTextArea commandEmphasisArea = UiSupport.textArea(3);
     private final JTextArea situationalAwarenessArea = UiSupport.textArea(3);
     private final JCheckBox siteSafetyPlanRequired = new JCheckBox("Site safety plan required");
-    private final JTextArea attachmentsArea = UiSupport.textArea(3);
+    private final JCheckBox includeIcs202 = new JCheckBox("ICS 202");
+    private final JCheckBox includeIcs204 = new JCheckBox("ICS 204");
+    private final JCheckBox includeMapPacket = new JCheckBox("Map packet");
+    private final JTextArea additionalFormsArea = UiSupport.textArea(2);
     private final JTextField preparedByNameField = UiSupport.textField();
     private final JTextField preparedByPositionField = UiSupport.textField();
-    private final JTextField preparedBySignatureField = UiSupport.textField();
     private final JTextField approvedByNameField = UiSupport.textField();
-    private final JTextField approvedBySignatureField = UiSupport.textField();
-    private final JTextField approvedDateTimeField = UiSupport.textField();
-    private final JTextField formNumberField = UiSupport.textField();
+    private final javax.swing.JSpinner approvedDateTimeField = UiSupport.dateTimeSpinner();
     private final JTextField iapPageField = UiSupport.textField();
 
     /**
@@ -49,15 +48,14 @@ public class Ics202Panel extends JPanel {
         UiSupport.addRow(form, 1, "Command emphasis", new JScrollPane(commandEmphasisArea));
         UiSupport.addRow(form, 2, "General situational awareness", new JScrollPane(situationalAwarenessArea));
         UiSupport.addRow(form, 3, "Safety plan", siteSafetyPlanRequired);
-        UiSupport.addRow(form, 4, "Included forms / attachments (one per line)", new JScrollPane(attachmentsArea));
+        UiSupport.addRow(form, 4, "Included forms / attachments", includedFormsPanel());
         UiSupport.addRow(form, 5, "Prepared by name", preparedByNameField);
         UiSupport.addRow(form, 6, "Prepared by position/title", preparedByPositionField);
-        UiSupport.addRow(form, 7, "Prepared by signature", preparedBySignatureField);
-        UiSupport.addRow(form, 8, "Approved by incident commander", approvedByNameField);
-        UiSupport.addRow(form, 9, "Incident commander signature", approvedBySignatureField);
-        UiSupport.addRow(form, 10, "Approval date/time (yyyy-MM-dd HH:mm)", approvedDateTimeField);
-        UiSupport.addRow(form, 11, "Form number", formNumberField);
-        UiSupport.addRow(form, 12, "IAP page", iapPageField);
+        preparedByNameField.setEditable(false);
+        preparedByPositionField.setEditable(false);
+        UiSupport.addRow(form, 7, "Approved by incident commander", approvedByNameField);
+        UiSupport.addRow(form, 8, "Approval date/time", approvedDateTimeField);
+        UiSupport.addRow(form, 9, "IAP page", iapPageField);
         add(new JScrollPane(form), BorderLayout.CENTER);
     }
 
@@ -68,14 +66,11 @@ public class Ics202Panel extends JPanel {
         commandEmphasisArea.setText(nullSafe(form.getCommandEmphasis()));
         situationalAwarenessArea.setText(nullSafe(form.getSituationalAwareness()));
         siteSafetyPlanRequired.setSelected(form.isSiteSafetyPlanRequired());
-        attachmentsArea.setText(String.join("\n", form.getIncidentActionPlanAttachments()));
+        setIncludedForms(form.getIncidentActionPlanAttachments());
         preparedByNameField.setText(nullSafe(form.getPreparedByName()));
         preparedByPositionField.setText(nullSafe(form.getPreparedByPositionTitle()));
-        preparedBySignatureField.setText(nullSafe(form.getPreparedBySignature()));
         approvedByNameField.setText(nullSafe(form.getApprovedByIncidentCommanderName()));
-        approvedBySignatureField.setText(nullSafe(form.getApprovedBySignature()));
-        approvedDateTimeField.setText(format(form.getApprovedDateTime()));
-        formNumberField.setText(nullSafe(form.getFormNumber()));
+        approvedDateTimeField.setValue(AppController.toDate(form.getApprovedDateTime()));
         iapPageField.setText(nullSafe(form.getIapPage()));
     }
 
@@ -86,15 +81,59 @@ public class Ics202Panel extends JPanel {
         form.setCommandEmphasis(commandEmphasisArea.getText().trim());
         form.setSituationalAwareness(situationalAwarenessArea.getText().trim());
         form.setSiteSafetyPlanRequired(siteSafetyPlanRequired.isSelected());
-        form.setIncidentActionPlanAttachments(lines(attachmentsArea.getText()));
+        form.setIncidentActionPlanAttachments(getIncludedForms());
+        form.setApprovedByIncidentCommanderName(approvedByNameField.getText().trim());
         form.setPreparedByName(preparedByNameField.getText().trim());
         form.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
-        form.setPreparedBySignature(preparedBySignatureField.getText().trim());
-        form.setApprovedByIncidentCommanderName(approvedByNameField.getText().trim());
-        form.setApprovedBySignature(approvedBySignatureField.getText().trim());
-        form.setApprovedDateTime(parse(approvedDateTimeField.getText()));
-        form.setFormNumber(formNumberField.getText().trim());
+        form.setApprovedDateTime(AppController.toLocalDateTime((java.util.Date) approvedDateTimeField.getValue()));
         form.setIapPage(iapPageField.getText().trim());
+    }
+
+    private JPanel includedFormsPanel() {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        JPanel checks = new JPanel(new GridLayout(0, 2, 4, 4));
+        checks.add(includeIcs202);
+        checks.add(includeIcs204);
+        checks.add(includeMapPacket);
+        panel.add(checks);
+        panel.add(Box.createVerticalStrut(4));
+        panel.add(new JScrollPane(additionalFormsArea));
+        return panel;
+    }
+
+    private void setIncludedForms(List<String> items) {
+        includeIcs202.setSelected(false);
+        includeIcs204.setSelected(false);
+        includeMapPacket.setSelected(false);
+        List<String> additional = new ArrayList<>();
+        for (String item : items) {
+            if ("ICS 202".equalsIgnoreCase(item)) {
+                includeIcs202.setSelected(true);
+            } else if ("ICS 204".equalsIgnoreCase(item)) {
+                includeIcs204.setSelected(true);
+            } else if ("Map packet".equalsIgnoreCase(item)) {
+                includeMapPacket.setSelected(true);
+            } else {
+                additional.add(item);
+            }
+        }
+        additionalFormsArea.setText(String.join("\n", additional));
+    }
+
+    private List<String> getIncludedForms() {
+        List<String> items = new ArrayList<>();
+        if (includeIcs202.isSelected()) {
+            items.add("ICS 202");
+        }
+        if (includeIcs204.isSelected()) {
+            items.add("ICS 204");
+        }
+        if (includeMapPacket.isSelected()) {
+            items.add("Map packet");
+        }
+        items.addAll(lines(additionalFormsArea.getText()));
+        return items;
     }
 
     /**
@@ -111,33 +150,6 @@ public class Ics202Panel extends JPanel {
             }
         }
         return items;
-    }
-
-    /**
-     * Parses date/time field input.
-     *
-     * @param value text value.
-     * @return parsed date/time or {@code null}.
-     */
-    private LocalDateTime parse(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalDateTime.parse(value.trim(), FORMATTER);
-        } catch (Exception exception) {
-            return null;
-        }
-    }
-
-    /**
-     * Formats date/time for display.
-     *
-     * @param value date/time.
-     * @return formatted text.
-     */
-    private String format(LocalDateTime value) {
-        return value == null ? "" : FORMATTER.format(value);
     }
 
     /**

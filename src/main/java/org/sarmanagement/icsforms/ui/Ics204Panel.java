@@ -6,24 +6,24 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
+import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.awt.GridLayout;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * First-cut editor for ICS 204 assignment list data, resources, and communications.
  */
 public class Ics204Panel extends JPanel {
-    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-
     private final AppController controller;
     private final JTextField branchField = UiSupport.textField();
     private final JTextField divisionField = UiSupport.textField();
@@ -39,10 +39,9 @@ public class Ics204Panel extends JPanel {
     private final JTextArea specialInstructionsArea = UiSupport.textArea(3);
     private final JTextField preparedByNameField = UiSupport.textField();
     private final JTextField preparedByPositionField = UiSupport.textField();
-    private final JTextField preparedBySignatureField = UiSupport.textField();
-    private final JTextField preparedDateTimeField = UiSupport.textField();
-    private final JTextField formNumberField = UiSupport.textField();
+    private final JSpinner preparedDateTimeField = UiSupport.dateTimeSpinner();
     private final JTextField iapPageField = UiSupport.textField();
+    private final JPanel managementContactsPanel = new JPanel(new GridLayout(0, 4, 4, 4));
     private final ResourceTableModel resourceTableModel = new ResourceTableModel();
     private final CommunicationsTableModel communicationsTableModel = new CommunicationsTableModel();
 
@@ -61,23 +60,21 @@ public class Ics204Panel extends JPanel {
         UiSupport.addRow(form, 1, "Division", divisionField);
         UiSupport.addRow(form, 2, "Group", groupField);
         UiSupport.addRow(form, 3, "Staging area", stagingAreaField);
-        UiSupport.addRow(form, 4, "Operations section chief", operationsChiefNameField);
-        UiSupport.addRow(form, 5, "Operations chief contact", operationsChiefContactField);
-        UiSupport.addRow(form, 6, "Branch director", branchDirectorNameField);
-        UiSupport.addRow(form, 7, "Branch director contact", branchDirectorContactField);
-        UiSupport.addRow(form, 8, "Division/group supervisor", supervisorNameField);
-        UiSupport.addRow(form, 9, "Supervisor contact", supervisorContactField);
-        UiSupport.addRow(form, 10, "Shared work assignment", new JScrollPane(sharedAssignmentArea));
-        UiSupport.addRow(form, 11, "Special instructions", new JScrollPane(specialInstructionsArea));
-        UiSupport.addRow(form, 12, "Prepared by name", preparedByNameField);
-        UiSupport.addRow(form, 13, "Prepared by position/title", preparedByPositionField);
-        UiSupport.addRow(form, 14, "Prepared by signature", preparedBySignatureField);
-        UiSupport.addRow(form, 15, "Prepared date/time (yyyy-MM-dd HH:mm)", preparedDateTimeField);
-        UiSupport.addRow(form, 16, "Form number", formNumberField);
-        UiSupport.addRow(form, 17, "IAP page", iapPageField);
+        UiSupport.addRow(form, 4, "Management contacts", managementContactsPanel);
+        UiSupport.addRow(form, 5, "Shared work assignment", new JScrollPane(sharedAssignmentArea));
+        UiSupport.addRow(form, 6, "Special instructions", new JScrollPane(specialInstructionsArea));
+        UiSupport.addRow(form, 7, "Prepared by name", preparedByNameField);
+        UiSupport.addRow(form, 8, "Prepared by position/title", preparedByPositionField);
+        UiSupport.addRow(form, 9, "Prepared date/time", preparedDateTimeField);
+        UiSupport.addRow(form, 10, "IAP page", iapPageField);
+        preparedByNameField.setEditable(false);
+        preparedByPositionField.setEditable(false);
+        rebuildManagementContacts();
 
         JTable resourceTable = new JTable(resourceTableModel);
         JTable communicationsTable = new JTable(communicationsTableModel);
+        resourceTable.setFillsViewportHeight(true);
+        communicationsTable.setFillsViewportHeight(true);
 
         JPanel resourcesPanel = new JPanel(new BorderLayout());
         resourcesPanel.setBorder(BorderFactory.createTitledBorder("Resources Assigned"));
@@ -95,11 +92,12 @@ public class Ics204Panel extends JPanel {
                 () -> communicationsTableModel.removeRow(communicationsTable.getSelectedRow())
         ), BorderLayout.SOUTH);
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, resourcesPanel, communicationsPanel);
-        splitPane.setResizeWeight(0.65);
+        JPanel tablesPanel = new JPanel(new GridLayout(2, 1, 8, 8));
+        tablesPanel.add(resourcesPanel);
+        tablesPanel.add(communicationsPanel);
 
         add(new JScrollPane(form), BorderLayout.NORTH);
-        add(splitPane, BorderLayout.CENTER);
+        add(tablesPanel, BorderLayout.CENTER);
     }
 
     /** Loads values from the model. */
@@ -119,10 +117,9 @@ public class Ics204Panel extends JPanel {
         specialInstructionsArea.setText(nullSafe(form.getSpecialInstructions()));
         preparedByNameField.setText(nullSafe(form.getPreparedByName()));
         preparedByPositionField.setText(nullSafe(form.getPreparedByPositionTitle()));
-        preparedBySignatureField.setText(nullSafe(form.getPreparedBySignature()));
-        preparedDateTimeField.setText(format(form.getPreparedDateTime()));
-        formNumberField.setText(nullSafe(form.getFormNumber()));
+        preparedDateTimeField.setValue(AppController.toDate(form.getPreparedDateTime()));
         iapPageField.setText(nullSafe(form.getIapPage()));
+        rebuildManagementContacts();
         resourceTableModel.setRows(form.getResourcesAssigned());
         communicationsTableModel.setRows(form.getCommunications());
     }
@@ -144,12 +141,45 @@ public class Ics204Panel extends JPanel {
         form.setSpecialInstructions(specialInstructionsArea.getText().trim());
         form.setPreparedByName(preparedByNameField.getText().trim());
         form.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
-        form.setPreparedBySignature(preparedBySignatureField.getText().trim());
-        form.setPreparedDateTime(parse(preparedDateTimeField.getText()));
-        form.setFormNumber(formNumberField.getText().trim());
+        form.setPreparedDateTime(AppController.toLocalDateTime((java.util.Date) preparedDateTimeField.getValue()));
         form.setIapPage(iapPageField.getText().trim());
         form.setResourcesAssigned(resourceTableModel.getRows());
         form.setCommunications(communicationsTableModel.getRows());
+        rebuildManagementContacts();
+    }
+
+    private void rebuildManagementContacts() {
+        managementContactsPanel.removeAll();
+        for (String[] row : visibleManagementRows()) {
+            managementContactsPanel.add(new JLabel(row[0]));
+            managementContactsPanel.add(textFieldWithValue(row[1]));
+            managementContactsPanel.add(new JLabel(row[2]));
+            managementContactsPanel.add(textFieldWithValue(row[3]));
+        }
+        managementContactsPanel.revalidate();
+        managementContactsPanel.repaint();
+    }
+
+    private List<String[]> visibleManagementRows() {
+        List<String[]> rows = new ArrayList<>();
+        rows.add(new String[]{"Operations section chief", operationsChiefNameField.getText(), "Contact", operationsChiefContactField.getText()});
+        boolean hasBranch = !branchField.getText().trim().isEmpty();
+        boolean hasDivision = !divisionField.getText().trim().isEmpty();
+        boolean hasGroup = !groupField.getText().trim().isEmpty();
+        if (hasBranch) {
+            rows.add(new String[]{"Branch director", branchDirectorNameField.getText(), "Contact", branchDirectorContactField.getText()});
+        }
+        if (hasDivision || hasGroup) {
+            rows.add(new String[]{hasGroup ? "Group supervisor" : "Division supervisor", supervisorNameField.getText(), "Contact", supervisorContactField.getText()});
+        }
+        return rows;
+    }
+
+    private JTextField textFieldWithValue(String value) {
+        JTextField field = UiSupport.textField();
+        field.setText(value == null ? "" : value);
+        field.setEditable(false);
+        return field;
     }
 
     /**
@@ -168,33 +198,6 @@ public class Ics204Panel extends JPanel {
         panel.add(add);
         panel.add(remove);
         return panel;
-    }
-
-    /**
-     * Parses user-entered date/time.
-     *
-     * @param value text value.
-     * @return parsed date/time or {@code null}.
-     */
-    private LocalDateTime parse(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalDateTime.parse(value.trim(), FORMATTER);
-        } catch (Exception exception) {
-            return null;
-        }
-    }
-
-    /**
-     * Formats a date/time for display.
-     *
-     * @param value date/time.
-     * @return display text.
-     */
-    private String format(LocalDateTime value) {
-        return value == null ? "" : FORMATTER.format(value);
     }
 
     /**

@@ -34,7 +34,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             Ics202Form form = data.getForm202();
             lines.add("Incident Name: " + safe(context.getIncidentName()));
             lines.add("Operational Period: " + format(context.getOperationalPeriodStart()) + " to " + format(context.getOperationalPeriodEnd()));
-            lines.add("Prepared/Current User: " + safe(context.getCurrentUser()));
+            lines.add("Prepared/Current User: " + safe(context.getCurrentUser()) + " / " + safe(context.getCurrentUserPositionTitle()));
             lines.add("");
             lines.add("Objectives:");
             int index = 1;
@@ -47,9 +47,9 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             lines.add("Site Safety Plan Required: " + (form.isSiteSafetyPlanRequired() ? "Yes" : "No"));
             lines.add("Included Forms / Attachments: " + String.join(", ", form.getIncidentActionPlanAttachments()));
             lines.add("");
-            lines.add("Prepared By: " + safe(form.getPreparedByName()) + " / " + safe(form.getPreparedByPositionTitle()) + " / " + safe(form.getPreparedBySignature()));
-            lines.add("Approved By IC: " + safe(form.getApprovedByIncidentCommanderName()) + " / " + safe(form.getApprovedBySignature()) + " / " + format(form.getApprovedDateTime()));
-            lines.add("Form Number: " + safe(form.getFormNumber()) + "    IAP Page: " + safe(form.getIapPage()));
+            lines.add("Prepared By: " + safe(form.getPreparedByName()) + " / " + safe(form.getPreparedByPositionTitle()));
+            lines.add("Approved By IC: " + safe(form.getApprovedByIncidentCommanderName()) + " / " + format(form.getApprovedDateTime()));
+            lines.add("IAP Page: " + safe(form.getIapPage()));
             writeLines(document, "ICS 202 Incident Objectives", lines);
             document.save(outputFile.toFile());
         }

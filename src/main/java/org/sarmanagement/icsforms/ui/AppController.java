@@ -13,8 +13,10 @@ import org.sarmanagement.icsforms.validation.ValidationMessage;
 import javax.swing.Timer;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.ZoneId;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -150,6 +152,26 @@ public class AppController {
     }
 
     /**
+     * Converts a date to local date/time in the system zone.
+     *
+     * @param value source date.
+     * @return converted local date/time.
+     */
+    public static LocalDateTime toLocalDateTime(Date value) {
+        return value == null ? null : LocalDateTime.ofInstant(value.toInstant(), ZoneId.systemDefault());
+    }
+
+    /**
+     * Converts a local date/time to a date in the system zone.
+     *
+     * @param value source local date/time.
+     * @return converted date.
+     */
+    public static Date toDate(LocalDateTime value) {
+        return value == null ? new Date() : Date.from(value.atZone(ZoneId.systemDefault()).toInstant());
+    }
+
+    /**
      * Returns whether the document has unsaved edits.
      *
      * @return {@code true} when unsaved edits exist.
@@ -164,6 +186,7 @@ public class AppController {
     public void syncSarTasks() {
         IncidentContext context = data.getIncidentContext();
         Ics204Form form = data.getForm204();
+        syncSharedPreparer(context, data.getForm202(), form);
         List<SarTaskAssignment> synced = new ArrayList<>();
         for (ResourceAssignment resource : form.getResourcesAssigned()) {
             synced.add(SarTaskAssignment.fromResourceAssignment(resource, context, form));
@@ -192,6 +215,7 @@ public class AppController {
         if (data.getSchemaVersion() == 0) {
             data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
         }
+        syncSharedPreparer(data.getIncidentContext(), data.getForm202(), data.getForm204());
     }
 
     /**
@@ -205,5 +229,17 @@ public class AppController {
         context.setOperationalPeriodStart(LocalDateTime.now().withSecond(0).withNano(0));
         context.setOperationalPeriodEnd(context.getOperationalPeriodStart().plusHours(12));
         return document;
+    }
+
+    private void syncSharedPreparer(IncidentContext context, org.sarmanagement.icsforms.model.Ics202Form form202, Ics204Form form204) {
+        if (context == null) {
+            return;
+        }
+        String name = context.getCurrentUser() == null ? "" : context.getCurrentUser();
+        String title = context.getCurrentUserPositionTitle() == null ? "" : context.getCurrentUserPositionTitle();
+        form202.setPreparedByName(name);
+        form202.setPreparedByPositionTitle(title);
+        form204.setPreparedByName(name);
+        form204.setPreparedByPositionTitle(title);
     }
 }

@@ -10,6 +10,7 @@ public class IncidentContext {
     private LocalDateTime operationalPeriodStart;
     private LocalDateTime operationalPeriodEnd;
     private String currentUser = "";
+    private String currentUserPositionTitle = "";
 
     /**
      * Creates an empty incident context.
@@ -24,12 +25,15 @@ public class IncidentContext {
      * @param operationalPeriodStart operational period start date/time.
      * @param operationalPeriodEnd operational period end date/time.
      * @param currentUser preparer or current user identity.
+     * @param currentUserPositionTitle preparer position/title.
      */
-    public IncidentContext(String incidentName, LocalDateTime operationalPeriodStart, LocalDateTime operationalPeriodEnd, String currentUser) {
+    public IncidentContext(String incidentName, LocalDateTime operationalPeriodStart, LocalDateTime operationalPeriodEnd, String currentUser,
+                           String currentUserPositionTitle) {
         this.incidentName = incidentName;
         this.operationalPeriodStart = operationalPeriodStart;
         this.operationalPeriodEnd = operationalPeriodEnd;
         this.currentUser = currentUser;
+        this.currentUserPositionTitle = currentUserPositionTitle;
     }
 
     /**
@@ -102,5 +106,23 @@ public class IncidentContext {
      */
     public void setCurrentUser(String currentUser) {
         this.currentUser = currentUser;
+    }
+
+    /**
+     * Returns the current user or preparer position/title.
+     *
+     * @return current user position/title.
+     */
+    public String getCurrentUserPositionTitle() {
+        return currentUserPositionTitle;
+    }
+
+    /**
+     * Sets the current user or preparer position/title.
+     *
+     * @param currentUserPositionTitle current user position/title.
+     */
+    public void setCurrentUserPositionTitle(String currentUserPositionTitle) {
+        this.currentUserPositionTitle = currentUserPositionTitle;
     }
 }

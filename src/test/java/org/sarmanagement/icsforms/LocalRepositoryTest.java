@@ -128,7 +128,7 @@ class LocalRepositoryTest {
      * @return sample incident document.
      */
     private AppData sampleData() {
-        IncidentContext context = new IncidentContext("Test Incident", LocalDateTime.parse("2026-01-01T00:00:00"), LocalDateTime.parse("2026-01-01T12:00:00"), "Planner");
+        IncidentContext context = new IncidentContext("Test Incident", LocalDateTime.parse("2026-01-01T00:00:00"), LocalDateTime.parse("2026-01-01T12:00:00"), "Planner", "Planning Section Chief");
 
         Ics202Form form202 = new Ics202Form();
         form202.setObjectives(List.of("Protect life", "Stabilize scene"));
@@ -136,11 +136,7 @@ class LocalRepositoryTest {
         form202.setSituationalAwareness("Wind shift expected.");
         form202.setSiteSafetyPlanRequired(true);
         form202.setIncidentActionPlanAttachments(List.of("ICS 203", "Map packet"));
-        form202.setPreparedByName("Planner");
-        form202.setPreparedByPositionTitle("Planning Section Chief");
-        form202.setPreparedBySignature("Planner Sig");
         form202.setApprovedByIncidentCommanderName("IC Name");
-        form202.setApprovedBySignature("IC Sig");
         form202.setApprovedDateTime(LocalDateTime.parse("2026-01-01T01:00:00"));
         form202.setIapPage("1");
 
@@ -171,9 +167,8 @@ class LocalRepositoryTest {
         form204.setCommunications(List.of(communicationEntry));
         form204.setSharedWorkAssignment("Shared assignment");
         form204.setSpecialInstructions("Maintain radio discipline");
-        form204.setPreparedByName("Ops Planner");
-        form204.setPreparedByPositionTitle("Operations");
-        form204.setPreparedBySignature("Ops Sig");
+        form204.setPreparedByName("Planner");
+        form204.setPreparedByPositionTitle("Planning Section Chief");
         form204.setPreparedDateTime(LocalDateTime.parse("2026-01-01T02:00:00"));
         form204.setIapPage("2");
 

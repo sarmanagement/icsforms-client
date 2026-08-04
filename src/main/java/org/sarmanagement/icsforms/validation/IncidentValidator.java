@@ -67,9 +67,6 @@ public class IncidentValidator {
                 && context.getOperationalPeriodStart().isAfter(context.getOperationalPeriodEnd())) {
             messages.add(new ValidationMessage("operationalPeriod", "Operational period start must be before or equal to the end."));
         }
-        if (blank(context.getCurrentUser())) {
-            messages.add(new ValidationMessage("currentUser", "Preparer identity is required."));
-        }
     }
 
     /**
@@ -86,20 +83,8 @@ public class IncidentValidator {
         if (form.getObjectives().stream().noneMatch(item -> !blank(item))) {
             messages.add(new ValidationMessage("ics202.objectives", "At least one incident objective is required."));
         }
-        if (blank(form.getPreparedByName())) {
-            messages.add(new ValidationMessage("ics202.preparedByName", "ICS 202 preparer name is required."));
-        }
-        if (blank(form.getPreparedByPositionTitle())) {
-            messages.add(new ValidationMessage("ics202.preparedByPositionTitle", "ICS 202 preparer position/title is required."));
-        }
-        if (blank(form.getPreparedBySignature())) {
-            messages.add(new ValidationMessage("ics202.preparedBySignature", "ICS 202 preparer signature is required."));
-        }
         if (blank(form.getApprovedByIncidentCommanderName())) {
             messages.add(new ValidationMessage("ics202.approvedByIncidentCommanderName", "Incident commander approval name is required."));
-        }
-        if (blank(form.getApprovedBySignature())) {
-            messages.add(new ValidationMessage("ics202.approvedBySignature", "Incident commander signature is required."));
         }
         if (form.getApprovedDateTime() == null) {
             messages.add(new ValidationMessage("ics202.approvedDateTime", "Incident commander approval date/time is required."));
@@ -146,15 +131,6 @@ public class IncidentValidator {
             if (blank(entry.getNameOrFunction()) || blank(entry.getPrimaryContact())) {
                 messages.add(new ValidationMessage("ics204.communications[" + i + "]", "Communication rows need both name/function and primary contact."));
             }
-        }
-        if (blank(form.getPreparedByName())) {
-            messages.add(new ValidationMessage("ics204.preparedByName", "ICS 204 preparer name is required."));
-        }
-        if (blank(form.getPreparedByPositionTitle())) {
-            messages.add(new ValidationMessage("ics204.preparedByPositionTitle", "ICS 204 preparer position/title is required."));
-        }
-        if (blank(form.getPreparedBySignature())) {
-            messages.add(new ValidationMessage("ics204.preparedBySignature", "ICS 204 preparer signature is required."));
         }
         if (form.getPreparedDateTime() == null) {
             messages.add(new ValidationMessage("ics204.preparedDateTime", "ICS 204 preparer date/time is required."));

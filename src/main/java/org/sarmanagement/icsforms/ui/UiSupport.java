@@ -1,13 +1,16 @@
 package org.sarmanagement.icsforms.ui;
 
 import javax.swing.JComponent;
+import javax.swing.JSpinner;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.SpinnerDateModel;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.util.Date;
 
 /**
  * Shared Swing layout helpers for compact form editing panels.
@@ -70,5 +73,17 @@ final class UiSupport {
      */
     static JTextField textField() {
         return new JTextField(30);
+    }
+
+    /**
+     * Creates a standard date/time spinner.
+     *
+     * @return configured date/time spinner.
+     */
+    static JSpinner dateTimeSpinner() {
+        JSpinner spinner = new JSpinner(new SpinnerDateModel());
+        spinner.setEditor(new JSpinner.DateEditor(spinner, "yyyy-MM-dd HH:mm"));
+        spinner.setValue(new Date());
+        return spinner;
     }
 }
