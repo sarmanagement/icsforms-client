@@ -25,7 +25,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final float MARGIN = 36f;
-    private static final float HEADER_HEIGHT = 22f;
+    private static final float HEADER_HEIGHT = 14f;
     private static final float BODY_FONT_SIZE = 10f;
     private static final float HEADING_FONT_SIZE = 10f;
     private static final float LINE_HEIGHT = 12f;
@@ -69,7 +69,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             float row1 = 60f;
             float row4 = 54f;
             float row5 = 34f;
-            float row6 = 48f;
+            float row6 = 40f;
             float row7 = 34f;
             float row8 = 56f;
             float row9 = 24f;
@@ -86,7 +86,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             drawCell(stream, MARGIN, y - row1, halfWidth, row1);
             drawCell(stream, MARGIN + halfWidth, y - row1, halfWidth, row1);
             overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row1, halfWidth, row1,
-                    "1 INCIDENT NAME", List.of(safe(context.getIncidentName())), "Incident Name"));
+                    "1. Incident Name", List.of(safe(context.getIncidentName())), "1. Incident Name"));
             drawOperationalPeriodSection(stream, bold, regular, MARGIN + halfWidth, y - row1, halfWidth, row1, context);
             y -= row1;
 
@@ -96,33 +96,33 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                 objectiveLines = List.of("");
             }
             overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row2, PAGE_WIDTH, row2,
-                    "3 OBJECTIVES", objectiveLines, "Objectives"));
+                    "3. Objectives", objectiveLines, "3. Objectives"));
             y -= row2;
 
             drawCell(stream, MARGIN, y - row3, PAGE_WIDTH, row3);
             overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row3, PAGE_WIDTH, row3,
-                    "4 OPERATIONAL PERIOD COMMAND EMPHASIS", wrap(form.getCommandEmphasis(), 92), "Operational Period Command Emphasis"));
+                    "4. Operational Period Command Emphasis", wrap(form.getCommandEmphasis(), 92), "4. Operational Period Command Emphasis"));
             y -= row3;
 
             drawCell(stream, MARGIN, y - row4, PAGE_WIDTH, row4);
             overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row4, PAGE_WIDTH, row4,
-                    "GENERAL SITUATIONAL AWARENESS", wrap(form.getSituationalAwareness(), 92), "General Situational Awareness"));
+                    "4. General Situational Awareness", wrap(form.getSituationalAwareness(), 92), "4. General Situational Awareness"));
             y -= row4;
 
             drawCell(stream, MARGIN, y - row5, PAGE_WIDTH, row5);
             overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row5, PAGE_WIDTH, row5,
-                    "5 SITE SAFETY PLAN REQUIRED", List.of(form.isSiteSafetyPlanRequired() ? "Yes" : "No"), "Site Safety Plan Required"));
+                    "5. Site Safety Plan Required", List.of(form.isSiteSafetyPlanRequired() ? "Yes" : "No"), "5. Site Safety Plan Required"));
             y -= row5;
 
             drawCell(stream, MARGIN, y - row6, PAGE_WIDTH, row6);
             List<String> formsLines = includedFormsLines(form.getIncidentActionPlanAttachments());
             overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row6, PAGE_WIDTH, row6,
-                    "6 INCIDENT ACTION PLAN (INCLUDED FORMS)", formsLines, "Incident Action Plan Included Forms"));
+                    "6. Incident Action Plan (Included Forms)", formsLines, null));
             y -= row6;
 
             drawCell(stream, MARGIN, y - row7, PAGE_WIDTH, row7);
             overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row7, PAGE_WIDTH, row7,
-                    "7 PREPARED BY", List.of(joinPreparedBy(context.getCurrentUser(), context.getCurrentUserPositionTitle())), "Prepared By"));
+                    "7. Prepared By", List.of(joinPreparedBy(context.getCurrentUser(), context.getCurrentUserPositionTitle())), "7. Prepared By"));
             y -= row7;
 
             drawCell(stream, MARGIN, y - row8, PAGE_WIDTH, row8);
@@ -130,9 +130,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             y -= row8;
 
             drawCell(stream, MARGIN, y - row9, PAGE_WIDTH / 2f, row9);
-            drawCell(stream, MARGIN + (PAGE_WIDTH / 2f), y - row9, PAGE_WIDTH / 2f, row9);
-            drawSmallFooterCell(stream, bold, regular, MARGIN, y - row9, PAGE_WIDTH / 2f, row9, "FORM NUMBER", "ICS 202");
-            drawSmallFooterCell(stream, bold, regular, MARGIN + (PAGE_WIDTH / 2f), y - row9, PAGE_WIDTH / 2f, row9, "IAP PAGE", safe(form.getIapPage()));
+            drawFooterSection(stream, bold, regular, MARGIN, y - row9, PAGE_WIDTH / 2f, row9, form);
         }
 
         for (OverflowSection overflow : overflowSections) {
@@ -147,7 +145,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
             float pageTop = page.getMediaBox().getHeight() - MARGIN;
-            drawCenteredHeader(stream, bold, pageTop, "ICS 202", overflow.heading.toUpperCase());
+            drawCenteredHeader(stream, bold, pageTop, "ICS 202", overflow.heading);
             float boxTop = pageTop - HEADER_HEIGHT;
             float boxHeight = boxTop - PAGE_BOTTOM_MARGIN;
             drawCell(stream, MARGIN, PAGE_BOTTOM_MARGIN, PAGE_WIDTH, boxHeight);
@@ -157,7 +155,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawCenteredHeader(PDPageContentStream stream, PDType1Font bold, float y, String formNumber, String title)
             throws IOException {
-        String header = (formNumber + " " + title).toUpperCase();
+        String header = formNumber + " " + title;
         float headerWidth = bold.getStringWidth(header) / 1000f * 14f;
         stream.beginText();
         stream.setFont(bold, 14f);
@@ -168,7 +166,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                               float x, float y, float width, float height, IncidentContext context) throws IOException {
-        drawHeading(stream, bold, x, y, "2 OPERATIONAL PERIOD");
+        drawHeading(stream, bold, x, y, "2. Operational Period");
         float labelY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY, "Date From", formatDate(context.getOperationalPeriodStart()));
         drawInlinePair(stream, bold, regular, x + (width / 2f), labelY, "Date To", formatDate(context.getOperationalPeriodEnd()));
@@ -178,31 +176,45 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawApprovalSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                      float x, float y, float width, float height, Ics202Form form) throws IOException {
-        drawHeading(stream, bold, x, y, "8 APPROVED BY INCIDENT COMMANDER");
+        drawHeading(stream, bold, x, y, "8. Approved By Incident Commander");
         float textY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
+        float leftWidth = width * 0.45f;
+        float rightX = x + leftWidth + 18f;
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, textY, "Name", safe(form.getApprovedByIncidentCommanderName()));
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, textY - 18f, "Signature", "");
-        drawInlinePair(stream, bold, regular, x + width - 150f, y + CELL_PADDING + 18f, "Date/Time", formatDateTime(form.getApprovedDateTime()));
+        drawInlinePair(stream, bold, regular, rightX, textY, "Date/Time", formatDateTime(form.getApprovedDateTime()));
+        drawInlinePair(stream, bold, regular, rightX, textY - 18f, "Signature", "");
     }
 
-    private void drawSmallFooterCell(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
-                                     float x, float y, float width, float height, String heading, String value) throws IOException {
-        drawHeading(stream, bold, x, y, heading);
-        writeLines(stream, regular, x + CELL_PADDING, y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f, List.of(value));
+    private void drawFooterSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                   float x, float y, float width, float height, Ics202Form form) throws IOException {
+        float textY = y + height - CELL_PADDING - 12f;
+        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, textY, "ICS 202", "");
+        writeInlineHeadingValue(stream, bold, regular, x + (width / 2f), textY, "IAP Page", safe(form.getIapPage()));
     }
 
     private List<OverflowSection> drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                               float x, float y, float width, float height, String heading, List<String> lines,
                                               String overflowHeading) throws IOException {
-        drawHeading(stream, bold, x, y, heading);
-        float contentTop = y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f;
-        int capacity = contentCapacity(height);
+        float contentTop = writeHeadingWithInlineContent(stream, bold, regular, x, y, width, height, heading, lines);
+        int capacity = contentCapacity(height, contentTop - y);
         List<String> normalized = lines == null || lines.isEmpty() ? List.of("") : lines;
-        List<String> visible = new ArrayList<>(normalized.subList(0, Math.min(capacity, normalized.size())));
         List<OverflowSection> overflowSections = new ArrayList<>();
-        if (normalized.size() > capacity && !visible.isEmpty()) {
+        if (capacity >= normalized.size()) {
+            if (usesInlineHeadingContent(heading, normalized)) {
+                if (normalized.size() > 1) {
+                    writeLines(stream, regular, x + CELL_PADDING, contentTop, normalized.subList(1, normalized.size()));
+                }
+            } else {
+                writeLines(stream, regular, x + CELL_PADDING, contentTop, normalized);
+            }
+            return overflowSections;
+        }
+        int startIndex = usesInlineHeadingContent(heading, normalized) ? 1 : 0;
+        int visibleCapacity = Math.max(1, capacity - startIndex);
+        List<String> visible = new ArrayList<>(normalized.subList(startIndex, Math.min(startIndex + visibleCapacity, normalized.size())));
+        if (overflowHeading != null && (normalized.size() - startIndex) > visibleCapacity && !visible.isEmpty()) {
             visible.set(visible.size() - 1, "See next page");
-            overflowSections.add(new OverflowSection(overflowHeading, normalized.subList(capacity - 1, normalized.size())));
+            overflowSections.add(new OverflowSection(overflowHeading, normalized.subList(startIndex + visibleCapacity - 1, normalized.size())));
         }
         writeLines(stream, regular, x + CELL_PADDING, contentTop, visible);
         return overflowSections;
@@ -210,7 +222,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawTextBlock(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                float x, float y, float width, float height, String heading, List<String> lines) throws IOException {
-        drawHeading(stream, bold, x, y, heading.toUpperCase());
+        drawHeading(stream, bold, x, y, heading);
         float contentTop = y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f;
         writeLines(stream, regular, x + CELL_PADDING, contentTop, lines);
     }
@@ -221,6 +233,35 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         stream.newLineAtOffset(x + CELL_PADDING, y + CELL_PADDING + 2f);
         stream.showText(heading);
         stream.endText();
+    }
+
+    private float writeHeadingWithInlineContent(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                                float x, float y, float width, float height, String heading, List<String> lines) throws IOException {
+        List<String> normalized = lines == null || lines.isEmpty() ? List.of("") : lines;
+        drawHeading(stream, bold, x, y, heading);
+        float headingWidth = bold.getStringWidth(heading) / 1000f * HEADING_FONT_SIZE;
+        float inlineX = x + CELL_PADDING + headingWidth + 8f;
+        float headingBaseline = y + CELL_PADDING + 2f;
+        if (usesInlineHeadingContent(heading, normalized)) {
+            stream.beginText();
+            stream.setFont(regular, BODY_FONT_SIZE);
+            stream.newLineAtOffset(inlineX, headingBaseline);
+            stream.showText(safe(normalized.get(0)));
+            stream.endText();
+            return y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f;
+        }
+        return y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f;
+    }
+
+    private boolean usesInlineHeadingContent(String heading, List<String> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return false;
+        }
+        String first = lines.get(0);
+        if (first == null || first.isBlank()) {
+            return false;
+        }
+        return heading.startsWith("1.") || heading.startsWith("5.") || heading.startsWith("7.");
     }
 
     private void writeLines(PDPageContentStream stream, PDType1Font regular, float x, float startY, List<String> lines) throws IOException {
@@ -254,8 +295,18 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         stream.stroke();
     }
 
-    private int contentCapacity(float height) {
-        return Math.max(1, (int) ((height - (CELL_PADDING * 2) - HEADING_FONT_SIZE - 10f) / LINE_HEIGHT));
+    private int contentCapacity(float height, float contentOffset) {
+        float availableHeight = height - (height - contentOffset) - CELL_PADDING;
+        return Math.max(1, (int) (availableHeight / LINE_HEIGHT));
+    }
+
+    private void writeInlineHeadingValue(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                         float x, float y, String heading, String value) throws IOException {
+        stream.beginText();
+        stream.setFont(bold, BODY_FONT_SIZE);
+        stream.newLineAtOffset(x, y);
+        stream.showText(heading + (safe(value).isBlank() ? "" : ": " + safe(value)));
+        stream.endText();
     }
 
     private List<String> numberedLines(List<String> values) {

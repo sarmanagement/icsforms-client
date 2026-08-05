@@ -130,9 +130,9 @@ class LocalRepositoryTest {
         try (PDDocument pdf = Loader.loadPDF(pdf202.toFile())) {
             String text = new PDFTextStripper().getText(pdf);
             assertTrue(text.contains("ICS 202 INCIDENT OBJECTIVES"));
-            assertTrue(text.contains("1 INCIDENT NAME"));
-            assertTrue(text.contains("2 OPERATIONAL PERIOD"));
-            assertTrue(text.contains("8 APPROVED BY INCIDENT COMMANDER"));
+            assertTrue(text.contains("1. Incident Name"));
+            assertTrue(text.contains("2. Operational Period"));
+            assertTrue(text.contains("8. Approved By Incident Commander"));
         }
     }
 
