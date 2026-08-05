@@ -126,11 +126,10 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             y -= row7;
 
             drawCell(stream, MARGIN, y - row8, PAGE_WIDTH, row8);
-            drawApprovalSection(stream, bold, regular, MARGIN, y - row8, PAGE_WIDTH, row8, form);
+            drawCell(stream, MARGIN, y - row8, PAGE_WIDTH / 2f, row9);
+            drawCell(stream, MARGIN + (PAGE_WIDTH / 2f), y - row8, PAGE_WIDTH / 2f, row9);
+            drawApprovalSection(stream, bold, regular, MARGIN, y - row8, PAGE_WIDTH, row8, row9, form);
             y -= row8;
-
-            drawCell(stream, MARGIN, y - row9, PAGE_WIDTH / 2f, row9);
-            drawFooterSection(stream, bold, regular, MARGIN, y - row9, PAGE_WIDTH / 2f, row9, form);
         }
 
         for (OverflowSection overflow : overflowSections) {
@@ -175,21 +174,20 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private void drawApprovalSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
-                                     float x, float y, float width, float height, Ics202Form form) throws IOException {
+                                     float x, float y, float width, float height, float footerHeight, Ics202Form form) throws IOException {
         drawHeading(stream, bold, x, y, "8. Approved By Incident Commander");
-        float textY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
-        float leftWidth = width * 0.45f;
-        float rightX = x + leftWidth + 18f;
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, textY, "Name", safe(form.getApprovedByIncidentCommanderName()));
-        drawInlinePair(stream, bold, regular, rightX, textY, "Date/Time", formatDateTime(form.getApprovedDateTime()));
-        drawInlinePair(stream, bold, regular, rightX, textY - 18f, "Signature", "");
-    }
+        float topRowY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
+        float footerTopY = y + footerHeight - CELL_PADDING - 12f;
+        float nameX = x + CELL_PADDING;
+        float signatureX = x + (width * 0.45f);
+        float footerSplitX = x + (width / 4f);
+        float dateTimeX = x + (width / 2f) + CELL_PADDING;
 
-    private void drawFooterSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
-                                   float x, float y, float width, float height, Ics202Form form) throws IOException {
-        float textY = y + height - CELL_PADDING - 12f;
-        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, textY, "ICS 202", "");
-        writeInlineHeadingValue(stream, bold, regular, x + (width / 2f), textY, "IAP Page", safe(form.getIapPage()));
+        drawInlinePair(stream, bold, regular, nameX, topRowY, "Name", safe(form.getApprovedByIncidentCommanderName()));
+        drawInlinePair(stream, bold, regular, signatureX, topRowY, "Signature", "");
+        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerTopY, "ICS 202", "");
+        writeInlineHeadingValue(stream, bold, regular, footerSplitX + CELL_PADDING, footerTopY, "IAP Page", safe(form.getIapPage()));
+        drawInlinePair(stream, bold, regular, dateTimeX, footerTopY, "Date/Time", formatDateTime(form.getApprovedDateTime()));
     }
 
     private List<OverflowSection> drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -230,7 +228,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     private void drawHeading(PDPageContentStream stream, PDType1Font bold, float x, float y, String heading) throws IOException {
         stream.beginText();
         stream.setFont(bold, HEADING_FONT_SIZE);
-        stream.newLineAtOffset(x + CELL_PADDING, y + CELL_PADDING + 2f);
+        stream.newLineAtOffset(x + CELL_PADDING, y + HEADING_FONT_SIZE + CELL_PADDING);
         stream.showText(heading);
         stream.endText();
     }
@@ -241,7 +239,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         drawHeading(stream, bold, x, y, heading);
         float headingWidth = bold.getStringWidth(heading) / 1000f * HEADING_FONT_SIZE;
         float inlineX = x + CELL_PADDING + headingWidth + 8f;
-        float headingBaseline = y + CELL_PADDING + 2f;
+        float headingBaseline = y + HEADING_FONT_SIZE + CELL_PADDING;
         if (usesInlineHeadingContent(heading, normalized)) {
             stream.beginText();
             stream.setFont(regular, BODY_FONT_SIZE);
