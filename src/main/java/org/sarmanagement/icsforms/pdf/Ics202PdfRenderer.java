@@ -125,11 +125,20 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                     "7. Prepared By", List.of(joinPreparedBy(context.getCurrentUser(), context.getCurrentUserPositionTitle())), "7. Prepared By"));
             y -= row7;
 
-            drawCell(stream, MARGIN, y - row8, PAGE_WIDTH, row8);
-            drawCell(stream, MARGIN, y - row8, PAGE_WIDTH / 2f, row9);
-            drawCell(stream, MARGIN + (PAGE_WIDTH / 2f), y - row8, PAGE_WIDTH / 2f, row9);
-            drawApprovalSection(stream, bold, regular, MARGIN, y - row8, PAGE_WIDTH, row8, row9, form);
-            y -= row8;
+            // y is the current top of the big row
+            float approvalBottom = y - row8;     // bottom of big approval cell
+            float footerCellWidth = PAGE_WIDTH / 8f;
+            
+            // Big outer cell (for “8. Approved by Incident Commander” block)
+            drawCell(stream, MARGIN, approvalBottom, PAGE_WIDTH, row8);
+            
+            // Bottom band cells (row9 tall, at bottom of big cell)
+            drawCell(stream, MARGIN, approvalBottom, footerCellWidth, row9);                          // ICS 202
+            drawCell(stream, MARGIN + footerCellWidth, approvalBottom, footerCellWidth, row9);        // IAP Page
+            
+            drawApprovalSection(stream, bold, regular, MARGIN, approvalBottom, PAGE_WIDTH, row8, row9, form);
+            
+            y -= row8;  // move up for next row
         }
 
         for (OverflowSection overflow : overflowSections) {
@@ -174,25 +183,40 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private void drawApprovalSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
-                                     float x, float y, float width, float height, float footerHeight, Ics202Form form) throws IOException {
-        float footerTop = y + footerHeight;
-        float footerCellWidth = width / 4f;
-        float footerLeftWidth = width / 2f;
+                                     float x, float y, float width, float height,
+                                     float footerHeight, Ics202Form form) throws IOException {
+    
+        // y is the BOTTOM of the big cell
+        float cellBottom = y;
+        float cellTop = y + height;                // top of the big cell
+        float footerTop = cellBottom + footerHeight; // top of the footer band inside the big cell
+    
+        float footerCellWidth = width / 8f;
+        float footerLeftWidth = width / 4f;
         float footerRightX = x + footerLeftWidth;
-        float footerContentY = footerTop - CELL_PADDING - BODY_FONT_SIZE;
-
-        drawHeading(stream, bold, x, footerTop, "8. Approved By Incident Commander");
-        float topRowY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
-        float signatureY = footerTop + 12f;
+    
+        // --- 1) Heading at the top of the big cell ---
+        drawHeading(stream, bold, x, cellTop, "8. Approved By Incident Commander");
+    
+        // drawHeading uses: topY - CELL_PADDING - HEADING_FONT_SIZE
+        float headingBaselineY = cellTop - CELL_PADDING - HEADING_FONT_SIZE;
+    
+        // --- 2) Name / Signature row below the heading ---
+        float topRowY = headingBaselineY - LINE_HEIGHT; // adjust spacing as you like
+    
         float nameX = x + CELL_PADDING;
-        float signatureX = x + (width * 0.58f);
-
+        float signatureX = x + (width * 0.45f);
+    
         drawInlinePair(stream, bold, regular, nameX, topRowY, "Name", safe(form.getApprovedByIncidentCommanderName()));
-        drawInlinePair(stream, bold, regular, signatureX, topRowY, "Signature", "");
+        drawInlinePair(stream, bold, regular, signatureX, topRowY, "Signature", "_______________________________");
+    
+        // --- 3) Bottom footer band: ICS 202 | IAP Page | Date/Time ---
+        float footerContentY = footerTop - CELL_PADDING - BODY_FONT_SIZE;
+    
         writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerContentY, "ICS 202", "");
         writeInlineHeadingValue(stream, bold, regular, x + footerCellWidth + CELL_PADDING, footerContentY, "IAP Page", safe(form.getIapPage()));
-        drawInlinePair(stream, bold, regular, footerRightX + CELL_PADDING, footerContentY, "Date/Time", formatDateTime(form.getApprovedDateTime()));
-        drawInlinePair(stream, bold, regular, signatureX, signatureY, "", "____________________");
+        drawInlinePair(stream, bold, regular, signatureX, footerContentY, "Date/Time", formatDateTime(form.getApprovedDateTime()));
+    
     }
 
     private List<OverflowSection> drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -283,7 +307,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         stream.beginText();
         stream.setFont(bold, BODY_FONT_SIZE);
         stream.newLineAtOffset(x, y);
-        stream.showText(label + ":");
+        stream.showText(label + ": ");
         stream.endText();
 
         stream.beginText();
