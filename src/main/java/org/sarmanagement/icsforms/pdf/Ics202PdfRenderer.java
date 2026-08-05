@@ -165,7 +165,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                               float x, float y, float width, float height, IncidentContext context) throws IOException {
-        drawHeading(stream, bold, x, y, "2. Operational Period");
+        drawHeading(stream, bold, x, y + height, "2. Operational Period");
         float labelY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY, "Date From", formatDate(context.getOperationalPeriodStart()));
         drawInlinePair(stream, bold, regular, x + (width / 2f), labelY, "Date To", formatDate(context.getOperationalPeriodEnd()));
@@ -175,19 +175,24 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawApprovalSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                      float x, float y, float width, float height, float footerHeight, Ics202Form form) throws IOException {
-        drawHeading(stream, bold, x, y, "8. Approved By Incident Commander");
+        float footerTop = y + footerHeight;
+        float footerCellWidth = width / 4f;
+        float footerLeftWidth = width / 2f;
+        float footerRightX = x + footerLeftWidth;
+        float footerContentY = footerTop - CELL_PADDING - BODY_FONT_SIZE;
+
+        drawHeading(stream, bold, x, footerTop, "8. Approved By Incident Commander");
         float topRowY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
-        float footerTopY = y + footerHeight - CELL_PADDING - 12f;
+        float signatureY = footerTop + 12f;
         float nameX = x + CELL_PADDING;
-        float signatureX = x + (width * 0.45f);
-        float footerSplitX = x + (width / 4f);
-        float dateTimeX = x + (width / 2f) + CELL_PADDING;
+        float signatureX = x + (width * 0.58f);
 
         drawInlinePair(stream, bold, regular, nameX, topRowY, "Name", safe(form.getApprovedByIncidentCommanderName()));
         drawInlinePair(stream, bold, regular, signatureX, topRowY, "Signature", "");
-        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerTopY, "ICS 202", "");
-        writeInlineHeadingValue(stream, bold, regular, footerSplitX + CELL_PADDING, footerTopY, "IAP Page", safe(form.getIapPage()));
-        drawInlinePair(stream, bold, regular, dateTimeX, footerTopY, "Date/Time", formatDateTime(form.getApprovedDateTime()));
+        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerContentY, "ICS 202", "");
+        writeInlineHeadingValue(stream, bold, regular, x + footerCellWidth + CELL_PADDING, footerContentY, "IAP Page", safe(form.getIapPage()));
+        drawInlinePair(stream, bold, regular, footerRightX + CELL_PADDING, footerContentY, "Date/Time", formatDateTime(form.getApprovedDateTime()));
+        drawInlinePair(stream, bold, regular, signatureX, signatureY, "", "____________________");
     }
 
     private List<OverflowSection> drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -220,15 +225,15 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawTextBlock(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                float x, float y, float width, float height, String heading, List<String> lines) throws IOException {
-        drawHeading(stream, bold, x, y, heading);
+        drawHeading(stream, bold, x, y + height, heading);
         float contentTop = y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f;
         writeLines(stream, regular, x + CELL_PADDING, contentTop, lines);
     }
 
-    private void drawHeading(PDPageContentStream stream, PDType1Font bold, float x, float y, String heading) throws IOException {
+    private void drawHeading(PDPageContentStream stream, PDType1Font bold, float x, float topY, String heading) throws IOException {
         stream.beginText();
         stream.setFont(bold, HEADING_FONT_SIZE);
-        stream.newLineAtOffset(x + CELL_PADDING, y + HEADING_FONT_SIZE + CELL_PADDING);
+        stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
         stream.showText(heading);
         stream.endText();
     }
@@ -236,10 +241,10 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     private float writeHeadingWithInlineContent(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                                 float x, float y, float width, float height, String heading, List<String> lines) throws IOException {
         List<String> normalized = lines == null || lines.isEmpty() ? List.of("") : lines;
-        drawHeading(stream, bold, x, y, heading);
+        drawHeading(stream, bold, x, y + height, heading);
         float headingWidth = bold.getStringWidth(heading) / 1000f * HEADING_FONT_SIZE;
         float inlineX = x + CELL_PADDING + headingWidth + 8f;
-        float headingBaseline = y + HEADING_FONT_SIZE + CELL_PADDING;
+        float headingBaseline = y + height - CELL_PADDING - HEADING_FONT_SIZE;
         if (usesInlineHeadingContent(heading, normalized)) {
             stream.beginText();
             stream.setFont(regular, BODY_FONT_SIZE);

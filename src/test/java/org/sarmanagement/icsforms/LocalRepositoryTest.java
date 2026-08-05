@@ -133,6 +133,8 @@ class LocalRepositoryTest {
             assertTrue(text.contains("1. Incident Name"));
             assertTrue(text.contains("2. Operational Period"));
             assertTrue(text.contains("8. Approved By Incident Commander"));
+            assertTrue(text.contains("IAP Page: 1"));
+            assertTrue(text.contains("Date/Time:"));
         }
     }
 
