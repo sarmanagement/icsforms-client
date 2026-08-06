@@ -109,7 +109,16 @@ public class AppController {
      * Saves the active document immediately.
      */
     public void save() {
-        synchronizeLinkedFields(activeLinkSource);
+        save(activeLinkSource);
+    }
+
+    /**
+     * Saves the active document immediately using the current authoritative linked-field source.
+     *
+     * @param source source tab for linked role values.
+     */
+    public void save(LinkSource source) {
+        synchronizeLinkedFields(source);
         syncSarTasks();
         repository.save(data);
         dirty = false;
@@ -121,7 +130,17 @@ public class AppController {
      * @param path destination file path.
      */
     public void saveAs(Path path) {
-        synchronizeLinkedFields(activeLinkSource);
+        saveAs(path, activeLinkSource);
+    }
+
+    /**
+     * Saves the active document to a different location using the current authoritative linked-field source.
+     *
+     * @param path destination file path.
+     * @param source source tab for linked role values.
+     */
+    public void saveAs(Path path, LinkSource source) {
+        synchronizeLinkedFields(source);
         syncSarTasks();
         new LocalRepository(path).save(data);
         dirty = false;
@@ -150,7 +169,17 @@ public class AppController {
      * @return validation messages.
      */
     public List<ValidationMessage> validate() {
-        synchronizeLinkedFields(activeLinkSource);
+        return validate(activeLinkSource);
+    }
+
+    /**
+     * Validates the active document using the current authoritative linked-field source.
+     *
+     * @param source source tab for linked role values.
+     * @return validation messages.
+     */
+    public List<ValidationMessage> validate(LinkSource source) {
+        synchronizeLinkedFields(source);
         syncSarTasks();
         return validator.validate(data);
     }
@@ -164,7 +193,20 @@ public class AppController {
      * @throws IOException when export fails.
      */
     public Path exportSelected(String formKey, Path outputDirectory) throws IOException {
-        synchronizeLinkedFields(activeLinkSource);
+        return exportSelected(formKey, outputDirectory, activeLinkSource);
+    }
+
+    /**
+     * Exports one supported form to PDF after validation.
+     *
+     * @param formKey form identifier.
+     * @param outputDirectory destination directory.
+     * @param source source tab for linked role values.
+     * @return created file path.
+     * @throws IOException when export fails.
+     */
+    public Path exportSelected(String formKey, Path outputDirectory, LinkSource source) throws IOException {
+        synchronizeLinkedFields(source);
         syncSarTasks();
         return exportService.exportSelected(formKey, data, outputDirectory);
     }
@@ -177,7 +219,19 @@ public class AppController {
      * @throws IOException when export fails.
      */
     public java.util.Map<String, Path> exportAll(Path outputDirectory) throws IOException {
-        synchronizeLinkedFields(activeLinkSource);
+        return exportAll(outputDirectory, activeLinkSource);
+    }
+
+    /**
+     * Exports all supported forms to PDF after validation.
+     *
+     * @param outputDirectory destination directory.
+     * @param source source tab for linked role values.
+     * @return created file paths.
+     * @throws IOException when export fails.
+     */
+    public java.util.Map<String, Path> exportAll(Path outputDirectory, LinkSource source) throws IOException {
+        synchronizeLinkedFields(source);
         syncSarTasks();
         return exportService.exportAll(data, outputDirectory);
     }
@@ -204,7 +258,9 @@ public class AppController {
 
         List<String> incidentCommanders = linkedIncidentCommanders(source, form202, organizationalChart);
         if (matchesIncidentCommanderRole(preparerTitle) && !preparerName.isBlank()) {
-            addUnique(incidentCommanders, preparerName);
+            incidentCommanders = source == LinkSource.SHARED
+                    ? new ArrayList<>(List.of(preparerName))
+                    : withAddedUnique(incidentCommanders, preparerName);
         }
         organizationalChart.setIncidentCommanders(incidentCommanders);
         form202.setApprovedByIncidentCommanderName(joinNames(incidentCommanders));
@@ -334,7 +390,7 @@ public class AppController {
         for (String name : value.split("[\\r\\n;]+")) {
             String trimmed = safe(name);
             if (!trimmed.isBlank()) {
-                addUnique(names, trimmed);
+                names = withAddedUnique(names, trimmed);
             }
         }
         return names;
@@ -344,14 +400,16 @@ public class AppController {
         return String.join("; ", names);
     }
 
-    private void addUnique(List<String> values, String value) {
+    private List<String> withAddedUnique(List<String> values, String value) {
+        List<String> updated = new ArrayList<>(values);
         String normalizedValue = normalizeRole(value);
-        for (String existing : values) {
+        for (String existing : updated) {
             if (normalizeRole(existing).equals(normalizedValue)) {
-                return;
+                return updated;
             }
         }
-        values.add(value);
+        updated.add(value);
+        return updated;
     }
 
     private boolean matchesIncidentCommanderRole(String value) {

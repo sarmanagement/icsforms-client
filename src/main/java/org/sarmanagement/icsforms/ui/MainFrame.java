@@ -38,7 +38,7 @@ public class MainFrame extends JFrame {
     private final SarTaskPanel sarTaskPanel;
     private final JTabbedPane tabs = new JTabbedPane();
     private final Map<java.awt.Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
-    private int lastSelectedTabIndex;
+    private int lastSelectedTabIndex = -1;
 
     /**
      * Creates the main application frame.
@@ -79,7 +79,9 @@ public class MainFrame extends JFrame {
             if (selectedIndex == lastSelectedTabIndex) {
                 return;
             }
-            pushToModel(linkSourceForTab(lastSelectedTabIndex));
+            if (lastSelectedTabIndex >= 0) {
+                pushToModel(linkSourceForTab(lastSelectedTabIndex));
+            }
             refreshFromModel();
             lastSelectedTabIndex = selectedIndex;
         });
@@ -89,6 +91,7 @@ public class MainFrame extends JFrame {
         add(content, BorderLayout.CENTER);
         add(validationLabel, BorderLayout.SOUTH);
         refreshFromModel();
+        lastSelectedTabIndex = tabs.getSelectedIndex();
         pack();
         setLocationRelativeTo(null);
     }
@@ -118,22 +121,25 @@ public class MainFrame extends JFrame {
 
         JMenuItem saveItem = new JMenuItem("Save");
         saveItem.addActionListener(event -> {
-            pushToModel();
-            controller.save();
+            AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
+            pushToModel(source);
+            controller.save(source);
             refreshStatus();
         });
 
         JMenuItem saveAsItem = new JMenuItem("Save As…");
         saveAsItem.addActionListener(event -> chooseFile(defaultDirectory, true, path -> {
-            pushToModel();
-            controller.saveAs(path);
+            AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
+            pushToModel(source);
+            controller.saveAs(path, source);
             refreshStatus();
         }));
 
         JMenuItem exitItem = new JMenuItem("Exit");
         exitItem.addActionListener(event -> {
-            pushToModel();
-            controller.save();
+            AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
+            pushToModel(source);
+            controller.save(source);
             dispose();
         });
 
@@ -144,18 +150,21 @@ public class MainFrame extends JFrame {
         export204Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 204"));
 
         JMenuItem exportAllItem = new JMenuItem("Export All PDFs…");
-        exportAllItem.addActionListener(event -> chooseDirectory(defaultDirectory, directory -> {
+        exportAllItem.addActionListener(event -> {
+            AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
+            chooseDirectory(defaultDirectory, directory -> {
             if (!handleValidationBeforeExport()) {
                 return;
             }
-            pushToModel();
+            pushToModel(source);
             try {
-                controller.exportAll(directory);
+                controller.exportAll(directory, source);
                 JOptionPane.showMessageDialog(this, "Exported ICS 202 and ICS 204 PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
             } catch (IOException exception) {
                 showError("Failed to export PDFs", exception);
             }
-        }));
+            });
+        });
 
         fileMenu.add(newItem);
         fileMenu.add(openItem);
@@ -178,13 +187,14 @@ public class MainFrame extends JFrame {
      * @param formKey form to export.
      */
     private void exportOne(Path defaultDirectory, String formKey) {
+        AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
         chooseDirectory(defaultDirectory, directory -> {
             if (!handleValidationBeforeExport()) {
                 return;
             }
-            pushToModel();
+            pushToModel(source);
             try {
-                Path output = controller.exportSelected(formKey, directory);
+                Path output = controller.exportSelected(formKey, directory, source);
                 JOptionPane.showMessageDialog(this, "Exported " + formKey + " to\n" + output, "Export complete", JOptionPane.INFORMATION_MESSAGE);
             } catch (IOException exception) {
                 showError("Failed to export " + formKey, exception);
@@ -231,7 +241,7 @@ public class MainFrame extends JFrame {
      * Updates status text and unsaved indicator.
      */
     private void refreshStatus() {
-        List<ValidationMessage> messages = controller.validate();
+        List<ValidationMessage> messages = controller.validate(linkSourceForTab(tabs.getSelectedIndex()));
         validationLabel.setText(messages.isEmpty() ? "Ready" : messages.get(0).message());
         setTitle((controller.isDirty() ? "* " : "") + "ICS Forms Desktop");
     }
@@ -242,8 +252,9 @@ public class MainFrame extends JFrame {
      * @return {@code true} when export may continue.
      */
     private boolean handleValidationBeforeExport() {
-        pushToModel();
-        List<ValidationMessage> messages = controller.validate();
+        AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
+        pushToModel(source);
+        List<ValidationMessage> messages = controller.validate(source);
         refreshStatus();
         if (!messages.isEmpty()) {
             StringBuilder builder = new StringBuilder("Please resolve the following before export:\n\n");
