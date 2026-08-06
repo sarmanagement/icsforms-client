@@ -53,8 +53,8 @@ public class Ics202Panel extends JPanel {
         UiSupport.addRow(form, 6, "Prepared by position/title", preparedByPositionField);
         preparedByNameField.setEditable(false);
         preparedByPositionField.setEditable(false);
-        UiSupport.addRow(form, 7, "Approved by incident commander", approvedByNameField);
-        UiSupport.addRow(form, 8, "Approval date/time", approvedDateTimeField);
+        UiSupport.addRow(form, 7, "Incident commander", approvedByNameField);
+        UiSupport.addRow(form, 8, "IC Approval date/time", approvedDateTimeField);
         UiSupport.addRow(form, 9, "IAP page", iapPageField);
         JScrollPane scrollPane = new JScrollPane(form);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
