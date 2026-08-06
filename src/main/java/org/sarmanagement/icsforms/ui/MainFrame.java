@@ -151,18 +151,18 @@ public class MainFrame extends JFrame {
 
         JMenuItem exportAllItem = new JMenuItem("Export All PDFs…");
         exportAllItem.addActionListener(event -> {
-            chooseDirectory(defaultDirectory, directory -> {
             AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-            if (!handleValidationBeforeExport()) {
-                return;
-            }
-            pushToModel(source);
-            try {
-                controller.exportAll(directory, source);
-                JOptionPane.showMessageDialog(this, "Exported ICS 202 and ICS 204 PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
-            } catch (IOException exception) {
-                showError("Failed to export PDFs", exception);
-            }
+            chooseDirectory(defaultDirectory, directory -> {
+                if (!handleValidationBeforeExport()) {
+                    return;
+                }
+                pushToModel(source);
+                try {
+                    controller.exportAll(directory, source);
+                    JOptionPane.showMessageDialog(this, "Exported ICS 202 and ICS 204 PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
+                } catch (IOException exception) {
+                    showError("Failed to export PDFs", exception);
+                }
             });
         });
 
@@ -187,8 +187,8 @@ public class MainFrame extends JFrame {
      * @param formKey form to export.
      */
     private void exportOne(Path defaultDirectory, String formKey) {
+        AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
         chooseDirectory(defaultDirectory, directory -> {
-            AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
             if (!handleValidationBeforeExport()) {
                 return;
             }

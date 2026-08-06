@@ -100,6 +100,9 @@ public class AppController {
      */
     public void markDirty(LinkSource source) {
         dirty = true;
+        if (source != LinkSource.NONE) {
+            activeLinkSource = source;
+        }
         synchronizeLinkedFields(source);
         syncSarTasks();
         autosaveTimer.restart();
@@ -244,9 +247,6 @@ public class AppController {
     public void synchronizeLinkedFields(LinkSource source) {
         if (source == LinkSource.NONE && activeLinkSource != LinkSource.NONE) {
             source = activeLinkSource;
-        }
-        if (source != LinkSource.NONE) {
-            activeLinkSource = source;
         }
         IncidentContext context = data.getIncidentContext();
         org.sarmanagement.icsforms.model.Ics202Form form202 = data.getForm202();
