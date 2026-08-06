@@ -21,7 +21,9 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Main Swing frame for editing shared incident data, ICS 202, ICS 204, and SAR task scaffolds.
@@ -35,6 +37,7 @@ public class MainFrame extends JFrame {
     private final Ics204Panel ics204Panel;
     private final SarTaskPanel sarTaskPanel;
     private final JTabbedPane tabs = new JTabbedPane();
+    private final Map<java.awt.Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
     private int lastSelectedTabIndex;
 
     /**
@@ -63,9 +66,13 @@ public class MainFrame extends JFrame {
         content.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         tabs.addTab("Shared", incidentContextPanel);
+        tabSources.put(incidentContextPanel, AppController.LinkSource.SHARED);
         tabs.addTab("Org Chart", organizationalChartPanel);
+        tabSources.put(organizationalChartPanel, AppController.LinkSource.ORG_CHART);
         tabs.addTab("ICS 202", ics202Panel);
+        tabSources.put(ics202Panel, AppController.LinkSource.ICS202);
         tabs.addTab("ICS 204", ics204Panel);
+        tabSources.put(ics204Panel, AppController.LinkSource.ICS204);
         tabs.addTab("SAR Tasks", sarTaskPanel);
         tabs.addChangeListener(event -> {
             int selectedIndex = tabs.getSelectedIndex();
@@ -214,13 +221,10 @@ public class MainFrame extends JFrame {
     }
 
     private AppController.LinkSource linkSourceForTab(int tabIndex) {
-        return switch (tabIndex) {
-            case 0 -> AppController.LinkSource.SHARED;
-            case 1 -> AppController.LinkSource.ORG_CHART;
-            case 2 -> AppController.LinkSource.ICS202;
-            case 3 -> AppController.LinkSource.ICS204;
-            default -> AppController.LinkSource.NONE;
-        };
+        if (tabIndex < 0 || tabIndex >= tabs.getTabCount()) {
+            return AppController.LinkSource.NONE;
+        }
+        return tabSources.getOrDefault(tabs.getComponentAt(tabIndex), AppController.LinkSource.NONE);
     }
 
     /**

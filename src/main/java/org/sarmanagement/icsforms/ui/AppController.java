@@ -32,6 +32,7 @@ public class AppController {
     private final Timer autosaveTimer;
     private AppData data;
     private boolean dirty;
+    private LinkSource activeLinkSource = LinkSource.NONE;
 
     /**
      * Identifies which tab last edited a shared linked role field.
@@ -82,6 +83,7 @@ public class AppController {
         ensureDefaults(this.data);
         syncSarTasks();
         dirty = false;
+        activeLinkSource = LinkSource.NONE;
     }
 
     /**
@@ -107,7 +109,7 @@ public class AppController {
      * Saves the active document immediately.
      */
     public void save() {
-        synchronizeLinkedFields(LinkSource.NONE);
+        synchronizeLinkedFields(activeLinkSource);
         syncSarTasks();
         repository.save(data);
         dirty = false;
@@ -119,7 +121,7 @@ public class AppController {
      * @param path destination file path.
      */
     public void saveAs(Path path) {
-        synchronizeLinkedFields(LinkSource.NONE);
+        synchronizeLinkedFields(activeLinkSource);
         syncSarTasks();
         new LocalRepository(path).save(data);
         dirty = false;
@@ -148,7 +150,7 @@ public class AppController {
      * @return validation messages.
      */
     public List<ValidationMessage> validate() {
-        synchronizeLinkedFields(LinkSource.NONE);
+        synchronizeLinkedFields(activeLinkSource);
         syncSarTasks();
         return validator.validate(data);
     }
@@ -162,7 +164,7 @@ public class AppController {
      * @throws IOException when export fails.
      */
     public Path exportSelected(String formKey, Path outputDirectory) throws IOException {
-        synchronizeLinkedFields(LinkSource.NONE);
+        synchronizeLinkedFields(activeLinkSource);
         syncSarTasks();
         return exportService.exportSelected(formKey, data, outputDirectory);
     }
@@ -175,7 +177,7 @@ public class AppController {
      * @throws IOException when export fails.
      */
     public java.util.Map<String, Path> exportAll(Path outputDirectory) throws IOException {
-        synchronizeLinkedFields(LinkSource.NONE);
+        synchronizeLinkedFields(activeLinkSource);
         syncSarTasks();
         return exportService.exportAll(data, outputDirectory);
     }
@@ -186,6 +188,9 @@ public class AppController {
      * @param source source tab for linked role values.
      */
     public void synchronizeLinkedFields(LinkSource source) {
+        if (source != LinkSource.NONE) {
+            activeLinkSource = source;
+        }
         IncidentContext context = data.getIncidentContext();
         org.sarmanagement.icsforms.model.Ics202Form form202 = data.getForm202();
         Ics204Form form204 = data.getForm204();
@@ -284,6 +289,7 @@ public class AppController {
         if (data.getSchemaVersion() < AppData.CURRENT_SCHEMA_VERSION) {
             data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
         }
+        activeLinkSource = LinkSource.NONE;
         synchronizeLinkedFields(LinkSource.NONE);
     }
 
