@@ -202,13 +202,6 @@ public class MainFrame extends JFrame {
         });
     }
 
-    /**
-     * Pushes UI edits into the shared incident document.
-     */
-    private void pushToModel() {
-        pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
-    }
-
     private void pushToModel(AppController.LinkSource source) {
         incidentContextPanel.pushToModel();
         organizationalChartPanel.pushToModel();

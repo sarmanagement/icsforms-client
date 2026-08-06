@@ -258,7 +258,7 @@ public class AppController {
 
         List<String> incidentCommanders = linkedIncidentCommanders(source, form202, organizationalChart);
         if (matchesIncidentCommanderRole(preparerTitle) && !preparerName.isBlank()) {
-            incidentCommanders = source == LinkSource.SHARED
+            incidentCommanders = incidentCommanders.isEmpty()
                     ? new ArrayList<>(List.of(preparerName))
                     : withAddedUnique(incidentCommanders, preparerName);
         }
@@ -345,8 +345,8 @@ public class AppController {
         if (data.getSchemaVersion() < AppData.CURRENT_SCHEMA_VERSION) {
             data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
         }
-        activeLinkSource = LinkSource.NONE;
-        synchronizeLinkedFields(LinkSource.NONE);
+        activeLinkSource = initialLinkSource(data);
+        synchronizeLinkedFields(activeLinkSource);
     }
 
     /**
@@ -398,6 +398,16 @@ public class AppController {
 
     private String joinNames(List<String> names) {
         return String.join("; ", names);
+    }
+
+    private LinkSource initialLinkSource(AppData data) {
+        OrganizationalChart organizationalChart = data.getOrganizationalChart();
+        if (organizationalChart != null
+                && (!organizationalChart.getIncidentCommanders().isEmpty()
+                || !safe(organizationalChart.getOperationsSectionChiefName()).isBlank())) {
+            return LinkSource.ORG_CHART;
+        }
+        return LinkSource.NONE;
     }
 
     private List<String> withAddedUnique(List<String> values, String value) {
