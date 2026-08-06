@@ -136,6 +136,18 @@ class LocalRepositoryTest {
             assertTrue(text.contains("IAP Page: 1"));
             assertTrue(text.contains("Date/Time:"));
         }
+
+        try (PDDocument pdf = Loader.loadPDF(pdf204.toFile())) {
+            String text = new PDFTextStripper().getText(pdf);
+            assertTrue(text.contains("ICS 204 ASSIGNMENT LIST"));
+            assertTrue(text.contains("5. Resources Assigned"));
+            assertTrue(text.contains("Resource Identifier"));
+            assertTrue(text.contains("# of Persons"));
+            assertTrue(text.contains("Reporting Location / Special"));
+            assertTrue(text.contains("Equipment / Remarks"));
+            assertTrue(text.contains("9. Prepared By"));
+            assertTrue(text.contains("IAP Page: 2"));
+        }
     }
 
     /**
