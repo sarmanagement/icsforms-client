@@ -30,9 +30,12 @@ public class MainFrame extends JFrame {
     private final AppController controller;
     private final JLabel validationLabel = new JLabel("Ready", SwingConstants.LEFT);
     private final IncidentContextPanel incidentContextPanel;
+    private final OrganizationalChartPanel organizationalChartPanel;
     private final Ics202Panel ics202Panel;
     private final Ics204Panel ics204Panel;
     private final SarTaskPanel sarTaskPanel;
+    private final JTabbedPane tabs = new JTabbedPane();
+    private int lastSelectedTabIndex;
 
     /**
      * Creates the main application frame.
@@ -47,6 +50,7 @@ public class MainFrame extends JFrame {
         super("ICS Forms Desktop");
         this.controller = new AppController(data, repository, exportService, validator);
         this.incidentContextPanel = new IncidentContextPanel(controller);
+        this.organizationalChartPanel = new OrganizationalChartPanel(controller);
         this.ics202Panel = new Ics202Panel(controller);
         this.ics204Panel = new Ics204Panel(controller);
         this.sarTaskPanel = new SarTaskPanel(controller);
@@ -58,11 +62,20 @@ public class MainFrame extends JFrame {
         JPanel content = new JPanel(new BorderLayout(8, 8));
         content.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
-        JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Shared", incidentContextPanel);
+        tabs.addTab("Org Chart", organizationalChartPanel);
         tabs.addTab("ICS 202", ics202Panel);
         tabs.addTab("ICS 204", ics204Panel);
         tabs.addTab("SAR Tasks", sarTaskPanel);
+        tabs.addChangeListener(event -> {
+            int selectedIndex = tabs.getSelectedIndex();
+            if (selectedIndex == lastSelectedTabIndex) {
+                return;
+            }
+            pushToModel(linkSourceForTab(lastSelectedTabIndex));
+            refreshFromModel();
+            lastSelectedTabIndex = selectedIndex;
+        });
         content.add(tabs, BorderLayout.CENTER);
 
         validationLabel.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
@@ -176,11 +189,16 @@ public class MainFrame extends JFrame {
      * Pushes UI edits into the shared incident document.
      */
     private void pushToModel() {
+        pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+    }
+
+    private void pushToModel(AppController.LinkSource source) {
         incidentContextPanel.pushToModel();
+        organizationalChartPanel.pushToModel();
         ics202Panel.pushToModel();
         ics204Panel.pushToModel();
         sarTaskPanel.refreshTable();
-        controller.markDirty();
+        controller.markDirty(source);
     }
 
     /**
@@ -188,10 +206,21 @@ public class MainFrame extends JFrame {
      */
     private void refreshFromModel() {
         incidentContextPanel.refreshFromModel();
+        organizationalChartPanel.refreshFromModel();
         ics202Panel.refreshFromModel();
         ics204Panel.refreshFromModel();
         sarTaskPanel.refreshTable();
         refreshStatus();
+    }
+
+    private AppController.LinkSource linkSourceForTab(int tabIndex) {
+        return switch (tabIndex) {
+            case 0 -> AppController.LinkSource.SHARED;
+            case 1 -> AppController.LinkSource.ORG_CHART;
+            case 2 -> AppController.LinkSource.ICS202;
+            case 3 -> AppController.LinkSource.ICS204;
+            default -> AppController.LinkSource.NONE;
+        };
     }
 
     /**

@@ -9,10 +9,11 @@ import java.util.List;
  */
 public class AppData {
     /** Current persistence schema version for JSON storage. */
-    public static final int CURRENT_SCHEMA_VERSION = 1;
+    public static final int CURRENT_SCHEMA_VERSION = 2;
 
     private int schemaVersion = CURRENT_SCHEMA_VERSION;
     private IncidentContext incidentContext = new IncidentContext();
+    private OrganizationalChart organizationalChart = new OrganizationalChart();
     private Ics202Form form202 = new Ics202Form();
     private Ics204Form form204 = new Ics204Form();
     private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
@@ -33,6 +34,7 @@ public class AppData {
      */
     public AppData(IncidentContext incidentContext, Ics202Form form202, Ics204Form form204, List<SarTaskAssignment> sarTaskAssignments) {
         this.incidentContext = incidentContext == null ? new IncidentContext() : incidentContext;
+        this.organizationalChart = new OrganizationalChart();
         this.form202 = form202 == null ? new Ics202Form() : form202;
         this.form204 = form204 == null ? new Ics204Form() : form204;
         if (sarTaskAssignments != null) {
@@ -74,6 +76,24 @@ public class AppData {
      */
     public void setIncidentContext(IncidentContext incidentContext) {
         this.incidentContext = incidentContext == null ? new IncidentContext() : incidentContext;
+    }
+
+    /**
+     * Returns the organizational chart data shared across forms.
+     *
+     * @return organizational chart data.
+     */
+    public OrganizationalChart getOrganizationalChart() {
+        return organizationalChart;
+    }
+
+    /**
+     * Sets the organizational chart data shared across forms.
+     *
+     * @param organizationalChart organizational chart data.
+     */
+    public void setOrganizationalChart(OrganizationalChart organizationalChart) {
+        this.organizationalChart = organizationalChart == null ? new OrganizationalChart() : organizationalChart;
     }
 
     /**

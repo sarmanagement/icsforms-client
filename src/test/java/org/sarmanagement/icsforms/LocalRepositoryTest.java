@@ -6,12 +6,14 @@ import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
+import org.sarmanagement.icsforms.ui.AppController;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
 import org.apache.pdfbox.Loader;
@@ -48,6 +50,8 @@ class LocalRepositoryTest {
         assertNotNull(loaded.getIncidentContext());
         assertEquals(AppData.CURRENT_SCHEMA_VERSION, loaded.getSchemaVersion());
         assertEquals("Test Incident", loaded.getIncidentContext().getIncidentName());
+        assertEquals(List.of("IC One", "IC Two"), loaded.getOrganizationalChart().getIncidentCommanders());
+        assertEquals("Ops Chief", loaded.getOrganizationalChart().getOperationsSectionChiefName());
         assertEquals(1, loaded.getForm204().getResourcesAssigned().size());
         assertEquals("assign-1", loaded.getForm204().getResourcesAssigned().get(0).getAssignmentId());
         assertEquals(Ics204Form.MANAGEMENT_DIVISION, loaded.getForm204().getManagementContext());
@@ -126,6 +130,28 @@ class LocalRepositoryTest {
         assertEquals("Tac 1", task.getCommunications().get(0).getPrimaryContact());
         assertEquals("Team 1 Lead", task.getCommunications().get(0).getName());
         assertEquals("Medical", task.getCommunications().get(0).getFunction());
+    }
+
+    /**
+     * Verifies the org chart tab data links bidirectionally with ICS 202/204 and shared preparer roles.
+     *
+     * @throws Exception when temp file setup fails.
+     */
+    @Test
+    void organizationalChartLinksAcrossTabs() throws Exception {
+        Path tempDir = Files.createTempDirectory("icsforms");
+        AppController controller = new AppController(sampleData(), new LocalRepository(tempDir.resolve("incident.json")),
+                new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer()), new IncidentValidator());
+
+        controller.getData().getForm202().setApprovedByIncidentCommanderName("IC Alpha; IC Bravo");
+        controller.synchronizeLinkedFields(AppController.LinkSource.ICS202);
+        assertEquals(List.of("IC Alpha", "IC Bravo"), controller.getData().getOrganizationalChart().getIncidentCommanders());
+
+        controller.getData().getIncidentContext().setCurrentUser("Ops Prep");
+        controller.getData().getIncidentContext().setCurrentUserPositionTitle("Operations Section Chief");
+        controller.synchronizeLinkedFields(AppController.LinkSource.SHARED);
+        assertEquals("Ops Prep", controller.getData().getOrganizationalChart().getOperationsSectionChiefName());
+        assertEquals("Ops Prep", controller.getData().getForm204().getOperationsSectionChiefName());
     }
 
     /**
@@ -227,6 +253,10 @@ class LocalRepositoryTest {
         form204.setIapPage("2");
 
         AppData data = new AppData(context, form202, form204, List.of());
+        OrganizationalChart organizationalChart = new OrganizationalChart();
+        organizationalChart.setIncidentCommanders(List.of("IC One", "IC Two"));
+        organizationalChart.setOperationsSectionChiefName("Ops Chief");
+        data.setOrganizationalChart(organizationalChart);
         data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
         return data;
     }

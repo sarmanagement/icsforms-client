@@ -3,6 +3,7 @@ package org.sarmanagement.icsforms.ui;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
@@ -31,6 +32,17 @@ public class AppController {
     private final Timer autosaveTimer;
     private AppData data;
     private boolean dirty;
+
+    /**
+     * Identifies which tab last edited a shared linked role field.
+     */
+    public enum LinkSource {
+        NONE,
+        SHARED,
+        ORG_CHART,
+        ICS202,
+        ICS204
+    }
 
     /**
      * Creates a controller for the desktop application.
@@ -76,7 +88,17 @@ public class AppController {
      * Marks the document dirty and schedules autosave.
      */
     public void markDirty() {
+        markDirty(LinkSource.NONE);
+    }
+
+    /**
+     * Marks the document dirty, synchronizes linked fields, and schedules autosave.
+     *
+     * @param source source tab for linked role values.
+     */
+    public void markDirty(LinkSource source) {
         dirty = true;
+        synchronizeLinkedFields(source);
         syncSarTasks();
         autosaveTimer.restart();
     }
@@ -85,6 +107,8 @@ public class AppController {
      * Saves the active document immediately.
      */
     public void save() {
+        synchronizeLinkedFields(LinkSource.NONE);
+        syncSarTasks();
         repository.save(data);
         dirty = false;
     }
@@ -95,6 +119,8 @@ public class AppController {
      * @param path destination file path.
      */
     public void saveAs(Path path) {
+        synchronizeLinkedFields(LinkSource.NONE);
+        syncSarTasks();
         new LocalRepository(path).save(data);
         dirty = false;
     }
@@ -122,6 +148,7 @@ public class AppController {
      * @return validation messages.
      */
     public List<ValidationMessage> validate() {
+        synchronizeLinkedFields(LinkSource.NONE);
         syncSarTasks();
         return validator.validate(data);
     }
@@ -135,6 +162,7 @@ public class AppController {
      * @throws IOException when export fails.
      */
     public Path exportSelected(String formKey, Path outputDirectory) throws IOException {
+        synchronizeLinkedFields(LinkSource.NONE);
         syncSarTasks();
         return exportService.exportSelected(formKey, data, outputDirectory);
     }
@@ -147,8 +175,47 @@ public class AppController {
      * @throws IOException when export fails.
      */
     public java.util.Map<String, Path> exportAll(Path outputDirectory) throws IOException {
+        synchronizeLinkedFields(LinkSource.NONE);
         syncSarTasks();
         return exportService.exportAll(data, outputDirectory);
+    }
+
+    /**
+     * Synchronizes shared org-chart-linked fields across the shared tab, org chart, ICS 202, and ICS 204.
+     *
+     * @param source source tab for linked role values.
+     */
+    public void synchronizeLinkedFields(LinkSource source) {
+        IncidentContext context = data.getIncidentContext();
+        org.sarmanagement.icsforms.model.Ics202Form form202 = data.getForm202();
+        Ics204Form form204 = data.getForm204();
+        OrganizationalChart organizationalChart = data.getOrganizationalChart();
+        if (context == null || form202 == null || form204 == null || organizationalChart == null) {
+            return;
+        }
+
+        String preparerName = safe(context.getCurrentUser());
+        String preparerTitle = safe(context.getCurrentUserPositionTitle());
+
+        List<String> incidentCommanders = linkedIncidentCommanders(source, form202, organizationalChart);
+        if (matchesIncidentCommanderRole(preparerTitle) && !preparerName.isBlank()) {
+            addUnique(incidentCommanders, preparerName);
+        }
+        organizationalChart.setIncidentCommanders(incidentCommanders);
+        form202.setApprovedByIncidentCommanderName(joinNames(incidentCommanders));
+
+        String operationsSectionChiefName = linkedOperationsSectionChief(source, form204, organizationalChart);
+        if (matchesOperationsSectionChiefRole(preparerTitle) && !preparerName.isBlank()) {
+            operationsSectionChiefName = preparerName;
+        }
+        operationsSectionChiefName = safe(operationsSectionChiefName);
+        organizationalChart.setOperationsSectionChiefName(operationsSectionChiefName);
+        form204.setOperationsSectionChiefName(operationsSectionChiefName);
+
+        form202.setPreparedByName(preparerName);
+        form202.setPreparedByPositionTitle(preparerTitle);
+        form204.setPreparedByName(preparerName);
+        form204.setPreparedByPositionTitle(preparerTitle);
     }
 
     /**
@@ -186,7 +253,6 @@ public class AppController {
     public void syncSarTasks() {
         IncidentContext context = data.getIncidentContext();
         Ics204Form form = data.getForm204();
-        syncSharedPreparer(context, data.getForm202(), form);
         List<SarTaskAssignment> synced = new ArrayList<>();
         for (ResourceAssignment resource : form.getResourcesAssigned()) {
             synced.add(SarTaskAssignment.fromResourceAssignment(resource, context, form));
@@ -203,6 +269,9 @@ public class AppController {
         if (data.getIncidentContext() == null) {
             data.setIncidentContext(new IncidentContext());
         }
+        if (data.getOrganizationalChart() == null) {
+            data.setOrganizationalChart(new OrganizationalChart());
+        }
         if (data.getForm202() == null) {
             data.setForm202(new org.sarmanagement.icsforms.model.Ics202Form());
         }
@@ -212,10 +281,10 @@ public class AppController {
         if (data.getSarTaskAssignments() == null) {
             data.setSarTaskAssignments(new ArrayList<>());
         }
-        if (data.getSchemaVersion() == 0) {
+        if (data.getSchemaVersion() < AppData.CURRENT_SCHEMA_VERSION) {
             data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
         }
-        syncSharedPreparer(data.getIncidentContext(), data.getForm202(), data.getForm204());
+        synchronizeLinkedFields(LinkSource.NONE);
     }
 
     /**
@@ -231,15 +300,68 @@ public class AppController {
         return document;
     }
 
-    private void syncSharedPreparer(IncidentContext context, org.sarmanagement.icsforms.model.Ics202Form form202, Ics204Form form204) {
-        if (context == null) {
-            return;
+    private List<String> linkedIncidentCommanders(LinkSource source, org.sarmanagement.icsforms.model.Ics202Form form202,
+                                                  OrganizationalChart organizationalChart) {
+        List<String> from202 = parseNames(form202.getApprovedByIncidentCommanderName());
+        List<String> fromChart = new ArrayList<>(organizationalChart.getIncidentCommanders());
+        return switch (source) {
+            case ICS202 -> from202;
+            case ORG_CHART -> fromChart;
+            default -> !from202.isEmpty() ? from202 : fromChart;
+        };
+    }
+
+    private String linkedOperationsSectionChief(LinkSource source, Ics204Form form204, OrganizationalChart organizationalChart) {
+        return switch (source) {
+            case ICS204 -> form204.getOperationsSectionChiefName();
+            case ORG_CHART -> organizationalChart.getOperationsSectionChiefName();
+            default -> !safe(form204.getOperationsSectionChiefName()).isBlank()
+                    ? form204.getOperationsSectionChiefName() : organizationalChart.getOperationsSectionChiefName();
+        };
+    }
+
+    private List<String> parseNames(String value) {
+        List<String> names = new ArrayList<>();
+        if (value == null || value.isBlank()) {
+            return names;
         }
-        String name = context.getCurrentUser() == null ? "" : context.getCurrentUser();
-        String title = context.getCurrentUserPositionTitle() == null ? "" : context.getCurrentUserPositionTitle();
-        form202.setPreparedByName(name);
-        form202.setPreparedByPositionTitle(title);
-        form204.setPreparedByName(name);
-        form204.setPreparedByPositionTitle(title);
+        for (String name : value.split("[\\r\\n;]+")) {
+            String trimmed = safe(name);
+            if (!trimmed.isBlank()) {
+                addUnique(names, trimmed);
+            }
+        }
+        return names;
+    }
+
+    private String joinNames(List<String> names) {
+        return String.join("; ", names);
+    }
+
+    private void addUnique(List<String> values, String value) {
+        String normalizedValue = normalizeRole(value);
+        for (String existing : values) {
+            if (normalizeRole(existing).equals(normalizedValue)) {
+                return;
+            }
+        }
+        values.add(value);
+    }
+
+    private boolean matchesIncidentCommanderRole(String value) {
+        String normalized = normalizeRole(value);
+        return normalized.equals("incident commander") || normalized.equals("unified command");
+    }
+
+    private boolean matchesOperationsSectionChiefRole(String value) {
+        return normalizeRole(value).equals("operations section chief");
+    }
+
+    private String normalizeRole(String value) {
+        return safe(value).toLowerCase().replaceAll("[^a-z0-9]+", " ").trim().replaceAll("\\s+", " ");
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 }
