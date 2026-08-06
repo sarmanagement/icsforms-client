@@ -260,7 +260,7 @@ public class AppController {
         String preparerTitle = safe(context.getCurrentUserPositionTitle());
 
         List<String> incidentCommanders = linkedIncidentCommanders(source, form202, organizationalChart);
-        if (matchesIncidentCommanderRole(preparerTitle) && !preparerName.isBlank()) {
+        if (source == LinkSource.SHARED && matchesIncidentCommanderRole(preparerTitle) && !preparerName.isBlank()) {
             incidentCommanders = incidentCommanders.isEmpty()
                     ? new ArrayList<>(List.of(preparerName))
                     : withAddedUnique(incidentCommanders, preparerName);
@@ -269,7 +269,7 @@ public class AppController {
         form202.setApprovedByIncidentCommanderName(joinNames(incidentCommanders));
 
         String operationsSectionChiefName = linkedOperationsSectionChief(source, form204, organizationalChart);
-        if (matchesOperationsSectionChiefRole(preparerTitle) && !preparerName.isBlank()) {
+        if (source == LinkSource.SHARED && matchesOperationsSectionChiefRole(preparerTitle) && !preparerName.isBlank()) {
             operationsSectionChiefName = preparerName;
         }
         operationsSectionChiefName = safe(operationsSectionChiefName);
