@@ -6,6 +6,7 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -26,6 +27,9 @@ import java.util.List;
  */
 public class Ics204Panel extends JPanel {
     private final AppController controller;
+    private final JComboBox<String> managementContextSelector = new JComboBox<>(new String[]{"Staging Area", "Branch", "Division", "Group"});
+    private final JLabel selectedContextLabel = new JLabel("Staging area name");
+    private final JTextField selectedContextValueField = UiSupport.textField();
     private final JTextField branchField = UiSupport.textField();
     private final JTextField divisionField = UiSupport.textField();
     private final JTextField groupField = UiSupport.textField();
@@ -45,6 +49,8 @@ public class Ics204Panel extends JPanel {
     private final JPanel managementContactsPanel = new JPanel(new GridLayout(0, 4, 4, 4));
     private final ResourceTableModel resourceTableModel = new ResourceTableModel();
     private final CommunicationsTableModel communicationsTableModel = new CommunicationsTableModel();
+    private String activeManagementContext = Ics204Form.MANAGEMENT_STAGING_AREA;
+    private boolean updatingContextSelection;
 
     /**
      * Creates the ICS 204 editor panel.
@@ -56,20 +62,32 @@ public class Ics204Panel extends JPanel {
         this.controller = controller;
 
         JPanel form = UiSupport.formPanel();
+        JPanel selectedContextPanel = new JPanel(new BorderLayout(4, 0));
+        selectedContextPanel.add(selectedContextLabel, BorderLayout.WEST);
+        selectedContextPanel.add(selectedContextValueField, BorderLayout.CENTER);
         form.setBorder(BorderFactory.createTitledBorder("ICS 204 Assignment Context"));
-        UiSupport.addRow(form, 0, "Branch", branchField);
-        UiSupport.addRow(form, 1, "Division", divisionField);
-        UiSupport.addRow(form, 2, "Group", groupField);
-        UiSupport.addRow(form, 3, "Staging area", stagingAreaField);
-        UiSupport.addRow(form, 4, "Management contacts", managementContactsPanel);
-        UiSupport.addRow(form, 5, "Shared work assignment", new JScrollPane(sharedAssignmentArea));
-        UiSupport.addRow(form, 6, "Special instructions", new JScrollPane(specialInstructionsArea));
-        UiSupport.addRow(form, 7, "Prepared by name", preparedByNameField);
-        UiSupport.addRow(form, 8, "Prepared by position/title", preparedByPositionField);
-        UiSupport.addRow(form, 9, "Prepared date/time", preparedDateTimeField);
-        UiSupport.addRow(form, 10, "IAP page", iapPageField);
+        UiSupport.addRow(form, 0, "Management level", managementContextSelector);
+        UiSupport.addRow(form, 1, "Selected context", selectedContextPanel);
+        UiSupport.addRow(form, 2, "Management contacts", managementContactsPanel);
+        UiSupport.addRow(form, 3, "Shared work assignment", new JScrollPane(sharedAssignmentArea));
+        UiSupport.addRow(form, 4, "Special instructions", new JScrollPane(specialInstructionsArea));
+        UiSupport.addRow(form, 5, "Prepared by name", preparedByNameField);
+        UiSupport.addRow(form, 6, "Prepared by position/title", preparedByPositionField);
+        UiSupport.addRow(form, 7, "Prepared date/time", preparedDateTimeField);
+        UiSupport.addRow(form, 8, "IAP page", iapPageField);
         preparedByNameField.setEditable(false);
         preparedByPositionField.setEditable(false);
+        managementContextSelector.addActionListener(event -> {
+            if (updatingContextSelection) {
+                return;
+            }
+            storeSelectedContextValue(activeManagementContext);
+            activeManagementContext = selectedManagementContext();
+            updateSelectedContextLabel();
+            loadSelectedContextValue(activeManagementContext);
+            rebuildManagementContacts();
+        });
+        updateSelectedContextLabel();
         rebuildManagementContacts();
 
         JTable resourceTable = new JTable(resourceTableModel);
@@ -99,7 +117,7 @@ public class Ics204Panel extends JPanel {
 
         JScrollPane formScrollPane = new JScrollPane(form);
         formScrollPane.setBorder(BorderFactory.createEmptyBorder());
-        formScrollPane.setPreferredSize(new Dimension(0, 285));
+        formScrollPane.setPreferredSize(new Dimension(0, 320));
         add(formScrollPane, BorderLayout.NORTH);
         add(tablesPanel, BorderLayout.CENTER);
     }
@@ -111,6 +129,10 @@ public class Ics204Panel extends JPanel {
         divisionField.setText(nullSafe(form.getDivision()));
         groupField.setText(nullSafe(form.getGroup()));
         stagingAreaField.setText(nullSafe(form.getStagingArea()));
+        activeManagementContext = form.getManagementContext();
+        setSelectedManagementContext(activeManagementContext);
+        updateSelectedContextLabel();
+        loadSelectedContextValue(activeManagementContext);
         operationsChiefNameField.setText(nullSafe(form.getOperationsSectionChiefName()));
         operationsChiefContactField.setText(nullSafe(form.getOperationsSectionChiefContact()));
         branchDirectorNameField.setText(nullSafe(form.getBranchDirectorName()));
@@ -131,10 +153,22 @@ public class Ics204Panel extends JPanel {
     /** Applies field values to the model. */
     public void pushToModel() {
         Ics204Form form = controller.getData().getForm204();
-        form.setBranch(branchField.getText().trim());
-        form.setDivision(divisionField.getText().trim());
-        form.setGroup(groupField.getText().trim());
-        form.setStagingArea(stagingAreaField.getText().trim());
+        storeSelectedContextValue(activeManagementContext);
+        form.setManagementContext(activeManagementContext);
+        form.setBranch("");
+        form.setDivision("");
+        form.setGroup("");
+        form.setStagingArea("");
+        String selectedContextValue = selectedContextValueField.getText().trim();
+        if (Ics204Form.MANAGEMENT_BRANCH.equals(activeManagementContext)) {
+            form.setBranch(selectedContextValue);
+        } else if (Ics204Form.MANAGEMENT_DIVISION.equals(activeManagementContext)) {
+            form.setDivision(selectedContextValue);
+        } else if (Ics204Form.MANAGEMENT_GROUP.equals(activeManagementContext)) {
+            form.setGroup(selectedContextValue);
+        } else {
+            form.setStagingArea(selectedContextValue);
+        }
         form.setOperationsSectionChiefName(operationsChiefNameField.getText().trim());
         form.setOperationsSectionChiefContact(operationsChiefContactField.getText().trim());
         form.setBranchDirectorName(branchDirectorNameField.getText().trim());
@@ -154,37 +188,82 @@ public class Ics204Panel extends JPanel {
 
     private void rebuildManagementContacts() {
         managementContactsPanel.removeAll();
-        for (String[] row : visibleManagementRows()) {
-            managementContactsPanel.add(new JLabel(row[0]));
-            managementContactsPanel.add(textFieldWithValue(row[1]));
-            managementContactsPanel.add(new JLabel(row[2]));
-            managementContactsPanel.add(textFieldWithValue(row[3]));
+        for (Object[] row : visibleManagementRows()) {
+            managementContactsPanel.add(new JLabel((String) row[0]));
+            managementContactsPanel.add((JTextField) row[1]);
+            managementContactsPanel.add(new JLabel((String) row[2]));
+            managementContactsPanel.add((JTextField) row[3]);
         }
         managementContactsPanel.revalidate();
         managementContactsPanel.repaint();
     }
 
-    private List<String[]> visibleManagementRows() {
-        List<String[]> rows = new ArrayList<>();
-        rows.add(new String[]{"Operations section chief", operationsChiefNameField.getText(), "Contact", operationsChiefContactField.getText()});
-        boolean hasBranch = !branchField.getText().trim().isEmpty();
-        boolean hasDivision = !divisionField.getText().trim().isEmpty();
-        boolean hasGroup = !groupField.getText().trim().isEmpty();
-        if (hasBranch) {
-            rows.add(new String[]{"Branch director", branchDirectorNameField.getText(), "Contact", branchDirectorContactField.getText()});
+    private List<Object[]> visibleManagementRows() {
+        List<Object[]> rows = new ArrayList<>();
+        rows.add(new Object[]{"Operations section chief", operationsChiefNameField, "Contact", operationsChiefContactField});
+        if (Ics204Form.MANAGEMENT_BRANCH.equals(activeManagementContext)) {
+            rows.add(new Object[]{"Branch director", branchDirectorNameField, "Contact", branchDirectorContactField});
         }
-        if (hasDivision || hasGroup) {
-            rows.add(new String[]{hasGroup ? "Group supervisor" : "Division supervisor", supervisorNameField.getText(), "Contact", supervisorContactField.getText()});
+        if (Ics204Form.MANAGEMENT_DIVISION.equals(activeManagementContext)
+                || Ics204Form.MANAGEMENT_GROUP.equals(activeManagementContext)) {
+            rows.add(new Object[]{Ics204Form.MANAGEMENT_GROUP.equals(activeManagementContext) ? "Group supervisor" : "Division supervisor",
+                    supervisorNameField, "Contact", supervisorContactField});
         }
         return rows;
     }
 
-    private JTextField textFieldWithValue(String value) {
-        JTextField field = UiSupport.textField();
-        field.setText(value == null ? "" : value);
-        field.setEditable(false);
-        field.setColumns(16);
-        return field;
+    private void updateSelectedContextLabel() {
+        selectedContextLabel.setText(switch (activeManagementContext) {
+            case Ics204Form.MANAGEMENT_BRANCH -> "Branch name";
+            case Ics204Form.MANAGEMENT_DIVISION -> "Division name";
+            case Ics204Form.MANAGEMENT_GROUP -> "Group name";
+            default -> "Staging area name";
+        });
+    }
+
+    private void storeSelectedContextValue(String managementContext) {
+        String value = selectedContextValueField.getText().trim();
+        switch (managementContext) {
+            case Ics204Form.MANAGEMENT_BRANCH -> branchField.setText(value);
+            case Ics204Form.MANAGEMENT_DIVISION -> divisionField.setText(value);
+            case Ics204Form.MANAGEMENT_GROUP -> groupField.setText(value);
+            default -> stagingAreaField.setText(value);
+        }
+    }
+
+    private void loadSelectedContextValue(String managementContext) {
+        selectedContextValueField.setText(switch (managementContext) {
+            case Ics204Form.MANAGEMENT_BRANCH -> nullSafe(branchField.getText());
+            case Ics204Form.MANAGEMENT_DIVISION -> nullSafe(divisionField.getText());
+            case Ics204Form.MANAGEMENT_GROUP -> nullSafe(groupField.getText());
+            default -> nullSafe(stagingAreaField.getText());
+        });
+    }
+
+    private String selectedManagementContext() {
+        Object selected = managementContextSelector.getSelectedItem();
+        if ("Branch".equals(selected)) {
+            return Ics204Form.MANAGEMENT_BRANCH;
+        }
+        if ("Division".equals(selected)) {
+            return Ics204Form.MANAGEMENT_DIVISION;
+        }
+        if ("Group".equals(selected)) {
+            return Ics204Form.MANAGEMENT_GROUP;
+        }
+        return Ics204Form.MANAGEMENT_STAGING_AREA;
+    }
+
+    private void setSelectedManagementContext(String managementContext) {
+        updatingContextSelection = true;
+        managementContextSelector.setSelectedItem(switch (managementContext) {
+            case Ics204Form.MANAGEMENT_BRANCH -> "Branch";
+            case Ics204Form.MANAGEMENT_DIVISION -> "Division";
+            case Ics204Form.MANAGEMENT_GROUP -> "Group";
+            default -> "Staging Area";
+        });
+        updatingContextSelection = false;
+        activeManagementContext = managementContext;
     }
 
     /**

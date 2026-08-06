@@ -1,5 +1,7 @@
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,6 +10,12 @@ import java.util.List;
  * First-cut Assignment List (ICS 204) content and resource records.
  */
 public class Ics204Form {
+    public static final String MANAGEMENT_STAGING_AREA = "stagingArea";
+    public static final String MANAGEMENT_BRANCH = "branch";
+    public static final String MANAGEMENT_DIVISION = "division";
+    public static final String MANAGEMENT_GROUP = "group";
+
+    private String managementContext = MANAGEMENT_STAGING_AREA;
     private String branch = "";
     private String division = "";
     private String group = "";
@@ -35,7 +43,9 @@ public class Ics204Form {
      * @return {@code true} when a division/group supervisor is required.
      */
     public boolean requiresBranchDivisionGroupSupervisor() {
-        return notBlank(branch) || notBlank(division) || notBlank(group);
+        return MANAGEMENT_BRANCH.equals(getManagementContext())
+                || MANAGEMENT_DIVISION.equals(getManagementContext())
+                || MANAGEMENT_GROUP.equals(getManagementContext());
     }
 
     /**
@@ -47,7 +57,110 @@ public class Ics204Form {
         if (!requiresBranchDivisionGroupSupervisor()) {
             return true;
         }
+        if (MANAGEMENT_BRANCH.equals(getManagementContext())) {
+            return notBlank(branchDirectorName) && notBlank(branchDirectorContact);
+        }
         return notBlank(divisionGroupSupervisorName) && notBlank(divisionGroupSupervisorContact);
+    }
+
+    /**
+     * Returns the selected management context.
+     *
+     * @return selected management context key.
+     */
+    public String getManagementContext() {
+        if (MANAGEMENT_BRANCH.equals(managementContext)
+                || MANAGEMENT_DIVISION.equals(managementContext)
+                || MANAGEMENT_GROUP.equals(managementContext)) {
+            return managementContext;
+        }
+        if (MANAGEMENT_STAGING_AREA.equals(managementContext) && notBlank(stagingArea)) {
+            return managementContext;
+        }
+        if (notBlank(branch)) {
+            return MANAGEMENT_BRANCH;
+        }
+        if (notBlank(division)) {
+            return MANAGEMENT_DIVISION;
+        }
+        if (notBlank(group)) {
+            return MANAGEMENT_GROUP;
+        }
+        return MANAGEMENT_STAGING_AREA;
+    }
+
+    /**
+     * Sets the selected management context.
+     *
+     * @param managementContext selected management context key.
+     */
+    public void setManagementContext(String managementContext) {
+        this.managementContext = managementContext;
+    }
+
+    /**
+     * Returns the selected context heading text for UI and PDF output.
+     *
+     * @return selected context heading.
+     */
+    @JsonIgnore
+    public String getSelectedContextHeading() {
+        return switch (getManagementContext()) {
+            case MANAGEMENT_BRANCH -> "Branch";
+            case MANAGEMENT_DIVISION -> "Division";
+            case MANAGEMENT_GROUP -> "Group";
+            default -> "Staging Area";
+        };
+    }
+
+    /**
+     * Returns the selected context value.
+     *
+     * @return selected context value.
+     */
+    @JsonIgnore
+    public String getSelectedContextValue() {
+        return switch (getManagementContext()) {
+            case MANAGEMENT_BRANCH -> branch;
+            case MANAGEMENT_DIVISION -> division;
+            case MANAGEMENT_GROUP -> group;
+            default -> stagingArea;
+        };
+    }
+
+    /**
+     * Returns the secondary management role label required by the selected context.
+     *
+     * @return secondary management role label or empty when none is needed.
+     */
+    @JsonIgnore
+    public String getSecondaryManagementRoleLabel() {
+        return switch (getManagementContext()) {
+            case MANAGEMENT_BRANCH -> "Branch Director";
+            case MANAGEMENT_DIVISION -> "Division Supervisor";
+            case MANAGEMENT_GROUP -> "Group Supervisor";
+            default -> "";
+        };
+    }
+
+    /**
+     * Returns the selected secondary management name.
+     *
+     * @return secondary management name.
+     */
+    @JsonIgnore
+    public String getSecondaryManagementName() {
+        return MANAGEMENT_BRANCH.equals(getManagementContext()) ? branchDirectorName : divisionGroupSupervisorName;
+    }
+
+    /**
+     * Returns the selected secondary management contact.
+     *
+     * @return secondary management contact.
+     */
+    @JsonIgnore
+    public String getSecondaryManagementContact() {
+        return MANAGEMENT_BRANCH.equals(getManagementContext()) ? branchDirectorContact : divisionGroupSupervisorContact;
     }
 
     /**

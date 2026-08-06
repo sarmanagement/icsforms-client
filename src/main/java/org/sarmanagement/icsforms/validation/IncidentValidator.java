@@ -108,11 +108,23 @@ public class IncidentValidator {
         if (blank(form.getOperationsSectionChiefContact())) {
             messages.add(new ValidationMessage("ics204.operationsSectionChiefContact", "Operations section chief contact is required."));
         }
-        if (form.requiresBranchDivisionGroupSupervisor() && blank(form.getDivisionGroupSupervisorName())) {
-            messages.add(new ValidationMessage("ics204.divisionGroupSupervisorName", "Division/group supervisor is required when branch, division, or group is set."));
+        if (Ics204Form.MANAGEMENT_BRANCH.equals(form.getManagementContext())) {
+            if (blank(form.getBranchDirectorName())) {
+                messages.add(new ValidationMessage("ics204.branchDirectorName", "Branch director is required when branch is selected."));
+            }
+            if (blank(form.getBranchDirectorContact())) {
+                messages.add(new ValidationMessage("ics204.branchDirectorContact", "Branch director contact is required when branch is selected."));
+            }
         }
-        if (form.requiresBranchDivisionGroupSupervisor() && blank(form.getDivisionGroupSupervisorContact())) {
-            messages.add(new ValidationMessage("ics204.divisionGroupSupervisorContact", "Division/group supervisor contact is required when branch, division, or group is set."));
+        if ((Ics204Form.MANAGEMENT_DIVISION.equals(form.getManagementContext())
+                || Ics204Form.MANAGEMENT_GROUP.equals(form.getManagementContext()))
+                && blank(form.getDivisionGroupSupervisorName())) {
+            messages.add(new ValidationMessage("ics204.divisionGroupSupervisorName", "Division/group supervisor is required when division or group is selected."));
+        }
+        if ((Ics204Form.MANAGEMENT_DIVISION.equals(form.getManagementContext())
+                || Ics204Form.MANAGEMENT_GROUP.equals(form.getManagementContext()))
+                && blank(form.getDivisionGroupSupervisorContact())) {
+            messages.add(new ValidationMessage("ics204.divisionGroupSupervisorContact", "Division/group supervisor contact is required when division or group is selected."));
         }
         if (form.getResourcesAssigned().isEmpty()) {
             messages.add(new ValidationMessage("ics204.resourcesAssigned", "At least one resource assignment is required."));

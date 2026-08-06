@@ -50,6 +50,7 @@ class LocalRepositoryTest {
         assertEquals("Test Incident", loaded.getIncidentContext().getIncidentName());
         assertEquals(1, loaded.getForm204().getResourcesAssigned().size());
         assertEquals("assign-1", loaded.getForm204().getResourcesAssigned().get(0).getAssignmentId());
+        assertEquals(Ics204Form.MANAGEMENT_DIVISION, loaded.getForm204().getManagementContext());
     }
 
     /**
@@ -78,6 +79,7 @@ class LocalRepositoryTest {
         AppData data = sampleData();
         data.getIncidentContext().setOperationalPeriodStart(LocalDateTime.parse("2026-01-02T12:00:00"));
         data.getIncidentContext().setOperationalPeriodEnd(LocalDateTime.parse("2026-01-01T12:00:00"));
+        data.getForm204().setManagementContext(Ics204Form.MANAGEMENT_DIVISION);
         data.getForm204().setDivision("Alpha");
         data.getForm204().setDivisionGroupSupervisorName("");
         data.getForm204().setDivisionGroupSupervisorContact("");
@@ -87,6 +89,25 @@ class LocalRepositoryTest {
         assertTrue(messages.stream().anyMatch(message -> message.field().equals("operationalPeriod")));
         assertTrue(messages.stream().anyMatch(message -> message.field().equals("ics204.divisionGroupSupervisorName")));
         assertTrue(messages.stream().anyMatch(message -> message.field().equals("ics204.divisionGroupSupervisorContact")));
+    }
+
+    /**
+     * Verifies branch selection requires branch director data instead of division/group supervisor data.
+     */
+    @Test
+    void validatorUsesBranchSpecificSupervisorFields() {
+        AppData data = sampleData();
+        data.getForm204().setManagementContext(Ics204Form.MANAGEMENT_BRANCH);
+        data.getForm204().setBranch("Branch 1");
+        data.getForm204().setDivision("");
+        data.getForm204().setBranchDirectorName("");
+        data.getForm204().setBranchDirectorContact("");
+
+        List<ValidationMessage> messages = new IncidentValidator().validate(data);
+
+        assertTrue(messages.stream().anyMatch(message -> message.field().equals("ics204.branchDirectorName")));
+        assertTrue(messages.stream().anyMatch(message -> message.field().equals("ics204.branchDirectorContact")));
+        assertFalse(messages.stream().anyMatch(message -> message.field().equals("ics204.divisionGroupSupervisorName")));
     }
 
     /**
@@ -140,11 +161,14 @@ class LocalRepositoryTest {
         try (PDDocument pdf = Loader.loadPDF(pdf204.toFile())) {
             String text = new PDFTextStripper().getText(pdf);
             assertTrue(text.contains("ICS 204 ASSIGNMENT LIST"));
+            assertTrue(text.contains("4. Operations Personnel"));
+            assertTrue(text.contains("3. Division"));
+            assertTrue(text.contains("Division Supervisor"));
             assertTrue(text.contains("5. Resources Assigned"));
-            assertTrue(text.contains("Resource Identifier"));
-            assertTrue(text.contains("# of Persons"));
-            assertTrue(text.contains("Reporting Location / Special"));
-            assertTrue(text.contains("Equipment / Remarks"));
+            assertTrue(text.contains("Resource"));
+            assertTrue(text.contains("Leader"));
+            assertTrue(text.contains("Contact"));
+            assertTrue(text.contains("Reporting Location"));
             assertTrue(text.contains("9. Prepared By"));
             assertTrue(text.contains("IAP Page: 2"));
         }
@@ -187,6 +211,7 @@ class LocalRepositoryTest {
         communicationEntry.setPrimaryContact("Tac 1");
 
         Ics204Form form204 = new Ics204Form();
+        form204.setManagementContext(Ics204Form.MANAGEMENT_DIVISION);
         form204.setDivision("Division A");
         form204.setOperationsSectionChiefName("Ops Chief");
         form204.setOperationsSectionChiefContact("555-0199");

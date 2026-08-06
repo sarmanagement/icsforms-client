@@ -34,6 +34,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     private static final float CELL_PADDING = 4f;
     private static final float PAGE_BOTTOM_MARGIN = 36f;
     private static final float PAGE_WIDTH = PDRectangle.LETTER.getWidth() - (MARGIN * 2);
+    private static final int RESOURCE_ROW_COUNT = 9;
 
     /** {@inheritDoc} */
     @Override
@@ -69,21 +70,17 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             float gridHeight = gridTop - gridBottom;
 
             float row1 = 60f;
-            float row2 = 46f;
-            float row3 = 56f;
-            float row6 = 54f;
-            float row7 = 70f;
-            float row8 = 64f;
-            float row5 = gridHeight - (row1 + row2 + row3 + row6 + row7 + row8);
-            if (row5 < 220f) {
-                row5 = 220f;
-                row7 = Math.max(56f, gridHeight - (row1 + row2 + row3 + row5 + row6 + row8));
-            }
+            float row2 = 64f;
+            float row5 = 282f;
+            float row6 = 108f;
+            float row7 = 120f;
+            float row8 = gridHeight - (row1 + row2 + row5 + row6 + row7);
 
             drawCell(stream, MARGIN, gridBottom, PAGE_WIDTH, gridHeight);
 
             float y = gridTop;
             float halfWidth = PAGE_WIDTH / 2f;
+            float operationsWidth = PAGE_WIDTH * 0.8f;
 
             drawHorizontalLine(stream, MARGIN, MARGIN + PAGE_WIDTH, y - row1);
             drawVerticalLine(stream, MARGIN + halfWidth, y - row1, y);
@@ -93,12 +90,11 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             y -= row1;
 
             drawHorizontalLine(stream, MARGIN, MARGIN + PAGE_WIDTH, y - row2);
-            drawAssignmentContextSection(stream, bold, regular, MARGIN, y - row2, PAGE_WIDTH, row2, form);
+            drawVerticalLine(stream, MARGIN + operationsWidth, y - row2, y);
+            drawManagementSection(stream, bold, regular, MARGIN, y - row2, operationsWidth, row2, form);
+            drawAssignmentContextSection(stream, bold, regular, MARGIN + operationsWidth, y - row2,
+                    PAGE_WIDTH - operationsWidth, row2, form);
             y -= row2;
-
-            drawHorizontalLine(stream, MARGIN, MARGIN + PAGE_WIDTH, y - row3);
-            drawManagementSection(stream, bold, regular, MARGIN, y - row3, PAGE_WIDTH, row3, form);
-            y -= row3;
 
             drawHorizontalLine(stream, MARGIN, MARGIN + PAGE_WIDTH, y - row5);
             overflowSections.addAll(drawResourcesSection(stream, bold, regular, MARGIN, y - row5, PAGE_WIDTH, row5, form));
@@ -142,41 +138,29 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawAssignmentContextSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                               float x, float y, float width, float height, Ics204Form form) throws IOException {
-        drawHeading(stream, bold, x, y + height, "3. Assignment Context");
-        float bandBottom = y + height - 18f;
-        drawHorizontalLine(stream, x, x + width, bandBottom);
-
-        float columnWidth = width / 4f;
-        for (int i = 1; i < 4; i++) {
-            drawVerticalLine(stream, x + (columnWidth * i), y, bandBottom);
+        String heading = "3. " + form.getSelectedContextHeading();
+        List<String> lines = wrap(form.getSelectedContextValue(), Math.max(10, (int) (width / 6f)));
+        if (lines.isEmpty()) {
+            lines = List.of("");
         }
-
-        drawLabeledColumn(stream, bold, regular, x, y, columnWidth, bandBottom, "Branch", List.of(safe(form.getBranch())));
-        drawLabeledColumn(stream, bold, regular, x + columnWidth, y, columnWidth, bandBottom, "Division", List.of(safe(form.getDivision())));
-        drawLabeledColumn(stream, bold, regular, x + (columnWidth * 2f), y, columnWidth, bandBottom, "Group", List.of(safe(form.getGroup())));
-        drawLabeledColumn(stream, bold, regular, x + (columnWidth * 3f), y, columnWidth, bandBottom, "Staging Area", List.of(safe(form.getStagingArea())));
+        drawSection(stream, bold, regular, x, y, width, height, heading, lines, null);
     }
 
     private void drawManagementSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                        float x, float y, float width, float height, Ics204Form form) throws IOException {
-        drawHeading(stream, bold, x, y + height, "4. Supervisory Personnel");
-        float bandBottom = y + height - 18f;
-        drawHorizontalLine(stream, x, x + width, bandBottom);
-
-        float columnWidth = width / 3f;
-        for (int i = 1; i < 3; i++) {
-            drawVerticalLine(stream, x + (columnWidth * i), y, bandBottom);
+        drawHeading(stream, bold, x, y + height, "4. Operations Personnel");
+        float firstLineY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
+        drawInlinePair(stream, bold, regular, x + CELL_PADDING, firstLineY,
+                "Operations Section Chief", safe(form.getOperationsSectionChiefName()));
+        drawInlinePair(stream, bold, regular, x + (width * 0.58f), firstLineY,
+                "Contact", safe(form.getOperationsSectionChiefContact()));
+        if (!safe(form.getSecondaryManagementRoleLabel()).isBlank()) {
+            float secondLineY = firstLineY - (LINE_HEIGHT + 4f);
+            drawInlinePair(stream, bold, regular, x + CELL_PADDING, secondLineY,
+                    form.getSecondaryManagementRoleLabel(), safe(form.getSecondaryManagementName()));
+            drawInlinePair(stream, bold, regular, x + (width * 0.58f), secondLineY,
+                    "Contact", safe(form.getSecondaryManagementContact()));
         }
-
-        drawLabeledColumn(stream, bold, regular, x, y, columnWidth, bandBottom,
-                "Operations Section Chief",
-                combineLines(safe(form.getOperationsSectionChiefName()), labelValue("Contact", form.getOperationsSectionChiefContact())));
-        drawLabeledColumn(stream, bold, regular, x + columnWidth, y, columnWidth, bandBottom,
-                "Branch Director",
-                combineLines(safe(form.getBranchDirectorName()), labelValue("Contact", form.getBranchDirectorContact())));
-        drawLabeledColumn(stream, bold, regular, x + (columnWidth * 2f), y, columnWidth, bandBottom,
-                "Division/Group Supervisor",
-                combineLines(safe(form.getDivisionGroupSupervisorName()), labelValue("Contact", form.getDivisionGroupSupervisorContact())));
     }
 
     private List<OverflowSection> drawResourcesSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -184,13 +168,13 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         List<OverflowSection> overflowSections = new ArrayList<>();
         drawHeading(stream, bold, x, y + height, "5. Resources Assigned");
         float tableTop = y + height - 18f;
-        float headerHeight = 40f;
-        float rowHeight = 56f;
+        float headerHeight = 42f;
         float headerBottom = tableTop - headerHeight;
+        float rowHeight = (headerBottom - y) / RESOURCE_ROW_COUNT;
         drawHorizontalLine(stream, x, x + width, tableTop);
         drawHorizontalLine(stream, x, x + width, headerBottom);
 
-        float[] widths = {0.18f, 0.15f, 0.14f, 0.15f, 0.38f};
+        float[] widths = {4f / 18f, 4f / 18f, 1f / 18f, 5f / 18f, 4f / 18f};
         float currentX = x;
         for (int i = 0; i < widths.length - 1; i++) {
             currentX += width * widths[i];
@@ -208,55 +192,49 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         float[] starts = columnStarts(x, width, widths);
         for (int i = 0; i < headings.length; i++) {
             writeWrappedCellText(stream, bold, starts[i], headerBottom, width * widths[i], headerHeight,
-                    wrap(headings[i], widths[i] < 0.15f ? 12 : widths[i] < 0.18f ? 16 : 30));
+                    wrap(headings[i], widths[i] <= (1f / 18f) ? 10 : widths[i] <= (4f / 18f) ? 18 : 24));
         }
 
         List<ResourceAssignment> resources = form.getResourcesAssigned();
-        int availableRows = Math.max(1, (int) ((headerBottom - y) / rowHeight));
-        int visibleCount = resources.isEmpty() ? 1 : Math.min(resources.size(), availableRows);
-
-        for (int rowIndex = 0; rowIndex < visibleCount; rowIndex++) {
+        int visibleCount = Math.min(resources.size(), RESOURCE_ROW_COUNT);
+        for (int rowIndex = 0; rowIndex < RESOURCE_ROW_COUNT; rowIndex++) {
             float rowTop = headerBottom - (rowIndex * rowHeight);
             float rowBottom = Math.max(y, rowTop - rowHeight);
             drawHorizontalLine(stream, x, x + width, rowBottom);
 
-            if (resources.isEmpty()) {
+            if (rowIndex >= visibleCount) {
                 continue;
             }
 
             ResourceAssignment resource = resources.get(rowIndex);
-            List<List<String>> columns = resourceColumns(resource, form, rowIndex == (visibleCount - 1) && resources.size() > availableRows);
+            List<List<String>> columns = resourceColumns(resource, rowIndex == (visibleCount - 1) && resources.size() > RESOURCE_ROW_COUNT);
             for (int col = 0; col < columns.size(); col++) {
                 writeWrappedCellText(stream, regular, starts[col], rowBottom, width * widths[col], rowTop - rowBottom, columns.get(col));
             }
         }
 
-        if (resources.size() > availableRows) {
-            overflowSections.add(new OverflowSection("5. Resources Assigned", flattenOverflowResources(resources.subList(availableRows, resources.size()), form)));
+        if (resources.size() > RESOURCE_ROW_COUNT) {
+            overflowSections.add(new OverflowSection("5. Resources Assigned", flattenOverflowResources(resources.subList(RESOURCE_ROW_COUNT, resources.size()), form)));
         }
         return overflowSections;
     }
 
     private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                        float x, float y, float width, float height, float footerHeight, Ics204Form form) throws IOException {
+        drawCell(stream, x, y, width, height);
         float footerCellWidth = width / 8f;
-        float footerTop = y + footerHeight;
-        drawHeading(stream, bold, x, y + height, "9. Prepared By");
+        float footerContentY = y + footerHeight - CELL_PADDING - BODY_FONT_SIZE;
+        float topRowY = y + height - CELL_PADDING - HEADING_FONT_SIZE - LINE_HEIGHT;
+        float rightX = x + (width * 0.45f);
 
+        drawHeading(stream, bold, x, y + height, "9. Prepared By");
         drawCell(stream, x, y, footerCellWidth, footerHeight);
         drawCell(stream, x + footerCellWidth, y, footerCellWidth, footerHeight);
-
-        float nameY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
-        float titleY = nameY - LINE_HEIGHT;
-        float dateTimeY = footerTop + 12f;
-        float rightX = x + (width * 0.58f);
-
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, nameY, "Name", safe(form.getPreparedByName()));
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, titleY, "Position/Title", safe(form.getPreparedByPositionTitle()));
-        drawInlinePair(stream, bold, regular, rightX, dateTimeY, "Date/Time", formatDateTime(form.getPreparedDateTime()));
-        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, y + footerHeight - CELL_PADDING - BODY_FONT_SIZE, "ICS 204", "");
-        writeInlineHeadingValue(stream, bold, regular, x + footerCellWidth + CELL_PADDING, y + footerHeight - CELL_PADDING - BODY_FONT_SIZE,
-                "IAP Page", safe(form.getIapPage()));
+        drawInlinePair(stream, bold, regular, x + CELL_PADDING, topRowY, "Name", safe(form.getPreparedByName()));
+        drawInlinePair(stream, bold, regular, rightX, topRowY, "Position/Title", safe(form.getPreparedByPositionTitle()));
+        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerContentY, "ICS 204", "");
+        writeInlineHeadingValue(stream, bold, regular, x + footerCellWidth + CELL_PADDING, footerContentY, "IAP Page", safe(form.getIapPage()));
+        drawInlinePair(stream, bold, regular, rightX, footerContentY, "Date/Time", formatDateTime(form.getPreparedDateTime()));
     }
 
     private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -407,7 +385,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
         stream.beginText();
         stream.setFont(regular, BODY_FONT_SIZE);
-        stream.newLineAtOffset(x + (safeLabel.isBlank() ? 0f : 52f), y);
+        stream.newLineAtOffset(x + (safeLabel.isBlank() ? 0f : (bold.getStringWidth(safeLabel + ":") / 1000f * BODY_FONT_SIZE) + 4f), y);
         stream.showText(safe(value));
         stream.endText();
     }
@@ -453,20 +431,19 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         return starts;
     }
 
-    private List<List<String>> resourceColumns(ResourceAssignment resource, Ics204Form form, boolean appendContinuationNotice) {
+    private List<List<String>> resourceColumns(ResourceAssignment resource, boolean appendContinuationNotice) {
         List<List<String>> columns = new ArrayList<>();
-        columns.add(wrap(safe(resource.getResourceIdentifier()), 16));
-        columns.add(wrap(safe(resource.getLeader()), 14));
+        columns.add(wrap(safe(resource.getResourceIdentifier()), 18));
+        columns.add(wrap(safe(resource.getLeader()), 18));
         columns.add(List.of(resource.getNumberOfPersons() > 0 ? String.valueOf(resource.getNumberOfPersons()) : ""));
-        columns.add(wrap(safe(resource.getContact()), 14));
+        columns.add(wrap(safe(resource.getContact()), 24));
 
         List<String> lastColumn = new ArrayList<>();
-        addWrapped(lastColumn, safe(resource.getReportingLocation()), 26);
-        addWrapped(lastColumn, labelValue("Equipment", resource.getSpecialEquipment()), 26);
-        addWrapped(lastColumn, labelValue("Assignment", effectiveAssignment(resource, form)), 26);
-        addWrapped(lastColumn, joinAvailable(labelValue("Supplies", resource.getSupplies()), labelValue("Remarks", resource.getRemarks())), 26);
+        addWrapped(lastColumn, safe(resource.getReportingLocation()), 18);
+        addWrapped(lastColumn, labelValue("Equipment", resource.getSpecialEquipment()), 18);
+        addWrapped(lastColumn, labelValue("Remarks", resource.getRemarks()), 18);
         if (!safe(resource.getNotes()).isBlank()) {
-            addWrapped(lastColumn, labelValue("Notes", resource.getNotes()), 26);
+            addWrapped(lastColumn, labelValue("Notes", resource.getNotes()), 18);
         }
         if (appendContinuationNotice) {
             lastColumn.add("See next page");
