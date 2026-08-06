@@ -9,7 +9,7 @@ import java.util.List;
  */
 public class AppData {
     /** Current persistence schema version for JSON storage. */
-    public static final int CURRENT_SCHEMA_VERSION = 2;
+    public static final int CURRENT_SCHEMA_VERSION = 1;
 
     private int schemaVersion = CURRENT_SCHEMA_VERSION;
     private IncidentContext incidentContext = new IncidentContext();

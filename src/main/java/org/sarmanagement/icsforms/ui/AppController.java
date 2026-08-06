@@ -242,6 +242,9 @@ public class AppController {
      * @param source source tab for linked role values.
      */
     public void synchronizeLinkedFields(LinkSource source) {
+        if (source == LinkSource.NONE && activeLinkSource != LinkSource.NONE) {
+            source = activeLinkSource;
+        }
         if (source != LinkSource.NONE) {
             activeLinkSource = source;
         }
@@ -273,10 +276,12 @@ public class AppController {
         organizationalChart.setOperationsSectionChiefName(operationsSectionChiefName);
         form204.setOperationsSectionChiefName(operationsSectionChiefName);
 
-        form202.setPreparedByName(preparerName);
-        form202.setPreparedByPositionTitle(preparerTitle);
-        form204.setPreparedByName(preparerName);
-        form204.setPreparedByPositionTitle(preparerTitle);
+        if (!preparerName.isBlank() || !preparerTitle.isBlank() || source == LinkSource.SHARED) {
+            form202.setPreparedByName(preparerName);
+            form202.setPreparedByPositionTitle(preparerTitle);
+            form204.setPreparedByName(preparerName);
+            form204.setPreparedByPositionTitle(preparerTitle);
+        }
     }
 
     /**
@@ -342,7 +347,7 @@ public class AppController {
         if (data.getSarTaskAssignments() == null) {
             data.setSarTaskAssignments(new ArrayList<>());
         }
-        if (data.getSchemaVersion() < AppData.CURRENT_SCHEMA_VERSION) {
+        if (data.getSchemaVersion() == 0) {
             data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
         }
         activeLinkSource = initialLinkSource(data);
