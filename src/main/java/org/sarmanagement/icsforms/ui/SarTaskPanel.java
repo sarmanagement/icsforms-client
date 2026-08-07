@@ -343,13 +343,13 @@ public class SarTaskPanel extends JPanel {
             if (function.isBlank() && name.isBlank()) {
                 continue;
             }
+            if (resources.size() >= 18) {
+                break;
+            }
             SarTaskResource resource = new SarTaskResource();
             resource.setFunction(function);
             resource.setName(name);
             resources.add(resource);
-            if (resources.size() >= 18) {
-                break;
-            }
         }
         return resources;
     }
@@ -389,7 +389,7 @@ public class SarTaskPanel extends JPanel {
     }
 
     private static JPanel buttonsPanel(Runnable addAction, Runnable removeAction) {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         panel.setOpaque(false);
         JButton addButton = new JButton("Add");
         addButton.addActionListener(event -> addAction.run());
