@@ -6,6 +6,7 @@ import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,7 @@ public class IncidentValidator {
         validateContext(data.getIncidentContext(), messages);
         validate202(data.getForm202(), messages);
         validate204(data.getForm204(), messages);
+        validateSarTasks(data.getSarTaskAssignments(), messages);
         return messages;
     }
 
@@ -131,6 +133,10 @@ public class IncidentValidator {
         }
         for (int i = 0; i < form.getResourcesAssigned().size(); i++) {
             ResourceAssignment resource = form.getResourcesAssigned().get(i);
+            if (blank(resource.getAssignmentTeamNumber())) {
+                messages.add(new ValidationMessage("ics204.resourcesAssigned[" + i + "].assignmentTeamNumber",
+                        "Each resource needs an Assignment/Team Number for SAR task handoff."));
+            }
             if (blank(resource.getResourceIdentifier())) {
                 messages.add(new ValidationMessage("ics204.resourcesAssigned[" + i + "].resourceIdentifier", "Each resource must have an identifier."));
             }
@@ -146,6 +152,22 @@ public class IncidentValidator {
         }
         if (form.getPreparedDateTime() == null) {
             messages.add(new ValidationMessage("ics204.preparedDateTime", "ICS 204 preparer date/time is required."));
+        }
+    }
+
+    /**
+     * Validates linked SAR task assignment records.
+     *
+     * @param tasks SAR task assignments.
+     * @param messages collector for validation messages.
+     */
+    private void validateSarTasks(List<SarTaskAssignment> tasks, List<ValidationMessage> messages) {
+        for (int i = 0; i < tasks.size(); i++) {
+            SarTaskAssignment task = tasks.get(i);
+            if (blank(task.getAssignmentTeamNumber())) {
+                messages.add(new ValidationMessage("sarTaskAssignments[" + i + "].assignmentTeamNumber",
+                        "Assignment/Team Number is required on each SAR task assignment form."));
+            }
         }
     }
 

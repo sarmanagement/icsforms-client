@@ -6,6 +6,7 @@ import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -17,8 +18,10 @@ import java.nio.file.Path;
 import java.time.ZoneId;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Coordinates UI edits, autosave, validation, and linked SAR task synchronization.
@@ -319,11 +322,84 @@ public class AppController {
     public void syncSarTasks() {
         IncidentContext context = data.getIncidentContext();
         Ics204Form form = data.getForm204();
+        Map<String, SarTaskAssignment> existingById = new LinkedHashMap<>();
+        for (SarTaskAssignment existing : data.getSarTaskAssignments()) {
+            existingById.put(existing.getAssignmentId(), existing);
+        }
         List<SarTaskAssignment> synced = new ArrayList<>();
         for (ResourceAssignment resource : form.getResourcesAssigned()) {
-            synced.add(SarTaskAssignment.fromResourceAssignment(resource, context, form));
+            SarTaskAssignment scaffold = SarTaskAssignment.fromResourceAssignment(resource, context, form);
+            scaffold.setPreparedDateTime(form.getPreparedDateTime());
+            SarTaskAssignment existing = existingById.get(resource.getAssignmentId());
+            synced.add(existing == null ? scaffold : mergeSarTask(existing, scaffold));
         }
         data.setSarTaskAssignments(synced);
+    }
+
+    private SarTaskAssignment mergeSarTask(SarTaskAssignment existing, SarTaskAssignment scaffold) {
+        existing.setAssignmentId(scaffold.getAssignmentId());
+        if (!safe(scaffold.getAssignmentTeamNumber()).isBlank()) {
+            existing.setAssignmentTeamNumber(scaffold.getAssignmentTeamNumber());
+        }
+        existing.setIncidentName(scaffold.getIncidentName());
+        existing.setResourceIdentifier(scaffold.getResourceIdentifier());
+        existing.setLeaderRole(scaffold.getLeaderRole());
+        existing.setLeader(scaffold.getLeader());
+        if (safe(existing.getAssignment()).isBlank()) {
+            existing.setAssignment(scaffold.getAssignment());
+        }
+        existing.setContact(scaffold.getContact());
+        existing.setBranch(scaffold.getBranch());
+        existing.setDivision(scaffold.getDivision());
+        existing.setGroup(scaffold.getGroup());
+        existing.setStagingArea(scaffold.getStagingArea());
+        existing.setTaskMap(scaffold.getTaskMap());
+        existing.setOperationsSectionChiefName(scaffold.getOperationsSectionChiefName());
+        existing.setOperationsSectionChiefContact(scaffold.getOperationsSectionChiefContact());
+        existing.setSecondaryManagementRoleLabel(scaffold.getSecondaryManagementRoleLabel());
+        existing.setSecondaryManagementName(scaffold.getSecondaryManagementName());
+        existing.setSecondaryManagementContact(scaffold.getSecondaryManagementContact());
+        if (safe(existing.getTransportationInstructions()).isBlank()) {
+            existing.setTransportationInstructions(scaffold.getTransportationInstructions());
+        }
+        if (safe(existing.getSpecialEquipment()).isBlank()) {
+            existing.setSpecialEquipment(scaffold.getSpecialEquipment());
+        }
+        existing.setCommunications(scaffold.getCommunications());
+        if (safe(existing.getPreparedByName()).isBlank()) {
+            existing.setPreparedByName(scaffold.getPreparedByName());
+        }
+        if (safe(existing.getPreparedByPositionTitle()).isBlank()) {
+            existing.setPreparedByPositionTitle(scaffold.getPreparedByPositionTitle());
+        }
+        if (existing.getPreparedDateTime() == null) {
+            existing.setPreparedDateTime(scaffold.getPreparedDateTime());
+        }
+        if (safe(existing.getDebriefPreparedByName()).isBlank()) {
+            existing.setDebriefPreparedByName(scaffold.getDebriefPreparedByName());
+        }
+        if (safe(existing.getDebriefPreparedByPositionTitle()).isBlank()) {
+            existing.setDebriefPreparedByPositionTitle(scaffold.getDebriefPreparedByPositionTitle());
+        }
+        if (existing.getResourcesAssigned().isEmpty()) {
+            existing.setResourcesAssigned(scaffold.getResourcesAssigned());
+        } else {
+            syncLeadResource(existing.getResourcesAssigned(), scaffold.getResourcesAssigned());
+        }
+        return existing;
+    }
+
+    private void syncLeadResource(List<SarTaskResource> existingResources, List<SarTaskResource> scaffoldResources) {
+        if (scaffoldResources.isEmpty()) {
+            return;
+        }
+        SarTaskResource lead = scaffoldResources.get(0);
+        if (existingResources.isEmpty()) {
+            existingResources.add(lead);
+            return;
+        }
+        existingResources.get(0).setFunction(lead.getFunction());
+        existingResources.get(0).setName(lead.getName());
     }
 
     /**

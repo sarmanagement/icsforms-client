@@ -8,8 +8,10 @@ import java.util.List;
  */
 public class SarTaskAssignment {
     private String assignmentId = "";
+    private String assignmentTeamNumber = "";
     private String incidentName = "";
     private String resourceIdentifier = "";
+    private String leaderRole = "Leader";
     private String leader = "";
     private String assignment = "";
     private String contact = "";
@@ -17,9 +19,29 @@ public class SarTaskAssignment {
     private String division = "";
     private String group = "";
     private String stagingArea = "";
-    private String specialInstructions = "";
+    private String taskMap = "";
+    private String operationsSectionChiefName = "";
+    private String operationsSectionChiefContact = "";
+    private String secondaryManagementRoleLabel = "";
+    private String secondaryManagementName = "";
+    private String secondaryManagementContact = "";
+    private List<SarTaskResource> resourcesAssigned = new ArrayList<>();
+    private String transportationInstructions = "";
+    private String specialEquipment = "";
     private List<CommunicationEntry> communications = new ArrayList<>();
+    private String preparedByName = "";
+    private String preparedByPositionTitle = "";
+    private java.time.LocalDateTime preparedDateTime;
+    private String debriefingSupervisor = "";
+    private java.time.LocalDateTime assignmentStart;
+    private java.time.LocalDateTime assignmentEnd;
+    private String vehicleMiles = "";
     private String debriefNotes = "";
+    private String areasNotCovered = "";
+    private String hazardsObserved = "";
+    private String debriefPreparedByName = "";
+    private String debriefPreparedByPositionTitle = "";
+    private java.time.LocalDateTime debriefPreparedDateTime;
 
     /**
      * Creates a SAR scaffold from a linked ICS 204 resource assignment.
@@ -33,22 +55,36 @@ public class SarTaskAssignment {
         SarTaskAssignment task = new SarTaskAssignment();
         if (resourceAssignment != null) {
             task.setAssignmentId(resourceAssignment.getAssignmentId());
+            task.setAssignmentTeamNumber(resourceAssignment.getAssignmentTeamNumber());
             task.setResourceIdentifier(resourceAssignment.getResourceIdentifier());
+            task.setLeaderRole(resourceAssignment.getLeaderRole());
             task.setLeader(resourceAssignment.getLeader());
             task.setContact(resourceAssignment.getContact());
             task.setAssignment(resourceAssignment.getAssignment() == null || resourceAssignment.getAssignment().isBlank()
                     ? form204.getSharedWorkAssignment()
                     : resourceAssignment.getAssignment());
+            task.setTransportationInstructions(resourceAssignment.getReportingLocation());
+            task.setSpecialEquipment(joinNonBlank(resourceAssignment.getSpecialEquipment(), resourceAssignment.getSupplies()));
+            task.setResourcesAssigned(defaultResources(resourceAssignment));
         }
         if (incidentContext != null) {
             task.setIncidentName(incidentContext.getIncidentName());
+            task.setTaskMap(incidentContext.getTaskMap());
+            task.setPreparedByName(incidentContext.getCurrentUser());
+            task.setPreparedByPositionTitle(incidentContext.getCurrentUserPositionTitle());
+            task.setDebriefPreparedByName(incidentContext.getCurrentUser());
+            task.setDebriefPreparedByPositionTitle(incidentContext.getCurrentUserPositionTitle());
         }
         if (form204 != null) {
             task.setBranch(form204.getBranch());
             task.setDivision(form204.getDivision());
             task.setGroup(form204.getGroup());
             task.setStagingArea(form204.getStagingArea());
-            task.setSpecialInstructions(form204.getSpecialInstructions());
+            task.setOperationsSectionChiefName(form204.getOperationsSectionChiefName());
+            task.setOperationsSectionChiefContact(form204.getOperationsSectionChiefContact());
+            task.setSecondaryManagementRoleLabel(form204.getSecondaryManagementRoleLabel());
+            task.setSecondaryManagementName(form204.getSecondaryManagementName());
+            task.setSecondaryManagementContact(form204.getSecondaryManagementContact());
             List<CommunicationEntry> copied = new ArrayList<>();
             for (CommunicationEntry entry : form204.getCommunications()) {
                 CommunicationEntry clone = new CommunicationEntry();
@@ -62,56 +98,178 @@ public class SarTaskAssignment {
         return task;
     }
 
+    private static List<SarTaskResource> defaultResources(ResourceAssignment resourceAssignment) {
+        List<SarTaskResource> resources = new ArrayList<>();
+        if (resourceAssignment == null) {
+            return resources;
+        }
+        if (!safe(resourceAssignment.getLeader()).isBlank()) {
+            SarTaskResource leaderResource = new SarTaskResource();
+            leaderResource.setFunction(resourceAssignment.getLeaderRole());
+            leaderResource.setName(resourceAssignment.getLeader());
+            resources.add(leaderResource);
+        }
+        if (!safe(resourceAssignment.getResourceIdentifier()).isBlank()) {
+            SarTaskResource identifierResource = new SarTaskResource();
+            identifierResource.setFunction("Resource");
+            identifierResource.setName(resourceAssignment.getResourceIdentifier());
+            resources.add(identifierResource);
+        }
+        return resources;
+    }
+
+    private static String joinNonBlank(String... values) {
+        List<String> parts = new ArrayList<>();
+        for (String value : values) {
+            if (!safe(value).isBlank()) {
+                parts.add(value.trim());
+            }
+        }
+        return String.join(" / ", parts);
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
+    }
+
     /** @return linked assignment identifier. */
     public String getAssignmentId() { return assignmentId; }
     /** @param assignmentId linked assignment identifier. */
-    public void setAssignmentId(String assignmentId) { this.assignmentId = assignmentId; }
+    public void setAssignmentId(String assignmentId) { this.assignmentId = assignmentId == null ? "" : assignmentId; }
+    /** @return assignment/team number. */
+    public String getAssignmentTeamNumber() { return assignmentTeamNumber; }
+    /** @param assignmentTeamNumber assignment/team number. */
+    public void setAssignmentTeamNumber(String assignmentTeamNumber) { this.assignmentTeamNumber = assignmentTeamNumber == null ? "" : assignmentTeamNumber; }
     /** @return incident name. */
     public String getIncidentName() { return incidentName; }
     /** @param incidentName incident name. */
-    public void setIncidentName(String incidentName) { this.incidentName = incidentName; }
+    public void setIncidentName(String incidentName) { this.incidentName = incidentName == null ? "" : incidentName; }
     /** @return resource identifier. */
     public String getResourceIdentifier() { return resourceIdentifier; }
     /** @param resourceIdentifier resource identifier. */
-    public void setResourceIdentifier(String resourceIdentifier) { this.resourceIdentifier = resourceIdentifier; }
+    public void setResourceIdentifier(String resourceIdentifier) { this.resourceIdentifier = resourceIdentifier == null ? "" : resourceIdentifier; }
+    /** @return leader role label. */
+    public String getLeaderRole() { return leaderRole; }
+    /** @param leaderRole leader role label. */
+    public void setLeaderRole(String leaderRole) { this.leaderRole = leaderRole == null || leaderRole.isBlank() ? "Leader" : leaderRole; }
     /** @return leader. */
     public String getLeader() { return leader; }
     /** @param leader leader. */
-    public void setLeader(String leader) { this.leader = leader; }
+    public void setLeader(String leader) { this.leader = leader == null ? "" : leader; }
     /** @return assignment text. */
     public String getAssignment() { return assignment; }
     /** @param assignment assignment text. */
-    public void setAssignment(String assignment) { this.assignment = assignment; }
+    public void setAssignment(String assignment) { this.assignment = assignment == null ? "" : assignment; }
     /** @return contact. */
     public String getContact() { return contact; }
     /** @param contact contact. */
-    public void setContact(String contact) { this.contact = contact; }
+    public void setContact(String contact) { this.contact = contact == null ? "" : contact; }
     /** @return branch. */
     public String getBranch() { return branch; }
     /** @param branch branch. */
-    public void setBranch(String branch) { this.branch = branch; }
+    public void setBranch(String branch) { this.branch = branch == null ? "" : branch; }
     /** @return division. */
     public String getDivision() { return division; }
     /** @param division division. */
-    public void setDivision(String division) { this.division = division; }
+    public void setDivision(String division) { this.division = division == null ? "" : division; }
     /** @return group. */
     public String getGroup() { return group; }
     /** @param group group. */
-    public void setGroup(String group) { this.group = group; }
+    public void setGroup(String group) { this.group = group == null ? "" : group; }
     /** @return staging area. */
     public String getStagingArea() { return stagingArea; }
     /** @param stagingArea staging area. */
-    public void setStagingArea(String stagingArea) { this.stagingArea = stagingArea; }
-    /** @return special instructions. */
-    public String getSpecialInstructions() { return specialInstructions; }
-    /** @param specialInstructions special instructions. */
-    public void setSpecialInstructions(String specialInstructions) { this.specialInstructions = specialInstructions; }
+    public void setStagingArea(String stagingArea) { this.stagingArea = stagingArea == null ? "" : stagingArea; }
+    /** @return shared task map identifier. */
+    public String getTaskMap() { return taskMap; }
+    /** @param taskMap shared task map identifier. */
+    public void setTaskMap(String taskMap) { this.taskMap = taskMap == null ? "" : taskMap; }
+    /** @return operations section chief name. */
+    public String getOperationsSectionChiefName() { return operationsSectionChiefName; }
+    /** @param operationsSectionChiefName operations section chief name. */
+    public void setOperationsSectionChiefName(String operationsSectionChiefName) { this.operationsSectionChiefName = operationsSectionChiefName == null ? "" : operationsSectionChiefName; }
+    /** @return operations section chief contact. */
+    public String getOperationsSectionChiefContact() { return operationsSectionChiefContact; }
+    /** @param operationsSectionChiefContact operations section chief contact. */
+    public void setOperationsSectionChiefContact(String operationsSectionChiefContact) { this.operationsSectionChiefContact = operationsSectionChiefContact == null ? "" : operationsSectionChiefContact; }
+    /** @return secondary management role label. */
+    public String getSecondaryManagementRoleLabel() { return secondaryManagementRoleLabel; }
+    /** @param secondaryManagementRoleLabel secondary management role label. */
+    public void setSecondaryManagementRoleLabel(String secondaryManagementRoleLabel) { this.secondaryManagementRoleLabel = secondaryManagementRoleLabel == null ? "" : secondaryManagementRoleLabel; }
+    /** @return secondary management name. */
+    public String getSecondaryManagementName() { return secondaryManagementName; }
+    /** @param secondaryManagementName secondary management name. */
+    public void setSecondaryManagementName(String secondaryManagementName) { this.secondaryManagementName = secondaryManagementName == null ? "" : secondaryManagementName; }
+    /** @return secondary management contact. */
+    public String getSecondaryManagementContact() { return secondaryManagementContact; }
+    /** @param secondaryManagementContact secondary management contact. */
+    public void setSecondaryManagementContact(String secondaryManagementContact) { this.secondaryManagementContact = secondaryManagementContact == null ? "" : secondaryManagementContact; }
+    /** @return printable task resources. */
+    public List<SarTaskResource> getResourcesAssigned() { return resourcesAssigned; }
+    /** @param resourcesAssigned printable task resources. */
+    public void setResourcesAssigned(List<SarTaskResource> resourcesAssigned) { this.resourcesAssigned = resourcesAssigned == null ? new ArrayList<>() : resourcesAssigned; }
+    /** @return transportation instructions. */
+    public String getTransportationInstructions() { return transportationInstructions; }
+    /** @param transportationInstructions transportation instructions. */
+    public void setTransportationInstructions(String transportationInstructions) { this.transportationInstructions = transportationInstructions == null ? "" : transportationInstructions; }
+    /** @return special equipment. */
+    public String getSpecialEquipment() { return specialEquipment; }
+    /** @param specialEquipment special equipment. */
+    public void setSpecialEquipment(String specialEquipment) { this.specialEquipment = specialEquipment == null ? "" : specialEquipment; }
     /** @return communications context. */
     public List<CommunicationEntry> getCommunications() { return communications; }
     /** @param communications communications context. */
     public void setCommunications(List<CommunicationEntry> communications) { this.communications = communications == null ? new ArrayList<>() : communications; }
+    /** @return assignment-side preparer name. */
+    public String getPreparedByName() { return preparedByName; }
+    /** @param preparedByName assignment-side preparer name. */
+    public void setPreparedByName(String preparedByName) { this.preparedByName = preparedByName == null ? "" : preparedByName; }
+    /** @return assignment-side preparer title. */
+    public String getPreparedByPositionTitle() { return preparedByPositionTitle; }
+    /** @param preparedByPositionTitle assignment-side preparer title. */
+    public void setPreparedByPositionTitle(String preparedByPositionTitle) { this.preparedByPositionTitle = preparedByPositionTitle == null ? "" : preparedByPositionTitle; }
+    /** @return assignment-side prepared date/time. */
+    public java.time.LocalDateTime getPreparedDateTime() { return preparedDateTime; }
+    /** @param preparedDateTime assignment-side prepared date/time. */
+    public void setPreparedDateTime(java.time.LocalDateTime preparedDateTime) { this.preparedDateTime = preparedDateTime; }
+    /** @return debriefing supervisor. */
+    public String getDebriefingSupervisor() { return debriefingSupervisor; }
+    /** @param debriefingSupervisor debriefing supervisor. */
+    public void setDebriefingSupervisor(String debriefingSupervisor) { this.debriefingSupervisor = debriefingSupervisor == null ? "" : debriefingSupervisor; }
+    /** @return assignment start. */
+    public java.time.LocalDateTime getAssignmentStart() { return assignmentStart; }
+    /** @param assignmentStart assignment start. */
+    public void setAssignmentStart(java.time.LocalDateTime assignmentStart) { this.assignmentStart = assignmentStart; }
+    /** @return assignment end. */
+    public java.time.LocalDateTime getAssignmentEnd() { return assignmentEnd; }
+    /** @param assignmentEnd assignment end. */
+    public void setAssignmentEnd(java.time.LocalDateTime assignmentEnd) { this.assignmentEnd = assignmentEnd; }
+    /** @return vehicle miles. */
+    public String getVehicleMiles() { return vehicleMiles; }
+    /** @param vehicleMiles vehicle miles. */
+    public void setVehicleMiles(String vehicleMiles) { this.vehicleMiles = vehicleMiles == null ? "" : vehicleMiles; }
     /** @return debrief notes. */
     public String getDebriefNotes() { return debriefNotes; }
     /** @param debriefNotes debrief notes. */
-    public void setDebriefNotes(String debriefNotes) { this.debriefNotes = debriefNotes; }
+    public void setDebriefNotes(String debriefNotes) { this.debriefNotes = debriefNotes == null ? "" : debriefNotes; }
+    /** @return areas not covered notes. */
+    public String getAreasNotCovered() { return areasNotCovered; }
+    /** @param areasNotCovered areas not covered notes. */
+    public void setAreasNotCovered(String areasNotCovered) { this.areasNotCovered = areasNotCovered == null ? "" : areasNotCovered; }
+    /** @return hazards observed notes. */
+    public String getHazardsObserved() { return hazardsObserved; }
+    /** @param hazardsObserved hazards observed notes. */
+    public void setHazardsObserved(String hazardsObserved) { this.hazardsObserved = hazardsObserved == null ? "" : hazardsObserved; }
+    /** @return debrief prepared by name. */
+    public String getDebriefPreparedByName() { return debriefPreparedByName; }
+    /** @param debriefPreparedByName debrief prepared by name. */
+    public void setDebriefPreparedByName(String debriefPreparedByName) { this.debriefPreparedByName = debriefPreparedByName == null ? "" : debriefPreparedByName; }
+    /** @return debrief prepared by title. */
+    public String getDebriefPreparedByPositionTitle() { return debriefPreparedByPositionTitle; }
+    /** @param debriefPreparedByPositionTitle debrief prepared by title. */
+    public void setDebriefPreparedByPositionTitle(String debriefPreparedByPositionTitle) { this.debriefPreparedByPositionTitle = debriefPreparedByPositionTitle == null ? "" : debriefPreparedByPositionTitle; }
+    /** @return debrief prepared date/time. */
+    public java.time.LocalDateTime getDebriefPreparedDateTime() { return debriefPreparedDateTime; }
+    /** @param debriefPreparedDateTime debrief prepared date/time. */
+    public void setDebriefPreparedDateTime(java.time.LocalDateTime debriefPreparedDateTime) { this.debriefPreparedDateTime = debriefPreparedDateTime; }
 }

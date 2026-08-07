@@ -149,6 +149,9 @@ public class MainFrame extends JFrame {
         JMenuItem export204Item = new JMenuItem("Export ICS 204 PDF…");
         export204Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 204"));
 
+        JMenuItem exportSarTaskItem = new JMenuItem("Export SAR Task Assignment PDF…");
+        exportSarTaskItem.addActionListener(event -> exportOne(defaultDirectory, "SAR Task Assignment"));
+
         JMenuItem exportAllItem = new JMenuItem("Export All PDFs…");
         exportAllItem.addActionListener(event -> {
             AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
@@ -159,7 +162,7 @@ public class MainFrame extends JFrame {
                 pushToModel(source);
                 try {
                     controller.exportAll(directory, source);
-                    JOptionPane.showMessageDialog(this, "Exported ICS 202 and ICS 204 PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Exported ICS 202, ICS 204, and SAR Task Assignment PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
                 } catch (IOException exception) {
                     showError("Failed to export PDFs", exception);
                 }
@@ -174,6 +177,7 @@ public class MainFrame extends JFrame {
         fileMenu.add(exitItem);
         exportMenu.add(export202Item);
         exportMenu.add(export204Item);
+        exportMenu.add(exportSarTaskItem);
         exportMenu.add(exportAllItem);
         bar.add(fileMenu);
         bar.add(exportMenu);
@@ -207,7 +211,7 @@ public class MainFrame extends JFrame {
         organizationalChartPanel.pushToModel();
         ics202Panel.pushToModel();
         ics204Panel.pushToModel();
-        sarTaskPanel.refreshTable();
+        sarTaskPanel.pushToModel();
         controller.markDirty(source);
     }
 
@@ -219,7 +223,7 @@ public class MainFrame extends JFrame {
         organizationalChartPanel.refreshFromModel();
         ics202Panel.refreshFromModel();
         ics204Panel.refreshFromModel();
-        sarTaskPanel.refreshTable();
+        sarTaskPanel.refreshFromModel();
         refreshStatus();
     }
 
@@ -253,7 +257,8 @@ public class MainFrame extends JFrame {
             StringBuilder builder = new StringBuilder("Please resolve the following before export:\n\n");
             for (ValidationMessage message : messages) {
                 if (message.field().equals("incidentName") || message.field().equals("operationalPeriodStart")
-                        || message.field().equals("operationalPeriodEnd") || message.field().equals("operationalPeriod")) {
+                        || message.field().equals("operationalPeriodEnd") || message.field().equals("operationalPeriod")
+                        || message.field().contains("assignmentTeamNumber")) {
                     builder.append("- ").append(message.message()).append('\n');
                 }
             }

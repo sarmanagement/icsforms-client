@@ -11,6 +11,7 @@ public class IncidentContext {
     private LocalDateTime operationalPeriodEnd;
     private String currentUser = "";
     private String currentUserPositionTitle = "";
+    private String taskMap = "";
 
     /**
      * Creates an empty incident context.
@@ -124,5 +125,23 @@ public class IncidentContext {
      */
     public void setCurrentUserPositionTitle(String currentUserPositionTitle) {
         this.currentUserPositionTitle = currentUserPositionTitle;
+    }
+
+    /**
+     * Returns the shared SAR task map identifier or reference.
+     *
+     * @return task map identifier.
+     */
+    public String getTaskMap() {
+        return taskMap;
+    }
+
+    /**
+     * Sets the shared SAR task map identifier or reference.
+     *
+     * @param taskMap task map identifier.
+     */
+    public void setTaskMap(String taskMap) {
+        this.taskMap = taskMap == null ? "" : taskMap;
     }
 }

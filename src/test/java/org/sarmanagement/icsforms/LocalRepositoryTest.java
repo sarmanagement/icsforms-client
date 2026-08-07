@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
+import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
 import org.sarmanagement.icsforms.ui.AppController;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
@@ -54,7 +55,9 @@ class LocalRepositoryTest {
         assertEquals("Ops Chief", loaded.getOrganizationalChart().getOperationsSectionChiefName());
         assertEquals(1, loaded.getForm204().getResourcesAssigned().size());
         assertEquals("assign-1", loaded.getForm204().getResourcesAssigned().get(0).getAssignmentId());
+        assertEquals("A-1", loaded.getForm204().getResourcesAssigned().get(0).getAssignmentTeamNumber());
         assertEquals(Ics204Form.MANAGEMENT_DIVISION, loaded.getForm204().getManagementContext());
+        assertEquals("Map-42", loaded.getIncidentContext().getTaskMap());
     }
 
     /**
@@ -127,9 +130,39 @@ class LocalRepositoryTest {
         assertEquals(resource.getAssignmentId(), task.getAssignmentId());
         assertEquals("Search trail segment", task.getAssignment());
         assertEquals("Division A", task.getDivision());
+        assertEquals("A-1", task.getAssignmentTeamNumber());
+        assertEquals("Leader/Handler", task.getLeaderRole());
+        assertEquals("Map-42", task.getTaskMap());
         assertEquals("Tac 1", task.getCommunications().get(0).getPrimaryContact());
         assertEquals("Team 1 Lead", task.getCommunications().get(0).getName());
         assertEquals("Medical", task.getCommunications().get(0).getFunction());
+    }
+
+    /**
+     * Verifies syncing SAR tasks preserves debrief details while refreshing shared assignment data.
+     *
+     * @throws Exception when temp file setup fails.
+     */
+    @Test
+    void syncSarTasksPreservesDebriefData() throws Exception {
+        Path tempDir = Files.createTempDirectory("icsforms");
+        AppController controller = new AppController(sampleData(), new LocalRepository(tempDir.resolve("incident.json")),
+                new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer()),
+                new IncidentValidator());
+
+        SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(0);
+        task.setDebriefNotes("Completed assignment and located clues.");
+        task.setAssignment("Detailed segment instructions");
+        task.setVehicleMiles("14");
+        controller.getData().getIncidentContext().setTaskMap("Map-99");
+        controller.syncSarTasks();
+
+        SarTaskAssignment synced = controller.getData().getSarTaskAssignments().get(0);
+        assertEquals("Completed assignment and located clues.", synced.getDebriefNotes());
+        assertEquals("Detailed segment instructions", synced.getAssignment());
+        assertEquals("14", synced.getVehicleMiles());
+        assertEquals("Map-99", synced.getTaskMap());
+        assertEquals("A-1", synced.getAssignmentTeamNumber());
     }
 
     /**
@@ -141,7 +174,7 @@ class LocalRepositoryTest {
     void organizationalChartLinksAcrossTabs() throws Exception {
         Path tempDir = Files.createTempDirectory("icsforms");
         AppController controller = new AppController(sampleData(), new LocalRepository(tempDir.resolve("incident.json")),
-                new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer()), new IncidentValidator());
+                new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
 
         controller.getData().getForm202().setApprovedByIncidentCommanderName("IC Alpha; IC Bravo");
         controller.synchronizeLinkedFields(AppController.LinkSource.ICS202);
@@ -162,17 +195,20 @@ class LocalRepositoryTest {
     @Test
     void pdfExportsAreGenerated() throws Exception {
         AppData data = sampleData();
-        PdfExportService exportService = new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer());
+        PdfExportService exportService = new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer());
         Path outputDir = Files.createTempDirectory("icsforms-pdf");
 
         Path pdf202 = exportService.exportSelected("ICS 202", data, outputDir);
         Path pdf204 = exportService.exportSelected("ICS 204", data, outputDir);
+        Path sarPdf = exportService.exportSelected("SAR Task Assignment", data, outputDir);
 
         assertTrue(Files.exists(pdf202));
         assertTrue(Files.size(pdf202) > 0);
         assertTrue(Files.exists(pdf204));
         assertTrue(Files.size(pdf204) > 0);
         assertTrue(Files.readAllBytes(pdf202).length > 0);
+        assertTrue(Files.exists(sarPdf));
+        assertTrue(Files.size(sarPdf) > 0);
 
         try (PDDocument pdf = Loader.loadPDF(pdf202.toFile())) {
             String text = new PDFTextStripper().getText(pdf);
@@ -198,6 +234,19 @@ class LocalRepositoryTest {
             assertTrue(text.contains("9. Prepared By"));
             assertTrue(text.contains("IAP Page: 2"));
         }
+
+        try (PDDocument pdf = Loader.loadPDF(sarPdf.toFile())) {
+            String text = new PDFTextStripper().getText(pdf);
+            assertEquals(2, pdf.getNumberOfPages());
+            assertTrue(text.contains("SAR TASK ASSIGNMENT FORM"));
+            assertTrue(text.contains("1. Incident/Mission Name"));
+            assertTrue(text.contains("3. Assignment/Team Number"));
+            assertTrue(text.contains("A-1"));
+            assertTrue(text.contains("Leader/Handler"));
+            assertTrue(text.contains("8. Task Map"));
+            assertTrue(text.contains("Map-42"));
+            assertTrue(text.contains("15. Debriefing"));
+        }
     }
 
     /**
@@ -207,6 +256,7 @@ class LocalRepositoryTest {
      */
     private AppData sampleData() {
         IncidentContext context = new IncidentContext("Test Incident", LocalDateTime.parse("2026-01-01T00:00:00"), LocalDateTime.parse("2026-01-01T12:00:00"), "Planner", "Planning Section Chief");
+        context.setTaskMap("Map-42");
 
         Ics202Form form202 = new Ics202Form();
         form202.setObjectives(List.of("Protect life", "Stabilize scene"));
@@ -220,7 +270,9 @@ class LocalRepositoryTest {
 
         ResourceAssignment resource = new ResourceAssignment();
         resource.setAssignmentId("assign-1");
+        resource.setAssignmentTeamNumber("A-1");
         resource.setResourceIdentifier("Team 1");
+        resource.setLeaderRole("Leader/Handler");
         resource.setLeader("Leader A");
         resource.setNumberOfPersons(4);
         resource.setContact("555-0101");
@@ -252,7 +304,10 @@ class LocalRepositoryTest {
         form204.setPreparedDateTime(LocalDateTime.parse("2026-01-01T02:00:00"));
         form204.setIapPage("2");
 
-        AppData data = new AppData(context, form202, form204, List.of());
+        SarTaskAssignment task = SarTaskAssignment.fromResourceAssignment(resource, context, form204);
+        task.setPreparedDateTime(form204.getPreparedDateTime());
+        task.setDebriefNotes("Initial debrief notes");
+        AppData data = new AppData(context, form202, form204, List.of(task));
         OrganizationalChart organizationalChart = new OrganizationalChart();
         organizationalChart.setIncidentCommanders(List.of("IC One", "IC Two"));
         organizationalChart.setOperationsSectionChiefName("Ops Chief");

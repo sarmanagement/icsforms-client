@@ -298,7 +298,7 @@ public class Ics204Panel extends JPanel {
      * Table model for editable resource assignment rows.
      */
     private static class ResourceTableModel extends AbstractTableModel {
-        private final String[] columns = {"Assignment ID", "Resource", "Leader", "Persons", "Contact", "Reporting", "Equipment", "Supplies", "Remarks", "Notes", "Assignment"};
+        private final String[] columns = {"Assignment ID", "Assignment/Team #", "Resource", "Leader Role", "Leader", "Persons", "Contact", "Reporting", "Equipment", "Supplies", "Remarks", "Notes", "Assignment"};
         private java.util.List<ResourceAssignment> rows = new java.util.ArrayList<>();
 
         /** @param rows replacement rows. */
@@ -317,15 +317,17 @@ public class Ics204Panel extends JPanel {
             ResourceAssignment row = rows.get(rowIndex);
             return switch (columnIndex) {
                 case 0 -> row.getAssignmentId();
-                case 1 -> row.getResourceIdentifier();
-                case 2 -> row.getLeader();
-                case 3 -> row.getNumberOfPersons();
-                case 4 -> row.getContact();
-                case 5 -> row.getReportingLocation();
-                case 6 -> row.getSpecialEquipment();
-                case 7 -> row.getSupplies();
-                case 8 -> row.getRemarks();
-                case 9 -> row.getNotes();
+                case 1 -> row.getAssignmentTeamNumber();
+                case 2 -> row.getResourceIdentifier();
+                case 3 -> row.getLeaderRole();
+                case 4 -> row.getLeader();
+                case 5 -> row.getNumberOfPersons();
+                case 6 -> row.getContact();
+                case 7 -> row.getReportingLocation();
+                case 8 -> row.getSpecialEquipment();
+                case 9 -> row.getSupplies();
+                case 10 -> row.getRemarks();
+                case 11 -> row.getNotes();
                 default -> row.getAssignment();
             };
         }
@@ -334,15 +336,17 @@ public class Ics204Panel extends JPanel {
             String value = aValue == null ? "" : aValue.toString();
             switch (columnIndex) {
                 case 0 -> row.setAssignmentId(value);
-                case 1 -> row.setResourceIdentifier(value);
-                case 2 -> row.setLeader(value);
-                case 3 -> row.setNumberOfPersons(parseInt(value));
-                case 4 -> row.setContact(value);
-                case 5 -> row.setReportingLocation(value);
-                case 6 -> row.setSpecialEquipment(value);
-                case 7 -> row.setSupplies(value);
-                case 8 -> row.setRemarks(value);
-                case 9 -> row.setNotes(value);
+                case 1 -> row.setAssignmentTeamNumber(value);
+                case 2 -> row.setResourceIdentifier(value);
+                case 3 -> row.setLeaderRole(value);
+                case 4 -> row.setLeader(value);
+                case 5 -> row.setNumberOfPersons(parseInt(value));
+                case 6 -> row.setContact(value);
+                case 7 -> row.setReportingLocation(value);
+                case 8 -> row.setSpecialEquipment(value);
+                case 9 -> row.setSupplies(value);
+                case 10 -> row.setRemarks(value);
+                case 11 -> row.setNotes(value);
                 default -> row.setAssignment(value);
             }
             fireTableCellUpdated(rowIndex, columnIndex);
