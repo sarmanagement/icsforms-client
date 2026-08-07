@@ -1,12 +1,17 @@
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
+import org.sarmanagement.icsforms.model.PodFactorRating;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.SarTaskSupport;
 
 import javax.swing.BorderFactory;
-import javax.swing.JMenuItem;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -27,15 +32,16 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Set;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Editable SAR task assignment and debriefing grid linked from ICS 204 resource assignments.
  */
 public class SarTaskPanel extends JPanel {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-    private static final Set<Integer> READ_ONLY_COLUMNS = Set.of(1, 2, 3, 4, 5, 6, 7);
+    private static final Set<Integer> READ_ONLY_COLUMNS = Set.of(1, 4, 5, 6, 7, 8, 9);
 
     private final AppController controller;
     private final SarTaskTableModel tableModel = new SarTaskTableModel();
@@ -62,7 +68,7 @@ public class SarTaskPanel extends JPanel {
      */
     public void refreshFromModel() {
         controller.syncSarTasks();
-        tableModel.setRows(controller.getData().getSarTaskAssignments());
+        tableModel.setRows(controller.getData().getSarTaskAssignments(), controller.getData().getClueLogEntries());
     }
 
     /**
@@ -70,6 +76,22 @@ public class SarTaskPanel extends JPanel {
      */
     public void pushToModel() {
         controller.getData().setSarTaskAssignments(tableModel.getRows());
+        controller.syncIcs204ResourcesFromSarTasks();
+    }
+
+    static String formatDateTimeValue(LocalDateTime value) {
+        return value == null ? "" : DATE_TIME_FORMATTER.format(value);
+    }
+
+    static LocalDateTime parseDateTimeValue(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(value.trim(), DATE_TIME_FORMATTER);
+        } catch (DateTimeParseException exception) {
+            return null;
+        }
     }
 
     private void installRowEditor() {
@@ -125,18 +147,18 @@ public class SarTaskPanel extends JPanel {
             table.getCellEditor().stopCellEditing();
         }
         SarTaskAssignment row = tableModel.getRows().get(rowIndex);
-        SarTaskEditor editor = new SarTaskEditor(row, mode);
+        SarTaskEditor editor = new SarTaskEditor(row, mode, controller.getData().getClueLogEntries());
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        scrollPane.setPreferredSize(new Dimension(760, 560));
-        String assignmentTeamNumber = row.getAssignmentTeamNumber();
-        String title = mode.dialogTitle(assignmentTeamNumber);
+        scrollPane.setPreferredSize(new Dimension(840, 620));
+        String title = mode.dialogTitle(row.getAssignmentTeamNumber());
         if (JOptionPane.showConfirmDialog(this, scrollPane, title,
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
             return;
         }
-        editor.applyTo(row);
-        tableModel.fireTableRowsUpdated(rowIndex, rowIndex);
+        editor.applyTo(row, controller.getData().getClueLogEntries());
+        controller.syncIcs204ResourcesFromSarTasks();
+        tableModel.setRows(tableModel.getRows(), controller.getData().getClueLogEntries());
         controller.getData().setSarTaskAssignments(tableModel.getRows());
         controller.markDirty();
         int viewRow = table.convertRowIndexToView(rowIndex);
@@ -207,6 +229,31 @@ public class SarTaskPanel extends JPanel {
         return panel;
     }
 
+    private static JPanel clueEditorPanel(List<ClueLogEntry> clues, List<ClueEntryFields> fields) {
+        JPanel panel = new JPanel(new GridLayout(0, 4, 6, 3));
+        panel.setOpaque(false);
+        panel.add(new JLabel("Date/Time"));
+        panel.add(new JLabel("Location"));
+        panel.add(new JLabel("Description"));
+        panel.add(new JLabel("Follow Up"));
+        int rowCount = Math.max(2, (clues == null ? 0 : clues.size()) + 1);
+        for (int i = 0; i < rowCount; i++) {
+            ClueEntryFields entry = new ClueEntryFields();
+            if (clues != null && i < clues.size()) {
+                entry.dateTimeField.setText(formatDateTimeValue(clues.get(i).getDateTimeCollected()));
+                entry.locationField.setText(clues.get(i).getLocation());
+                entry.descriptionField.setText(clues.get(i).getDescription());
+                entry.followUpField.setText(clues.get(i).getFollowUp());
+            }
+            fields.add(entry);
+            panel.add(entry.dateTimeField);
+            panel.add(entry.locationField);
+            panel.add(entry.descriptionField);
+            panel.add(entry.followUpField);
+        }
+        return panel;
+    }
+
     private static List<SarTaskResource> resourceValuesFrom(List<ResourceEntryFields> fields) {
         List<SarTaskResource> resources = new ArrayList<>();
         for (ResourceEntryFields entry : fields) {
@@ -237,6 +284,46 @@ public class SarTaskPanel extends JPanel {
         return communications;
     }
 
+    private static List<ClueLogEntry> clueValuesFrom(List<ClueEntryFields> fields, SarTaskAssignment row, String detectingTask) {
+        List<ClueLogEntry> clues = new ArrayList<>();
+        for (ClueEntryFields entry : fields) {
+            if (entry.dateTimeField.getText().isBlank() && entry.locationField.getText().isBlank()
+                    && entry.descriptionField.getText().isBlank() && entry.followUpField.getText().isBlank()) {
+                continue;
+            }
+            ClueLogEntry clue = new ClueLogEntry();
+            clue.setAssignmentId(row.getAssignmentId());
+            clue.setDetectingTask(detectingTask);
+            clue.setDateTimeCollected(parseDateTimeValue(entry.dateTimeField.getText().trim()));
+            clue.setLocation(entry.locationField.getText().trim());
+            clue.setDescription(entry.descriptionField.getText().trim());
+            clue.setFollowUp(entry.followUpField.getText().trim());
+            clues.add(clue);
+        }
+        return clues;
+    }
+
+    private static List<ClueLogEntry> cluesForTask(SarTaskAssignment row, List<ClueLogEntry> clues) {
+        List<ClueLogEntry> matches = new ArrayList<>();
+        if (clues == null) {
+            return matches;
+        }
+        for (ClueLogEntry clue : clues) {
+            if (clue == null) {
+                continue;
+            }
+            if (!row.getAssignmentId().isBlank() && row.getAssignmentId().equals(clue.getAssignmentId())) {
+                matches.add(clue);
+                continue;
+            }
+            if (row.getAssignmentId().isBlank() && !row.getAssignmentTeamNumber().isBlank()
+                    && row.getAssignmentTeamNumber().equals(clue.getDetectingTask())) {
+                matches.add(clue);
+            }
+        }
+        return matches;
+    }
+
     private static class ResourceEntryFields {
         private final JTextField functionField = UiSupport.textField();
         private final JTextField nameField = UiSupport.textField();
@@ -246,6 +333,31 @@ public class SarTaskPanel extends JPanel {
         private final JTextField nameField = UiSupport.textField();
         private final JTextField functionField = UiSupport.textField();
         private final JTextField primaryContactField = UiSupport.textField();
+    }
+
+    private static class ClueEntryFields {
+        private final JTextField dateTimeField = UiSupport.textField();
+        private final JTextField locationField = UiSupport.textField();
+        private final JTextField descriptionField = UiSupport.textField();
+        private final JTextField followUpField = UiSupport.textField();
+    }
+
+    private static class PodFactorEntryFields {
+        private final String factorName;
+        private final int maxScore;
+        private final JTextField scoreField = UiSupport.textField();
+        private final JTextField descriptionField = UiSupport.textField();
+
+        private PodFactorEntryFields(PodFactorRating rating, boolean descriptionAllowed) {
+            this.factorName = rating.getName();
+            this.maxScore = rating.getMaxScore();
+            this.scoreField.setText(rating.getScore() == null ? "" : String.valueOf(rating.getScore()));
+            this.descriptionField.setText(rating.getDescription());
+            this.descriptionField.setEditable(descriptionAllowed);
+            if (!descriptionAllowed) {
+                this.descriptionField.setText("");
+            }
+        }
     }
 
     private enum EditorMode {
@@ -271,6 +383,8 @@ public class SarTaskPanel extends JPanel {
         private final JPanel panel = UiSupport.formPanel();
         private final EditorMode mode;
         private final JTextField assignmentTeamNumberField;
+        private final JComboBox<String> resourceTypeField;
+        private final JComboBox<String> taskTypeField;
         private final JTextField incidentNameField;
         private final JTextField resourceIdentifierField;
         private final JTextField leaderRoleField;
@@ -290,17 +404,31 @@ public class SarTaskPanel extends JPanel {
         private final JTextField assignmentStartField;
         private final JTextField assignmentEndField;
         private final JTextField vehicleMilesField;
+        private final JTextField reportedPodField;
         private final JScrollPane debriefNotesField;
+        private final JPanel clueEntriesField;
+        private final List<ClueEntryFields> clueEntryFields = new ArrayList<>();
+        private final JPanel podFactorsField = new JPanel(new GridLayout(0, 3, 6, 3));
+        private final List<PodFactorEntryFields> podFactorEntryFields = new ArrayList<>();
+        private final JTextField canineSearchTypeField;
+        private final JTextField canineImprintField;
+        private final JTextField canineSunAngleField;
+        private final JTextField canineDayNightField;
+        private final JTextField canineCloudCoverField;
+        private final JTextField canineWindSpeedField;
+        private final JPanel canineMetadataField = new JPanel(new GridLayout(0, 2, 6, 3));
         private final JScrollPane areasNotCoveredField;
         private final JScrollPane hazardsObservedField;
 
-        private SarTaskEditor(SarTaskAssignment row) {
-            this(row, EditorMode.ASSIGNMENT);
-        }
-
-        private SarTaskEditor(SarTaskAssignment row, EditorMode mode) {
+        private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries) {
             this.mode = mode;
             assignmentTeamNumberField = textField(row.getAssignmentTeamNumber(), true);
+            resourceTypeField = new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new));
+            resourceTypeField.setEditable(true);
+            resourceTypeField.setSelectedItem(row.getResourceType());
+            taskTypeField = new JComboBox<>(SarTaskSupport.taskTypes().toArray(String[]::new));
+            taskTypeField.setEditable(true);
+            taskTypeField.setSelectedItem(row.getTaskType());
             incidentNameField = textField(row.getIncidentName(), false);
             resourceIdentifierField = textField(row.getResourceIdentifier(), false);
             leaderRoleField = textField(row.getLeaderRole(), false);
@@ -315,15 +443,43 @@ public class SarTaskPanel extends JPanel {
             specialEquipmentField = textArea(row.getSpecialEquipment(), 2, true);
             communicationsField = communicationEditorPanel(row.getCommunications(), communicationEntryFields);
             debriefingSupervisorField = textField(row.getDebriefingSupervisor(), true);
-            assignmentStartField = textField(SarTaskTableModel.formatDateTime(row.getAssignmentStart()), true);
-            assignmentEndField = textField(SarTaskTableModel.formatDateTime(row.getAssignmentEnd()), true);
+            assignmentStartField = textField(formatDateTimeValue(row.getAssignmentStart()), true);
+            assignmentEndField = textField(formatDateTimeValue(row.getAssignmentEnd()), true);
             vehicleMilesField = textField(row.getVehicleMiles(), true);
+            reportedPodField = textField(row.getReportedPod(), true);
             debriefNotesField = textArea(row.getDebriefNotes(), 4, true);
+            clueEntriesField = clueEditorPanel(cluesForTask(row, clueLogEntries), clueEntryFields);
+            canineSearchTypeField = textField(row.getCanineSearchType(), true);
+            canineImprintField = textField(row.getCanineImprint(), true);
+            canineSunAngleField = textField(row.getCanineSunAngle(), true);
+            canineDayNightField = textField(row.getCanineDayNight(), true);
+            canineCloudCoverField = textField(row.getCanineCloudCover(), true);
+            canineWindSpeedField = textField(row.getCanineWindSpeed(), true);
             areasNotCoveredField = textArea(row.getAreasNotCovered(), 3, true);
             hazardsObservedField = textArea(row.getHazardsObserved(), 3, true);
 
+            canineMetadataField.setOpaque(false);
+            canineMetadataField.add(new JLabel("Canine resource type"));
+            canineMetadataField.add(canineSearchTypeField);
+            canineMetadataField.add(new JLabel("Dog imprint"));
+            canineMetadataField.add(canineImprintField);
+            canineMetadataField.add(new JLabel("Sun angle"));
+            canineMetadataField.add(canineSunAngleField);
+            canineMetadataField.add(new JLabel("Day/night"));
+            canineMetadataField.add(canineDayNightField);
+            canineMetadataField.add(new JLabel("Cloud cover"));
+            canineMetadataField.add(canineCloudCoverField);
+            canineMetadataField.add(new JLabel("Wind speed"));
+            canineMetadataField.add(canineWindSpeedField);
+
+            podFactorsField.setOpaque(false);
+            rebuildPodFactorFields(row.getResourceType(), row.getQualitativePodFactors());
+            resourceTypeField.addActionListener(event -> rebuildPodFactorFields(selectedComboValue(resourceTypeField), existingFactorValues()));
+
             int rowIndex = 0;
             UiSupport.addRequiredRow(panel, rowIndex++, "Assignment/Team #", assignmentTeamNumberField);
+            UiSupport.addRow(panel, rowIndex++, "Resource type", resourceTypeField);
+            UiSupport.addRow(panel, rowIndex++, "Task type", taskTypeField);
             UiSupport.addRow(panel, rowIndex++, "Incident", incidentNameField);
             UiSupport.addRow(panel, rowIndex++, "Resource", resourceIdentifierField);
             if (mode == EditorMode.ASSIGNMENT) {
@@ -344,13 +500,57 @@ public class SarTaskPanel extends JPanel {
             UiSupport.addRow(panel, rowIndex++, "Assignment start (yyyy-MM-dd HH:mm)", assignmentStartField);
             UiSupport.addRow(panel, rowIndex++, "Assignment end (yyyy-MM-dd HH:mm)", assignmentEndField);
             UiSupport.addRow(panel, rowIndex++, "Vehicle miles", vehicleMilesField);
+            UiSupport.addRow(panel, rowIndex++, "Reported POD (%)", reportedPodField);
             UiSupport.addRow(panel, rowIndex++, "Debriefing", debriefNotesField);
+            UiSupport.addRow(panel, rowIndex++, "Clues detected", clueEntriesField);
+            UiSupport.addRow(panel, rowIndex++, SarTaskSupport.podProfileLabel(selectedComboValue(resourceTypeField)), podFactorsField);
+            UiSupport.addRow(panel, rowIndex++, "Canine assignment details", canineMetadataField);
             UiSupport.addRow(panel, rowIndex++, "Areas not covered", areasNotCoveredField);
             UiSupport.addRow(panel, rowIndex, "Hazards observed", hazardsObservedField);
+            updateCanineMetadataVisibility();
         }
 
-        private void applyTo(SarTaskAssignment row) {
+        private void rebuildPodFactorFields(String resourceType, List<PodFactorRating> existing) {
+            podFactorsField.removeAll();
+            podFactorEntryFields.clear();
+            podFactorsField.add(new JLabel("Factor"));
+            podFactorsField.add(new JLabel("Score"));
+            podFactorsField.add(new JLabel("Description"));
+            for (PodFactorRating rating : SarTaskSupport.factorRatings(resourceType, existing)) {
+                boolean descriptionAllowed = SarTaskSupport.allowsDescription(resourceType, rating.getName());
+                PodFactorEntryFields fields = new PodFactorEntryFields(rating, descriptionAllowed);
+                podFactorEntryFields.add(fields);
+                podFactorsField.add(new JLabel(rating.getName() + " (1-" + rating.getMaxScore() + ")"));
+                podFactorsField.add(fields.scoreField);
+                podFactorsField.add(fields.descriptionField);
+            }
+            updateCanineMetadataVisibility();
+            podFactorsField.revalidate();
+            podFactorsField.repaint();
+        }
+
+        private List<PodFactorRating> existingFactorValues() {
+            List<PodFactorRating> ratings = new ArrayList<>();
+            for (PodFactorEntryFields entry : podFactorEntryFields) {
+                PodFactorRating rating = new PodFactorRating();
+                rating.setName(entry.factorName);
+                rating.setMaxScore(entry.maxScore);
+                rating.setScore(parseInteger(entry.scoreField.getText()));
+                rating.setDescription(entry.descriptionField.getText().trim());
+                ratings.add(rating);
+            }
+            return ratings;
+        }
+
+        private void updateCanineMetadataVisibility() {
+            boolean canine = SarTaskSupport.usesCanineFactors(selectedComboValue(resourceTypeField));
+            canineMetadataField.setVisible(canine);
+        }
+
+        private void applyTo(SarTaskAssignment row, List<ClueLogEntry> clueLogEntries) {
             row.setAssignmentTeamNumber(assignmentTeamNumberField.getText().trim());
+            row.setResourceType(selectedComboValue(resourceTypeField));
+            row.setTaskType(selectedComboValue(taskTypeField));
             if (mode == EditorMode.ASSIGNMENT) {
                 row.setResourcesAssigned(resourceValuesFrom(resourceEntryFields));
                 row.setAssignment(textAreaFrom(assignmentField).getText().trim());
@@ -361,12 +561,44 @@ public class SarTaskPanel extends JPanel {
                 return;
             }
             row.setDebriefingSupervisor(debriefingSupervisorField.getText().trim());
-            row.setAssignmentStart(SarTaskTableModel.parseDateTime(assignmentStartField.getText().trim()));
-            row.setAssignmentEnd(SarTaskTableModel.parseDateTime(assignmentEndField.getText().trim()));
+            row.setAssignmentStart(parseDateTimeValue(assignmentStartField.getText().trim()));
+            row.setAssignmentEnd(parseDateTimeValue(assignmentEndField.getText().trim()));
             row.setVehicleMiles(vehicleMilesField.getText().trim());
+            row.setReportedPod(reportedPodField.getText().trim());
             row.setDebriefNotes(textAreaFrom(debriefNotesField).getText().trim());
+            row.setQualitativePodFactors(existingFactorValues());
+            row.setCanineSearchType(canineSearchTypeField.getText().trim());
+            row.setCanineImprint(canineImprintField.getText().trim());
+            row.setCanineSunAngle(canineSunAngleField.getText().trim());
+            row.setCanineDayNight(canineDayNightField.getText().trim());
+            row.setCanineCloudCover(canineCloudCoverField.getText().trim());
+            row.setCanineWindSpeed(canineWindSpeedField.getText().trim());
             row.setAreasNotCovered(textAreaFrom(areasNotCoveredField).getText().trim());
             row.setHazardsObserved(textAreaFrom(hazardsObservedField).getText().trim());
+
+            for (Iterator<ClueLogEntry> iterator = clueLogEntries.iterator(); iterator.hasNext(); ) {
+                ClueLogEntry clue = iterator.next();
+                if (row.getAssignmentId().equals(clue.getAssignmentId())) {
+                    iterator.remove();
+                }
+            }
+            clueLogEntries.addAll(clueValuesFrom(clueEntryFields, row, row.getAssignmentTeamNumber()));
+        }
+    }
+
+    private static String selectedComboValue(JComboBox<String> comboBox) {
+        Object selected = comboBox.getEditor().getItem();
+        return selected == null ? "" : selected.toString().trim();
+    }
+
+    private static Integer parseInteger(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException exception) {
+            return null;
         }
     }
 
@@ -375,21 +607,21 @@ public class SarTaskPanel extends JPanel {
      */
     private static class SarTaskTableModel extends AbstractTableModel {
         private final String[] columns = {
-                "Assignment/Team # (required)", "Incident", "Resource", "Leader Role", "Leader", "Contact",
+                "Assignment/Team # (required)", "Incident", "Resource Type", "Task Type", "Resource", "Leader Role", "Leader", "Contact",
                 "Operations Personnel", "Context", "Resources Assigned", "Work Assignment",
                 "Transportation", "Task Map", "Special Equipment", "Communications",
-                "Debrief Supervisor", "Time On Start", "Time On End", "Vehicle Miles",
-                "Debriefing", "Areas Not Covered", "Hazards Observed"
+                "Debrief Supervisor", "Time On Start", "Time On End", "Vehicle Miles", "Reported POD",
+                "Debriefing", "Clues Detected", "POD Factors", "Areas Not Covered", "Hazards Observed"
         };
         private List<SarTaskAssignment> rows = new ArrayList<>();
+        private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
 
-        /** @param rows replacement rows. */
-        void setRows(List<SarTaskAssignment> rows) {
+        void setRows(List<SarTaskAssignment> rows, List<ClueLogEntry> clueLogEntries) {
             this.rows = rows == null ? new ArrayList<>() : rows;
+            this.clueLogEntries = clueLogEntries == null ? new ArrayList<>() : clueLogEntries;
             fireTableDataChanged();
         }
 
-        /** @return editable rows. */
         List<SarTaskAssignment> getRows() {
             return rows;
         }
@@ -399,51 +631,61 @@ public class SarTaskPanel extends JPanel {
         @Override public String getColumnName(int column) { return columns[column]; }
         @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return !READ_ONLY_COLUMNS.contains(columnIndex); }
 
-        @Override public Object getValueAt(int rowIndex, int columnIndex) {
+        @Override
+        public Object getValueAt(int rowIndex, int columnIndex) {
             SarTaskAssignment row = rows.get(rowIndex);
             return switch (columnIndex) {
                 case 0 -> row.getAssignmentTeamNumber();
                 case 1 -> row.getIncidentName();
-                case 2 -> row.getResourceIdentifier();
-                case 3 -> row.getLeaderRole();
-                case 4 -> row.getLeader();
-                case 5 -> row.getContact();
-                case 6 -> joinOperations(row);
-                case 7 -> joinContext(row);
-                case 8 -> formatResources(row.getResourcesAssigned());
-                case 9 -> row.getAssignment();
-                case 10 -> row.getTransportationInstructions();
-                case 11 -> row.getTaskMap();
-                case 12 -> row.getSpecialEquipment();
-                case 13 -> formatCommunications(row.getCommunications());
-                case 14 -> row.getDebriefingSupervisor();
-                case 15 -> formatDateTime(row.getAssignmentStart());
-                case 16 -> formatDateTime(row.getAssignmentEnd());
-                case 17 -> row.getVehicleMiles();
-                case 18 -> row.getDebriefNotes();
-                case 19 -> row.getAreasNotCovered();
+                case 2 -> row.getResourceType();
+                case 3 -> row.getTaskType();
+                case 4 -> row.getResourceIdentifier();
+                case 5 -> row.getLeaderRole();
+                case 6 -> row.getLeader();
+                case 7 -> row.getContact();
+                case 8 -> joinOperations(row);
+                case 9 -> joinContext(row);
+                case 10 -> formatResources(row.getResourcesAssigned());
+                case 11 -> row.getAssignment();
+                case 12 -> row.getTransportationInstructions();
+                case 13 -> row.getTaskMap();
+                case 14 -> row.getSpecialEquipment();
+                case 15 -> formatCommunications(row.getCommunications());
+                case 16 -> row.getDebriefingSupervisor();
+                case 17 -> formatDateTimeValue(row.getAssignmentStart());
+                case 18 -> formatDateTimeValue(row.getAssignmentEnd());
+                case 19 -> row.getVehicleMiles();
+                case 20 -> row.getReportedPod();
+                case 21 -> row.getDebriefNotes();
+                case 22 -> formatClues(row, clueLogEntries);
+                case 23 -> formatPodFactors(row.getQualitativePodFactors());
+                case 24 -> row.getAreasNotCovered();
                 default -> row.getHazardsObserved();
             };
         }
 
-        @Override public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
+        @Override
+        public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
             SarTaskAssignment row = rows.get(rowIndex);
             String value = aValue == null ? "" : aValue.toString();
             switch (columnIndex) {
                 case 0 -> row.setAssignmentTeamNumber(value);
-                case 8 -> row.setResourcesAssigned(parseResources(value));
-                case 9 -> row.setAssignment(value);
-                case 10 -> row.setTransportationInstructions(value);
-                case 11 -> row.setTaskMap(value);
-                case 12 -> row.setSpecialEquipment(value);
-                case 13 -> row.setCommunications(parseCommunications(value));
-                case 14 -> row.setDebriefingSupervisor(value);
-                case 15 -> row.setAssignmentStart(parseDateTime(value));
-                case 16 -> row.setAssignmentEnd(parseDateTime(value));
-                case 17 -> row.setVehicleMiles(value);
-                case 18 -> row.setDebriefNotes(value);
-                case 19 -> row.setAreasNotCovered(value);
-                case 20 -> row.setHazardsObserved(value);
+                case 2 -> row.setResourceType(value);
+                case 3 -> row.setTaskType(value);
+                case 10 -> row.setResourcesAssigned(parseResources(value));
+                case 11 -> row.setAssignment(value);
+                case 12 -> row.setTransportationInstructions(value);
+                case 13 -> row.setTaskMap(value);
+                case 14 -> row.setSpecialEquipment(value);
+                case 15 -> row.setCommunications(parseCommunications(value));
+                case 16 -> row.setDebriefingSupervisor(value);
+                case 17 -> row.setAssignmentStart(parseDateTimeValue(value));
+                case 18 -> row.setAssignmentEnd(parseDateTimeValue(value));
+                case 19 -> row.setVehicleMiles(value);
+                case 20 -> row.setReportedPod(value);
+                case 21 -> row.setDebriefNotes(value);
+                case 24 -> row.setAreasNotCovered(value);
+                case 25 -> row.setHazardsObserved(value);
                 default -> { return; }
             }
             fireTableCellUpdated(rowIndex, columnIndex);
@@ -532,6 +774,27 @@ public class SarTaskPanel extends JPanel {
             return communications;
         }
 
+        private static String formatClues(SarTaskAssignment row, List<ClueLogEntry> clueLogEntries) {
+            List<String> descriptions = new ArrayList<>();
+            for (ClueLogEntry clue : clueLogEntries) {
+                if (clue != null && row.getAssignmentId().equals(clue.getAssignmentId()) && !clue.getDescription().isBlank()) {
+                    descriptions.add(clue.getDescription());
+                }
+            }
+            return String.join(" ; ", descriptions);
+        }
+
+        private static String formatPodFactors(List<PodFactorRating> factors) {
+            List<String> values = new ArrayList<>();
+            for (PodFactorRating factor : factors) {
+                if (factor == null || factor.getScore() == null) {
+                    continue;
+                }
+                values.add(factor.getName() + " " + factor.getScore() + "/" + factor.getMaxScore());
+            }
+            return String.join(" ; ", values);
+        }
+
         private static List<String> splitEntries(String value) {
             List<String> entries = new ArrayList<>();
             for (String raw : value.split("\\s*;\\s*")) {
@@ -541,21 +804,6 @@ public class SarTaskPanel extends JPanel {
                 }
             }
             return entries;
-        }
-
-        private static String formatDateTime(LocalDateTime value) {
-            return value == null ? "" : DATE_TIME_FORMATTER.format(value);
-        }
-
-        private static LocalDateTime parseDateTime(String value) {
-            if (value == null || value.isBlank()) {
-                return null;
-            }
-            try {
-                return LocalDateTime.parse(value.trim(), DATE_TIME_FORMATTER);
-            } catch (DateTimeParseException exception) {
-                return null;
-            }
         }
     }
 

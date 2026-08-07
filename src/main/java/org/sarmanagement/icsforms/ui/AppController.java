@@ -1,6 +1,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
@@ -336,10 +337,36 @@ public class AppController {
         data.setSarTaskAssignments(synced);
     }
 
+    /**
+     * Synchronizes editable SAR task linkage fields back into the matching ICS 204 resource rows.
+     */
+    public void syncIcs204ResourcesFromSarTasks() {
+        Map<String, SarTaskAssignment> tasksById = new LinkedHashMap<>();
+        for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+            tasksById.put(task.getAssignmentId(), task);
+        }
+        for (ResourceAssignment resource : data.getForm204().getResourcesAssigned()) {
+            SarTaskAssignment task = tasksById.get(resource.getAssignmentId());
+            if (task == null) {
+                continue;
+            }
+            resource.setAssignmentTeamNumber(task.getAssignmentTeamNumber());
+            resource.setResourceType(task.getResourceType());
+            resource.setTaskType(task.getTaskType());
+        }
+        updateClueTaskLabels(tasksById);
+    }
+
     private SarTaskAssignment mergeSarTask(SarTaskAssignment existing, SarTaskAssignment scaffold) {
         existing.setAssignmentId(scaffold.getAssignmentId());
         if (!safe(scaffold.getAssignmentTeamNumber()).isBlank()) {
             existing.setAssignmentTeamNumber(scaffold.getAssignmentTeamNumber());
+        }
+        if (!safe(scaffold.getResourceType()).isBlank()) {
+            existing.setResourceType(scaffold.getResourceType());
+        }
+        if (!safe(scaffold.getTaskType()).isBlank()) {
+            existing.setTaskType(scaffold.getTaskType());
         }
         existing.setIncidentName(scaffold.getIncidentName());
         existing.setResourceIdentifier(scaffold.getResourceIdentifier());
@@ -423,6 +450,9 @@ public class AppController {
         if (data.getSarTaskAssignments() == null) {
             data.setSarTaskAssignments(new ArrayList<>());
         }
+        if (data.getClueLogEntries() == null) {
+            data.setClueLogEntries(new ArrayList<>());
+        }
         if (data.getSchemaVersion() == 0) {
             data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
         }
@@ -489,6 +519,15 @@ public class AppController {
             return LinkSource.ORG_CHART;
         }
         return LinkSource.NONE;
+    }
+
+    private void updateClueTaskLabels(Map<String, SarTaskAssignment> tasksById) {
+        for (ClueLogEntry entry : data.getClueLogEntries()) {
+            SarTaskAssignment task = tasksById.get(entry.getAssignmentId());
+            if (task != null) {
+                entry.setDetectingTask(task.getAssignmentTeamNumber());
+            }
+        }
     }
 
     private List<String> withAddedUnique(List<String> values, String value) {

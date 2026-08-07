@@ -417,7 +417,13 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private List<List<String>> resourceColumns(ResourceAssignment resource, boolean appendContinuationNotice) {
         List<List<String>> columns = new ArrayList<>();
-        columns.add(wrap(safe(resource.getResourceIdentifier()), 18));
+        String resourceIdentifier = safe(resource.getResourceIdentifier());
+        if (!safe(resource.getResourceType()).isBlank() || !safe(resource.getTaskType()).isBlank()) {
+            resourceIdentifier = joinAvailable(resourceIdentifier,
+                    labelValue("Type", resource.getResourceType()),
+                    labelValue("Task", resource.getTaskType()));
+        }
+        columns.add(wrap(resourceIdentifier, 18));
         columns.add(wrap(safe(resource.getLeader()), 18));
         columns.add(List.of(resource.getNumberOfPersons() > 0 ? String.valueOf(resource.getNumberOfPersons()) : ""));
         columns.add(wrap(safe(resource.getContact()), 24));
@@ -440,6 +446,9 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         List<String> lines = new ArrayList<>();
         for (ResourceAssignment resource : resources) {
             lines.add("Resource Identifier: " + safe(resource.getResourceIdentifier()));
+            if (!safe(resource.getResourceType()).isBlank() || !safe(resource.getTaskType()).isBlank()) {
+                lines.add("Resource / Task Type: " + joinAvailable(safe(resource.getResourceType()), safe(resource.getTaskType())));
+            }
             lines.add("Leader: " + safe(resource.getLeader()) + " | # of Persons: "
                     + (resource.getNumberOfPersons() > 0 ? resource.getNumberOfPersons() : "")
                     + " | Contact: " + safe(resource.getContact()));

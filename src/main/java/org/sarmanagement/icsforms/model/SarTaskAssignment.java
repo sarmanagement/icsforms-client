@@ -11,6 +11,8 @@ import java.util.List;
 public class SarTaskAssignment {
     private String assignmentId = "";
     private String assignmentTeamNumber = "";
+    private String resourceType = "";
+    private String taskType = "";
     private String incidentName = "";
     private String resourceIdentifier = "";
     private String leaderRole = "Leader";
@@ -40,8 +42,16 @@ public class SarTaskAssignment {
     private java.time.LocalDateTime assignmentEnd;
     private String vehicleMiles = "";
     private String debriefNotes = "";
+    private String reportedPod = "";
     private String areasNotCovered = "";
     private String hazardsObserved = "";
+    private String canineSearchType = "";
+    private String canineImprint = "";
+    private String canineSunAngle = "";
+    private String canineDayNight = "";
+    private String canineCloudCover = "";
+    private String canineWindSpeed = "";
+    private List<PodFactorRating> qualitativePodFactors = new ArrayList<>();
     private String debriefPreparedByName = "";
     private String debriefPreparedByPositionTitle = "";
     private java.time.LocalDateTime debriefPreparedDateTime;
@@ -59,6 +69,8 @@ public class SarTaskAssignment {
         if (resourceAssignment != null) {
             task.setAssignmentId(resourceAssignment.getAssignmentId());
             task.setAssignmentTeamNumber(resourceAssignment.getAssignmentTeamNumber());
+            task.setResourceType(resourceAssignment.getResourceType());
+            task.setTaskType(resourceAssignment.getTaskType());
             task.setResourceIdentifier(resourceAssignment.getResourceIdentifier());
             task.setLeaderRole(resourceAssignment.getLeaderRole());
             task.setLeader(resourceAssignment.getLeader());
@@ -143,6 +155,14 @@ public class SarTaskAssignment {
     public String getAssignmentTeamNumber() { return assignmentTeamNumber; }
     /** @param assignmentTeamNumber assignment/team number. */
     public void setAssignmentTeamNumber(String assignmentTeamNumber) { this.assignmentTeamNumber = assignmentTeamNumber == null ? "" : assignmentTeamNumber; }
+    /** @return resource type. */
+    public String getResourceType() { return resourceType; }
+    /** @param resourceType resource type. */
+    public void setResourceType(String resourceType) { this.resourceType = SarTaskSupport.normalizedResourceType(resourceType); }
+    /** @return task type. */
+    public String getTaskType() { return taskType; }
+    /** @param taskType task type. */
+    public void setTaskType(String taskType) { this.taskType = SarTaskSupport.normalizedTaskType(taskType); }
     /** @return incident name. */
     public String getIncidentName() { return incidentName; }
     /** @param incidentName incident name. */
@@ -255,6 +275,10 @@ public class SarTaskAssignment {
     public String getDebriefNotes() { return debriefNotes; }
     /** @param debriefNotes debrief notes. */
     public void setDebriefNotes(String debriefNotes) { this.debriefNotes = debriefNotes == null ? "" : debriefNotes; }
+    /** @return reported POD percent. */
+    public String getReportedPod() { return reportedPod; }
+    /** @param reportedPod reported POD percent. */
+    public void setReportedPod(String reportedPod) { this.reportedPod = reportedPod == null ? "" : reportedPod; }
     /** @return areas not covered notes. */
     public String getAreasNotCovered() { return areasNotCovered; }
     /** @param areasNotCovered areas not covered notes. */
@@ -263,6 +287,36 @@ public class SarTaskAssignment {
     public String getHazardsObserved() { return hazardsObserved; }
     /** @param hazardsObserved hazards observed notes. */
     public void setHazardsObserved(String hazardsObserved) { this.hazardsObserved = hazardsObserved == null ? "" : hazardsObserved; }
+    /** @return canine resource subtype. */
+    public String getCanineSearchType() { return canineSearchType; }
+    /** @param canineSearchType canine resource subtype. */
+    public void setCanineSearchType(String canineSearchType) { this.canineSearchType = canineSearchType == null ? "" : canineSearchType; }
+    /** @return canine imprint. */
+    public String getCanineImprint() { return canineImprint; }
+    /** @param canineImprint canine imprint. */
+    public void setCanineImprint(String canineImprint) { this.canineImprint = canineImprint == null ? "" : canineImprint; }
+    /** @return canine sun angle notes. */
+    public String getCanineSunAngle() { return canineSunAngle; }
+    /** @param canineSunAngle canine sun angle notes. */
+    public void setCanineSunAngle(String canineSunAngle) { this.canineSunAngle = canineSunAngle == null ? "" : canineSunAngle; }
+    /** @return canine day/night notes. */
+    public String getCanineDayNight() { return canineDayNight; }
+    /** @param canineDayNight canine day/night notes. */
+    public void setCanineDayNight(String canineDayNight) { this.canineDayNight = canineDayNight == null ? "" : canineDayNight; }
+    /** @return canine cloud cover notes. */
+    public String getCanineCloudCover() { return canineCloudCover; }
+    /** @param canineCloudCover canine cloud cover notes. */
+    public void setCanineCloudCover(String canineCloudCover) { this.canineCloudCover = canineCloudCover == null ? "" : canineCloudCover; }
+    /** @return canine wind speed notes. */
+    public String getCanineWindSpeed() { return canineWindSpeed; }
+    /** @param canineWindSpeed canine wind speed notes. */
+    public void setCanineWindSpeed(String canineWindSpeed) { this.canineWindSpeed = canineWindSpeed == null ? "" : canineWindSpeed; }
+    /** @return qualitative POD factors. */
+    public List<PodFactorRating> getQualitativePodFactors() { return qualitativePodFactors; }
+    /** @param qualitativePodFactors qualitative POD factors. */
+    public void setQualitativePodFactors(List<PodFactorRating> qualitativePodFactors) {
+        this.qualitativePodFactors = qualitativePodFactors == null ? new ArrayList<>() : qualitativePodFactors;
+    }
     /** @return debrief prepared by name. */
     public String getDebriefPreparedByName() { return debriefPreparedByName; }
     /** @param debriefPreparedByName debrief prepared by name. */

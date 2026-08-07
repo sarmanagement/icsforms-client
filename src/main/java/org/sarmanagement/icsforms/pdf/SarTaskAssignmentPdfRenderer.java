@@ -7,10 +7,13 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.PodFactorRating;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.SarTaskSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -45,7 +48,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
                     ? List.of(new SarTaskAssignment()) : data.getSarTaskAssignments();
             for (SarTaskAssignment task : tasks) {
                 renderAssignmentPage(document, data.getIncidentContext(), task);
-                renderDebriefPage(document, task);
+                renderDebriefPage(document, task, data.getClueLogEntries());
             }
             document.save(outputFile.toFile());
         }
@@ -131,6 +134,10 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     }
 
     private void renderDebriefPage(PDDocument document, SarTaskAssignment task) throws IOException {
+        renderDebriefPage(document, task, List.of());
+    }
+
+    private void renderDebriefPage(PDDocument document, SarTaskAssignment task, List<ClueLogEntry> clueLogEntries) throws IOException {
         PDPage page = new PDPage(PDRectangle.LETTER);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
@@ -165,8 +172,8 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             y -= row1;
 
             drawCell(stream, layout.x(), y - row2, pageWidth, row2);
-            drawSection(stream, bold, regular, layout.x(), y - row2, pageWidth, row2,
-                    "15. Debriefing", wrap(task.getDebriefNotes(), 96));
+            drawDebriefingSection(stream, bold, regular, layout.x(), y - row2, pageWidth, row2,
+                    task, cluesForTask(task, clueLogEntries));
             y -= row2;
 
             drawCell(stream, layout.x(), y - row3, pageWidth, row3);
@@ -189,7 +196,10 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
                                       float x, float y, float width, float height, SarTaskAssignment task) throws IOException {
         drawHeading(stream, bold, x, y + height, "5. Resources Assigned");
         drawRightAlignedHeadingValue(stream, regular, x, y + height, width, task.getResourceIdentifier());
-        float tableTop = y + height - 18f;
+        float detailLineY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 16f;
+        drawInlinePair(stream, bold, regular, x + CELL_PADDING, detailLineY, "Resource Type", safe(task.getResourceType()));
+        drawInlinePair(stream, bold, regular, x + (width * 0.42f), detailLineY, "Task Type", safe(task.getTaskType()));
+        float tableTop = y + height - 30f;
         float headerHeight = 20f;
         float headerBottom = tableTop - headerHeight;
         float rowHeight = (headerBottom - y) / 9f;
@@ -339,6 +349,22 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         stream.endText();
     }
 
+    private void drawDebriefingSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                       float x, float y, float width, float height, SarTaskAssignment task,
+                                       List<ClueLogEntry> clues) throws IOException {
+        drawHeading(stream, bold, x, y + height, "15. Debriefing");
+        if (!safe(task.getReportedPod()).isBlank()) {
+            String podLabel = "REPORTED POD: " + safe(task.getReportedPod()) + "%";
+            float podWidth = bold.getStringWidth(podLabel) / 1000f * BODY_FONT_SIZE;
+            stream.beginText();
+            stream.setFont(bold, BODY_FONT_SIZE);
+            stream.newLineAtOffset(x + width - CELL_PADDING - podWidth, y + height - CELL_PADDING - HEADING_FONT_SIZE);
+            stream.showText(podLabel);
+            stream.endText();
+        }
+        writeWrappedCellText(stream, regular, x, y, width, height - 20f, debriefSectionLines(task, clues));
+    }
+
     private void drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                              float x, float y, float width, float height, String heading, List<String> lines) throws IOException {
         drawHeading(stream, bold, x, y + height, heading);
@@ -449,6 +475,78 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         return resources;
     }
 
+    private List<ClueLogEntry> cluesForTask(SarTaskAssignment task, List<ClueLogEntry> clueLogEntries) {
+        List<ClueLogEntry> matches = new ArrayList<>();
+        for (ClueLogEntry clue : clueLogEntries) {
+            if (clue != null && safe(task.getAssignmentId()).equals(clue.getAssignmentId())) {
+                matches.add(clue);
+            }
+        }
+        return matches;
+    }
+
+    private List<String> debriefSectionLines(SarTaskAssignment task, List<ClueLogEntry> clues) {
+        List<String> lines = new ArrayList<>();
+        addWrappedBlock(lines, safe(task.getDebriefNotes()), 96);
+        if (!clues.isEmpty()) {
+            lines.add("");
+            lines.add("Clues Detected:");
+            for (ClueLogEntry clue : clues) {
+                String clueSummary = joinNonBlank(
+                        formatDateTime(clue.getDateTimeCollected()),
+                        safe(clue.getLocation()),
+                        safe(clue.getDescription()),
+                        safe(clue.getFollowUp()));
+                addWrappedBlock(lines, "- " + clueSummary, 92);
+            }
+        }
+        List<PodFactorRating> factors = SarTaskSupport.factorRatings(task.getResourceType(), task.getQualitativePodFactors());
+        boolean hasFactorContent = factors.stream().anyMatch(factor -> factor.getScore() != null || !safe(factor.getDescription()).isBlank());
+        if (hasFactorContent) {
+            lines.add("");
+            lines.add("Qualitative POD Factors (" + SarTaskSupport.podProfileLabel(task.getResourceType()) + "):");
+            for (PodFactorRating factor : factors) {
+                if (factor.getScore() == null && safe(factor.getDescription()).isBlank()) {
+                    continue;
+                }
+                String factorSummary = factor.getName() + " " + (factor.getScore() == null ? "" : factor.getScore() + "/" + factor.getMaxScore());
+                if (!safe(factor.getDescription()).isBlank()) {
+                    factorSummary += ": " + factor.getDescription();
+                }
+                addWrappedBlock(lines, "- " + factorSummary.trim(), 92);
+            }
+        }
+        if (SarTaskSupport.usesCanineFactors(task.getResourceType())) {
+            List<String> canineLines = new ArrayList<>();
+            addIfPresent(canineLines, "Canine Type", task.getCanineSearchType());
+            addIfPresent(canineLines, "Imprint", task.getCanineImprint());
+            addIfPresent(canineLines, "Sun Angle", task.getCanineSunAngle());
+            addIfPresent(canineLines, "Day/Night", task.getCanineDayNight());
+            addIfPresent(canineLines, "Cloud Cover", task.getCanineCloudCover());
+            addIfPresent(canineLines, "Wind Speed", task.getCanineWindSpeed());
+            if (!canineLines.isEmpty()) {
+                lines.add("");
+                lines.add("Canine Assignment Conditions:");
+                for (String canineLine : canineLines) {
+                    addWrappedBlock(lines, "- " + canineLine, 92);
+                }
+            }
+        }
+        return lines.isEmpty() ? List.of("") : lines;
+    }
+
+    private void addWrappedBlock(List<String> lines, String value, int width) {
+        if (!safe(value).isBlank()) {
+            lines.addAll(wrap(value, width));
+        }
+    }
+
+    private void addIfPresent(List<String> lines, String label, String value) {
+        if (!safe(value).isBlank()) {
+            lines.add(label + ": " + value);
+        }
+    }
+
     private LabeledValue relevantContext(SarTaskAssignment task) {
         // The printed form only has room for one management-context cell, so prefer the
         // first populated ICS 204 context field in its Branch -> Division -> Group ->
@@ -478,6 +576,16 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
     private String formatDateTime(LocalDateTime value) {
         return value == null ? "" : formatDate(value) + " " + formatTime(value);
+    }
+
+    private String joinNonBlank(String... values) {
+        List<String> parts = new ArrayList<>();
+        for (String value : values) {
+            if (!safe(value).isBlank()) {
+                parts.add(value.trim());
+            }
+        }
+        return String.join(" | ", parts);
     }
 
     private String safe(String value) {

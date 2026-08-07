@@ -36,6 +36,7 @@ public class MainFrame extends JFrame {
     private final Ics202Panel ics202Panel;
     private final Ics204Panel ics204Panel;
     private final SarTaskPanel sarTaskPanel;
+    private final ClueLogPanel clueLogPanel;
     private final JTabbedPane tabs = new JTabbedPane();
     private final Map<java.awt.Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
     private int lastSelectedTabIndex = -1;
@@ -57,6 +58,7 @@ public class MainFrame extends JFrame {
         this.ics202Panel = new Ics202Panel(controller);
         this.ics204Panel = new Ics204Panel(controller);
         this.sarTaskPanel = new SarTaskPanel(controller);
+        this.clueLogPanel = new ClueLogPanel(controller);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setPreferredSize(new Dimension(1120, 820));
         setJMenuBar(createMenuBar(defaultDirectory));
@@ -74,6 +76,7 @@ public class MainFrame extends JFrame {
         tabs.addTab("ICS 204", ics204Panel);
         tabSources.put(ics204Panel, AppController.LinkSource.ICS204);
         tabs.addTab("SAR Tasks", sarTaskPanel);
+        tabs.addTab("Clue Log", clueLogPanel);
         tabs.addChangeListener(event -> {
             int selectedIndex = tabs.getSelectedIndex();
             if (selectedIndex == lastSelectedTabIndex) {
@@ -212,6 +215,7 @@ public class MainFrame extends JFrame {
         ics202Panel.pushToModel();
         ics204Panel.pushToModel();
         sarTaskPanel.pushToModel();
+        clueLogPanel.pushToModel();
         controller.markDirty(source);
     }
 
@@ -224,6 +228,7 @@ public class MainFrame extends JFrame {
         ics202Panel.refreshFromModel();
         ics204Panel.refreshFromModel();
         sarTaskPanel.refreshFromModel();
+        clueLogPanel.refreshFromModel();
         refreshStatus();
     }
 

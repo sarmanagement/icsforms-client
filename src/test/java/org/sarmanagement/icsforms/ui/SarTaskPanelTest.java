@@ -2,12 +2,14 @@ package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
@@ -68,14 +70,17 @@ class SarTaskPanelTest {
         panelField.setAccessible(true);
 
         JLabel[] debriefLabel = new JLabel[1];
+        JLabel[] reportedPodLabel = new JLabel[1];
         JLabel[] resourcesLabel = new JLabel[1];
         SwingUtilities.invokeAndWait(() -> {
             Component panel = (Component) getFieldValue(panelField, editor);
             debriefLabel[0] = findLabel(panel, "Debriefing");
+            reportedPodLabel[0] = findLabel(panel, "Reported POD (%)");
             resourcesLabel[0] = findLabel(panel, "Resources assigned");
         });
 
         assertNotNull(debriefLabel[0]);
+        assertNotNull(reportedPodLabel[0]);
         assertNull(resourcesLabel[0]);
     }
 
@@ -114,9 +119,9 @@ class SarTaskPanelTest {
         Class<?> editorClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$SarTaskEditor");
         Class<?> modeClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$EditorMode");
         Object mode = enumConstant(modeClass, modeName);
-        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass);
+        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass, List.class);
         constructor.setAccessible(true);
-        return constructor.newInstance(task, mode);
+        return constructor.newInstance(task, mode, List.of());
     }
 
     private static Object enumConstant(Class<?> enumClass, String name) {
@@ -155,6 +160,8 @@ class SarTaskPanelTest {
         ResourceAssignment resource = new ResourceAssignment();
         resource.setAssignmentId("assign-1");
         resource.setAssignmentTeamNumber("A-1");
+        resource.setResourceType(SarTaskSupport.RESOURCE_TYPE_CANINE);
+        resource.setTaskType(SarTaskSupport.TASK_TYPE_AREA);
         resource.setResourceIdentifier("Team 1");
         resource.setLeaderRole("Leader/Handler");
         resource.setLeader("Leader A");
@@ -186,7 +193,9 @@ class SarTaskPanelTest {
         form204.setSpecialInstructions("Maintain radio discipline");
         form204.setPreparedDateTime(LocalDateTime.parse("2026-01-01T02:00:00"));
 
-        return SarTaskAssignment.fromResourceAssignment(resource, context, form204);
+        SarTaskAssignment task = SarTaskAssignment.fromResourceAssignment(resource, context, form204);
+        task.setReportedPod("60");
+        return task;
     }
 
     private static AppController sampleController() throws Exception {
@@ -194,6 +203,8 @@ class SarTaskPanelTest {
         ResourceAssignment resource = new ResourceAssignment();
         resource.setAssignmentId(task.getAssignmentId());
         resource.setAssignmentTeamNumber(task.getAssignmentTeamNumber());
+        resource.setResourceType(task.getResourceType());
+        resource.setTaskType(task.getTaskType());
         resource.setResourceIdentifier(task.getResourceIdentifier());
         resource.setLeaderRole(task.getLeaderRole());
         resource.setLeader(task.getLeader());
@@ -218,6 +229,11 @@ class SarTaskPanelTest {
         context.setTaskMap(task.getTaskMap());
 
         AppData data = new AppData(context, new Ics202Form(), form204, List.of(task));
+        ClueLogEntry clue = new ClueLogEntry();
+        clue.setAssignmentId(task.getAssignmentId());
+        clue.setDetectingTask(task.getAssignmentTeamNumber());
+        clue.setDescription("Footprint");
+        data.setClueLogEntries(List.of(clue));
         return new AppController(
                 data,
                 new LocalRepository(Files.createTempDirectory("icsforms-ui").resolve("incident.json")),

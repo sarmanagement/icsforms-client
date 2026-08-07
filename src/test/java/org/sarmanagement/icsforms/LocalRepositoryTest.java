@@ -2,13 +2,16 @@ package org.sarmanagement.icsforms;
 
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
+import org.sarmanagement.icsforms.model.PodFactorRating;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
@@ -61,8 +64,12 @@ class LocalRepositoryTest {
         assertEquals(1, loaded.getForm204().getResourcesAssigned().size());
         assertEquals("assign-1", loaded.getForm204().getResourcesAssigned().get(0).getAssignmentId());
         assertEquals("A-1", loaded.getForm204().getResourcesAssigned().get(0).getAssignmentTeamNumber());
+        assertEquals(SarTaskSupport.RESOURCE_TYPE_CANINE, loaded.getForm204().getResourcesAssigned().get(0).getResourceType());
+        assertEquals(SarTaskSupport.TASK_TYPE_AREA, loaded.getForm204().getResourcesAssigned().get(0).getTaskType());
         assertEquals(Ics204Form.MANAGEMENT_DIVISION, loaded.getForm204().getManagementContext());
         assertEquals("Map-42", loaded.getIncidentContext().getTaskMap());
+        assertEquals("65", loaded.getSarTaskAssignments().get(0).getReportedPod());
+        assertEquals(1, loaded.getClueLogEntries().size());
     }
 
     /**
@@ -157,6 +164,8 @@ class LocalRepositoryTest {
         assertEquals("Division A", task.getDivision());
         assertEquals("A-1", task.getAssignmentTeamNumber());
         assertEquals("Leader/Handler", task.getLeaderRole());
+        assertEquals(SarTaskSupport.RESOURCE_TYPE_CANINE, task.getResourceType());
+        assertEquals(SarTaskSupport.TASK_TYPE_AREA, task.getTaskType());
         assertEquals("Map-42", task.getTaskMap());
         assertEquals("Tac 1", task.getCommunications().get(0).getPrimaryContact());
         assertEquals("Team 1 Lead", task.getCommunications().get(0).getName());
@@ -179,6 +188,7 @@ class LocalRepositoryTest {
         task.setDebriefNotes("Completed assignment and located clues.");
         task.setAssignment("Detailed segment instructions");
         task.setVehicleMiles("14");
+        task.setReportedPod("70");
         controller.getData().getIncidentContext().setTaskMap("Map-99");
         controller.syncSarTasks();
 
@@ -186,6 +196,7 @@ class LocalRepositoryTest {
         assertEquals("Completed assignment and located clues.", synced.getDebriefNotes());
         assertEquals("Detailed segment instructions", synced.getAssignment());
         assertEquals("14", synced.getVehicleMiles());
+        assertEquals("70", synced.getReportedPod());
         assertEquals("Map-99", synced.getTaskMap());
         assertEquals("A-1", synced.getAssignmentTeamNumber());
     }
@@ -275,6 +286,8 @@ class LocalRepositoryTest {
             assertTrue(text.contains("8. Task Map"));
             assertTrue(text.contains("Map-42"));
             assertTrue(text.contains("15. Debriefing"));
+            assertTrue(text.contains("REPORTED POD: 65%"));
+            assertTrue(text.contains("Clues Detected:"));
             assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 706f));
             assertTrue(hasRectangle(pdf.getPage(1), 36f, 36f, 540f, 706f));
             assertEquals(1, countRectangles(pdf.getPage(0), 36f, 36f, 180f, 14f));
@@ -337,6 +350,8 @@ class LocalRepositoryTest {
         ResourceAssignment resource = new ResourceAssignment();
         resource.setAssignmentId("assign-1");
         resource.setAssignmentTeamNumber("A-1");
+        resource.setResourceType(SarTaskSupport.RESOURCE_TYPE_CANINE);
+        resource.setTaskType(SarTaskSupport.TASK_TYPE_AREA);
         resource.setResourceIdentifier("Team 1");
         resource.setLeaderRole("Leader/Handler");
         resource.setLeader("Leader A");
@@ -373,13 +388,43 @@ class LocalRepositoryTest {
         SarTaskAssignment task = SarTaskAssignment.fromResourceAssignment(resource, context, form204);
         task.setPreparedDateTime(form204.getPreparedDateTime());
         task.setDebriefNotes("Initial debrief notes");
+        task.setReportedPod("65");
+        task.setCanineSearchType("Wilderness air scent");
+        task.setCanineImprint("Live find");
+        task.setCanineSunAngle("Low sun");
+        task.setCanineDayNight("Day");
+        task.setCanineCloudCover("Broken clouds");
+        task.setCanineWindSpeed("8 mph");
+        task.setQualitativePodFactors(samplePodFactors());
         AppData data = new AppData(context, form202, form204, List.of(task));
+        ClueLogEntry clue = new ClueLogEntry();
+        clue.setAssignmentId("assign-1");
+        clue.setDetectingTask("A-1");
+        clue.setDateTimeCollected(LocalDateTime.parse("2026-01-01T03:00:00"));
+        clue.setLocation("Trail junction");
+        clue.setDescription("Fresh shoe print");
+        clue.setFollowUp("Photograph and mark");
+        data.setClueLogEntries(List.of(clue));
         OrganizationalChart organizationalChart = new OrganizationalChart();
         organizationalChart.setIncidentCommanders(List.of("IC One", "IC Two"));
         organizationalChart.setOperationsSectionChiefName("Ops Chief");
         data.setOrganizationalChart(organizationalChart);
         data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
         return data;
+    }
+
+    private List<PodFactorRating> samplePodFactors() {
+        PodFactorRating hazards = new PodFactorRating();
+        hazards.setName("Hazards Observed");
+        hazards.setMaxScore(5);
+        hazards.setScore(4);
+
+        PodFactorRating wind = new PodFactorRating();
+        wind.setName("Wind");
+        wind.setMaxScore(10);
+        wind.setScore(7);
+        wind.setDescription("Steady crosswind");
+        return List.of(hazards, wind);
     }
 
     private String expectedSarContextHeading(SarTaskAssignment task) {
