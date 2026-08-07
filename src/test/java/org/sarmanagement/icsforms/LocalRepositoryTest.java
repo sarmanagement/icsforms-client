@@ -79,6 +79,26 @@ class LocalRepositoryTest {
     }
 
     /**
+     * Verifies legacy SAR task JSON fields continue loading after schema evolution.
+     *
+     * @throws Exception when temp file setup fails.
+     */
+    @Test
+    void legacySarTaskFieldsRemainLoadable() throws Exception {
+        Path tempDir = Files.createTempDirectory("icsforms");
+        Path tempFile = tempDir.resolve("incident.json");
+        LocalRepository repository = new LocalRepository(tempFile);
+        repository.save(sampleData());
+        String legacyJson = Files.readString(tempFile).replace("\"specialEquipment\"", "\"specialInstructions\"");
+        Files.writeString(tempFile, legacyJson);
+
+        AppData loaded = repository.loadOrDefault();
+
+        assertEquals(1, loaded.getSarTaskAssignments().size());
+        assertEquals("ATV / Medical kit", loaded.getSarTaskAssignments().get(0).getSpecialEquipment());
+    }
+
+    /**
      * Verifies conditional supervisor validation and date ordering checks.
      */
     @Test

@@ -1,5 +1,7 @@
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -215,6 +217,7 @@ public class SarTaskAssignment {
     /** @return special equipment. */
     public String getSpecialEquipment() { return specialEquipment; }
     /** @param specialEquipment special equipment. */
+    @JsonAlias("specialInstructions")
     public void setSpecialEquipment(String specialEquipment) { this.specialEquipment = specialEquipment == null ? "" : specialEquipment; }
     /** @return communications context. */
     public List<CommunicationEntry> getCommunications() { return communications; }
