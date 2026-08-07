@@ -261,7 +261,7 @@ class LocalRepositoryTest {
             assertTrue(text.contains("SAR TASK ASSIGNMENT FORM"));
             assertTrue(text.contains("1. Incident Name"));
             assertTrue(text.contains("Assignment/Team Number"));
-            assertTrue(text.contains("3. Division"));
+            assertTrue(text.contains(expectedSarContextHeading(data.getSarTaskAssignments().get(0))));
             assertTrue(text.contains("A-1"));
             assertTrue(text.contains("Leader/Handler"));
             assertTrue(text.contains("8. Task Map"));
@@ -335,5 +335,21 @@ class LocalRepositoryTest {
         data.setOrganizationalChart(organizationalChart);
         data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
         return data;
+    }
+
+    private String expectedSarContextHeading(SarTaskAssignment task) {
+        if (!task.getBranch().isBlank()) {
+            return "3. Branch";
+        }
+        if (!task.getDivision().isBlank()) {
+            return "3. Division";
+        }
+        if (!task.getGroup().isBlank()) {
+            return "3. Group";
+        }
+        if (!task.getStagingArea().isBlank()) {
+            return "3. Staging Area";
+        }
+        return "3. Context";
     }
 }

@@ -462,6 +462,9 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     }
 
     private LabeledValue relevantContext(SarTaskAssignment task) {
+        // The printed form only has room for one management-context cell, so prefer the
+        // most organizationally specific populated value in the same order the upstream
+        // ICS 204 data is modeled for these mutually exclusive context fields.
         if (!safe(task.getBranch()).isBlank()) {
             return new LabeledValue("Branch", task.getBranch());
         }
