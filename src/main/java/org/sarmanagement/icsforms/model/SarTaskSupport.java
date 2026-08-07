@@ -24,7 +24,7 @@ public final class SarTaskSupport {
     private static final List<String> TASK_TYPES = List.of("", TASK_TYPE_AREA, TASK_TYPE_ROUTE, TASK_TYPE_POINT);
 
     private static final List<PodFactorTemplate> HUMAN_GROUND_FACTORS = List.of(
-            new PodFactorTemplate("Hazards", 10, false),
+            new PodFactorTemplate("Hazards Observed", 10, false),
             new PodFactorTemplate("Terrain", 10, true),
             new PodFactorTemplate("Vegetation", 10, true),
             new PodFactorTemplate("Weather", 10, true),

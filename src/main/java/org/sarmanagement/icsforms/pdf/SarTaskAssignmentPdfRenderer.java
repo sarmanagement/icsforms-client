@@ -133,10 +133,6 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         }
     }
 
-    private void renderDebriefPage(PDDocument document, SarTaskAssignment task) throws IOException {
-        renderDebriefPage(document, task, List.of());
-    }
-
     private void renderDebriefPage(PDDocument document, SarTaskAssignment task, List<ClueLogEntry> clueLogEntries) throws IOException {
         PDPage page = new PDPage(PDRectangle.LETTER);
         document.addPage(page);
@@ -478,7 +474,15 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     private List<ClueLogEntry> cluesForTask(SarTaskAssignment task, List<ClueLogEntry> clueLogEntries) {
         List<ClueLogEntry> matches = new ArrayList<>();
         for (ClueLogEntry clue : clueLogEntries) {
-            if (clue != null && safe(task.getAssignmentId()).equals(clue.getAssignmentId())) {
+            if (clue == null) {
+                continue;
+            }
+            if (!safe(task.getAssignmentId()).isBlank() && safe(task.getAssignmentId()).equals(clue.getAssignmentId())) {
+                matches.add(clue);
+                continue;
+            }
+            if (safe(task.getAssignmentId()).isBlank() && !safe(task.getAssignmentTeamNumber()).isBlank()
+                    && safe(task.getAssignmentTeamNumber()).equals(clue.getDetectingTask())) {
                 matches.add(clue);
             }
         }

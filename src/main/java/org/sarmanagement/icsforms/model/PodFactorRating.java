@@ -4,8 +4,10 @@ package org.sarmanagement.icsforms.model;
  * Qualitative POD factor rating collected during SAR task debriefing.
  */
 public class PodFactorRating {
+    private static final int DEFAULT_MAX_SCORE = 10;
+
     private String name = "";
-    private int maxScore = 10;
+    private int maxScore = DEFAULT_MAX_SCORE;
     private Integer score;
     private String description = "";
 
@@ -22,7 +24,7 @@ public class PodFactorRating {
     }
 
     public void setMaxScore(int maxScore) {
-        this.maxScore = maxScore <= 0 ? 10 : maxScore;
+        this.maxScore = maxScore <= 0 ? DEFAULT_MAX_SCORE : maxScore;
     }
 
     public Integer getScore() {

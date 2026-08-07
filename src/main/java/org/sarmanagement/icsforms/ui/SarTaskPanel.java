@@ -41,7 +41,7 @@ import java.util.Set;
  */
 public class SarTaskPanel extends JPanel {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-    private static final Set<Integer> READ_ONLY_COLUMNS = Set.of(1, 4, 5, 6, 7, 8, 9);
+    private static final Set<Integer> READ_ONLY_COLUMNS = Set.of(1, 4, 5, 6, 7, 8, 9, 22, 23);
 
     private final AppController controller;
     private final SarTaskTableModel tableModel = new SarTaskTableModel();
@@ -156,7 +156,7 @@ public class SarTaskPanel extends JPanel {
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
             return;
         }
-        editor.applyTo(row, controller.getData().getClueLogEntries());
+        controller.getData().setClueLogEntries(editor.applyTo(row, controller.getData().getClueLogEntries()));
         controller.syncIcs204ResourcesFromSarTasks();
         tableModel.setRows(tableModel.getRows(), controller.getData().getClueLogEntries());
         controller.getData().setSarTaskAssignments(tableModel.getRows());
@@ -354,9 +354,6 @@ public class SarTaskPanel extends JPanel {
             this.scoreField.setText(rating.getScore() == null ? "" : String.valueOf(rating.getScore()));
             this.descriptionField.setText(rating.getDescription());
             this.descriptionField.setEditable(descriptionAllowed);
-            if (!descriptionAllowed) {
-                this.descriptionField.setText("");
-            }
         }
     }
 
@@ -547,7 +544,7 @@ public class SarTaskPanel extends JPanel {
             canineMetadataField.setVisible(canine);
         }
 
-        private void applyTo(SarTaskAssignment row, List<ClueLogEntry> clueLogEntries) {
+        private List<ClueLogEntry> applyTo(SarTaskAssignment row, List<ClueLogEntry> clueLogEntries) {
             row.setAssignmentTeamNumber(assignmentTeamNumberField.getText().trim());
             row.setResourceType(selectedComboValue(resourceTypeField));
             row.setTaskType(selectedComboValue(taskTypeField));
@@ -558,7 +555,7 @@ public class SarTaskPanel extends JPanel {
                 row.setTaskMap(taskMapField.getText().trim());
                 row.setSpecialEquipment(textAreaFrom(specialEquipmentField).getText().trim());
                 row.setCommunications(communicationValuesFrom(communicationEntryFields));
-                return;
+                return clueLogEntries == null ? new ArrayList<>() : new ArrayList<>(clueLogEntries);
             }
             row.setDebriefingSupervisor(debriefingSupervisorField.getText().trim());
             row.setAssignmentStart(parseDateTimeValue(assignmentStartField.getText().trim()));
@@ -576,13 +573,24 @@ public class SarTaskPanel extends JPanel {
             row.setAreasNotCovered(textAreaFrom(areasNotCoveredField).getText().trim());
             row.setHazardsObserved(textAreaFrom(hazardsObservedField).getText().trim());
 
-            for (Iterator<ClueLogEntry> iterator = clueLogEntries.iterator(); iterator.hasNext(); ) {
-                ClueLogEntry clue = iterator.next();
-                if (row.getAssignmentId().equals(clue.getAssignmentId())) {
-                    iterator.remove();
+            List<ClueLogEntry> updatedClues = clueLogEntries == null ? new ArrayList<>() : new ArrayList<>(clueLogEntries);
+            if (!row.getAssignmentId().isBlank()) {
+                for (Iterator<ClueLogEntry> iterator = updatedClues.iterator(); iterator.hasNext(); ) {
+                    ClueLogEntry clue = iterator.next();
+                    if (row.getAssignmentId().equals(clue.getAssignmentId())) {
+                        iterator.remove();
+                    }
+                }
+            } else if (!row.getAssignmentTeamNumber().isBlank()) {
+                for (Iterator<ClueLogEntry> iterator = updatedClues.iterator(); iterator.hasNext(); ) {
+                    ClueLogEntry clue = iterator.next();
+                    if (row.getAssignmentTeamNumber().equals(clue.getDetectingTask())) {
+                        iterator.remove();
+                    }
                 }
             }
-            clueLogEntries.addAll(clueValuesFrom(clueEntryFields, row, row.getAssignmentTeamNumber()));
+            updatedClues.addAll(clueValuesFrom(clueEntryFields, row, row.getAssignmentTeamNumber()));
+            return updatedClues;
         }
     }
 
@@ -660,7 +668,8 @@ public class SarTaskPanel extends JPanel {
                 case 22 -> formatClues(row, clueLogEntries);
                 case 23 -> formatPodFactors(row.getQualitativePodFactors());
                 case 24 -> row.getAreasNotCovered();
-                default -> row.getHazardsObserved();
+                case 25 -> row.getHazardsObserved();
+                default -> "";
             };
         }
 
@@ -776,8 +785,17 @@ public class SarTaskPanel extends JPanel {
 
         private static String formatClues(SarTaskAssignment row, List<ClueLogEntry> clueLogEntries) {
             List<String> descriptions = new ArrayList<>();
+            if (clueLogEntries == null) {
+                return "";
+            }
             for (ClueLogEntry clue : clueLogEntries) {
-                if (clue != null && row.getAssignmentId().equals(clue.getAssignmentId()) && !clue.getDescription().isBlank()) {
+                if (clue == null || clue.getDescription().isBlank()) {
+                    continue;
+                }
+                boolean matchesAssignment = !row.getAssignmentId().isBlank() && row.getAssignmentId().equals(clue.getAssignmentId());
+                boolean matchesTeamNumber = row.getAssignmentId().isBlank() && !row.getAssignmentTeamNumber().isBlank()
+                        && row.getAssignmentTeamNumber().equals(clue.getDetectingTask());
+                if (matchesAssignment || matchesTeamNumber) {
                     descriptions.add(clue.getDescription());
                 }
             }
