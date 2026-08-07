@@ -184,7 +184,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     private void drawResourcesSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                       float x, float y, float width, float height, SarTaskAssignment task) throws IOException {
         drawHeading(stream, bold, x, y + height, "5. Resources Assigned");
-        drawRightAlignedHeadingValue(stream, regular, x, y + height, width, safe(task.getResourceIdentifier()));
+        drawRightAlignedHeadingValue(stream, regular, x, y + height, width, task.getResourceIdentifier());
         float tableTop = y + height - 18f;
         float headerHeight = 20f;
         float headerBottom = tableTop - headerHeight;
@@ -451,8 +451,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             if (resource == null) {
                 continue;
             }
-            if ("Resource".equalsIgnoreCase(safe(resource.getFunction()))
-                    && safe(resource.getName()).equals(taskResourceIdentifier)) {
+            if (safe(resource.getName()).equals(taskResourceIdentifier)) {
                 continue;
             }
             resources.add(resource);
@@ -470,7 +469,10 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         if (!safe(task.getGroup()).isBlank()) {
             return new LabeledValue("Group", task.getGroup());
         }
-        return new LabeledValue("Staging Area", task.getStagingArea());
+        if (!safe(task.getStagingArea()).isBlank()) {
+            return new LabeledValue("Staging Area", task.getStagingArea());
+        }
+        return new LabeledValue("Context", "");
     }
 
     private String formatDate(LocalDateTime value) {
