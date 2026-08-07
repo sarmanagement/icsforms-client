@@ -38,11 +38,11 @@ class Ics202PanelTest {
         assertTrue(checkbox[0].isSelected());
 
         SwingUtilities.invokeAndWait(() -> {
-            checkbox[0].setSelected(true);
+            checkbox[0].setSelected(false);
             panel.pushToModel();
         });
 
-        assertTrue(controller.getData().getForm202().getIncidentActionPlanAttachments().contains("SAR Task Assignment"));
+        assertTrue(!controller.getData().getForm202().getIncidentActionPlanAttachments().contains("SAR Task Assignment"));
     }
 
     private static Object fieldValue(Object instance, String fieldName) {
