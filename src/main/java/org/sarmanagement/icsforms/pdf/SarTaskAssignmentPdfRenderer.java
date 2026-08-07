@@ -271,7 +271,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     private void drawContextSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                     float x, float y, float width, float height, SarTaskAssignment task) throws IOException {
         LabeledValue context = relevantContext(task);
-        drawSection(stream, bold, regular, x, y, width, height, context.label(), wrap(context.value(), 14));
+        drawSection(stream, bold, regular, x, y, width, height, "3. " + context.label(), wrap(context.value(), 14));
     }
 
     private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -451,7 +451,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             if (resource == null) {
                 continue;
             }
-            if (safe(resource.getName()).equals(taskResourceIdentifier)) {
+            if (!taskResourceIdentifier.isBlank() && safe(resource.getName()).equals(taskResourceIdentifier)) {
                 continue;
             }
             resources.add(resource);
