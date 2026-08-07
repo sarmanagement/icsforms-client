@@ -129,7 +129,7 @@ public class SarTaskPanel extends JPanel {
             return;
         }
         editor.applyTo(row);
-        pushToModel();
+        tableModel.fireTableRowsUpdated(rowIndex, rowIndex);
         controller.markDirty();
         tableModel.setRows(controller.getData().getSarTaskAssignments());
         if (rowIndex < table.getRowCount()) {
