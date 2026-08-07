@@ -117,7 +117,7 @@ public class SarTaskPanel extends JPanel {
             table.getCellEditor().stopCellEditing();
         }
         SarTaskAssignment row = tableModel.getRows().get(rowIndex);
-        SarTaskEditor editor = new SarTaskEditor(row, tableModel);
+        SarTaskEditor editor = new SarTaskEditor(row);
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         scrollPane.setPreferredSize(new Dimension(760, 560));
@@ -130,6 +130,7 @@ public class SarTaskPanel extends JPanel {
         }
         editor.applyTo(row);
         tableModel.fireTableRowsUpdated(rowIndex, rowIndex);
+        controller.getData().setSarTaskAssignments(tableModel.getRows());
         controller.markDirty();
         tableModel.setRows(controller.getData().getSarTaskAssignments());
         if (rowIndex < table.getRowCount()) {
@@ -179,24 +180,24 @@ public class SarTaskPanel extends JPanel {
         private final JScrollPane areasNotCoveredField;
         private final JScrollPane hazardsObservedField;
 
-        private SarTaskEditor(SarTaskAssignment row, SarTaskTableModel tableModel) {
+        private SarTaskEditor(SarTaskAssignment row) {
             assignmentTeamNumberField = textField(row.getAssignmentTeamNumber(), true);
             incidentNameField = textField(row.getIncidentName(), false);
             resourceIdentifierField = textField(row.getResourceIdentifier(), false);
             leaderRoleField = textField(row.getLeaderRole(), false);
             leaderField = textField(row.getLeader(), false);
             contactField = textField(row.getContact(), false);
-            operationsField = textArea(tableModel.joinOperations(row), 2, false);
-            contextField = textArea(tableModel.joinContext(row), 2, false);
-            resourcesAssignedField = textArea(tableModel.formatResources(row.getResourcesAssigned()), 3, true);
+            operationsField = textArea(SarTaskTableModel.joinOperations(row), 2, false);
+            contextField = textArea(SarTaskTableModel.joinContext(row), 2, false);
+            resourcesAssignedField = textArea(SarTaskTableModel.formatResources(row.getResourcesAssigned()), 3, true);
             assignmentField = textArea(row.getAssignment(), 3, true);
             transportationField = textArea(row.getTransportationInstructions(), 2, true);
             taskMapField = textField(row.getTaskMap(), true);
             specialEquipmentField = textArea(row.getSpecialEquipment(), 2, true);
-            communicationsField = textArea(tableModel.formatCommunications(row.getCommunications()), 3, true);
+            communicationsField = textArea(SarTaskTableModel.formatCommunications(row.getCommunications()), 3, true);
             debriefingSupervisorField = textField(row.getDebriefingSupervisor(), true);
-            assignmentStartField = textField(tableModel.formatDateTime(row.getAssignmentStart()), true);
-            assignmentEndField = textField(tableModel.formatDateTime(row.getAssignmentEnd()), true);
+            assignmentStartField = textField(SarTaskTableModel.formatDateTime(row.getAssignmentStart()), true);
+            assignmentEndField = textField(SarTaskTableModel.formatDateTime(row.getAssignmentEnd()), true);
             vehicleMilesField = textField(row.getVehicleMiles(), true);
             debriefNotesField = textArea(row.getDebriefNotes(), 4, true);
             areasNotCoveredField = textArea(row.getAreasNotCovered(), 3, true);
