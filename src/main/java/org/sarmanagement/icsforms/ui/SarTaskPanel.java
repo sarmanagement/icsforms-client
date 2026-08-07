@@ -5,11 +5,20 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 
 import javax.swing.BorderFactory;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -26,6 +35,7 @@ public class SarTaskPanel extends JPanel {
 
     private final AppController controller;
     private final SarTaskTableModel tableModel = new SarTaskTableModel();
+    private final JTable table = new JTable(tableModel);
 
     /**
      * Creates the SAR task assignment panel.
@@ -35,8 +45,9 @@ public class SarTaskPanel extends JPanel {
     public SarTaskPanel(AppController controller) {
         super(new BorderLayout());
         this.controller = controller;
-        JTable table = new JTable(tableModel);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        table.setFillsViewportHeight(true);
+        installRowEditor();
         setBorder(BorderFactory.createTitledBorder("SAR Task Assignment / Debriefing"));
         add(new JScrollPane(table), BorderLayout.CENTER);
     }
@@ -54,6 +65,183 @@ public class SarTaskPanel extends JPanel {
      */
     public void pushToModel() {
         controller.getData().setSarTaskAssignments(tableModel.getRows());
+    }
+
+    private void installRowEditor() {
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem editRowItem = new JMenuItem("Edit row…");
+        editRowItem.addActionListener(event -> openSelectedRowEditor());
+        menu.add(editRowItem);
+        table.setComponentPopupMenu(menu);
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent event) {
+                selectRowAtEvent(event);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                selectRowAtEvent(event);
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
+                    selectRowAtEvent(event);
+                    openSelectedRowEditor();
+                }
+            }
+        });
+    }
+
+    private void selectRowAtEvent(MouseEvent event) {
+        int viewRow = table.rowAtPoint(event.getPoint());
+        if (viewRow >= 0) {
+            table.setRowSelectionInterval(viewRow, viewRow);
+        }
+    }
+
+    private void openSelectedRowEditor() {
+        int viewRow = table.getSelectedRow();
+        if (viewRow < 0) {
+            return;
+        }
+        editRow(table.convertRowIndexToModel(viewRow));
+    }
+
+    private void editRow(int rowIndex) {
+        if (rowIndex < 0 || rowIndex >= tableModel.getRowCount()) {
+            return;
+        }
+        if (table.isEditing() && table.getCellEditor() != null) {
+            table.getCellEditor().stopCellEditing();
+        }
+        SarTaskAssignment row = tableModel.getRows().get(rowIndex);
+        SarTaskEditor editor = new SarTaskEditor(row, tableModel);
+        JScrollPane scrollPane = new JScrollPane(editor.panel);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        scrollPane.setPreferredSize(new Dimension(760, 560));
+        String title = row.getAssignmentTeamNumber().isBlank()
+                ? "Edit SAR Task"
+                : "Edit SAR Task " + row.getAssignmentTeamNumber();
+        if (JOptionPane.showConfirmDialog(this, scrollPane, title,
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
+            return;
+        }
+        editor.applyTo(row);
+        pushToModel();
+        controller.markDirty();
+        tableModel.setRows(controller.getData().getSarTaskAssignments());
+        if (rowIndex < table.getRowCount()) {
+            table.setRowSelectionInterval(rowIndex, rowIndex);
+        }
+    }
+
+    private static JTextField textField(String value, boolean editable) {
+        JTextField field = UiSupport.textField();
+        field.setText(value == null ? "" : value);
+        field.setEditable(editable);
+        return field;
+    }
+
+    private static JScrollPane textArea(String value, int rows, boolean editable) {
+        JTextArea area = UiSupport.textArea(rows);
+        area.setText(value == null ? "" : value);
+        area.setEditable(editable);
+        return new JScrollPane(area);
+    }
+
+    private static JTextArea areaFrom(JScrollPane scrollPane) {
+        return (JTextArea) scrollPane.getViewport().getView();
+    }
+
+    private static class SarTaskEditor {
+        private final JPanel panel = UiSupport.formPanel();
+        private final JTextField assignmentTeamNumberField;
+        private final JTextField incidentNameField;
+        private final JTextField resourceIdentifierField;
+        private final JTextField leaderRoleField;
+        private final JTextField leaderField;
+        private final JTextField contactField;
+        private final JScrollPane operationsField;
+        private final JScrollPane contextField;
+        private final JScrollPane resourcesAssignedField;
+        private final JScrollPane assignmentField;
+        private final JScrollPane transportationField;
+        private final JTextField taskMapField;
+        private final JScrollPane specialEquipmentField;
+        private final JScrollPane communicationsField;
+        private final JTextField debriefingSupervisorField;
+        private final JTextField assignmentStartField;
+        private final JTextField assignmentEndField;
+        private final JTextField vehicleMilesField;
+        private final JScrollPane debriefNotesField;
+        private final JScrollPane areasNotCoveredField;
+        private final JScrollPane hazardsObservedField;
+
+        private SarTaskEditor(SarTaskAssignment row, SarTaskTableModel tableModel) {
+            assignmentTeamNumberField = textField(row.getAssignmentTeamNumber(), true);
+            incidentNameField = textField(row.getIncidentName(), false);
+            resourceIdentifierField = textField(row.getResourceIdentifier(), false);
+            leaderRoleField = textField(row.getLeaderRole(), false);
+            leaderField = textField(row.getLeader(), false);
+            contactField = textField(row.getContact(), false);
+            operationsField = textArea(tableModel.joinOperations(row), 2, false);
+            contextField = textArea(tableModel.joinContext(row), 2, false);
+            resourcesAssignedField = textArea(tableModel.formatResources(row.getResourcesAssigned()), 3, true);
+            assignmentField = textArea(row.getAssignment(), 3, true);
+            transportationField = textArea(row.getTransportationInstructions(), 2, true);
+            taskMapField = textField(row.getTaskMap(), true);
+            specialEquipmentField = textArea(row.getSpecialEquipment(), 2, true);
+            communicationsField = textArea(tableModel.formatCommunications(row.getCommunications()), 3, true);
+            debriefingSupervisorField = textField(row.getDebriefingSupervisor(), true);
+            assignmentStartField = textField(tableModel.formatDateTime(row.getAssignmentStart()), true);
+            assignmentEndField = textField(tableModel.formatDateTime(row.getAssignmentEnd()), true);
+            vehicleMilesField = textField(row.getVehicleMiles(), true);
+            debriefNotesField = textArea(row.getDebriefNotes(), 4, true);
+            areasNotCoveredField = textArea(row.getAreasNotCovered(), 3, true);
+            hazardsObservedField = textArea(row.getHazardsObserved(), 3, true);
+
+            int rowIndex = 0;
+            UiSupport.addRow(panel, rowIndex++, "Assignment/Team #", assignmentTeamNumberField);
+            UiSupport.addRow(panel, rowIndex++, "Incident", incidentNameField);
+            UiSupport.addRow(panel, rowIndex++, "Resource", resourceIdentifierField);
+            UiSupport.addRow(panel, rowIndex++, "Leader role", leaderRoleField);
+            UiSupport.addRow(panel, rowIndex++, "Leader", leaderField);
+            UiSupport.addRow(panel, rowIndex++, "Contact", contactField);
+            UiSupport.addRow(panel, rowIndex++, "Operations personnel", operationsField);
+            UiSupport.addRow(panel, rowIndex++, "Context", contextField);
+            UiSupport.addRow(panel, rowIndex++, "Resources assigned", resourcesAssignedField);
+            UiSupport.addRow(panel, rowIndex++, "Work assignment", assignmentField);
+            UiSupport.addRow(panel, rowIndex++, "Transportation", transportationField);
+            UiSupport.addRow(panel, rowIndex++, "Task map", taskMapField);
+            UiSupport.addRow(panel, rowIndex++, "Special equipment", specialEquipmentField);
+            UiSupport.addRow(panel, rowIndex++, "Communications", communicationsField);
+            UiSupport.addRow(panel, rowIndex++, "Debrief supervisor", debriefingSupervisorField);
+            UiSupport.addRow(panel, rowIndex++, "Time on start (yyyy-MM-dd HH:mm)", assignmentStartField);
+            UiSupport.addRow(panel, rowIndex++, "Time on end (yyyy-MM-dd HH:mm)", assignmentEndField);
+            UiSupport.addRow(panel, rowIndex++, "Vehicle miles", vehicleMilesField);
+            UiSupport.addRow(panel, rowIndex++, "Debriefing", debriefNotesField);
+            UiSupport.addRow(panel, rowIndex++, "Areas not covered", areasNotCoveredField);
+            UiSupport.addRow(panel, rowIndex, "Hazards observed", hazardsObservedField);
+        }
+
+        private void applyTo(SarTaskAssignment row) {
+            row.setAssignmentTeamNumber(assignmentTeamNumberField.getText().trim());
+            row.setResourcesAssigned(SarTaskTableModel.parseResources(areaFrom(resourcesAssignedField).getText()));
+            row.setAssignment(areaFrom(assignmentField).getText().trim());
+            row.setTransportationInstructions(areaFrom(transportationField).getText().trim());
+            row.setTaskMap(taskMapField.getText().trim());
+            row.setSpecialEquipment(areaFrom(specialEquipmentField).getText().trim());
+            row.setCommunications(SarTaskTableModel.parseCommunications(areaFrom(communicationsField).getText()));
+            row.setDebriefingSupervisor(debriefingSupervisorField.getText().trim());
+            row.setAssignmentStart(SarTaskTableModel.parseDateTime(assignmentStartField.getText().trim()));
+            row.setAssignmentEnd(SarTaskTableModel.parseDateTime(assignmentEndField.getText().trim()));
+            row.setVehicleMiles(vehicleMilesField.getText().trim());
+            row.setDebriefNotes(areaFrom(debriefNotesField).getText().trim());
+            row.setAreasNotCovered(areaFrom(areasNotCoveredField).getText().trim());
+            row.setHazardsObserved(areaFrom(hazardsObservedField).getText().trim());
+        }
     }
 
     /**
@@ -135,7 +323,7 @@ public class SarTaskPanel extends JPanel {
             fireTableCellUpdated(rowIndex, columnIndex);
         }
 
-        private String joinOperations(SarTaskAssignment row) {
+        private static String joinOperations(SarTaskAssignment row) {
             List<String> values = new ArrayList<>();
             if (!row.getOperationsSectionChiefName().isBlank()) {
                 values.add("Ops: " + row.getOperationsSectionChiefName()
@@ -148,7 +336,7 @@ public class SarTaskPanel extends JPanel {
             return String.join(" | ", values);
         }
 
-        private String joinContext(SarTaskAssignment row) {
+        private static String joinContext(SarTaskAssignment row) {
             List<String> values = new ArrayList<>();
             addIfPresent(values, "Branch", row.getBranch());
             addIfPresent(values, "Division", row.getDivision());
@@ -157,13 +345,13 @@ public class SarTaskPanel extends JPanel {
             return String.join(" | ", values);
         }
 
-        private void addIfPresent(List<String> values, String label, String value) {
+        private static void addIfPresent(List<String> values, String label, String value) {
             if (value != null && !value.isBlank()) {
                 values.add(label + ": " + value);
             }
         }
 
-        private String formatResources(List<SarTaskResource> resources) {
+        private static String formatResources(List<SarTaskResource> resources) {
             List<String> lines = new ArrayList<>();
             for (SarTaskResource resource : resources) {
                 if (resource.getFunction().isBlank() && resource.getName().isBlank()) {
@@ -174,7 +362,7 @@ public class SarTaskPanel extends JPanel {
             return String.join(" ; ", lines);
         }
 
-        private List<SarTaskResource> parseResources(String value) {
+        private static List<SarTaskResource> parseResources(String value) {
             List<SarTaskResource> resources = new ArrayList<>();
             for (String entry : splitEntries(value)) {
                 SarTaskResource resource = new SarTaskResource();
@@ -190,7 +378,7 @@ public class SarTaskPanel extends JPanel {
             return resources;
         }
 
-        private String formatCommunications(List<CommunicationEntry> communications) {
+        private static String formatCommunications(List<CommunicationEntry> communications) {
             List<String> lines = new ArrayList<>();
             for (CommunicationEntry communication : communications) {
                 if (communication.getName().isBlank() && communication.getFunction().isBlank() && communication.getPrimaryContact().isBlank()) {
@@ -202,7 +390,7 @@ public class SarTaskPanel extends JPanel {
             return String.join(" ; ", lines);
         }
 
-        private List<CommunicationEntry> parseCommunications(String value) {
+        private static List<CommunicationEntry> parseCommunications(String value) {
             List<CommunicationEntry> communications = new ArrayList<>();
             for (String entry : splitEntries(value)) {
                 CommunicationEntry communication = new CommunicationEntry();
@@ -218,7 +406,7 @@ public class SarTaskPanel extends JPanel {
             return communications;
         }
 
-        private List<String> splitEntries(String value) {
+        private static List<String> splitEntries(String value) {
             List<String> entries = new ArrayList<>();
             for (String raw : value.split("\\s*;\\s*")) {
                 String trimmed = raw.trim();
@@ -229,11 +417,11 @@ public class SarTaskPanel extends JPanel {
             return entries;
         }
 
-        private String formatDateTime(LocalDateTime value) {
+        private static String formatDateTime(LocalDateTime value) {
             return value == null ? "" : DATE_TIME_FORMATTER.format(value);
         }
 
-        private LocalDateTime parseDateTime(String value) {
+        private static LocalDateTime parseDateTime(String value) {
             if (value == null || value.isBlank()) {
                 return null;
             }
