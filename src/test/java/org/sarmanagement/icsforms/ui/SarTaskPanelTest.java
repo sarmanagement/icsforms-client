@@ -47,7 +47,7 @@ class SarTaskPanelTest {
     @Test
     void sarTaskEditorMarksRequiredAssignmentFieldAccessibly() throws Exception {
         SarTaskAssignment task = sampleTask();
-        Object editor = createEditor(task, "ASSIGNMENT");
+        Object editor = createEditor(task, "ASSIGNMENT", 1);
         Class<?> editorClass = editor.getClass();
 
         Field panelField = editorClass.getDeclaredField("panel");
@@ -71,7 +71,7 @@ class SarTaskPanelTest {
 
     @Test
     void debriefEditorShowsDebriefFieldsWithoutAssignmentOnlyFields() throws Exception {
-        Object editor = createEditor(sampleTask(), "DEBRIEFING");
+        Object editor = createEditor(sampleTask(), "DEBRIEFING", 1);
         Field panelField = editor.getClass().getDeclaredField("panel");
         panelField.setAccessible(true);
 
@@ -136,7 +136,7 @@ class SarTaskPanelTest {
         resources.add(medic);
         task.setResourcesAssigned(resources);
 
-        Object editor = createEditor(task, "ASSIGNMENT");
+        Object editor = createEditor(task, "ASSIGNMENT", 2);
         Field panelField = editor.getClass().getDeclaredField("panel");
         panelField.setAccessible(true);
         Field resourceModelField = editor.getClass().getDeclaredField("resourceEntryTableModel");
@@ -171,7 +171,7 @@ class SarTaskPanelTest {
 
     @Test
     void debriefEditorUsesCompactPodFactorHeaderAndScoreWidth() throws Exception {
-        Object editor = createEditor(sampleTask(), "DEBRIEFING");
+        Object editor = createEditor(sampleTask(), "DEBRIEFING", 1);
         Field podFactorsField = editor.getClass().getDeclaredField("podFactorsField");
         podFactorsField.setAccessible(true);
         Field podFactorEntriesField = editor.getClass().getDeclaredField("podFactorEntryFields");
@@ -183,16 +183,20 @@ class SarTaskPanelTest {
         List<?> entries = (List<?>) getFieldValue(podFactorEntriesField, editor);
         assertTrue(header[0].getText().contains("Qualitative POD Factors"));
         assertTrue(header[0].getText().contains("Factor"));
-        assertEquals(2, textFieldColumnCount(entries.get(0), "scoreField"));
+        assertEquals(2, textFieldColumns(entries.get(0), "scoreField"));
     }
 
     private static Object createEditor(SarTaskAssignment task, String modeName) throws Exception {
+        return createEditor(task, modeName, 1);
+    }
+
+    private static Object createEditor(SarTaskAssignment task, String modeName, int resourceRows) throws Exception {
         Class<?> editorClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$SarTaskEditor");
         Class<?> modeClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$EditorMode");
         Object mode = enumConstant(modeClass, modeName);
-        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass, List.class);
+        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass, List.class, int.class);
         constructor.setAccessible(true);
-        return constructor.newInstance(task, mode, List.of());
+        return constructor.newInstance(task, mode, List.of(), resourceRows);
     }
 
     private static Object enumConstant(Class<?> enumClass, String name) {
@@ -271,7 +275,7 @@ class SarTaskPanelTest {
         return task;
     }
 
-    private static int textFieldColumnCount(Object instance, String fieldName) {
+    private static int textFieldColumns(Object instance, String fieldName) {
         try {
             Field field = instance.getClass().getDeclaredField(fieldName);
             field.setAccessible(true);

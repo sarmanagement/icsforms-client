@@ -50,7 +50,12 @@ import java.util.Set;
  */
 public class SarTaskPanel extends JPanel {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final int MAX_RESOURCE_ROWS = 18;
     private static final Set<Integer> READ_ONLY_COLUMNS = Set.of(1, 4, 5, 6, 7, 8, 9, 22, 23);
+    private static final int RESOURCE_EDITOR_WIDTH = 420;
+    private static final int RESOURCE_EDITOR_VISIBLE_ROWS = 9;
+    private static final int RESOURCE_EDITOR_PADDING = 8;
+    private static final int SCORE_FIELD_WIDTH = 48;
 
     private final AppController controller;
     private final SarTaskTableModel tableModel = new SarTaskTableModel();
@@ -198,7 +203,7 @@ public class SarTaskPanel extends JPanel {
             }
         }
         int minimum = persons > 0 ? persons : 1;
-        return Math.min(18, Math.max(existing, minimum));
+        return Math.min(MAX_RESOURCE_ROWS, Math.max(existing, minimum));
     }
 
     private static JTextField textField(String value, boolean editable) {
@@ -264,13 +269,32 @@ public class SarTaskPanel extends JPanel {
         table.setFillsViewportHeight(true);
 
         JScrollPane scrollPane = new JScrollPane(table);
-        scrollPane.setPreferredSize(new Dimension(420,
-                table.getRowHeight() * 9 + table.getTableHeader().getPreferredSize().height + 8));
+        scrollPane.setPreferredSize(new Dimension(RESOURCE_EDITOR_WIDTH,
+                table.getRowHeight() * RESOURCE_EDITOR_VISIBLE_ROWS
+                        + table.getTableHeader().getPreferredSize().height
+                        + RESOURCE_EDITOR_PADDING));
+
+        JButton addButton = new JButton("Add");
+        addButton.addActionListener(event -> model.addRow());
+        JButton removeButton = new JButton("Remove");
+        removeButton.setEnabled(false);
+        table.getSelectionModel().addListSelectionListener(event -> removeButton.setEnabled(table.getSelectedRow() >= 0));
+        removeButton.addActionListener(event -> {
+            if (table.isEditing() && table.getCellEditor() != null) {
+                table.getCellEditor().stopCellEditing();
+            }
+            model.removeRow(table.getSelectedRow());
+        });
+
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        buttons.setOpaque(false);
+        buttons.add(addButton);
+        buttons.add(removeButton);
 
         JPanel panel = new JPanel(new BorderLayout(0, 4));
         panel.setOpaque(false);
         panel.add(scrollPane, BorderLayout.CENTER);
-        panel.add(buttonsPanel(model::addRow, () -> model.removeRow(table.getSelectedRow())), BorderLayout.SOUTH);
+        panel.add(buttons, BorderLayout.SOUTH);
         return panel;
     }
 
@@ -343,7 +367,7 @@ public class SarTaskPanel extends JPanel {
             if (function.isBlank() && name.isBlank()) {
                 continue;
             }
-            if (resources.size() >= 18) {
+            if (resources.size() >= MAX_RESOURCE_ROWS) {
                 break;
             }
             SarTaskResource resource = new SarTaskResource();
@@ -385,18 +409,6 @@ public class SarTaskPanel extends JPanel {
             cell.add(field.component(), BorderLayout.CENTER);
             panel.add(cell);
         }
-        return panel;
-    }
-
-    private static JPanel buttonsPanel(Runnable addAction, Runnable removeAction) {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        panel.setOpaque(false);
-        JButton addButton = new JButton("Add");
-        addButton.addActionListener(event -> addAction.run());
-        JButton removeButton = new JButton("Remove");
-        removeButton.addActionListener(event -> removeAction.run());
-        panel.add(addButton);
-        panel.add(removeButton);
         return panel;
     }
 
@@ -488,7 +500,7 @@ public class SarTaskPanel extends JPanel {
             this.scoreField.setText(rating.getScore() == null ? "" : String.valueOf(rating.getScore()));
             this.scoreField.setHorizontalAlignment(JTextField.RIGHT);
             Dimension preferredSize = this.scoreField.getPreferredSize();
-            this.scoreField.setPreferredSize(new Dimension(48, preferredSize.height));
+            this.scoreField.setPreferredSize(new Dimension(SCORE_FIELD_WIDTH, preferredSize.height));
             this.descriptionField.setText(rating.getDescription());
             this.descriptionField.setEditable(descriptionAllowed);
         }
@@ -502,7 +514,7 @@ public class SarTaskPanel extends JPanel {
             rows.clear();
             if (resources != null) {
                 for (SarTaskResource resource : resources) {
-                    if (rows.size() >= 18) {
+                    if (rows.size() >= MAX_RESOURCE_ROWS) {
                         break;
                     }
                     SarTaskResource copy = new SarTaskResource();
@@ -511,7 +523,7 @@ public class SarTaskPanel extends JPanel {
                     rows.add(copy);
                 }
             }
-            while (rows.size() < Math.max(1, minimumRows) && rows.size() < 18) {
+            while (rows.size() < Math.max(1, minimumRows) && rows.size() < MAX_RESOURCE_ROWS) {
                 rows.add(new SarTaskResource());
             }
             fireTableDataChanged();
@@ -522,7 +534,7 @@ public class SarTaskPanel extends JPanel {
         }
 
         private void addRow() {
-            if (rows.size() >= 18) {
+            if (rows.size() >= MAX_RESOURCE_ROWS) {
                 return;
             }
             rows.add(new SarTaskResource());
@@ -530,7 +542,7 @@ public class SarTaskPanel extends JPanel {
         }
 
         private void removeRow(int rowIndex) {
-            if (rowIndex < 0 || rowIndex >= rows.size() || rows.size() <= 1) {
+            if (rowIndex < 0 || rowIndex >= rows.size()) {
                 return;
             }
             rows.remove(rowIndex);
@@ -639,10 +651,6 @@ public class SarTaskPanel extends JPanel {
         private final JPanel canineMetadataField = new JPanel(new GridLayout(0, 2, 6, 3));
         private final JScrollPane areasNotCoveredField;
         private final JScrollPane hazardsObservedField;
-
-        private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries) {
-            this(row, mode, clueLogEntries, Math.max(1, editableResources(row).size()));
-        }
 
         private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries, int resourceRowCount) {
             this.mode = mode;
