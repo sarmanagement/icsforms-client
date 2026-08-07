@@ -123,9 +123,10 @@ public class SarTaskPanel extends JPanel {
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         scrollPane.setPreferredSize(new Dimension(760, 560));
-        String title = row.getAssignmentTeamNumber().isBlank()
+        String assignmentTeamNumber = row.getAssignmentTeamNumber();
+        String title = assignmentTeamNumber == null || assignmentTeamNumber.isBlank()
                 ? "Edit SAR Task"
-                : "Edit SAR Task " + row.getAssignmentTeamNumber();
+                : "Edit SAR Task " + assignmentTeamNumber;
         if (JOptionPane.showConfirmDialog(this, scrollPane, title,
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
             return;
@@ -308,8 +309,8 @@ public class SarTaskPanel extends JPanel {
             UiSupport.addRow(panel, rowIndex++, "Special equipment", specialEquipmentField);
             UiSupport.addRow(panel, rowIndex++, "Communications", communicationsField);
             UiSupport.addRow(panel, rowIndex++, "Debrief supervisor", debriefingSupervisorField);
-            UiSupport.addRow(panel, rowIndex++, "Time on start (yyyy-MM-dd HH:mm)", assignmentStartField);
-            UiSupport.addRow(panel, rowIndex++, "Time on end (yyyy-MM-dd HH:mm)", assignmentEndField);
+            UiSupport.addRow(panel, rowIndex++, "Assignment start (yyyy-MM-dd HH:mm)", assignmentStartField);
+            UiSupport.addRow(panel, rowIndex++, "Assignment end (yyyy-MM-dd HH:mm)", assignmentEndField);
             UiSupport.addRow(panel, rowIndex++, "Vehicle miles", vehicleMilesField);
             UiSupport.addRow(panel, rowIndex++, "Debriefing", debriefNotesField);
             UiSupport.addRow(panel, rowIndex++, "Areas not covered", areasNotCoveredField);
