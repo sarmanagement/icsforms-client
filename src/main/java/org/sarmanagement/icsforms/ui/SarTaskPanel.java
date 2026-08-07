@@ -96,7 +96,7 @@ public class SarTaskPanel extends JPanel {
             public void mouseClicked(MouseEvent event) {
                 if (event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
                     selectRowAtEvent(event);
-                openSelectedRowEditor(EditorMode.ASSIGNMENT);
+                    openSelectedRowEditor(EditorMode.ASSIGNMENT);
                 }
             }
         });

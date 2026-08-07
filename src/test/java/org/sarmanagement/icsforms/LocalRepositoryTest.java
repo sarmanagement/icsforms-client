@@ -292,11 +292,14 @@ class LocalRepositoryTest {
             if (!(token instanceof Operator operator) || !"re".equals(operator.getName())) {
                 continue;
             }
-            float rectX = ((COSNumber) tokens.get(i - 4)).floatValue();
-            float rectY = ((COSNumber) tokens.get(i - 3)).floatValue();
-            float rectWidth = ((COSNumber) tokens.get(i - 2)).floatValue();
-            float rectHeight = ((COSNumber) tokens.get(i - 1)).floatValue();
-            if (closeTo(rectX, x) && closeTo(rectY, y) && closeTo(rectWidth, width) && closeTo(rectHeight, height)) {
+            if (!(tokens.get(i - 4) instanceof COSNumber rectX)
+                    || !(tokens.get(i - 3) instanceof COSNumber rectY)
+                    || !(tokens.get(i - 2) instanceof COSNumber rectWidth)
+                    || !(tokens.get(i - 1) instanceof COSNumber rectHeight)) {
+                continue;
+            }
+            if (closeTo(rectX.floatValue(), x) && closeTo(rectY.floatValue(), y)
+                    && closeTo(rectWidth.floatValue(), width) && closeTo(rectHeight.floatValue(), height)) {
                 count++;
             }
         }
