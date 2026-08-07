@@ -25,6 +25,7 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.text.PDFTextStripper;
 
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -286,21 +287,24 @@ class LocalRepositoryTest {
 
     private int countRectangles(PDPage page, float x, float y, float width, float height) throws Exception {
         int count = 0;
-        java.util.List<Object> tokens = new PDFStreamParser(page).parse();
-        for (int i = 4; i < tokens.size(); i++) {
-            Object token = tokens.get(i);
-            if (!(token instanceof Operator operator) || !"re".equals(operator.getName())) {
-                continue;
-            }
-            if (!(tokens.get(i - 4) instanceof COSNumber rectX)
-                    || !(tokens.get(i - 3) instanceof COSNumber rectY)
-                    || !(tokens.get(i - 2) instanceof COSNumber rectWidth)
-                    || !(tokens.get(i - 1) instanceof COSNumber rectHeight)) {
-                continue;
-            }
-            if (closeTo(rectX.floatValue(), x) && closeTo(rectY.floatValue(), y)
-                    && closeTo(rectWidth.floatValue(), width) && closeTo(rectHeight.floatValue(), height)) {
-                count++;
+        try (InputStream inputStream = page.getContents()) {
+            PDFStreamParser parser = new PDFStreamParser(inputStream.readAllBytes());
+            java.util.List<Object> tokens = parser.parse();
+            for (int i = 4; i < tokens.size(); i++) {
+                Object token = tokens.get(i);
+                if (!(token instanceof Operator operator) || !"re".equals(operator.getName())) {
+                    continue;
+                }
+                if (!(tokens.get(i - 4) instanceof COSNumber rectX)
+                        || !(tokens.get(i - 3) instanceof COSNumber rectY)
+                        || !(tokens.get(i - 2) instanceof COSNumber rectWidth)
+                        || !(tokens.get(i - 1) instanceof COSNumber rectHeight)) {
+                    continue;
+                }
+                if (closeTo(rectX.floatValue(), x) && closeTo(rectY.floatValue(), y)
+                        && closeTo(rectWidth.floatValue(), width) && closeTo(rectHeight.floatValue(), height)) {
+                    count++;
+                }
             }
         }
         return count;
