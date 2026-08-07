@@ -159,6 +159,30 @@ abstract class AbstractPdfRenderer {
     }
 
     /**
+     * Expands one designated row to consume any unused form height while leaving
+     * the other rows at their preferred heights.
+     *
+     * @param totalHeight total height available for the rows.
+     * @param expandableRowIndex zero-based index of the row that should absorb extra space.
+     * @param preferredHeights preferred heights for each row.
+     * @return resolved row heights.
+     */
+    protected float[] expandRowToFill(float totalHeight, int expandableRowIndex, float... preferredHeights) {
+        float[] resolved = preferredHeights.clone();
+        if (expandableRowIndex < 0 || expandableRowIndex >= resolved.length) {
+            return resolved;
+        }
+        float usedHeight = 0f;
+        for (float height : resolved) {
+            usedHeight += height;
+        }
+        if (usedHeight < totalHeight) {
+            resolved[expandableRowIndex] += totalHeight - usedHeight;
+        }
+        return resolved;
+    }
+
+    /**
      * Shared outer form bounds beneath the centered page heading.
      *
      * @param x left edge.

@@ -244,6 +244,7 @@ class LocalRepositoryTest {
             assertTrue(text.contains("IAP Page: 1"));
             assertTrue(text.contains("Date/Time:"));
             assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 706f));
+            assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 80f));
         }
 
         try (PDDocument pdf = Loader.loadPDF(pdf204.toFile())) {

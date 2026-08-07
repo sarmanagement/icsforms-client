@@ -65,14 +65,15 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             drawFormFrame(stream, layout);
             float y = layout.top();
 
-            float row1 = 58f;
-            float row2 = 58f;
-            float row3 = 176f;
-            float row5 = 42f;
-            float row6 = 104f;
-            float row7 = 74f;
-            float row8 = 44f;
-            float row4 = formHeight - row1 - row2 - row3 - row5 - row6 - row7 - row8;
+            float[] rows = expandRowToFill(formHeight, 3, 58f, 58f, 176f, 104f, 42f, 104f, 74f, 44f);
+            float row1 = rows[0];
+            float row2 = rows[1];
+            float row3 = rows[2];
+            float row4 = rows[3];
+            float row5 = rows[4];
+            float row6 = rows[5];
+            float row7 = rows[6];
+            float row8 = rows[7];
 
             float leftWidth = pageWidth * 0.30f;
             float middleWidth = pageWidth * 0.44f;
@@ -143,11 +144,12 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             drawFormFrame(stream, layout);
             float y = layout.top();
 
-            float row1 = 68f;
-            float row3 = 140f;
-            float row4 = 90f;
-            float row5 = 48f;
-            float row2 = formHeight - row1 - row3 - row4 - row5;
+            float[] rows = expandRowToFill(formHeight, 1, 68f, 220f, 140f, 90f, 48f);
+            float row1 = rows[0];
+            float row2 = rows[1];
+            float row3 = rows[2];
+            float row4 = rows[3];
+            float row5 = rows[4];
 
             float leftWidth = pageWidth * 0.34f;
             float middleWidth = pageWidth * 0.37f;
