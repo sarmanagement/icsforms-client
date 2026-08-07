@@ -26,14 +26,10 @@ import java.util.List;
 public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements PdfFormRenderer {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
-    private static final float MARGIN = 36f;
-    private static final float HEADER_HEIGHT = 14f;
     private static final float BODY_FONT_SIZE = 9f;
     private static final float HEADING_FONT_SIZE = 10f;
     private static final float LINE_HEIGHT = 11f;
     private static final float CELL_PADDING = 4f;
-    private static final float PAGE_WIDTH = PDRectangle.LETTER.getWidth() - (MARGIN * 2);
-    private static final float FORM_HEIGHT = PDRectangle.LETTER.getHeight() - (MARGIN * 2) - HEADER_HEIGHT;
     private static final int RESOURCE_SLOT_COUNT = 18;
 
     @Override
@@ -61,10 +57,13 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+            FormLayout layout = formLayout(page);
+            float pageWidth = layout.width();
+            float formHeight = layout.height();
 
-            float pageTop = page.getMediaBox().getHeight() - MARGIN;
-            drawCenteredHeader(stream, bold, pageTop, "SAR TASK ASSIGNMENT FORM", "Page 1 of 2");
-            float y = pageTop - HEADER_HEIGHT;
+            drawFormHeader(stream, bold, layout, "SAR TASK ASSIGNMENT", "FORM");
+            drawFormFrame(stream, layout);
+            float y = layout.top();
 
             float row1 = 58f;
             float row2 = 58f;
@@ -73,60 +72,60 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             float row6 = 104f;
             float row7 = 74f;
             float row8 = 44f;
-            float row4 = FORM_HEIGHT - row1 - row2 - row3 - row5 - row6 - row7 - row8;
+            float row4 = formHeight - row1 - row2 - row3 - row5 - row6 - row7 - row8;
 
-            float leftWidth = PAGE_WIDTH * 0.30f;
-            float middleWidth = PAGE_WIDTH * 0.44f;
-            float rightWidth = PAGE_WIDTH - leftWidth - middleWidth;
+            float leftWidth = pageWidth * 0.30f;
+            float middleWidth = pageWidth * 0.44f;
+            float rightWidth = pageWidth - leftWidth - middleWidth;
 
-            drawCell(stream, MARGIN, y - row1, leftWidth, row1);
-            drawCell(stream, MARGIN + leftWidth, y - row1, middleWidth, row1);
-            drawCell(stream, MARGIN + leftWidth + middleWidth, y - row1, rightWidth, row1);
-            drawSection(stream, bold, regular, MARGIN, y - row1, leftWidth, row1,
+            drawCell(stream, layout.x(), y - row1, leftWidth, row1);
+            drawCell(stream, layout.x() + leftWidth, y - row1, middleWidth, row1);
+            drawCell(stream, layout.x() + leftWidth + middleWidth, y - row1, rightWidth, row1);
+            drawSection(stream, bold, regular, layout.x(), y - row1, leftWidth, row1,
                     "1. Incident Name", wrap(taskOrContextIncident(task, context), 20));
-            drawOperationalPeriodSection(stream, bold, regular, MARGIN + leftWidth, y - row1, middleWidth, row1, context);
-            drawAssignmentNumberSection(stream, bold, regular, MARGIN + leftWidth + middleWidth, y - row1, rightWidth, row1,
+            drawOperationalPeriodSection(stream, bold, regular, layout.x() + leftWidth, y - row1, middleWidth, row1, context);
+            drawAssignmentNumberSection(stream, bold, regular, layout.x() + leftWidth + middleWidth, y - row1, rightWidth, row1,
                     task.getAssignmentTeamNumber());
             y -= row1;
 
-            float contextWidth = PAGE_WIDTH * 0.22f;
-            float operationsWidth = PAGE_WIDTH - contextWidth;
-            drawCell(stream, MARGIN, y - row2, operationsWidth, row2);
-            drawCell(stream, MARGIN + operationsWidth, y - row2, contextWidth, row2);
-            drawOperationsSection(stream, bold, regular, MARGIN, y - row2, operationsWidth, row2, task);
-            drawContextSection(stream, bold, regular, MARGIN + operationsWidth, y - row2, contextWidth, row2, task);
+            float contextWidth = pageWidth * 0.22f;
+            float operationsWidth = pageWidth - contextWidth;
+            drawCell(stream, layout.x(), y - row2, operationsWidth, row2);
+            drawCell(stream, layout.x() + operationsWidth, y - row2, contextWidth, row2);
+            drawOperationsSection(stream, bold, regular, layout.x(), y - row2, operationsWidth, row2, task);
+            drawContextSection(stream, bold, regular, layout.x() + operationsWidth, y - row2, contextWidth, row2, task);
             y -= row2;
 
-            drawCell(stream, MARGIN, y - row3, PAGE_WIDTH, row3);
-            drawResourcesSection(stream, bold, regular, MARGIN, y - row3, PAGE_WIDTH, row3, task);
+            drawCell(stream, layout.x(), y - row3, pageWidth, row3);
+            drawResourcesSection(stream, bold, regular, layout.x(), y - row3, pageWidth, row3, task);
             y -= row3;
 
-            drawCell(stream, MARGIN, y - row4, PAGE_WIDTH, row4);
-            drawSection(stream, bold, regular, MARGIN, y - row4, PAGE_WIDTH, row4,
+            drawCell(stream, layout.x(), y - row4, pageWidth, row4);
+            drawSection(stream, bold, regular, layout.x(), y - row4, pageWidth, row4,
                     "6. Work Assignment", wrap(task.getAssignment(), 95));
             y -= row4;
 
-            drawCell(stream, MARGIN, y - row5, PAGE_WIDTH, row5);
-            drawSection(stream, bold, regular, MARGIN, y - row5, PAGE_WIDTH, row5,
+            drawCell(stream, layout.x(), y - row5, pageWidth, row5);
+            drawSection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5,
                     "7. Transportation Instructions", wrap(task.getTransportationInstructions(), 95));
             y -= row5;
 
-            float mapWidth = PAGE_WIDTH * 0.68f;
-            drawCell(stream, MARGIN, y - row6, mapWidth, row6);
-            drawCell(stream, MARGIN + mapWidth, y - row6, PAGE_WIDTH - mapWidth, row6);
-            drawSection(stream, bold, regular, MARGIN, y - row6, mapWidth, row6,
+            float mapWidth = pageWidth * 0.68f;
+            drawCell(stream, layout.x(), y - row6, mapWidth, row6);
+            drawCell(stream, layout.x() + mapWidth, y - row6, pageWidth - mapWidth, row6);
+            drawSection(stream, bold, regular, layout.x(), y - row6, mapWidth, row6,
                     "8. Task Map", wrap(task.getTaskMap(), 62));
-            drawSection(stream, bold, regular, MARGIN + mapWidth, y - row6, PAGE_WIDTH - mapWidth, row6,
+            drawSection(stream, bold, regular, layout.x() + mapWidth, y - row6, pageWidth - mapWidth, row6,
                     "9. Special Equipment", wrap(task.getSpecialEquipment(), 26));
             y -= row6;
 
-            drawCell(stream, MARGIN, y - row7, PAGE_WIDTH, row7);
-            drawCommunicationsSection(stream, bold, regular, MARGIN, y - row7, PAGE_WIDTH, row7, task.getCommunications());
+            drawCell(stream, layout.x(), y - row7, pageWidth, row7);
+            drawCommunicationsSection(stream, bold, regular, layout.x(), y - row7, pageWidth, row7, task.getCommunications());
             y -= row7;
 
-            drawPreparedBySection(stream, bold, regular, MARGIN, y - row8, PAGE_WIDTH, row8,
+            drawPreparedBySection(stream, bold, regular, layout.x(), y - row8, pageWidth, row8,
                     "11. Prepared by", task.getPreparedByName(), task.getPreparedByPositionTitle(), task.getPreparedDateTime(),
-                    "SAR Task Assignment Form — Page 1 of 2");
+                    "SAR Task Assignment Form - Page 1 of 2");
         }
     }
 
@@ -136,48 +135,51 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+            FormLayout layout = formLayout(page);
+            float pageWidth = layout.width();
+            float formHeight = layout.height();
 
-            float pageTop = page.getMediaBox().getHeight() - MARGIN;
-            drawCenteredHeader(stream, bold, pageTop, "SAR TASK ASSIGNMENT FORM — DEBRIEFING", "Page 2 of 2");
-            float y = pageTop - HEADER_HEIGHT;
+            drawFormHeader(stream, bold, layout, "SAR TASK ASSIGNMENT FORM", "DEBRIEFING");
+            drawFormFrame(stream, layout);
+            float y = layout.top();
 
             float row1 = 68f;
             float row3 = 140f;
             float row4 = 90f;
             float row5 = 48f;
-            float row2 = FORM_HEIGHT - row1 - row3 - row4 - row5;
+            float row2 = formHeight - row1 - row3 - row4 - row5;
 
-            float leftWidth = PAGE_WIDTH * 0.34f;
-            float middleWidth = PAGE_WIDTH * 0.37f;
-            float rightWidth = PAGE_WIDTH - leftWidth - middleWidth;
+            float leftWidth = pageWidth * 0.34f;
+            float middleWidth = pageWidth * 0.37f;
+            float rightWidth = pageWidth - leftWidth - middleWidth;
 
-            drawCell(stream, MARGIN, y - row1, leftWidth, row1);
-            drawCell(stream, MARGIN + leftWidth, y - row1, middleWidth, row1);
-            drawCell(stream, MARGIN + leftWidth + middleWidth, y - row1, rightWidth, row1);
-            drawSection(stream, bold, regular, MARGIN, y - row1, leftWidth, row1,
+            drawCell(stream, layout.x(), y - row1, leftWidth, row1);
+            drawCell(stream, layout.x() + leftWidth, y - row1, middleWidth, row1);
+            drawCell(stream, layout.x() + leftWidth + middleWidth, y - row1, rightWidth, row1);
+            drawSection(stream, bold, regular, layout.x(), y - row1, leftWidth, row1,
                     "12. Debriefing Supervisor", wrap(task.getDebriefingSupervisor(), 24));
-            drawTimeOnAssignmentSection(stream, bold, regular, MARGIN + leftWidth, y - row1, middleWidth, row1, task);
-            drawDebriefHeaderRight(stream, bold, regular, MARGIN + leftWidth + middleWidth, y - row1, rightWidth, row1, task);
+            drawTimeOnAssignmentSection(stream, bold, regular, layout.x() + leftWidth, y - row1, middleWidth, row1, task);
+            drawDebriefHeaderRight(stream, bold, regular, layout.x() + leftWidth + middleWidth, y - row1, rightWidth, row1, task);
             y -= row1;
 
-            drawCell(stream, MARGIN, y - row2, PAGE_WIDTH, row2);
-            drawSection(stream, bold, regular, MARGIN, y - row2, PAGE_WIDTH, row2,
+            drawCell(stream, layout.x(), y - row2, pageWidth, row2);
+            drawSection(stream, bold, regular, layout.x(), y - row2, pageWidth, row2,
                     "15. Debriefing", wrap(task.getDebriefNotes(), 96));
             y -= row2;
 
-            drawCell(stream, MARGIN, y - row3, PAGE_WIDTH, row3);
-            drawSection(stream, bold, regular, MARGIN, y - row3, PAGE_WIDTH, row3,
+            drawCell(stream, layout.x(), y - row3, pageWidth, row3);
+            drawSection(stream, bold, regular, layout.x(), y - row3, pageWidth, row3,
                     "16. Areas Not Covered", wrap(task.getAreasNotCovered(), 96));
             y -= row3;
 
-            drawCell(stream, MARGIN, y - row4, PAGE_WIDTH, row4);
-            drawSection(stream, bold, regular, MARGIN, y - row4, PAGE_WIDTH, row4,
+            drawCell(stream, layout.x(), y - row4, pageWidth, row4);
+            drawSection(stream, bold, regular, layout.x(), y - row4, pageWidth, row4,
                     "17. Hazards Observed", wrap(task.getHazardsObserved(), 96));
             y -= row4;
 
-            drawPreparedBySection(stream, bold, regular, MARGIN, y - row5, PAGE_WIDTH, row5,
+            drawPreparedBySection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5,
                     "18. Prepared by", task.getDebriefPreparedByName(), task.getDebriefPreparedByPositionTitle(),
-                    task.getDebriefPreparedDateTime(), "SAR Task Assignment Form — Page 2 of 2");
+                    task.getDebriefPreparedDateTime(), "SAR Task Assignment Form - Page 2 of 2");
         }
     }
 
@@ -322,10 +324,8 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         drawCell(stream, x, y, width, height);
         drawHeading(stream, bold, x, y + height, heading);
         float footerBandHeight = 14f;
-        float footerTop = y + footerBandHeight;
-        drawHorizontalLine(stream, x, x + width, footerTop);
-        drawVerticalLine(stream, x + (width / 3f), y, footerTop);
-        drawVerticalLine(stream, x + ((width * 2f) / 3f), y, footerTop);
+        float footerCellWidth = width / 3f;
+        drawCell(stream, x, y, footerCellWidth, footerBandHeight);
         float contentY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, contentY, "Name", safe(name));
         drawInlinePair(stream, bold, regular, x + (width * 0.42f), contentY, "Position/Title", safe(title));
@@ -341,22 +341,6 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
                              float x, float y, float width, float height, String heading, List<String> lines) throws IOException {
         drawHeading(stream, bold, x, y + height, heading);
         writeWrappedCellText(stream, regular, x, y, width, height - 12f, lines == null || lines.isEmpty() ? List.of("") : lines);
-    }
-
-    private void drawCenteredHeader(PDPageContentStream stream, PDType1Font bold, float y, String title, String pageLabel) throws IOException {
-        float headerWidth = bold.getStringWidth(title) / 1000f * 14f;
-        stream.beginText();
-        stream.setFont(bold, 14f);
-        stream.newLineAtOffset((PDRectangle.LETTER.getWidth() - headerWidth) / 2f, y);
-        stream.showText(title);
-        stream.endText();
-
-        float labelWidth = bold.getStringWidth(pageLabel) / 1000f * 9f;
-        stream.beginText();
-        stream.setFont(bold, 9f);
-        stream.newLineAtOffset(PDRectangle.LETTER.getWidth() - MARGIN - labelWidth, y);
-        stream.showText(pageLabel);
-        stream.endText();
     }
 
     private void drawHeading(PDPageContentStream stream, PDType1Font bold, float x, float topY, String heading) throws IOException {

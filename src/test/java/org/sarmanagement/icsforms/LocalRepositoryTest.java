@@ -18,7 +18,11 @@ import org.sarmanagement.icsforms.ui.AppController;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.contentstream.operator.Operator;
+import org.apache.pdfbox.cos.COSNumber;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.text.PDFTextStripper;
 
 import java.nio.file.Files;
@@ -238,6 +242,7 @@ class LocalRepositoryTest {
             assertTrue(text.contains("8. Approved By Incident Commander"));
             assertTrue(text.contains("IAP Page: 1"));
             assertTrue(text.contains("Date/Time:"));
+            assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 706f));
         }
 
         try (PDDocument pdf = Loader.loadPDF(pdf204.toFile())) {
@@ -253,6 +258,7 @@ class LocalRepositoryTest {
             assertTrue(text.contains("Reporting Location"));
             assertTrue(text.contains("9. Prepared By"));
             assertTrue(text.contains("IAP Page: 2"));
+            assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 706f));
         }
 
         try (PDDocument pdf = Loader.loadPDF(sarPdf.toFile())) {
@@ -267,7 +273,38 @@ class LocalRepositoryTest {
             assertTrue(text.contains("8. Task Map"));
             assertTrue(text.contains("Map-42"));
             assertTrue(text.contains("15. Debriefing"));
+            assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 706f));
+            assertTrue(hasRectangle(pdf.getPage(1), 36f, 36f, 540f, 706f));
+            assertEquals(1, countRectangles(pdf.getPage(0), 36f, 36f, 180f, 14f));
+            assertEquals(1, countRectangles(pdf.getPage(1), 36f, 36f, 180f, 14f));
         }
+    }
+
+    private boolean hasRectangle(PDPage page, float x, float y, float width, float height) throws Exception {
+        return countRectangles(page, x, y, width, height) > 0;
+    }
+
+    private int countRectangles(PDPage page, float x, float y, float width, float height) throws Exception {
+        int count = 0;
+        java.util.List<Object> tokens = new PDFStreamParser(page).parse();
+        for (int i = 4; i < tokens.size(); i++) {
+            Object token = tokens.get(i);
+            if (!(token instanceof Operator operator) || !"re".equals(operator.getName())) {
+                continue;
+            }
+            float rectX = ((COSNumber) tokens.get(i - 4)).floatValue();
+            float rectY = ((COSNumber) tokens.get(i - 3)).floatValue();
+            float rectWidth = ((COSNumber) tokens.get(i - 2)).floatValue();
+            float rectHeight = ((COSNumber) tokens.get(i - 1)).floatValue();
+            if (closeTo(rectX, x) && closeTo(rectY, y) && closeTo(rectWidth, width) && closeTo(rectHeight, height)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean closeTo(float actual, float expected) {
+        return Math.abs(actual - expected) < 0.2f;
     }
 
     /**

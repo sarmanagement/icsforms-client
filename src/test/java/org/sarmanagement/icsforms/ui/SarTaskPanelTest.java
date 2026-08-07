@@ -16,6 +16,8 @@ import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
@@ -27,6 +29,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -36,10 +39,8 @@ class SarTaskPanelTest {
     @Test
     void sarTaskEditorMarksRequiredAssignmentFieldAccessibly() throws Exception {
         SarTaskAssignment task = sampleTask();
-        Class<?> editorClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$SarTaskEditor");
-        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class);
-        constructor.setAccessible(true);
-        Object editor = constructor.newInstance(task);
+        Object editor = createEditor(task, "ASSIGNMENT");
+        Class<?> editorClass = editor.getClass();
 
         Field panelField = editorClass.getDeclaredField("panel");
         panelField.setAccessible(true);
@@ -61,6 +62,24 @@ class SarTaskPanelTest {
     }
 
     @Test
+    void debriefEditorShowsDebriefFieldsWithoutAssignmentOnlyFields() throws Exception {
+        Object editor = createEditor(sampleTask(), "DEBRIEFING");
+        Field panelField = editor.getClass().getDeclaredField("panel");
+        panelField.setAccessible(true);
+
+        JLabel[] debriefLabel = new JLabel[1];
+        JLabel[] resourcesLabel = new JLabel[1];
+        SwingUtilities.invokeAndWait(() -> {
+            Component panel = (Component) getFieldValue(panelField, editor);
+            debriefLabel[0] = findLabel(panel, "Debriefing");
+            resourcesLabel[0] = findLabel(panel, "Resources assigned");
+        });
+
+        assertNotNull(debriefLabel[0]);
+        assertNull(resourcesLabel[0]);
+    }
+
+    @Test
     void sarTaskGridMarksRequiredAssignmentColumn() throws Exception {
         AppController controller = sampleController();
         SarTaskPanel panel = new SarTaskPanel(controller);
@@ -73,6 +92,40 @@ class SarTaskPanelTest {
         assertEquals("Assignment/Team # (required)", table.getColumnName(0));
         Component component = table.prepareRenderer(table.getCellRenderer(0, 0), 0, 0);
         assertEquals(UiSupport.REQUIRED_FIELD_BACKGROUND, component.getBackground());
+    }
+
+    @Test
+    void sarTaskGridPopupOffersAssignmentAndDebriefingEditors() throws Exception {
+        AppController controller = sampleController();
+        SarTaskPanel panel = new SarTaskPanel(controller);
+        SwingUtilities.invokeAndWait(panel::refreshFromModel);
+
+        Field tableField = SarTaskPanel.class.getDeclaredField("table");
+        tableField.setAccessible(true);
+        JTable table = (JTable) tableField.get(panel);
+        JPopupMenu menu = table.getComponentPopupMenu();
+
+        assertNotNull(menu);
+        assertEquals("Edit assignment…", ((JMenuItem) menu.getComponent(0)).getText());
+        assertEquals("Edit debriefing…", ((JMenuItem) menu.getComponent(1)).getText());
+    }
+
+    private static Object createEditor(SarTaskAssignment task, String modeName) throws Exception {
+        Class<?> editorClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$SarTaskEditor");
+        Class<?> modeClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$EditorMode");
+        Object mode = enumConstant(modeClass, modeName);
+        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass);
+        constructor.setAccessible(true);
+        return constructor.newInstance(task, mode);
+    }
+
+    private static Object enumConstant(Class<?> enumClass, String name) {
+        for (Object constant : enumClass.getEnumConstants()) {
+            if (name.equals(((Enum<?>) constant).name())) {
+                return constant;
+            }
+        }
+        throw new IllegalArgumentException("Missing enum constant " + name);
     }
 
     private static Object getFieldValue(Field field, Object instance) {

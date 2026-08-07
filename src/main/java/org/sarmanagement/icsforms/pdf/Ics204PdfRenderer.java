@@ -26,14 +26,10 @@ import java.util.List;
 public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRenderer {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
-    private static final float MARGIN = 36f;
-    private static final float HEADER_HEIGHT = 14f;
     private static final float BODY_FONT_SIZE = 10f;
     private static final float HEADING_FONT_SIZE = 10f;
     private static final float LINE_HEIGHT = 12f;
     private static final float CELL_PADDING = 4f;
-    private static final float PAGE_BOTTOM_MARGIN = 36f;
-    private static final float PAGE_WIDTH = PDRectangle.LETTER.getWidth() - (MARGIN * 2);
     private static final int RESOURCE_ROW_COUNT = 9;
 
     /** {@inheritDoc} */
@@ -62,12 +58,14 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+            FormLayout layout = formLayout(page);
 
-            float pageTop = page.getMediaBox().getHeight() - MARGIN;
-            drawCenteredHeader(stream, bold, pageTop, "ICS 204", "ASSIGNMENT LIST");
-            float gridTop = pageTop - HEADER_HEIGHT;
-            float gridBottom = PAGE_BOTTOM_MARGIN;
-            float gridHeight = gridTop - gridBottom;
+            drawFormHeader(stream, bold, layout, "ICS 204", "ASSIGNMENT LIST");
+            drawFormFrame(stream, layout);
+            float gridTop = layout.top();
+            float gridBottom = layout.y();
+            float gridHeight = layout.height();
+            float pageWidth = layout.width();
 
             float row1 = 60f;
             float row2 = 64f;
@@ -76,44 +74,42 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             float row7 = 120f;
             float row8 = gridHeight - (row1 + row2 + row5 + row6 + row7);
 
-            drawCell(stream, MARGIN, gridBottom, PAGE_WIDTH, gridHeight);
-
             float y = gridTop;
-            float halfWidth = PAGE_WIDTH / 2f;
-            float operationsWidth = PAGE_WIDTH * 0.8f;
+            float halfWidth = pageWidth / 2f;
+            float operationsWidth = pageWidth * 0.8f;
 
-            drawHorizontalLine(stream, MARGIN, MARGIN + PAGE_WIDTH, y - row1);
-            drawVerticalLine(stream, MARGIN + halfWidth, y - row1, y);
-            drawSection(stream, bold, regular, MARGIN, y - row1, halfWidth, row1,
+            drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row1);
+            drawVerticalLine(stream, layout.x() + halfWidth, y - row1, y);
+            drawSection(stream, bold, regular, layout.x(), y - row1, halfWidth, row1,
                     "1. Incident Name", List.of(safe(context.getIncidentName())), null);
-            drawOperationalPeriodSection(stream, bold, regular, MARGIN + halfWidth, y - row1, halfWidth, row1, context);
+            drawOperationalPeriodSection(stream, bold, regular, layout.x() + halfWidth, y - row1, halfWidth, row1, context);
             y -= row1;
 
-            drawHorizontalLine(stream, MARGIN, MARGIN + PAGE_WIDTH, y - row2);
-            drawVerticalLine(stream, MARGIN + operationsWidth, y - row2, y);
-            drawManagementSection(stream, bold, regular, MARGIN, y - row2, operationsWidth, row2, form);
-            drawAssignmentContextSection(stream, bold, regular, MARGIN + operationsWidth, y - row2,
-                    PAGE_WIDTH - operationsWidth, row2, form);
+            drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row2);
+            drawVerticalLine(stream, layout.x() + operationsWidth, y - row2, y);
+            drawManagementSection(stream, bold, regular, layout.x(), y - row2, operationsWidth, row2, form);
+            drawAssignmentContextSection(stream, bold, regular, layout.x() + operationsWidth, y - row2,
+                    pageWidth - operationsWidth, row2, form);
             y -= row2;
 
-            drawHorizontalLine(stream, MARGIN, MARGIN + PAGE_WIDTH, y - row5);
-            overflowSections.addAll(drawResourcesSection(stream, bold, regular, MARGIN, y - row5, PAGE_WIDTH, row5, form));
+            drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row5);
+            overflowSections.addAll(drawResourcesSection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5, form));
             y -= row5;
 
-            drawHorizontalLine(stream, MARGIN, MARGIN + PAGE_WIDTH, y - row6);
-            overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row6, PAGE_WIDTH, row6,
+            drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row6);
+            overflowSections.addAll(drawSection(stream, bold, regular, layout.x(), y - row6, pageWidth, row6,
                     "6. Work Assignment", workAssignmentLines(form), "6. Work Assignment"));
             y -= row6;
 
-            drawHorizontalLine(stream, MARGIN, MARGIN + PAGE_WIDTH, y - row7);
-            drawVerticalLine(stream, MARGIN + halfWidth, y - row7, y);
-            overflowSections.addAll(drawSection(stream, bold, regular, MARGIN, y - row7, halfWidth, row7,
+            drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row7);
+            drawVerticalLine(stream, layout.x() + halfWidth, y - row7, y);
+            overflowSections.addAll(drawSection(stream, bold, regular, layout.x(), y - row7, halfWidth, row7,
                     "7. Special Instructions", wrap(form.getSpecialInstructions(), 42), "7. Special Instructions"));
-            overflowSections.addAll(drawSection(stream, bold, regular, MARGIN + halfWidth, y - row7, halfWidth, row7,
+            overflowSections.addAll(drawSection(stream, bold, regular, layout.x() + halfWidth, y - row7, halfWidth, row7,
                     "8. Communications", communicationLines(form.getCommunications()), "8. Communications"));
             y -= row7;
 
-            drawPreparedBySection(stream, bold, regular, MARGIN, y - row8, PAGE_WIDTH, row8, 24f, form);
+            drawPreparedBySection(stream, bold, regular, layout.x(), y - row8, pageWidth, row8, 24f, form);
         }
 
         for (OverflowSection overflow : overflowSections) {
@@ -127,12 +123,10 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            float pageTop = page.getMediaBox().getHeight() - MARGIN;
-            drawCenteredHeader(stream, bold, pageTop, "ICS 204", overflow.heading);
-            float boxTop = pageTop - HEADER_HEIGHT;
-            float boxHeight = boxTop - PAGE_BOTTOM_MARGIN;
-            drawCell(stream, MARGIN, PAGE_BOTTOM_MARGIN, PAGE_WIDTH, boxHeight);
-            drawTextBlock(stream, bold, regular, MARGIN, PAGE_BOTTOM_MARGIN, PAGE_WIDTH, boxHeight, overflow.heading, overflow.lines);
+            FormLayout layout = formLayout(page);
+            drawFormHeader(stream, bold, layout, "ICS 204", overflow.heading);
+            drawFormFrame(stream, layout);
+            drawTextBlock(stream, bold, regular, layout.x(), layout.y(), layout.width(), layout.height(), overflow.heading, overflow.lines);
         }
     }
 
@@ -280,17 +274,6 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         drawHeading(stream, bold, x, y + height, heading);
         float contentTop = y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f;
         writeLines(stream, regular, x + CELL_PADDING, contentTop, lines);
-    }
-
-    private void drawCenteredHeader(PDPageContentStream stream, PDType1Font bold, float y, String formNumber, String title)
-            throws IOException {
-        String header = formNumber + " " + title;
-        float headerWidth = bold.getStringWidth(header) / 1000f * 14f;
-        stream.beginText();
-        stream.setFont(bold, 14f);
-        stream.newLineAtOffset((PDRectangle.LETTER.getWidth() - headerWidth) / 2f, y);
-        stream.showText(header);
-        stream.endText();
     }
 
     private void drawHeading(PDPageContentStream stream, PDType1Font bold, float x, float topY, String heading) throws IOException {
