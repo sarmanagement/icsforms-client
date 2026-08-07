@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Set;
 import java.util.List;
 
 /**
@@ -21,6 +22,7 @@ import java.util.List;
  */
 public class SarTaskPanel extends JPanel {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final Set<Integer> READ_ONLY_COLUMNS = Set.of(1, 2, 3, 4, 5, 6, 7);
 
     private final AppController controller;
     private final SarTaskTableModel tableModel = new SarTaskTableModel();
@@ -81,9 +83,7 @@ public class SarTaskPanel extends JPanel {
         @Override public int getRowCount() { return rows.size(); }
         @Override public int getColumnCount() { return columns.length; }
         @Override public String getColumnName(int column) { return columns[column]; }
-        @Override public boolean isCellEditable(int rowIndex, int columnIndex) {
-            return columnIndex != 1 && columnIndex != 2 && columnIndex != 3 && columnIndex != 4 && columnIndex != 5 && columnIndex != 6 && columnIndex != 7;
-        }
+        @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return !READ_ONLY_COLUMNS.contains(columnIndex); }
 
         @Override public Object getValueAt(int rowIndex, int columnIndex) {
             SarTaskAssignment row = rows.get(rowIndex);

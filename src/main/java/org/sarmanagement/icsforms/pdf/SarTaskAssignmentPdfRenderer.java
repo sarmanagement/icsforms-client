@@ -32,7 +32,6 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     private static final float HEADING_FONT_SIZE = 10f;
     private static final float LINE_HEIGHT = 11f;
     private static final float CELL_PADDING = 4f;
-    private static final float PAGE_BOTTOM_MARGIN = 28f;
     private static final float PAGE_WIDTH = PDRectangle.LETTER.getWidth() - (MARGIN * 2);
     private static final int RESOURCE_SLOT_COUNT = 18;
 
@@ -340,12 +339,11 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     }
 
     private void drawCenteredHeader(PDPageContentStream stream, PDType1Font bold, float y, String title, String pageLabel) throws IOException {
-        String header = title;
-        float headerWidth = bold.getStringWidth(header) / 1000f * 14f;
+        float headerWidth = bold.getStringWidth(title) / 1000f * 14f;
         stream.beginText();
         stream.setFont(bold, 14f);
         stream.newLineAtOffset((PDRectangle.LETTER.getWidth() - headerWidth) / 2f, y);
-        stream.showText(header);
+        stream.showText(title);
         stream.endText();
 
         float labelWidth = bold.getStringWidth(pageLabel) / 1000f * 9f;
@@ -366,6 +364,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
     private void drawInlinePair(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                 float x, float y, String label, String value) throws IOException {
+        float valueOffset = (bold.getStringWidth(label + ": ") / 1000f * BODY_FONT_SIZE) + 2f;
         stream.beginText();
         stream.setFont(bold, BODY_FONT_SIZE);
         stream.newLineAtOffset(x, y);
@@ -374,7 +373,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
         stream.beginText();
         stream.setFont(regular, BODY_FONT_SIZE);
-        stream.newLineAtOffset(x + 56f, y);
+        stream.newLineAtOffset(x + valueOffset, y);
         stream.showText(safe(value));
         stream.endText();
     }
