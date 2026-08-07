@@ -25,7 +25,9 @@ import javax.swing.JPopupMenu;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.table.AbstractTableModel;
 import java.awt.Component;
+import java.lang.reflect.Method;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
@@ -137,22 +139,51 @@ class SarTaskPanelTest {
         Object editor = createEditor(task, "ASSIGNMENT");
         Field panelField = editor.getClass().getDeclaredField("panel");
         panelField.setAccessible(true);
-        Field resourceFieldsField = editor.getClass().getDeclaredField("resourceEntryFields");
-        resourceFieldsField.setAccessible(true);
+        Field resourceModelField = editor.getClass().getDeclaredField("resourceEntryTableModel");
+        resourceModelField.setAccessible(true);
 
         JLabel[] communicationsLabel = new JLabel[1];
-        List<?> resourceFields = (List<?>) getFieldValue(resourceFieldsField, editor);
         SwingUtilities.invokeAndWait(() -> communicationsLabel[0] = findLabel((Component) getFieldValue(panelField, editor), "Communications"));
 
+        AbstractTableModel resourceModel = (AbstractTableModel) getFieldValue(resourceModelField, editor);
         assertNull(communicationsLabel[0]);
-        assertEquals(18, resourceFields.size());
-        assertEquals("Leader/Handler", fieldText(resourceFields.get(0), "functionField"));
-        assertEquals("Leader A", fieldText(resourceFields.get(0), "nameField"));
-        assertEquals("Medic", fieldText(resourceFields.get(1), "functionField"));
-        assertEquals("Alex", fieldText(resourceFields.get(1), "nameField"));
-        for (Object resourceField : resourceFields) {
-            assertNotEquals("Team 1", fieldText(resourceField, "nameField"));
+        assertEquals(2, resourceModel.getRowCount());
+        assertEquals("Leader/Handler", resourceModel.getValueAt(0, 0));
+        assertEquals("Leader A", resourceModel.getValueAt(0, 1));
+        assertEquals("Medic", resourceModel.getValueAt(1, 0));
+        assertEquals("Alex", resourceModel.getValueAt(1, 1));
+        for (int rowIndex = 0; rowIndex < resourceModel.getRowCount(); rowIndex++) {
+            assertNotEquals("Team 1", resourceModel.getValueAt(rowIndex, 1));
         }
+    }
+
+    @Test
+    void assignmentEditorDefaultsResourceRowsFromIcs204PersonCount() throws Exception {
+        AppController controller = sampleController();
+        SarTaskPanel panel = new SarTaskPanel(controller);
+        Method method = SarTaskPanel.class.getDeclaredMethod("defaultResourceEditorRowCount", SarTaskAssignment.class);
+        method.setAccessible(true);
+
+        int rowCount = (int) method.invoke(panel, controller.getData().getSarTaskAssignments().get(0));
+
+        assertEquals(3, rowCount);
+    }
+
+    @Test
+    void debriefEditorUsesCompactPodFactorHeaderAndScoreWidth() throws Exception {
+        Object editor = createEditor(sampleTask(), "DEBRIEFING");
+        Field podFactorsField = editor.getClass().getDeclaredField("podFactorsField");
+        podFactorsField.setAccessible(true);
+        Field podFactorEntriesField = editor.getClass().getDeclaredField("podFactorEntryFields");
+        podFactorEntriesField.setAccessible(true);
+
+        JLabel[] header = new JLabel[1];
+        SwingUtilities.invokeAndWait(() -> header[0] = (JLabel) ((java.awt.Container) getFieldValue(podFactorsField, editor)).getComponent(0));
+
+        List<?> entries = (List<?>) getFieldValue(podFactorEntriesField, editor);
+        assertTrue(header[0].getText().contains("Qualitative POD Factors"));
+        assertTrue(header[0].getText().contains("Factor"));
+        assertEquals(2, textFieldColumnCount(entries.get(0), "scoreField"));
     }
 
     private static Object createEditor(SarTaskAssignment task, String modeName) throws Exception {
@@ -240,11 +271,11 @@ class SarTaskPanelTest {
         return task;
     }
 
-    private static String fieldText(Object instance, String fieldName) {
+    private static int textFieldColumnCount(Object instance, String fieldName) {
         try {
             Field field = instance.getClass().getDeclaredField(fieldName);
             field.setAccessible(true);
-            return ((JTextField) field.get(instance)).getText();
+            return ((JTextField) field.get(instance)).getColumns();
         } catch (ReflectiveOperationException exception) {
             throw new IllegalStateException(exception);
         }
@@ -260,6 +291,7 @@ class SarTaskPanelTest {
         resource.setResourceIdentifier(task.getResourceIdentifier());
         resource.setLeaderRole(task.getLeaderRole());
         resource.setLeader(task.getLeader());
+        resource.setNumberOfPersons(3);
         resource.setContact(task.getContact());
         resource.setAssignment(task.getAssignment());
 

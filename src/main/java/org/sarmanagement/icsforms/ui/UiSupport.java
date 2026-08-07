@@ -21,6 +21,7 @@ import java.util.Date;
  */
 final class UiSupport {
     static final Color REQUIRED_FIELD_BACKGROUND = new Color(255, 248, 225);
+    private static final String FORM_SPACER_PROPERTY = "uiSupport.formSpacer";
 
     private UiSupport() {
     }
@@ -60,6 +61,26 @@ final class UiSupport {
         addRow(panel, row, label, component, true);
     }
 
+    /**
+     * Adds a full-width component row to a form panel.
+     *
+     * @param panel target panel.
+     * @param row row index.
+     * @param component row component.
+     */
+    static void addWideRow(JPanel panel, int row, JComponent component) {
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.gridx = 0;
+        constraints.gridy = row;
+        constraints.gridwidth = 2;
+        constraints.weightx = 1.0;
+        constraints.anchor = GridBagConstraints.NORTHWEST;
+        constraints.fill = GridBagConstraints.HORIZONTAL;
+        constraints.insets = new Insets(3, 3, 3, 3);
+        panel.add(component, constraints);
+        updateBottomSpacer(panel, row + 1);
+    }
+
     private static void addRow(JPanel panel, int row, String label, JComponent component, boolean required) {
         JLabel fieldLabel = new JLabel(required ? label + " (required)" : label);
         fieldLabel.setLabelFor(labelTarget(component));
@@ -82,6 +103,25 @@ final class UiSupport {
         right.fill = GridBagConstraints.HORIZONTAL;
         right.insets = new Insets(3, 0, 3, 3);
         panel.add(component, right);
+        updateBottomSpacer(panel, row + 1);
+    }
+
+    private static void updateBottomSpacer(JPanel panel, int row) {
+        Object existing = panel.getClientProperty(FORM_SPACER_PROPERTY);
+        if (existing instanceof JPanel spacer) {
+            panel.remove(spacer);
+        }
+        JPanel spacer = new JPanel();
+        spacer.setOpaque(false);
+        GridBagConstraints filler = new GridBagConstraints();
+        filler.gridx = 0;
+        filler.gridy = row;
+        filler.gridwidth = 2;
+        filler.weightx = 1.0;
+        filler.weighty = 1.0;
+        filler.fill = GridBagConstraints.BOTH;
+        panel.add(spacer, filler);
+        panel.putClientProperty(FORM_SPACER_PROPERTY, spacer);
     }
 
     private static JComponent labelTarget(JComponent component) {

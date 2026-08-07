@@ -3,11 +3,13 @@ package org.sarmanagement.icsforms.ui;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.PodFactorRating;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 
 import javax.swing.BorderFactory;
+import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -26,6 +28,10 @@ import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.GridLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -150,7 +156,8 @@ public class SarTaskPanel extends JPanel {
             table.getCellEditor().stopCellEditing();
         }
         SarTaskAssignment row = tableModel.getRows().get(rowIndex);
-        SarTaskEditor editor = new SarTaskEditor(row, mode, controller.getData().getClueLogEntries());
+        SarTaskEditor editor = new SarTaskEditor(row, mode, controller.getData().getClueLogEntries(),
+                defaultResourceEditorRowCount(row));
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         scrollPane.setPreferredSize(mode == EditorMode.ASSIGNMENT
@@ -170,6 +177,28 @@ public class SarTaskPanel extends JPanel {
         if (viewRow >= 0 && viewRow < table.getRowCount()) {
             table.setRowSelectionInterval(viewRow, viewRow);
         }
+    }
+
+    private int defaultResourceEditorRowCount(SarTaskAssignment row) {
+        int existing = editableResources(row).size();
+        int persons = 0;
+        for (ResourceAssignment assignment : controller.getData().getForm204().getResourcesAssigned()) {
+            if (assignment == null) {
+                continue;
+            }
+            if (!row.getAssignmentId().isBlank() && row.getAssignmentId().equals(assignment.getAssignmentId())) {
+                persons = assignment.getNumberOfPersons();
+                break;
+            }
+            if (row.getAssignmentId().isBlank()
+                    && !row.getAssignmentTeamNumber().isBlank()
+                    && row.getAssignmentTeamNumber().equals(assignment.getAssignmentTeamNumber())) {
+                persons = assignment.getNumberOfPersons();
+                break;
+            }
+        }
+        int minimum = persons > 0 ? persons : 1;
+        return Math.min(18, Math.max(existing, minimum));
     }
 
     private static JTextField textField(String value, boolean editable) {
@@ -228,32 +257,20 @@ public class SarTaskPanel extends JPanel {
         return area;
     }
 
-    private static JPanel resourceEditorPanel(SarTaskAssignment row, List<ResourceEntryFields> fields) {
-        JPanel panel = new JPanel(new GridLayout(0, 4, 6, 3));
+    private static JPanel resourceEditorPanel(SarTaskAssignment row, ResourceEntriesTableModel model, int minimumRows) {
+        model.setRows(editableResources(row), minimumRows);
+        JTable table = new JTable(model);
+        table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
+        table.setFillsViewportHeight(true);
+
+        JScrollPane scrollPane = new JScrollPane(table);
+        scrollPane.setPreferredSize(new Dimension(420,
+                table.getRowHeight() * 9 + table.getTableHeader().getPreferredSize().height + 8));
+
+        JPanel panel = new JPanel(new BorderLayout(0, 4));
         panel.setOpaque(false);
-        panel.add(new JLabel("Function"));
-        panel.add(new JLabel("Name"));
-        panel.add(new JLabel("Function"));
-        panel.add(new JLabel("Name"));
-        List<SarTaskResource> resources = editableResources(row);
-        for (int i = 0; i < 9; i++) {
-            ResourceEntryFields entry = new ResourceEntryFields();
-            if ((i * 2) < resources.size()) {
-                entry.functionField.setText(resources.get(i * 2).getFunction());
-                entry.nameField.setText(resources.get(i * 2).getName());
-            }
-            fields.add(entry);
-            panel.add(entry.functionField);
-            panel.add(entry.nameField);
-            ResourceEntryFields pairedEntry = new ResourceEntryFields();
-            if ((i * 2) + 1 < resources.size()) {
-                pairedEntry.functionField.setText(resources.get((i * 2) + 1).getFunction());
-                pairedEntry.nameField.setText(resources.get((i * 2) + 1).getName());
-            }
-            fields.add(pairedEntry);
-            panel.add(pairedEntry.functionField);
-            panel.add(pairedEntry.nameField);
-        }
+        panel.add(scrollPane, BorderLayout.CENTER);
+        panel.add(buttonsPanel(model::addRow, () -> model.removeRow(table.getSelectedRow())), BorderLayout.SOUTH);
         return panel;
     }
 
@@ -318,19 +335,21 @@ public class SarTaskPanel extends JPanel {
         return panel;
     }
 
-    private static List<SarTaskResource> resourceValuesFrom(List<ResourceEntryFields> fields) {
+    private static List<SarTaskResource> resourceValuesFrom(ResourceEntriesTableModel model) {
         List<SarTaskResource> resources = new ArrayList<>();
-        for (ResourceEntryFields entry : fields) {
-            if (entry.functionField.getText().isBlank() && entry.nameField.getText().isBlank()) {
+        for (SarTaskResource entry : model.getRows()) {
+            String function = entry.getFunction() == null ? "" : entry.getFunction().trim();
+            String name = entry.getName() == null ? "" : entry.getName().trim();
+            if (function.isBlank() && name.isBlank()) {
                 continue;
             }
+            SarTaskResource resource = new SarTaskResource();
+            resource.setFunction(function);
+            resource.setName(name);
+            resources.add(resource);
             if (resources.size() >= 18) {
                 break;
             }
-            SarTaskResource resource = new SarTaskResource();
-            resource.setFunction(entry.functionField.getText().trim());
-            resource.setName(entry.nameField.getText().trim());
-            resources.add(resource);
         }
         return resources;
     }
@@ -366,6 +385,18 @@ public class SarTaskPanel extends JPanel {
             cell.add(field.component(), BorderLayout.CENTER);
             panel.add(cell);
         }
+        return panel;
+    }
+
+    private static JPanel buttonsPanel(Runnable addAction, Runnable removeAction) {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        panel.setOpaque(false);
+        JButton addButton = new JButton("Add");
+        addButton.addActionListener(event -> addAction.run());
+        JButton removeButton = new JButton("Remove");
+        removeButton.addActionListener(event -> removeAction.run());
+        panel.add(addButton);
+        panel.add(removeButton);
         return panel;
     }
 
@@ -432,11 +463,6 @@ public class SarTaskPanel extends JPanel {
     private record LabeledComponent(String label, JComponent component) {
     }
 
-    private static class ResourceEntryFields {
-        private final JTextField functionField = UiSupport.textField();
-        private final JTextField nameField = UiSupport.textField();
-    }
-
     private static class CommunicationEntryFields {
         private final JTextField nameField = UiSupport.textField();
         private final JTextField functionField = UiSupport.textField();
@@ -453,15 +479,104 @@ public class SarTaskPanel extends JPanel {
     private static class PodFactorEntryFields {
         private final String factorName;
         private final int maxScore;
-        private final JTextField scoreField = textField("", true, 3);
+        private final JTextField scoreField = textField("", true, 2);
         private final JTextField descriptionField = UiSupport.textField();
 
         private PodFactorEntryFields(PodFactorRating rating, boolean descriptionAllowed) {
             this.factorName = rating.getName();
             this.maxScore = rating.getMaxScore();
             this.scoreField.setText(rating.getScore() == null ? "" : String.valueOf(rating.getScore()));
+            this.scoreField.setHorizontalAlignment(JTextField.RIGHT);
+            Dimension preferredSize = this.scoreField.getPreferredSize();
+            this.scoreField.setPreferredSize(new Dimension(48, preferredSize.height));
             this.descriptionField.setText(rating.getDescription());
             this.descriptionField.setEditable(descriptionAllowed);
+        }
+    }
+
+    private static class ResourceEntriesTableModel extends AbstractTableModel {
+        private final String[] columns = {"Function", "Name"};
+        private final List<SarTaskResource> rows = new ArrayList<>();
+
+        private void setRows(List<SarTaskResource> resources, int minimumRows) {
+            rows.clear();
+            if (resources != null) {
+                for (SarTaskResource resource : resources) {
+                    if (rows.size() >= 18) {
+                        break;
+                    }
+                    SarTaskResource copy = new SarTaskResource();
+                    copy.setFunction(resource.getFunction());
+                    copy.setName(resource.getName());
+                    rows.add(copy);
+                }
+            }
+            while (rows.size() < Math.max(1, minimumRows) && rows.size() < 18) {
+                rows.add(new SarTaskResource());
+            }
+            fireTableDataChanged();
+        }
+
+        private List<SarTaskResource> getRows() {
+            return rows;
+        }
+
+        private void addRow() {
+            if (rows.size() >= 18) {
+                return;
+            }
+            rows.add(new SarTaskResource());
+            fireTableRowsInserted(rows.size() - 1, rows.size() - 1);
+        }
+
+        private void removeRow(int rowIndex) {
+            if (rowIndex < 0 || rowIndex >= rows.size() || rows.size() <= 1) {
+                return;
+            }
+            rows.remove(rowIndex);
+            fireTableRowsDeleted(rowIndex, rowIndex);
+        }
+
+        @Override
+        public int getRowCount() {
+            return rows.size();
+        }
+
+        @Override
+        public int getColumnCount() {
+            return columns.length;
+        }
+
+        @Override
+        public String getColumnName(int column) {
+            return columns[column];
+        }
+
+        @Override
+        public boolean isCellEditable(int rowIndex, int columnIndex) {
+            return true;
+        }
+
+        @Override
+        public Object getValueAt(int rowIndex, int columnIndex) {
+            SarTaskResource row = rows.get(rowIndex);
+            return switch (columnIndex) {
+                case 0 -> row.getFunction();
+                case 1 -> row.getName();
+                default -> "";
+            };
+        }
+
+        @Override
+        public void setValueAt(Object value, int rowIndex, int columnIndex) {
+            SarTaskResource row = rows.get(rowIndex);
+            String text = value == null ? "" : value.toString().trim();
+            if (columnIndex == 0) {
+                row.setFunction(text);
+            } else if (columnIndex == 1) {
+                row.setName(text);
+            }
+            fireTableCellUpdated(rowIndex, columnIndex);
         }
     }
 
@@ -500,7 +615,7 @@ public class SarTaskPanel extends JPanel {
         private final JScrollPane operationsField;
         private final JScrollPane contextField;
         private final JPanel resourcesAssignedField;
-        private final List<ResourceEntryFields> resourceEntryFields = new ArrayList<>();
+        private final ResourceEntriesTableModel resourceEntryTableModel = new ResourceEntriesTableModel();
         private final JScrollPane assignmentField;
         private final JScrollPane transportationField;
         private final JTextField taskMapField;
@@ -513,7 +628,7 @@ public class SarTaskPanel extends JPanel {
         private final JScrollPane debriefNotesField;
         private final JPanel clueEntriesField;
         private final List<ClueEntryFields> clueEntryFields = new ArrayList<>();
-        private final JPanel podFactorsField = new JPanel(new GridLayout(0, 3, 6, 3));
+        private final JPanel podFactorsField = new JPanel(new GridBagLayout());
         private final List<PodFactorEntryFields> podFactorEntryFields = new ArrayList<>();
         private final JTextField canineSearchTypeField;
         private final JTextField canineImprintField;
@@ -526,6 +641,10 @@ public class SarTaskPanel extends JPanel {
         private final JScrollPane hazardsObservedField;
 
         private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries) {
+            this(row, mode, clueLogEntries, Math.max(1, editableResources(row).size()));
+        }
+
+        private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries, int resourceRowCount) {
             this.mode = mode;
             assignmentTeamNumberField = textField(row.getAssignmentTeamNumber(), true);
             resourceTypeField = new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new));
@@ -550,16 +669,16 @@ public class SarTaskPanel extends JPanel {
                     "Resource: " + safeValue(row.getResourceIdentifier()));
             operationsField = textArea(SarTaskTableModel.joinOperations(row), 2, false);
             contextField = textArea(SarTaskTableModel.joinContext(row), 2, false);
-            resourcesAssignedField = resourceEditorPanel(row, resourceEntryFields);
+            resourcesAssignedField = resourceEditorPanel(row, resourceEntryTableModel, resourceRowCount);
             assignmentField = textArea(row.getAssignment(), 3, true);
             transportationField = textArea(row.getTransportationInstructions(), 2, true);
             taskMapField = textField(row.getTaskMap(), true, 14);
             specialEquipmentField = textArea(row.getSpecialEquipment(), 2, true);
             debriefingSupervisorField = textField(row.getDebriefingSupervisor(), true, 12);
-            assignmentStartField = dateTimeSpinner(row.getAssignmentStart(), 150);
-            assignmentEndField = dateTimeSpinner(row.getAssignmentEnd(), 150);
-            vehicleMilesField = textField(row.getVehicleMiles(), true, 8);
-            reportedPodField = textField(row.getReportedPod(), true, 3);
+            assignmentStartField = dateTimeSpinner(row.getAssignmentStart(), 132);
+            assignmentEndField = dateTimeSpinner(row.getAssignmentEnd(), 132);
+            vehicleMilesField = textField(row.getVehicleMiles(), true, 6);
+            reportedPodField = textField(row.getReportedPod(), true, 2);
             debriefNotesField = textArea(row.getDebriefNotes(), 4, true);
             clueEntriesField = clueEditorPanel(cluesForTask(row, clueLogEntries), clueEntryFields);
             canineSearchTypeField = textField(row.getCanineSearchType(), true);
@@ -616,7 +735,7 @@ public class SarTaskPanel extends JPanel {
                     new LabeledComponent("Assignment end", assignmentEndField)));
             UiSupport.addRow(panel, rowIndex++, "Debriefing", debriefNotesField);
             UiSupport.addRow(panel, rowIndex++, "Clues detected", clueEntriesField);
-            UiSupport.addRow(panel, rowIndex++, "Qualitative POD Factors", podFactorsField);
+            UiSupport.addWideRow(panel, rowIndex++, podFactorsField);
             UiSupport.addRow(panel, rowIndex++, "Canine assignment details", canineMetadataField);
             UiSupport.addRow(panel, rowIndex++, "Areas not covered", areasNotCoveredField);
             UiSupport.addRow(panel, rowIndex, "Hazards observed", hazardsObservedField);
@@ -626,20 +745,34 @@ public class SarTaskPanel extends JPanel {
         private void rebuildPodFactorFields(String resourceType, List<PodFactorRating> existing) {
             podFactorsField.removeAll();
             podFactorEntryFields.clear();
-            podFactorsField.add(new JLabel("Factor"));
-            podFactorsField.add(new JLabel("Score"));
-            podFactorsField.add(new JLabel("Description"));
+            addPodFactorCell(new JLabel("<html>Qualitative POD Factors<br>Factor</html>"), 0, 0, 0.0, GridBagConstraints.NONE);
+            addPodFactorCell(new JLabel("Score"), 1, 0, 0.0, GridBagConstraints.NONE);
+            addPodFactorCell(new JLabel("Description"), 2, 0, 1.0, GridBagConstraints.HORIZONTAL);
+            int rowIndex = 1;
             for (PodFactorRating rating : SarTaskSupport.factorRatings(resourceType, existing)) {
                 boolean descriptionAllowed = SarTaskSupport.allowsDescription(resourceType, rating.getName());
                 PodFactorEntryFields fields = new PodFactorEntryFields(rating, descriptionAllowed);
                 podFactorEntryFields.add(fields);
-                podFactorsField.add(new JLabel(rating.getName() + " (1-" + rating.getMaxScore() + ")"));
-                podFactorsField.add(fields.scoreField);
-                podFactorsField.add(fields.descriptionField);
+                addPodFactorCell(new JLabel(rating.getName() + " (1-" + rating.getMaxScore() + ")"),
+                        0, rowIndex, 0.0, GridBagConstraints.NONE);
+                addPodFactorCell(fields.scoreField, 1, rowIndex, 0.0, GridBagConstraints.NONE);
+                addPodFactorCell(fields.descriptionField, 2, rowIndex, 1.0, GridBagConstraints.HORIZONTAL);
+                rowIndex++;
             }
             updateCanineMetadataVisibility();
             podFactorsField.revalidate();
             podFactorsField.repaint();
+        }
+
+        private void addPodFactorCell(Component component, int column, int row, double weightx, int fill) {
+            GridBagConstraints constraints = new GridBagConstraints();
+            constraints.gridx = column;
+            constraints.gridy = row;
+            constraints.weightx = weightx;
+            constraints.anchor = GridBagConstraints.NORTHWEST;
+            constraints.fill = fill;
+            constraints.insets = new Insets(0, 0, 3, column == 2 ? 0 : 6);
+            podFactorsField.add(component, constraints);
         }
 
         private List<PodFactorRating> existingFactorValues() {
@@ -665,7 +798,7 @@ public class SarTaskPanel extends JPanel {
             row.setResourceType(selectedComboValue(resourceTypeField));
             row.setTaskType(selectedComboValue(taskTypeField));
             if (mode == EditorMode.ASSIGNMENT) {
-                row.setResourcesAssigned(resourceValuesFrom(resourceEntryFields));
+                row.setResourcesAssigned(resourceValuesFrom(resourceEntryTableModel));
                 row.setAssignment(textAreaFrom(assignmentField).getText().trim());
                 row.setTransportationInstructions(textAreaFrom(transportationField).getText().trim());
                 row.setTaskMap(taskMapField.getText().trim());
