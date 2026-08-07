@@ -16,7 +16,9 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.awt.event.MouseAdapter;
@@ -49,6 +51,7 @@ public class SarTaskPanel extends JPanel {
         this.controller = controller;
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         table.setFillsViewportHeight(true);
+        table.getColumnModel().getColumn(0).setCellRenderer(new RequiredFieldCellRenderer());
         installRowEditor();
         setBorder(BorderFactory.createTitledBorder("SAR Task Assignment / Debriefing"));
         add(new JScrollPane(table), BorderLayout.CENTER);
@@ -294,7 +297,7 @@ public class SarTaskPanel extends JPanel {
             hazardsObservedField = textArea(row.getHazardsObserved(), 3, true);
 
             int rowIndex = 0;
-            UiSupport.addRow(panel, rowIndex++, "Assignment/Team #", assignmentTeamNumberField);
+            UiSupport.addRequiredRow(panel, rowIndex++, "Assignment/Team #", assignmentTeamNumberField);
             UiSupport.addRow(panel, rowIndex++, "Incident", incidentNameField);
             UiSupport.addRow(panel, rowIndex++, "Resource", resourceIdentifierField);
             UiSupport.addRow(panel, rowIndex++, "Leader role", leaderRoleField);
@@ -340,7 +343,7 @@ public class SarTaskPanel extends JPanel {
      */
     private static class SarTaskTableModel extends AbstractTableModel {
         private final String[] columns = {
-                "Assignment/Team #", "Incident", "Resource", "Leader Role", "Leader", "Contact",
+                "Assignment/Team # (required)", "Incident", "Resource", "Leader Role", "Leader", "Contact",
                 "Operations Personnel", "Context", "Resources Assigned", "Work Assignment",
                 "Transportation", "Task Map", "Special Equipment", "Communications",
                 "Debrief Supervisor", "Time On Start", "Time On End", "Vehicle Miles",
@@ -521,6 +524,18 @@ public class SarTaskPanel extends JPanel {
             } catch (DateTimeParseException exception) {
                 return null;
             }
+        }
+    }
+
+    private static class RequiredFieldCellRenderer extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
+                                                       int row, int column) {
+            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            if (!isSelected) {
+                component.setBackground(UiSupport.REQUIRED_FIELD_BACKGROUND);
+            }
+            return component;
         }
     }
 }
