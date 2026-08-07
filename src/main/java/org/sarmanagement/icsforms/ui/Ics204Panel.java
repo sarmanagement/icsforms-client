@@ -20,7 +20,10 @@ import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -48,7 +51,7 @@ public class Ics204Panel extends JPanel {
     private final JTextField preparedByPositionField = UiSupport.textField();
     private final JSpinner preparedDateTimeField = UiSupport.dateTimeSpinner();
     private final JTextField iapPageField = UiSupport.textField();
-    private final JPanel managementContactsPanel = new JPanel(new GridLayout(0, 4, 4, 4));
+    private final JPanel managementContactsPanel = new JPanel(new GridBagLayout());
     private final ResourceTableModel resourceTableModel = new ResourceTableModel();
     private final CommunicationsTableModel communicationsTableModel = new CommunicationsTableModel();
     private String activeManagementContext = Ics204Form.MANAGEMENT_STAGING_AREA;
@@ -64,8 +67,19 @@ public class Ics204Panel extends JPanel {
         this.controller = controller;
 
         JPanel form = UiSupport.formPanel();
-        JPanel selectedContextPanel = new JPanel(new BorderLayout(4, 0));
-        selectedContextPanel.add(selectedContextLabel, BorderLayout.WEST);
+        selectedContextValueField.setColumns(16);
+        operationsChiefNameField.setColumns(16);
+        operationsChiefContactField.setColumns(12);
+        branchDirectorNameField.setColumns(16);
+        branchDirectorContactField.setColumns(12);
+        supervisorNameField.setColumns(16);
+        supervisorContactField.setColumns(12);
+        preparedByNameField.setColumns(18);
+        preparedByPositionField.setColumns(18);
+        iapPageField.setColumns(8);
+        JPanel selectedContextPanel = new JPanel(new BorderLayout(0, 2));
+        selectedContextPanel.setOpaque(false);
+        selectedContextPanel.add(selectedContextLabel, BorderLayout.NORTH);
         selectedContextPanel.add(selectedContextValueField, BorderLayout.CENTER);
         form.setBorder(BorderFactory.createTitledBorder("ICS 204 Assignment Context"));
         UiSupport.addRow(form, 0, "Management level", managementContextSelector);
@@ -194,11 +208,23 @@ public class Ics204Panel extends JPanel {
 
     private void rebuildManagementContacts() {
         managementContactsPanel.removeAll();
+        int rowIndex = 0;
         for (Object[] row : visibleManagementRows()) {
-            managementContactsPanel.add(new JLabel((String) row[0]));
-            managementContactsPanel.add((JTextField) row[1]);
-            managementContactsPanel.add(new JLabel((String) row[2]));
-            managementContactsPanel.add((JTextField) row[3]);
+            GridBagConstraints left = new GridBagConstraints();
+            left.gridx = 0;
+            left.gridy = rowIndex;
+            left.anchor = GridBagConstraints.WEST;
+            left.insets = new Insets(2, 0, 2, 8);
+            managementContactsPanel.add(new JLabel((String) row[0]), left);
+
+            GridBagConstraints right = new GridBagConstraints();
+            right.gridx = 1;
+            right.gridy = rowIndex;
+            right.weightx = 1.0;
+            right.fill = GridBagConstraints.HORIZONTAL;
+            right.insets = new Insets(2, 0, 2, 0);
+            managementContactsPanel.add((JTextField) row[1], right);
+            rowIndex++;
         }
         managementContactsPanel.revalidate();
         managementContactsPanel.repaint();
@@ -206,14 +232,18 @@ public class Ics204Panel extends JPanel {
 
     private List<Object[]> visibleManagementRows() {
         List<Object[]> rows = new ArrayList<>();
-        rows.add(new Object[]{"Operations section chief", operationsChiefNameField, "Contact", operationsChiefContactField});
+        rows.add(new Object[]{"Operations section chief", operationsChiefNameField});
+        rows.add(new Object[]{"Operations contact", operationsChiefContactField});
         if (Ics204Form.MANAGEMENT_BRANCH.equals(activeManagementContext)) {
-            rows.add(new Object[]{"Branch director", branchDirectorNameField, "Contact", branchDirectorContactField});
+            rows.add(new Object[]{"Branch director", branchDirectorNameField});
+            rows.add(new Object[]{"Branch contact", branchDirectorContactField});
         }
         if (Ics204Form.MANAGEMENT_DIVISION.equals(activeManagementContext)
                 || Ics204Form.MANAGEMENT_GROUP.equals(activeManagementContext)) {
             rows.add(new Object[]{Ics204Form.MANAGEMENT_GROUP.equals(activeManagementContext) ? "Group supervisor" : "Division supervisor",
-                    supervisorNameField, "Contact", supervisorContactField});
+                    supervisorNameField});
+            rows.add(new Object[]{Ics204Form.MANAGEMENT_GROUP.equals(activeManagementContext) ? "Group contact" : "Division contact",
+                    supervisorContactField});
         }
         return rows;
     }
@@ -304,7 +334,7 @@ public class Ics204Panel extends JPanel {
      * Table model for editable resource assignment rows.
      */
     private static class ResourceTableModel extends AbstractTableModel {
-        private final String[] columns = {"Assignment ID", "Assignment/Team #", "Resource Type", "Task Type", "Resource", "Leader Role", "Leader", "Persons", "Contact", "Reporting", "Equipment", "Supplies", "Remarks", "Notes", "Assignment"};
+        private final String[] columns = {"Assignment ID", "Assignment/Team #", "Resource Type", "Task Geometry", "Resource", "Leader Role", "Leader", "Persons", "Contact", "Reporting", "Equipment", "Supplies", "Remarks", "Notes", "Assignment"};
         private java.util.List<ResourceAssignment> rows = new java.util.ArrayList<>();
 
         /** @param rows replacement rows. */

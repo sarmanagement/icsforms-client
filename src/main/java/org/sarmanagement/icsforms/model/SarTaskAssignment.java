@@ -124,12 +124,6 @@ public class SarTaskAssignment {
             leaderResource.setName(resourceAssignment.getLeader());
             resources.add(leaderResource);
         }
-        if (!safe(resourceAssignment.getResourceIdentifier()).isBlank()) {
-            SarTaskResource identifierResource = new SarTaskResource();
-            identifierResource.setFunction("Resource");
-            identifierResource.setName(resourceAssignment.getResourceIdentifier());
-            resources.add(identifierResource);
-        }
         return resources;
     }
 

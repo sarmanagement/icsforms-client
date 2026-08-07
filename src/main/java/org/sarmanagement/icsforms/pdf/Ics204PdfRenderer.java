@@ -447,7 +447,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         for (ResourceAssignment resource : resources) {
             lines.add("Resource Identifier: " + safe(resource.getResourceIdentifier()));
             if (!safe(resource.getResourceType()).isBlank() || !safe(resource.getTaskType()).isBlank()) {
-                lines.add("Resource / Task Type: " + joinAvailable(safe(resource.getResourceType()), safe(resource.getTaskType())));
+                lines.add("Resource / Task Geometry: " + joinAvailable(safe(resource.getResourceType()), safe(resource.getTaskType())));
             }
             lines.add("Leader: " + safe(resource.getLeader()) + " | # of Persons: "
                     + (resource.getNumberOfPersons() > 0 ? resource.getNumberOfPersons() : "")

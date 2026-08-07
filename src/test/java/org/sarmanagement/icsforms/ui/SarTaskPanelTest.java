@@ -7,8 +7,10 @@ import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.PodFactorRating;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
@@ -28,6 +30,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -95,6 +98,7 @@ class SarTaskPanelTest {
         JTable table = (JTable) tableField.get(panel);
 
         assertEquals("Assignment/Team # (required)", table.getColumnName(0));
+        assertEquals("Task Geometry", table.getColumnName(3));
         Component component = table.prepareRenderer(table.getCellRenderer(0, 0), 0, 0);
         assertEquals(UiSupport.REQUIRED_FIELD_BACKGROUND, component.getBackground());
     }
@@ -113,6 +117,41 @@ class SarTaskPanelTest {
         assertNotNull(menu);
         assertEquals("Edit assignment…", ((JMenuItem) menu.getComponent(0)).getText());
         assertEquals("Edit debriefing…", ((JMenuItem) menu.getComponent(1)).getText());
+    }
+
+    @Test
+    void assignmentEditorUsesCompactResourceListWithoutPrimaryTaskResource() throws Exception {
+        SarTaskAssignment task = sampleTask();
+        List<SarTaskResource> resources = new ArrayList<>(task.getResourcesAssigned());
+        SarTaskResource primary = new SarTaskResource();
+        primary.setFunction("Resource");
+        primary.setName(task.getResourceIdentifier());
+        resources.add(primary);
+        SarTaskResource medic = new SarTaskResource();
+        medic.setFunction("Medic");
+        medic.setName("Alex");
+        resources.add(medic);
+        task.setResourcesAssigned(resources);
+
+        Object editor = createEditor(task, "ASSIGNMENT");
+        Field panelField = editor.getClass().getDeclaredField("panel");
+        panelField.setAccessible(true);
+        Field resourceFieldsField = editor.getClass().getDeclaredField("resourceEntryFields");
+        resourceFieldsField.setAccessible(true);
+
+        JLabel[] communicationsLabel = new JLabel[1];
+        List<?> resourceFields = (List<?>) getFieldValue(resourceFieldsField, editor);
+        SwingUtilities.invokeAndWait(() -> communicationsLabel[0] = findLabel((Component) getFieldValue(panelField, editor), "Communications"));
+
+        assertNull(communicationsLabel[0]);
+        assertEquals(18, resourceFields.size());
+        assertEquals("Leader/Handler", fieldText(resourceFields.get(0), "functionField"));
+        assertEquals("Leader A", fieldText(resourceFields.get(0), "nameField"));
+        assertEquals("Medic", fieldText(resourceFields.get(1), "functionField"));
+        assertEquals("Alex", fieldText(resourceFields.get(1), "nameField"));
+        for (Object resourceField : resourceFields) {
+            assertTrue(!"Team 1".equals(fieldText(resourceField, "nameField")));
+        }
     }
 
     private static Object createEditor(SarTaskAssignment task, String modeName) throws Exception {
@@ -195,7 +234,19 @@ class SarTaskPanelTest {
 
         SarTaskAssignment task = SarTaskAssignment.fromResourceAssignment(resource, context, form204);
         task.setReportedPod("60");
+        List<PodFactorRating> ratings = SarTaskSupport.factorRatings(task.getResourceType(), List.of());
+        task.setQualitativePodFactors(ratings);
         return task;
+    }
+
+    private static String fieldText(Object instance, String fieldName) {
+        try {
+            Field field = instance.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return ((JTextField) field.get(instance)).getText();
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     private static AppController sampleController() throws Exception {

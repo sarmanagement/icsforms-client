@@ -194,7 +194,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         drawRightAlignedHeadingValue(stream, regular, x, y + height, width, task.getResourceIdentifier());
         float detailLineY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 16f;
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, detailLineY, "Resource Type", safe(task.getResourceType()));
-        drawInlinePair(stream, bold, regular, x + (width * 0.42f), detailLineY, "Task Type", safe(task.getTaskType()));
+        drawInlinePair(stream, bold, regular, x + (width * 0.42f), detailLineY, "Task Geometry", safe(task.getTaskType()));
         float tableTop = y + height - 30f;
         float headerHeight = 20f;
         float headerBottom = tableTop - headerHeight;
@@ -463,7 +463,9 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
                 continue;
             }
             String resourceName = safe(resource.getName()).trim();
-            if (!taskResourceIdentifier.isBlank() && resourceName.equalsIgnoreCase(taskResourceIdentifier)) {
+            String resourceFunction = safe(resource.getFunction()).trim();
+            if (!taskResourceIdentifier.isBlank() && resourceName.equalsIgnoreCase(taskResourceIdentifier)
+                    && (resourceFunction.isBlank() || "Resource".equalsIgnoreCase(resourceFunction))) {
                 continue;
             }
             resources.add(resource);

@@ -343,10 +343,11 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private List<String> includedFormsLines(List<String> attachments) {
-        List<String> supported = List.of("ICS 202", "ICS 204", "Map packet");
+        List<String> supported = List.of("ICS 202", "ICS 204", "SAR Task Assignment", "Map packet");
         List<String> lines = new ArrayList<>();
         lines.add(checkLine("ICS 202", attachments));
         lines.add(checkLine("ICS 204", attachments));
+        lines.add(checkLine("SAR Task Assignment", attachments));
         lines.add(checkLine("Map packet", attachments));
         List<String> additional = attachments == null ? List.of() : attachments.stream()
                 .filter(item -> item != null && supported.stream().noneMatch(s -> s.equalsIgnoreCase(item)))
