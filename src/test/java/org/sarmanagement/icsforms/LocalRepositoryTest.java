@@ -261,7 +261,7 @@ class LocalRepositoryTest {
             assertTrue(text.contains("SAR TASK ASSIGNMENT FORM"));
             assertTrue(text.contains("1. Incident Name"));
             assertTrue(text.contains("3. Assignment/Team Number"));
-            assertTrue(text.contains("3. Division"));
+            assertTrue(text.contains("Division"));
             assertTrue(text.contains("A-1"));
             assertTrue(text.contains("Leader/Handler"));
             assertTrue(text.contains("8. Task Map"));
