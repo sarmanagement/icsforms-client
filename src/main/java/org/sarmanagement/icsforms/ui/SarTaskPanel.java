@@ -109,10 +109,6 @@ public class SarTaskPanel extends JPanel {
         }
     }
 
-    private void openSelectedRowEditor() {
-        openSelectedRowEditor(EditorMode.ASSIGNMENT);
-    }
-
     private void openSelectedRowEditor(EditorMode mode) {
         int viewRow = table.getSelectedRow();
         if (viewRow < 0) {
