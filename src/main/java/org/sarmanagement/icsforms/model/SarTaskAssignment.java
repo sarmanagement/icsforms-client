@@ -29,6 +29,7 @@ public class SarTaskAssignment {
     private String secondaryManagementContact = "";
     private List<SarTaskResource> resourcesAssigned = new ArrayList<>();
     private String transportationInstructions = "";
+    @JsonAlias("specialInstructions")
     private String specialEquipment = "";
     private List<CommunicationEntry> communications = new ArrayList<>();
     private String preparedByName = "";
@@ -217,7 +218,6 @@ public class SarTaskAssignment {
     /** @return special equipment. */
     public String getSpecialEquipment() { return specialEquipment; }
     /** @param specialEquipment special equipment. */
-    @JsonAlias("specialInstructions")
     public void setSpecialEquipment(String specialEquipment) { this.specialEquipment = specialEquipment == null ? "" : specialEquipment; }
     /** @return communications context. */
     public List<CommunicationEntry> getCommunications() { return communications; }
