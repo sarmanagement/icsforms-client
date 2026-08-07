@@ -132,8 +132,9 @@ public class SarTaskPanel extends JPanel {
         tableModel.fireTableRowsUpdated(rowIndex, rowIndex);
         controller.getData().setSarTaskAssignments(tableModel.getRows());
         controller.markDirty();
-        if (rowIndex < table.getRowCount()) {
-            table.setRowSelectionInterval(rowIndex, rowIndex);
+        int viewRow = table.convertRowIndexToView(rowIndex);
+        if (viewRow >= 0 && viewRow < table.getRowCount()) {
+            table.setRowSelectionInterval(viewRow, viewRow);
         }
     }
 
