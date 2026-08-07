@@ -532,7 +532,9 @@ public class SarTaskPanel extends JPanel {
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
                                                        int row, int column) {
             Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            if (!isSelected) {
+            if (isSelected) {
+                component.setBackground(table.getSelectionBackground());
+            } else {
                 component.setBackground(UiSupport.REQUIRED_FIELD_BACKGROUND);
             }
             return component;
