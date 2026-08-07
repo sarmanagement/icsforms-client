@@ -449,6 +449,8 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         List<SarTaskResource> resources = new ArrayList<>();
         String taskResourceIdentifier = safe(task.getResourceIdentifier()).trim();
         for (SarTaskResource resource : task.getResourcesAssigned()) {
+            // Ignore sparse/null entries so partially edited rows still render as blank slots
+            // instead of failing the entire PDF export.
             if (resource == null) {
                 continue;
             }
@@ -463,8 +465,8 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
     private LabeledValue relevantContext(SarTaskAssignment task) {
         // The printed form only has room for one management-context cell, so prefer the
-        // most organizationally specific populated value in the same order the upstream
-        // ICS 204 data is modeled for these mutually exclusive context fields.
+        // first populated ICS 204 context field in its Branch -> Division -> Group ->
+        // Staging Area order so the PDF matches the linked assignment context source.
         if (!safe(task.getBranch()).isBlank()) {
             return new LabeledValue("Branch", task.getBranch());
         }
