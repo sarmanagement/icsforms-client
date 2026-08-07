@@ -33,6 +33,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     private static final float LINE_HEIGHT = 11f;
     private static final float CELL_PADDING = 4f;
     private static final float PAGE_WIDTH = PDRectangle.LETTER.getWidth() - (MARGIN * 2);
+    private static final float FORM_HEIGHT = PDRectangle.LETTER.getHeight() - (MARGIN * 2) - HEADER_HEIGHT;
     private static final int RESOURCE_SLOT_COUNT = 18;
 
     @Override
@@ -68,31 +69,32 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             float row1 = 58f;
             float row2 = 58f;
             float row3 = 176f;
-            float row4 = 90f;
             float row5 = 42f;
             float row6 = 104f;
             float row7 = 74f;
             float row8 = 44f;
+            float row4 = FORM_HEIGHT - row1 - row2 - row3 - row5 - row6 - row7 - row8;
 
-            float leftWidth = PAGE_WIDTH * 0.42f;
-            float middleWidth = PAGE_WIDTH * 0.32f;
+            float leftWidth = PAGE_WIDTH * 0.30f;
+            float middleWidth = PAGE_WIDTH * 0.44f;
             float rightWidth = PAGE_WIDTH - leftWidth - middleWidth;
 
             drawCell(stream, MARGIN, y - row1, leftWidth, row1);
             drawCell(stream, MARGIN + leftWidth, y - row1, middleWidth, row1);
             drawCell(stream, MARGIN + leftWidth + middleWidth, y - row1, rightWidth, row1);
             drawSection(stream, bold, regular, MARGIN, y - row1, leftWidth, row1,
-                    "1. Incident/Mission Name", wrap(taskOrContextIncident(task, context), 30));
+                    "1. Incident Name", wrap(taskOrContextIncident(task, context), 20));
             drawOperationalPeriodSection(stream, bold, regular, MARGIN + leftWidth, y - row1, middleWidth, row1, context);
             drawAssignmentNumberSection(stream, bold, regular, MARGIN + leftWidth + middleWidth, y - row1, rightWidth, row1,
                     task.getAssignmentTeamNumber());
             y -= row1;
 
-            float topOpsWidth = PAGE_WIDTH * 0.58f;
-            drawCell(stream, MARGIN, y - row2, topOpsWidth, row2);
-            drawCell(stream, MARGIN + topOpsWidth, y - row2, PAGE_WIDTH - topOpsWidth, row2);
-            drawOperationsSection(stream, bold, regular, MARGIN, y - row2, topOpsWidth, row2, task);
-            drawContextSection(stream, bold, regular, MARGIN + topOpsWidth, y - row2, PAGE_WIDTH - topOpsWidth, row2, task);
+            float contextWidth = PAGE_WIDTH * 0.22f;
+            float operationsWidth = PAGE_WIDTH - contextWidth;
+            drawCell(stream, MARGIN, y - row2, operationsWidth, row2);
+            drawCell(stream, MARGIN + operationsWidth, y - row2, contextWidth, row2);
+            drawOperationsSection(stream, bold, regular, MARGIN, y - row2, operationsWidth, row2, task);
+            drawContextSection(stream, bold, regular, MARGIN + operationsWidth, y - row2, contextWidth, row2, task);
             y -= row2;
 
             drawCell(stream, MARGIN, y - row3, PAGE_WIDTH, row3);
@@ -140,10 +142,10 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             float y = pageTop - HEADER_HEIGHT;
 
             float row1 = 68f;
-            float row2 = 214f;
             float row3 = 140f;
             float row4 = 90f;
             float row5 = 48f;
+            float row2 = FORM_HEIGHT - row1 - row3 - row4 - row5;
 
             float leftWidth = PAGE_WIDTH * 0.34f;
             float middleWidth = PAGE_WIDTH * 0.37f;
@@ -182,6 +184,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     private void drawResourcesSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                       float x, float y, float width, float height, SarTaskAssignment task) throws IOException {
         drawHeading(stream, bold, x, y + height, "5. Resources Assigned");
+        drawRightAlignedHeadingValue(stream, regular, x, y + height, width, safe(task.getResourceIdentifier()));
         float tableTop = y + height - 18f;
         float headerHeight = 20f;
         float headerBottom = tableTop - headerHeight;
@@ -201,7 +204,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             writeWrappedCellText(stream, bold, starts[i], headerBottom, width * widths[i], headerHeight, List.of(headings[i]));
         }
 
-        List<SarTaskResource> resources = new ArrayList<>(task.getResourcesAssigned());
+        List<SarTaskResource> resources = printableResources(task);
         while (resources.size() < RESOURCE_SLOT_COUNT) {
             resources.add(new SarTaskResource());
         }
@@ -267,12 +270,8 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
     private void drawContextSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                     float x, float y, float width, float height, SarTaskAssignment task) throws IOException {
-        List<String> lines = new ArrayList<>();
-        lines.add("Branch: " + safe(task.getBranch()));
-        lines.add("Division: " + safe(task.getDivision()));
-        lines.add("Group: " + safe(task.getGroup()));
-        lines.add("Staging Area: " + safe(task.getStagingArea()));
-        drawSection(stream, bold, regular, x, y, width, height, "3. Branch / Division / Group / Staging Area", lines);
+        LabeledValue context = relevantContext(task);
+        drawSection(stream, bold, regular, x, y, width, height, "3. " + context.label(), wrap(context.value(), 14));
     }
 
     private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -321,13 +320,18 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
                                        String name, String title, LocalDateTime dateTime, String footerLabel) throws IOException {
         drawCell(stream, x, y, width, height);
         drawHeading(stream, bold, x, y + height, heading);
+        float footerBandHeight = 14f;
+        float footerTop = y + footerBandHeight;
+        drawHorizontalLine(stream, x, x + width, footerTop);
+        drawVerticalLine(stream, x + (width / 3f), y, footerTop);
+        drawVerticalLine(stream, x + ((width * 2f) / 3f), y, footerTop);
         float contentY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, contentY, "Name", safe(name));
         drawInlinePair(stream, bold, regular, x + (width * 0.42f), contentY, "Position/Title", safe(title));
         drawInlinePair(stream, bold, regular, x + (width * 0.74f), contentY, "Date/Time", formatDateTime(dateTime));
         stream.beginText();
         stream.setFont(regular, 8f);
-        stream.newLineAtOffset(x + CELL_PADDING, y + 6f);
+        stream.newLineAtOffset(x + CELL_PADDING, y + 3f);
         stream.showText(footerLabel);
         stream.endText();
     }
@@ -359,6 +363,19 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         stream.setFont(bold, HEADING_FONT_SIZE);
         stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
         stream.showText(heading);
+        stream.endText();
+    }
+
+    private void drawRightAlignedHeadingValue(PDPageContentStream stream, PDType1Font font,
+                                              float x, float topY, float width, String value) throws IOException {
+        if (safe(value).isBlank()) {
+            return;
+        }
+        float textWidth = font.getStringWidth(value) / 1000f * BODY_FONT_SIZE;
+        stream.beginText();
+        stream.setFont(font, BODY_FONT_SIZE);
+        stream.newLineAtOffset(x + width - CELL_PADDING - textWidth, topY - CELL_PADDING - HEADING_FONT_SIZE);
+        stream.showText(value);
         stream.endText();
     }
 
@@ -426,6 +443,35 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         return safe(task.getIncidentName()).isBlank() && context != null ? context.getIncidentName() : task.getIncidentName();
     }
 
+    private List<SarTaskResource> printableResources(SarTaskAssignment task) {
+        List<SarTaskResource> resources = new ArrayList<>();
+        String taskResourceIdentifier = safe(task.getResourceIdentifier());
+        for (SarTaskResource resource : task.getResourcesAssigned()) {
+            if (resource == null) {
+                continue;
+            }
+            if ("Resource".equalsIgnoreCase(safe(resource.getFunction()))
+                    && safe(resource.getName()).equals(taskResourceIdentifier)) {
+                continue;
+            }
+            resources.add(resource);
+        }
+        return new ArrayList<>(resources);
+    }
+
+    private LabeledValue relevantContext(SarTaskAssignment task) {
+        if (!safe(task.getBranch()).isBlank()) {
+            return new LabeledValue("Branch", task.getBranch());
+        }
+        if (!safe(task.getDivision()).isBlank()) {
+            return new LabeledValue("Division", task.getDivision());
+        }
+        if (!safe(task.getGroup()).isBlank()) {
+            return new LabeledValue("Group", task.getGroup());
+        }
+        return new LabeledValue("Staging Area", task.getStagingArea());
+    }
+
     private String formatDate(LocalDateTime value) {
         return value == null ? "" : DATE_FORMATTER.format(value);
     }
@@ -440,5 +486,8 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private record LabeledValue(String label, String value) {
     }
 }
