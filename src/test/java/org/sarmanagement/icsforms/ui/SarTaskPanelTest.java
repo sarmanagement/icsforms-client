@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -150,7 +151,7 @@ class SarTaskPanelTest {
         assertEquals("Medic", fieldText(resourceFields.get(1), "functionField"));
         assertEquals("Alex", fieldText(resourceFields.get(1), "nameField"));
         for (Object resourceField : resourceFields) {
-            assertTrue(!"Team 1".equals(fieldText(resourceField, "nameField")));
+            assertNotEquals("Team 1", fieldText(resourceField, "nameField"));
         }
     }
 
