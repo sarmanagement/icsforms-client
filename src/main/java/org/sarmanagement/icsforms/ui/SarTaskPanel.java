@@ -54,6 +54,8 @@ public class SarTaskPanel extends JPanel {
     private static final int RESOURCE_EDITOR_WIDTH = 420;
     private static final int RESOURCE_EDITOR_VISIBLE_ROWS = 9;
     private static final int RESOURCE_EDITOR_PADDING = 8;
+    private static final int CLUE_EDITOR_WIDTH = 720;
+    private static final int CLUE_EDITOR_PADDING = 8;
     private static final int SCORE_FIELD_WIDTH = 48;
 
     private final AppController controller;
@@ -168,7 +170,7 @@ public class SarTaskPanel extends JPanel {
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         String title = mode.dialogTitle(row.getAssignmentTeamNumber());
         if (!UiSupport.showResizableConfirmDialog(this, title, scrollPane,
-                mode == EditorMode.ASSIGNMENT ? new Dimension(1040, 680) : new Dimension(980, 680))) {
+                mode == EditorMode.ASSIGNMENT ? new Dimension(1040, 680) : new Dimension(980, 620))) {
             return;
         }
         controller.getData().setClueLogEntries(editor.applyTo(row, controller.getData().getClueLogEntries()));
@@ -350,6 +352,9 @@ public class SarTaskPanel extends JPanel {
         JTable table = new JTable(model);
         table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         table.setFillsViewportHeight(true);
+        JScrollPane scrollPane = new JScrollPane(table);
+        updateClueEditorSize(scrollPane, table, model.getRowCount());
+        model.addTableModelListener(event -> updateClueEditorSize(scrollPane, table, model.getRowCount()));
 
         JButton addButton = new JButton("Add");
         addButton.addActionListener(event -> model.addRow());
@@ -360,9 +365,20 @@ public class SarTaskPanel extends JPanel {
 
         JPanel panel = new JPanel(new BorderLayout(0, 4));
         panel.setOpaque(false);
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        panel.add(scrollPane, BorderLayout.CENTER);
         panel.add(buttons, BorderLayout.SOUTH);
         return panel;
+    }
+
+    private static void updateClueEditorSize(JScrollPane scrollPane, JTable table, int rowCount) {
+        int visibleRows = Math.max(1, rowCount);
+        int height = table.getRowHeight() * visibleRows
+                + table.getTableHeader().getPreferredSize().height
+                + CLUE_EDITOR_PADDING;
+        Dimension size = new Dimension(CLUE_EDITOR_WIDTH, height);
+        scrollPane.setPreferredSize(size);
+        scrollPane.setMinimumSize(size);
+        scrollPane.revalidate();
     }
 
     private static List<SarTaskResource> resourceValuesFrom(ResourceEntriesTableModel model) {

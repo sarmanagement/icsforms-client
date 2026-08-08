@@ -21,7 +21,9 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
+import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
@@ -193,6 +195,8 @@ class SarTaskPanelTest {
         Object editor = createEditor(sampleTask(), "DEBRIEFING", 1);
         Field panelField = editor.getClass().getDeclaredField("panel");
         panelField.setAccessible(true);
+        Field clueEntriesFieldField = editor.getClass().getDeclaredField("clueEntriesField");
+        clueEntriesFieldField.setAccessible(true);
         Field clueTableModelField = editor.getClass().getDeclaredField("clueEntryTableModel");
         clueTableModelField.setAccessible(true);
 
@@ -201,9 +205,28 @@ class SarTaskPanelTest {
                 canineHeading[0] = findLabel((Component) getFieldValue(panelField, editor), "Canine assignment details"));
 
         AbstractTableModel clueModel = (AbstractTableModel) getFieldValue(clueTableModelField, editor);
+        JPanel[] cluePanel = new JPanel[1];
+        SwingUtilities.invokeAndWait(() -> cluePanel[0] = (JPanel) getFieldValue(clueEntriesFieldField, editor));
         assertNull(canineHeading[0]);
         assertEquals("Date/Time", clueModel.getColumnName(0));
         assertEquals("Location", clueModel.getColumnName(1));
+        JScrollPane scrollPane = findScrollPane(cluePanel[0]);
+        assertNotNull(scrollPane);
+        int initialHeight = scrollPane.getPreferredSize().height;
+        assertEquals(1, clueModel.getRowCount());
+
+        Method addRow = clueModel.getClass().getDeclaredMethod("addRow");
+        addRow.setAccessible(true);
+        SwingUtilities.invokeAndWait(() -> {
+            try {
+                addRow.invoke(clueModel);
+            } catch (ReflectiveOperationException exception) {
+                throw new IllegalStateException(exception);
+            }
+        });
+
+        assertEquals(2, clueModel.getRowCount());
+        assertTrue(scrollPane.getPreferredSize().height > initialHeight);
     }
 
     private static Object createEditor(SarTaskAssignment task, String modeName) throws Exception {
@@ -245,6 +268,21 @@ class SarTaskPanelTest {
                 JLabel label = findLabel(child, text);
                 if (label != null) {
                     return label;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static JScrollPane findScrollPane(Component component) {
+        if (component instanceof JScrollPane scrollPane) {
+            return scrollPane;
+        }
+        if (component instanceof java.awt.Container container) {
+            for (Component child : container.getComponents()) {
+                JScrollPane scrollPane = findScrollPane(child);
+                if (scrollPane != null) {
+                    return scrollPane;
                 }
             }
         }
