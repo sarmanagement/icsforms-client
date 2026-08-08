@@ -61,6 +61,7 @@ public class SarTaskPanel extends JPanel {
             "HRD", "Article", "Patrol", "Water", "Other");
     private static final List<String> CANINE_IMPRINT_OPTIONS = List.of(
             "", "Living human", "HRD", "Both live and HRD", "Article/Track");
+    private static final String CANINE_WEATHER_FACTOR_NAME = "Weather/Temperature";
 
     private final AppController controller;
     private final SarTaskTableModel tableModel = new SarTaskTableModel();
@@ -859,7 +860,7 @@ public class SarTaskPanel extends JPanel {
                 addPodFactorCell(fields.descriptionField, 2, rowIndex, 1.0, GridBagConstraints.HORIZONTAL);
                 rowIndex++;
                 if (SarTaskSupport.usesCanineFactors(resourceType)
-                        && "Weather/Temperature".equals(rating.getName())) {
+                        && CANINE_WEATHER_FACTOR_NAME.equals(rating.getName())) {
                     addPodFactorWideCell(inlineFieldPanel(
                             new LabeledComponent("Canine resource type", canineSearchTypeField),
                             new LabeledComponent("Dog imprinted on", canineImprintField)), rowIndex++);
