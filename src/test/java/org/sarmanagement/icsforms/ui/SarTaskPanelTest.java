@@ -21,6 +21,7 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
+import javax.swing.JComboBox;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
@@ -199,21 +200,42 @@ class SarTaskPanelTest {
         clueEntriesFieldField.setAccessible(true);
         Field clueTableModelField = editor.getClass().getDeclaredField("clueEntryTableModel");
         clueTableModelField.setAccessible(true);
+        Field podFactorsFieldField = editor.getClass().getDeclaredField("podFactorsField");
+        podFactorsFieldField.setAccessible(true);
+        Field canineSearchTypeField = editor.getClass().getDeclaredField("canineSearchTypeField");
+        canineSearchTypeField.setAccessible(true);
+        Field canineImprintField = editor.getClass().getDeclaredField("canineImprintField");
+        canineImprintField.setAccessible(true);
 
         JLabel[] canineHeading = new JLabel[1];
+        JLabel[] resourceTypeLabel = new JLabel[1];
+        JLabel[] imprintLabel = new JLabel[1];
         SwingUtilities.invokeAndWait(() ->
                 canineHeading[0] = findLabel((Component) getFieldValue(panelField, editor), "Canine assignment details"));
+        SwingUtilities.invokeAndWait(() -> {
+            Component podFactors = (Component) getFieldValue(podFactorsFieldField, editor);
+            resourceTypeLabel[0] = findLabel(podFactors, "Canine resource type");
+            imprintLabel[0] = findLabel(podFactors, "Dog imprinted on");
+        });
 
         AbstractTableModel clueModel = (AbstractTableModel) getFieldValue(clueTableModelField, editor);
         JPanel[] cluePanel = new JPanel[1];
         SwingUtilities.invokeAndWait(() -> cluePanel[0] = (JPanel) getFieldValue(clueEntriesFieldField, editor));
         assertNull(canineHeading[0]);
+        assertNotNull(resourceTypeLabel[0]);
+        assertNotNull(imprintLabel[0]);
         assertEquals("Date/Time", clueModel.getColumnName(0));
         assertEquals("Location", clueModel.getColumnName(1));
         JScrollPane scrollPane = findScrollPane(cluePanel[0]);
         assertNotNull(scrollPane);
         int initialHeight = scrollPane.getPreferredSize().height;
         assertEquals(1, clueModel.getRowCount());
+        JComboBox<?> searchTypeCombo = (JComboBox<?>) getFieldValue(canineSearchTypeField, editor);
+        JComboBox<?> imprintCombo = (JComboBox<?>) getFieldValue(canineImprintField, editor);
+        assertEquals("Wilderness air scent", searchTypeCombo.getItemAt(1));
+        assertEquals("Other", searchTypeCombo.getItemAt(searchTypeCombo.getItemCount() - 1));
+        assertEquals("Living human", imprintCombo.getItemAt(1));
+        assertEquals("Article/Track", imprintCombo.getItemAt(imprintCombo.getItemCount() - 1));
 
         Method addRow = clueModel.getClass().getDeclaredMethod("addRow");
         addRow.setAccessible(true);
