@@ -31,11 +31,8 @@ public class ClueLogPanel extends JPanel {
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton add = new JButton("Add");
-        JButton remove = new JButton("Remove");
         add.addActionListener(event -> tableModel.addRow());
-        remove.addActionListener(event -> tableModel.removeRow(table.getSelectedRow()));
         buttons.add(add);
-        buttons.add(remove);
         add(buttons, BorderLayout.SOUTH);
     }
 
@@ -63,13 +60,6 @@ public class ClueLogPanel extends JPanel {
         void addRow() {
             rows.add(new ClueLogEntry());
             fireTableRowsInserted(rows.size() - 1, rows.size() - 1);
-        }
-
-        void removeRow(int row) {
-            if (row >= 0 && row < rows.size()) {
-                rows.remove(row);
-                fireTableRowsDeleted(row, row);
-            }
         }
 
         @Override public int getRowCount() { return rows.size(); }

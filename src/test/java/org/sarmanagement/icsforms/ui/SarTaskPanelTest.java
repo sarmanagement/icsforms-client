@@ -101,7 +101,9 @@ class SarTaskPanelTest {
         JTable table = (JTable) tableField.get(panel);
 
         assertEquals("Assignment/Team # (required)", table.getColumnName(0));
-        assertEquals("Task Geometry", table.getColumnName(3));
+        assertEquals("Task Geometry", table.getColumnName(2));
+        assertEquals("People", table.getColumnName(7));
+        assertEquals(3, table.getValueAt(0, 7));
         Component component = table.prepareRenderer(table.getCellRenderer(0, 0), 0, 0);
         assertEquals(UiSupport.REQUIRED_FIELD_BACKGROUND, component.getBackground());
     }
@@ -184,6 +186,24 @@ class SarTaskPanelTest {
         assertTrue(header[0].getText().contains("Qualitative POD Factors"));
         assertTrue(header[0].getText().contains("Factor"));
         assertEquals(2, textFieldColumns(entries.get(0), "scoreField"));
+    }
+
+    @Test
+    void debriefEditorUsesGridCluesAndInlineCanineDetails() throws Exception {
+        Object editor = createEditor(sampleTask(), "DEBRIEFING", 1);
+        Field panelField = editor.getClass().getDeclaredField("panel");
+        panelField.setAccessible(true);
+        Field clueTableModelField = editor.getClass().getDeclaredField("clueEntryTableModel");
+        clueTableModelField.setAccessible(true);
+
+        JLabel[] canineHeading = new JLabel[1];
+        SwingUtilities.invokeAndWait(() ->
+                canineHeading[0] = findLabel((Component) getFieldValue(panelField, editor), "Canine assignment details"));
+
+        AbstractTableModel clueModel = (AbstractTableModel) getFieldValue(clueTableModelField, editor);
+        assertNull(canineHeading[0]);
+        assertEquals("Date/Time", clueModel.getColumnName(0));
+        assertEquals("Location", clueModel.getColumnName(1));
     }
 
     private static Object createEditor(SarTaskAssignment task, String modeName) throws Exception {

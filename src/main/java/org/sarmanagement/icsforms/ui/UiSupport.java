@@ -1,14 +1,17 @@
 package org.sarmanagement.icsforms.ui;
 
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JSpinner;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SpinnerDateModel;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JViewport;
+import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -191,5 +194,33 @@ final class UiSupport {
         spinner.setValue(new Date());
         spinner.setPreferredSize(new Dimension(180, spinner.getPreferredSize().height));
         return spinner;
+    }
+
+    /**
+     * Shows a resizable OK/cancel dialog for richer editors.
+     *
+     * @param parent parent component.
+     * @param title dialog title.
+     * @param component dialog content.
+     * @param preferredSize preferred minimum content size.
+     * @return {@code true} when OK was selected.
+     */
+    static boolean showResizableConfirmDialog(Component parent, String title, JComponent component, Dimension preferredSize) {
+        if (preferredSize != null) {
+            component.setPreferredSize(preferredSize);
+        }
+        JOptionPane optionPane = new JOptionPane(component, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
+        JDialog dialog = optionPane.createDialog(parent, title);
+        dialog.setResizable(true);
+        dialog.pack();
+        if (preferredSize != null) {
+            dialog.setSize(new Dimension(
+                    Math.max(dialog.getWidth(), preferredSize.width),
+                    Math.max(dialog.getHeight(), preferredSize.height)));
+        }
+        dialog.setVisible(true);
+        Object value = optionPane.getValue();
+        dialog.dispose();
+        return Integer.valueOf(JOptionPane.OK_OPTION).equals(value);
     }
 }

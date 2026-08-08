@@ -10,6 +10,8 @@ import javax.swing.JButton;
 import javax.swing.DefaultCellEditor;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
@@ -24,6 +26,8 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,6 +58,7 @@ public class Ics204Panel extends JPanel {
     private final JPanel managementContactsPanel = new JPanel(new GridBagLayout());
     private final ResourceTableModel resourceTableModel = new ResourceTableModel();
     private final CommunicationsTableModel communicationsTableModel = new CommunicationsTableModel();
+    private final JTable resourceTable = new JTable(resourceTableModel);
     private String activeManagementContext = Ics204Form.MANAGEMENT_STAGING_AREA;
     private boolean updatingContextSelection;
 
@@ -106,14 +111,14 @@ public class Ics204Panel extends JPanel {
         updateSelectedContextLabel();
         rebuildManagementContacts();
 
-        JTable resourceTable = new JTable(resourceTableModel);
         JTable communicationsTable = new JTable(communicationsTableModel);
         resourceTable.setFillsViewportHeight(true);
         communicationsTable.setFillsViewportHeight(true);
-        resourceTable.getColumnModel().getColumn(2).setCellEditor(new DefaultCellEditor(
+        resourceTable.getColumnModel().getColumn(1).setCellEditor(new DefaultCellEditor(
                 new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new))));
-        resourceTable.getColumnModel().getColumn(3).setCellEditor(new DefaultCellEditor(
+        resourceTable.getColumnModel().getColumn(2).setCellEditor(new DefaultCellEditor(
                 new JComboBox<>(SarTaskSupport.taskTypes().toArray(String[]::new))));
+        installResourceRowEditor();
 
         JPanel resourcesPanel = new JPanel(new BorderLayout());
         resourcesPanel.setBorder(BorderFactory.createTitledBorder("Resources Assigned"));
@@ -137,7 +142,7 @@ public class Ics204Panel extends JPanel {
 
         JScrollPane formScrollPane = new JScrollPane(form);
         formScrollPane.setBorder(BorderFactory.createEmptyBorder());
-        formScrollPane.setPreferredSize(new Dimension(0, 320));
+        formScrollPane.setPreferredSize(new Dimension(0, 260));
         add(formScrollPane, BorderLayout.NORTH);
         add(tablesPanel, BorderLayout.CENTER);
     }
@@ -209,41 +214,54 @@ public class Ics204Panel extends JPanel {
     private void rebuildManagementContacts() {
         managementContactsPanel.removeAll();
         int rowIndex = 0;
-        for (Object[] row : visibleManagementRows()) {
-            GridBagConstraints left = new GridBagConstraints();
-            left.gridx = 0;
-            left.gridy = rowIndex;
-            left.anchor = GridBagConstraints.WEST;
-            left.insets = new Insets(2, 0, 2, 8);
-            managementContactsPanel.add(new JLabel((String) row[0]), left);
+        for (ManagementContactRow row : visibleManagementRows()) {
+            GridBagConstraints label = new GridBagConstraints();
+            label.gridx = 0;
+            label.gridy = rowIndex;
+            label.anchor = GridBagConstraints.NORTHWEST;
+            label.insets = new Insets(2, 0, 2, 8);
+            managementContactsPanel.add(new JLabel(row.label()), label);
 
-            GridBagConstraints right = new GridBagConstraints();
-            right.gridx = 1;
-            right.gridy = rowIndex;
-            right.weightx = 1.0;
-            right.fill = GridBagConstraints.HORIZONTAL;
-            right.insets = new Insets(2, 0, 2, 0);
-            managementContactsPanel.add((JTextField) row[1], right);
+            GridBagConstraints name = new GridBagConstraints();
+            name.gridx = 1;
+            name.gridy = rowIndex;
+            name.weightx = 1.0;
+            name.fill = GridBagConstraints.HORIZONTAL;
+            name.insets = new Insets(2, 0, 2, 6);
+            managementContactsPanel.add(row.nameField(), name);
+
+            GridBagConstraints contactLabel = new GridBagConstraints();
+            contactLabel.gridx = 2;
+            contactLabel.gridy = rowIndex;
+            contactLabel.anchor = GridBagConstraints.NORTHWEST;
+            contactLabel.insets = new Insets(2, 0, 2, 6);
+            managementContactsPanel.add(new JLabel("Contact"), contactLabel);
+
+            GridBagConstraints contact = new GridBagConstraints();
+            contact.gridx = 3;
+            contact.gridy = rowIndex;
+            contact.weightx = 0.7;
+            contact.fill = GridBagConstraints.HORIZONTAL;
+            contact.insets = new Insets(2, 0, 2, 0);
+            managementContactsPanel.add(row.contactField(), contact);
             rowIndex++;
         }
         managementContactsPanel.revalidate();
         managementContactsPanel.repaint();
     }
 
-    private List<Object[]> visibleManagementRows() {
-        List<Object[]> rows = new ArrayList<>();
-        rows.add(new Object[]{"Operations section chief", operationsChiefNameField});
-        rows.add(new Object[]{"Operations contact", operationsChiefContactField});
+    private List<ManagementContactRow> visibleManagementRows() {
+        List<ManagementContactRow> rows = new ArrayList<>();
+        rows.add(new ManagementContactRow("Operations section chief", operationsChiefNameField, operationsChiefContactField));
         if (Ics204Form.MANAGEMENT_BRANCH.equals(activeManagementContext)) {
-            rows.add(new Object[]{"Branch director", branchDirectorNameField});
-            rows.add(new Object[]{"Branch contact", branchDirectorContactField});
+            rows.add(new ManagementContactRow("Branch director", branchDirectorNameField, branchDirectorContactField));
         }
         if (Ics204Form.MANAGEMENT_DIVISION.equals(activeManagementContext)
                 || Ics204Form.MANAGEMENT_GROUP.equals(activeManagementContext)) {
-            rows.add(new Object[]{Ics204Form.MANAGEMENT_GROUP.equals(activeManagementContext) ? "Group supervisor" : "Division supervisor",
-                    supervisorNameField});
-            rows.add(new Object[]{Ics204Form.MANAGEMENT_GROUP.equals(activeManagementContext) ? "Group contact" : "Division contact",
-                    supervisorContactField});
+            rows.add(new ManagementContactRow(
+                    Ics204Form.MANAGEMENT_GROUP.equals(activeManagementContext) ? "Group supervisor" : "Division supervisor",
+                    supervisorNameField,
+                    supervisorContactField));
         }
         return rows;
     }
@@ -320,6 +338,80 @@ public class Ics204Panel extends JPanel {
         return panel;
     }
 
+    private void installResourceRowEditor() {
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem editItem = new JMenuItem("Edit assignment…");
+        editItem.addActionListener(event -> openSelectedResourceEditor());
+        menu.add(editItem);
+        resourceTable.setComponentPopupMenu(menu);
+        resourceTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent event) {
+                selectResourceRow(event);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                selectResourceRow(event);
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() == 2 && event.getButton() == MouseEvent.BUTTON1) {
+                    selectResourceRow(event);
+                    openSelectedResourceEditor();
+                }
+            }
+        });
+    }
+
+    private void selectResourceRow(MouseEvent event) {
+        int viewRow = resourceTable.rowAtPoint(event.getPoint());
+        if (viewRow >= 0) {
+            resourceTable.setRowSelectionInterval(viewRow, viewRow);
+        }
+    }
+
+    private void openSelectedResourceEditor() {
+        int viewRow = resourceTable.getSelectedRow();
+        if (viewRow < 0) {
+            return;
+        }
+        int modelRow = resourceTable.convertRowIndexToModel(viewRow);
+        ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
+        ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row);
+        JScrollPane scrollPane = new JScrollPane(editor.panel);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        if (!UiSupport.showResizableConfirmDialog(this, editor.dialogTitle(), scrollPane, new Dimension(920, 560))) {
+            return;
+        }
+        editor.applyTo(row);
+        resourceTableModel.fireTableRowsUpdated(modelRow, modelRow);
+    }
+
+    private static JPanel inlineFieldPanel(LabeledComponent... components) {
+        JPanel panel = new JPanel(new GridLayout(1, components.length, 8, 0));
+        panel.setOpaque(false);
+        for (LabeledComponent component : components) {
+            JPanel cell = new JPanel(new BorderLayout(0, 2));
+            cell.setOpaque(false);
+            cell.add(new JLabel(component.label()), BorderLayout.NORTH);
+            cell.add(component.component(), BorderLayout.CENTER);
+            panel.add(cell);
+        }
+        return panel;
+    }
+
+    private static JScrollPane textArea(String value, int rows) {
+        JTextArea area = UiSupport.textArea(rows);
+        area.setText(value == null ? "" : value);
+        return new JScrollPane(area);
+    }
+
+    private static JTextArea textAreaFrom(JScrollPane scrollPane) {
+        return (JTextArea) scrollPane.getViewport().getView();
+    }
+
     /**
      * Converts null strings to empty strings.
      *
@@ -330,11 +422,109 @@ public class Ics204Panel extends JPanel {
         return value == null ? "" : value;
     }
 
+    private record ManagementContactRow(String label, JTextField nameField, JTextField contactField) {
+    }
+
+    private record LabeledComponent(String label, java.awt.Component component) {
+    }
+
+    private static class ResourceAssignmentEditor {
+        private final JPanel panel = UiSupport.formPanel();
+        private final JTextField assignmentTeamNumberField = UiSupport.textField();
+        private final JComboBox<String> resourceTypeField = new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new));
+        private final JComboBox<String> taskTypeField = new JComboBox<>(SarTaskSupport.taskTypes().toArray(String[]::new));
+        private final JTextField resourceField = UiSupport.textField();
+        private final JTextField leaderRoleField = UiSupport.textField();
+        private final JTextField leaderField = UiSupport.textField();
+        private final JTextField personsField = UiSupport.textField();
+        private final JTextField contactField = UiSupport.textField();
+        private final JTextField reportingField = UiSupport.textField();
+        private final JScrollPane equipmentField;
+        private final JScrollPane suppliesField;
+        private final JScrollPane remarksField;
+        private final JScrollPane notesField;
+        private final JScrollPane assignmentField;
+
+        private ResourceAssignmentEditor(ResourceAssignment row) {
+            resourceTypeField.setEditable(true);
+            taskTypeField.setEditable(true);
+            assignmentTeamNumberField.setText(row.getAssignmentTeamNumber());
+            resourceTypeField.setSelectedItem(row.getResourceType());
+            taskTypeField.setSelectedItem(row.getTaskType());
+            resourceField.setText(row.getResourceIdentifier());
+            leaderRoleField.setText(row.getLeaderRole());
+            leaderField.setText(row.getLeader());
+            personsField.setColumns(4);
+            personsField.setText(row.getNumberOfPersons() <= 0 ? "" : String.valueOf(row.getNumberOfPersons()));
+            contactField.setText(row.getContact());
+            reportingField.setText(row.getReportingLocation());
+            equipmentField = textArea(row.getSpecialEquipment(), 2);
+            suppliesField = textArea(row.getSupplies(), 2);
+            remarksField = textArea(row.getRemarks(), 2);
+            notesField = textArea(row.getNotes(), 2);
+            assignmentField = textArea(row.getAssignment(), 4);
+
+            int rowIndex = 0;
+            UiSupport.addRequiredRow(panel, rowIndex++, "Assignment/Team #", assignmentTeamNumberField);
+            UiSupport.addRow(panel, rowIndex++, "Task setup", inlineFieldPanel(
+                    new LabeledComponent("Resource type", resourceTypeField),
+                    new LabeledComponent("Task Geometry", taskTypeField),
+                    new LabeledComponent("Persons", personsField)));
+            UiSupport.addRow(panel, rowIndex++, "Resource", inlineFieldPanel(
+                    new LabeledComponent("Identifier", resourceField),
+                    new LabeledComponent("Primary contact", contactField)));
+            UiSupport.addRow(panel, rowIndex++, "Leadership", inlineFieldPanel(
+                    new LabeledComponent("Leader role", leaderRoleField),
+                    new LabeledComponent("Leader", leaderField)));
+            UiSupport.addRow(panel, rowIndex++, "Reporting location", reportingField);
+            UiSupport.addRow(panel, rowIndex++, "Special equipment", equipmentField);
+            UiSupport.addRow(panel, rowIndex++, "Supplies", suppliesField);
+            UiSupport.addRow(panel, rowIndex++, "Remarks", remarksField);
+            UiSupport.addRow(panel, rowIndex++, "Notes", notesField);
+            UiSupport.addRow(panel, rowIndex, "Assignment", assignmentField);
+        }
+
+        private String dialogTitle() {
+            String teamNumber = assignmentTeamNumberField.getText().trim();
+            return teamNumber.isBlank() ? "Edit assignment" : "Edit assignment " + teamNumber;
+        }
+
+        private void applyTo(ResourceAssignment row) {
+            row.setAssignmentTeamNumber(assignmentTeamNumberField.getText().trim());
+            row.setResourceType(selectedComboValue(resourceTypeField));
+            row.setTaskType(selectedComboValue(taskTypeField));
+            row.setResourceIdentifier(resourceField.getText().trim());
+            row.setLeaderRole(leaderRoleField.getText().trim());
+            row.setLeader(leaderField.getText().trim());
+            row.setNumberOfPersons(parseInt(personsField.getText()));
+            row.setContact(contactField.getText().trim());
+            row.setReportingLocation(reportingField.getText().trim());
+            row.setSpecialEquipment(textAreaFrom(equipmentField).getText().trim());
+            row.setSupplies(textAreaFrom(suppliesField).getText().trim());
+            row.setRemarks(textAreaFrom(remarksField).getText().trim());
+            row.setNotes(textAreaFrom(notesField).getText().trim());
+            row.setAssignment(textAreaFrom(assignmentField).getText().trim());
+        }
+
+        private static String selectedComboValue(JComboBox<String> comboBox) {
+            Object selected = comboBox.getEditor().getItem();
+            return selected == null ? "" : selected.toString().trim();
+        }
+
+        private static int parseInt(String value) {
+            try {
+                return Integer.parseInt(value.trim());
+            } catch (Exception ex) {
+                return 0;
+            }
+        }
+    }
+
     /**
      * Table model for editable resource assignment rows.
      */
     private static class ResourceTableModel extends AbstractTableModel {
-        private final String[] columns = {"Assignment ID", "Assignment/Team #", "Resource Type", "Task Geometry", "Resource", "Leader Role", "Leader", "Persons", "Contact", "Reporting", "Equipment", "Supplies", "Remarks", "Notes", "Assignment"};
+        private final String[] columns = {"Assignment/Team #", "Resource Type", "Task Geometry", "Resource", "Leader Role", "Leader", "Persons", "Contact", "Reporting", "Equipment", "Supplies", "Remarks", "Notes", "Assignment"};
         private java.util.List<ResourceAssignment> rows = new java.util.ArrayList<>();
 
         /** @param rows replacement rows. */
@@ -352,20 +542,19 @@ public class Ics204Panel extends JPanel {
         @Override public Object getValueAt(int rowIndex, int columnIndex) {
             ResourceAssignment row = rows.get(rowIndex);
             return switch (columnIndex) {
-                case 0 -> row.getAssignmentId();
-                case 1 -> row.getAssignmentTeamNumber();
-                case 2 -> row.getResourceType();
-                case 3 -> row.getTaskType();
-                case 4 -> row.getResourceIdentifier();
-                case 5 -> row.getLeaderRole();
-                case 6 -> row.getLeader();
-                case 7 -> row.getNumberOfPersons();
-                case 8 -> row.getContact();
-                case 9 -> row.getReportingLocation();
-                case 10 -> row.getSpecialEquipment();
-                case 11 -> row.getSupplies();
-                case 12 -> row.getRemarks();
-                case 13 -> row.getNotes();
+                case 0 -> row.getAssignmentTeamNumber();
+                case 1 -> row.getResourceType();
+                case 2 -> row.getTaskType();
+                case 3 -> row.getResourceIdentifier();
+                case 4 -> row.getLeaderRole();
+                case 5 -> row.getLeader();
+                case 6 -> row.getNumberOfPersons();
+                case 7 -> row.getContact();
+                case 8 -> row.getReportingLocation();
+                case 9 -> row.getSpecialEquipment();
+                case 10 -> row.getSupplies();
+                case 11 -> row.getRemarks();
+                case 12 -> row.getNotes();
                 default -> row.getAssignment();
             };
         }
@@ -373,20 +562,19 @@ public class Ics204Panel extends JPanel {
             ResourceAssignment row = rows.get(rowIndex);
             String value = aValue == null ? "" : aValue.toString();
             switch (columnIndex) {
-                case 0 -> row.setAssignmentId(value);
-                case 1 -> row.setAssignmentTeamNumber(value);
-                case 2 -> row.setResourceType(value);
-                case 3 -> row.setTaskType(value);
-                case 4 -> row.setResourceIdentifier(value);
-                case 5 -> row.setLeaderRole(value);
-                case 6 -> row.setLeader(value);
-                case 7 -> row.setNumberOfPersons(parseInt(value));
-                case 8 -> row.setContact(value);
-                case 9 -> row.setReportingLocation(value);
-                case 10 -> row.setSpecialEquipment(value);
-                case 11 -> row.setSupplies(value);
-                case 12 -> row.setRemarks(value);
-                case 13 -> row.setNotes(value);
+                case 0 -> row.setAssignmentTeamNumber(value);
+                case 1 -> row.setResourceType(value);
+                case 2 -> row.setTaskType(value);
+                case 3 -> row.setResourceIdentifier(value);
+                case 4 -> row.setLeaderRole(value);
+                case 5 -> row.setLeader(value);
+                case 6 -> row.setNumberOfPersons(parseInt(value));
+                case 7 -> row.setContact(value);
+                case 8 -> row.setReportingLocation(value);
+                case 9 -> row.setSpecialEquipment(value);
+                case 10 -> row.setSupplies(value);
+                case 11 -> row.setRemarks(value);
+                case 12 -> row.setNotes(value);
                 default -> row.setAssignment(value);
             }
             fireTableCellUpdated(rowIndex, columnIndex);
