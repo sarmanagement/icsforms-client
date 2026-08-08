@@ -188,19 +188,10 @@ public class SarTaskPanel extends JPanel {
     }
 
     private void updateLinkedResourcePersonCount(SarTaskAssignment row, int resourceCount) {
-        for (ResourceAssignment assignment : controller.getData().getForm204().getResourcesAssigned()) {
-            if (assignment == null) {
-                continue;
-            }
-            if (!row.getAssignmentId().isBlank() && row.getAssignmentId().equals(assignment.getAssignmentId())) {
-                assignment.setNumberOfPersons(resourceCount);
-                return;
-            }
-            if (row.getAssignmentId().isBlank() && !row.getAssignmentTeamNumber().isBlank()
-                    && row.getAssignmentTeamNumber().equals(assignment.getAssignmentTeamNumber())) {
-                assignment.setNumberOfPersons(resourceCount);
-                return;
-            }
+        ResourceAssignment assignment = SarTaskTableModel.findLinkedAssignment(
+                row, controller.getData().getForm204().getResourcesAssigned());
+        if (assignment != null) {
+            assignment.setNumberOfPersons(resourceCount);
         }
     }
 
@@ -1041,19 +1032,27 @@ public class SarTaskPanel extends JPanel {
         }
 
         private static int linkedPeople(SarTaskAssignment row, List<ResourceAssignment> resourceAssignments) {
+            ResourceAssignment assignment = findLinkedAssignment(row, resourceAssignments);
+            if (assignment != null) {
+                return assignment.getNumberOfPersons();
+            }
+            return row.getResourcesAssigned().size();
+        }
+
+        private static ResourceAssignment findLinkedAssignment(SarTaskAssignment row, List<ResourceAssignment> resourceAssignments) {
             for (ResourceAssignment assignment : resourceAssignments) {
                 if (assignment == null) {
                     continue;
                 }
                 if (!row.getAssignmentId().isBlank() && row.getAssignmentId().equals(assignment.getAssignmentId())) {
-                    return assignment.getNumberOfPersons();
+                    return assignment;
                 }
                 if (row.getAssignmentId().isBlank() && !row.getAssignmentTeamNumber().isBlank()
                         && row.getAssignmentTeamNumber().equals(assignment.getAssignmentTeamNumber())) {
-                    return assignment.getNumberOfPersons();
+                    return assignment;
                 }
             }
-            return row.getResourcesAssigned().size();
+            return null;
         }
 
         private static String joinOperations(SarTaskAssignment row) {

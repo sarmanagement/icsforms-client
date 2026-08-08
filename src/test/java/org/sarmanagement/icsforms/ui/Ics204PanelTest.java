@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class Ics204PanelTest {
+    private static final int COMPONENTS_PER_COMPACT_CONTACT_ROW = 4;
 
     @Test
     void resourcesGridHidesAssignmentIdAndOffersPopupEditor() throws Exception {
@@ -51,7 +52,7 @@ class Ics204PanelTest {
 
         JPanel contactsPanel = (JPanel) fieldValue(panel, "managementContactsPanel");
 
-        assertEquals(8, contactsPanel.getComponentCount());
+        assertEquals(2 * COMPONENTS_PER_COMPACT_CONTACT_ROW, contactsPanel.getComponentCount());
     }
 
     private static Object fieldValue(Object instance, String fieldName) {

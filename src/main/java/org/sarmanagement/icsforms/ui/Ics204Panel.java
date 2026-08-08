@@ -347,12 +347,16 @@ public class Ics204Panel extends JPanel {
         resourceTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent event) {
-                selectResourceRow(event);
+                if (!event.isPopupTrigger()) {
+                    selectResourceRow(event);
+                }
             }
 
             @Override
             public void mouseReleased(MouseEvent event) {
-                selectResourceRow(event);
+                if (event.isPopupTrigger()) {
+                    selectResourceRow(event);
+                }
             }
 
             @Override
@@ -410,6 +414,14 @@ public class Ics204Panel extends JPanel {
 
     private static JTextArea textAreaFrom(JScrollPane scrollPane) {
         return (JTextArea) scrollPane.getViewport().getView();
+    }
+
+    private static int parseInt(String value) {
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (Exception ex) {
+            return 0;
+        }
     }
 
     /**
@@ -510,14 +522,6 @@ public class Ics204Panel extends JPanel {
             Object selected = comboBox.getEditor().getItem();
             return selected == null ? "" : selected.toString().trim();
         }
-
-        private static int parseInt(String value) {
-            try {
-                return Integer.parseInt(value.trim());
-            } catch (Exception ex) {
-                return 0;
-            }
-        }
     }
 
     /**
@@ -580,7 +584,6 @@ public class Ics204Panel extends JPanel {
             fireTableCellUpdated(rowIndex, columnIndex);
         }
         /** @param value string value. @return parsed integer or zero. */
-        private int parseInt(String value) { try { return Integer.parseInt(value.trim()); } catch (Exception ex) { return 0; } }
     }
 
     /**
