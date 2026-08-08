@@ -55,7 +55,6 @@ public class SarTaskPanel extends JPanel {
     private static final int RESOURCE_EDITOR_VISIBLE_ROWS = 9;
     private static final int RESOURCE_EDITOR_PADDING = 8;
     private static final int CLUE_EDITOR_WIDTH = 720;
-    private static final int CLUE_EDITOR_PADDING = 8;
     private static final int SCORE_FIELD_WIDTH = 48;
 
     private final AppController controller;
@@ -372,13 +371,15 @@ public class SarTaskPanel extends JPanel {
 
     private static void updateClueEditorSize(JScrollPane scrollPane, JTable table, int rowCount) {
         int visibleRows = Math.max(1, rowCount);
+        Insets insets = scrollPane.getInsets();
         int height = table.getRowHeight() * visibleRows
                 + table.getTableHeader().getPreferredSize().height
-                + CLUE_EDITOR_PADDING;
+                + insets.top + insets.bottom;
         Dimension size = new Dimension(CLUE_EDITOR_WIDTH, height);
         scrollPane.setPreferredSize(size);
         scrollPane.setMinimumSize(size);
         scrollPane.revalidate();
+        scrollPane.repaint();
     }
 
     private static List<SarTaskResource> resourceValuesFrom(ResourceEntriesTableModel model) {
