@@ -125,7 +125,7 @@ class SarTaskPanelTest {
 
         assertNotNull(menu);
         assertEquals("Edit assignment…", ((JMenuItem) menu.getComponent(0)).getText());
-        assertEquals("Edit debriefing…", ((JMenuItem) menu.getComponent(1)).getText());
+        assertEquals("Debrief…", ((JMenuItem) menu.getComponent(1)).getText());
     }
 
     @Test
@@ -211,12 +211,22 @@ class SarTaskPanelTest {
         JLabel[] canineHeading = new JLabel[1];
         JLabel[] resourceTypeLabel = new JLabel[1];
         JLabel[] imprintLabel = new JLabel[1];
+        Component[] resourceTypeRow = new Component[1];
+        Component[] sunAngleRow = new Component[1];
+        Component[] cloudCoverRow = new Component[1];
+        Component[] handlerCertificationRow = new Component[1];
+        Component[] lightRow = new Component[1];
         SwingUtilities.invokeAndWait(() ->
                 canineHeading[0] = findLabel((Component) getFieldValue(panelField, editor), "Canine assignment details"));
         SwingUtilities.invokeAndWait(() -> {
-            Component podFactors = (Component) getFieldValue(podFactorsFieldField, editor);
+            JPanel podFactors = (JPanel) getFieldValue(podFactorsFieldField, editor);
             resourceTypeLabel[0] = findLabel(podFactors, "Canine resource type");
             imprintLabel[0] = findLabel(podFactors, "Dog imprinted on");
+            resourceTypeRow[0] = childContainingLabel(podFactors, "Canine resource type");
+            sunAngleRow[0] = childContainingLabel(podFactors, "Sun angle");
+            cloudCoverRow[0] = childContainingLabel(podFactors, "Cloud cover");
+            handlerCertificationRow[0] = childContainingLabel(podFactors, "Handler/K-9 Certification (1-5)");
+            lightRow[0] = childContainingLabel(podFactors, "Light (1-5)");
         });
 
         AbstractTableModel clueModel = (AbstractTableModel) getFieldValue(clueTableModelField, editor);
@@ -225,6 +235,15 @@ class SarTaskPanelTest {
         assertNull(canineHeading[0]);
         assertNotNull(resourceTypeLabel[0]);
         assertNotNull(imprintLabel[0]);
+        assertNotNull(resourceTypeRow[0]);
+        assertNotNull(sunAngleRow[0]);
+        assertNotNull(cloudCoverRow[0]);
+        assertEquals(4, ((JPanel) resourceTypeRow[0]).getComponentCount());
+        assertEquals(1, gridX(resourceTypeRow[0]));
+        assertEquals(1, gridX(sunAngleRow[0]));
+        assertEquals(1, gridX(cloudCoverRow[0]));
+        assertTrue(gridY(resourceTypeRow[0]) > gridY(handlerCertificationRow[0]));
+        assertTrue(gridY(resourceTypeRow[0]) < gridY(lightRow[0]));
         assertEquals("Date/Time", clueModel.getColumnName(0));
         assertEquals("Location", clueModel.getColumnName(1));
         JScrollPane scrollPane = findScrollPane(cluePanel[0]);
@@ -311,6 +330,27 @@ class SarTaskPanelTest {
             }
         }
         return null;
+    }
+
+    private static Component childContainingLabel(JPanel panel, String text) {
+        for (Component child : panel.getComponents()) {
+            if (findLabel(child, text) != null) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    private static int gridX(Component component) {
+        return gridBagConstraints(component).gridx;
+    }
+
+    private static int gridY(Component component) {
+        return gridBagConstraints(component).gridy;
+    }
+
+    private static java.awt.GridBagConstraints gridBagConstraints(Component component) {
+        return ((java.awt.GridBagLayout) component.getParent().getLayout()).getConstraints(component);
     }
 
     private static List<String> comboItems(JComboBox<?> comboBox) {

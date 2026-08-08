@@ -7,6 +7,9 @@ import java.util.List;
  * Centralized SAR task option lists and qualitative POD factor profiles.
  */
 public final class SarTaskSupport {
+    private static final String LEGACY_CANINE_SWEEP_WIDTH_PATTERN = "Established Sweep Width Pattern";
+    private static final String CANINE_SWEEP_WIDTH_PATTERN = "Sweep Width Pattern";
+
     public static final String RESOURCE_TYPE_CANINE = "Canine";
     public static final String RESOURCE_TYPE_EQUINE = "Equine";
     public static final String RESOURCE_TYPE_GROUND = "Ground";
@@ -40,7 +43,7 @@ public final class SarTaskSupport {
             new PodFactorTemplate("Wind", 10, true),
             new PodFactorTemplate("Humidity", 10, true),
             new PodFactorTemplate("Vegetation", 10, true),
-            new PodFactorTemplate("Established Sweep Width Pattern", 10, true),
+            new PodFactorTemplate(CANINE_SWEEP_WIDTH_PATTERN, 10, true),
             new PodFactorTemplate("Team Wellness", 10, true),
             new PodFactorTemplate("Contamination", 10, true),
             new PodFactorTemplate("Handler/K-9 Certification", 5, true),
@@ -153,11 +156,18 @@ public final class SarTaskSupport {
             return null;
         }
         for (PodFactorRating rating : existing) {
-            if (rating != null && name.equals(rating.getName())) {
+            if (rating != null && matchesFactorName(name, rating.getName())) {
                 return rating;
             }
         }
         return null;
+    }
+
+    private static boolean matchesFactorName(String expected, String actual) {
+        if (expected.equals(actual)) {
+            return true;
+        }
+        return CANINE_SWEEP_WIDTH_PATTERN.equals(expected) && LEGACY_CANINE_SWEEP_WIDTH_PATTERN.equals(actual);
     }
 
     private static String safe(String value) {

@@ -61,6 +61,7 @@ public class SarTaskPanel extends JPanel {
             "HRD", "Article", "Patrol", "Water", "Other");
     private static final List<String> CANINE_IMPRINT_OPTIONS = List.of(
             "", "Living human", "HRD", "Both live and HRD", "Article/Track");
+    private static final String CANINE_RESOURCE_DETAILS_FACTOR_NAME = "Handler/K-9 Certification";
     private static final String CANINE_WEATHER_FACTOR_NAME = "Weather/Temperature";
 
     private final AppController controller;
@@ -121,7 +122,7 @@ public class SarTaskPanel extends JPanel {
         JMenuItem editAssignmentItem = new JMenuItem("Edit assignment…");
         editAssignmentItem.addActionListener(event -> openSelectedRowEditor(EditorMode.ASSIGNMENT));
         menu.add(editAssignmentItem);
-        JMenuItem editDebriefingItem = new JMenuItem("Edit debriefing…");
+        JMenuItem editDebriefingItem = new JMenuItem("Debrief…");
         editDebriefingItem.addActionListener(event -> openSelectedRowEditor(EditorMode.DEBRIEFING));
         menu.add(editDebriefingItem);
         table.setComponentPopupMenu(menu);
@@ -320,6 +321,16 @@ public class SarTaskPanel extends JPanel {
         panel.setOpaque(false);
         panel.add(scrollPane, BorderLayout.CENTER);
         panel.add(buttons, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private static JPanel compactFieldRowPanel(LabeledComponent... fields) {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        panel.setOpaque(false);
+        for (LabeledComponent field : fields) {
+            panel.add(new JLabel(field.label()));
+            panel.add(field.component());
+        }
         return panel;
     }
 
@@ -800,10 +811,12 @@ public class SarTaskPanel extends JPanel {
             clueEntriesField = clueEditorPanel(clueEntryTableModel, cluesForTask(row, clueLogEntries));
             canineSearchTypeField = comboBox(CANINE_SEARCH_TYPE_OPTIONS, row.getCanineSearchType());
             canineImprintField = comboBox(CANINE_IMPRINT_OPTIONS, row.getCanineImprint());
-            canineSunAngleField = textField(row.getCanineSunAngle(), true);
-            canineDayNightField = textField(row.getCanineDayNight(), true);
-            canineCloudCoverField = textField(row.getCanineCloudCover(), true);
-            canineWindSpeedField = textField(row.getCanineWindSpeed(), true);
+            canineSearchTypeField.setPreferredSize(new Dimension(140, canineSearchTypeField.getPreferredSize().height));
+            canineImprintField.setPreferredSize(new Dimension(150, canineImprintField.getPreferredSize().height));
+            canineSunAngleField = textField(row.getCanineSunAngle(), true, 8);
+            canineDayNightField = textField(row.getCanineDayNight(), true, 8);
+            canineCloudCoverField = textField(row.getCanineCloudCover(), true, 8);
+            canineWindSpeedField = textField(row.getCanineWindSpeed(), true, 8);
             areasNotCoveredField = textArea(row.getAreasNotCovered(), 3, true);
             hazardsObservedField = textArea(row.getHazardsObserved(), 3, true);
 
@@ -847,7 +860,8 @@ public class SarTaskPanel extends JPanel {
             podFactorsField.removeAll();
             podFactorEntryFields.clear();
             boolean canine = SarTaskSupport.usesCanineFactors(resourceType);
-            boolean canineDetailsAdded = false;
+            boolean canineResourceDetailsAdded = false;
+            boolean canineWeatherDetailsAdded = false;
             addPodFactorCell(new JLabel("<html>Qualitative POD Factors<br>Factor</html>"), 0, 0, 0.0, GridBagConstraints.NONE);
             addPodFactorCell(new JLabel("Score"), 1, 0, 0.0, GridBagConstraints.NONE);
             addPodFactorCell(new JLabel("Description"), 2, 0, 1.0, GridBagConstraints.HORIZONTAL);
@@ -861,13 +875,20 @@ public class SarTaskPanel extends JPanel {
                 addPodFactorCell(fields.scoreField, 1, rowIndex, 0.0, GridBagConstraints.NONE);
                 addPodFactorCell(fields.descriptionField, 2, rowIndex, 1.0, GridBagConstraints.HORIZONTAL);
                 rowIndex++;
+                if (canine && CANINE_RESOURCE_DETAILS_FACTOR_NAME.equals(rating.getName())) {
+                    rowIndex = addCanineResourceDetailRow(rowIndex);
+                    canineResourceDetailsAdded = true;
+                }
                 if (canine && CANINE_WEATHER_FACTOR_NAME.equals(rating.getName())) {
-                    rowIndex = addCanineDetailRows(rowIndex);
-                    canineDetailsAdded = true;
+                    rowIndex = addCanineWeatherRows(rowIndex);
+                    canineWeatherDetailsAdded = true;
                 }
             }
-            if (canine && !canineDetailsAdded) {
-                addCanineDetailRows(rowIndex);
+            if (canine && !canineResourceDetailsAdded) {
+                rowIndex = addCanineResourceDetailRow(rowIndex);
+            }
+            if (canine && !canineWeatherDetailsAdded) {
+                addCanineWeatherRows(rowIndex);
             }
             podFactorsField.revalidate();
             podFactorsField.repaint();
@@ -884,11 +905,11 @@ public class SarTaskPanel extends JPanel {
             podFactorsField.add(component, constraints);
         }
 
-        private void addPodFactorWideCell(Component component, int row) {
+        private void addPodFactorDetailCell(Component component, int row) {
             GridBagConstraints constraints = new GridBagConstraints();
-            constraints.gridx = 0;
+            constraints.gridx = 1;
             constraints.gridy = row;
-            constraints.gridwidth = 3;
+            constraints.gridwidth = 2;
             constraints.weightx = 1.0;
             constraints.anchor = GridBagConstraints.NORTHWEST;
             constraints.fill = GridBagConstraints.HORIZONTAL;
@@ -896,14 +917,18 @@ public class SarTaskPanel extends JPanel {
             podFactorsField.add(component, constraints);
         }
 
-        private int addCanineDetailRows(int rowIndex) {
-            addPodFactorWideCell(inlineFieldPanel(
+        private int addCanineResourceDetailRow(int rowIndex) {
+            addPodFactorDetailCell(compactFieldRowPanel(
                     new LabeledComponent("Canine resource type", canineSearchTypeField),
                     new LabeledComponent("Dog imprinted on", canineImprintField)), rowIndex++);
-            addPodFactorWideCell(inlineFieldPanel(
+            return rowIndex;
+        }
+
+        private int addCanineWeatherRows(int rowIndex) {
+            addPodFactorDetailCell(compactFieldRowPanel(
                     new LabeledComponent("Sun angle", canineSunAngleField),
                     new LabeledComponent("Day/night", canineDayNightField)), rowIndex++);
-            addPodFactorWideCell(inlineFieldPanel(
+            addPodFactorDetailCell(compactFieldRowPanel(
                     new LabeledComponent("Cloud cover", canineCloudCoverField),
                     new LabeledComponent("Wind speed", canineWindSpeedField)), rowIndex++);
             return rowIndex;
