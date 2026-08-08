@@ -846,6 +846,8 @@ public class SarTaskPanel extends JPanel {
         private void rebuildPodFactorFields(String resourceType, List<PodFactorRating> existing) {
             podFactorsField.removeAll();
             podFactorEntryFields.clear();
+            boolean canine = SarTaskSupport.usesCanineFactors(resourceType);
+            boolean canineDetailsAdded = false;
             addPodFactorCell(new JLabel("<html>Qualitative POD Factors<br>Factor</html>"), 0, 0, 0.0, GridBagConstraints.NONE);
             addPodFactorCell(new JLabel("Score"), 1, 0, 0.0, GridBagConstraints.NONE);
             addPodFactorCell(new JLabel("Description"), 2, 0, 1.0, GridBagConstraints.HORIZONTAL);
@@ -859,18 +861,13 @@ public class SarTaskPanel extends JPanel {
                 addPodFactorCell(fields.scoreField, 1, rowIndex, 0.0, GridBagConstraints.NONE);
                 addPodFactorCell(fields.descriptionField, 2, rowIndex, 1.0, GridBagConstraints.HORIZONTAL);
                 rowIndex++;
-                if (SarTaskSupport.usesCanineFactors(resourceType)
-                        && CANINE_WEATHER_FACTOR_NAME.equals(rating.getName())) {
-                    addPodFactorWideCell(inlineFieldPanel(
-                            new LabeledComponent("Canine resource type", canineSearchTypeField),
-                            new LabeledComponent("Dog imprinted on", canineImprintField)), rowIndex++);
-                    addPodFactorWideCell(inlineFieldPanel(
-                            new LabeledComponent("Sun angle", canineSunAngleField),
-                            new LabeledComponent("Day/night", canineDayNightField)), rowIndex++);
-                    addPodFactorWideCell(inlineFieldPanel(
-                            new LabeledComponent("Cloud cover", canineCloudCoverField),
-                            new LabeledComponent("Wind speed", canineWindSpeedField)), rowIndex++);
+                if (canine && CANINE_WEATHER_FACTOR_NAME.equals(rating.getName())) {
+                    rowIndex = addCanineDetailRows(rowIndex);
+                    canineDetailsAdded = true;
                 }
+            }
+            if (canine && !canineDetailsAdded) {
+                addCanineDetailRows(rowIndex);
             }
             podFactorsField.revalidate();
             podFactorsField.repaint();
@@ -897,6 +894,19 @@ public class SarTaskPanel extends JPanel {
             constraints.fill = GridBagConstraints.HORIZONTAL;
             constraints.insets = new Insets(0, 0, 3, 0);
             podFactorsField.add(component, constraints);
+        }
+
+        private int addCanineDetailRows(int rowIndex) {
+            addPodFactorWideCell(inlineFieldPanel(
+                    new LabeledComponent("Canine resource type", canineSearchTypeField),
+                    new LabeledComponent("Dog imprinted on", canineImprintField)), rowIndex++);
+            addPodFactorWideCell(inlineFieldPanel(
+                    new LabeledComponent("Sun angle", canineSunAngleField),
+                    new LabeledComponent("Day/night", canineDayNightField)), rowIndex++);
+            addPodFactorWideCell(inlineFieldPanel(
+                    new LabeledComponent("Cloud cover", canineCloudCoverField),
+                    new LabeledComponent("Wind speed", canineWindSpeedField)), rowIndex++);
+            return rowIndex;
         }
 
         private List<PodFactorRating> existingFactorValues() {
