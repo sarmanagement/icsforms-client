@@ -37,6 +37,7 @@ import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -232,10 +233,11 @@ class SarTaskPanelTest {
         assertEquals(1, clueModel.getRowCount());
         JComboBox<?> searchTypeCombo = (JComboBox<?>) getFieldValue(canineSearchTypeField, editor);
         JComboBox<?> imprintCombo = (JComboBox<?>) getFieldValue(canineImprintField, editor);
-        assertEquals("Wilderness air scent", searchTypeCombo.getItemAt(1));
-        assertEquals("Other", searchTypeCombo.getItemAt(searchTypeCombo.getItemCount() - 1));
-        assertEquals("Living human", imprintCombo.getItemAt(1));
-        assertEquals("Article/Track", imprintCombo.getItemAt(imprintCombo.getItemCount() - 1));
+        assertEquals(List.of("", "Wilderness air scent", "Tracking", "Trailing", "Tracking/Trailing",
+                        "HRD", "Article", "Patrol", "Water", "Other"),
+                comboItems(searchTypeCombo));
+        assertEquals(List.of("", "Living human", "HRD", "Both live and HRD", "Article/Track"),
+                comboItems(imprintCombo));
 
         Method addRow = clueModel.getClass().getDeclaredMethod("addRow");
         addRow.setAccessible(true);
@@ -309,6 +311,12 @@ class SarTaskPanelTest {
             }
         }
         return null;
+    }
+
+    private static List<String> comboItems(JComboBox<?> comboBox) {
+        return IntStream.range(0, comboBox.getItemCount())
+                .mapToObj(index -> String.valueOf(comboBox.getItemAt(index)))
+                .toList();
     }
 
     private static SarTaskAssignment sampleTask() {
