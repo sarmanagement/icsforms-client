@@ -10,6 +10,7 @@ public final class SarTaskSupport {
     private static final String LEGACY_CANINE_SWEEP_WIDTH_PATTERN = "Established Sweep Width Pattern";
     private static final String CANINE_SWEEP_WIDTH_PATTERN = "Sweep Width Pattern";
 
+    public static final String CANINE_HANDLER_CERTIFICATION_FACTOR_NAME = "Handler/K-9 Certification";
     public static final String RESOURCE_TYPE_CANINE = "Canine";
     public static final String RESOURCE_TYPE_EQUINE = "Equine";
     public static final String RESOURCE_TYPE_GROUND = "Ground";
@@ -46,7 +47,7 @@ public final class SarTaskSupport {
             new PodFactorTemplate(CANINE_SWEEP_WIDTH_PATTERN, 10, true),
             new PodFactorTemplate("Team Wellness", 10, true),
             new PodFactorTemplate("Contamination", 10, true),
-            new PodFactorTemplate("Handler/K-9 Certification", 5, true),
+            new PodFactorTemplate(CANINE_HANDLER_CERTIFICATION_FACTOR_NAME, 5, true),
             new PodFactorTemplate("Light", 5, true),
             new PodFactorTemplate("Weather/Temperature", 5, true),
             new PodFactorTemplate("Terrain Features", 5, true),

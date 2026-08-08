@@ -61,7 +61,6 @@ public class SarTaskPanel extends JPanel {
             "HRD", "Article", "Patrol", "Water", "Other");
     private static final List<String> CANINE_IMPRINT_OPTIONS = List.of(
             "", "Living human", "HRD", "Both live and HRD", "Article/Track");
-    private static final String CANINE_RESOURCE_DETAILS_FACTOR_NAME = "Handler/K-9 Certification";
     private static final String CANINE_WEATHER_FACTOR_NAME = "Weather/Temperature";
 
     private final AppController controller;
@@ -875,7 +874,7 @@ public class SarTaskPanel extends JPanel {
                 addPodFactorCell(fields.scoreField, 1, rowIndex, 0.0, GridBagConstraints.NONE);
                 addPodFactorCell(fields.descriptionField, 2, rowIndex, 1.0, GridBagConstraints.HORIZONTAL);
                 rowIndex++;
-                if (canine && CANINE_RESOURCE_DETAILS_FACTOR_NAME.equals(rating.getName())) {
+                if (canine && SarTaskSupport.CANINE_HANDLER_CERTIFICATION_FACTOR_NAME.equals(rating.getName())) {
                     rowIndex = addCanineResourceDetailRow(rowIndex);
                     canineResourceDetailsAdded = true;
                 }

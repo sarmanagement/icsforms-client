@@ -238,6 +238,8 @@ class SarTaskPanelTest {
         assertNotNull(resourceTypeRow[0]);
         assertNotNull(sunAngleRow[0]);
         assertNotNull(cloudCoverRow[0]);
+        assertNotNull(handlerCertificationRow[0]);
+        assertNotNull(lightRow[0]);
         assertEquals(4, ((JPanel) resourceTypeRow[0]).getComponentCount());
         assertEquals(1, gridX(resourceTypeRow[0]));
         assertEquals(1, gridX(sunAngleRow[0]));
