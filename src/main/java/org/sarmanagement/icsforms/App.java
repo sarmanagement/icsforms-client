@@ -5,6 +5,7 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
+import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
 import org.sarmanagement.icsforms.ui.MainFrame;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
@@ -36,7 +37,8 @@ public final class App {
             AppData data = repository.loadOrDefault();
             PdfExportService exportService = new PdfExportService(
                     new Ics202PdfRenderer(),
-                    new Ics204PdfRenderer()
+                    new Ics204PdfRenderer(),
+                    new SarTaskAssignmentPdfRenderer()
             );
             MainFrame frame = new MainFrame(data, repository, exportService, new IncidentValidator(), Path.of(System.getProperty("user.home")));
             frame.setVisible(true);

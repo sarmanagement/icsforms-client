@@ -17,6 +17,7 @@ public class AppData {
     private Ics202Form form202 = new Ics202Form();
     private Ics204Form form204 = new Ics204Form();
     private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
+    private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
 
     /**
      * Creates an empty incident document.
@@ -148,5 +149,23 @@ public class AppData {
      */
     public void setSarTaskAssignments(List<SarTaskAssignment> sarTaskAssignments) {
         this.sarTaskAssignments = sarTaskAssignments == null ? new ArrayList<>() : sarTaskAssignments;
+    }
+
+    /**
+     * Returns shared clue log entries collected from task debriefings.
+     *
+     * @return clue log entries.
+     */
+    public List<ClueLogEntry> getClueLogEntries() {
+        return clueLogEntries;
+    }
+
+    /**
+     * Sets shared clue log entries collected from task debriefings.
+     *
+     * @param clueLogEntries clue log entries.
+     */
+    public void setClueLogEntries(List<ClueLogEntry> clueLogEntries) {
+        this.clueLogEntries = clueLogEntries == null ? new ArrayList<>() : clueLogEntries;
     }
 }

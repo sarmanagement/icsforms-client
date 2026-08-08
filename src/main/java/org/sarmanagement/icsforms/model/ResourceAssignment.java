@@ -7,7 +7,11 @@ import java.util.UUID;
  */
 public class ResourceAssignment {
     private String assignmentId = UUID.randomUUID().toString();
+    private String assignmentTeamNumber = "";
+    private String resourceType = "";
+    private String taskType = "";
     private String resourceIdentifier = "";
+    private String leaderRole = "Leader";
     private String leader = "";
     private int numberOfPersons;
     private String contact = "";
@@ -37,6 +41,60 @@ public class ResourceAssignment {
     }
 
     /**
+     * Returns the task assignment or team number shown on linked SAR forms.
+     *
+     * @return assignment or team number.
+     */
+    public String getAssignmentTeamNumber() {
+        return assignmentTeamNumber;
+    }
+
+    /**
+     * Sets the task assignment or team number shown on linked SAR forms.
+     *
+     * @param assignmentTeamNumber assignment or team number.
+     */
+    public void setAssignmentTeamNumber(String assignmentTeamNumber) {
+        this.assignmentTeamNumber = assignmentTeamNumber == null ? "" : assignmentTeamNumber;
+    }
+
+    /**
+     * Returns the SAR resource type.
+     *
+     * @return resource type.
+     */
+    public String getResourceType() {
+        return resourceType;
+    }
+
+    /**
+     * Sets the SAR resource type.
+     *
+     * @param resourceType resource type.
+     */
+    public void setResourceType(String resourceType) {
+        this.resourceType = SarTaskSupport.normalizedResourceType(resourceType);
+    }
+
+    /**
+     * Returns the SAR task type.
+     *
+     * @return task type.
+     */
+    public String getTaskType() {
+        return taskType;
+    }
+
+    /**
+     * Sets the SAR task type.
+     *
+     * @param taskType task type.
+     */
+    public void setTaskType(String taskType) {
+        this.taskType = SarTaskSupport.normalizedTaskType(taskType);
+    }
+
+    /**
      * Returns the resource identifier.
      *
      * @return resource identifier.
@@ -52,6 +110,24 @@ public class ResourceAssignment {
      */
     public void setResourceIdentifier(String resourceIdentifier) {
         this.resourceIdentifier = resourceIdentifier;
+    }
+
+    /**
+     * Returns the leader role label used by linked SAR task resources.
+     *
+     * @return leader role label.
+     */
+    public String getLeaderRole() {
+        return leaderRole;
+    }
+
+    /**
+     * Sets the leader role label used by linked SAR task resources.
+     *
+     * @param leaderRole leader role label.
+     */
+    public void setLeaderRole(String leaderRole) {
+        this.leaderRole = leaderRole == null || leaderRole.isBlank() ? "Leader" : leaderRole;
     }
 
     /**

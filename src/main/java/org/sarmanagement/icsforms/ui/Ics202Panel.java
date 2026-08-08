@@ -3,10 +3,8 @@ package org.sarmanagement.icsforms.ui;
 import org.sarmanagement.icsforms.model.Ics202Form;
 
 import javax.swing.BorderFactory;
-import javax.swing.JCheckBox;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.JPanel;
+import javax.swing.JCheckBox;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -26,6 +24,7 @@ public class Ics202Panel extends JPanel {
     private final JCheckBox siteSafetyPlanRequired = new JCheckBox("Site safety plan required");
     private final JCheckBox includeIcs202 = new JCheckBox("ICS 202");
     private final JCheckBox includeIcs204 = new JCheckBox("ICS 204");
+    private final JCheckBox includeSarTaskAssignment = new JCheckBox("SAR Task Assignment");
     private final JCheckBox includeMapPacket = new JCheckBox("Map packet");
     private final JTextArea additionalFormsArea = UiSupport.textArea(2);
     private final JTextField preparedByNameField = UiSupport.textField();
@@ -92,25 +91,25 @@ public class Ics202Panel extends JPanel {
     }
 
     private JPanel includedFormsPanel() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        JPanel panel = new JPanel(new BorderLayout(0, 4));
         panel.setOpaque(false);
         JPanel checks = new JPanel(new GridLayout(0, 2, 4, 4));
         checks.setOpaque(false);
         checks.add(includeIcs202);
         checks.add(includeIcs204);
+        checks.add(includeSarTaskAssignment);
         checks.add(includeMapPacket);
-        panel.add(checks);
-        panel.add(Box.createVerticalStrut(4));
+        panel.add(checks, BorderLayout.NORTH);
         JScrollPane scrollPane = new JScrollPane(additionalFormsArea);
         scrollPane.setPreferredSize(new java.awt.Dimension(100, 60));
-        panel.add(scrollPane);
+        panel.add(scrollPane, BorderLayout.CENTER);
         return panel;
     }
 
     private void setIncludedForms(List<String> items) {
         includeIcs202.setSelected(false);
         includeIcs204.setSelected(false);
+        includeSarTaskAssignment.setSelected(false);
         includeMapPacket.setSelected(false);
         List<String> additional = new ArrayList<>();
         for (String item : items) {
@@ -118,6 +117,8 @@ public class Ics202Panel extends JPanel {
                 includeIcs202.setSelected(true);
             } else if ("ICS 204".equalsIgnoreCase(item)) {
                 includeIcs204.setSelected(true);
+            } else if ("SAR Task Assignment".equalsIgnoreCase(item)) {
+                includeSarTaskAssignment.setSelected(true);
             } else if ("Map packet".equalsIgnoreCase(item)) {
                 includeMapPacket.setSelected(true);
             } else {
@@ -134,6 +135,9 @@ public class Ics202Panel extends JPanel {
         }
         if (includeIcs204.isSelected()) {
             items.add("ICS 204");
+        }
+        if (includeSarTaskAssignment.isSelected()) {
+            items.add("SAR Task Assignment");
         }
         if (includeMapPacket.isSelected()) {
             items.add("Map packet");

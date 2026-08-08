@@ -21,6 +21,8 @@ abstract class AbstractPdfRenderer {
     private static final float BODY_FONT_SIZE = 10f;
     private static final float BLOCK_PADDING = 8f;
     private static final float BLOCK_SPACING = 10f;
+    protected static final float FORM_MARGIN = 36f;
+    protected static final float FORM_HEADER_HEIGHT = 14f;
 
     /**
      * Writes a centered header line plus bordered content blocks across one or more pages.
@@ -109,5 +111,89 @@ abstract class AbstractPdfRenderer {
             lines.add(current.toString());
         }
         return lines;
+    }
+
+    /**
+     * Returns the shared printable form frame for bordered ICS/SAR documents.
+     *
+     * @param page PDF page.
+     * @return shared form layout bounds.
+     */
+    protected FormLayout formLayout(PDPage page) {
+        float width = page.getMediaBox().getWidth() - (FORM_MARGIN * 2f);
+        float top = page.getMediaBox().getHeight() - FORM_MARGIN - FORM_HEADER_HEIGHT;
+        return new FormLayout(FORM_MARGIN, FORM_MARGIN, width, top - FORM_MARGIN, top + FORM_HEADER_HEIGHT);
+    }
+
+    /**
+     * Draws the shared heading line above the printable form.
+     *
+     * @param stream page stream.
+     * @param bold bold font.
+     * @param layout shared form layout.
+     * @param formNumber form number text.
+     * @param title title text.
+     * @throws IOException when PDF output fails.
+     */
+    protected void drawFormHeader(PDPageContentStream stream, PDType1Font bold, FormLayout layout,
+                                  String formNumber, String title) throws IOException {
+        String header = formNumber + " " + title;
+        float headerWidth = bold.getStringWidth(header) / 1000f * HEADER_FONT_SIZE;
+        stream.beginText();
+        stream.setFont(bold, HEADER_FONT_SIZE);
+        stream.newLineAtOffset((PDRectangle.LETTER.getWidth() - headerWidth) / 2f, layout.headerBaseline());
+        stream.showText(header);
+        stream.endText();
+    }
+
+    /**
+     * Draws the shared outer border that fills the printable form area.
+     *
+     * @param stream page stream.
+     * @param layout shared form layout.
+     * @throws IOException when PDF output fails.
+     */
+    protected void drawFormFrame(PDPageContentStream stream, FormLayout layout) throws IOException {
+        stream.addRect(layout.x(), layout.y(), layout.width(), layout.height());
+        stream.stroke();
+    }
+
+    /**
+     * Expands one designated row to consume any unused form height while leaving
+     * the other rows at their preferred heights.
+     *
+     * @param totalHeight total height available for the rows.
+     * @param expandableRowIndex zero-based index of the row that should absorb extra space.
+     * @param preferredHeights preferred heights for each row.
+     * @return resolved row heights.
+     */
+    protected float[] expandRowToFill(float totalHeight, int expandableRowIndex, float... preferredHeights) {
+        float[] resolved = preferredHeights.clone();
+        if (expandableRowIndex < 0 || expandableRowIndex >= resolved.length) {
+            return resolved;
+        }
+        float usedHeight = 0f;
+        for (float height : resolved) {
+            usedHeight += height;
+        }
+        if (usedHeight < totalHeight) {
+            resolved[expandableRowIndex] += totalHeight - usedHeight;
+        }
+        return resolved;
+    }
+
+    /**
+     * Shared outer form bounds beneath the centered page heading.
+     *
+     * @param x left edge.
+     * @param y bottom edge.
+     * @param width form width.
+     * @param height form height.
+     * @param headerBaseline baseline for the centered header text.
+     */
+    protected record FormLayout(float x, float y, float width, float height, float headerBaseline) {
+        float top() {
+            return y + height;
+        }
     }
 }

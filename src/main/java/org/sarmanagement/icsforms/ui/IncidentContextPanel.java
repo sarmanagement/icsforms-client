@@ -19,6 +19,7 @@ public class IncidentContextPanel extends JPanel {
     private final JTextField incidentNameField = UiSupport.textField();
     private final JSpinner startField = UiSupport.dateTimeSpinner();
     private final JSpinner endField = UiSupport.dateTimeSpinner();
+    private final JTextField taskMapField = UiSupport.textField();
     private final JTextField currentUserField = UiSupport.textField();
     private final JTextField currentUserPositionField = UiSupport.textField();
 
@@ -35,8 +36,9 @@ public class IncidentContextPanel extends JPanel {
         UiSupport.addRow(form, 0, "Incident name", incidentNameField);
         UiSupport.addRow(form, 1, "Operational period start", startField);
         UiSupport.addRow(form, 2, "Operational period end", endField);
-        UiSupport.addRow(form, 3, "Preparer / current user", currentUserField);
-        UiSupport.addRow(form, 4, "Preparer position/title", currentUserPositionField);
+        UiSupport.addRow(form, 3, "Task map / CalTopo id", taskMapField);
+        UiSupport.addRow(form, 4, "Preparer / current user", currentUserField);
+        UiSupport.addRow(form, 5, "Preparer position/title", currentUserPositionField);
         JPanel topAlignedForm = new JPanel(new BorderLayout());
         topAlignedForm.setOpaque(false);
         topAlignedForm.add(form, BorderLayout.NORTH);
@@ -54,6 +56,7 @@ public class IncidentContextPanel extends JPanel {
         incidentNameField.setText(nullSafe(context.getIncidentName()));
         startField.setValue(toDate(context.getOperationalPeriodStart()));
         endField.setValue(toDate(context.getOperationalPeriodEnd()));
+        taskMapField.setText(nullSafe(context.getTaskMap()));
         currentUserField.setText(nullSafe(context.getCurrentUser()));
         currentUserPositionField.setText(nullSafe(context.getCurrentUserPositionTitle()));
     }
@@ -66,6 +69,7 @@ public class IncidentContextPanel extends JPanel {
         context.setIncidentName(incidentNameField.getText().trim());
         context.setOperationalPeriodStart(AppController.toLocalDateTime((Date) startField.getValue()));
         context.setOperationalPeriodEnd(AppController.toLocalDateTime((Date) endField.getValue()));
+        context.setTaskMap(taskMapField.getText().trim());
         context.setCurrentUser(currentUserField.getText().trim());
         context.setCurrentUserPositionTitle(currentUserPositionField.getText().trim());
     }
