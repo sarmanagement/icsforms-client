@@ -2,6 +2,7 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
+import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.SarTaskResource;
@@ -103,7 +104,19 @@ public class Ics214Panel extends JPanel {
             loadSelectedLog();
         });
 
-        add(formScrollPane, BorderLayout.NORTH);
+        JPanel logSelectorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton addLogButton = new JButton("Add Log");
+        JButton removeLogButton = new JButton("Remove Log");
+        addLogButton.addActionListener(event -> addLog());
+        removeLogButton.addActionListener(event -> removeActiveLog());
+        logSelectorPanel.add(addLogButton);
+        logSelectorPanel.add(removeLogButton);
+
+        JPanel northPanel = new JPanel(new BorderLayout());
+        northPanel.add(formScrollPane, BorderLayout.CENTER);
+        northPanel.add(logSelectorPanel, BorderLayout.SOUTH);
+
+        add(northPanel, BorderLayout.NORTH);
         add(tablesPanel, BorderLayout.CENTER);
     }
 
@@ -240,6 +253,62 @@ public class Ics214Panel extends JPanel {
                     resolvedEventTypes());
             controller.markDirty();
         }
+    }
+
+    private void addLog() {
+        if (currentData == null) {
+            return;
+        }
+        JComboBox<ActivityLogScope> scopeCombo = new JComboBox<>(ActivityLogScope.values());
+        JTextField linkedIdField = UiSupport.textField();
+        JPanel input = UiSupport.formPanel();
+        UiSupport.addRow(input, 0, "Scope", scopeCombo);
+        UiSupport.addRow(input, 1, "Linked form ID (optional)", linkedIdField);
+        JScrollPane scrollPane = new JScrollPane(input);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        if (!UiSupport.showResizableConfirmDialog(this, "Add Activity Log", scrollPane, new Dimension(480, 160))) {
+            return;
+        }
+        saveActiveLog();
+        Ics214Form form = new Ics214Form();
+        form.setLogScope((ActivityLogScope) scopeCombo.getSelectedItem());
+        form.setLinkedFormId(linkedIdField.getText().trim());
+        currentData.getActivityLogs().add(form);
+        int newIndex = currentData.getActivityLogs().size() - 1;
+        updatingSelection = true;
+        logSelector.addItem(new LogOption(newIndex, form));
+        updatingSelection = false;
+        activeLogIndex = newIndex;
+        logSelector.setSelectedIndex(newIndex);
+        loadSelectedLog();
+        controller.markDirty();
+    }
+
+    private void removeActiveLog() {
+        if (currentData == null || currentData.getActivityLogs().size() <= 1) {
+            JOptionPane.showMessageDialog(this,
+                    "At least one activity log must remain.",
+                    "Cannot Remove", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Remove the currently selected activity log?",
+                "Remove Log", JOptionPane.YES_NO_OPTION);
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+        currentData.getActivityLogs().remove(activeLogIndex);
+        int newIndex = Math.max(0, activeLogIndex - 1);
+        activeLogIndex = newIndex;
+        updatingSelection = true;
+        logSelector.removeAllItems();
+        for (int i = 0; i < currentData.getActivityLogs().size(); i++) {
+            logSelector.addItem(new LogOption(i, currentData.getActivityLogs().get(i)));
+        }
+        updatingSelection = false;
+        logSelector.setSelectedIndex(newIndex);
+        loadSelectedLog();
+        controller.markDirty();
     }
 
     private JPanel activityButtonsPanel() {
