@@ -1,5 +1,7 @@
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +15,7 @@ import java.util.List;
  * neither reference is set the log belongs to the ICP/command-post level.
  * The operational scope is derived from these typed fields via {@link #getLogScope()}.</p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Ics214Form {
     private String linkedIcs204FormId = "";
     private String linkedSarTaskAssignmentId = "";
