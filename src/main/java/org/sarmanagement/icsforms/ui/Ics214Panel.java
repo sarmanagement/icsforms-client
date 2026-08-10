@@ -2,11 +2,8 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
-import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
-import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
-import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 
 import javax.swing.BorderFactory;
@@ -41,7 +38,6 @@ public class Ics214Panel extends JPanel {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final AppController controller;
-    private final JComboBox<LogOption> logSelector = new JComboBox<>();
     private final JTextField nameField = UiSupport.textField();
     private final JTextField icsPositionField = UiSupport.textField();
     private final JTextField homeAgencyField = UiSupport.textField();
@@ -54,8 +50,7 @@ public class Ics214Panel extends JPanel {
     private final JTable resourcesTable = new JTable(resourcesTableModel);
     private final JTable activityLogTable = new JTable(activityLogTableModel);
     private AppData currentData;
-    private int activeLogIndex = -1;
-    private boolean updatingSelection;
+    private Ics214Form currentForm;
 
     /**
      * Creates the ICS 214 editor panel.
@@ -68,14 +63,13 @@ public class Ics214Panel extends JPanel {
 
         JPanel form = UiSupport.formPanel();
         form.setBorder(BorderFactory.createTitledBorder("ICS 214 Activity Log"));
-        UiSupport.addRow(form, 0, "Activity log", logSelector);
-        UiSupport.addRow(form, 1, "Name", nameField);
-        UiSupport.addRow(form, 2, "ICS position", icsPositionField);
-        UiSupport.addRow(form, 3, "Home agency", homeAgencyField);
-        UiSupport.addRow(form, 4, "Prepared by name", preparedByNameField);
-        UiSupport.addRow(form, 5, "Prepared by position/title", preparedByPositionField);
-        UiSupport.addRow(form, 6, "Prepared by signature", preparedBySignatureField);
-        UiSupport.addRow(form, 7, "Prepared date/time", preparedDateTimeField);
+        UiSupport.addRow(form, 0, "Name", nameField);
+        UiSupport.addRow(form, 1, "ICS position", icsPositionField);
+        UiSupport.addRow(form, 2, "Home agency", homeAgencyField);
+        UiSupport.addRow(form, 3, "Prepared by name", preparedByNameField);
+        UiSupport.addRow(form, 4, "Prepared by position/title", preparedByPositionField);
+        UiSupport.addRow(form, 5, "Prepared by signature", preparedBySignatureField);
+        UiSupport.addRow(form, 6, "Prepared date/time", preparedDateTimeField);
 
         resourcesTable.setFillsViewportHeight(true);
         activityLogTable.setFillsViewportHeight(true);
@@ -97,112 +91,48 @@ public class Ics214Panel extends JPanel {
         formScrollPane.setBorder(BorderFactory.createEmptyBorder());
         formScrollPane.setPreferredSize(new Dimension(0, 240));
 
-        logSelector.addActionListener(event -> {
-            if (updatingSelection || currentData == null) {
-                return;
-            }
-            saveActiveLog();
-            activeLogIndex = logSelector.getSelectedIndex();
-            loadSelectedLog();
-        });
-
-        JPanel logSelectorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton addLogButton = new JButton("Add Log");
-        JButton removeLogButton = new JButton("Remove Log");
-        addLogButton.addActionListener(event -> addLog());
-        removeLogButton.addActionListener(event -> removeActiveLog());
-        logSelectorPanel.add(addLogButton);
-        logSelectorPanel.add(removeLogButton);
-
-        JPanel northPanel = new JPanel(new BorderLayout());
-        northPanel.add(formScrollPane, BorderLayout.CENTER);
-        northPanel.add(logSelectorPanel, BorderLayout.SOUTH);
-
-        add(northPanel, BorderLayout.NORTH);
+        add(formScrollPane, BorderLayout.NORTH);
         add(tablesPanel, BorderLayout.CENTER);
     }
 
     /**
      * Loads values from the supplied model.
      *
+     * @param form activity log form.
      * @param data source document.
      */
-    public void loadFromModel(AppData data) {
+    public void loadFromModel(Ics214Form form, AppData data) {
+        currentForm = form;
         currentData = data == null ? new AppData() : data;
-        ensureLogs(currentData);
-        int selectedIndex = activeLogIndex >= 0 && activeLogIndex < currentData.getActivityLogs().size() ? activeLogIndex : 0;
-        updatingSelection = true;
-        logSelector.removeAllItems();
-        for (int index = 0; index < currentData.getActivityLogs().size(); index++) {
-            logSelector.addItem(new LogOption(index, currentData.getActivityLogs().get(index)));
-        }
-        if (logSelector.getItemCount() > 0) {
-            logSelector.setSelectedIndex(selectedIndex);
-        }
-        updatingSelection = false;
-        activeLogIndex = logSelector.getSelectedIndex();
-        loadSelectedLog();
-    }
-
-    /**
-     * Saves current field values into the supplied model.
-     *
-     * @param data target document.
-     */
-    public void saveToModel(AppData data) {
-        currentData = data == null ? controller.getData() : data;
-        ensureLogs(currentData);
-        saveActiveLog();
-    }
-
-    private void ensureLogs(AppData data) {
-        if (data.getActivityLogs().isEmpty()) {
-            Ics214Form form = new Ics214Form();
-            form.setPreparedByName(data.getForm204().getPreparedByName());
-            form.setPreparedByPositionTitle(data.getForm204().getPreparedByPositionTitle());
-            form.setPreparedDateTime(data.getForm204().getPreparedDateTime());
-            data.getActivityLogs().add(form);
-        }
-    }
-
-    private void loadSelectedLog() {
-        Ics214Form form = selectedLog();
-        if (form == null) {
+        if (currentForm == null) {
             clearFields();
             return;
         }
-        nameField.setText(nullSafe(form.getName()));
-        icsPositionField.setText(nullSafe(form.getIcsPosition()));
-        homeAgencyField.setText(nullSafe(form.getHomeAgency()));
-        preparedByNameField.setText(nullSafe(form.getPreparedByName()));
-        preparedByPositionField.setText(nullSafe(form.getPreparedByPositionTitle()));
-        preparedBySignatureField.setText(nullSafe(form.getPreparedBySignature()));
-        preparedDateTimeField.setValue(AppController.toDate(form.getPreparedDateTime()));
-        resourcesTableModel.setRows(form.getResourcesAssigned());
-        activityLogTableModel.setRows(form.getActivityLog(), resolvedEventTypes());
+        nameField.setText(nullSafe(currentForm.getName()));
+        icsPositionField.setText(nullSafe(currentForm.getIcsPosition()));
+        homeAgencyField.setText(nullSafe(currentForm.getHomeAgency()));
+        preparedByNameField.setText(nullSafe(currentForm.getPreparedByName()));
+        preparedByPositionField.setText(nullSafe(currentForm.getPreparedByPositionTitle()));
+        preparedBySignatureField.setText(nullSafe(currentForm.getPreparedBySignature()));
+        preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
+        resourcesTableModel.setRows(currentForm.getResourcesAssigned());
+        activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
     }
 
-    private void saveActiveLog() {
-        Ics214Form form = selectedLog();
-        if (form == null) {
+    /** Saves current field values into the stored model reference. */
+    public void saveToModel() {
+        if (currentForm == null) {
             return;
         }
-        form.setName(nameField.getText().trim());
-        form.setIcsPosition(icsPositionField.getText().trim());
-        form.setHomeAgency(homeAgencyField.getText().trim());
-        form.setPreparedByName(preparedByNameField.getText().trim());
-        form.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
-        form.setPreparedBySignature(preparedBySignatureField.getText().trim());
-        form.setPreparedDateTime(AppController.toLocalDateTime((Date) preparedDateTimeField.getValue()));
-        form.setResourcesAssigned(resourcesTableModel.getRows());
-        form.setActivityLog(activityLogTableModel.getRows());
-    }
-
-    private Ics214Form selectedLog() {
-        if (currentData == null || activeLogIndex < 0 || activeLogIndex >= currentData.getActivityLogs().size()) {
-            return null;
-        }
-        return currentData.getActivityLogs().get(activeLogIndex);
+        currentForm.setName(nameField.getText().trim());
+        currentForm.setIcsPosition(icsPositionField.getText().trim());
+        currentForm.setHomeAgency(homeAgencyField.getText().trim());
+        currentForm.setPreparedByName(preparedByNameField.getText().trim());
+        currentForm.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
+        currentForm.setPreparedBySignature(preparedBySignatureField.getText().trim());
+        currentForm.setPreparedDateTime(AppController.toLocalDateTime((Date) preparedDateTimeField.getValue()));
+        currentForm.setResourcesAssigned(resourcesTableModel.getRows());
+        currentForm.setActivityLog(activityLogTableModel.getRows());
     }
 
     /** Returns the configured event types, falling back to defaults when empty. */
@@ -214,8 +144,7 @@ public class Ics214Panel extends JPanel {
     }
 
     private void addActivityEntry() {
-        Ics214Form form = selectedLog();
-        if (form == null) {
+        if (currentForm == null) {
             return;
         }
         List<ActivityEventType> types = resolvedEventTypes();
@@ -225,18 +154,17 @@ public class Ics214Panel extends JPanel {
         if (!UiSupport.showResizableConfirmDialog(this, "Add activity entry", scrollPane, new Dimension(640, 320))) {
             return;
         }
-        form.getActivityLog().add(editor.toEntry());
-        activityLogTableModel.setRows(form.getActivityLog(), types);
+        currentForm.getActivityLog().add(editor.toEntry());
+        activityLogTableModel.setRows(currentForm.getActivityLog(), types);
         controller.markDirty();
     }
 
     private void removeSelectedActivityEntry(int row) {
-        Ics214Form form = selectedLog();
-        if (form == null || row < 0 || row >= form.getActivityLog().size()) {
+        if (currentForm == null || row < 0 || row >= currentForm.getActivityLog().size()) {
             return;
         }
-        form.getActivityLog().remove(row);
-        activityLogTableModel.setRows(form.getActivityLog(), resolvedEventTypes());
+        currentForm.getActivityLog().remove(row);
+        activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
         controller.markDirty();
     }
 
@@ -251,143 +179,10 @@ public class Ics214Panel extends JPanel {
         if (UiSupport.showResizableConfirmDialog(this, "Manage event types", scrollPane, new Dimension(480, 380))) {
             currentData.setActivityEventTypes(dialog.getEventTypes());
             activityLogTableModel.setRows(
-                    selectedLog() != null ? selectedLog().getActivityLog() : List.of(),
+                    currentForm != null ? currentForm.getActivityLog() : List.of(),
                     resolvedEventTypes());
             controller.markDirty();
         }
-    }
-
-    /** A document that can be linked to an ICS 214 activity log. */
-    private record AssociableDocument(String label, String linkedFormId) {
-        @Override
-        public String toString() {
-            return label;
-        }
-    }
-
-    /** Builds the list of documents available for linking based on the selected scope. */
-    private List<AssociableDocument> documentsForScope(ActivityLogScope scope) {
-        List<AssociableDocument> docs = new ArrayList<>();
-        if (currentData == null || scope == ActivityLogScope.ICP) {
-            docs.add(new AssociableDocument("(none)", ""));
-            return docs;
-        }
-        if (scope == ActivityLogScope.ASSIGNMENT_LIST) {
-            docs.add(labelFor204(currentData.getForm204(), 1));
-            List<Ics204Form> additional = currentData.getAdditionalForms204();
-            for (int i = 0; i < additional.size(); i++) {
-                docs.add(labelFor204(additional.get(i), i + 2));
-            }
-        } else {
-            // TASK_ASSIGNMENT
-            for (SarTaskAssignment a : currentData.getSarTaskAssignments()) {
-                docs.add(labelForAssignment(a));
-            }
-        }
-        if (docs.isEmpty()) {
-            docs.add(new AssociableDocument("(none)", ""));
-        }
-        return docs;
-    }
-
-    private static AssociableDocument labelFor204(Ics204Form form, int ordinal) {
-        String context = form.getSelectedContextValue();
-        String heading = form.getSelectedContextHeading();
-        String label;
-        if (context != null && !context.isBlank()) {
-            label = "ICS 204 – " + heading + " " + context;
-        } else if (form.getIapPage() != null && !form.getIapPage().isBlank()) {
-            label = "ICS 204 – Page " + form.getIapPage();
-        } else {
-            label = "ICS 204 #" + ordinal;
-        }
-        String id = label;
-        return new AssociableDocument(label, id);
-    }
-
-    private static AssociableDocument labelForAssignment(SarTaskAssignment a) {
-        String id = a.getAssignmentId();
-        String resource = a.getResourceIdentifier();
-        String label;
-        if (id != null && !id.isBlank()) {
-            label = "Assignment " + id + (resource != null && !resource.isBlank() ? " – " + resource : "");
-        } else if (resource != null && !resource.isBlank()) {
-            label = "Assignment – " + resource;
-        } else {
-            label = "Assignment";
-        }
-        return new AssociableDocument(label, label);
-    }
-
-    private void addLog() {
-        if (currentData == null) {
-            return;
-        }
-        JComboBox<ActivityLogScope> scopeCombo = new JComboBox<>(ActivityLogScope.values());
-        JComboBox<AssociableDocument> linkedDocCombo = new JComboBox<>();
-        // Populate initially for ICP scope
-        documentsForScope(ActivityLogScope.ICP).forEach(linkedDocCombo::addItem);
-        JPanel input = UiSupport.formPanel();
-        UiSupport.addRow(input, 0, "Scope", scopeCombo);
-        UiSupport.addRow(input, 1, "Associated document", linkedDocCombo);
-        scopeCombo.addActionListener(e -> {
-            ActivityLogScope selected = (ActivityLogScope) scopeCombo.getSelectedItem();
-            linkedDocCombo.removeAllItems();
-            documentsForScope(selected).forEach(linkedDocCombo::addItem);
-        });
-        JScrollPane scrollPane = new JScrollPane(input);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, "Add Activity Log", scrollPane, new Dimension(480, 160))) {
-            return;
-        }
-        saveActiveLog();
-        Ics214Form form = new Ics214Form();
-        form.setLogScope((ActivityLogScope) scopeCombo.getSelectedItem());
-        AssociableDocument selectedDoc = (AssociableDocument) linkedDocCombo.getSelectedItem();
-        form.setLinkedFormId(selectedDoc != null ? selectedDoc.linkedFormId() : "");
-        currentData.getActivityLogs().add(form);
-        int newIndex = currentData.getActivityLogs().size() - 1;
-        updatingSelection = true;
-        logSelector.addItem(new LogOption(newIndex, form));
-        updatingSelection = false;
-        activeLogIndex = newIndex;
-        logSelector.setSelectedIndex(newIndex);
-        loadSelectedLog();
-        controller.markDirty();
-    }
-
-    private void removeActiveLog() {
-        if (currentData == null || currentData.getActivityLogs().size() <= 1) {
-            JOptionPane.showMessageDialog(this,
-                    "At least one activity log must remain.",
-                    "Cannot Remove", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        Ics214Form active = selectedLog();
-        if (active != null && !active.getActivityLog().isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                    "Cannot remove a log that contains activity entries. Remove all entries first.",
-                    "Cannot Remove", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        int confirm = JOptionPane.showConfirmDialog(this,
-                "Remove the currently selected activity log?",
-                "Remove Log", JOptionPane.YES_NO_OPTION);
-        if (confirm != JOptionPane.YES_OPTION) {
-            return;
-        }
-        currentData.getActivityLogs().remove(activeLogIndex);
-        int newIndex = Math.max(0, activeLogIndex - 1);
-        activeLogIndex = newIndex;
-        updatingSelection = true;
-        logSelector.removeAllItems();
-        for (int i = 0; i < currentData.getActivityLogs().size(); i++) {
-            logSelector.addItem(new LogOption(i, currentData.getActivityLogs().get(i)));
-        }
-        updatingSelection = false;
-        logSelector.setSelectedIndex(newIndex);
-        loadSelectedLog();
-        controller.markDirty();
     }
 
     private JPanel activityButtonsPanel() {
@@ -418,16 +213,6 @@ public class Ics214Panel extends JPanel {
 
     private String nullSafe(String value) {
         return value == null ? "" : value;
-    }
-
-    private record LogOption(int index, Ics214Form form) {
-        @Override
-        public String toString() {
-            if (form.getLinkedFormId().isBlank()) {
-                return form.getLogScope().getLabel();
-            }
-            return form.getLinkedFormId() + " - " + form.getLogScope().getLabel();
-        }
     }
 
     // -------------------------------------------------------------------------
