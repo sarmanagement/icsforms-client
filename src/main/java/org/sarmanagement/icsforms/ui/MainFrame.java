@@ -35,6 +35,7 @@ public class MainFrame extends JFrame {
     private final OrganizationalChartPanel organizationalChartPanel;
     private final Ics202Panel ics202Panel;
     private final Ics204Panel ics204Panel;
+    private final Ics214Panel ics214Panel;
     private final SarTaskPanel sarTaskPanel;
     private final ClueLogPanel clueLogPanel;
     private final JTabbedPane tabs = new JTabbedPane();
@@ -57,6 +58,7 @@ public class MainFrame extends JFrame {
         this.organizationalChartPanel = new OrganizationalChartPanel(controller);
         this.ics202Panel = new Ics202Panel(controller);
         this.ics204Panel = new Ics204Panel(controller);
+        this.ics214Panel = new Ics214Panel(controller);
         this.sarTaskPanel = new SarTaskPanel(controller);
         this.clueLogPanel = new ClueLogPanel(controller);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -75,6 +77,8 @@ public class MainFrame extends JFrame {
         tabSources.put(ics202Panel, AppController.LinkSource.ICS202);
         tabs.addTab("ICS 204", ics204Panel);
         tabSources.put(ics204Panel, AppController.LinkSource.ICS204);
+        tabs.addTab("ICS 214", ics214Panel);
+        tabSources.put(ics214Panel, AppController.LinkSource.ICS214);
         tabs.addTab("SAR Tasks", sarTaskPanel);
         tabs.addTab("Clue Log", clueLogPanel);
         tabs.addChangeListener(event -> {
@@ -155,6 +159,9 @@ public class MainFrame extends JFrame {
         JMenuItem exportSarTaskItem = new JMenuItem("Export SAR Task Assignment PDF…");
         exportSarTaskItem.addActionListener(event -> exportOne(defaultDirectory, "SAR Task Assignment"));
 
+        JMenuItem export214Item = new JMenuItem("Export ICS 214 PDF…");
+        export214Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 214"));
+
         JMenuItem exportAllItem = new JMenuItem("Export All PDFs…");
         exportAllItem.addActionListener(event -> {
             AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
@@ -165,7 +172,7 @@ public class MainFrame extends JFrame {
                 pushToModel(source);
                 try {
                     controller.exportAll(directory, source);
-                    JOptionPane.showMessageDialog(this, "Exported ICS 202, ICS 204, and SAR Task Assignment PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Exported ICS 202, ICS 204, ICS 214, and SAR Task Assignment PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
                 } catch (IOException exception) {
                     showError("Failed to export PDFs", exception);
                 }
@@ -180,6 +187,7 @@ public class MainFrame extends JFrame {
         fileMenu.add(exitItem);
         exportMenu.add(export202Item);
         exportMenu.add(export204Item);
+        exportMenu.add(export214Item);
         exportMenu.add(exportSarTaskItem);
         exportMenu.add(exportAllItem);
         bar.add(fileMenu);
@@ -214,6 +222,7 @@ public class MainFrame extends JFrame {
         organizationalChartPanel.pushToModel();
         ics202Panel.pushToModel();
         ics204Panel.pushToModel();
+        ics214Panel.saveToModel(controller.getData());
         sarTaskPanel.pushToModel();
         clueLogPanel.pushToModel();
         controller.markDirty(source);
@@ -227,6 +236,7 @@ public class MainFrame extends JFrame {
         organizationalChartPanel.refreshFromModel();
         ics202Panel.refreshFromModel();
         ics204Panel.refreshFromModel();
+        ics214Panel.loadFromModel(controller.getData());
         sarTaskPanel.refreshFromModel();
         clueLogPanel.refreshFromModel();
         refreshStatus();

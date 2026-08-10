@@ -1,5 +1,6 @@
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Ics204Form;
@@ -46,7 +47,8 @@ public class AppController {
         SHARED,
         ORG_CHART,
         ICS202,
-        ICS204
+        ICS204,
+        ICS214
     }
 
     /**
@@ -426,6 +428,8 @@ public class AppController {
             return;
         }
         existingResources.get(0).setFunction(lead.getFunction());
+        existingResources.get(0).setIcsPosition(lead.getIcsPosition());
+        existingResources.get(0).setHomeAgency(lead.getHomeAgency());
         existingResources.get(0).setName(lead.getName());
     }
 
@@ -447,13 +451,22 @@ public class AppController {
         if (data.getForm204() == null) {
             data.setForm204(new Ics204Form());
         }
+        if (data.getAdditionalForms204() == null) {
+            data.setAdditionalForms204(new ArrayList<>());
+        }
+        if (data.getActivityLogs() == null) {
+            data.setActivityLogs(new ArrayList<>());
+        }
+        if (data.getActivityEventTypes() == null || data.getActivityEventTypes().isEmpty()) {
+            data.setActivityEventTypes(new ArrayList<>(ActivityEventType.defaultTypes()));
+        }
         if (data.getSarTaskAssignments() == null) {
             data.setSarTaskAssignments(new ArrayList<>());
         }
         if (data.getClueLogEntries() == null) {
             data.setClueLogEntries(new ArrayList<>());
         }
-        if (data.getSchemaVersion() == 0) {
+        if (data.getSchemaVersion() < AppData.CURRENT_SCHEMA_VERSION) {
             data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
         }
         activeLinkSource = initialLinkSource(data);

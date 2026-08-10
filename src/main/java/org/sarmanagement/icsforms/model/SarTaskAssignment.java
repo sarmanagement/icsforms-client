@@ -121,6 +121,7 @@ public class SarTaskAssignment {
         if (!safe(resourceAssignment.getLeader()).isBlank()) {
             SarTaskResource leaderResource = new SarTaskResource();
             leaderResource.setFunction(resourceAssignment.getLeaderRole());
+            leaderResource.setIcsPosition(resourceAssignment.getLeaderRole());
             leaderResource.setName(resourceAssignment.getLeader());
             resources.add(leaderResource);
         }
