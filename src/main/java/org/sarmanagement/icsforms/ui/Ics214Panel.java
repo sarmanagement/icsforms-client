@@ -4,7 +4,9 @@ import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 
 import javax.swing.BorderFactory;
@@ -255,15 +257,84 @@ public class Ics214Panel extends JPanel {
         }
     }
 
+    /** A document that can be linked to an ICS 214 activity log. */
+    private record AssociableDocument(String label, String linkedFormId) {
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    /** Builds the list of documents available for linking based on the selected scope. */
+    private List<AssociableDocument> documentsForScope(ActivityLogScope scope) {
+        List<AssociableDocument> docs = new ArrayList<>();
+        if (currentData == null || scope == ActivityLogScope.ICP) {
+            docs.add(new AssociableDocument("(none)", ""));
+            return docs;
+        }
+        if (scope == ActivityLogScope.ASSIGNMENT_LIST) {
+            docs.add(labelFor204(currentData.getForm204(), 1));
+            List<Ics204Form> additional = currentData.getAdditionalForms204();
+            for (int i = 0; i < additional.size(); i++) {
+                docs.add(labelFor204(additional.get(i), i + 2));
+            }
+        } else {
+            // TASK_ASSIGNMENT
+            for (SarTaskAssignment a : currentData.getSarTaskAssignments()) {
+                docs.add(labelForAssignment(a));
+            }
+        }
+        if (docs.isEmpty()) {
+            docs.add(new AssociableDocument("(none)", ""));
+        }
+        return docs;
+    }
+
+    private static AssociableDocument labelFor204(Ics204Form form, int ordinal) {
+        String context = form.getSelectedContextValue();
+        String heading = form.getSelectedContextHeading();
+        String label;
+        if (context != null && !context.isBlank()) {
+            label = "ICS 204 – " + heading + " " + context;
+        } else if (form.getIapPage() != null && !form.getIapPage().isBlank()) {
+            label = "ICS 204 – Page " + form.getIapPage();
+        } else {
+            label = "ICS 204 #" + ordinal;
+        }
+        String id = label;
+        return new AssociableDocument(label, id);
+    }
+
+    private static AssociableDocument labelForAssignment(SarTaskAssignment a) {
+        String id = a.getAssignmentId();
+        String resource = a.getResourceIdentifier();
+        String label;
+        if (id != null && !id.isBlank()) {
+            label = "Assignment " + id + (resource != null && !resource.isBlank() ? " – " + resource : "");
+        } else if (resource != null && !resource.isBlank()) {
+            label = "Assignment – " + resource;
+        } else {
+            label = "Assignment";
+        }
+        return new AssociableDocument(label, label);
+    }
+
     private void addLog() {
         if (currentData == null) {
             return;
         }
         JComboBox<ActivityLogScope> scopeCombo = new JComboBox<>(ActivityLogScope.values());
-        JTextField linkedIdField = UiSupport.textField();
+        JComboBox<AssociableDocument> linkedDocCombo = new JComboBox<>();
+        // Populate initially for ICP scope
+        documentsForScope(ActivityLogScope.ICP).forEach(linkedDocCombo::addItem);
         JPanel input = UiSupport.formPanel();
         UiSupport.addRow(input, 0, "Scope", scopeCombo);
-        UiSupport.addRow(input, 1, "Linked form ID (optional)", linkedIdField);
+        UiSupport.addRow(input, 1, "Associated document", linkedDocCombo);
+        scopeCombo.addActionListener(e -> {
+            ActivityLogScope selected = (ActivityLogScope) scopeCombo.getSelectedItem();
+            linkedDocCombo.removeAllItems();
+            documentsForScope(selected).forEach(linkedDocCombo::addItem);
+        });
         JScrollPane scrollPane = new JScrollPane(input);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(this, "Add Activity Log", scrollPane, new Dimension(480, 160))) {
@@ -272,7 +343,8 @@ public class Ics214Panel extends JPanel {
         saveActiveLog();
         Ics214Form form = new Ics214Form();
         form.setLogScope((ActivityLogScope) scopeCombo.getSelectedItem());
-        form.setLinkedFormId(linkedIdField.getText().trim());
+        AssociableDocument selectedDoc = (AssociableDocument) linkedDocCombo.getSelectedItem();
+        form.setLinkedFormId(selectedDoc != null ? selectedDoc.linkedFormId() : "");
         currentData.getActivityLogs().add(form);
         int newIndex = currentData.getActivityLogs().size() - 1;
         updatingSelection = true;
