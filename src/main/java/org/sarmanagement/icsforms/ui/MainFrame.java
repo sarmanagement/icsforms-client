@@ -518,8 +518,24 @@ public class MainFrame extends JFrame {
         }
         Ics214Form form = new Ics214Form();
         form.setLinkedSarTaskAssignmentId(assignmentId);
-        form.setName(resource.getResourceIdentifier());
-        form.setIcsPosition(resource.getLeaderRole());
+        String resourceName = resource.getResourceIdentifier();
+        form.setName(resourceName);
+        // Look up the linked SAR task assignment to populate section 6 and derive the leader's ICS position.
+        data.getSarTaskAssignments().stream()
+                .filter(a -> assignmentId.equals(a.getAssignmentId()))
+                .findFirst()
+                .ifPresentOrElse(
+                        taf -> {
+                            form.setResourcesAssigned(new java.util.ArrayList<>(taf.getResourcesAssigned()));
+                            taf.getResourcesAssigned().stream()
+                                    .filter(r -> resource.getLeaderRole().equalsIgnoreCase(r.getFunction())
+                                            || resource.getLeaderRole().equalsIgnoreCase(r.getIcsPosition()))
+                                    .findFirst()
+                                    .ifPresentOrElse(
+                                            leader -> form.setIcsPosition(leader.getIcsPosition()),
+                                            () -> form.setIcsPosition(resource.getLeaderRole()));
+                        },
+                        () -> form.setIcsPosition(resource.getLeaderRole()));
         data.getActivityLogs().add(form);
         controller.markDirty(AppController.LinkSource.ICS214);
         rebuildLogTabs();
@@ -648,10 +664,16 @@ public class MainFrame extends JFrame {
     }
 
     private static String shortLogTabTitle(Ics214Form form, AppData data) {
+        // For resource-linked logs (TASK_ASSIGNMENT), identify the tab by the resource name (section 3)
+        // so it reads "ICS 214 – Team X" matching the Resource column in the ICS 204 grid.
+        if (form.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT) {
+            String name = form.getName();
+            return name.isBlank() ? "ICS 214 – Task" : "ICS 214 – " + truncate(name, 20);
+        }
         String scope = switch (form.getLogScope()) {
             case ICP -> "ICP";
             case ASSIGNMENT_LIST -> "Asmt";
-            case TASK_ASSIGNMENT -> "Task";
+            default -> "";
         };
         String linked = truncate(resolveLinkedDocumentLabel(form, data), 10);
         return linked.isBlank() ? "ICS 214 – " + scope : "ICS 214 – " + scope + " " + linked;

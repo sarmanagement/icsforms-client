@@ -217,7 +217,7 @@ public class Ics214Panel extends JPanel {
             return;
         }
         List<ActivityEventType> types = resolvedEventTypes();
-        ActivityEntryEditor editor = new ActivityEntryEditor(types);
+        ActivityEntryEditor editor = new ActivityEntryEditor(types, currentForm.getName());
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(this, "Add activity entry", scrollPane, new Dimension(640, 320))) {
@@ -275,7 +275,7 @@ public class Ics214Panel extends JPanel {
         private final JTextField resourceIdentifierField = UiSupport.textField();
         private final JTextArea notableActivityField = UiSupport.textArea(4);
 
-        private ActivityEntryEditor(List<ActivityEventType> eventTypes) {
+        private ActivityEntryEditor(List<ActivityEventType> eventTypes, String defaultResourceIdentifier) {
             ActivityEventType[] typeArray = eventTypes.toArray(new ActivityEventType[0]);
             eventTypeField = new JComboBox<>(typeArray);
             // Select the free-text / Note type by default.
@@ -284,6 +284,9 @@ public class Ics214Panel extends JPanel {
                     eventTypeField.setSelectedItem(t);
                     break;
                 }
+            }
+            if (defaultResourceIdentifier != null && !defaultResourceIdentifier.isBlank()) {
+                resourceIdentifierField.setText(defaultResourceIdentifier);
             }
             UiSupport.addRow(panel, 0, "Date/time", timestampField);
             UiSupport.addRow(panel, 1, "Event type", eventTypeField);
