@@ -52,15 +52,18 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void renderDocument(PDDocument document, AppData data) throws IOException {
         IncidentContext context = data.getIncidentContext() == null ? new IncidentContext() : data.getIncidentContext();
-        Ics214Form form = data.getActivityLogs().isEmpty() ? new Ics214Form() : data.getActivityLogs().get(0);
         List<ActivityEventType> eventTypes = data.getActivityEventTypes().isEmpty()
                 ? ActivityEventType.defaultTypes() : data.getActivityEventTypes();
-        int rowsPerPage = activityRowsPerPage();
-        int totalPages = Math.max(1, (int) Math.ceil(Math.max(1, form.getActivityLog().size()) / (double) rowsPerPage));
-        for (int pageIndex = 0; pageIndex < totalPages; pageIndex++) {
-            int startIndex = pageIndex * rowsPerPage;
-            int endIndex = Math.min(form.getActivityLog().size(), startIndex + rowsPerPage);
-            renderPage(document, context, form, eventTypes, form.getActivityLog().subList(startIndex, endIndex), pageIndex + 1, totalPages);
+        List<Ics214Form> logs = data.getActivityLogs().isEmpty()
+                ? List.of(new Ics214Form()) : data.getActivityLogs();
+        for (Ics214Form form : logs) {
+            int rowsPerPage = activityRowsPerPage();
+            int totalPages = Math.max(1, (int) Math.ceil(Math.max(1, form.getActivityLog().size()) / (double) rowsPerPage));
+            for (int pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+                int startIndex = pageIndex * rowsPerPage;
+                int endIndex = Math.min(form.getActivityLog().size(), startIndex + rowsPerPage);
+                renderPage(document, context, form, eventTypes, form.getActivityLog().subList(startIndex, endIndex), pageIndex + 1, totalPages);
+            }
         }
     }
 

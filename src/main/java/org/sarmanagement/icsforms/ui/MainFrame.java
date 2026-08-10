@@ -1,9 +1,11 @@
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
@@ -22,6 +24,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JRadioButtonMenuItem;
+import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingConstants;
 import javax.swing.event.MenuEvent;
@@ -79,6 +82,7 @@ public class MainFrame extends JFrame {
         this.ics204Panel = new Ics204Panel(controller);
         this.sarTaskPanel = new SarTaskPanel(controller);
         this.clueLogPanel = new ClueLogPanel(controller);
+        ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
         groupVisible.put(CORE_GROUP, true);
         groupVisible.put(ACTIVITY_LOGS_GROUP, true);
         registerTab("Shared", incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
@@ -132,6 +136,7 @@ public class MainFrame extends JFrame {
         JMenu viewMenu = new JMenu("View");
         JMenu exportMenu = new JMenu("Export");
         JMenu logsMenu = new JMenu("Logs");
+        JMenu configMenu = new JMenu("Configuration");
         JMenu logsListMenu = new JMenu("Go to Log");
 
         JMenuItem newItem = new JMenuItem("New");
@@ -248,10 +253,14 @@ public class MainFrame extends JFrame {
         logsMenu.add(removeCurrentLogItem);
         logsMenu.addSeparator();
         logsMenu.add(logsListMenu);
+        JMenuItem manageEventTypesItem = new JMenuItem("Manage Event Types…");
+        manageEventTypesItem.addActionListener(event -> manageEventTypes());
+        configMenu.add(manageEventTypesItem);
         bar.add(fileMenu);
         bar.add(viewMenu);
         bar.add(exportMenu);
         bar.add(logsMenu);
+        bar.add(configMenu);
         return bar;
     }
 
@@ -473,6 +482,51 @@ public class MainFrame extends JFrame {
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             consumer.accept(chooser.getSelectedFile().toPath());
         }
+    }
+
+    private void manageEventTypes() {
+        pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+        AppData data = controller.getData();
+        List<ActivityEventType> initial = data.getActivityEventTypes().isEmpty()
+                ? ActivityEventType.defaultTypes() : new ArrayList<>(data.getActivityEventTypes());
+        Ics214Panel.EventTypeManagerDialog dialog = new Ics214Panel.EventTypeManagerDialog(initial);
+        JScrollPane scrollPane = new JScrollPane(dialog.panel);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        if (UiSupport.showResizableConfirmDialog(this, "Manage event types", scrollPane, new Dimension(480, 380))) {
+            data.setActivityEventTypes(dialog.getEventTypes());
+            controller.markDirty(AppController.LinkSource.ICS214);
+            for (Ics214Panel panel : ics214Panels) {
+                panel.refreshEventTypes();
+            }
+        }
+    }
+
+    private void addOrOpenLog214ForResource(ResourceAssignment resource) {
+        pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+        AppData data = controller.getData();
+        String assignmentId = resource.getAssignmentId();
+        for (int i = 0; i < data.getActivityLogs().size(); i++) {
+            Ics214Form existing = data.getActivityLogs().get(i);
+            if (assignmentId.equals(existing.getLinkedSarTaskAssignmentId())) {
+                groupVisible.put(ACTIVITY_LOGS_GROUP, true);
+                rebuildVisibleTabs(ics214Panels.get(i), i);
+                if (tabs.indexOfComponent(ics214Panels.get(i)) >= 0) {
+                    tabs.setSelectedComponent(ics214Panels.get(i));
+                }
+                return;
+            }
+        }
+        Ics214Form form = new Ics214Form();
+        form.setLinkedSarTaskAssignmentId(assignmentId);
+        form.setName(resource.getResourceIdentifier());
+        form.setIcsPosition(resource.getLeaderRole());
+        data.getActivityLogs().add(form);
+        controller.markDirty(AppController.LinkSource.ICS214);
+        rebuildLogTabs();
+        groupVisible.put(ACTIVITY_LOGS_GROUP, true);
+        int newIndex = data.getActivityLogs().size() - 1;
+        rebuildVisibleTabs(newIndex < ics214Panels.size() ? ics214Panels.get(newIndex) : null, newIndex);
+        refreshStatus();
     }
 
     private void addLog() {

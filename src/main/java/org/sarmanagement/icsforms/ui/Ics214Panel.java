@@ -2,8 +2,10 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
+import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 
 import javax.swing.BorderFactory;
@@ -31,8 +33,8 @@ import java.util.List;
  * First-cut editor for ICS 214 activity log data.
  *
  * <p>Event types shown in the entry dialog are read from
- * {@link AppData#getActivityEventTypes()}, which can be extended by the operator
- * using the <em>Manage Event Types</em> button.</p>
+ * {@link AppData#getActivityEventTypes()}, which can be managed via the
+ * Configuration menu.</p>
  */
 public class Ics214Panel extends JPanel {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -45,6 +47,7 @@ public class Ics214Panel extends JPanel {
     private final JTextField preparedByPositionField = UiSupport.textField();
     private final JTextField preparedBySignatureField = UiSupport.textField();
     private final JSpinner preparedDateTimeField = UiSupport.dateTimeSpinner();
+    private final JButton pickPreparerButton = new JButton("Pick preparer from task…");
     private final ResourcesTableModel resourcesTableModel = new ResourcesTableModel();
     private final ActivityLogTableModel activityLogTableModel = new ActivityLogTableModel();
     private final JTable resourcesTable = new JTable(resourcesTableModel);
@@ -71,6 +74,11 @@ public class Ics214Panel extends JPanel {
         UiSupport.addRow(form, 5, "Prepared by signature", preparedBySignatureField);
         UiSupport.addRow(form, 6, "Prepared date/time", preparedDateTimeField);
 
+        pickPreparerButton.setEnabled(false);
+        pickPreparerButton.addActionListener(event -> pickPreparerFromTask());
+        JPanel pickPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        pickPanel.add(pickPreparerButton);
+
         resourcesTable.setFillsViewportHeight(true);
         activityLogTable.setFillsViewportHeight(true);
 
@@ -87,11 +95,16 @@ public class Ics214Panel extends JPanel {
         tablesPanel.add(resourcesPanel);
         tablesPanel.add(activityPanel);
 
+        JPanel northPanel = new JPanel(new BorderLayout());
+
         JScrollPane formScrollPane = new JScrollPane(form);
         formScrollPane.setBorder(BorderFactory.createEmptyBorder());
         formScrollPane.setPreferredSize(new Dimension(0, 240));
 
-        add(formScrollPane, BorderLayout.NORTH);
+        northPanel.add(formScrollPane, BorderLayout.CENTER);
+        northPanel.add(pickPanel, BorderLayout.SOUTH);
+
+        add(northPanel, BorderLayout.NORTH);
         add(tablesPanel, BorderLayout.CENTER);
     }
 
@@ -106,6 +119,7 @@ public class Ics214Panel extends JPanel {
         currentData = data == null ? new AppData() : data;
         if (currentForm == null) {
             clearFields();
+            pickPreparerButton.setEnabled(false);
             return;
         }
         nameField.setText(nullSafe(currentForm.getName()));
@@ -117,6 +131,8 @@ public class Ics214Panel extends JPanel {
         preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
         resourcesTableModel.setRows(currentForm.getResourcesAssigned());
         activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
+        pickPreparerButton.setEnabled(currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT
+                && !linkedTaskResources().isEmpty());
     }
 
     /** Saves current field values into the stored model reference. */
@@ -135,12 +151,65 @@ public class Ics214Panel extends JPanel {
         currentForm.setActivityLog(activityLogTableModel.getRows());
     }
 
+    /** Reloads event type labels after the event type list has been modified. */
+    public void refreshEventTypes() {
+        if (currentForm != null) {
+            activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
+        }
+    }
+
     /** Returns the configured event types, falling back to defaults when empty. */
     private List<ActivityEventType> resolvedEventTypes() {
         if (currentData == null || currentData.getActivityEventTypes().isEmpty()) {
             return ActivityEventType.defaultTypes();
         }
         return currentData.getActivityEventTypes();
+    }
+
+    /** Returns the resources assigned to the linked SAR task, or an empty list. */
+    private List<SarTaskResource> linkedTaskResources() {
+        if (currentForm == null || currentData == null) {
+            return List.of();
+        }
+        String taskId = currentForm.getLinkedSarTaskAssignmentId();
+        if (taskId == null || taskId.isBlank()) {
+            return List.of();
+        }
+        return currentData.getSarTaskAssignments().stream()
+                .filter(t -> taskId.equals(t.getAssignmentId()))
+                .findFirst()
+                .map(SarTaskAssignment::getResourcesAssigned)
+                .orElse(List.of());
+    }
+
+    private void pickPreparerFromTask() {
+        List<SarTaskResource> resources = linkedTaskResources();
+        if (resources.isEmpty()) {
+            return;
+        }
+        SarTaskResource[] resourceArray = resources.toArray(new SarTaskResource[0]);
+        JComboBox<SarTaskResource> combo = new JComboBox<>(resourceArray);
+        combo.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
+            JLabel label = new JLabel(value == null ? "" : value.getName() + " (" + value.getIcsPosition() + ")");
+            if (isSelected) {
+                label.setBackground(list.getSelectionBackground());
+                label.setForeground(list.getSelectionForeground());
+                label.setOpaque(true);
+            }
+            return label;
+        });
+        int result = JOptionPane.showConfirmDialog(this, combo, "Pick preparer", JOptionPane.OK_CANCEL_OPTION);
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
+        SarTaskResource selected = (SarTaskResource) combo.getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+        preparedByNameField.setText(nullSafe(selected.getName()));
+        preparedByPositionField.setText(nullSafe(selected.getIcsPosition()));
+        homeAgencyField.setText(nullSafe(selected.getHomeAgency()));
+        controller.markDirty();
     }
 
     private void addActivityEntry() {
@@ -168,34 +237,14 @@ public class Ics214Panel extends JPanel {
         controller.markDirty();
     }
 
-    private void manageEventTypes() {
-        if (currentData == null) {
-            return;
-        }
-        EventTypeManagerDialog dialog = new EventTypeManagerDialog(
-                new ArrayList<>(resolvedEventTypes()));
-        JScrollPane scrollPane = new JScrollPane(dialog.panel);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        if (UiSupport.showResizableConfirmDialog(this, "Manage event types", scrollPane, new Dimension(480, 380))) {
-            currentData.setActivityEventTypes(dialog.getEventTypes());
-            activityLogTableModel.setRows(
-                    currentForm != null ? currentForm.getActivityLog() : List.of(),
-                    resolvedEventTypes());
-            controller.markDirty();
-        }
-    }
-
     private JPanel activityButtonsPanel() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton add = new JButton("Add Entry");
         JButton remove = new JButton("Remove Entry");
-        JButton manage = new JButton("Manage Event Types");
         add.addActionListener(event -> addActivityEntry());
         remove.addActionListener(event -> removeSelectedActivityEntry(activityLogTable.getSelectedRow()));
-        manage.addActionListener(event -> manageEventTypes());
         panel.add(add);
         panel.add(remove);
-        panel.add(manage);
         return panel;
     }
 
@@ -254,15 +303,15 @@ public class Ics214Panel extends JPanel {
     }
 
     // -------------------------------------------------------------------------
-    // Event type manager dialog
+    // Event type manager dialog (invoked from Configuration menu via MainFrame)
     // -------------------------------------------------------------------------
 
-    private static class EventTypeManagerDialog {
-        private final JPanel panel = new JPanel(new BorderLayout(4, 4));
+    static class EventTypeManagerDialog {
+        final JPanel panel = new JPanel(new BorderLayout(4, 4));
         private final EventTypesTableModel tableModel;
         private final JTable table;
 
-        private EventTypeManagerDialog(List<ActivityEventType> initial) {
+        EventTypeManagerDialog(List<ActivityEventType> initial) {
             tableModel = new EventTypesTableModel(initial);
             table = new JTable(tableModel);
             table.setFillsViewportHeight(true);
@@ -316,7 +365,7 @@ public class Ics214Panel extends JPanel {
             }
         }
 
-        private List<ActivityEventType> getEventTypes() {
+        List<ActivityEventType> getEventTypes() {
             return tableModel.getTypes();
         }
     }
