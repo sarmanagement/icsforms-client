@@ -4,12 +4,14 @@ import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -223,9 +225,60 @@ public class Ics214Panel extends JPanel {
         if (!UiSupport.showResizableConfirmDialog(this, "Add activity entry", scrollPane, new Dimension(640, 320))) {
             return;
         }
-        currentForm.getActivityLog().add(editor.toEntry());
+        ActivityLogEntry entry = editor.toEntry();
+        currentForm.getActivityLog().add(entry);
         activityLogTableModel.setRows(currentForm.getActivityLog(), types);
+
+        // For clue-related event types, open the clue capture dialog.
+        String eventTypeId = entry.getEventTypeId();
+        boolean isClueDetected = ActivityEventType.ID_CLUE_DETECTED.equals(eventTypeId);
+        boolean isClueReported = ActivityEventType.ID_CLUE_REPORTED.equals(eventTypeId);
+        if ((isClueDetected || isClueReported) && currentData != null) {
+            captureClue(entry, isClueReported);
+        }
+
         controller.markDirty();
+    }
+
+    /**
+     * Shows the clue capture dialog pre-populated from the given activity log entry and adds the
+     * result to the shared clue log.  For "Clue Reported" entries the "Possible Duplicate" checkbox
+     * is pre-checked to flag that the detecting resource may have already logged the same clue.
+     */
+    private void captureClue(ActivityLogEntry sourceEntry, boolean possibleDuplicateDefault) {
+        JPanel form = UiSupport.formPanel();
+        JTextField locationField = UiSupport.textField();
+        JTextArea descriptionArea = UiSupport.textArea(3);
+        JTextArea immediateActionArea = UiSupport.textArea(2);
+        JTextArea followUpArea = UiSupport.textArea(2);
+        JCheckBox possibleDuplicateCheck = new JCheckBox("Possible duplicate (another resource may have logged this clue)");
+        possibleDuplicateCheck.setSelected(possibleDuplicateDefault);
+
+        UiSupport.addRow(form, 0, "Location / position", locationField);
+        UiSupport.addRow(form, 1, "Description", new JScrollPane(descriptionArea));
+        UiSupport.addRow(form, 2, "Immediate action taken", new JScrollPane(immediateActionArea));
+        UiSupport.addRow(form, 3, "Follow-up required", new JScrollPane(followUpArea));
+        UiSupport.addRow(form, 4, "", possibleDuplicateCheck);
+
+        JScrollPane scrollPane = new JScrollPane(form);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        if (!UiSupport.showResizableConfirmDialog(this, "Capture clue details", scrollPane, new Dimension(640, 380))) {
+            return;
+        }
+
+        ClueLogEntry clue = new ClueLogEntry();
+        clue.setDateTimeCollected(sourceEntry.getTimestamp());
+        clue.setDetectingTask(currentForm.getName());
+        clue.setLocation(locationField.getText().trim());
+        clue.setDescription(descriptionArea.getText().trim());
+        clue.setImmediateAction(immediateActionArea.getText().trim());
+        clue.setFollowUp(followUpArea.getText().trim());
+        clue.setPossibleDuplicate(possibleDuplicateCheck.isSelected());
+        String taskId = currentForm.getLinkedSarTaskAssignmentId();
+        if (taskId != null && !taskId.isBlank()) {
+            clue.setAssignmentId(taskId);
+        }
+        currentData.getClueLogEntries().add(clue);
     }
 
     private void removeSelectedActivityEntry(int row) {

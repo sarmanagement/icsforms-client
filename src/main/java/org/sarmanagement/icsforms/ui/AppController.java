@@ -459,6 +459,15 @@ public class AppController {
         }
         if (data.getActivityEventTypes() == null || data.getActivityEventTypes().isEmpty()) {
             data.setActivityEventTypes(new ArrayList<>(ActivityEventType.defaultTypes()));
+        } else {
+            // Backfill any built-in types introduced after the initial seed.
+            List<String> existing = data.getActivityEventTypes().stream()
+                    .map(ActivityEventType::getId).toList();
+            for (ActivityEventType builtIn : ActivityEventType.defaultTypes()) {
+                if (!existing.contains(builtIn.getId())) {
+                    data.getActivityEventTypes().add(builtIn);
+                }
+            }
         }
         if (data.getSarTaskAssignments() == null) {
             data.setSarTaskAssignments(new ArrayList<>());

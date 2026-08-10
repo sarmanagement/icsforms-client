@@ -45,7 +45,7 @@ public class ClueLogPanel extends JPanel {
     }
 
     private static class ClueLogTableModel extends AbstractTableModel {
-        private final String[] columns = {"Detecting Task", "Date/Time Collected", "Location", "Description", "Follow Up"};
+        private final String[] columns = {"Detecting Task", "Date/Time Collected", "Location", "Description", "Immediate Action", "Poss. Dup", "Follow Up"};
         private List<ClueLogEntry> rows = new ArrayList<>();
 
         void setRows(List<ClueLogEntry> rows) {
@@ -68,6 +68,11 @@ public class ClueLogPanel extends JPanel {
         @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return true; }
 
         @Override
+        public Class<?> getColumnClass(int columnIndex) {
+            return columnIndex == 5 ? Boolean.class : String.class;
+        }
+
+        @Override
         public Object getValueAt(int rowIndex, int columnIndex) {
             ClueLogEntry row = rows.get(rowIndex);
             return switch (columnIndex) {
@@ -75,6 +80,8 @@ public class ClueLogPanel extends JPanel {
                 case 1 -> SarTaskPanel.formatDateTimeValue(row.getDateTimeCollected());
                 case 2 -> row.getLocation();
                 case 3 -> row.getDescription();
+                case 4 -> row.getImmediateAction();
+                case 5 -> row.isPossibleDuplicate();
                 default -> row.getFollowUp();
             };
         }
@@ -82,13 +89,14 @@ public class ClueLogPanel extends JPanel {
         @Override
         public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
             ClueLogEntry row = rows.get(rowIndex);
-            String value = aValue == null ? "" : aValue.toString();
             switch (columnIndex) {
-                case 0 -> row.setDetectingTask(value);
-                case 1 -> row.setDateTimeCollected(SarTaskPanel.parseDateTimeValue(value));
-                case 2 -> row.setLocation(value);
-                case 3 -> row.setDescription(value);
-                default -> row.setFollowUp(value);
+                case 0 -> row.setDetectingTask(aValue == null ? "" : aValue.toString());
+                case 1 -> row.setDateTimeCollected(SarTaskPanel.parseDateTimeValue(aValue == null ? "" : aValue.toString()));
+                case 2 -> row.setLocation(aValue == null ? "" : aValue.toString());
+                case 3 -> row.setDescription(aValue == null ? "" : aValue.toString());
+                case 4 -> row.setImmediateAction(aValue == null ? "" : aValue.toString());
+                case 5 -> row.setPossibleDuplicate(Boolean.TRUE.equals(aValue));
+                default -> row.setFollowUp(aValue == null ? "" : aValue.toString());
             }
             fireTableCellUpdated(rowIndex, columnIndex);
         }

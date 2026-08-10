@@ -490,6 +490,8 @@ public class SarTaskPanel extends JPanel {
             clue.setDateTimeCollected(entry.getDateTimeCollected());
             clue.setLocation(entry.getLocation().trim());
             clue.setDescription(entry.getDescription().trim());
+            clue.setImmediateAction(entry.getImmediateAction().trim());
+            clue.setPossibleDuplicate(entry.isPossibleDuplicate());
             clue.setFollowUp(entry.getFollowUp().trim());
             clues.add(clue);
         }
@@ -531,7 +533,7 @@ public class SarTaskPanel extends JPanel {
     }
 
     private static class ClueEntriesTableModel extends AbstractTableModel {
-        private final String[] columns = {"Date/Time", "Location", "Description", "Follow Up"};
+        private final String[] columns = {"Date/Time", "Location", "Description", "Immediate Action", "Poss. Dup", "Follow Up"};
         private final List<ClueLogEntry> rows = new ArrayList<>();
 
         private void setRows(List<ClueLogEntry> clues) {
@@ -544,6 +546,8 @@ public class SarTaskPanel extends JPanel {
                     copy.setDateTimeCollected(clue.getDateTimeCollected());
                     copy.setLocation(clue.getLocation());
                     copy.setDescription(clue.getDescription());
+                    copy.setImmediateAction(clue.getImmediateAction());
+                    copy.setPossibleDuplicate(clue.isPossibleDuplicate());
                     copy.setFollowUp(clue.getFollowUp());
                     rows.add(copy);
                 }
@@ -584,12 +588,19 @@ public class SarTaskPanel extends JPanel {
         }
 
         @Override
+        public Class<?> getColumnClass(int columnIndex) {
+            return columnIndex == 4 ? Boolean.class : String.class;
+        }
+
+        @Override
         public Object getValueAt(int rowIndex, int columnIndex) {
             ClueLogEntry row = rows.get(rowIndex);
             return switch (columnIndex) {
                 case 0 -> formatDateTimeValue(row.getDateTimeCollected());
                 case 1 -> row.getLocation();
                 case 2 -> row.getDescription();
+                case 3 -> row.getImmediateAction();
+                case 4 -> row.isPossibleDuplicate();
                 default -> row.getFollowUp();
             };
         }
@@ -597,12 +608,13 @@ public class SarTaskPanel extends JPanel {
         @Override
         public void setValueAt(Object value, int rowIndex, int columnIndex) {
             ClueLogEntry row = rows.get(rowIndex);
-            String text = value == null ? "" : value.toString().trim();
             switch (columnIndex) {
-                case 0 -> row.setDateTimeCollected(parseDateTimeValue(text));
-                case 1 -> row.setLocation(text);
-                case 2 -> row.setDescription(text);
-                default -> row.setFollowUp(text);
+                case 0 -> row.setDateTimeCollected(parseDateTimeValue(value == null ? "" : value.toString().trim()));
+                case 1 -> row.setLocation(value == null ? "" : value.toString().trim());
+                case 2 -> row.setDescription(value == null ? "" : value.toString().trim());
+                case 3 -> row.setImmediateAction(value == null ? "" : value.toString().trim());
+                case 4 -> row.setPossibleDuplicate(Boolean.TRUE.equals(value));
+                default -> row.setFollowUp(value == null ? "" : value.toString().trim());
             }
             fireTableCellUpdated(rowIndex, columnIndex);
         }

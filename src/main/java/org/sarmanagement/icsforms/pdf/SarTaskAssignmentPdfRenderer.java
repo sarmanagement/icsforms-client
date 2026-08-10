@@ -498,12 +498,18 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             lines.add("");
             lines.add("Clues Detected:");
             for (ClueLogEntry clue : clues) {
+                String dupFlag = clue.isPossibleDuplicate() ? " [POSSIBLE DUPLICATE]" : "";
                 String clueSummary = joinNonBlank(
                         formatDateTime(clue.getDateTimeCollected()),
                         safe(clue.getLocation()),
-                        safe(clue.getDescription()),
-                        safe(clue.getFollowUp()));
-                addWrappedBlock(lines, "- " + clueSummary, 92);
+                        safe(clue.getDescription()));
+                addWrappedBlock(lines, "- " + clueSummary + dupFlag, 92);
+                if (!safe(clue.getImmediateAction()).isBlank()) {
+                    addWrappedBlock(lines, "  Action taken: " + clue.getImmediateAction(), 90);
+                }
+                if (!safe(clue.getFollowUp()).isBlank()) {
+                    addWrappedBlock(lines, "  Follow-up: " + clue.getFollowUp(), 90);
+                }
             }
         }
         List<PodFactorRating> factors = SarTaskSupport.factorRatings(task.getResourceType(), task.getQualitativePodFactors());

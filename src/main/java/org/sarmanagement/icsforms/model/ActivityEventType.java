@@ -14,6 +14,9 @@ public class ActivityEventType {
     /** Stable identifier for the built-in "Clue Detected" type. */
     public static final String ID_CLUE_DETECTED = "CLUE_DETECTED";
 
+    /** Stable identifier for the built-in "Clue Reported" type (another resource found and reported it). */
+    public static final String ID_CLUE_REPORTED = "CLUE_REPORTED";
+
     /** Stable identifier for the built-in "Subject Found" type. */
     public static final String ID_SUBJECT_FOUND = "SUBJECT_FOUND";
 
@@ -64,6 +67,7 @@ public class ActivityEventType {
         return List.of(
                 new ActivityEventType(ID_FREE_TEXT, "Note", true),
                 new ActivityEventType(ID_CLUE_DETECTED, "Clue Detected", true),
+                new ActivityEventType(ID_CLUE_REPORTED, "Clue Reported", true),
                 new ActivityEventType(ID_SUBJECT_FOUND, "Subject Found", true),
                 new ActivityEventType(ID_RESOURCE_ON_TASK, "Resource Going on Task", true),
                 new ActivityEventType(ID_TASK_COMPLETED, "Task Completed", true),
