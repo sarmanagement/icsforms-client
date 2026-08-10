@@ -6,10 +6,16 @@ import java.util.List;
 
 /**
  * First-cut ICS 214 activity log content and prepared-by details.
+ *
+ * <p>Each log is associated with at most one other data object through a typed
+ * relationship: an ICS 204 assignment list (referenced by {@link #linkedIcs204FormId})
+ * or a SAR task assignment (referenced by {@link #linkedSarTaskAssignmentId}).  When
+ * neither reference is set the log belongs to the ICP/command-post level.
+ * The operational scope is derived from these typed fields via {@link #getLogScope()}.</p>
  */
 public class Ics214Form {
-    private ActivityLogScope logScope = ActivityLogScope.ICP;
-    private String linkedFormId = "";
+    private String linkedIcs204FormId = "";
+    private String linkedSarTaskAssignmentId = "";
     private String name = "";
     private String icsPosition = "";
     private String homeAgency = "";
@@ -21,39 +27,70 @@ public class Ics214Form {
     private LocalDateTime preparedDateTime;
 
     /**
-     * Returns the log scope.
+     * Returns the operational scope derived from the typed association fields.
      *
-     * @return log scope.
+     * <ul>
+     *   <li>{@link ActivityLogScope#TASK_ASSIGNMENT} when {@link #linkedSarTaskAssignmentId} is set.</li>
+     *   <li>{@link ActivityLogScope#ASSIGNMENT_LIST} when {@link #linkedIcs204FormId} is set.</li>
+     *   <li>{@link ActivityLogScope#ICP} when neither typed reference is set.</li>
+     * </ul>
+     *
+     * @return derived log scope.
      */
     public ActivityLogScope getLogScope() {
-        return logScope;
+        if (linkedSarTaskAssignmentId != null && !linkedSarTaskAssignmentId.isBlank()) {
+            return ActivityLogScope.TASK_ASSIGNMENT;
+        }
+        if (linkedIcs204FormId != null && !linkedIcs204FormId.isBlank()) {
+            return ActivityLogScope.ASSIGNMENT_LIST;
+        }
+        return ActivityLogScope.ICP;
     }
 
     /**
-     * Sets the log scope.
+     * Returns the {@link org.sarmanagement.icsforms.model.Ics204Form#getFormId() formId} of the
+     * ICS 204 assignment list associated with this log, or an empty string when not linked.
      *
-     * @param logScope log scope.
+     * @return linked ICS 204 form identifier.
      */
-    public void setLogScope(ActivityLogScope logScope) {
-        this.logScope = logScope == null ? ActivityLogScope.ICP : logScope;
+    public String getLinkedIcs204FormId() {
+        return linkedIcs204FormId;
     }
 
     /**
-     * Returns the linked form identifier.
+     * Sets the ICS 204 form identifier for an assignment-list-scoped log.
+     * Clears {@link #linkedSarTaskAssignmentId} so the two typed references stay mutually exclusive.
      *
-     * @return linked form identifier.
+     * @param linkedIcs204FormId ICS 204 form identifier, or {@code null}/blank to clear.
      */
-    public String getLinkedFormId() {
-        return linkedFormId;
+    public void setLinkedIcs204FormId(String linkedIcs204FormId) {
+        this.linkedIcs204FormId = linkedIcs204FormId == null ? "" : linkedIcs204FormId;
+        if (!this.linkedIcs204FormId.isBlank()) {
+            this.linkedSarTaskAssignmentId = "";
+        }
     }
 
     /**
-     * Sets the linked form identifier.
+     * Returns the {@link SarTaskAssignment#getAssignmentId() assignmentId} of the SAR task
+     * assignment associated with this log, or an empty string when not linked.
      *
-     * @param linkedFormId linked form identifier.
+     * @return linked SAR task assignment identifier.
      */
-    public void setLinkedFormId(String linkedFormId) {
-        this.linkedFormId = linkedFormId == null ? "" : linkedFormId;
+    public String getLinkedSarTaskAssignmentId() {
+        return linkedSarTaskAssignmentId;
+    }
+
+    /**
+     * Sets the SAR task assignment identifier for a task-assignment-scoped log.
+     * Clears {@link #linkedIcs204FormId} so the two typed references stay mutually exclusive.
+     *
+     * @param linkedSarTaskAssignmentId SAR task assignment identifier, or {@code null}/blank to clear.
+     */
+    public void setLinkedSarTaskAssignmentId(String linkedSarTaskAssignmentId) {
+        this.linkedSarTaskAssignmentId = linkedSarTaskAssignmentId == null ? "" : linkedSarTaskAssignmentId;
+        if (!this.linkedSarTaskAssignmentId.isBlank()) {
+            this.linkedIcs204FormId = "";
+        }
     }
 
     /**

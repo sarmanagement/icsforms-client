@@ -19,6 +19,48 @@ class Ics214FormTest {
         Ics214Form form = new Ics214Form();
 
         assertSame(ActivityLogScope.ICP, form.getLogScope());
+        assertTrue(form.getLinkedIcs204FormId().isBlank());
+        assertTrue(form.getLinkedSarTaskAssignmentId().isBlank());
+    }
+
+    @Test
+    void formLinkedToIcs204ReportsAssignmentListScope() {
+        Ics214Form form = new Ics214Form();
+        form.setLinkedIcs204FormId("some-uuid");
+
+        assertSame(ActivityLogScope.ASSIGNMENT_LIST, form.getLogScope());
+        assertEquals("some-uuid", form.getLinkedIcs204FormId());
+        assertTrue(form.getLinkedSarTaskAssignmentId().isBlank());
+    }
+
+    @Test
+    void formLinkedToSarTaskReportsTaskAssignmentScope() {
+        Ics214Form form = new Ics214Form();
+        form.setLinkedSarTaskAssignmentId("T-01");
+
+        assertSame(ActivityLogScope.TASK_ASSIGNMENT, form.getLogScope());
+        assertEquals("T-01", form.getLinkedSarTaskAssignmentId());
+        assertTrue(form.getLinkedIcs204FormId().isBlank());
+    }
+
+    @Test
+    void settingIcs204IdClearsSarTaskId() {
+        Ics214Form form = new Ics214Form();
+        form.setLinkedSarTaskAssignmentId("T-01");
+        form.setLinkedIcs204FormId("some-uuid");
+
+        assertTrue(form.getLinkedSarTaskAssignmentId().isBlank());
+        assertSame(ActivityLogScope.ASSIGNMENT_LIST, form.getLogScope());
+    }
+
+    @Test
+    void settingSarTaskIdClearsIcs204Id() {
+        Ics214Form form = new Ics214Form();
+        form.setLinkedIcs204FormId("some-uuid");
+        form.setLinkedSarTaskAssignmentId("T-01");
+
+        assertTrue(form.getLinkedIcs204FormId().isBlank());
+        assertSame(ActivityLogScope.TASK_ASSIGNMENT, form.getLogScope());
     }
 
     @Test

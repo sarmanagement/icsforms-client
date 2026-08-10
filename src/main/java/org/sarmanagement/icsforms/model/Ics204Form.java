@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * First-cut Assignment List (ICS 204) content and resource records.
@@ -15,6 +16,7 @@ public class Ics204Form {
     public static final String MANAGEMENT_DIVISION = "division";
     public static final String MANAGEMENT_GROUP = "group";
 
+    private String formId = UUID.randomUUID().toString();
     private String managementContext = MANAGEMENT_STAGING_AREA;
     private String branch = "";
     private String division = "";
@@ -36,6 +38,24 @@ public class Ics204Form {
     private LocalDateTime preparedDateTime;
     private String formNumber = "ICS 204";
     private String iapPage = "";
+
+    /**
+     * Returns the stable form identifier used to link ICS 214 activity logs to this form.
+     *
+     * @return stable form identifier (UUID string).
+     */
+    public String getFormId() {
+        return formId;
+    }
+
+    /**
+     * Sets the stable form identifier.
+     *
+     * @param formId stable form identifier.
+     */
+    public void setFormId(String formId) {
+        this.formId = (formId == null || formId.isBlank()) ? UUID.randomUUID().toString() : formId;
+    }
 
     /**
      * Returns whether branch, division, or group context requires a supervisor.

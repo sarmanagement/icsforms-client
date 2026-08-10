@@ -315,7 +315,7 @@ public class MainFrame extends JFrame {
                 Ics214Panel panel = new Ics214Panel(controller);
                 panel.loadFromModel(form, data);
                 ics214Panels.add(panel);
-                registerTab(shortLogTabTitle(form), panel, AppController.LinkSource.ICS214, ACTIVITY_LOGS_GROUP);
+                registerTab(shortLogTabTitle(form, data), panel, AppController.LinkSource.ICS214, ACTIVITY_LOGS_GROUP);
                 int insertIndex = tabs.indexOfComponent(sarTaskPanel);
                 if (insertIndex < 0) {
                     insertIndex = tabs.getTabCount();
@@ -496,9 +496,14 @@ public class MainFrame extends JFrame {
             return;
         }
         Ics214Form form = new Ics214Form();
-        form.setLogScope((ActivityLogScope) scopeCombo.getSelectedItem());
         AssociableDocument selectedDoc = (AssociableDocument) linkedDocCombo.getSelectedItem();
-        form.setLinkedFormId(selectedDoc != null ? selectedDoc.linkedFormId() : "");
+        if (selectedDoc != null) {
+            if (!selectedDoc.ics204FormId().isBlank()) {
+                form.setLinkedIcs204FormId(selectedDoc.ics204FormId());
+            } else if (!selectedDoc.sarTaskAssignmentId().isBlank()) {
+                form.setLinkedSarTaskAssignmentId(selectedDoc.sarTaskAssignmentId());
+            }
+        }
         data.getActivityLogs().add(form);
         controller.markDirty(AppController.LinkSource.ICS214);
         rebuildLogTabs();
@@ -581,21 +586,53 @@ public class MainFrame extends JFrame {
     }
 
     private String logMenuLabel(Ics214Form form) {
-        String linked = safe(form.getLinkedFormId());
+        String linked = resolveLinkedDocumentLabel(form, controller.getData());
         if (linked.isBlank()) {
             return form.getLogScope().getLabel();
         }
         return form.getLogScope().getLabel() + " – " + linked;
     }
 
-    private static String shortLogTabTitle(Ics214Form form) {
+    private static String shortLogTabTitle(Ics214Form form, AppData data) {
         String scope = switch (form.getLogScope()) {
             case ICP -> "ICP";
             case ASSIGNMENT_LIST -> "Asmt";
             case TASK_ASSIGNMENT -> "Task";
         };
-        String linked = truncate(safe(form.getLinkedFormId()), 10);
+        String linked = truncate(resolveLinkedDocumentLabel(form, data), 10);
         return linked.isBlank() ? "ICS 214 – " + scope : "ICS 214 – " + scope + " " + linked;
+    }
+
+    /**
+     * Resolves the display label for the document typed-linked to the given form.
+     * Returns an empty string for ICP-level logs.
+     */
+    private static String resolveLinkedDocumentLabel(Ics214Form form, AppData data) {
+        if (data == null) {
+            return "";
+        }
+        String ics204Id = form.getLinkedIcs204FormId();
+        if (!ics204Id.isBlank()) {
+            if (ics204Id.equals(data.getForm204().getFormId())) {
+                return labelStringFor204(data.getForm204(), 1);
+            }
+            List<Ics204Form> additional = data.getAdditionalForms204();
+            for (int i = 0; i < additional.size(); i++) {
+                if (ics204Id.equals(additional.get(i).getFormId())) {
+                    return labelStringFor204(additional.get(i), i + 2);
+                }
+            }
+            return "";
+        }
+        String sarId = form.getLinkedSarTaskAssignmentId();
+        if (!sarId.isBlank()) {
+            return data.getSarTaskAssignments().stream()
+                    .filter(a -> sarId.equals(a.getAssignmentId()))
+                    .findFirst()
+                    .map(MainFrame::labelStringForAssignment)
+                    .orElse("");
+        }
+        return "";
     }
 
     private static String truncate(String value, int maxLength) {
@@ -611,7 +648,22 @@ public class MainFrame extends JFrame {
     }
 
     /** A document that can be linked to an ICS 214 activity log. */
-    private record AssociableDocument(String label, String linkedFormId) {
+    private record AssociableDocument(String label, String ics204FormId, String sarTaskAssignmentId) {
+        /** No associated document (ICP-level log). */
+        static AssociableDocument none() {
+            return new AssociableDocument("(none)", "", "");
+        }
+
+        /** Linked to an ICS 204 assignment list, referenced by its stable {@code formId}. */
+        static AssociableDocument forIcs204(String label, String formId) {
+            return new AssociableDocument(label, formId, "");
+        }
+
+        /** Linked to a SAR task assignment, referenced by its {@code assignmentId}. */
+        static AssociableDocument forSarTask(String label, String assignmentId) {
+            return new AssociableDocument(label, "", assignmentId);
+        }
+
         @Override
         public String toString() {
             return label;
@@ -622,7 +674,7 @@ public class MainFrame extends JFrame {
     private List<AssociableDocument> documentsForScope(AppData data, ActivityLogScope scope) {
         List<AssociableDocument> docs = new ArrayList<>();
         if (data == null || scope == ActivityLogScope.ICP) {
-            docs.add(new AssociableDocument("(none)", ""));
+            docs.add(AssociableDocument.none());
             return docs;
         }
         if (scope == ActivityLogScope.ASSIGNMENT_LIST) {
@@ -637,37 +689,41 @@ public class MainFrame extends JFrame {
             }
         }
         if (docs.isEmpty()) {
-            docs.add(new AssociableDocument("(none)", ""));
+            docs.add(AssociableDocument.none());
         }
         return docs;
     }
 
     private static AssociableDocument labelFor204(Ics204Form form, int ordinal) {
+        return AssociableDocument.forIcs204(labelStringFor204(form, ordinal), form.getFormId());
+    }
+
+    private static String labelStringFor204(Ics204Form form, int ordinal) {
         String context = form.getSelectedContextValue();
         String heading = form.getSelectedContextHeading();
-        String label;
         if (context != null && !context.isBlank()) {
-            label = "ICS 204 – " + heading + " " + context;
-        } else if (form.getIapPage() != null && !form.getIapPage().isBlank()) {
-            label = "ICS 204 – Page " + form.getIapPage();
-        } else {
-            label = "ICS 204 #" + ordinal;
+            return "ICS 204 – " + heading + " " + context;
         }
-        return new AssociableDocument(label, label);
+        if (form.getIapPage() != null && !form.getIapPage().isBlank()) {
+            return "ICS 204 – Page " + form.getIapPage();
+        }
+        return "ICS 204 #" + ordinal;
     }
 
     private static AssociableDocument labelForAssignment(SarTaskAssignment assignment) {
+        return AssociableDocument.forSarTask(labelStringForAssignment(assignment), assignment.getAssignmentId());
+    }
+
+    private static String labelStringForAssignment(SarTaskAssignment assignment) {
         String id = assignment.getAssignmentId();
         String resource = assignment.getResourceIdentifier();
-        String label;
         if (id != null && !id.isBlank()) {
-            label = "Assignment " + id + (resource != null && !resource.isBlank() ? " – " + resource : "");
-        } else if (resource != null && !resource.isBlank()) {
-            label = "Assignment – " + resource;
-        } else {
-            label = "Assignment";
+            return "Assignment " + id + (resource != null && !resource.isBlank() ? " – " + resource : "");
         }
-        return new AssociableDocument(label, label);
+        if (resource != null && !resource.isBlank()) {
+            return "Assignment – " + resource;
+        }
+        return "Assignment";
     }
 
     /**
