@@ -291,6 +291,13 @@ public class Ics214Panel extends JPanel {
                     "Cannot Remove", JOptionPane.WARNING_MESSAGE);
             return;
         }
+        Ics214Form active = selectedLog();
+        if (active != null && !active.getActivityLog().isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "Cannot remove a log that contains activity entries. Remove all entries first.",
+                    "Cannot Remove", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
         int confirm = JOptionPane.showConfirmDialog(this,
                 "Remove the currently selected activity log?",
                 "Remove Log", JOptionPane.YES_NO_OPTION);
