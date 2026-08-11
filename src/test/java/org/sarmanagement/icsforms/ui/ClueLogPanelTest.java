@@ -24,12 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ClueLogPanelTest {
 
     @Test
-    void clueLogOnlyShowsAddButton() throws Exception {
+    void clueLogShowsAddAndFindDuplicatesButtons() throws Exception {
         ClueLogPanel panel = new ClueLogPanel(sampleController());
         JPanel buttons = (JPanel) panel.getComponent(1);
 
-        assertEquals(1, buttons.getComponentCount());
+        assertEquals(2, buttons.getComponentCount());
         assertEquals("Add", ((JButton) buttons.getComponent(0)).getText());
+        assertEquals("Find Duplicates\u2026", ((JButton) buttons.getComponent(1)).getText());
     }
 
     private static AppController sampleController() throws Exception {

@@ -2,6 +2,7 @@ package org.sarmanagement.icsforms;
 
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.pdf.ClueLogPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics214PdfRenderer;
@@ -40,7 +41,8 @@ public final class App {
                     new Ics202PdfRenderer(),
                     new Ics204PdfRenderer(),
                     new Ics214PdfRenderer(),
-                    new SarTaskAssignmentPdfRenderer()
+                    new SarTaskAssignmentPdfRenderer(),
+                    new ClueLogPdfRenderer()
             );
             MainFrame frame = new MainFrame(data, repository, exportService, new IncidentValidator(), Path.of(System.getProperty("user.home")));
             frame.setVisible(true);

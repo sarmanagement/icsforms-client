@@ -200,6 +200,9 @@ public class MainFrame extends JFrame {
         JMenuItem export214Item = new JMenuItem("Export ICS 214 PDF…");
         export214Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 214"));
 
+        JMenuItem exportClueLogItem = new JMenuItem("Export Clue Log PDF…");
+        exportClueLogItem.addActionListener(event -> exportOne(defaultDirectory, "Clue Log"));
+
         JMenuItem exportAllItem = new JMenuItem("Export All PDFs…");
         exportAllItem.addActionListener(event -> {
             AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
@@ -248,6 +251,7 @@ public class MainFrame extends JFrame {
         exportMenu.add(export204Item);
         exportMenu.add(export214Item);
         exportMenu.add(exportSarTaskItem);
+        exportMenu.add(exportClueLogItem);
         exportMenu.add(exportAllItem);
         logsMenu.add(addLogItem);
         logsMenu.add(removeCurrentLogItem);

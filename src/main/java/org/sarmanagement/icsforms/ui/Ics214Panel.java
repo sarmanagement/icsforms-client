@@ -30,6 +30,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * First-cut editor for ICS 214 activity log data.
@@ -234,7 +235,7 @@ public class Ics214Panel extends JPanel {
         boolean isClueDetected = ActivityEventType.ID_CLUE_DETECTED.equals(eventTypeId);
         boolean isClueReported = ActivityEventType.ID_CLUE_REPORTED.equals(eventTypeId);
         if ((isClueDetected || isClueReported) && currentData != null) {
-            captureClue(entry, isClueReported);
+            captureClue(entry, eventTypeId);
         }
 
         controller.markDirty();
@@ -242,43 +243,116 @@ public class Ics214Panel extends JPanel {
 
     /**
      * Shows the clue capture dialog pre-populated from the given activity log entry and adds the
-     * result to the shared clue log.  For "Clue Reported" entries the "Possible Duplicate" checkbox
-     * is pre-checked to flag that the detecting resource may have already logged the same clue.
+     * result to the shared clue log.
+     *
+     * <p>Behaviour differs by log type and event type:</p>
+     * <ul>
+     *   <li>Resource 214 (task-linked): detecting resource is fixed to the form name; no
+     *       possible-duplicate checkbox.</li>
+     *   <li>Management 214 (ICP / assignment-list): detecting resource is chosen from a
+     *       picklist of task-linked 214 forms; possible-duplicate checkbox is shown.</li>
+     *   <li>CLUE_REPORTED: the follow-up field is hidden (follow-up belongs to the detecting
+     *       resource's own log, not the reporter's).</li>
+     * </ul>
+     *
+     * @param sourceEntry the activity log entry that triggered clue capture.
+     * @param eventTypeId the event type identifier ({@code CLUE_DETECTED} or {@code CLUE_REPORTED}).
      */
-    private void captureClue(ActivityLogEntry sourceEntry, boolean possibleDuplicateDefault) {
+    private void captureClue(ActivityLogEntry sourceEntry, String eventTypeId) {
+        boolean isClueReported = ActivityEventType.ID_CLUE_REPORTED.equals(eventTypeId);
+        boolean isResourceLog = currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT;
+
         JPanel form = UiSupport.formPanel();
         JTextField locationField = UiSupport.textField();
         JTextArea descriptionArea = UiSupport.textArea(3);
         JTextArea immediateActionArea = UiSupport.textArea(2);
-        JTextArea followUpArea = UiSupport.textArea(2);
-        JCheckBox possibleDuplicateCheck = new JCheckBox("Possible duplicate (another resource may have logged this clue)");
-        possibleDuplicateCheck.setSelected(possibleDuplicateDefault);
 
-        UiSupport.addRow(form, 0, "Location / position", locationField);
-        UiSupport.addRow(form, 1, "Description", new JScrollPane(descriptionArea));
-        UiSupport.addRow(form, 2, "Immediate action taken", new JScrollPane(immediateActionArea));
-        UiSupport.addRow(form, 3, "Follow-up required", new JScrollPane(followUpArea));
-        UiSupport.addRow(form, 4, "", possibleDuplicateCheck);
+        // Detecting resource: fixed for resource 214, picklist for management 214.
+        JComboBox<String> detectingResourceCombo = null;
+        JLabel detectingResourceLabel = null;
+        if (isResourceLog) {
+            detectingResourceLabel = new JLabel(nullSafe(currentForm.getName()));
+        } else {
+            List<String> resourceNames = taskLinkedFormNames();
+            String[] items = resourceNames.isEmpty()
+                    ? new String[]{""}
+                    : resourceNames.toArray(new String[0]);
+            detectingResourceCombo = new JComboBox<>(items);
+        }
+
+        // Follow-up: hidden for CLUE_REPORTED (belongs to the detecting resource's own log).
+        JTextArea followUpArea = isClueReported ? null : UiSupport.textArea(2);
+
+        // Possible duplicate: shown only for management 214.
+        JCheckBox possibleDuplicateCheck = null;
+        if (!isResourceLog) {
+            possibleDuplicateCheck = new JCheckBox("Possible duplicate (detecting resource may have already logged this clue)");
+            possibleDuplicateCheck.setSelected(isClueReported);
+        }
+
+        int row = 0;
+        if (detectingResourceCombo != null) {
+            UiSupport.addRow(form, row++, "Detecting resource", detectingResourceCombo);
+        } else {
+            UiSupport.addRow(form, row++, "Detecting resource", detectingResourceLabel);
+        }
+        UiSupport.addRow(form, row++, "Location / position", locationField);
+        UiSupport.addRow(form, row++, "Description", new JScrollPane(descriptionArea));
+        UiSupport.addRow(form, row++, "Immediate action taken", new JScrollPane(immediateActionArea));
+        if (followUpArea != null) {
+            UiSupport.addRow(form, row++, "Follow-up required", new JScrollPane(followUpArea));
+        }
+        if (possibleDuplicateCheck != null) {
+            UiSupport.addRow(form, row++, "", possibleDuplicateCheck);
+        }
 
         JScrollPane scrollPane = new JScrollPane(form);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, "Capture clue details", scrollPane, new Dimension(640, 380))) {
+        int dialogHeight = 340 + (followUpArea != null ? 60 : 0) + (possibleDuplicateCheck != null ? 30 : 0);
+        if (!UiSupport.showResizableConfirmDialog(this, "Capture clue details", scrollPane, new Dimension(640, dialogHeight))) {
             return;
+        }
+
+        // Resolve detecting task from dialog.
+        String detectingTask;
+        if (isResourceLog) {
+            detectingTask = nullSafe(currentForm.getName());
+        } else if (detectingResourceCombo != null && detectingResourceCombo.getSelectedItem() != null) {
+            detectingTask = detectingResourceCombo.getSelectedItem().toString();
+        } else {
+            detectingTask = "";
         }
 
         ClueLogEntry clue = new ClueLogEntry();
         clue.setDateTimeCollected(sourceEntry.getTimestamp());
-        clue.setDetectingTask(currentForm.getName());
+        clue.setDetectingTask(detectingTask);
         clue.setLocation(locationField.getText().trim());
         clue.setDescription(descriptionArea.getText().trim());
         clue.setImmediateAction(immediateActionArea.getText().trim());
-        clue.setFollowUp(followUpArea.getText().trim());
-        clue.setPossibleDuplicate(possibleDuplicateCheck.isSelected());
+        clue.setFollowUp(followUpArea != null ? followUpArea.getText().trim() : "");
+        clue.setPossibleDuplicate(possibleDuplicateCheck != null && possibleDuplicateCheck.isSelected());
         String taskId = currentForm.getLinkedSarTaskAssignmentId();
         if (taskId != null && !taskId.isBlank()) {
             clue.setAssignmentId(taskId);
         }
         currentData.getClueLogEntries().add(clue);
+    }
+
+    /**
+     * Returns the names of all ICS 214 forms in the document that are linked to a SAR task
+     * assignment (i.e. resource-level 214 forms).  Used to populate the detecting-resource
+     * picklist in the management-214 clue capture dialog.
+     */
+    private List<String> taskLinkedFormNames() {
+        if (currentData == null) {
+            return List.of();
+        }
+        return currentData.getActivityLogs().stream()
+                .filter(f -> f.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT)
+                .map(Ics214Form::getName)
+                .filter(name -> name != null && !name.isBlank())
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     private void removeSelectedActivityEntry(int row) {
