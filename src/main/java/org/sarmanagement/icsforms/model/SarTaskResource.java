@@ -5,6 +5,8 @@ package org.sarmanagement.icsforms.model;
  */
 public class SarTaskResource {
     private String function = "";
+    private String icsPosition = "";
+    private String homeAgency = "";
     private String name = "";
 
     /** @return resource function or role. */
@@ -15,6 +17,26 @@ public class SarTaskResource {
     /** @param function resource function or role. */
     public void setFunction(String function) {
         this.function = function == null ? "" : function;
+    }
+
+    /** @return ICS position or role. */
+    public String getIcsPosition() {
+        return icsPosition.isBlank() ? function : icsPosition;
+    }
+
+    /** @param icsPosition ICS position or role. */
+    public void setIcsPosition(String icsPosition) {
+        this.icsPosition = icsPosition == null ? "" : icsPosition;
+    }
+
+    /** @return home agency. */
+    public String getHomeAgency() {
+        return homeAgency;
+    }
+
+    /** @param homeAgency home agency. */
+    public void setHomeAgency(String homeAgency) {
+        this.homeAgency = homeAgency == null ? "" : homeAgency;
     }
 
     /** @return resource name. */

@@ -1,12 +1,20 @@
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.ActivityEventType;
+import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
 
 import javax.swing.BorderFactory;
+import javax.swing.ButtonGroup;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -15,13 +23,20 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JRadioButtonMenuItem;
+import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingConstants;
+import javax.swing.event.MenuEvent;
+import javax.swing.event.MenuListener;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,17 +44,25 @@ import java.util.Map;
  * Main Swing frame for editing shared incident data, ICS 202, ICS 204, and SAR task scaffolds.
  */
 public class MainFrame extends JFrame {
+    private static final String CORE_GROUP = "Core";
+    private static final String ACTIVITY_LOGS_GROUP = "Activity Logs";
+
     private final AppController controller;
     private final JLabel validationLabel = new JLabel("Ready", SwingConstants.LEFT);
     private final IncidentContextPanel incidentContextPanel;
     private final OrganizationalChartPanel organizationalChartPanel;
     private final Ics202Panel ics202Panel;
     private final Ics204Panel ics204Panel;
+    private final List<Ics214Panel> ics214Panels = new ArrayList<>();
     private final SarTaskPanel sarTaskPanel;
     private final ClueLogPanel clueLogPanel;
     private final JTabbedPane tabs = new JTabbedPane();
-    private final Map<java.awt.Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
+    private final Map<Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
+    private final Map<Component, String> tabGroups = new IdentityHashMap<>();
+    private final Map<Component, String> tabTitles = new IdentityHashMap<>();
+    private final Map<String, Boolean> groupVisible = new LinkedHashMap<>();
     private int lastSelectedTabIndex = -1;
+    private boolean rebuildingTabs;
 
     /**
      * Creates the main application frame.
@@ -59,6 +82,15 @@ public class MainFrame extends JFrame {
         this.ics204Panel = new Ics204Panel(controller);
         this.sarTaskPanel = new SarTaskPanel(controller);
         this.clueLogPanel = new ClueLogPanel(controller);
+        ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
+        groupVisible.put(CORE_GROUP, true);
+        groupVisible.put(ACTIVITY_LOGS_GROUP, true);
+        registerTab("Shared", incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
+        registerTab("Org Chart", organizationalChartPanel, AppController.LinkSource.ORG_CHART, CORE_GROUP);
+        registerTab("ICS 202", ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
+        registerTab("ICS 204", ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
+        registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, CORE_GROUP);
+        registerTab("Clue Log", clueLogPanel, AppController.LinkSource.NONE, CORE_GROUP);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setPreferredSize(new Dimension(1120, 820));
         setJMenuBar(createMenuBar(defaultDirectory));
@@ -67,17 +99,10 @@ public class MainFrame extends JFrame {
         JPanel content = new JPanel(new BorderLayout(8, 8));
         content.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
-        tabs.addTab("Shared", incidentContextPanel);
-        tabSources.put(incidentContextPanel, AppController.LinkSource.SHARED);
-        tabs.addTab("Org Chart", organizationalChartPanel);
-        tabSources.put(organizationalChartPanel, AppController.LinkSource.ORG_CHART);
-        tabs.addTab("ICS 202", ics202Panel);
-        tabSources.put(ics202Panel, AppController.LinkSource.ICS202);
-        tabs.addTab("ICS 204", ics204Panel);
-        tabSources.put(ics204Panel, AppController.LinkSource.ICS204);
-        tabs.addTab("SAR Tasks", sarTaskPanel);
-        tabs.addTab("Clue Log", clueLogPanel);
         tabs.addChangeListener(event -> {
+            if (rebuildingTabs) {
+                return;
+            }
             int selectedIndex = tabs.getSelectedIndex();
             if (selectedIndex == lastSelectedTabIndex) {
                 return;
@@ -86,7 +111,7 @@ public class MainFrame extends JFrame {
                 pushToModel(linkSourceForTab(lastSelectedTabIndex));
             }
             refreshFromModel();
-            lastSelectedTabIndex = selectedIndex;
+            lastSelectedTabIndex = tabs.getSelectedIndex();
         });
         content.add(tabs, BorderLayout.CENTER);
 
@@ -108,7 +133,11 @@ public class MainFrame extends JFrame {
     private JMenuBar createMenuBar(Path defaultDirectory) {
         JMenuBar bar = new JMenuBar();
         JMenu fileMenu = new JMenu("File");
+        JMenu viewMenu = new JMenu("View");
         JMenu exportMenu = new JMenu("Export");
+        JMenu logsMenu = new JMenu("Logs");
+        JMenu configMenu = new JMenu("Configuration");
+        JMenu logsListMenu = new JMenu("Go to Log");
 
         JMenuItem newItem = new JMenuItem("New");
         newItem.addActionListener(event -> {
@@ -146,6 +175,19 @@ public class MainFrame extends JFrame {
             dispose();
         });
 
+        for (Map.Entry<String, Boolean> entry : groupVisible.entrySet()) {
+            if (CORE_GROUP.equals(entry.getKey())) {
+                continue;
+            }
+            JCheckBoxMenuItem item = new JCheckBoxMenuItem(entry.getKey(), entry.getValue());
+            item.addActionListener(event -> {
+                groupVisible.put(entry.getKey(), item.isSelected());
+                rebuildVisibleTabs();
+                refreshStatus();
+            });
+            viewMenu.add(item);
+        }
+
         JMenuItem export202Item = new JMenuItem("Export ICS 202 PDF…");
         export202Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 202"));
 
@@ -154,6 +196,12 @@ public class MainFrame extends JFrame {
 
         JMenuItem exportSarTaskItem = new JMenuItem("Export SAR Task Assignment PDF…");
         exportSarTaskItem.addActionListener(event -> exportOne(defaultDirectory, "SAR Task Assignment"));
+
+        JMenuItem export214Item = new JMenuItem("Export ICS 214 PDF…");
+        export214Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 214"));
+
+        JMenuItem exportClueLogItem = new JMenuItem("Export Clue Log PDF…");
+        exportClueLogItem.addActionListener(event -> exportOne(defaultDirectory, "Clue Log"));
 
         JMenuItem exportAllItem = new JMenuItem("Export All PDFs…");
         exportAllItem.addActionListener(event -> {
@@ -165,11 +213,32 @@ public class MainFrame extends JFrame {
                 pushToModel(source);
                 try {
                     controller.exportAll(directory, source);
-                    JOptionPane.showMessageDialog(this, "Exported ICS 202, ICS 204, and SAR Task Assignment PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Exported ICS 202, ICS 204, ICS 214, and SAR Task Assignment PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
                 } catch (IOException exception) {
                     showError("Failed to export PDFs", exception);
                 }
             });
+        });
+
+        JMenuItem addLogItem = new JMenuItem("Add Log");
+        addLogItem.addActionListener(event -> addLog());
+
+        JMenuItem removeCurrentLogItem = new JMenuItem("Remove Current Log");
+        removeCurrentLogItem.addActionListener(event -> removeCurrentLog());
+
+        logsMenu.addMenuListener(new MenuListener() {
+            @Override
+            public void menuSelected(MenuEvent event) {
+                rebuildLogsListMenu(logsListMenu);
+            }
+
+            @Override
+            public void menuDeselected(MenuEvent event) {
+            }
+
+            @Override
+            public void menuCanceled(MenuEvent event) {
+            }
         });
 
         fileMenu.add(newItem);
@@ -180,10 +249,22 @@ public class MainFrame extends JFrame {
         fileMenu.add(exitItem);
         exportMenu.add(export202Item);
         exportMenu.add(export204Item);
+        exportMenu.add(export214Item);
         exportMenu.add(exportSarTaskItem);
+        exportMenu.add(exportClueLogItem);
         exportMenu.add(exportAllItem);
+        logsMenu.add(addLogItem);
+        logsMenu.add(removeCurrentLogItem);
+        logsMenu.addSeparator();
+        logsMenu.add(logsListMenu);
+        JMenuItem manageEventTypesItem = new JMenuItem("Manage Event Types…");
+        manageEventTypesItem.addActionListener(event -> manageEventTypes());
+        configMenu.add(manageEventTypesItem);
         bar.add(fileMenu);
+        bar.add(viewMenu);
         bar.add(exportMenu);
+        bar.add(logsMenu);
+        bar.add(configMenu);
         return bar;
     }
 
@@ -214,22 +295,124 @@ public class MainFrame extends JFrame {
         organizationalChartPanel.pushToModel();
         ics202Panel.pushToModel();
         ics204Panel.pushToModel();
+        for (Ics214Panel panel : ics214Panels) {
+            panel.saveToModel();
+        }
         sarTaskPanel.pushToModel();
         clueLogPanel.pushToModel();
         controller.markDirty(source);
     }
 
-    /**
-     * Reloads panel state from the active incident document.
-     */
+    private void ensureLogs(AppData data) {
+        if (data.getActivityLogs().isEmpty()) {
+            Ics214Form form = new Ics214Form();
+            form.setPreparedByName(data.getForm204().getPreparedByName());
+            form.setPreparedByPositionTitle(data.getForm204().getPreparedByPositionTitle());
+            form.setPreparedDateTime(data.getForm204().getPreparedDateTime());
+            data.getActivityLogs().add(form);
+        }
+    }
+
+    private void rebuildLogTabs() {
+        rebuildingTabs = true;
+        try {
+            for (Ics214Panel panel : new ArrayList<>(ics214Panels)) {
+                tabs.remove(panel);
+                tabSources.remove(panel);
+                tabGroups.remove(panel);
+                tabTitles.remove(panel);
+            }
+            ics214Panels.clear();
+            AppData data = controller.getData();
+            for (Ics214Form form : data.getActivityLogs()) {
+                Ics214Panel panel = new Ics214Panel(controller);
+                panel.loadFromModel(form, data);
+                ics214Panels.add(panel);
+                registerTab(shortLogTabTitle(form, data), panel, AppController.LinkSource.ICS214, ACTIVITY_LOGS_GROUP);
+                int insertIndex = tabs.indexOfComponent(sarTaskPanel);
+                if (insertIndex < 0) {
+                    insertIndex = tabs.getTabCount();
+                }
+                tabs.insertTab(tabTitles.get(panel), null, panel, null, insertIndex);
+            }
+        } finally {
+            rebuildingTabs = false;
+        }
+    }
+
+    /** Reloads panel state from the active incident document. */
     private void refreshFromModel() {
+        Component selectedComponent = tabs.getSelectedComponent();
+        int selectedLogIndex = selectedLogIndex(selectedComponent);
         incidentContextPanel.refreshFromModel();
         organizationalChartPanel.refreshFromModel();
         ics202Panel.refreshFromModel();
         ics204Panel.refreshFromModel();
+        ensureLogs(controller.getData());
+        rebuildLogTabs();
         sarTaskPanel.refreshFromModel();
         clueLogPanel.refreshFromModel();
+        rebuildVisibleTabs(selectedComponent, selectedLogIndex);
         refreshStatus();
+    }
+
+    private void rebuildVisibleTabs() {
+        rebuildVisibleTabs(tabs.getSelectedComponent(), selectedLogIndex(tabs.getSelectedComponent()));
+    }
+
+    private void rebuildVisibleTabs(Component preferredComponent, int preferredLogIndex) {
+        rebuildingTabs = true;
+        try {
+            tabs.removeAll();
+            addVisibleTab(incidentContextPanel);
+            addVisibleTab(organizationalChartPanel);
+            addVisibleTab(ics202Panel);
+            addVisibleTab(ics204Panel);
+            if (isGroupVisible(ACTIVITY_LOGS_GROUP)) {
+                for (Ics214Panel panel : ics214Panels) {
+                    addVisibleTab(panel);
+                }
+            }
+            addVisibleTab(sarTaskPanel);
+            addVisibleTab(clueLogPanel);
+            Component selection = resolveSelection(preferredComponent, preferredLogIndex);
+            if (selection != null && tabs.indexOfComponent(selection) >= 0) {
+                tabs.setSelectedComponent(selection);
+            } else if (tabs.getTabCount() > 0) {
+                tabs.setSelectedIndex(0);
+            }
+        } finally {
+            rebuildingTabs = false;
+        }
+        lastSelectedTabIndex = tabs.getSelectedIndex();
+    }
+
+    private Component resolveSelection(Component preferredComponent, int preferredLogIndex) {
+        if (preferredLogIndex >= 0 && preferredLogIndex < ics214Panels.size() && isGroupVisible(ACTIVITY_LOGS_GROUP)) {
+            return ics214Panels.get(preferredLogIndex);
+        }
+        if (preferredComponent != null && tabs.indexOfComponent(preferredComponent) >= 0) {
+            return preferredComponent;
+        }
+        return incidentContextPanel;
+    }
+
+    private void addVisibleTab(Component component) {
+        String group = tabGroups.getOrDefault(component, CORE_GROUP);
+        if (!CORE_GROUP.equals(group) && !isGroupVisible(group)) {
+            return;
+        }
+        tabs.addTab(tabTitles.getOrDefault(component, ""), component);
+    }
+
+    private boolean isGroupVisible(String group) {
+        return groupVisible.getOrDefault(group, true);
+    }
+
+    private void registerTab(String title, Component component, AppController.LinkSource source, String group) {
+        tabSources.put(component, source);
+        tabGroups.put(component, group);
+        tabTitles.put(component, title);
     }
 
     private AppController.LinkSource linkSourceForTab(int tabIndex) {
@@ -303,6 +486,324 @@ public class MainFrame extends JFrame {
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             consumer.accept(chooser.getSelectedFile().toPath());
         }
+    }
+
+    private void manageEventTypes() {
+        pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+        AppData data = controller.getData();
+        List<ActivityEventType> initial = data.getActivityEventTypes().isEmpty()
+                ? ActivityEventType.defaultTypes() : new ArrayList<>(data.getActivityEventTypes());
+        Ics214Panel.EventTypeManagerDialog dialog = new Ics214Panel.EventTypeManagerDialog(initial);
+        JScrollPane scrollPane = new JScrollPane(dialog.panel);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        if (UiSupport.showResizableConfirmDialog(this, "Manage event types", scrollPane, new Dimension(480, 380))) {
+            data.setActivityEventTypes(dialog.getEventTypes());
+            controller.markDirty(AppController.LinkSource.ICS214);
+            for (Ics214Panel panel : ics214Panels) {
+                panel.refreshEventTypes();
+            }
+        }
+    }
+
+    private void addOrOpenLog214ForResource(ResourceAssignment resource) {
+        pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+        AppData data = controller.getData();
+        String assignmentId = resource.getAssignmentId();
+        for (int i = 0; i < data.getActivityLogs().size(); i++) {
+            Ics214Form existing = data.getActivityLogs().get(i);
+            if (assignmentId.equals(existing.getLinkedSarTaskAssignmentId())) {
+                groupVisible.put(ACTIVITY_LOGS_GROUP, true);
+                rebuildVisibleTabs(ics214Panels.get(i), i);
+                if (tabs.indexOfComponent(ics214Panels.get(i)) >= 0) {
+                    tabs.setSelectedComponent(ics214Panels.get(i));
+                }
+                return;
+            }
+        }
+        Ics214Form form = new Ics214Form();
+        form.setLinkedSarTaskAssignmentId(assignmentId);
+        String resourceName = resource.getResourceIdentifier();
+        form.setName(resourceName);
+        // Look up the linked SAR task assignment to populate section 6 and derive the leader's ICS position.
+        data.getSarTaskAssignments().stream()
+                .filter(a -> assignmentId.equals(a.getAssignmentId()))
+                .findFirst()
+                .ifPresentOrElse(
+                        taf -> {
+                            form.setResourcesAssigned(new java.util.ArrayList<>(taf.getResourcesAssigned()));
+                            taf.getResourcesAssigned().stream()
+                                    .filter(r -> resource.getLeaderRole().equalsIgnoreCase(r.getFunction())
+                                            || resource.getLeaderRole().equalsIgnoreCase(r.getIcsPosition()))
+                                    .findFirst()
+                                    .ifPresentOrElse(
+                                            leader -> form.setIcsPosition(leader.getIcsPosition()),
+                                            () -> form.setIcsPosition(resource.getLeaderRole()));
+                        },
+                        () -> form.setIcsPosition(resource.getLeaderRole()));
+        data.getActivityLogs().add(form);
+        controller.markDirty(AppController.LinkSource.ICS214);
+        rebuildLogTabs();
+        groupVisible.put(ACTIVITY_LOGS_GROUP, true);
+        int newIndex = data.getActivityLogs().size() - 1;
+        rebuildVisibleTabs(newIndex < ics214Panels.size() ? ics214Panels.get(newIndex) : null, newIndex);
+        refreshStatus();
+    }
+
+    private void addLog() {
+        pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+        AppData data = controller.getData();
+        ensureLogs(data);
+        javax.swing.JComboBox<ActivityLogScope> scopeCombo = new javax.swing.JComboBox<>(ActivityLogScope.values());
+        javax.swing.JComboBox<AssociableDocument> linkedDocCombo = new javax.swing.JComboBox<>();
+        documentsForScope(data, ActivityLogScope.ICP).forEach(linkedDocCombo::addItem);
+        JPanel input = UiSupport.formPanel();
+        UiSupport.addRow(input, 0, "Scope", scopeCombo);
+        UiSupport.addRow(input, 1, "Associated document", linkedDocCombo);
+        scopeCombo.addActionListener(event -> {
+            ActivityLogScope selected = (ActivityLogScope) scopeCombo.getSelectedItem();
+            linkedDocCombo.removeAllItems();
+            documentsForScope(data, selected).forEach(linkedDocCombo::addItem);
+        });
+        javax.swing.JScrollPane scrollPane = new javax.swing.JScrollPane(input);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        if (!UiSupport.showResizableConfirmDialog(this, "Add Activity Log", scrollPane, new Dimension(480, 160))) {
+            return;
+        }
+        Ics214Form form = new Ics214Form();
+        AssociableDocument selectedDoc = (AssociableDocument) linkedDocCombo.getSelectedItem();
+        if (selectedDoc != null) {
+            if (!selectedDoc.ics204FormId().isBlank()) {
+                form.setLinkedIcs204FormId(selectedDoc.ics204FormId());
+            } else if (!selectedDoc.sarTaskAssignmentId().isBlank()) {
+                form.setLinkedSarTaskAssignmentId(selectedDoc.sarTaskAssignmentId());
+            }
+        }
+        data.getActivityLogs().add(form);
+        controller.markDirty(AppController.LinkSource.ICS214);
+        rebuildLogTabs();
+        groupVisible.put(ACTIVITY_LOGS_GROUP, true);
+        int newIndex = data.getActivityLogs().size() - 1;
+        rebuildVisibleTabs(newIndex < ics214Panels.size() ? ics214Panels.get(newIndex) : null, newIndex);
+        refreshStatus();
+    }
+
+    private void removeCurrentLog() {
+        if (!(tabs.getSelectedComponent() instanceof Ics214Panel selectedPanel)) {
+            JOptionPane.showMessageDialog(this,
+                    "Select an ICS 214 activity log tab first.",
+                    "Cannot Remove",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        AppData data = controller.getData();
+        ensureLogs(data);
+        int logIndex = ics214Panels.indexOf(selectedPanel);
+        if (logIndex < 0) {
+            return;
+        }
+        if (data.getActivityLogs().size() <= 1) {
+            JOptionPane.showMessageDialog(this,
+                    "At least one activity log must remain.",
+                    "Cannot Remove",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        Ics214Form active = data.getActivityLogs().get(logIndex);
+        if (!active.getActivityLog().isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "Cannot remove a log that contains activity entries. Remove all entries first.",
+                    "Cannot Remove",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Remove the currently selected activity log?",
+                "Remove Log",
+                JOptionPane.YES_NO_OPTION);
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+        data.getActivityLogs().remove(logIndex);
+        controller.markDirty(AppController.LinkSource.ICS214);
+        rebuildLogTabs();
+        int newIndex = Math.max(0, logIndex - 1);
+        rebuildVisibleTabs(newIndex < ics214Panels.size() ? ics214Panels.get(newIndex) : incidentContextPanel, newIndex);
+        refreshStatus();
+    }
+
+    private void rebuildLogsListMenu(JMenu logsListMenu) {
+        logsListMenu.removeAll();
+        ButtonGroup group = new ButtonGroup();
+        int selectedLogIndex = selectedLogIndex(tabs.getSelectedComponent());
+        List<Ics214Form> logs = controller.getData().getActivityLogs();
+        for (int i = 0; i < logs.size(); i++) {
+            final int logIndex = i;
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(logMenuLabel(logs.get(i)), i == selectedLogIndex);
+            item.addActionListener(event -> {
+                groupVisible.put(ACTIVITY_LOGS_GROUP, true);
+                rebuildVisibleTabs(ics214Panels.get(logIndex), logIndex);
+                if (tabs.indexOfComponent(ics214Panels.get(logIndex)) >= 0) {
+                    tabs.setSelectedComponent(ics214Panels.get(logIndex));
+                }
+            });
+            group.add(item);
+            logsListMenu.add(item);
+        }
+        logsListMenu.setEnabled(!logs.isEmpty());
+    }
+
+    private int selectedLogIndex(Component component) {
+        if (component instanceof Ics214Panel panel) {
+            return ics214Panels.indexOf(panel);
+        }
+        return -1;
+    }
+
+    private String logMenuLabel(Ics214Form form) {
+        String linked = resolveLinkedDocumentLabel(form, controller.getData());
+        if (linked.isBlank()) {
+            return form.getLogScope().getLabel();
+        }
+        return form.getLogScope().getLabel() + " – " + linked;
+    }
+
+    private static String shortLogTabTitle(Ics214Form form, AppData data) {
+        // For resource-linked logs (TASK_ASSIGNMENT), identify the tab by the resource name (section 3)
+        // so it reads "ICS 214 – Team X" matching the Resource column in the ICS 204 grid.
+        if (form.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT) {
+            String name = form.getName();
+            return name.isBlank() ? "ICS 214 – Task" : "ICS 214 – " + truncate(name, 20);
+        }
+        String scope = switch (form.getLogScope()) {
+            case ICP -> "ICP";
+            case ASSIGNMENT_LIST -> "Asmt";
+            default -> "";
+        };
+        String linked = truncate(resolveLinkedDocumentLabel(form, data), 10);
+        return linked.isBlank() ? "ICS 214 – " + scope : "ICS 214 – " + scope + " " + linked;
+    }
+
+    /**
+     * Resolves the display label for the document typed-linked to the given form.
+     * Returns an empty string for ICP-level logs.
+     */
+    private static String resolveLinkedDocumentLabel(Ics214Form form, AppData data) {
+        if (data == null) {
+            return "";
+        }
+        String ics204Id = form.getLinkedIcs204FormId();
+        if (!ics204Id.isBlank()) {
+            if (ics204Id.equals(data.getForm204().getFormId())) {
+                return labelStringFor204(data.getForm204(), 1);
+            }
+            List<Ics204Form> additional = data.getAdditionalForms204();
+            for (int i = 0; i < additional.size(); i++) {
+                if (ics204Id.equals(additional.get(i).getFormId())) {
+                    return labelStringFor204(additional.get(i), i + 2);
+                }
+            }
+            return "";
+        }
+        String sarId = form.getLinkedSarTaskAssignmentId();
+        if (!sarId.isBlank()) {
+            return data.getSarTaskAssignments().stream()
+                    .filter(a -> sarId.equals(a.getAssignmentId()))
+                    .findFirst()
+                    .map(MainFrame::labelStringForAssignment)
+                    .orElse("");
+        }
+        return "";
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        String trimmed = value.trim();
+        return trimmed.length() <= maxLength ? trimmed : trimmed.substring(0, maxLength);
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
+    }
+
+    /** A document that can be linked to an ICS 214 activity log. */
+    private record AssociableDocument(String label, String ics204FormId, String sarTaskAssignmentId) {
+        /** No associated document (ICP-level log). */
+        static AssociableDocument none() {
+            return new AssociableDocument("(none)", "", "");
+        }
+
+        /** Linked to an ICS 204 assignment list, referenced by its stable {@code formId}. */
+        static AssociableDocument forIcs204(String label, String formId) {
+            return new AssociableDocument(label, formId, "");
+        }
+
+        /** Linked to a SAR task assignment, referenced by its {@code assignmentId}. */
+        static AssociableDocument forSarTask(String label, String assignmentId) {
+            return new AssociableDocument(label, "", assignmentId);
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    /** Builds the list of documents available for linking based on the selected scope. */
+    private List<AssociableDocument> documentsForScope(AppData data, ActivityLogScope scope) {
+        List<AssociableDocument> docs = new ArrayList<>();
+        if (data == null || scope == ActivityLogScope.ICP) {
+            docs.add(AssociableDocument.none());
+            return docs;
+        }
+        if (scope == ActivityLogScope.ASSIGNMENT_LIST) {
+            docs.add(labelFor204(data.getForm204(), 1));
+            List<Ics204Form> additional = data.getAdditionalForms204();
+            for (int i = 0; i < additional.size(); i++) {
+                docs.add(labelFor204(additional.get(i), i + 2));
+            }
+        } else {
+            for (SarTaskAssignment assignment : data.getSarTaskAssignments()) {
+                docs.add(labelForAssignment(assignment));
+            }
+        }
+        if (docs.isEmpty()) {
+            docs.add(AssociableDocument.none());
+        }
+        return docs;
+    }
+
+    private static AssociableDocument labelFor204(Ics204Form form, int ordinal) {
+        return AssociableDocument.forIcs204(labelStringFor204(form, ordinal), form.getFormId());
+    }
+
+    private static String labelStringFor204(Ics204Form form, int ordinal) {
+        String context = form.getSelectedContextValue();
+        String heading = form.getSelectedContextHeading();
+        if (context != null && !context.isBlank()) {
+            return "ICS 204 – " + heading + " " + context;
+        }
+        if (form.getIapPage() != null && !form.getIapPage().isBlank()) {
+            return "ICS 204 – Page " + form.getIapPage();
+        }
+        return "ICS 204 #" + ordinal;
+    }
+
+    private static AssociableDocument labelForAssignment(SarTaskAssignment assignment) {
+        return AssociableDocument.forSarTask(labelStringForAssignment(assignment), assignment.getAssignmentId());
+    }
+
+    private static String labelStringForAssignment(SarTaskAssignment assignment) {
+        String id = assignment.getAssignmentId();
+        String resource = assignment.getResourceIdentifier();
+        if (id != null && !id.isBlank()) {
+            return "Assignment " + id + (resource != null && !resource.isBlank() ? " – " + resource : "");
+        }
+        if (resource != null && !resource.isBlank()) {
+            return "Assignment – " + resource;
+        }
+        return "Assignment";
     }
 
     /**

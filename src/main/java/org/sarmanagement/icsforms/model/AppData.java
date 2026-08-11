@@ -9,13 +9,16 @@ import java.util.List;
  */
 public class AppData {
     /** Current persistence schema version for JSON storage. */
-    public static final int CURRENT_SCHEMA_VERSION = 1;
+    public static final int CURRENT_SCHEMA_VERSION = 2;
 
     private int schemaVersion = CURRENT_SCHEMA_VERSION;
     private IncidentContext incidentContext = new IncidentContext();
     private OrganizationalChart organizationalChart = new OrganizationalChart();
     private Ics202Form form202 = new Ics202Form();
     private Ics204Form form204 = new Ics204Form();
+    private List<Ics204Form> additionalForms204 = new ArrayList<>();
+    private List<Ics214Form> activityLogs = new ArrayList<>();
+    private List<ActivityEventType> activityEventTypes = new ArrayList<>();
     private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
     private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
 
@@ -131,6 +134,64 @@ public class AppData {
      */
     public void setForm204(Ics204Form form204) {
         this.form204 = form204 == null ? new Ics204Form() : form204;
+    }
+
+    /**
+     * Returns additional ICS 204 forms beyond the primary assignment list.
+     *
+     * @return additional ICS 204 forms.
+     */
+    public List<Ics204Form> getAdditionalForms204() {
+        return additionalForms204;
+    }
+
+    /**
+     * Sets additional ICS 204 forms beyond the primary assignment list.
+     *
+     * @param additionalForms204 additional ICS 204 forms.
+     */
+    public void setAdditionalForms204(List<Ics204Form> additionalForms204) {
+        this.additionalForms204 = additionalForms204 == null ? new ArrayList<>() : additionalForms204;
+    }
+
+    /**
+     * Returns ICS 214 activity logs.
+     *
+     * @return ICS 214 activity logs.
+     */
+    public List<Ics214Form> getActivityLogs() {
+        return activityLogs;
+    }
+
+    /**
+     * Sets ICS 214 activity logs.
+     *
+     * @param activityLogs ICS 214 activity logs.
+     */
+    public void setActivityLogs(List<Ics214Form> activityLogs) {
+        this.activityLogs = activityLogs == null ? new ArrayList<>() : activityLogs;
+    }
+
+    /**
+     * Returns the configured activity event types used across all ICS 214 logs.
+     *
+     * <p>When this list is empty the application populates it with
+     * {@link ActivityEventType#defaultTypes()} on startup.  Operators may add
+     * custom types to extend the built-in set.</p>
+     *
+     * @return configured activity event types.
+     */
+    public List<ActivityEventType> getActivityEventTypes() {
+        return activityEventTypes;
+    }
+
+    /**
+     * Sets the configured activity event types.
+     *
+     * @param activityEventTypes configured activity event types.
+     */
+    public void setActivityEventTypes(List<ActivityEventType> activityEventTypes) {
+        this.activityEventTypes = activityEventTypes == null ? new ArrayList<>() : activityEventTypes;
     }
 
     /**

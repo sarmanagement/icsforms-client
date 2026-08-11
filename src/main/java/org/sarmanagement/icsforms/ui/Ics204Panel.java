@@ -36,6 +36,7 @@ import java.util.List;
  */
 public class Ics204Panel extends JPanel {
     private final AppController controller;
+    private java.util.function.Consumer<ResourceAssignment> on214Request;
     private final JComboBox<String> managementContextSelector = new JComboBox<>(new String[]{"Staging Area", "Branch", "Division", "Group"});
     private final JLabel selectedContextLabel = new JLabel("Staging area name");
     private final JTextField selectedContextValueField = UiSupport.textField();
@@ -145,6 +146,15 @@ public class Ics204Panel extends JPanel {
         formScrollPane.setPreferredSize(new Dimension(0, 260));
         add(formScrollPane, BorderLayout.NORTH);
         add(tablesPanel, BorderLayout.CENTER);
+    }
+
+    /**
+     * Sets the callback invoked when the operator requests to add or open an ICS 214 log for a resource.
+     *
+     * @param handler callback receiving the selected {@link ResourceAssignment}.
+     */
+    public void setOn214Request(java.util.function.Consumer<ResourceAssignment> handler) {
+        this.on214Request = handler;
     }
 
     /** Loads values from the model. */
@@ -342,7 +352,26 @@ public class Ics204Panel extends JPanel {
         JPopupMenu menu = new JPopupMenu();
         JMenuItem editItem = new JMenuItem("Edit assignment…");
         editItem.addActionListener(event -> openSelectedResourceEditor());
+        JMenuItem log214Item = new JMenuItem("Add ICS 214 Log…");
+        log214Item.addActionListener(event -> open214ForSelectedResource());
         menu.add(editItem);
+        menu.add(log214Item);
+        menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
+                int viewRow = resourceTable.getSelectedRow();
+                if (viewRow >= 0) {
+                    int modelRow = resourceTable.convertRowIndexToModel(viewRow);
+                    ResourceAssignment ra = resourceTableModel.getRows().get(modelRow);
+                    boolean exists = controller.getData().getActivityLogs().stream()
+                            .anyMatch(f -> ra.getAssignmentId().equals(f.getLinkedSarTaskAssignmentId()));
+                    log214Item.setText(exists ? "Open ICS 214 Log" : "Add ICS 214 Log…");
+                }
+                log214Item.setVisible(on214Request != null);
+            }
+            @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {}
+            @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {}
+        });
         resourceTable.setComponentPopupMenu(menu);
         resourceTable.addMouseListener(new MouseAdapter() {
             @Override
@@ -391,6 +420,19 @@ public class Ics204Panel extends JPanel {
         }
         editor.applyTo(row);
         resourceTableModel.fireTableRowsUpdated(modelRow, modelRow);
+    }
+
+    private void open214ForSelectedResource() {
+        if (on214Request == null) {
+            return;
+        }
+        int viewRow = resourceTable.getSelectedRow();
+        if (viewRow < 0) {
+            return;
+        }
+        int modelRow = resourceTable.convertRowIndexToModel(viewRow);
+        ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
+        on214Request.accept(row);
     }
 
     private static JPanel inlineFieldPanel(LabeledComponent... components) {
