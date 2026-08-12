@@ -97,7 +97,7 @@ public class PdfExportService {
         for (Path part : tempFiles) {
             merger.addSource(part.toFile());
         }
-        merger.mergeDocuments(null);
+        merger.mergeDocuments(null); // null = in-memory; suitable for typical IAP sizes (< ~50 pages)
         // Remove individual component files now that the bundle is written.
         for (Path part : tempFiles) {
             try {

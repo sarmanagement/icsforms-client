@@ -187,6 +187,8 @@ public class MainFrame extends JFrame {
         });
 
         for (Map.Entry<String, Boolean> entry : groupVisible.entrySet()) {
+            // CORE_GROUP is always visible; SAR_ONLY_GROUP is controlled exclusively by the
+            // Incident Mode menu (Configuration > Incident Mode) and must not appear here.
             if (CORE_GROUP.equals(entry.getKey()) || SAR_ONLY_GROUP.equals(entry.getKey())) {
                 continue;
             }
@@ -411,7 +413,8 @@ public class MainFrame extends JFrame {
             addVisibleTab(organizationalChartPanel);
             addVisibleTab(ics202Panel);
             addVisibleTab(ics204Panel);
-            // SAR Tasks and Clue Log appear before ICS-214 tabs (SAR-only group).
+            // sarTaskPanel and clueLogPanel belong to SAR_ONLY_GROUP; addVisibleTab() checks
+            // group visibility and skips them automatically in GENERIC mode.
             addVisibleTab(sarTaskPanel);
             // ICS-214 activity log tabs are to the right of SAR Tasks.
             if (isGroupVisible(ACTIVITY_LOGS_GROUP)) {
