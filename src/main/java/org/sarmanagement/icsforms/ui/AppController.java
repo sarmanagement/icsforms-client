@@ -22,10 +22,13 @@ import java.nio.file.Path;
 import java.time.ZoneId;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Coordinates UI edits, autosave, validation, and linked SAR task synchronization.
@@ -422,6 +425,17 @@ public class AppController {
             }
         }
 
+        // Build a name → card map for cross-source deduplication.  The same physical
+        // person may appear as a leader on one task and as a resource on another; they
+        // should share a single T-card record rather than receiving duplicates.
+        Map<String, TCard> byName = new LinkedHashMap<>();
+        for (TCard card : cards) {
+            String n = card.getPersonName().trim().toLowerCase();
+            if (!n.isBlank()) {
+                byName.putIfAbsent(n, card);
+            }
+        }
+
         // Collect the set of sourceRefs that should exist after this sync.
         Map<String, TCard> wanted = new LinkedHashMap<>();
 
@@ -440,31 +454,32 @@ public class AppController {
                         card.setSourceRef(ref);
                         card.setNotes(notePreserving(card.getNotes(), "Incident Commander"));
                         wanted.put(ref, card);
+                        byName.putIfAbsent(name.trim().toLowerCase(), card);
                     }
                 }
             }
-            addOrgCard(wanted, byRef, "org:safetyOfficer",
+            addOrgCard(wanted, byRef, byName, "org:safetyOfficer",
                     chart.getSafetyOfficerName(), chart.getSafetyOfficerContact(),
                     "Safety Officer");
-            addOrgCard(wanted, byRef, "org:pio",
+            addOrgCard(wanted, byRef, byName, "org:pio",
                     chart.getPublicInformationOfficerName(), chart.getPublicInformationOfficerContact(),
                     "Public Information Officer");
-            addOrgCard(wanted, byRef, "org:liaisonOfficer",
+            addOrgCard(wanted, byRef, byName, "org:liaisonOfficer",
                     chart.getLiaisonOfficerName(), chart.getLiaisonOfficerContact(),
                     "Liaison Officer");
-            addOrgCard(wanted, byRef, "org:operationsChief",
+            addOrgCard(wanted, byRef, byName, "org:operationsChief",
                     chart.getOperationsSectionChiefName(), chart.getOperationsSectionChiefContact(),
                     "Operations Section Chief");
-            addOrgCard(wanted, byRef, "org:planningChief",
+            addOrgCard(wanted, byRef, byName, "org:planningChief",
                     chart.getPlanningSectionChiefName(), chart.getPlanningSectionChiefContact(),
                     "Planning Section Chief");
-            addOrgCard(wanted, byRef, "org:logisticsChief",
+            addOrgCard(wanted, byRef, byName, "org:logisticsChief",
                     chart.getLogisticsSectionChiefName(), chart.getLogisticsSectionChiefContact(),
                     "Logistics Section Chief");
-            addOrgCard(wanted, byRef, "org:financeAdminChief",
+            addOrgCard(wanted, byRef, byName, "org:financeAdminChief",
                     chart.getFinanceAdminSectionChiefName(), chart.getFinanceAdminSectionChiefContact(),
                     "Finance/Admin Section Chief");
-            addOrgCard(wanted, byRef, "org:documentationUnitLeader",
+            addOrgCard(wanted, byRef, byName, "org:documentationUnitLeader",
                     chart.getDocumentationUnitLeaderName(), chart.getDocumentationUnitLeaderContact(),
                     "Documentation Unit Leader");
         }
@@ -479,13 +494,14 @@ public class AppController {
             String leaderName = safe(task.getLeader());
             if (!leaderName.isBlank()) {
                 String ref = "sar:" + assignmentId + ":leader";
-                TCard card = byRef.containsKey(ref) ? byRef.get(ref) : newPersonnelCard(leaderName);
+                TCard card = findOrCreatePersonCard(ref, leaderName, byRef, byName, wanted);
                 card.setPersonName(leaderName);
                 card.setPhoneNumber(coalesce(card.getPhoneNumber(), task.getContact()));
-                card.setSourceRef(ref);
+                card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
                 card.setNotes(notePreserving(card.getNotes(),
                         safe(task.getLeaderRole()) + " — " + safe(task.getAssignmentTeamNumber())));
                 wanted.put(ref, card);
+                byName.putIfAbsent(leaderName.trim().toLowerCase(), card);
             }
             // Assigned resources
             List<SarTaskResource> resources = task.getResourcesAssigned();
@@ -497,54 +513,102 @@ public class AppController {
                         continue;
                     }
                     String ref = "sar:" + assignmentId + ":r:" + i;
-                    TCard card = byRef.containsKey(ref) ? byRef.get(ref) : newPersonnelCard(resName);
+                    TCard card = findOrCreatePersonCard(ref, resName, byRef, byName, wanted);
                     card.setPersonName(resName);
                     card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
-                    card.setSourceRef(ref);
+                    card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
                     card.setNotes(notePreserving(card.getNotes(),
                             safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
                     wanted.put(ref, card);
+                    byName.putIfAbsent(resName.trim().toLowerCase(), card);
                 }
             }
         }
 
         // Rebuild the card list: keep manually created cards first, then source-linked cards
-        // in stable order, dropping any whose source was cleared.
+        // in stable order, dropping any whose source was cleared.  Use identity-based
+        // deduplication so that a card reused for multiple refs is only emitted once.
         List<TCard> result = new ArrayList<>();
+        Set<TCard> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (TCard card : cards) {
             if (card.getSourceRef().isBlank()) {
                 result.add(card);  // manual card — keep as-is
+                seen.add(card);
             }
         }
-        result.addAll(wanted.values());
+        for (TCard card : wanted.values()) {
+            if (!seen.contains(card)) {
+                result.add(card);
+                seen.add(card);
+            }
+        }
         data.setTCards(result);
+    }
+
+    /**
+     * Finds an existing T-card for {@code personName} or creates a new one.
+     *
+     * <p>Lookup priority:
+     * <ol>
+     *   <li>Card already registered under {@code ref} in {@code byRef} (same position, update).</li>
+     *   <li>Card already emitted into {@code wanted} for the same name (cross-ref dedup).</li>
+     *   <li>Card existing in {@code byName} from a previous sync cycle (persist old card).</li>
+     *   <li>New blank card.</li>
+     * </ol>
+     */
+    private TCard findOrCreatePersonCard(String ref, String personName,
+                                          Map<String, TCard> byRef,
+                                          Map<String, TCard> byName,
+                                          Map<String, TCard> wanted) {
+        if (byRef.containsKey(ref)) {
+            return byRef.get(ref);
+        }
+        String nameKey = personName.trim().toLowerCase();
+        // Check if we already placed this person's card into wanted under a different ref.
+        for (TCard c : wanted.values()) {
+            if (nameKey.equals(c.getPersonName().trim().toLowerCase())) {
+                return c;
+            }
+        }
+        if (byName.containsKey(nameKey)) {
+            return byName.get(nameKey);
+        }
+        return newPersonnelCard(personName);
     }
 
     /** Creates or updates a single org-chart staff T-card. */
     private void addOrgCard(Map<String, TCard> wanted, Map<String, TCard> existing,
+                             Map<String, TCard> byName,
                              String ref, String name, String contact, String roleLabel) {
         String safeName = safe(name);
         if (safeName.isBlank()) {
             return;
         }
-        TCard card = existing.containsKey(ref) ? existing.get(ref) : newOrgCard(safeName, contact);
+        TCard card;
+        if (existing.containsKey(ref)) {
+            card = existing.get(ref);
+        } else {
+            String nameKey = safeName.trim().toLowerCase();
+            card = byName.containsKey(nameKey) ? byName.get(nameKey) : newOrgCard(safeName, contact);
+        }
         card.setPersonName(safeName);
         card.setPhoneNumber(coalesce(card.getPhoneNumber(), contact));
-        card.setSourceRef(ref);
+        card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
         card.setNotes(notePreserving(card.getNotes(), roleLabel));
         wanted.put(ref, card);
+        byName.putIfAbsent(safeName.trim().toLowerCase(), card);
     }
 
     private TCard newPersonnelCard(String name) {
         TCard card = new TCard();
         card.setCardType(TCardType.PERSONNEL);
         card.setPersonName(name);
-        card.setLocation("ICP");
         return card;
     }
 
     private TCard newOrgCard(String name, String contact) {
         TCard card = newPersonnelCard(name);
+        card.setLocation("ICP");
         if (contact != null && !contact.isBlank()) {
             card.setPhoneNumber(contact);
         }

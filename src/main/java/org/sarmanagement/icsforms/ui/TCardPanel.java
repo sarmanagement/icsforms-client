@@ -142,21 +142,112 @@ public class TCardPanel extends JPanel {
     /**
      * Rebuilds the visual rack panel from the current table model rows.
      *
-     * <p>Cards are grouped into columns by card type, each column having a header label.
-     * Within a column cards are stacked vertically, coloured by type.</p>
+     * <p>If any HEADER (grey, 219-1) cards are present the rack is arranged as a physical
+     * T-card rack: each HEADER card becomes a column heading and the resource cards that
+     * follow it (up to the next HEADER) are stacked below it as narrow coloured cards.
+     * When no HEADER cards exist the rack falls back to grouping by card type.</p>
      */
     private void rebuildRackView() {
-        // Group cards by type preserving declaration order.
+        List<TCard> allCards = tableModel.getCards();
+
+        // Determine if there are any HEADER cards; if so use header-based layout.
+        boolean hasHeaders = allCards.stream().anyMatch(c -> c.getCardType() == TCardType.HEADER);
+
+        JPanel rack;
+        if (hasHeaders) {
+            rack = buildHeaderBasedRack(allCards);
+        } else {
+            rack = buildTypeBasedRack(allCards);
+        }
+
+        rackScroll.setViewportView(rack);
+        rackScroll.revalidate();
+        rackScroll.repaint();
+    }
+
+    /**
+     * Builds a rack panel where each HEADER card is a column heading and the
+     * resource cards that follow it are stacked below as narrow coloured widgets.
+     * Resource cards before the first HEADER are collected into an "Unassigned" column.
+     */
+    private JPanel buildHeaderBasedRack(List<TCard> cards) {
+        // Partition cards into sections: (headerCard-or-null, list-of-resource-cards).
+        List<TCard> sectionHeaders = new ArrayList<>();
+        List<List<TCard>> sectionCards = new ArrayList<>();
+
+        TCard currentHeader = null;
+        List<TCard> currentCards = new ArrayList<>();
+        for (TCard card : cards) {
+            if (card.getCardType() == TCardType.HEADER) {
+                sectionHeaders.add(currentHeader);
+                sectionCards.add(currentCards);
+                currentHeader = card;
+                currentCards = new ArrayList<>();
+            } else {
+                currentCards.add(card);
+            }
+        }
+        sectionHeaders.add(currentHeader);
+        sectionCards.add(currentCards);
+
+        // Remove leading null-header section if it has no cards.
+        if (!sectionHeaders.isEmpty() && sectionHeaders.get(0) == null && sectionCards.get(0).isEmpty()) {
+            sectionHeaders.remove(0);
+            sectionCards.remove(0);
+        }
+
+        int cols = Math.max(1, sectionHeaders.size());
+        JPanel rack = new JPanel(new GridLayout(1, cols, 6, 0));
+        rack.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+
+        for (int i = 0; i < sectionHeaders.size(); i++) {
+            TCard header = sectionHeaders.get(i);
+            List<TCard> children = sectionCards.get(i);
+
+            JPanel col = new JPanel();
+            col.setLayout(new javax.swing.BoxLayout(col, javax.swing.BoxLayout.Y_AXIS));
+
+            // Grey header card at top of column.
+            if (header != null) {
+                col.add(buildHeaderCardWidget(header));
+                col.add(javax.swing.Box.createVerticalStrut(4));
+            } else {
+                // Unassigned column heading.
+                JLabel lbl = new JLabel("Unassigned");
+                lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, 12f));
+                lbl.setOpaque(true);
+                lbl.setBackground(cardColor(TCardType.HEADER));
+                lbl.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(Color.DARK_GRAY),
+                        BorderFactory.createEmptyBorder(4, 6, 4, 6)));
+                lbl.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+                col.add(lbl);
+                col.add(javax.swing.Box.createVerticalStrut(4));
+            }
+
+            for (TCard card : children) {
+                col.add(buildRackCard(card));
+                col.add(javax.swing.Box.createVerticalStrut(3));
+            }
+            col.add(javax.swing.Box.createVerticalGlue());
+            rack.add(col);
+        }
+        return rack;
+    }
+
+    /**
+     * Builds a rack panel grouped by card type — used when no HEADER cards are present.
+     */
+    private JPanel buildTypeBasedRack(List<TCard> allCards) {
         List<TCardType> typeOrder = Arrays.asList(TCardType.values());
         java.util.Map<TCardType, List<TCard>> byType = new java.util.LinkedHashMap<>();
         for (TCardType t : typeOrder) {
             byType.put(t, new ArrayList<>());
         }
-        for (TCard card : tableModel.getCards()) {
+        for (TCard card : allCards) {
             byType.get(card.getCardType()).add(card);
         }
 
-        // One column per non-empty type.
         List<TCardType> usedTypes = new ArrayList<>();
         for (TCardType t : typeOrder) {
             if (!byType.get(t).isEmpty()) {
@@ -180,20 +271,52 @@ public class TCardPanel extends JPanel {
             col.add(javax.swing.Box.createVerticalGlue());
             rack.add(col);
         }
-
-        rackScroll.setViewportView(rack);
-        rackScroll.revalidate();
-        rackScroll.repaint();
+        return rack;
     }
 
-    /** Builds a single visual card widget for the rack view. */
+    /** Builds the grey column-heading widget for a HEADER card in the rack view. */
+    private JPanel buildHeaderCardWidget(TCard header) {
+        JPanel p = new JPanel(new BorderLayout(2, 2));
+        p.setBackground(cardColor(TCardType.HEADER));
+        p.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Color.DARK_GRAY, 2),
+                BorderFactory.createEmptyBorder(4, 6, 4, 6)));
+        p.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+
+        JLabel titleLabel = new JLabel(header.getDisplayLabel());
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+        p.add(titleLabel, BorderLayout.NORTH);
+
+        StringBuilder sub = new StringBuilder();
+        if (!header.getLocation().isBlank()) {
+            sub.append(header.getLocation());
+        }
+        if (!header.getNotes().isBlank()) {
+            if (!sub.isEmpty()) sub.append(" · ");
+            sub.append(header.getNotes());
+        }
+        if (!sub.isEmpty()) {
+            JLabel subLabel = new JLabel(sub.toString());
+            subLabel.setFont(subLabel.getFont().deriveFont(11f));
+            p.add(subLabel, BorderLayout.CENTER);
+        }
+        return p;
+    }
+
+    /**
+     * Builds a single narrow resource card widget for the rack view.
+     *
+     * <p>Location and status are omitted here because they are conveyed by the HEADER
+     * card above the column.  Only name, agency and phone are shown.</p>
+     */
     private JPanel buildRackCard(TCard card) {
         JPanel p = new JPanel(new BorderLayout(2, 2));
         p.setBackground(cardColor(card.getCardType()));
         p.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(Color.DARK_GRAY),
                 BorderFactory.createEmptyBorder(3, 5, 3, 5)));
-        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 70));
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 55));
+        p.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
 
         JLabel nameLabel = new JLabel(card.getDisplayLabel());
         nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD));
@@ -202,24 +325,15 @@ public class TCardPanel extends JPanel {
         if (!card.getHomeAgency().isBlank()) {
             detail.append(card.getHomeAgency());
         }
-        if (!card.getStatus().isBlank()) {
-            if (!detail.isEmpty()) detail.append(" · ");
-            detail.append(card.getStatus());
-        }
-        if (!card.getLocation().isBlank()) {
-            if (!detail.isEmpty()) detail.append(" · ");
-            detail.append(card.getLocation());
-        }
         if (!card.getPhoneNumber().isBlank()) {
             if (!detail.isEmpty()) detail.append(" · ");
             detail.append(card.getPhoneNumber());
         }
 
-        JLabel detailLabel = new JLabel(detail.toString());
-        detailLabel.setFont(detailLabel.getFont().deriveFont(10.5f));
-
         p.add(nameLabel, BorderLayout.NORTH);
         if (!detail.isEmpty()) {
+            JLabel detailLabel = new JLabel(detail.toString());
+            detailLabel.setFont(detailLabel.getFont().deriveFont(10.5f));
             p.add(detailLabel, BorderLayout.CENTER);
         }
         return p;
