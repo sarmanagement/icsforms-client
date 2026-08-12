@@ -9,6 +9,8 @@ import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -111,6 +113,7 @@ public class AppController {
         }
         synchronizeLinkedFields(source);
         syncSarTasks();
+        syncTCards();
         autosaveTimer.restart();
     }
 
@@ -390,6 +393,175 @@ public class AppController {
             resource.setTaskType(task.getTaskType());
         }
         updateClueTaskLabels(tasksById);
+    }
+
+    /**
+     * Synchronizes T-card records from org-chart staff positions and SAR task resources.
+     *
+     * <p>Each named staff position on the org chart and each named resource on a SAR task
+     * automatically maintains a linked T-card.  A card's {@code sourceRef} field is the
+     * stable key; only the name and contact fields are updated here so that operators may
+     * freely edit status, location, and notes without losing their changes.</p>
+     *
+     * <p>Cards whose source position is later cleared (name set to blank) are removed from
+     * the list.  Manually created cards (blank sourceRef) are never touched.</p>
+     */
+    public void syncTCards() {
+        List<TCard> cards = data.getTCards();
+        if (cards == null) {
+            cards = new ArrayList<>();
+            data.setTCards(cards);
+        }
+
+        // Build a mutable map of sourceRef → card for fast lookup; preserve order.
+        Map<String, TCard> byRef = new LinkedHashMap<>();
+        for (TCard card : cards) {
+            String ref = card.getSourceRef();
+            if (!ref.isBlank()) {
+                byRef.put(ref, card);
+            }
+        }
+
+        // Collect the set of sourceRefs that should exist after this sync.
+        Map<String, TCard> wanted = new LinkedHashMap<>();
+
+        // --- Org chart positions ---
+        OrganizationalChart chart = data.getOrganizationalChart();
+        if (chart != null) {
+            // Incident commanders (one card per named commander)
+            List<String> ics = chart.getIncidentCommanders();
+            if (ics != null) {
+                for (int i = 0; i < ics.size(); i++) {
+                    String name = safe(ics.get(i));
+                    if (!name.isBlank()) {
+                        String ref = "org:ic:" + i;
+                        TCard card = byRef.containsKey(ref) ? byRef.get(ref) : newOrgCard(name, "");
+                        card.setPersonName(name);
+                        card.setSourceRef(ref);
+                        card.setNotes(notePreserving(card.getNotes(), "Incident Commander"));
+                        wanted.put(ref, card);
+                    }
+                }
+            }
+            addOrgCard(wanted, byRef, "org:safetyOfficer",
+                    chart.getSafetyOfficerName(), chart.getSafetyOfficerContact(),
+                    "Safety Officer");
+            addOrgCard(wanted, byRef, "org:pio",
+                    chart.getPublicInformationOfficerName(), chart.getPublicInformationOfficerContact(),
+                    "Public Information Officer");
+            addOrgCard(wanted, byRef, "org:liaisonOfficer",
+                    chart.getLiaisonOfficerName(), chart.getLiaisonOfficerContact(),
+                    "Liaison Officer");
+            addOrgCard(wanted, byRef, "org:operationsChief",
+                    chart.getOperationsSectionChiefName(), chart.getOperationsSectionChiefContact(),
+                    "Operations Section Chief");
+            addOrgCard(wanted, byRef, "org:planningChief",
+                    chart.getPlanningSectionChiefName(), chart.getPlanningSectionChiefContact(),
+                    "Planning Section Chief");
+            addOrgCard(wanted, byRef, "org:logisticsChief",
+                    chart.getLogisticsSectionChiefName(), chart.getLogisticsSectionChiefContact(),
+                    "Logistics Section Chief");
+            addOrgCard(wanted, byRef, "org:financeAdminChief",
+                    chart.getFinanceAdminSectionChiefName(), chart.getFinanceAdminSectionChiefContact(),
+                    "Finance/Admin Section Chief");
+            addOrgCard(wanted, byRef, "org:documentationUnitLeader",
+                    chart.getDocumentationUnitLeaderName(), chart.getDocumentationUnitLeaderContact(),
+                    "Documentation Unit Leader");
+        }
+
+        // --- SAR task resources ---
+        for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+            String assignmentId = task.getAssignmentId();
+            if (assignmentId == null || assignmentId.isBlank()) {
+                continue;
+            }
+            // Task leader
+            String leaderName = safe(task.getLeader());
+            if (!leaderName.isBlank()) {
+                String ref = "sar:" + assignmentId + ":leader";
+                TCard card = byRef.containsKey(ref) ? byRef.get(ref) : newPersonnelCard(leaderName);
+                card.setPersonName(leaderName);
+                card.setPhoneNumber(coalesce(card.getPhoneNumber(), task.getContact()));
+                card.setSourceRef(ref);
+                card.setNotes(notePreserving(card.getNotes(),
+                        safe(task.getLeaderRole()) + " — " + safe(task.getAssignmentTeamNumber())));
+                wanted.put(ref, card);
+            }
+            // Assigned resources
+            List<SarTaskResource> resources = task.getResourcesAssigned();
+            if (resources != null) {
+                for (int i = 0; i < resources.size(); i++) {
+                    SarTaskResource res = resources.get(i);
+                    String resName = safe(res.getName());
+                    if (resName.isBlank()) {
+                        continue;
+                    }
+                    String ref = "sar:" + assignmentId + ":r:" + i;
+                    TCard card = byRef.containsKey(ref) ? byRef.get(ref) : newPersonnelCard(resName);
+                    card.setPersonName(resName);
+                    card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
+                    card.setSourceRef(ref);
+                    card.setNotes(notePreserving(card.getNotes(),
+                            safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
+                    wanted.put(ref, card);
+                }
+            }
+        }
+
+        // Rebuild the card list: keep manually created cards first, then source-linked cards
+        // in stable order, dropping any whose source was cleared.
+        List<TCard> result = new ArrayList<>();
+        for (TCard card : cards) {
+            if (card.getSourceRef().isBlank()) {
+                result.add(card);  // manual card — keep as-is
+            }
+        }
+        result.addAll(wanted.values());
+        data.setTCards(result);
+    }
+
+    /** Creates or updates a single org-chart staff T-card. */
+    private void addOrgCard(Map<String, TCard> wanted, Map<String, TCard> existing,
+                             String ref, String name, String contact, String roleLabel) {
+        String safeName = safe(name);
+        if (safeName.isBlank()) {
+            return;
+        }
+        TCard card = existing.containsKey(ref) ? existing.get(ref) : newOrgCard(safeName, contact);
+        card.setPersonName(safeName);
+        card.setPhoneNumber(coalesce(card.getPhoneNumber(), contact));
+        card.setSourceRef(ref);
+        card.setNotes(notePreserving(card.getNotes(), roleLabel));
+        wanted.put(ref, card);
+    }
+
+    private TCard newPersonnelCard(String name) {
+        TCard card = new TCard();
+        card.setCardType(TCardType.PERSONNEL);
+        card.setPersonName(name);
+        card.setLocation("ICP");
+        return card;
+    }
+
+    private TCard newOrgCard(String name, String contact) {
+        TCard card = newPersonnelCard(name);
+        if (contact != null && !contact.isBlank()) {
+            card.setPhoneNumber(contact);
+        }
+        return card;
+    }
+
+    /** Returns {@code preferred} if non-blank, otherwise {@code fallback}. */
+    private String coalesce(String preferred, String fallback) {
+        return (preferred != null && !preferred.isBlank()) ? preferred : safe(fallback);
+    }
+
+    /**
+     * Returns the existing notes value if non-blank, otherwise the generated label.
+     * This prevents overwriting operator-entered notes with role labels on every sync.
+     */
+    private String notePreserving(String existingNotes, String generatedLabel) {
+        return (existingNotes != null && !existingNotes.isBlank()) ? existingNotes : generatedLabel;
     }
 
     private SarTaskAssignment mergeSarTask(SarTaskAssignment existing, SarTaskAssignment scaffold) {

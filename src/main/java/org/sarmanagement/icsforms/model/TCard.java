@@ -39,6 +39,19 @@ public class TCard {
     private String notes = "";
 
     /**
+     * Opaque reference identifying the source object that generated this card.
+     *
+     * <p>Format conventions:
+     * <ul>
+     *   <li>{@code "org:<fieldKey>"} — org chart staff position, e.g. {@code "org:safetyOfficer"}</li>
+     *   <li>{@code "sar:<assignmentId>:<resourceIndex>"} — SAR task resource,
+     *       index 0 being the task leader</li>
+     * </ul>
+     * Blank when the card was created manually or imported from CSV.</p>
+     */
+    private String sourceRef = "";
+
+    /**
      * Creates an empty T-card defaulting to a Personnel card.
      */
     public TCard() {
@@ -222,6 +235,25 @@ public class TCard {
      */
     public void setNotes(String notes) {
         this.notes = notes == null ? "" : notes;
+    }
+
+    /**
+     * Returns the source reference identifying the incident object (org chart position or
+     * SAR task resource) that generated this T-card, or blank for manually created cards.
+     *
+     * @return source reference string, never {@code null}.
+     */
+    public String getSourceRef() {
+        return sourceRef == null ? "" : sourceRef;
+    }
+
+    /**
+     * Sets the source reference.
+     *
+     * @param sourceRef source reference; {@code null} is treated as blank.
+     */
+    public void setSourceRef(String sourceRef) {
+        this.sourceRef = sourceRef == null ? "" : sourceRef;
     }
 
     /**
