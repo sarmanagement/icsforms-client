@@ -66,6 +66,7 @@ public class SarTaskPanel extends JPanel {
     private final AppController controller;
     private final SarTaskTableModel tableModel = new SarTaskTableModel();
     private final JTable table = new JTable(tableModel);
+    private java.util.function.Consumer<SarTaskAssignment> on214Request;
 
     /**
      * Creates the SAR task assignment panel.
@@ -101,6 +102,26 @@ public class SarTaskPanel extends JPanel {
         controller.syncIcs204ResourcesFromSarTasks();
     }
 
+    /**
+     * Sets the callback invoked when the user requests to open/show the ICS 214 for a task.
+     *
+     * @param handler callback accepting the selected {@link SarTaskAssignment}.
+     */
+    public void setOn214Request(java.util.function.Consumer<SarTaskAssignment> handler) {
+        this.on214Request = handler;
+    }
+
+    private void openIcs214ForSelected() {
+        int viewRow = table.getSelectedRow();
+        if (viewRow < 0 || on214Request == null) {
+            return;
+        }
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        if (modelRow >= 0 && modelRow < tableModel.getRows().size()) {
+            on214Request.accept(tableModel.getRows().get(modelRow));
+        }
+    }
+
     static String formatDateTimeValue(LocalDateTime value) {
         return value == null ? "" : DATE_TIME_FORMATTER.format(value);
     }
@@ -124,6 +145,9 @@ public class SarTaskPanel extends JPanel {
         JMenuItem editDebriefingItem = new JMenuItem("Debrief…");
         editDebriefingItem.addActionListener(event -> openSelectedRowEditor(EditorMode.DEBRIEFING));
         menu.add(editDebriefingItem);
+        JMenuItem open214Item = new JMenuItem("Open ICS 214 for Task…");
+        open214Item.addActionListener(event -> openIcs214ForSelected());
+        menu.add(open214Item);
         table.setComponentPopupMenu(menu);
         table.addMouseListener(new MouseAdapter() {
             @Override

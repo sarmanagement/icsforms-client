@@ -4,21 +4,50 @@ import org.sarmanagement.icsforms.model.OrganizationalChart;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import java.awt.BorderLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Shared editor for organizational chart roles linked across forms.
+ *
+ * <p>Shows Incident Command, Command Staff (Safety Officer, PIO, Liaison Officer),
+ * and General Staff (Ops, Planning, Logistics, Finance chiefs plus Documentation Unit Leader).</p>
  */
 public class OrganizationalChartPanel extends JPanel {
     private final AppController controller;
     private final JTextArea incidentCommanderArea = UiSupport.textArea(4);
     private final JTextField operationsSectionChiefField = UiSupport.textField();
+    private final JTextField operationsSectionChiefContactField = UiSupport.textField();
+
+    // Command Staff
+    private final JTextField safetyOfficerNameField = UiSupport.textField();
+    private final JTextField safetyOfficerContactField = UiSupport.textField();
+    private final JTextField pioNameField = UiSupport.textField();
+    private final JTextField pioContactField = UiSupport.textField();
+    private final JTextField liaisonNameField = UiSupport.textField();
+    private final JTextField liaisonContactField = UiSupport.textField();
+
+    // General Staff
+    private final JTextField planningSectionChiefNameField = UiSupport.textField();
+    private final JTextField planningSectionChiefContactField = UiSupport.textField();
+    private final JTextField logisticsSectionChiefNameField = UiSupport.textField();
+    private final JTextField logisticsSectionChiefContactField = UiSupport.textField();
+    private final JTextField financeAdminSectionChiefNameField = UiSupport.textField();
+    private final JTextField financeAdminSectionChiefContactField = UiSupport.textField();
+
+    // Planning Section
+    private final JTextField documentationUnitLeaderNameField = UiSupport.textField();
+    private final JTextField documentationUnitLeaderContactField = UiSupport.textField();
 
     /**
      * Creates the organizational chart editor.
@@ -28,15 +57,45 @@ public class OrganizationalChartPanel extends JPanel {
     public OrganizationalChartPanel(AppController controller) {
         super(new BorderLayout());
         this.controller = controller;
-        JPanel form = UiSupport.formPanel();
-        form.setBorder(BorderFactory.createTitledBorder("Organizational Chart"));
-        UiSupport.addRow(form, 0, "Incident commander / unified command (one per line)", new JScrollPane(incidentCommanderArea));
-        UiSupport.addRow(form, 1, "Operations section chief", operationsSectionChiefField);
-        JPanel topAlignedForm = new JPanel(new BorderLayout());
-        topAlignedForm.setOpaque(false);
-        topAlignedForm.add(form, BorderLayout.NORTH);
-        topAlignedForm.add(Box.createVerticalGlue(), BorderLayout.CENTER);
-        JScrollPane scrollPane = new JScrollPane(topAlignedForm);
+
+        JPanel icSection = UiSupport.formPanel();
+        icSection.setBorder(BorderFactory.createTitledBorder("Incident Command"));
+        UiSupport.addRow(icSection, 0, "Incident commander / unified command (one per line)", new JScrollPane(incidentCommanderArea));
+
+        JPanel commandSection = buildTwoColumnSection("Command Staff",
+                new String[]{"Safety Officer", "PIO / Public Information Officer", "Liaison Officer"},
+                new JTextField[]{safetyOfficerNameField, pioNameField, liaisonNameField},
+                new JTextField[]{safetyOfficerContactField, pioContactField, liaisonContactField});
+
+        JPanel generalSection = buildTwoColumnSection("General Staff",
+                new String[]{"Operations Section Chief", "Planning Section Chief",
+                        "Logistics Section Chief", "Finance / Admin Section Chief"},
+                new JTextField[]{operationsSectionChiefField, planningSectionChiefNameField,
+                        logisticsSectionChiefNameField, financeAdminSectionChiefNameField},
+                new JTextField[]{operationsSectionChiefContactField, planningSectionChiefContactField,
+                        logisticsSectionChiefContactField, financeAdminSectionChiefContactField});
+
+        JPanel planningSection = buildTwoColumnSection("Planning Section Positions",
+                new String[]{"Documentation Unit Leader"},
+                new JTextField[]{documentationUnitLeaderNameField},
+                new JTextField[]{documentationUnitLeaderContactField});
+
+        JPanel all = new JPanel();
+        all.setLayout(new BoxLayout(all, BoxLayout.Y_AXIS));
+        all.setOpaque(false);
+        all.add(icSection);
+        all.add(Box.createVerticalStrut(8));
+        all.add(commandSection);
+        all.add(Box.createVerticalStrut(8));
+        all.add(generalSection);
+        all.add(Box.createVerticalStrut(8));
+        all.add(planningSection);
+
+        JPanel topAligned = new JPanel(new BorderLayout());
+        topAligned.setOpaque(false);
+        topAligned.add(all, BorderLayout.NORTH);
+
+        JScrollPane scrollPane = new JScrollPane(topAligned);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         add(scrollPane, BorderLayout.CENTER);
     }
@@ -47,7 +106,22 @@ public class OrganizationalChartPanel extends JPanel {
     public void refreshFromModel() {
         OrganizationalChart chart = controller.getData().getOrganizationalChart();
         incidentCommanderArea.setText(String.join("\n", chart.getIncidentCommanders()));
-        operationsSectionChiefField.setText(nullSafe(chart.getOperationsSectionChiefName()));
+        operationsSectionChiefField.setText(safe(chart.getOperationsSectionChiefName()));
+        operationsSectionChiefContactField.setText(safe(chart.getOperationsSectionChiefContact()));
+        safetyOfficerNameField.setText(safe(chart.getSafetyOfficerName()));
+        safetyOfficerContactField.setText(safe(chart.getSafetyOfficerContact()));
+        pioNameField.setText(safe(chart.getPublicInformationOfficerName()));
+        pioContactField.setText(safe(chart.getPublicInformationOfficerContact()));
+        liaisonNameField.setText(safe(chart.getLiaisonOfficerName()));
+        liaisonContactField.setText(safe(chart.getLiaisonOfficerContact()));
+        planningSectionChiefNameField.setText(safe(chart.getPlanningSectionChiefName()));
+        planningSectionChiefContactField.setText(safe(chart.getPlanningSectionChiefContact()));
+        logisticsSectionChiefNameField.setText(safe(chart.getLogisticsSectionChiefName()));
+        logisticsSectionChiefContactField.setText(safe(chart.getLogisticsSectionChiefContact()));
+        financeAdminSectionChiefNameField.setText(safe(chart.getFinanceAdminSectionChiefName()));
+        financeAdminSectionChiefContactField.setText(safe(chart.getFinanceAdminSectionChiefContact()));
+        documentationUnitLeaderNameField.setText(safe(chart.getDocumentationUnitLeaderName()));
+        documentationUnitLeaderContactField.setText(safe(chart.getDocumentationUnitLeaderContact()));
     }
 
     /**
@@ -57,6 +131,45 @@ public class OrganizationalChartPanel extends JPanel {
         OrganizationalChart chart = controller.getData().getOrganizationalChart();
         chart.setIncidentCommanders(lines(incidentCommanderArea.getText()));
         chart.setOperationsSectionChiefName(operationsSectionChiefField.getText().trim());
+        chart.setOperationsSectionChiefContact(operationsSectionChiefContactField.getText().trim());
+        chart.setSafetyOfficerName(safetyOfficerNameField.getText().trim());
+        chart.setSafetyOfficerContact(safetyOfficerContactField.getText().trim());
+        chart.setPublicInformationOfficerName(pioNameField.getText().trim());
+        chart.setPublicInformationOfficerContact(pioContactField.getText().trim());
+        chart.setLiaisonOfficerName(liaisonNameField.getText().trim());
+        chart.setLiaisonOfficerContact(liaisonContactField.getText().trim());
+        chart.setPlanningSectionChiefName(planningSectionChiefNameField.getText().trim());
+        chart.setPlanningSectionChiefContact(planningSectionChiefContactField.getText().trim());
+        chart.setLogisticsSectionChiefName(logisticsSectionChiefNameField.getText().trim());
+        chart.setLogisticsSectionChiefContact(logisticsSectionChiefContactField.getText().trim());
+        chart.setFinanceAdminSectionChiefName(financeAdminSectionChiefNameField.getText().trim());
+        chart.setFinanceAdminSectionChiefContact(financeAdminSectionChiefContactField.getText().trim());
+        chart.setDocumentationUnitLeaderName(documentationUnitLeaderNameField.getText().trim());
+        chart.setDocumentationUnitLeaderContact(documentationUnitLeaderContactField.getText().trim());
+    }
+
+    private JPanel buildTwoColumnSection(String title, String[] labels, JTextField[] nameFields, JTextField[] contactFields) {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBorder(BorderFactory.createTitledBorder(title));
+        GridBagConstraints c = new GridBagConstraints();
+        c.insets = new Insets(2, 4, 2, 4);
+        c.anchor = GridBagConstraints.WEST;
+
+        // Header row
+        c.gridx = 1; c.gridy = 0; c.weightx = 0.5;
+        panel.add(new JLabel("Name"), c);
+        c.gridx = 2;
+        panel.add(new JLabel("Contact (Radio/Phone)"), c);
+
+        for (int i = 0; i < labels.length; i++) {
+            c.gridx = 0; c.gridy = i + 1; c.weightx = 0;
+            panel.add(new JLabel(labels[i]), c);
+            c.gridx = 1; c.weightx = 0.5; c.fill = GridBagConstraints.HORIZONTAL;
+            panel.add(nameFields[i], c);
+            c.gridx = 2;
+            panel.add(contactFields[i], c);
+        }
+        return panel;
     }
 
     private List<String> lines(String value) {
@@ -69,7 +182,7 @@ public class OrganizationalChartPanel extends JPanel {
         return items;
     }
 
-    private String nullSafe(String value) {
+    private String safe(String value) {
         return value == null ? "" : value;
     }
 }

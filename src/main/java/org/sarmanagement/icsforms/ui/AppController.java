@@ -246,6 +246,20 @@ public class AppController {
     }
 
     /**
+     * Exports all supported forms merged into a single IAP bundle PDF.
+     *
+     * @param outputDirectory destination directory.
+     * @param source source tab for linked role values.
+     * @return path of the merged IAP bundle PDF.
+     * @throws IOException when export or merge fails.
+     */
+    public Path exportIapBundle(Path outputDirectory, LinkSource source) throws IOException {
+        synchronizeLinkedFields(source);
+        syncSarTasks();
+        return exportService.exportIapBundle(data, outputDirectory);
+    }
+
+    /**
      * Synchronizes shared org-chart-linked fields across the shared tab, org chart, ICS 202, and ICS 204.
      *
      * @param source source tab for linked role values.
@@ -317,6 +331,25 @@ public class AppController {
      */
     public boolean isDirty() {
         return dirty;
+    }
+
+    /**
+     * Returns the current incident mode (SAR or Generic).
+     *
+     * @return incident mode.
+     */
+    public org.sarmanagement.icsforms.model.IncidentMode getIncidentMode() {
+        return data.getIncidentMode();
+    }
+
+    /**
+     * Sets the incident mode and marks the document dirty.
+     *
+     * @param mode incident mode.
+     */
+    public void setIncidentMode(org.sarmanagement.icsforms.model.IncidentMode mode) {
+        data.setIncidentMode(mode);
+        markDirty();
     }
 
     /**
@@ -474,6 +507,12 @@ public class AppController {
         }
         if (data.getClueLogEntries() == null) {
             data.setClueLogEntries(new ArrayList<>());
+        }
+        if (data.getTCards() == null) {
+            data.setTCards(new ArrayList<>());
+        }
+        if (data.getIncidentMode() == null) {
+            data.setIncidentMode(org.sarmanagement.icsforms.model.IncidentMode.SAR);
         }
         if (data.getSchemaVersion() < AppData.CURRENT_SCHEMA_VERSION) {
             data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);

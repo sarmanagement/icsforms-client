@@ -9,9 +9,10 @@ import java.util.List;
  */
 public class AppData {
     /** Current persistence schema version for JSON storage. */
-    public static final int CURRENT_SCHEMA_VERSION = 2;
+    public static final int CURRENT_SCHEMA_VERSION = 3;
 
     private int schemaVersion = CURRENT_SCHEMA_VERSION;
+    private IncidentMode incidentMode = IncidentMode.SAR;
     private IncidentContext incidentContext = new IncidentContext();
     private OrganizationalChart organizationalChart = new OrganizationalChart();
     private Ics202Form form202 = new Ics202Form();
@@ -21,6 +22,7 @@ public class AppData {
     private List<ActivityEventType> activityEventTypes = new ArrayList<>();
     private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
     private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
+    private List<TCard> tCards = new ArrayList<>();
 
     /**
      * Creates an empty incident document.
@@ -228,5 +230,44 @@ public class AppData {
      */
     public void setClueLogEntries(List<ClueLogEntry> clueLogEntries) {
         this.clueLogEntries = clueLogEntries == null ? new ArrayList<>() : clueLogEntries;
+    }
+
+    /**
+     * Returns the incident operational mode (SAR or Generic).
+     *
+     * <p>Defaults to {@link IncidentMode#SAR} for backward compatibility with existing files
+     * that do not carry an explicit mode field.</p>
+     *
+     * @return incident mode.
+     */
+    public IncidentMode getIncidentMode() {
+        return incidentMode == null ? IncidentMode.SAR : incidentMode;
+    }
+
+    /**
+     * Sets the incident operational mode.
+     *
+     * @param incidentMode incident mode; {@code null} is treated as {@link IncidentMode#SAR}.
+     */
+    public void setIncidentMode(IncidentMode incidentMode) {
+        this.incidentMode = incidentMode == null ? IncidentMode.SAR : incidentMode;
+    }
+
+    /**
+     * Returns the list of T-Card (ICS 219) resource status records for this incident.
+     *
+     * @return T-card list.
+     */
+    public List<TCard> getTCards() {
+        return tCards;
+    }
+
+    /**
+     * Sets the list of T-Card records.
+     *
+     * @param tCards T-card list.
+     */
+    public void setTCards(List<TCard> tCards) {
+        this.tCards = tCards == null ? new ArrayList<>() : tCards;
     }
 }

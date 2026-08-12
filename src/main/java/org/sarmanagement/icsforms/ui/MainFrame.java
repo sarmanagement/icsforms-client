@@ -5,6 +5,7 @@ import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
@@ -46,6 +47,10 @@ import java.util.Map;
 public class MainFrame extends JFrame {
     private static final String CORE_GROUP = "Core";
     private static final String ACTIVITY_LOGS_GROUP = "Activity Logs";
+    /** Tab group for SAR-specific features hidden when mode is Generic. */
+    private static final String SAR_ONLY_GROUP = "SAR Features";
+    /** Tab group for T-Card (ICS 219) resource status tabs. */
+    private static final String T_CARDS_GROUP = "T-Cards";
 
     private final AppController controller;
     private final JLabel validationLabel = new JLabel("Ready", SwingConstants.LEFT);
@@ -56,6 +61,7 @@ public class MainFrame extends JFrame {
     private final List<Ics214Panel> ics214Panels = new ArrayList<>();
     private final SarTaskPanel sarTaskPanel;
     private final ClueLogPanel clueLogPanel;
+    private final TCardPanel tCardPanel;
     private final JTabbedPane tabs = new JTabbedPane();
     private final Map<Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
     private final Map<Component, String> tabGroups = new IdentityHashMap<>();
@@ -82,15 +88,20 @@ public class MainFrame extends JFrame {
         this.ics204Panel = new Ics204Panel(controller);
         this.sarTaskPanel = new SarTaskPanel(controller);
         this.clueLogPanel = new ClueLogPanel(controller);
+        this.tCardPanel = new TCardPanel(controller);
         ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
+        sarTaskPanel.setOn214Request(this::openIcs214ForSarTask);
         groupVisible.put(CORE_GROUP, true);
         groupVisible.put(ACTIVITY_LOGS_GROUP, true);
+        groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
+        groupVisible.put(T_CARDS_GROUP, true);
         registerTab("Shared", incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
         registerTab("Org Chart", organizationalChartPanel, AppController.LinkSource.ORG_CHART, CORE_GROUP);
         registerTab("ICS 202", ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
         registerTab("ICS 204", ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
-        registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, CORE_GROUP);
-        registerTab("Clue Log", clueLogPanel, AppController.LinkSource.NONE, CORE_GROUP);
+        registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
+        registerTab("Clue Log", clueLogPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
+        registerTab("T-Cards", tCardPanel, AppController.LinkSource.NONE, T_CARDS_GROUP);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setPreferredSize(new Dimension(1120, 820));
         setJMenuBar(createMenuBar(defaultDirectory));
@@ -176,7 +187,7 @@ public class MainFrame extends JFrame {
         });
 
         for (Map.Entry<String, Boolean> entry : groupVisible.entrySet()) {
-            if (CORE_GROUP.equals(entry.getKey())) {
+            if (CORE_GROUP.equals(entry.getKey()) || SAR_ONLY_GROUP.equals(entry.getKey())) {
                 continue;
             }
             JCheckBoxMenuItem item = new JCheckBoxMenuItem(entry.getKey(), entry.getValue());
@@ -220,6 +231,23 @@ public class MainFrame extends JFrame {
             });
         });
 
+        JMenuItem exportIapBundleItem = new JMenuItem("Export IAP Bundle (all PDFs merged)…");
+        exportIapBundleItem.addActionListener(event -> {
+            AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
+            chooseDirectory(defaultDirectory, directory -> {
+                if (!handleValidationBeforeExport()) {
+                    return;
+                }
+                pushToModel(source);
+                try {
+                    Path bundlePath = controller.exportIapBundle(directory, source);
+                    JOptionPane.showMessageDialog(this, "Exported IAP bundle to\n" + bundlePath, "Export complete", JOptionPane.INFORMATION_MESSAGE);
+                } catch (IOException exception) {
+                    showError("Failed to export IAP bundle", exception);
+                }
+            });
+        });
+
         JMenuItem addLogItem = new JMenuItem("Add Log");
         addLogItem.addActionListener(event -> addLog());
 
@@ -253,6 +281,8 @@ public class MainFrame extends JFrame {
         exportMenu.add(exportSarTaskItem);
         exportMenu.add(exportClueLogItem);
         exportMenu.add(exportAllItem);
+        exportMenu.addSeparator();
+        exportMenu.add(exportIapBundleItem);
         logsMenu.add(addLogItem);
         logsMenu.add(removeCurrentLogItem);
         logsMenu.addSeparator();
@@ -260,6 +290,20 @@ public class MainFrame extends JFrame {
         JMenuItem manageEventTypesItem = new JMenuItem("Manage Event Types…");
         manageEventTypesItem.addActionListener(event -> manageEventTypes());
         configMenu.add(manageEventTypesItem);
+
+        JMenu modeMenu = new JMenu("Incident Mode");
+        ButtonGroup modeGroup = new ButtonGroup();
+        JRadioButtonMenuItem sarModeItem = new JRadioButtonMenuItem("SAR Mode", controller.getIncidentMode() == IncidentMode.SAR);
+        JRadioButtonMenuItem genericModeItem = new JRadioButtonMenuItem("Generic Incident Mode", controller.getIncidentMode() == IncidentMode.GENERIC);
+        sarModeItem.addActionListener(e -> setIncidentMode(IncidentMode.SAR));
+        genericModeItem.addActionListener(e -> setIncidentMode(IncidentMode.GENERIC));
+        modeGroup.add(sarModeItem);
+        modeGroup.add(genericModeItem);
+        modeMenu.add(sarModeItem);
+        modeMenu.add(genericModeItem);
+        configMenu.addSeparator();
+        configMenu.add(modeMenu);
+
         bar.add(fileMenu);
         bar.add(viewMenu);
         bar.add(exportMenu);
@@ -300,6 +344,7 @@ public class MainFrame extends JFrame {
         }
         sarTaskPanel.pushToModel();
         clueLogPanel.pushToModel();
+        tCardPanel.pushToModel();
         controller.markDirty(source);
     }
 
@@ -329,11 +374,6 @@ public class MainFrame extends JFrame {
                 panel.loadFromModel(form, data);
                 ics214Panels.add(panel);
                 registerTab(shortLogTabTitle(form, data), panel, AppController.LinkSource.ICS214, ACTIVITY_LOGS_GROUP);
-                int insertIndex = tabs.indexOfComponent(sarTaskPanel);
-                if (insertIndex < 0) {
-                    insertIndex = tabs.getTabCount();
-                }
-                tabs.insertTab(tabTitles.get(panel), null, panel, null, insertIndex);
             }
         } finally {
             rebuildingTabs = false;
@@ -352,6 +392,9 @@ public class MainFrame extends JFrame {
         rebuildLogTabs();
         sarTaskPanel.refreshFromModel();
         clueLogPanel.refreshFromModel();
+        tCardPanel.refreshFromModel();
+        // Keep SAR-only tabs visible only in SAR mode.
+        groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
         rebuildVisibleTabs(selectedComponent, selectedLogIndex);
         refreshStatus();
     }
@@ -368,13 +411,16 @@ public class MainFrame extends JFrame {
             addVisibleTab(organizationalChartPanel);
             addVisibleTab(ics202Panel);
             addVisibleTab(ics204Panel);
+            // SAR Tasks and Clue Log appear before ICS-214 tabs (SAR-only group).
+            addVisibleTab(sarTaskPanel);
+            // ICS-214 activity log tabs are to the right of SAR Tasks.
             if (isGroupVisible(ACTIVITY_LOGS_GROUP)) {
                 for (Ics214Panel panel : ics214Panels) {
                     addVisibleTab(panel);
                 }
             }
-            addVisibleTab(sarTaskPanel);
             addVisibleTab(clueLogPanel);
+            addVisibleTab(tCardPanel);
             Component selection = resolveSelection(preferredComponent, preferredLogIndex);
             if (selection != null && tabs.indexOfComponent(selection) >= 0) {
                 tabs.setSelectedComponent(selection);
@@ -503,6 +549,59 @@ public class MainFrame extends JFrame {
                 panel.refreshEventTypes();
             }
         }
+    }
+
+    /**
+     * Switches the incident operational mode and refreshes SAR-only tab visibility.
+     *
+     * @param mode new incident mode.
+     */
+    private void setIncidentMode(IncidentMode mode) {
+        pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+        controller.setIncidentMode(mode);
+        groupVisible.put(SAR_ONLY_GROUP, mode == IncidentMode.SAR);
+        rebuildVisibleTabs();
+        refreshStatus();
+    }
+
+    /**
+     * Opens or creates the ICS 214 activity log for the given SAR task assignment.
+     *
+     * @param task SAR task assignment to open the log for.
+     */
+    private void openIcs214ForSarTask(SarTaskAssignment task) {
+        if (task == null) {
+            return;
+        }
+        pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+        AppData data = controller.getData();
+        String assignmentId = task.getAssignmentId();
+        for (int i = 0; i < data.getActivityLogs().size(); i++) {
+            Ics214Form existing = data.getActivityLogs().get(i);
+            if (assignmentId.equals(existing.getLinkedSarTaskAssignmentId())) {
+                groupVisible.put(ACTIVITY_LOGS_GROUP, true);
+                rebuildVisibleTabs(ics214Panels.get(i), i);
+                if (tabs.indexOfComponent(ics214Panels.get(i)) >= 0) {
+                    tabs.setSelectedComponent(ics214Panels.get(i));
+                }
+                return;
+            }
+        }
+        // No existing log – create one linked to this SAR task.
+        Ics214Form form = new Ics214Form();
+        form.setLinkedSarTaskAssignmentId(assignmentId);
+        form.setName(task.getResourceIdentifier());
+        form.setResourcesAssigned(new ArrayList<>(task.getResourcesAssigned()));
+        if (!task.getResourcesAssigned().isEmpty()) {
+            form.setIcsPosition(task.getResourcesAssigned().get(0).getIcsPosition());
+        }
+        data.getActivityLogs().add(form);
+        controller.markDirty(AppController.LinkSource.ICS214);
+        rebuildLogTabs();
+        groupVisible.put(ACTIVITY_LOGS_GROUP, true);
+        int newIndex = data.getActivityLogs().size() - 1;
+        rebuildVisibleTabs(newIndex < ics214Panels.size() ? ics214Panels.get(newIndex) : null, newIndex);
+        refreshStatus();
     }
 
     private void addOrOpenLog214ForResource(ResourceAssignment resource) {
