@@ -25,6 +25,8 @@ public class TCard {
     private String homeState = "";
     /** Contact phone number. */
     private String phoneNumber = "";
+    /** Assigned radio channel or talkgroup for the operational period. */
+    private String radioChannel = "";
     /** Date and time of check-in at the incident. */
     private LocalDateTime checkInDateTime;
 
@@ -145,6 +147,24 @@ public class TCard {
      */
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber == null ? "" : phoneNumber;
+    }
+
+    /**
+     * Returns the assigned radio channel or talkgroup for the operational period.
+     *
+     * @return radio channel.
+     */
+    public String getRadioChannel() {
+        return radioChannel == null ? "" : radioChannel;
+    }
+
+    /**
+     * Sets the assigned radio channel or talkgroup for the operational period.
+     *
+     * @param radioChannel radio channel or talkgroup.
+     */
+    public void setRadioChannel(String radioChannel) {
+        this.radioChannel = radioChannel == null ? "" : radioChannel;
     }
 
     /**

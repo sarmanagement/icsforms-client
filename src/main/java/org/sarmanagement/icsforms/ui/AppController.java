@@ -85,6 +85,37 @@ public class AppController {
     }
 
     /**
+     * Returns a sorted list of distinct personnel names from all T-cards with a non-blank name.
+     *
+     * @return sorted list of personnel names.
+     */
+    public List<String> getPersonnelNames() {
+        return data.getTCards().stream()
+                .filter(c -> !c.getPersonName().isBlank())
+                .map(TCard::getPersonName)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    /**
+     * Finds the first T-card whose {@code personName} matches {@code name} (case-insensitive).
+     *
+     * @param name person name to look up; {@code null} or blank returns {@code null}.
+     * @return matching T-card, or {@code null} if not found.
+     */
+    public TCard findPersonCard(String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        String key = name.trim().toLowerCase();
+        return data.getTCards().stream()
+                .filter(c -> key.equals(c.getPersonName().trim().toLowerCase()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
      * Replaces the active document and synchronizes linked defaults.
      *
      * @param data new active document.

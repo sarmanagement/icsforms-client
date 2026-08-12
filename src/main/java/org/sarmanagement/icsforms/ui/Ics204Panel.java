@@ -412,7 +412,7 @@ public class Ics204Panel extends JPanel {
         }
         int modelRow = resourceTable.convertRowIndexToModel(viewRow);
         ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
-        ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row);
+        ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(this, editor.dialogTitle(), scrollPane, new Dimension(920, 560))) {
@@ -499,7 +499,7 @@ public class Ics204Panel extends JPanel {
         private final JScrollPane notesField;
         private final JScrollPane assignmentField;
 
-        private ResourceAssignmentEditor(ResourceAssignment row) {
+        private ResourceAssignmentEditor(ResourceAssignment row, AppController controller) {
             resourceTypeField.setEditable(true);
             taskTypeField.setEditable(true);
             assignmentTeamNumberField.setText(row.getAssignmentTeamNumber());
@@ -517,6 +517,20 @@ public class Ics204Panel extends JPanel {
             remarksField = textArea(row.getRemarks(), 2);
             notesField = textArea(row.getNotes(), 2);
             assignmentField = textArea(row.getAssignment(), 4);
+
+            // Autocomplete on leader field: selecting a known name auto-fills contact.
+            UiSupport.installNameAutocomplete(leaderField,
+                    controller::getPersonnelNames,
+                    selectedName -> {
+                        var card = controller.findPersonCard(selectedName);
+                        if (card != null && contactField.getText().isBlank()) {
+                            String contact = card.getRadioChannel().isBlank()
+                                    ? card.getPhoneNumber() : card.getRadioChannel();
+                            if (!contact.isBlank()) {
+                                contactField.setText(contact);
+                            }
+                        }
+                    });
 
             int rowIndex = 0;
             UiSupport.addRequiredRow(panel, rowIndex++, "Assignment/Team #", assignmentTeamNumberField);

@@ -85,17 +85,20 @@ public class TCardPanel extends JPanel {
 
         JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
         JButton addPersonnelBtn = new JButton("Add Personnel Card");
+        JButton addHeaderBtn    = new JButton("Add Header Card");
         JButton editBtn        = new JButton("Edit Selected…");
         JButton removeBtn      = new JButton("Remove Selected");
         JButton importCsvBtn   = new JButton("Import from CSV…");
 
         addPersonnelBtn.addActionListener(e -> addPersonnelCard());
+        addHeaderBtn.addActionListener(e -> addHeaderCard());
         editBtn.addActionListener(e -> editSelectedCard());
         removeBtn.addActionListener(e -> removeSelectedCard());
         importCsvBtn.addActionListener(e -> importFromCsv());
         toggleViewBtn.addActionListener(e -> toggleView());
 
         buttonRow.add(addPersonnelBtn);
+        buttonRow.add(addHeaderBtn);
         buttonRow.add(editBtn);
         buttonRow.add(removeBtn);
         buttonRow.add(importCsvBtn);
@@ -352,15 +355,21 @@ public class TCardPanel extends JPanel {
         }
     }
 
+    private void addHeaderCard() {
+        TCard card = new TCard();
+        card.setCardType(TCardType.HEADER);
+        if (openEditDialog(card)) {
+            tableModel.addCard(card);
+            controller.markDirty();
+        }
+    }
+
     private void editSelectedCard() {
         int row = table.getSelectedRow();
         if (row < 0) {
             return;
         }
         TCard card = tableModel.getCard(row);
-        if (card.getCardType() == TCardType.HEADER) {
-            return;
-        }
         TCard copy = copyCard(card);
         if (openEditDialog(copy)) {
             tableModel.replaceCard(row, copy);
@@ -582,15 +591,16 @@ public class TCardPanel extends JPanel {
      * @return {@code true} when the user confirmed.
      */
     private boolean openEditDialog(TCard card) {
-        JTextField personNameField   = UiSupport.textField();
-        JTextField homeAgencyField   = UiSupport.textField();
-        JTextField homeStateField    = UiSupport.textField();
+        JTextField personNameField    = UiSupport.textField();
+        JTextField homeAgencyField    = UiSupport.textField();
+        JTextField homeStateField     = UiSupport.textField();
         homeStateField.setPreferredSize(new Dimension(48, homeStateField.getPreferredSize().height));
-        JTextField phoneField        = UiSupport.textField();
-        JTextField resourceIdField   = UiSupport.textField();
-        JTextField locationField     = UiSupport.textField();
+        JTextField phoneField         = UiSupport.textField();
+        JTextField radioChannelField  = UiSupport.textField();
+        JTextField resourceIdField    = UiSupport.textField();
+        JTextField locationField      = UiSupport.textField();
         JComboBox<String> statusCombo = new JComboBox<>(STATUS_OPTIONS);
-        JTextField notesField        = UiSupport.textField();
+        JTextField notesField         = UiSupport.textField();
 
         SpinnerDateModel checkInModel = new SpinnerDateModel();
         JSpinner checkInSpinner = new JSpinner(checkInModel);
@@ -600,6 +610,7 @@ public class TCardPanel extends JPanel {
         homeAgencyField.setText(card.getHomeAgency());
         homeStateField.setText(card.getHomeState());
         phoneField.setText(card.getPhoneNumber());
+        radioChannelField.setText(card.getRadioChannel());
         resourceIdField.setText(card.getResourceIdentifier());
         locationField.setText(card.getLocation());
         statusCombo.setSelectedItem(card.getStatus());
@@ -610,39 +621,53 @@ public class TCardPanel extends JPanel {
 
         JPanel form = UiSupport.formPanel();
         int row = 0;
-        if (card.getCardType() == TCardType.PERSONNEL) {
-            UiSupport.addRow(form, row++, "Person name",           personNameField);
-            UiSupport.addRow(form, row++, "Home agency",           homeAgencyField);
-            UiSupport.addRow(form, row++, "Home state (2-letter)", homeStateField);
-            UiSupport.addRow(form, row++, "Phone number",          phoneField);
-            UiSupport.addRow(form, row++, "Check-in date/time",    checkInSpinner);
+        if (card.getCardType() == TCardType.HEADER) {
+            UiSupport.addRow(form, row++, "Heading text (column label)", resourceIdField);
+            UiSupport.addRow(form, row++, "Location note",               locationField);
+            UiSupport.addRow(form, row,   "Notes",                       notesField);
+        } else {
+            if (card.getCardType() == TCardType.PERSONNEL) {
+                UiSupport.addRow(form, row++, "Person name",              personNameField);
+                UiSupport.addRow(form, row++, "Home agency",              homeAgencyField);
+                UiSupport.addRow(form, row++, "Home state (2-letter)",    homeStateField);
+                UiSupport.addRow(form, row++, "Phone number",             phoneField);
+                UiSupport.addRow(form, row++, "Radio channel/talkgroup",  radioChannelField);
+                UiSupport.addRow(form, row++, "Check-in date/time",       checkInSpinner);
+            }
+            UiSupport.addRow(form, row++, "Resource identifier", resourceIdField);
+            UiSupport.addRow(form, row++, "Location (e.g. ICP)", locationField);
+            UiSupport.addRow(form, row++, "Status",              statusCombo);
+            UiSupport.addRow(form, row,   "Notes",               notesField);
         }
-        UiSupport.addRow(form, row++, "Resource identifier", resourceIdField);
-        UiSupport.addRow(form, row++, "Location (e.g. ICP)", locationField);
-        UiSupport.addRow(form, row++, "Status",              statusCombo);
-        UiSupport.addRow(form, row,   "Notes",               notesField);
 
         JScrollPane scroll = new JScrollPane(form);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         String title = "Edit " + card.getCardType().getLabel();
         if (!UiSupport.showResizableConfirmDialog(
                 javax.swing.SwingUtilities.getWindowAncestor(this), title, scroll,
-                new Dimension(520, 400))) {
+                new Dimension(520, 420))) {
             return false;
         }
 
-        card.setPersonName(personNameField.getText().trim());
-        card.setHomeAgency(homeAgencyField.getText().trim());
-        card.setHomeState(homeStateField.getText().trim());
-        card.setPhoneNumber(phoneField.getText().trim());
-        Object spinnerVal = checkInSpinner.getValue();
-        if (spinnerVal instanceof Date d) {
-            card.setCheckInDateTime(LocalDateTime.ofInstant(d.toInstant(), ZoneId.systemDefault()));
+        if (card.getCardType() == TCardType.HEADER) {
+            card.setResourceIdentifier(resourceIdField.getText().trim());
+            card.setLocation(locationField.getText().trim());
+            card.setNotes(notesField.getText().trim());
+        } else {
+            card.setPersonName(personNameField.getText().trim());
+            card.setHomeAgency(homeAgencyField.getText().trim());
+            card.setHomeState(homeStateField.getText().trim());
+            card.setPhoneNumber(phoneField.getText().trim());
+            card.setRadioChannel(radioChannelField.getText().trim());
+            Object spinnerVal = checkInSpinner.getValue();
+            if (spinnerVal instanceof Date d) {
+                card.setCheckInDateTime(LocalDateTime.ofInstant(d.toInstant(), ZoneId.systemDefault()));
+            }
+            card.setResourceIdentifier(resourceIdField.getText().trim());
+            card.setLocation(locationField.getText().trim());
+            card.setStatus((String) statusCombo.getSelectedItem());
+            card.setNotes(notesField.getText().trim());
         }
-        card.setResourceIdentifier(resourceIdField.getText().trim());
-        card.setLocation(locationField.getText().trim());
-        card.setStatus((String) statusCombo.getSelectedItem());
-        card.setNotes(notesField.getText().trim());
         return true;
     }
 
@@ -653,6 +678,7 @@ public class TCardPanel extends JPanel {
         copy.setHomeAgency(src.getHomeAgency());
         copy.setHomeState(src.getHomeState());
         copy.setPhoneNumber(src.getPhoneNumber());
+        copy.setRadioChannel(src.getRadioChannel());
         copy.setCheckInDateTime(src.getCheckInDateTime());
         copy.setResourceIdentifier(src.getResourceIdentifier());
         copy.setLocation(src.getLocation());

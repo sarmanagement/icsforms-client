@@ -80,6 +80,17 @@ public class OrganizationalChartPanel extends JPanel {
                 new JTextField[]{documentationUnitLeaderNameField},
                 new JTextField[]{documentationUnitLeaderContactField});
 
+        // Install autocomplete on all name fields so existing T-card personnel
+        // can be selected, auto-populating the adjacent contact field.
+        installPersonAutocomplete(safetyOfficerNameField,          safetyOfficerContactField);
+        installPersonAutocomplete(pioNameField,                    pioContactField);
+        installPersonAutocomplete(liaisonNameField,                liaisonContactField);
+        installPersonAutocomplete(operationsSectionChiefField,     operationsSectionChiefContactField);
+        installPersonAutocomplete(planningSectionChiefNameField,   planningSectionChiefContactField);
+        installPersonAutocomplete(logisticsSectionChiefNameField,  logisticsSectionChiefContactField);
+        installPersonAutocomplete(financeAdminSectionChiefNameField, financeAdminSectionChiefContactField);
+        installPersonAutocomplete(documentationUnitLeaderNameField, documentationUnitLeaderContactField);
+
         JPanel all = new JPanel();
         all.setLayout(new BoxLayout(all, BoxLayout.Y_AXIS));
         all.setOpaque(false);
@@ -98,6 +109,26 @@ public class OrganizationalChartPanel extends JPanel {
         JScrollPane scrollPane = new JScrollPane(topAligned);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         add(scrollPane, BorderLayout.CENTER);
+    }
+
+    /**
+     * Installs name autocomplete on {@code nameField} from existing T-card personnel records.
+     * When a known name is selected the adjacent {@code contactField} is auto-filled with the
+     * T-card's radio channel (preferred) or phone number if the contact field is currently blank.
+     */
+    private void installPersonAutocomplete(JTextField nameField, JTextField contactField) {
+        UiSupport.installNameAutocomplete(nameField,
+                () -> controller.getPersonnelNames(),
+                selectedName -> {
+                    var card = controller.findPersonCard(selectedName);
+                    if (card != null && contactField.getText().isBlank()) {
+                        String contact = card.getRadioChannel().isBlank()
+                                ? card.getPhoneNumber() : card.getRadioChannel();
+                        if (!contact.isBlank()) {
+                            contactField.setText(contact);
+                        }
+                    }
+                });
     }
 
     /**
