@@ -55,6 +55,14 @@ public class SarTaskAssignment {
     private String debriefPreparedByName = "";
     private String debriefPreparedByPositionTitle = "";
     private java.time.LocalDateTime debriefPreparedDateTime;
+    /**
+     * Lifecycle status of this task assignment.
+     *
+     * <p>Values: {@code "Planning"} (default), {@code "On Task"} (resources Assigned),
+     * {@code "Returned"} (resources Out of Service or Available depending on incident
+     * configuration).</p>
+     */
+    private String taskLifecycleStatus = "Planning";
 
     /**
      * Creates a SAR scaffold from a linked ICS 204 resource assignment.
@@ -324,4 +332,18 @@ public class SarTaskAssignment {
     public java.time.LocalDateTime getDebriefPreparedDateTime() { return debriefPreparedDateTime; }
     /** @param debriefPreparedDateTime debrief prepared date/time. */
     public void setDebriefPreparedDateTime(java.time.LocalDateTime debriefPreparedDateTime) { this.debriefPreparedDateTime = debriefPreparedDateTime; }
+    /**
+     * Returns the task lifecycle status.
+     *
+     * @return "Planning", "On Task", or "Returned"; never {@code null}.
+     */
+    public String getTaskLifecycleStatus() { return taskLifecycleStatus == null ? "Planning" : taskLifecycleStatus; }
+    /**
+     * Sets the task lifecycle status.
+     *
+     * @param taskLifecycleStatus "Planning", "On Task", or "Returned"; null treated as "Planning".
+     */
+    public void setTaskLifecycleStatus(String taskLifecycleStatus) {
+        this.taskLifecycleStatus = taskLifecycleStatus == null ? "Planning" : taskLifecycleStatus;
+    }
 }

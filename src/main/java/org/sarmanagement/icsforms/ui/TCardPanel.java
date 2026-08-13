@@ -9,8 +9,10 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
@@ -29,6 +31,8 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -104,8 +108,36 @@ public class TCardPanel extends JPanel {
         buttonRow.add(importCsvBtn);
         buttonRow.add(toggleViewBtn);
 
+        installTablePopupMenu();
+
         add(viewContainer, BorderLayout.CENTER);
         add(buttonRow, BorderLayout.SOUTH);
+    }
+
+    /** Installs a right-click context menu on the T-card table mirroring the bottom buttons. */
+    private void installTablePopupMenu() {
+        JPopupMenu popup = new JPopupMenu();
+        JMenuItem editItem   = new JMenuItem("Edit Selected…");
+        JMenuItem removeItem = new JMenuItem("Remove Selected");
+        editItem.addActionListener(e -> editSelectedCard());
+        removeItem.addActionListener(e -> removeSelectedCard());
+        popup.add(editItem);
+        popup.add(removeItem);
+        table.setComponentPopupMenu(popup);
+        table.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) { selectRowAt(e); }
+            @Override public void mouseReleased(MouseEvent e) { selectRowAt(e); }
+            @Override public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    selectRowAt(e);
+                    editSelectedCard();
+                }
+            }
+            private void selectRowAt(MouseEvent e) {
+                int row = table.rowAtPoint(e.getPoint());
+                if (row >= 0) table.setRowSelectionInterval(row, row);
+            }
+        });
     }
 
     /**
@@ -169,34 +201,68 @@ public class TCardPanel extends JPanel {
     }
 
     /**
-     * Builds a rack panel where each HEADER card is a column heading and the
-     * resource cards that follow it are stacked below as narrow coloured widgets.
-     * Resource cards before the first HEADER are collected into an "Unassigned" column.
+     * Builds a rack panel where each HEADER card is a column heading and resource cards are
+     * placed into the column whose label best matches the card's status or location.
+     *
+     * <p>Matching priority:
+     * <ol>
+     *   <li>Card's {@code status} matches a HEADER's display label (case-insensitive).</li>
+     *   <li>Card's {@code location} matches a HEADER's display label (case-insensitive).</li>
+     *   <li>Default: the "Available" column if present, otherwise the first column.</li>
+     * </ol>
      */
     private JPanel buildHeaderBasedRack(List<TCard> cards) {
-        // Partition cards into sections: (headerCard-or-null, list-of-resource-cards).
+        // Collect HEADER cards in order.
         List<TCard> sectionHeaders = new ArrayList<>();
-        List<List<TCard>> sectionCards = new ArrayList<>();
-
-        TCard currentHeader = null;
-        List<TCard> currentCards = new ArrayList<>();
         for (TCard card : cards) {
             if (card.getCardType() == TCardType.HEADER) {
-                sectionHeaders.add(currentHeader);
-                sectionCards.add(currentCards);
-                currentHeader = card;
-                currentCards = new ArrayList<>();
-            } else {
-                currentCards.add(card);
+                sectionHeaders.add(card);
             }
         }
-        sectionHeaders.add(currentHeader);
-        sectionCards.add(currentCards);
 
-        // Remove leading null-header section if it has no cards.
-        if (!sectionHeaders.isEmpty() && sectionHeaders.get(0) == null && sectionCards.get(0).isEmpty()) {
-            sectionHeaders.remove(0);
-            sectionCards.remove(0);
+        // For each HEADER build a mutable child list.
+        List<List<TCard>> sectionCards = new ArrayList<>();
+        for (int i = 0; i < sectionHeaders.size(); i++) {
+            sectionCards.add(new ArrayList<>());
+        }
+
+        // Determine the default column index ("Available" header, or 0 if absent).
+        int defaultColIndex = 0;
+        for (int i = 0; i < sectionHeaders.size(); i++) {
+            if ("Available".equalsIgnoreCase(sectionHeaders.get(i).getDisplayLabel())) {
+                defaultColIndex = i;
+                break;
+            }
+        }
+
+        // Place each non-HEADER card into the best-matching column.
+        for (TCard card : cards) {
+            if (card.getCardType() == TCardType.HEADER) {
+                continue;
+            }
+            int colIndex = defaultColIndex;
+            // Try matching by status first, then by location.
+            String matchStatus   = card.getStatus()   == null ? "" : card.getStatus();
+            String matchLocation = card.getLocation() == null ? "" : card.getLocation();
+            boolean matched = false;
+            for (int i = 0; i < sectionHeaders.size(); i++) {
+                String headerLabel = sectionHeaders.get(i).getDisplayLabel();
+                if (!matchStatus.isBlank() && headerLabel.equalsIgnoreCase(matchStatus)) {
+                    colIndex = i;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                for (int i = 0; i < sectionHeaders.size(); i++) {
+                    String headerLabel = sectionHeaders.get(i).getDisplayLabel();
+                    if (!matchLocation.isBlank() && headerLabel.equalsIgnoreCase(matchLocation)) {
+                        colIndex = i;
+                        break;
+                    }
+                }
+            }
+            sectionCards.get(colIndex).add(card);
         }
 
         int cols = Math.max(1, sectionHeaders.size());
@@ -210,23 +276,8 @@ public class TCardPanel extends JPanel {
             JPanel col = new JPanel();
             col.setLayout(new javax.swing.BoxLayout(col, javax.swing.BoxLayout.Y_AXIS));
 
-            // Grey header card at top of column.
-            if (header != null) {
-                col.add(buildHeaderCardWidget(header));
-                col.add(javax.swing.Box.createVerticalStrut(4));
-            } else {
-                // Unassigned column heading.
-                JLabel lbl = new JLabel("Unassigned");
-                lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, 12f));
-                lbl.setOpaque(true);
-                lbl.setBackground(cardColor(TCardType.HEADER));
-                lbl.setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createLineBorder(Color.DARK_GRAY),
-                        BorderFactory.createEmptyBorder(4, 6, 4, 6)));
-                lbl.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-                col.add(lbl);
-                col.add(javax.swing.Box.createVerticalStrut(4));
-            }
+            col.add(buildHeaderCardWidget(header));
+            col.add(javax.swing.Box.createVerticalStrut(4));
 
             for (TCard card : children) {
                 col.add(buildRackCard(card));

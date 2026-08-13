@@ -516,11 +516,14 @@ public class AppController {
         }
 
         // --- SAR task resources ---
+        // Track desired T-card status from task lifecycle (identity-keyed for dedup safety).
+        Map<TCard, String> taskDrivenStatus = new java.util.IdentityHashMap<>();
         for (SarTaskAssignment task : data.getSarTaskAssignments()) {
             String assignmentId = task.getAssignmentId();
             if (assignmentId == null || assignmentId.isBlank()) {
                 continue;
             }
+            String lifecycleCardStatus = lifecycleToCardStatus(task.getTaskLifecycleStatus());
             // Task leader
             String leaderName = safe(task.getLeader());
             if (!leaderName.isBlank()) {
@@ -533,6 +536,7 @@ public class AppController {
                         safe(task.getLeaderRole()) + " — " + safe(task.getAssignmentTeamNumber())));
                 wanted.put(ref, card);
                 byName.putIfAbsent(leaderName.trim().toLowerCase(), card);
+                applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
             }
             // Assigned resources
             List<SarTaskResource> resources = task.getResourcesAssigned();
@@ -552,8 +556,14 @@ public class AppController {
                             safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
                     wanted.put(ref, card);
                     byName.putIfAbsent(resName.trim().toLowerCase(), card);
+                    applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
                 }
             }
+        }
+
+        // Apply lifecycle-driven statuses to task resource cards.
+        for (Map.Entry<TCard, String> entry : taskDrivenStatus.entrySet()) {
+            entry.getKey().setStatus(entry.getValue());
         }
 
         // Rebuild the card list: keep manually created cards first, then source-linked cards
@@ -573,7 +583,81 @@ public class AppController {
                 seen.add(card);
             }
         }
+        ensureDefaultHeaderCards(result);
         data.setTCards(result);
+    }
+
+    /** Default HEADER card labels used when no HEADER cards exist yet. */
+    private static final String[] DEFAULT_HEADER_LABELS = {
+            "ICP", "Available", "Assigned", "Out of Service", "Enroute"
+    };
+
+    /**
+     * Ensures the default HEADER (219-1) rack columns exist in the card list.
+     *
+     * <p>If no HEADER cards are present the five default labels (ICP, Available, Assigned,
+     * Out of Service, Enroute) are prepended to {@code cards}.  Once any HEADER card is
+     * present no defaults are added so as not to override operator customisation.</p>
+     *
+     * @param cards mutable card list to modify in-place.
+     */
+    private static void ensureDefaultHeaderCards(List<TCard> cards) {
+        boolean hasHeader = cards.stream().anyMatch(c -> c.getCardType() == TCardType.HEADER);
+        if (hasHeader) {
+            return;
+        }
+        List<TCard> headers = new ArrayList<>();
+        for (String label : DEFAULT_HEADER_LABELS) {
+            TCard h = new TCard();
+            h.setCardType(TCardType.HEADER);
+            h.setResourceIdentifier(label);
+            headers.add(h);
+        }
+        cards.addAll(0, headers);
+    }
+
+    /**
+     * Converts a task lifecycle status string to the equivalent T-card status.
+     *
+     * @param lifecycle "Planning", "On Task", or "Returned".
+     * @return T-card status string ("Assigned", "Out of Service", or blank).
+     */
+    static String lifecycleToCardStatus(String lifecycle) {
+        if (lifecycle == null) return "";
+        return switch (lifecycle) {
+            case "On Task"  -> "Assigned";
+            case "Returned" -> "Out of Service";
+            default         -> "";           // Planning or unknown → blank
+        };
+    }
+
+    /**
+     * Records a lifecycle-driven status for {@code card}, keeping the highest-priority
+     * value when the same card is referenced from multiple tasks.
+     *
+     * <p>Only non-blank statuses ("Assigned", "Out of Service") are tracked.  A blank
+     * status from a "Planning" task is ignored so that operator-set statuses are not
+     * overwritten when no active lifecycle state applies.</p>
+     *
+     * <p>Priority: "Assigned" &gt; "Out of Service".</p>
+     */
+    private static void applyHigherPriorityStatus(Map<TCard, String> map, TCard card, String status) {
+        if (status == null || status.isBlank()) {
+            return;  // Planning → do not touch the operator's existing status
+        }
+        String current = map.getOrDefault(card, "");
+        if (statusPriority(status) > statusPriority(current)) {
+            map.put(card, status);
+        }
+    }
+
+    private static int statusPriority(String status) {
+        if (status == null) return 0;
+        return switch (status) {
+            case "Assigned"       -> 2;
+            case "Out of Service" -> 1;
+            default               -> 0;
+        };
     }
 
     /**
