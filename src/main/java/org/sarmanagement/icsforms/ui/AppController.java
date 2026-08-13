@@ -333,6 +333,16 @@ public class AppController {
         organizationalChart.setOperationsSectionChiefName(operationsSectionChiefName);
         form204.setOperationsSectionChiefName(operationsSectionChiefName);
 
+        // Sync ops section chief contact from org chart → form 204 when org chart is authoritative.
+        String opsContact = safe(organizationalChart.getOperationsSectionChiefRadio()).isBlank()
+                ? safe(organizationalChart.getOperationsSectionChiefPhone())
+                : safe(organizationalChart.getOperationsSectionChiefRadio());
+        if (!opsContact.isBlank()
+                && (safe(form204.getOperationsSectionChiefContact()).isBlank()
+                || source == LinkSource.ORG_CHART)) {
+            form204.setOperationsSectionChiefContact(opsContact);
+        }
+
         if (!preparerName.isBlank() || !preparerTitle.isBlank() || source == LinkSource.SHARED) {
             form202.setPreparedByName(preparerName);
             form202.setPreparedByPositionTitle(preparerTitle);
@@ -386,6 +396,25 @@ public class AppController {
      */
     public void setIncidentMode(org.sarmanagement.icsforms.model.IncidentMode mode) {
         data.setIncidentMode(mode);
+        markDirty();
+    }
+
+    /**
+     * Returns the current IAP preparation phase.
+     *
+     * @return IAP phase.
+     */
+    public org.sarmanagement.icsforms.model.IapPhase getIapPhase() {
+        return data.getIapPhase();
+    }
+
+    /**
+     * Sets the IAP preparation phase and marks the document dirty.
+     *
+     * @param phase IAP phase.
+     */
+    public void setIapPhase(org.sarmanagement.icsforms.model.IapPhase phase) {
+        data.setIapPhase(phase);
         markDirty();
     }
 
@@ -480,7 +509,7 @@ public class AppController {
                     String name = safe(ics.get(i));
                     if (!name.isBlank()) {
                         String ref = "org:ic:" + i;
-                        TCard card = byRef.containsKey(ref) ? byRef.get(ref) : newOrgCard(name, "");
+                        TCard card = byRef.containsKey(ref) ? byRef.get(ref) : newOrgCard(name, "", "");
                         card.setPersonName(name);
                         card.setSourceRef(ref);
                         card.setNotes(notePreserving(card.getNotes(), "Incident Commander"));
@@ -490,29 +519,35 @@ public class AppController {
                 }
             }
             addOrgCard(wanted, byRef, byName, "org:safetyOfficer",
-                    chart.getSafetyOfficerName(), chart.getSafetyOfficerContact(),
-                    "Safety Officer");
+                    chart.getSafetyOfficerName(), chart.getSafetyOfficerRadio(),
+                    chart.getSafetyOfficerPhone(), "Safety Officer");
             addOrgCard(wanted, byRef, byName, "org:pio",
-                    chart.getPublicInformationOfficerName(), chart.getPublicInformationOfficerContact(),
-                    "Public Information Officer");
+                    chart.getPublicInformationOfficerName(), chart.getPublicInformationOfficerRadio(),
+                    chart.getPublicInformationOfficerPhone(), "Public Information Officer");
             addOrgCard(wanted, byRef, byName, "org:liaisonOfficer",
-                    chart.getLiaisonOfficerName(), chart.getLiaisonOfficerContact(),
-                    "Liaison Officer");
+                    chart.getLiaisonOfficerName(), chart.getLiaisonOfficerRadio(),
+                    chart.getLiaisonOfficerPhone(), "Liaison Officer");
             addOrgCard(wanted, byRef, byName, "org:operationsChief",
-                    chart.getOperationsSectionChiefName(), chart.getOperationsSectionChiefContact(),
-                    "Operations Section Chief");
+                    chart.getOperationsSectionChiefName(), chart.getOperationsSectionChiefRadio(),
+                    chart.getOperationsSectionChiefPhone(), "Operations Section Chief");
             addOrgCard(wanted, byRef, byName, "org:planningChief",
-                    chart.getPlanningSectionChiefName(), chart.getPlanningSectionChiefContact(),
-                    "Planning Section Chief");
+                    chart.getPlanningSectionChiefName(), chart.getPlanningSectionChiefRadio(),
+                    chart.getPlanningSectionChiefPhone(), "Planning Section Chief");
             addOrgCard(wanted, byRef, byName, "org:logisticsChief",
-                    chart.getLogisticsSectionChiefName(), chart.getLogisticsSectionChiefContact(),
-                    "Logistics Section Chief");
+                    chart.getLogisticsSectionChiefName(), chart.getLogisticsSectionChiefRadio(),
+                    chart.getLogisticsSectionChiefPhone(), "Logistics Section Chief");
             addOrgCard(wanted, byRef, byName, "org:financeAdminChief",
-                    chart.getFinanceAdminSectionChiefName(), chart.getFinanceAdminSectionChiefContact(),
-                    "Finance/Admin Section Chief");
+                    chart.getFinanceAdminSectionChiefName(), chart.getFinanceAdminSectionChiefRadio(),
+                    chart.getFinanceAdminSectionChiefPhone(), "Finance/Admin Section Chief");
             addOrgCard(wanted, byRef, byName, "org:documentationUnitLeader",
-                    chart.getDocumentationUnitLeaderName(), chart.getDocumentationUnitLeaderContact(),
-                    "Documentation Unit Leader");
+                    chart.getDocumentationUnitLeaderName(), chart.getDocumentationUnitLeaderRadio(),
+                    chart.getDocumentationUnitLeaderPhone(), "Documentation Unit Leader");
+            addOrgCard(wanted, byRef, byName, "org:commUnitLeader",
+                    chart.getCommunicationsUnitLeaderName(), chart.getCommunicationsUnitLeaderRadio(),
+                    chart.getCommunicationsUnitLeaderPhone(), "Communications Unit Leader");
+            addOrgCard(wanted, byRef, byName, "org:commTechnician",
+                    chart.getCommunicationsTechnicianName(), chart.getCommunicationsTechnicianRadio(),
+                    chart.getCommunicationsTechnicianPhone(), "Communications Technician");
         }
 
         // --- SAR task resources ---
@@ -583,7 +618,7 @@ public class AppController {
                 seen.add(card);
             }
         }
-        ensureDefaultHeaderCards(result);
+        ensureDefaultHeaderCards(result, data.getIapPhase());
         data.setTCards(result);
     }
 
@@ -591,17 +626,23 @@ public class AppController {
     private static final String[] DEFAULT_HEADER_LABELS = {
             "ICP", "Available", "Assigned", "Out of Service", "Enroute"
     };
+    /** Extra HEADER label added in pre-operational-period mode. */
+    private static final String ORDERED_HEADER_LABEL = "Ordered";
 
     /**
      * Ensures the default HEADER (219-1) rack columns exist in the card list.
      *
-     * <p>If no HEADER cards are present the five default labels (ICP, Available, Assigned,
-     * Out of Service, Enroute) are prepended to {@code cards}.  Once any HEADER card is
-     * present no defaults are added so as not to override operator customisation.</p>
+     * <p>If no HEADER cards are present the default labels (ICP, Available, Assigned,
+     * Out of Service, Enroute) are prepended; in {@link org.sarmanagement.icsforms.model.IapPhase#PRE_OP}
+     * mode an additional "Ordered" column is inserted after "ICP".
+     * Once any HEADER card is present no defaults are added so as not to override operator
+     * customisation.</p>
      *
-     * @param cards mutable card list to modify in-place.
+     * @param cards   mutable card list to modify in-place.
+     * @param phase   current IAP phase (used to include/exclude the Ordered column).
      */
-    private static void ensureDefaultHeaderCards(List<TCard> cards) {
+    static void ensureDefaultHeaderCards(List<TCard> cards,
+                                         org.sarmanagement.icsforms.model.IapPhase phase) {
         boolean hasHeader = cards.stream().anyMatch(c -> c.getCardType() == TCardType.HEADER);
         if (hasHeader) {
             return;
@@ -612,6 +653,13 @@ public class AppController {
             h.setCardType(TCardType.HEADER);
             h.setResourceIdentifier(label);
             headers.add(h);
+            // Insert "Ordered" after "ICP" in pre-op mode.
+            if ("ICP".equals(label) && phase == org.sarmanagement.icsforms.model.IapPhase.PRE_OP) {
+                TCard ordered = new TCard();
+                ordered.setCardType(TCardType.HEADER);
+                ordered.setResourceIdentifier(ORDERED_HEADER_LABEL);
+                headers.add(ordered);
+            }
         }
         cards.addAll(0, headers);
     }
@@ -694,7 +742,7 @@ public class AppController {
     /** Creates or updates a single org-chart staff T-card. */
     private void addOrgCard(Map<String, TCard> wanted, Map<String, TCard> existing,
                              Map<String, TCard> byName,
-                             String ref, String name, String contact, String roleLabel) {
+                             String ref, String name, String radio, String phone, String roleLabel) {
         String safeName = safe(name);
         if (safeName.isBlank()) {
             return;
@@ -704,10 +752,11 @@ public class AppController {
             card = existing.get(ref);
         } else {
             String nameKey = safeName.trim().toLowerCase();
-            card = byName.containsKey(nameKey) ? byName.get(nameKey) : newOrgCard(safeName, contact);
+            card = byName.containsKey(nameKey) ? byName.get(nameKey) : newOrgCard(safeName, radio, phone);
         }
         card.setPersonName(safeName);
-        card.setPhoneNumber(coalesce(card.getPhoneNumber(), contact));
+        card.setRadioChannel(coalesce(card.getRadioChannel(), radio));
+        card.setPhoneNumber(coalesce(card.getPhoneNumber(), phone));
         card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
         card.setNotes(notePreserving(card.getNotes(), roleLabel));
         wanted.put(ref, card);
@@ -721,11 +770,14 @@ public class AppController {
         return card;
     }
 
-    private TCard newOrgCard(String name, String contact) {
+    private TCard newOrgCard(String name, String radio, String phone) {
         TCard card = newPersonnelCard(name);
         card.setLocation("ICP");
-        if (contact != null && !contact.isBlank()) {
-            card.setPhoneNumber(contact);
+        if (radio != null && !radio.isBlank()) {
+            card.setRadioChannel(radio);
+        }
+        if (phone != null && !phone.isBlank()) {
+            card.setPhoneNumber(phone);
         }
         return card;
     }
@@ -864,6 +916,9 @@ public class AppController {
         }
         if (data.getIncidentMode() == null) {
             data.setIncidentMode(org.sarmanagement.icsforms.model.IncidentMode.SAR);
+        }
+        if (data.getIapPhase() == null) {
+            data.setIapPhase(org.sarmanagement.icsforms.model.IapPhase.PRE_OP);
         }
         if (data.getSchemaVersion() < AppData.CURRENT_SCHEMA_VERSION) {
             data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);

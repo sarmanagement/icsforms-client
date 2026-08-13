@@ -63,6 +63,7 @@ public class SarTaskAssignment {
      * configuration).</p>
      */
     private String taskLifecycleStatus = "Planning";
+    private String iapPage = "";
 
     /**
      * Creates a SAR scaffold from a linked ICS 204 resource assignment.
@@ -346,4 +347,9 @@ public class SarTaskAssignment {
     public void setTaskLifecycleStatus(String taskLifecycleStatus) {
         this.taskLifecycleStatus = taskLifecycleStatus == null ? "Planning" : taskLifecycleStatus;
     }
+
+    /** @return IAP page number string for this form in the bundle. */
+    public String getIapPage() { return iapPage == null ? "" : iapPage; }
+    /** @param iapPage IAP page number string. */
+    public void setIapPage(String iapPage) { this.iapPage = iapPage == null ? "" : iapPage; }
 }

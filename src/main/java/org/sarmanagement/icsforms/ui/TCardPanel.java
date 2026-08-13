@@ -265,13 +265,28 @@ public class TCardPanel extends JPanel {
             sectionCards.get(colIndex).add(card);
         }
 
-        int cols = Math.max(1, sectionHeaders.size());
+        // Build list of visible columns: filter out "Enroute" and "Ordered" headers
+        // when they have no resource cards assigned to them (items 4 + 5).
+        List<TCard> visibleHeaders = new ArrayList<>();
+        List<List<TCard>> visibleCards = new ArrayList<>();
+        for (int i = 0; i < sectionHeaders.size(); i++) {
+            String label = sectionHeaders.get(i).getDisplayLabel();
+            boolean hiddenWhenEmpty = "Enroute".equalsIgnoreCase(label)
+                    || "Ordered".equalsIgnoreCase(label);
+            if (hiddenWhenEmpty && sectionCards.get(i).isEmpty()) {
+                continue;
+            }
+            visibleHeaders.add(sectionHeaders.get(i));
+            visibleCards.add(sectionCards.get(i));
+        }
+
+        int cols = Math.max(1, visibleHeaders.size());
         JPanel rack = new JPanel(new GridLayout(1, cols, 6, 0));
         rack.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        for (int i = 0; i < sectionHeaders.size(); i++) {
-            TCard header = sectionHeaders.get(i);
-            List<TCard> children = sectionCards.get(i);
+        for (int i = 0; i < visibleHeaders.size(); i++) {
+            TCard header = visibleHeaders.get(i);
+            List<TCard> children = visibleCards.get(i);
 
             JPanel col = new JPanel();
             col.setLayout(new javax.swing.BoxLayout(col, javax.swing.BoxLayout.Y_AXIS));
@@ -328,32 +343,19 @@ public class TCardPanel extends JPanel {
         return rack;
     }
 
-    /** Builds the grey column-heading widget for a HEADER card in the rack view. */
+    /** Builds the compact grey column-heading widget for a HEADER card in the rack view. */
     private JPanel buildHeaderCardWidget(TCard header) {
-        JPanel p = new JPanel(new BorderLayout(2, 2));
+        JPanel p = new JPanel(new BorderLayout(2, 0));
         p.setBackground(cardColor(TCardType.HEADER));
         p.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(Color.DARK_GRAY, 2),
-                BorderFactory.createEmptyBorder(4, 6, 4, 6)));
+                BorderFactory.createEmptyBorder(3, 6, 3, 6)));
         p.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 
         JLabel titleLabel = new JLabel(header.getDisplayLabel());
-        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
-        p.add(titleLabel, BorderLayout.NORTH);
-
-        StringBuilder sub = new StringBuilder();
-        if (!header.getLocation().isBlank()) {
-            sub.append(header.getLocation());
-        }
-        if (!header.getNotes().isBlank()) {
-            if (!sub.isEmpty()) sub.append(" · ");
-            sub.append(header.getNotes());
-        }
-        if (!sub.isEmpty()) {
-            JLabel subLabel = new JLabel(sub.toString());
-            subLabel.setFont(subLabel.getFont().deriveFont(11f));
-            p.add(subLabel, BorderLayout.CENTER);
-        }
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
+        p.add(titleLabel, BorderLayout.CENTER);
         return p;
     }
 

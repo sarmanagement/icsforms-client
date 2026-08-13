@@ -5,6 +5,7 @@ import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.IapPhase;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
@@ -305,6 +306,21 @@ public class MainFrame extends JFrame {
         modeMenu.add(genericModeItem);
         configMenu.addSeparator();
         configMenu.add(modeMenu);
+
+        JMenu iapPhaseMenu = new JMenu("IAP Phase");
+        ButtonGroup phaseGroup = new ButtonGroup();
+        JRadioButtonMenuItem preOpItem  = new JRadioButtonMenuItem("Pre-Operational (planning)",
+                controller.getIapPhase() == IapPhase.PRE_OP);
+        JRadioButtonMenuItem duringOpItem = new JRadioButtonMenuItem("During Operational Period",
+                controller.getIapPhase() == IapPhase.DURING_OP);
+        preOpItem.addActionListener(e -> { controller.setIapPhase(IapPhase.PRE_OP); refreshFromModel(); });
+        duringOpItem.addActionListener(e -> { controller.setIapPhase(IapPhase.DURING_OP); refreshFromModel(); });
+        phaseGroup.add(preOpItem);
+        phaseGroup.add(duringOpItem);
+        iapPhaseMenu.add(preOpItem);
+        iapPhaseMenu.add(duringOpItem);
+        configMenu.addSeparator();
+        configMenu.add(iapPhaseMenu);
 
         bar.add(fileMenu);
         bar.add(viewMenu);

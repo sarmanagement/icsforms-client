@@ -156,40 +156,41 @@ class IncidentModeAndTCardTest {
     void orgChartNewPositionsRoundTrip() throws IOException {
         OrganizationalChart chart = new OrganizationalChart();
         chart.setSafetyOfficerName("Safety Sam");
-        chart.setSafetyOfficerContact("Tac-1");
+        chart.setSafetyOfficerRadio("Tac-1");
         chart.setPublicInformationOfficerName("PIO Pat");
-        chart.setPublicInformationOfficerContact("555-1111");
+        chart.setPublicInformationOfficerPhone("555-1111");
         chart.setLiaisonOfficerName("Liaison Lee");
-        chart.setLiaisonOfficerContact("555-2222");
+        chart.setLiaisonOfficerPhone("555-2222");
         chart.setPlanningSectionChiefName("Planning Pete");
-        chart.setPlanningSectionChiefContact("Tac-2");
+        chart.setPlanningSectionChiefRadio("Tac-2");
         chart.setLogisticsSectionChiefName("Logistics Lou");
-        chart.setLogisticsSectionChiefContact("Tac-3");
+        chart.setLogisticsSectionChiefRadio("Tac-3");
         chart.setFinanceAdminSectionChiefName("Finance Fran");
-        chart.setFinanceAdminSectionChiefContact("555-3333");
+        chart.setFinanceAdminSectionChiefPhone("555-3333");
         chart.setDocumentationUnitLeaderName("Doc Dan");
-        chart.setDocumentationUnitLeaderContact("555-4444");
+        chart.setDocumentationUnitLeaderPhone("555-4444");
 
         String json = mapper.writeValueAsString(chart);
         OrganizationalChart loaded = mapper.readValue(json, OrganizationalChart.class);
 
         assertEquals("Safety Sam", loaded.getSafetyOfficerName());
-        assertEquals("Tac-1", loaded.getSafetyOfficerContact());
+        assertEquals("Tac-1", loaded.getSafetyOfficerRadio());
         assertEquals("PIO Pat", loaded.getPublicInformationOfficerName());
-        assertEquals("555-1111", loaded.getPublicInformationOfficerContact());
+        assertEquals("555-1111", loaded.getPublicInformationOfficerPhone());
         assertEquals("Liaison Lee", loaded.getLiaisonOfficerName());
         assertEquals("Planning Pete", loaded.getPlanningSectionChiefName());
         assertEquals("Logistics Lou", loaded.getLogisticsSectionChiefName());
         assertEquals("Finance Fran", loaded.getFinanceAdminSectionChiefName());
         assertEquals("Doc Dan", loaded.getDocumentationUnitLeaderName());
-        assertEquals("555-4444", loaded.getDocumentationUnitLeaderContact());
+        assertEquals("555-4444", loaded.getDocumentationUnitLeaderPhone());
     }
 
     @Test
     void orgChartNewPositionsDefaultToEmpty() {
         OrganizationalChart chart = new OrganizationalChart();
         assertEquals("", chart.getSafetyOfficerName());
-        assertEquals("", chart.getSafetyOfficerContact());
+        assertEquals("", chart.getSafetyOfficerRadio());
+        assertEquals("", chart.getSafetyOfficerPhone());
         assertEquals("", chart.getPublicInformationOfficerName());
         assertEquals("", chart.getLiaisonOfficerName());
         assertEquals("", chart.getPlanningSectionChiefName());
@@ -230,4 +231,39 @@ class IncidentModeAndTCardTest {
         assertEquals("Officer Olivia", loaded.getOrganizationalChart().getSafetyOfficerName());
         assertEquals("Doc Dylan", loaded.getOrganizationalChart().getDocumentationUnitLeaderName());
     }
+
+    @Test
+    void orgChartLegacyContactFieldDeserializesToPhone() throws IOException {
+        // Old JSON written before the radio/phone split used a single "contact" field per position.
+        // @JsonAlias annotations must migrate those values into the new *Phone fields.
+        String legacyJson = """
+                {
+                  "safetyOfficerName": "Sam Safety",
+                  "safetyOfficerContact": "555-9999",
+                  "publicInformationOfficerName": "PIO Pat",
+                  "publicInformationOfficerContact": "555-8888"
+                }""";
+        OrganizationalChart chart = mapper.readValue(legacyJson, OrganizationalChart.class);
+        assertEquals("Sam Safety", chart.getSafetyOfficerName());
+        assertEquals("555-9999", chart.getSafetyOfficerPhone());
+        assertEquals("", chart.getSafetyOfficerRadio());
+        assertEquals("PIO Pat", chart.getPublicInformationOfficerName());
+        assertEquals("555-8888", chart.getPublicInformationOfficerPhone());
+    }
+
+    @Test
+    void iapPhaseRoundTrips() throws IOException {
+        AppData data = new AppData();
+        data.setIapPhase(org.sarmanagement.icsforms.model.IapPhase.DURING_OP);
+        String json = mapper.writeValueAsString(data);
+        AppData loaded = mapper.readValue(json, AppData.class);
+        assertEquals(org.sarmanagement.icsforms.model.IapPhase.DURING_OP, loaded.getIapPhase());
+    }
+
+    @Test
+    void iapPhaseDefaultsToPreOpForNewData() {
+        AppData data = new AppData();
+        assertEquals(org.sarmanagement.icsforms.model.IapPhase.PRE_OP, data.getIapPhase());
+    }
 }
+

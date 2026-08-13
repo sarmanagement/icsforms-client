@@ -217,6 +217,8 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         drawInlinePair(stream, bold, regular, rightX, topRowY, "Signature", safe(form.getPreparedBySignature()));
         writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerContentY, "ICS 214", "");
         drawInlinePair(stream, bold, regular, x + footerCellWidth + CELL_PADDING, footerContentY, "Date/Time", formatDateTime(form.getPreparedDateTime()));
+        String iapPageLabel = form.getIapPage().isBlank() ? "" : "IAP p." + form.getIapPage() + "  ";
+        writeInlineHeadingValue(stream, bold, regular, x + width - 118f - 60f, footerContentY, iapPageLabel, "");
         writeInlineHeadingValue(stream, bold, regular, x + width - 118f, footerContentY, "Page", pageNumber + " of " + totalPages);
     }
 

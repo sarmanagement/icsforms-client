@@ -228,7 +228,7 @@ class TCardSyncAndCsvTest {
     private static AppData appDataWithSafetyOfficer(String name, String contact) {
         AppData data = new AppData();
         data.getOrganizationalChart().setSafetyOfficerName(name);
-        data.getOrganizationalChart().setSafetyOfficerContact(contact);
+        data.getOrganizationalChart().setSafetyOfficerPhone(contact);
         return data;
     }
 

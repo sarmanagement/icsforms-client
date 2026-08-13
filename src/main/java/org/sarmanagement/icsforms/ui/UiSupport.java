@@ -289,7 +289,9 @@ final class UiSupport {
                         });
                         popup.add(item);
                     }
-                    popup.show(nameField, 0, nameField.getHeight());
+                    if (nameField.isShowing()) {
+                        popup.show(nameField, 0, nameField.getHeight());
+                    }
                 });
             }
         };

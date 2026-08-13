@@ -13,6 +13,7 @@ public class AppData {
 
     private int schemaVersion = CURRENT_SCHEMA_VERSION;
     private IncidentMode incidentMode = IncidentMode.SAR;
+    private IapPhase iapPhase = IapPhase.PRE_OP;
     private IncidentContext incidentContext = new IncidentContext();
     private OrganizationalChart organizationalChart = new OrganizationalChart();
     private Ics202Form form202 = new Ics202Form();
@@ -230,6 +231,26 @@ public class AppData {
      */
     public void setClueLogEntries(List<ClueLogEntry> clueLogEntries) {
         this.clueLogEntries = clueLogEntries == null ? new ArrayList<>() : clueLogEntries;
+    }
+
+    /**
+     * Returns the IAP preparation phase (pre-operational or during operational period).
+     *
+     * <p>Defaults to {@link IapPhase#PRE_OP} for backward compatibility.</p>
+     *
+     * @return IAP phase.
+     */
+    public IapPhase getIapPhase() {
+        return iapPhase == null ? IapPhase.PRE_OP : iapPhase;
+    }
+
+    /**
+     * Sets the IAP preparation phase.
+     *
+     * @param iapPhase IAP phase; {@code null} is treated as {@link IapPhase#PRE_OP}.
+     */
+    public void setIapPhase(IapPhase iapPhase) {
+        this.iapPhase = iapPhase == null ? IapPhase.PRE_OP : iapPhase;
     }
 
     /**

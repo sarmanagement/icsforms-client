@@ -2,7 +2,9 @@ package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.multipdf.PDFMergerUtility;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -88,6 +90,7 @@ public class PdfExportService {
      * @throws IOException when export or merge fails.
      */
     public Path exportIapBundle(AppData data, Path outputDirectory) throws IOException {
+        assignIapPageNumbers(data);
         Map<String, Path> parts = exportAll(data, outputDirectory);
         String bundleName = iapBundleFileName(data.getIncidentContext());
         Path bundlePath = outputDirectory.resolve(bundleName);
@@ -115,6 +118,36 @@ public class PdfExportService {
      * @param formKey form identifier.
      * @return PDF file name.
      */
+    /**
+     * Assigns sequential IAP page numbers to all forms in the document, ordered by ICS form
+     * number: ICS 202 (page 1), ICS 204 forms (primary then additional), SAR Task Assignment
+     * forms, ICS 214 activity logs.
+     *
+     * <p>This method mutates the forms in {@code data} in-place and is called just before the
+     * IAP bundle export so the page numbers printed on the PDFs are accurate.</p>
+     *
+     * @param data incident document.
+     */
+    static void assignIapPageNumbers(AppData data) {
+        int page = 1;
+        // ICS 202
+        data.getForm202().setIapPage(String.valueOf(page++));
+        // ICS 204 — primary form
+        data.getForm204().setIapPage(String.valueOf(page++));
+        // ICS 204 — additional forms
+        for (Ics204Form form : data.getAdditionalForms204()) {
+            form.setIapPage(String.valueOf(page++));
+        }
+        // SAR Task Assignment forms (TAFs)
+        for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+            task.setIapPage(String.valueOf(page++));
+        }
+        // ICS 214 activity logs
+        for (org.sarmanagement.icsforms.model.Ics214Form log : data.getActivityLogs()) {
+            log.setIapPage(String.valueOf(page++));
+        }
+    }
+
     private String fileName(String formKey) {
         return formKey.toLowerCase().replace(' ', '-') + ".pdf";
     }

@@ -1,5 +1,7 @@
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -7,337 +9,151 @@ import java.util.List;
  * Shared organizational chart data reused across the first-cut form editors.
  *
  * <p>All position fields are optional.  Blank values are allowed and rendered gracefully
- * in the form editors and PDF output.  Contact values may be a radio channel or phone number.</p>
+ * in the form editors and PDF output.  Each position now stores separate radio-channel and
+ * phone-number fields.  Legacy JSON files that stored a single {@code *Contact} value will
+ * have that value deserialized into the corresponding {@code *Phone} field via
+ * {@link JsonAlias} annotations for backward compatibility.</p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class OrganizationalChart {
     // Incident command
     private List<String> incidentCommanders = new ArrayList<>();
 
     // Command Staff (optional positions)
     private String safetyOfficerName = "";
-    private String safetyOfficerContact = "";
+    private String safetyOfficerRadio = "";
+    @JsonAlias("safetyOfficerContact")
+    private String safetyOfficerPhone = "";
+
     private String publicInformationOfficerName = "";
-    private String publicInformationOfficerContact = "";
+    private String publicInformationOfficerRadio = "";
+    @JsonAlias("publicInformationOfficerContact")
+    private String publicInformationOfficerPhone = "";
+
     private String liaisonOfficerName = "";
-    private String liaisonOfficerContact = "";
+    private String liaisonOfficerRadio = "";
+    @JsonAlias("liaisonOfficerContact")
+    private String liaisonOfficerPhone = "";
 
     // General Staff
     private String operationsSectionChiefName = "";
-    private String operationsSectionChiefContact = "";
+    private String operationsSectionChiefRadio = "";
+    @JsonAlias("operationsSectionChiefContact")
+    private String operationsSectionChiefPhone = "";
+
     private String planningSectionChiefName = "";
-    private String planningSectionChiefContact = "";
+    private String planningSectionChiefRadio = "";
+    @JsonAlias("planningSectionChiefContact")
+    private String planningSectionChiefPhone = "";
+
     private String logisticsSectionChiefName = "";
-    private String logisticsSectionChiefContact = "";
+    private String logisticsSectionChiefRadio = "";
+    @JsonAlias("logisticsSectionChiefContact")
+    private String logisticsSectionChiefPhone = "";
+
     private String financeAdminSectionChiefName = "";
-    private String financeAdminSectionChiefContact = "";
+    private String financeAdminSectionChiefRadio = "";
+    @JsonAlias("financeAdminSectionChiefContact")
+    private String financeAdminSectionChiefPhone = "";
 
     // Planning Section positions
     private String documentationUnitLeaderName = "";
-    private String documentationUnitLeaderContact = "";
+    private String documentationUnitLeaderRadio = "";
+    @JsonAlias("documentationUnitLeaderContact")
+    private String documentationUnitLeaderPhone = "";
+
+    // Logistics Section positions
+    private String communicationsUnitLeaderName = "";
+    private String communicationsUnitLeaderRadio = "";
+    private String communicationsUnitLeaderPhone = "";
+
+    private String communicationsTechnicianName = "";
+    private String communicationsTechnicianRadio = "";
+    private String communicationsTechnicianPhone = "";
 
     /**
      * Returns the incident commander or unified command names.
-     *
-     * @return incident commander names.
      */
-    public List<String> getIncidentCommanders() {
-        return incidentCommanders;
-    }
+    public List<String> getIncidentCommanders() { return incidentCommanders; }
+    public void setIncidentCommanders(List<String> v) { incidentCommanders = v == null ? new ArrayList<>() : new ArrayList<>(v); }
 
-    /**
-     * Sets the incident commander or unified command names.
-     *
-     * @param incidentCommanders incident commander names.
-     */
-    public void setIncidentCommanders(List<String> incidentCommanders) {
-        this.incidentCommanders = incidentCommanders == null ? new ArrayList<>() : new ArrayList<>(incidentCommanders);
-    }
+    // --- Safety Officer ---
+    public String getSafetyOfficerName()  { return safetyOfficerName; }
+    public void setSafetyOfficerName(String v)  { safetyOfficerName  = v == null ? "" : v; }
+    public String getSafetyOfficerRadio() { return safetyOfficerRadio; }
+    public void setSafetyOfficerRadio(String v) { safetyOfficerRadio = v == null ? "" : v; }
+    public String getSafetyOfficerPhone() { return safetyOfficerPhone; }
+    public void setSafetyOfficerPhone(String v) { safetyOfficerPhone = v == null ? "" : v; }
 
-    /**
-     * Returns the operations section chief name.
-     *
-     * @return operations section chief name.
-     */
-    public String getOperationsSectionChiefName() {
-        return operationsSectionChiefName;
-    }
+    // --- PIO ---
+    public String getPublicInformationOfficerName()  { return publicInformationOfficerName; }
+    public void setPublicInformationOfficerName(String v)  { publicInformationOfficerName  = v == null ? "" : v; }
+    public String getPublicInformationOfficerRadio() { return publicInformationOfficerRadio; }
+    public void setPublicInformationOfficerRadio(String v) { publicInformationOfficerRadio = v == null ? "" : v; }
+    public String getPublicInformationOfficerPhone() { return publicInformationOfficerPhone; }
+    public void setPublicInformationOfficerPhone(String v) { publicInformationOfficerPhone = v == null ? "" : v; }
 
-    /**
-     * Sets the operations section chief name.
-     *
-     * @param operationsSectionChiefName operations section chief name.
-     */
-    public void setOperationsSectionChiefName(String operationsSectionChiefName) {
-        this.operationsSectionChiefName = operationsSectionChiefName;
-    }
+    // --- Liaison Officer ---
+    public String getLiaisonOfficerName()  { return liaisonOfficerName; }
+    public void setLiaisonOfficerName(String v)  { liaisonOfficerName  = v == null ? "" : v; }
+    public String getLiaisonOfficerRadio() { return liaisonOfficerRadio; }
+    public void setLiaisonOfficerRadio(String v) { liaisonOfficerRadio = v == null ? "" : v; }
+    public String getLiaisonOfficerPhone() { return liaisonOfficerPhone; }
+    public void setLiaisonOfficerPhone(String v) { liaisonOfficerPhone = v == null ? "" : v; }
 
-    /**
-     * Returns the operations section chief contact (radio/phone).
-     *
-     * @return operations section chief contact.
-     */
-    public String getOperationsSectionChiefContact() {
-        return operationsSectionChiefContact;
-    }
+    // --- Operations Section Chief ---
+    public String getOperationsSectionChiefName()  { return operationsSectionChiefName; }
+    public void setOperationsSectionChiefName(String v)  { operationsSectionChiefName  = v == null ? "" : v; }
+    public String getOperationsSectionChiefRadio() { return operationsSectionChiefRadio; }
+    public void setOperationsSectionChiefRadio(String v) { operationsSectionChiefRadio = v == null ? "" : v; }
+    public String getOperationsSectionChiefPhone() { return operationsSectionChiefPhone; }
+    public void setOperationsSectionChiefPhone(String v) { operationsSectionChiefPhone = v == null ? "" : v; }
 
-    /**
-     * Sets the operations section chief contact.
-     *
-     * @param operationsSectionChiefContact operations section chief contact.
-     */
-    public void setOperationsSectionChiefContact(String operationsSectionChiefContact) {
-        this.operationsSectionChiefContact = operationsSectionChiefContact == null ? "" : operationsSectionChiefContact;
-    }
+    // --- Planning Section Chief ---
+    public String getPlanningSectionChiefName()  { return planningSectionChiefName; }
+    public void setPlanningSectionChiefName(String v)  { planningSectionChiefName  = v == null ? "" : v; }
+    public String getPlanningSectionChiefRadio() { return planningSectionChiefRadio; }
+    public void setPlanningSectionChiefRadio(String v) { planningSectionChiefRadio = v == null ? "" : v; }
+    public String getPlanningSectionChiefPhone() { return planningSectionChiefPhone; }
+    public void setPlanningSectionChiefPhone(String v) { planningSectionChiefPhone = v == null ? "" : v; }
 
-    /**
-     * Returns the safety officer name.
-     *
-     * @return safety officer name.
-     */
-    public String getSafetyOfficerName() {
-        return safetyOfficerName;
-    }
+    // --- Logistics Section Chief ---
+    public String getLogisticsSectionChiefName()  { return logisticsSectionChiefName; }
+    public void setLogisticsSectionChiefName(String v)  { logisticsSectionChiefName  = v == null ? "" : v; }
+    public String getLogisticsSectionChiefRadio() { return logisticsSectionChiefRadio; }
+    public void setLogisticsSectionChiefRadio(String v) { logisticsSectionChiefRadio = v == null ? "" : v; }
+    public String getLogisticsSectionChiefPhone() { return logisticsSectionChiefPhone; }
+    public void setLogisticsSectionChiefPhone(String v) { logisticsSectionChiefPhone = v == null ? "" : v; }
 
-    /**
-     * Sets the safety officer name.
-     *
-     * @param safetyOfficerName safety officer name.
-     */
-    public void setSafetyOfficerName(String safetyOfficerName) {
-        this.safetyOfficerName = safetyOfficerName == null ? "" : safetyOfficerName;
-    }
+    // --- Finance/Admin Section Chief ---
+    public String getFinanceAdminSectionChiefName()  { return financeAdminSectionChiefName; }
+    public void setFinanceAdminSectionChiefName(String v)  { financeAdminSectionChiefName  = v == null ? "" : v; }
+    public String getFinanceAdminSectionChiefRadio() { return financeAdminSectionChiefRadio; }
+    public void setFinanceAdminSectionChiefRadio(String v) { financeAdminSectionChiefRadio = v == null ? "" : v; }
+    public String getFinanceAdminSectionChiefPhone() { return financeAdminSectionChiefPhone; }
+    public void setFinanceAdminSectionChiefPhone(String v) { financeAdminSectionChiefPhone = v == null ? "" : v; }
 
-    /**
-     * Returns the safety officer contact (radio/phone).
-     *
-     * @return safety officer contact.
-     */
-    public String getSafetyOfficerContact() {
-        return safetyOfficerContact;
-    }
+    // --- Documentation Unit Leader ---
+    public String getDocumentationUnitLeaderName()  { return documentationUnitLeaderName; }
+    public void setDocumentationUnitLeaderName(String v)  { documentationUnitLeaderName  = v == null ? "" : v; }
+    public String getDocumentationUnitLeaderRadio() { return documentationUnitLeaderRadio; }
+    public void setDocumentationUnitLeaderRadio(String v) { documentationUnitLeaderRadio = v == null ? "" : v; }
+    public String getDocumentationUnitLeaderPhone() { return documentationUnitLeaderPhone; }
+    public void setDocumentationUnitLeaderPhone(String v) { documentationUnitLeaderPhone = v == null ? "" : v; }
 
-    /**
-     * Sets the safety officer contact.
-     *
-     * @param safetyOfficerContact safety officer contact.
-     */
-    public void setSafetyOfficerContact(String safetyOfficerContact) {
-        this.safetyOfficerContact = safetyOfficerContact == null ? "" : safetyOfficerContact;
-    }
+    // --- Communications Unit Leader (Logistics) ---
+    public String getCommunicationsUnitLeaderName()  { return communicationsUnitLeaderName; }
+    public void setCommunicationsUnitLeaderName(String v)  { communicationsUnitLeaderName  = v == null ? "" : v; }
+    public String getCommunicationsUnitLeaderRadio() { return communicationsUnitLeaderRadio; }
+    public void setCommunicationsUnitLeaderRadio(String v) { communicationsUnitLeaderRadio = v == null ? "" : v; }
+    public String getCommunicationsUnitLeaderPhone() { return communicationsUnitLeaderPhone; }
+    public void setCommunicationsUnitLeaderPhone(String v) { communicationsUnitLeaderPhone = v == null ? "" : v; }
 
-    /**
-     * Returns the public information officer name.
-     *
-     * @return PIO name.
-     */
-    public String getPublicInformationOfficerName() {
-        return publicInformationOfficerName;
-    }
-
-    /**
-     * Sets the public information officer name.
-     *
-     * @param publicInformationOfficerName PIO name.
-     */
-    public void setPublicInformationOfficerName(String publicInformationOfficerName) {
-        this.publicInformationOfficerName = publicInformationOfficerName == null ? "" : publicInformationOfficerName;
-    }
-
-    /**
-     * Returns the public information officer contact (radio/phone).
-     *
-     * @return PIO contact.
-     */
-    public String getPublicInformationOfficerContact() {
-        return publicInformationOfficerContact;
-    }
-
-    /**
-     * Sets the public information officer contact.
-     *
-     * @param publicInformationOfficerContact PIO contact.
-     */
-    public void setPublicInformationOfficerContact(String publicInformationOfficerContact) {
-        this.publicInformationOfficerContact = publicInformationOfficerContact == null ? "" : publicInformationOfficerContact;
-    }
-
-    /**
-     * Returns the liaison officer name.
-     *
-     * @return liaison officer name.
-     */
-    public String getLiaisonOfficerName() {
-        return liaisonOfficerName;
-    }
-
-    /**
-     * Sets the liaison officer name.
-     *
-     * @param liaisonOfficerName liaison officer name.
-     */
-    public void setLiaisonOfficerName(String liaisonOfficerName) {
-        this.liaisonOfficerName = liaisonOfficerName == null ? "" : liaisonOfficerName;
-    }
-
-    /**
-     * Returns the liaison officer contact (radio/phone).
-     *
-     * @return liaison officer contact.
-     */
-    public String getLiaisonOfficerContact() {
-        return liaisonOfficerContact;
-    }
-
-    /**
-     * Sets the liaison officer contact.
-     *
-     * @param liaisonOfficerContact liaison officer contact.
-     */
-    public void setLiaisonOfficerContact(String liaisonOfficerContact) {
-        this.liaisonOfficerContact = liaisonOfficerContact == null ? "" : liaisonOfficerContact;
-    }
-
-    /**
-     * Returns the planning section chief name.
-     *
-     * @return planning section chief name.
-     */
-    public String getPlanningSectionChiefName() {
-        return planningSectionChiefName;
-    }
-
-    /**
-     * Sets the planning section chief name.
-     *
-     * @param planningSectionChiefName planning section chief name.
-     */
-    public void setPlanningSectionChiefName(String planningSectionChiefName) {
-        this.planningSectionChiefName = planningSectionChiefName == null ? "" : planningSectionChiefName;
-    }
-
-    /**
-     * Returns the planning section chief contact (radio/phone).
-     *
-     * @return planning section chief contact.
-     */
-    public String getPlanningSectionChiefContact() {
-        return planningSectionChiefContact;
-    }
-
-    /**
-     * Sets the planning section chief contact.
-     *
-     * @param planningSectionChiefContact planning section chief contact.
-     */
-    public void setPlanningSectionChiefContact(String planningSectionChiefContact) {
-        this.planningSectionChiefContact = planningSectionChiefContact == null ? "" : planningSectionChiefContact;
-    }
-
-    /**
-     * Returns the logistics section chief name.
-     *
-     * @return logistics section chief name.
-     */
-    public String getLogisticsSectionChiefName() {
-        return logisticsSectionChiefName;
-    }
-
-    /**
-     * Sets the logistics section chief name.
-     *
-     * @param logisticsSectionChiefName logistics section chief name.
-     */
-    public void setLogisticsSectionChiefName(String logisticsSectionChiefName) {
-        this.logisticsSectionChiefName = logisticsSectionChiefName == null ? "" : logisticsSectionChiefName;
-    }
-
-    /**
-     * Returns the logistics section chief contact (radio/phone).
-     *
-     * @return logistics section chief contact.
-     */
-    public String getLogisticsSectionChiefContact() {
-        return logisticsSectionChiefContact;
-    }
-
-    /**
-     * Sets the logistics section chief contact.
-     *
-     * @param logisticsSectionChiefContact logistics section chief contact.
-     */
-    public void setLogisticsSectionChiefContact(String logisticsSectionChiefContact) {
-        this.logisticsSectionChiefContact = logisticsSectionChiefContact == null ? "" : logisticsSectionChiefContact;
-    }
-
-    /**
-     * Returns the finance/admin section chief name.
-     *
-     * @return finance/admin section chief name.
-     */
-    public String getFinanceAdminSectionChiefName() {
-        return financeAdminSectionChiefName;
-    }
-
-    /**
-     * Sets the finance/admin section chief name.
-     *
-     * @param financeAdminSectionChiefName finance/admin section chief name.
-     */
-    public void setFinanceAdminSectionChiefName(String financeAdminSectionChiefName) {
-        this.financeAdminSectionChiefName = financeAdminSectionChiefName == null ? "" : financeAdminSectionChiefName;
-    }
-
-    /**
-     * Returns the finance/admin section chief contact (radio/phone).
-     *
-     * @return finance/admin section chief contact.
-     */
-    public String getFinanceAdminSectionChiefContact() {
-        return financeAdminSectionChiefContact;
-    }
-
-    /**
-     * Sets the finance/admin section chief contact.
-     *
-     * @param financeAdminSectionChiefContact finance/admin section chief contact.
-     */
-    public void setFinanceAdminSectionChiefContact(String financeAdminSectionChiefContact) {
-        this.financeAdminSectionChiefContact = financeAdminSectionChiefContact == null ? "" : financeAdminSectionChiefContact;
-    }
-
-    /**
-     * Returns the documentation unit leader name (Planning Section).
-     *
-     * @return documentation unit leader name.
-     */
-    public String getDocumentationUnitLeaderName() {
-        return documentationUnitLeaderName;
-    }
-
-    /**
-     * Sets the documentation unit leader name.
-     *
-     * @param documentationUnitLeaderName documentation unit leader name.
-     */
-    public void setDocumentationUnitLeaderName(String documentationUnitLeaderName) {
-        this.documentationUnitLeaderName = documentationUnitLeaderName == null ? "" : documentationUnitLeaderName;
-    }
-
-    /**
-     * Returns the documentation unit leader contact (radio/phone).
-     *
-     * @return documentation unit leader contact.
-     */
-    public String getDocumentationUnitLeaderContact() {
-        return documentationUnitLeaderContact;
-    }
-
-    /**
-     * Sets the documentation unit leader contact.
-     *
-     * @param documentationUnitLeaderContact documentation unit leader contact.
-     */
-    public void setDocumentationUnitLeaderContact(String documentationUnitLeaderContact) {
-        this.documentationUnitLeaderContact = documentationUnitLeaderContact == null ? "" : documentationUnitLeaderContact;
-    }
+    // --- Communications Technician (Logistics) ---
+    public String getCommunicationsTechnicianName()  { return communicationsTechnicianName; }
+    public void setCommunicationsTechnicianName(String v)  { communicationsTechnicianName  = v == null ? "" : v; }
+    public String getCommunicationsTechnicianRadio() { return communicationsTechnicianRadio; }
+    public void setCommunicationsTechnicianRadio(String v) { communicationsTechnicianRadio = v == null ? "" : v; }
+    public String getCommunicationsTechnicianPhone() { return communicationsTechnicianPhone; }
+    public void setCommunicationsTechnicianPhone(String v) { communicationsTechnicianPhone = v == null ? "" : v; }
 }
