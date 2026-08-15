@@ -7,7 +7,6 @@ import org.sarmanagement.icsforms.model.SarTaskSupport;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
-import javax.swing.DefaultCellEditor;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -37,7 +36,7 @@ import java.util.List;
 public class Ics204Panel extends JPanel {
     private final AppController controller;
     private java.util.function.Consumer<ResourceAssignment> on214Request;
-    private final JComboBox<String> managementContextSelector = new JComboBox<>(new String[]{"Staging Area", "Branch", "Division", "Group"});
+    private final JComboBox<String> managementContextSelector = new JComboBox<>(new String[]{"Incident", "Branch", "Division", "Group"});
     private final JLabel selectedContextLabel = new JLabel("Staging area name");
     private final JTextField selectedContextValueField = UiSupport.textField();
     private final JTextField branchField = UiSupport.textField();
@@ -115,27 +114,37 @@ public class Ics204Panel extends JPanel {
         JTable communicationsTable = new JTable(communicationsTableModel);
         resourceTable.setFillsViewportHeight(true);
         communicationsTable.setFillsViewportHeight(true);
-        resourceTable.getColumnModel().getColumn(1).setCellEditor(new DefaultCellEditor(
-                new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new))));
-        resourceTable.getColumnModel().getColumn(2).setCellEditor(new DefaultCellEditor(
-                new JComboBox<>(SarTaskSupport.taskTypes().toArray(String[]::new))));
         installResourceRowEditor();
 
         JPanel resourcesPanel = new JPanel(new BorderLayout());
         resourcesPanel.setBorder(BorderFactory.createTitledBorder("Resources Assigned"));
         resourcesPanel.add(new JScrollPane(resourceTable), BorderLayout.CENTER);
         resourcesPanel.add(buttonsPanel(
-                () -> resourceTableModel.addRow(),
-                () -> resourceTableModel.removeRow(resourceTable.getSelectedRow())
+                () -> {
+                    resourceTableModel.addRow();
+                    int last = resourceTableModel.getRowCount() - 1;
+                    resourceTable.setRowSelectionInterval(last, last);
+                    resourceTable.scrollRectToVisible(resourceTable.getCellRect(last, 0, true));
+                    openSelectedResourceEditor();
+                    controller.markDirty();
+                },
+                () -> { resourceTableModel.removeRow(resourceTable.getSelectedRow()); controller.markDirty(); }
         ), BorderLayout.SOUTH);
 
         JPanel communicationsPanel = new JPanel(new BorderLayout());
         communicationsPanel.setBorder(BorderFactory.createTitledBorder("Communications"));
         communicationsPanel.add(new JScrollPane(communicationsTable), BorderLayout.CENTER);
-        communicationsPanel.add(buttonsPanel(
-                () -> communicationsTableModel.addRow(),
-                () -> communicationsTableModel.removeRow(communicationsTable.getSelectedRow())
-        ), BorderLayout.SOUTH);
+        JPanel commButtons = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 2));
+        JButton addCommRowBtn = new JButton("Add Row");
+        JButton addStaffBtn   = new JButton("Add Staff…");
+        JButton removeCommBtn = new JButton("Remove");
+        addCommRowBtn.addActionListener(e -> communicationsTableModel.addRow());
+        addStaffBtn.addActionListener(e -> addStaffToComms());
+        removeCommBtn.addActionListener(e -> communicationsTableModel.removeRow(communicationsTable.getSelectedRow()));
+        commButtons.add(addCommRowBtn);
+        commButtons.add(addStaffBtn);
+        commButtons.add(removeCommBtn);
+        communicationsPanel.add(commButtons, BorderLayout.SOUTH);
 
         JPanel tablesPanel = new JPanel(new GridLayout(2, 1, 8, 8));
         tablesPanel.add(resourcesPanel);
@@ -324,7 +333,7 @@ public class Ics204Panel extends JPanel {
             case Ics204Form.MANAGEMENT_BRANCH -> "Branch";
             case Ics204Form.MANAGEMENT_DIVISION -> "Division";
             case Ics204Form.MANAGEMENT_GROUP -> "Group";
-            default -> "Staging Area";
+            default -> "Incident";
         });
         updatingContextSelection = false;
         activeManagementContext = managementContext;
@@ -348,13 +357,99 @@ public class Ics204Panel extends JPanel {
         return panel;
     }
 
+    /**
+     * Opens a dialog showing named incident staff (from the org chart) to add to communications.
+     */
+    private void addStaffToComms() {
+        org.sarmanagement.icsforms.model.OrganizationalChart chart =
+                controller.getData().getOrganizationalChart();
+        // Collect all named staff positions as selectable entries.
+        java.util.List<String[]> entries = new java.util.ArrayList<>();
+        for (String ic : chart.getIncidentCommanders()) {
+            if (!ic.isBlank()) entries.add(new String[]{ic, "Incident Commander", ""});
+        }
+        addStaffEntry(entries, chart.getSafetyOfficerName(), "Safety Officer",
+                chart.getSafetyOfficerRadio().isBlank() ? chart.getSafetyOfficerPhone() : chart.getSafetyOfficerRadio());
+        addStaffEntry(entries, chart.getPublicInformationOfficerName(), "PIO",
+                chart.getPublicInformationOfficerRadio().isBlank() ? chart.getPublicInformationOfficerPhone() : chart.getPublicInformationOfficerRadio());
+        addStaffEntry(entries, chart.getLiaisonOfficerName(), "Liaison Officer",
+                chart.getLiaisonOfficerRadio().isBlank() ? chart.getLiaisonOfficerPhone() : chart.getLiaisonOfficerRadio());
+        addStaffEntry(entries, chart.getOperationsSectionChiefName(), "Operations Section Chief",
+                chart.getOperationsSectionChiefRadio().isBlank() ? chart.getOperationsSectionChiefPhone() : chart.getOperationsSectionChiefRadio());
+        addStaffEntry(entries, chart.getPlanningSectionChiefName(), "Planning Section Chief",
+                chart.getPlanningSectionChiefRadio().isBlank() ? chart.getPlanningSectionChiefPhone() : chart.getPlanningSectionChiefRadio());
+        addStaffEntry(entries, chart.getLogisticsSectionChiefName(), "Logistics Section Chief",
+                chart.getLogisticsSectionChiefRadio().isBlank() ? chart.getLogisticsSectionChiefPhone() : chart.getLogisticsSectionChiefRadio());
+        addStaffEntry(entries, chart.getFinanceAdminSectionChiefName(), "Finance/Admin Section Chief",
+                chart.getFinanceAdminSectionChiefRadio().isBlank() ? chart.getFinanceAdminSectionChiefPhone() : chart.getFinanceAdminSectionChiefRadio());
+        addStaffEntry(entries, chart.getCommunicationsUnitLeaderName(), "Communications Unit Leader",
+                chart.getCommunicationsUnitLeaderRadio().isBlank() ? chart.getCommunicationsUnitLeaderPhone() : chart.getCommunicationsUnitLeaderRadio());
+        addStaffEntry(entries, chart.getCommunicationsTechnicianName(), "Communications Technician",
+                chart.getCommunicationsTechnicianRadio().isBlank() ? chart.getCommunicationsTechnicianPhone() : chart.getCommunicationsTechnicianRadio());
+
+        if (entries.isEmpty()) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    "No named staff positions found on the Org Chart.",
+                    "Add Staff", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // Build a selection table.
+        String[] colNames = {"Name", "Role", "Contact"};
+        Object[][] data = entries.stream()
+                .map(e -> new Object[]{e[0], e[1], e[2]})
+                .toArray(Object[][]::new);
+        javax.swing.JTable selTable = new javax.swing.JTable(data, colNames) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+        selTable.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        selTable.setFillsViewportHeight(true);
+        javax.swing.JScrollPane scroll = new javax.swing.JScrollPane(selTable);
+        scroll.setPreferredSize(new java.awt.Dimension(500, 180));
+
+        int result = javax.swing.JOptionPane.showConfirmDialog(this, scroll,
+                "Select staff to add to Communications", javax.swing.JOptionPane.OK_CANCEL_OPTION);
+        if (result != javax.swing.JOptionPane.OK_OPTION) {
+            return;
+        }
+        int[] selected = selTable.getSelectedRows();
+        for (int row : selected) {
+            org.sarmanagement.icsforms.model.CommunicationEntry entry =
+                    new org.sarmanagement.icsforms.model.CommunicationEntry();
+            entry.setName(entries.get(row)[0]);
+            entry.setFunction(entries.get(row)[1]);
+            entry.setPrimaryContact(entries.get(row)[2]);
+            communicationsTableModel.addEntry(entry);
+        }
+    }
+
+    private static void addStaffEntry(java.util.List<String[]> list,
+                                      String name, String role, String contact) {
+        if (name != null && !name.isBlank()) {
+            list.add(new String[]{name, role, contact == null ? "" : contact});
+        }
+    }
+
     private void installResourceRowEditor() {
         JPopupMenu menu = new JPopupMenu();
-        JMenuItem editItem = new JMenuItem("Edit assignment…");
-        editItem.addActionListener(event -> openSelectedResourceEditor());
+        JMenuItem addItem    = new JMenuItem("Add assignment…");
+        JMenuItem editItem   = new JMenuItem("Edit assignment…");
+        JMenuItem removeItem = new JMenuItem("Remove assignment");
         JMenuItem log214Item = new JMenuItem("Add ICS 214 Log…");
+        addItem.addActionListener(event -> { resourceTableModel.addRow(); controller.markDirty(); });
+        editItem.addActionListener(event -> openSelectedResourceEditor());
+        removeItem.addActionListener(event -> {
+            int viewRow = resourceTable.getSelectedRow();
+            if (viewRow >= 0) {
+                resourceTableModel.removeRow(resourceTable.convertRowIndexToModel(viewRow));
+                controller.markDirty();
+            }
+        });
         log214Item.addActionListener(event -> open214ForSelectedResource());
+        menu.add(addItem);
         menu.add(editItem);
+        menu.add(removeItem);
+        menu.addSeparator();
         menu.add(log214Item);
         menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
             @Override
@@ -412,7 +507,7 @@ public class Ics204Panel extends JPanel {
         }
         int modelRow = resourceTable.convertRowIndexToModel(viewRow);
         ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
-        ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row);
+        ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(this, editor.dialogTitle(), scrollPane, new Dimension(920, 560))) {
@@ -499,7 +594,7 @@ public class Ics204Panel extends JPanel {
         private final JScrollPane notesField;
         private final JScrollPane assignmentField;
 
-        private ResourceAssignmentEditor(ResourceAssignment row) {
+        private ResourceAssignmentEditor(ResourceAssignment row, AppController controller) {
             resourceTypeField.setEditable(true);
             taskTypeField.setEditable(true);
             assignmentTeamNumberField.setText(row.getAssignmentTeamNumber());
@@ -517,6 +612,20 @@ public class Ics204Panel extends JPanel {
             remarksField = textArea(row.getRemarks(), 2);
             notesField = textArea(row.getNotes(), 2);
             assignmentField = textArea(row.getAssignment(), 4);
+
+            // Autocomplete on leader field: selecting a known name auto-fills contact.
+            UiSupport.installNameAutocomplete(leaderField,
+                    controller::getPersonnelNames,
+                    selectedName -> {
+                        var card = controller.findPersonCard(selectedName);
+                        if (card != null && contactField.getText().isBlank()) {
+                            String contact = card.getRadioChannel().isBlank()
+                                    ? card.getPhoneNumber() : card.getRadioChannel();
+                            if (!contact.isBlank()) {
+                                contactField.setText(contact);
+                            }
+                        }
+                    });
 
             int rowIndex = 0;
             UiSupport.addRequiredRow(panel, rowIndex++, "Assignment/Team #", assignmentTeamNumberField);
@@ -584,7 +693,7 @@ public class Ics204Panel extends JPanel {
         @Override public int getRowCount() { return rows.size(); }
         @Override public int getColumnCount() { return columns.length; }
         @Override public String getColumnName(int column) { return columns[column]; }
-        @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return true; }
+        @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return false; }
         @Override public Object getValueAt(int rowIndex, int columnIndex) {
             ResourceAssignment row = rows.get(rowIndex);
             return switch (columnIndex) {
@@ -641,6 +750,8 @@ public class Ics204Panel extends JPanel {
         java.util.List<CommunicationEntry> getRows() { return rows; }
         /** Adds a blank row. */
         void addRow() { rows.add(new CommunicationEntry()); fireTableRowsInserted(rows.size() - 1, rows.size() - 1); }
+        /** Adds a pre-populated entry. */
+        void addEntry(CommunicationEntry entry) { rows.add(entry); fireTableRowsInserted(rows.size() - 1, rows.size() - 1); }
         /** @param row row index to remove. */
         void removeRow(int row) { if (row >= 0 && row < rows.size()) { rows.remove(row); fireTableRowsDeleted(row, row); } }
         @Override public int getRowCount() { return rows.size(); }

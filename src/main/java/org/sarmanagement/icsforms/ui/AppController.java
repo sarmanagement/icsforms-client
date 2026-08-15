@@ -9,6 +9,8 @@ import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -20,10 +22,13 @@ import java.nio.file.Path;
 import java.time.ZoneId;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Coordinates UI edits, autosave, validation, and linked SAR task synchronization.
@@ -80,6 +85,37 @@ public class AppController {
     }
 
     /**
+     * Returns a sorted list of distinct personnel names from all T-cards with a non-blank name.
+     *
+     * @return sorted list of personnel names.
+     */
+    public List<String> getPersonnelNames() {
+        return data.getTCards().stream()
+                .filter(c -> !c.getPersonName().isBlank())
+                .map(TCard::getPersonName)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    /**
+     * Finds the first T-card whose {@code personName} matches {@code name} (case-insensitive).
+     *
+     * @param name person name to look up; {@code null} or blank returns {@code null}.
+     * @return matching T-card, or {@code null} if not found.
+     */
+    public TCard findPersonCard(String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        String key = name.trim().toLowerCase();
+        return data.getTCards().stream()
+                .filter(c -> key.equals(c.getPersonName().trim().toLowerCase()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
      * Replaces the active document and synchronizes linked defaults.
      *
      * @param data new active document.
@@ -111,6 +147,7 @@ public class AppController {
         }
         synchronizeLinkedFields(source);
         syncSarTasks();
+        syncTCards();
         autosaveTimer.restart();
     }
 
@@ -246,6 +283,20 @@ public class AppController {
     }
 
     /**
+     * Exports all supported forms merged into a single IAP bundle PDF.
+     *
+     * @param outputDirectory destination directory.
+     * @param source source tab for linked role values.
+     * @return path of the merged IAP bundle PDF.
+     * @throws IOException when export or merge fails.
+     */
+    public Path exportIapBundle(Path outputDirectory, LinkSource source) throws IOException {
+        synchronizeLinkedFields(source);
+        syncSarTasks();
+        return exportService.exportIapBundle(data, outputDirectory);
+    }
+
+    /**
      * Synchronizes shared org-chart-linked fields across the shared tab, org chart, ICS 202, and ICS 204.
      *
      * @param source source tab for linked role values.
@@ -282,6 +333,16 @@ public class AppController {
         organizationalChart.setOperationsSectionChiefName(operationsSectionChiefName);
         form204.setOperationsSectionChiefName(operationsSectionChiefName);
 
+        // Sync ops section chief contact from org chart → form 204 when org chart is authoritative.
+        String opsContact = safe(organizationalChart.getOperationsSectionChiefRadio()).isBlank()
+                ? safe(organizationalChart.getOperationsSectionChiefPhone())
+                : safe(organizationalChart.getOperationsSectionChiefRadio());
+        if (!opsContact.isBlank()
+                && (safe(form204.getOperationsSectionChiefContact()).isBlank()
+                || source == LinkSource.ORG_CHART)) {
+            form204.setOperationsSectionChiefContact(opsContact);
+        }
+
         if (!preparerName.isBlank() || !preparerTitle.isBlank() || source == LinkSource.SHARED) {
             form202.setPreparedByName(preparerName);
             form202.setPreparedByPositionTitle(preparerTitle);
@@ -317,6 +378,44 @@ public class AppController {
      */
     public boolean isDirty() {
         return dirty;
+    }
+
+    /**
+     * Returns the current incident mode (SAR or Generic).
+     *
+     * @return incident mode.
+     */
+    public org.sarmanagement.icsforms.model.IncidentMode getIncidentMode() {
+        return data.getIncidentMode();
+    }
+
+    /**
+     * Sets the incident mode and marks the document dirty.
+     *
+     * @param mode incident mode.
+     */
+    public void setIncidentMode(org.sarmanagement.icsforms.model.IncidentMode mode) {
+        data.setIncidentMode(mode);
+        markDirty();
+    }
+
+    /**
+     * Returns the current IAP preparation phase.
+     *
+     * @return IAP phase.
+     */
+    public org.sarmanagement.icsforms.model.IapPhase getIapPhase() {
+        return data.getIapPhase();
+    }
+
+    /**
+     * Sets the IAP preparation phase and marks the document dirty.
+     *
+     * @param phase IAP phase.
+     */
+    public void setIapPhase(org.sarmanagement.icsforms.model.IapPhase phase) {
+        data.setIapPhase(phase);
+        markDirty();
     }
 
     /**
@@ -357,6 +456,343 @@ public class AppController {
             resource.setTaskType(task.getTaskType());
         }
         updateClueTaskLabels(tasksById);
+    }
+
+    /**
+     * Synchronizes T-card records from org-chart staff positions and SAR task resources.
+     *
+     * <p>Each named staff position on the org chart and each named resource on a SAR task
+     * automatically maintains a linked T-card.  A card's {@code sourceRef} field is the
+     * stable key; only the name and contact fields are updated here so that operators may
+     * freely edit status, location, and notes without losing their changes.</p>
+     *
+     * <p>Cards whose source position is later cleared (name set to blank) are removed from
+     * the list.  Manually created cards (blank sourceRef) are never touched.</p>
+     */
+    public void syncTCards() {
+        List<TCard> cards = data.getTCards();
+        if (cards == null) {
+            cards = new ArrayList<>();
+            data.setTCards(cards);
+        }
+
+        // Build a mutable map of sourceRef → card for fast lookup; preserve order.
+        Map<String, TCard> byRef = new LinkedHashMap<>();
+        for (TCard card : cards) {
+            String ref = card.getSourceRef();
+            if (!ref.isBlank()) {
+                byRef.put(ref, card);
+            }
+        }
+
+        // Build a name → card map for cross-source deduplication.  The same physical
+        // person may appear as a leader on one task and as a resource on another; they
+        // should share a single T-card record rather than receiving duplicates.
+        Map<String, TCard> byName = new LinkedHashMap<>();
+        for (TCard card : cards) {
+            String n = card.getPersonName().trim().toLowerCase();
+            if (!n.isBlank()) {
+                byName.putIfAbsent(n, card);
+            }
+        }
+
+        // Collect the set of sourceRefs that should exist after this sync.
+        Map<String, TCard> wanted = new LinkedHashMap<>();
+
+        // --- Org chart positions ---
+        OrganizationalChart chart = data.getOrganizationalChart();
+        if (chart != null) {
+            // Incident commanders (one card per named commander)
+            List<String> ics = chart.getIncidentCommanders();
+            if (ics != null) {
+                for (int i = 0; i < ics.size(); i++) {
+                    String name = safe(ics.get(i));
+                    if (!name.isBlank()) {
+                        String ref = "org:ic:" + i;
+                        TCard card = byRef.containsKey(ref) ? byRef.get(ref) : newOrgCard(name, "", "");
+                        card.setPersonName(name);
+                        card.setSourceRef(ref);
+                        card.setNotes(notePreserving(card.getNotes(), "Incident Commander"));
+                        wanted.put(ref, card);
+                        byName.putIfAbsent(name.trim().toLowerCase(), card);
+                    }
+                }
+            }
+            addOrgCard(wanted, byRef, byName, "org:safetyOfficer",
+                    chart.getSafetyOfficerName(), chart.getSafetyOfficerRadio(),
+                    chart.getSafetyOfficerPhone(), "Safety Officer");
+            addOrgCard(wanted, byRef, byName, "org:pio",
+                    chart.getPublicInformationOfficerName(), chart.getPublicInformationOfficerRadio(),
+                    chart.getPublicInformationOfficerPhone(), "Public Information Officer");
+            addOrgCard(wanted, byRef, byName, "org:liaisonOfficer",
+                    chart.getLiaisonOfficerName(), chart.getLiaisonOfficerRadio(),
+                    chart.getLiaisonOfficerPhone(), "Liaison Officer");
+            addOrgCard(wanted, byRef, byName, "org:operationsChief",
+                    chart.getOperationsSectionChiefName(), chart.getOperationsSectionChiefRadio(),
+                    chart.getOperationsSectionChiefPhone(), "Operations Section Chief");
+            addOrgCard(wanted, byRef, byName, "org:planningChief",
+                    chart.getPlanningSectionChiefName(), chart.getPlanningSectionChiefRadio(),
+                    chart.getPlanningSectionChiefPhone(), "Planning Section Chief");
+            addOrgCard(wanted, byRef, byName, "org:logisticsChief",
+                    chart.getLogisticsSectionChiefName(), chart.getLogisticsSectionChiefRadio(),
+                    chart.getLogisticsSectionChiefPhone(), "Logistics Section Chief");
+            addOrgCard(wanted, byRef, byName, "org:financeAdminChief",
+                    chart.getFinanceAdminSectionChiefName(), chart.getFinanceAdminSectionChiefRadio(),
+                    chart.getFinanceAdminSectionChiefPhone(), "Finance/Admin Section Chief");
+            addOrgCard(wanted, byRef, byName, "org:documentationUnitLeader",
+                    chart.getDocumentationUnitLeaderName(), chart.getDocumentationUnitLeaderRadio(),
+                    chart.getDocumentationUnitLeaderPhone(), "Documentation Unit Leader");
+            addOrgCard(wanted, byRef, byName, "org:commUnitLeader",
+                    chart.getCommunicationsUnitLeaderName(), chart.getCommunicationsUnitLeaderRadio(),
+                    chart.getCommunicationsUnitLeaderPhone(), "Communications Unit Leader");
+            addOrgCard(wanted, byRef, byName, "org:commTechnician",
+                    chart.getCommunicationsTechnicianName(), chart.getCommunicationsTechnicianRadio(),
+                    chart.getCommunicationsTechnicianPhone(), "Communications Technician");
+        }
+
+        // --- SAR task resources ---
+        // Track desired T-card status from task lifecycle (identity-keyed for dedup safety).
+        Map<TCard, String> taskDrivenStatus = new java.util.IdentityHashMap<>();
+        for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+            String assignmentId = task.getAssignmentId();
+            if (assignmentId == null || assignmentId.isBlank()) {
+                continue;
+            }
+            String lifecycleCardStatus = lifecycleToCardStatus(task.getTaskLifecycleStatus());
+            // Task leader
+            String leaderName = safe(task.getLeader());
+            if (!leaderName.isBlank()) {
+                String ref = "sar:" + assignmentId + ":leader";
+                TCard card = findOrCreatePersonCard(ref, leaderName, byRef, byName, wanted);
+                card.setPersonName(leaderName);
+                card.setPhoneNumber(coalesce(card.getPhoneNumber(), task.getContact()));
+                card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
+                card.setNotes(notePreserving(card.getNotes(),
+                        safe(task.getLeaderRole()) + " — " + safe(task.getAssignmentTeamNumber())));
+                wanted.put(ref, card);
+                byName.putIfAbsent(leaderName.trim().toLowerCase(), card);
+                applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+            }
+            // Assigned resources
+            List<SarTaskResource> resources = task.getResourcesAssigned();
+            if (resources != null) {
+                for (int i = 0; i < resources.size(); i++) {
+                    SarTaskResource res = resources.get(i);
+                    String resName = safe(res.getName());
+                    if (resName.isBlank()) {
+                        continue;
+                    }
+                    String ref = "sar:" + assignmentId + ":r:" + i;
+                    TCard card = findOrCreatePersonCard(ref, resName, byRef, byName, wanted);
+                    card.setPersonName(resName);
+                    card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
+                    card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
+                    card.setNotes(notePreserving(card.getNotes(),
+                            safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
+                    wanted.put(ref, card);
+                    byName.putIfAbsent(resName.trim().toLowerCase(), card);
+                    applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+                }
+            }
+        }
+
+        // Apply lifecycle-driven statuses to task resource cards.
+        for (Map.Entry<TCard, String> entry : taskDrivenStatus.entrySet()) {
+            entry.getKey().setStatus(entry.getValue());
+        }
+
+        // Rebuild the card list: keep manually created cards first, then source-linked cards
+        // in stable order, dropping any whose source was cleared.  Use identity-based
+        // deduplication so that a card reused for multiple refs is only emitted once.
+        List<TCard> result = new ArrayList<>();
+        Set<TCard> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (TCard card : cards) {
+            if (card.getSourceRef().isBlank()) {
+                result.add(card);  // manual card — keep as-is
+                seen.add(card);
+            }
+        }
+        for (TCard card : wanted.values()) {
+            if (!seen.contains(card)) {
+                result.add(card);
+                seen.add(card);
+            }
+        }
+        ensureDefaultHeaderCards(result, data.getIapPhase());
+        data.setTCards(result);
+    }
+
+    /** Default HEADER card labels used when no HEADER cards exist yet. */
+    private static final String[] DEFAULT_HEADER_LABELS = {
+            "ICP", "Available", "Assigned", "Out of Service", "Enroute"
+    };
+    /** Extra HEADER label added in pre-operational-period mode. */
+    private static final String ORDERED_HEADER_LABEL = "Ordered";
+
+    /**
+     * Ensures the default HEADER (219-1) rack columns exist in the card list.
+     *
+     * <p>If no HEADER cards are present the default labels (ICP, Available, Assigned,
+     * Out of Service, Enroute) are prepended; in {@link org.sarmanagement.icsforms.model.IapPhase#PRE_OP}
+     * mode an additional "Ordered" column is inserted after "ICP".
+     * Once any HEADER card is present no defaults are added so as not to override operator
+     * customisation.</p>
+     *
+     * @param cards   mutable card list to modify in-place.
+     * @param phase   current IAP phase (used to include/exclude the Ordered column).
+     */
+    static void ensureDefaultHeaderCards(List<TCard> cards,
+                                         org.sarmanagement.icsforms.model.IapPhase phase) {
+        boolean hasHeader = cards.stream().anyMatch(c -> c.getCardType() == TCardType.HEADER);
+        if (hasHeader) {
+            return;
+        }
+        List<TCard> headers = new ArrayList<>();
+        for (String label : DEFAULT_HEADER_LABELS) {
+            TCard h = new TCard();
+            h.setCardType(TCardType.HEADER);
+            h.setResourceIdentifier(label);
+            headers.add(h);
+            // Insert "Ordered" after "ICP" in pre-op mode.
+            if ("ICP".equals(label) && phase == org.sarmanagement.icsforms.model.IapPhase.PRE_OP) {
+                TCard ordered = new TCard();
+                ordered.setCardType(TCardType.HEADER);
+                ordered.setResourceIdentifier(ORDERED_HEADER_LABEL);
+                headers.add(ordered);
+            }
+        }
+        cards.addAll(0, headers);
+    }
+
+    /**
+     * Converts a task lifecycle status string to the equivalent T-card status.
+     *
+     * @param lifecycle "Planning", "On Task", or "Returned".
+     * @return T-card status string ("Assigned", "Out of Service", or blank).
+     */
+    static String lifecycleToCardStatus(String lifecycle) {
+        if (lifecycle == null) return "";
+        return switch (lifecycle) {
+            case "On Task"  -> "Assigned";
+            case "Returned" -> "Out of Service";
+            default         -> "";           // Planning or unknown → blank
+        };
+    }
+
+    /**
+     * Records a lifecycle-driven status for {@code card}, keeping the highest-priority
+     * value when the same card is referenced from multiple tasks.
+     *
+     * <p>Only non-blank statuses ("Assigned", "Out of Service") are tracked.  A blank
+     * status from a "Planning" task is ignored so that operator-set statuses are not
+     * overwritten when no active lifecycle state applies.</p>
+     *
+     * <p>Priority: "Assigned" &gt; "Out of Service".</p>
+     */
+    private static void applyHigherPriorityStatus(Map<TCard, String> map, TCard card, String status) {
+        if (status == null || status.isBlank()) {
+            return;  // Planning → do not touch the operator's existing status
+        }
+        String current = map.getOrDefault(card, "");
+        if (statusPriority(status) > statusPriority(current)) {
+            map.put(card, status);
+        }
+    }
+
+    private static int statusPriority(String status) {
+        if (status == null) return 0;
+        return switch (status) {
+            case "Assigned"       -> 2;
+            case "Out of Service" -> 1;
+            default               -> 0;
+        };
+    }
+
+    /**
+     * Finds an existing T-card for {@code personName} or creates a new one.
+     *
+     * <p>Lookup priority:
+     * <ol>
+     *   <li>Card already registered under {@code ref} in {@code byRef} (same position, update).</li>
+     *   <li>Card already emitted into {@code wanted} for the same name (cross-ref dedup).</li>
+     *   <li>Card existing in {@code byName} from a previous sync cycle (persist old card).</li>
+     *   <li>New blank card.</li>
+     * </ol>
+     */
+    private TCard findOrCreatePersonCard(String ref, String personName,
+                                          Map<String, TCard> byRef,
+                                          Map<String, TCard> byName,
+                                          Map<String, TCard> wanted) {
+        if (byRef.containsKey(ref)) {
+            return byRef.get(ref);
+        }
+        String nameKey = personName.trim().toLowerCase();
+        // Check if we already placed this person's card into wanted under a different ref.
+        for (TCard c : wanted.values()) {
+            if (nameKey.equals(c.getPersonName().trim().toLowerCase())) {
+                return c;
+            }
+        }
+        if (byName.containsKey(nameKey)) {
+            return byName.get(nameKey);
+        }
+        return newPersonnelCard(personName);
+    }
+
+    /** Creates or updates a single org-chart staff T-card. */
+    private void addOrgCard(Map<String, TCard> wanted, Map<String, TCard> existing,
+                             Map<String, TCard> byName,
+                             String ref, String name, String radio, String phone, String roleLabel) {
+        String safeName = safe(name);
+        if (safeName.isBlank()) {
+            return;
+        }
+        TCard card;
+        if (existing.containsKey(ref)) {
+            card = existing.get(ref);
+        } else {
+            String nameKey = safeName.trim().toLowerCase();
+            card = byName.containsKey(nameKey) ? byName.get(nameKey) : newOrgCard(safeName, radio, phone);
+        }
+        card.setPersonName(safeName);
+        card.setRadioChannel(coalesce(card.getRadioChannel(), radio));
+        card.setPhoneNumber(coalesce(card.getPhoneNumber(), phone));
+        card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
+        card.setNotes(notePreserving(card.getNotes(), roleLabel));
+        wanted.put(ref, card);
+        byName.putIfAbsent(safeName.trim().toLowerCase(), card);
+    }
+
+    private TCard newPersonnelCard(String name) {
+        TCard card = new TCard();
+        card.setCardType(TCardType.PERSONNEL);
+        card.setPersonName(name);
+        return card;
+    }
+
+    private TCard newOrgCard(String name, String radio, String phone) {
+        TCard card = newPersonnelCard(name);
+        card.setLocation("ICP");
+        if (radio != null && !radio.isBlank()) {
+            card.setRadioChannel(radio);
+        }
+        if (phone != null && !phone.isBlank()) {
+            card.setPhoneNumber(phone);
+        }
+        return card;
+    }
+
+    /** Returns {@code preferred} if non-blank, otherwise {@code fallback}. */
+    private String coalesce(String preferred, String fallback) {
+        return (preferred != null && !preferred.isBlank()) ? preferred : safe(fallback);
+    }
+
+    /**
+     * Returns the existing notes value if non-blank, otherwise the generated label.
+     * This prevents overwriting operator-entered notes with role labels on every sync.
+     */
+    private String notePreserving(String existingNotes, String generatedLabel) {
+        return (existingNotes != null && !existingNotes.isBlank()) ? existingNotes : generatedLabel;
     }
 
     private SarTaskAssignment mergeSarTask(SarTaskAssignment existing, SarTaskAssignment scaffold) {
@@ -474,6 +910,15 @@ public class AppController {
         }
         if (data.getClueLogEntries() == null) {
             data.setClueLogEntries(new ArrayList<>());
+        }
+        if (data.getTCards() == null) {
+            data.setTCards(new ArrayList<>());
+        }
+        if (data.getIncidentMode() == null) {
+            data.setIncidentMode(org.sarmanagement.icsforms.model.IncidentMode.SAR);
+        }
+        if (data.getIapPhase() == null) {
+            data.setIapPhase(org.sarmanagement.icsforms.model.IapPhase.PRE_OP);
         }
         if (data.getSchemaVersion() < AppData.CURRENT_SCHEMA_VERSION) {
             data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);

@@ -28,6 +28,7 @@ public class Ics214Form {
     private String preparedByPositionTitle = "";
     private String preparedBySignature = "";
     private LocalDateTime preparedDateTime;
+    private String iapPage = "";
 
     /**
      * Returns the operational scope derived from the typed association fields.
@@ -257,4 +258,9 @@ public class Ics214Form {
     public void setPreparedDateTime(LocalDateTime preparedDateTime) {
         this.preparedDateTime = preparedDateTime;
     }
+
+    /** @return IAP page number string for this form in the bundle. */
+    public String getIapPage() { return iapPage == null ? "" : iapPage; }
+    /** @param iapPage IAP page number string. */
+    public void setIapPage(String iapPage) { this.iapPage = iapPage == null ? "" : iapPage; }
 }

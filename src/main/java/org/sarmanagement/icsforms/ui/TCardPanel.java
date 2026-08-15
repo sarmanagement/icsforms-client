@@ -1,0 +1,1299 @@
+package org.sarmanagement.icsforms.ui;
+
+import org.sarmanagement.icsforms.model.IncidentMode;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
+
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
+import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
+import javax.swing.JTable;
+import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
+import javax.swing.SpinnerDateModel;
+import javax.swing.SwingConstants;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Panel displaying and editing ICS 219 T-Card (Resource Status Card) records.
+ *
+ * <p>Cards may be displayed in a sortable table or in a colour-coded rack view that
+ * mimics a physical T-card rack.  Personnel cards linked from the org chart or SAR tasks
+ * are created automatically by {@link AppController#syncTCards()}; manual add and CSV
+ * import are also available.</p>
+ */
+public class TCardPanel extends JPanel {
+    private static final String[] STATUS_OPTIONS = {
+            "", "Enroute", "At Staging", "Assigned", "Out of Service"
+    };
+    private static final String VIEW_TABLE = "table";
+    private static final String VIEW_RACK  = "rack";
+
+    private final AppController controller;
+    private final TCardTableModel tableModel = new TCardTableModel();
+    private final JTable table = new JTable(tableModel);
+    private final CardLayout viewLayout = new CardLayout();
+    private final JPanel viewContainer = new JPanel(viewLayout);
+    private final JScrollPane rackScroll = new JScrollPane();
+    private final JButton toggleViewBtn = new JButton("Rack View");
+    private String currentView = VIEW_TABLE;
+    /** Currently selected card in rack view; {@code null} when nothing is selected. */
+    private TCard selectedRackCard = null;
+    /** Assignment ID → team number, used to label task groups in table and rack views. */
+    private final Map<String, String> assignmentTeamByRef = new LinkedHashMap<>();
+    /** Assignment ID → resource identifier, used in rack view task banners. */
+    private final Map<String, String> assignmentResIdByRef = new LinkedHashMap<>();
+    /** Set of assignment task keys (from sourceRef) whose rack-view group is collapsed. */
+    private final java.util.Set<String> collapsedTaskKeys = new java.util.HashSet<>();
+    /** Maps each T-card to its rack-view widget panel for in-place border updates without full rebuild. */
+    private final Map<TCard, JPanel> rackCardWidgets = new IdentityHashMap<>();
+
+    /**
+     * Creates the T-card panel.
+     *
+     * @param controller application controller.
+     */
+    public TCardPanel(AppController controller) {
+        super(new BorderLayout());
+        this.controller = controller;
+        setBorder(BorderFactory.createTitledBorder("T-Cards (ICS 219 Resource Status)"));
+
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
+        table.setFillsViewportHeight(true);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setRowHeight(22);
+        table.setDefaultRenderer(Object.class, new TCardCellRenderer());
+
+        viewContainer.add(new JScrollPane(table), VIEW_TABLE);
+        viewContainer.add(rackScroll, VIEW_RACK);
+
+        JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+        JButton addCardBtn     = new JButton("Add Card…");
+        JButton editBtn        = new JButton("Edit Selected…");
+        JButton removeBtn      = new JButton("Remove Selected");
+        JButton importCsvBtn   = new JButton("Import from CSV…");
+
+        addCardBtn.addActionListener(e -> addCardWithTypeChoice());
+        editBtn.addActionListener(e -> editSelectedCard());
+        removeBtn.addActionListener(e -> removeSelectedCard());
+        importCsvBtn.addActionListener(e -> importFromCsv());
+        toggleViewBtn.addActionListener(e -> toggleView());
+
+        buttonRow.add(addCardBtn);
+        buttonRow.add(editBtn);
+        buttonRow.add(removeBtn);
+        buttonRow.add(importCsvBtn);
+        buttonRow.add(toggleViewBtn);
+
+        installTablePopupMenu();
+
+        add(viewContainer, BorderLayout.CENTER);
+        add(buttonRow, BorderLayout.SOUTH);
+    }
+
+    /** Installs a right-click context menu on the T-card table mirroring the bottom buttons. */
+    private void installTablePopupMenu() {
+        JPopupMenu popup = new JPopupMenu();
+        JMenuItem addItem    = new JMenuItem("Add Card…");
+        JMenuItem editItem   = new JMenuItem("Edit Selected…");
+        JMenuItem removeItem = new JMenuItem("Remove Selected");
+        addItem.addActionListener(e -> addCardWithTypeChoice());
+        editItem.addActionListener(e -> editSelectedCard());
+        removeItem.addActionListener(e -> removeSelectedCard());
+        popup.add(addItem);
+        popup.add(editItem);
+        popup.add(removeItem);
+        table.setComponentPopupMenu(popup);
+        table.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) { selectRowAt(e); }
+            @Override public void mouseReleased(MouseEvent e) { selectRowAt(e); }
+            @Override public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    selectRowAt(e);
+                    editSelectedCard();
+                }
+            }
+            private void selectRowAt(MouseEvent e) {
+                int row = table.rowAtPoint(e.getPoint());
+                if (row >= 0) table.setRowSelectionInterval(row, row);
+            }
+        });
+    }
+
+    /**
+     * Reloads table rows from the model.
+     */
+    public void refreshFromModel() {
+        // Build assignment ID → team number map for task grouping.
+        assignmentTeamByRef.clear();
+        assignmentResIdByRef.clear();
+        for (SarTaskAssignment task : controller.getData().getSarTaskAssignments()) {
+            if (!task.getAssignmentId().isBlank()) {
+                assignmentTeamByRef.put(task.getAssignmentId(), task.getAssignmentTeamNumber());
+                assignmentResIdByRef.put(task.getAssignmentId(), task.getResourceIdentifier());
+            }
+        }
+        tableModel.setAssignmentTeamByRef(new LinkedHashMap<>(assignmentTeamByRef));
+        tableModel.setCards(new ArrayList<>(controller.getData().getTCards()));
+        if (currentView.equals(VIEW_RACK)) {
+            rebuildRackView();
+        }
+    }
+
+    /**
+     * Applies table edits back to the model.
+     */
+    public void pushToModel() {
+        controller.getData().setTCards(new ArrayList<>(tableModel.getCards()));
+    }
+
+    // -------------------------------------------------------------------------
+    // View toggle
+    // -------------------------------------------------------------------------
+
+    private void toggleView() {
+        if (currentView.equals(VIEW_TABLE)) {
+            currentView = VIEW_RACK;
+            toggleViewBtn.setText("Table View");
+            selectedRackCard = null;
+            rebuildRackView();
+            viewLayout.show(viewContainer, VIEW_RACK);
+        } else {
+            currentView = VIEW_TABLE;
+            toggleViewBtn.setText("Rack View");
+            selectedRackCard = null;
+            viewLayout.show(viewContainer, VIEW_TABLE);
+        }
+    }
+
+    /**
+     * Rebuilds the visual rack panel from the current table model rows.
+     *
+     * <p>If any HEADER (grey, 219-1) cards are present the rack is arranged as a physical
+     * T-card rack: each HEADER card becomes a column heading and the resource cards that
+     * follow it (up to the next HEADER) are stacked below it as narrow coloured cards.
+     * When no HEADER cards exist the rack falls back to grouping by card type.</p>
+     */
+    private void rebuildRackView() {
+        rackCardWidgets.clear();
+        List<TCard> allCards = tableModel.getCards();
+
+        // Determine if there are any HEADER cards; if so use header-based layout.
+        boolean hasHeaders = allCards.stream().anyMatch(c -> c.getCardType() == TCardType.HEADER);
+
+        JPanel rack;
+        if (hasHeaders) {
+            rack = buildHeaderBasedRack(allCards);
+        } else {
+            rack = buildTypeBasedRack(allCards);
+        }
+
+        rackScroll.setViewportView(rack);
+        rackScroll.revalidate();
+        rackScroll.repaint();
+    }
+
+    /**
+     * Builds a rack panel where each HEADER card is a column heading and resource cards are
+     * placed into the column whose label best matches the card's status or location.
+     *
+     * <p>Within the "Assigned" column, cards are further sub-grouped by SAR task assignment.
+     * Canine/equipment cards with a {@code handlerName} are rendered immediately below
+     * their handler's personnel card in every column.</p>
+     */
+    private JPanel buildHeaderBasedRack(List<TCard> cards) {
+        // Collect HEADER cards in order.
+        List<TCard> sectionHeaders = new ArrayList<>();
+        for (TCard card : cards) {
+            if (card.getCardType() == TCardType.HEADER) {
+                sectionHeaders.add(card);
+            }
+        }
+
+        // For each HEADER build a mutable child list.
+        List<List<TCard>> sectionCards = new ArrayList<>();
+        for (int i = 0; i < sectionHeaders.size(); i++) {
+            sectionCards.add(new ArrayList<>());
+        }
+
+        // Determine the default column index ("Available" header, or 0 if absent).
+        int defaultColIndex = 0;
+        for (int i = 0; i < sectionHeaders.size(); i++) {
+            if ("Available".equalsIgnoreCase(sectionHeaders.get(i).getDisplayLabel())) {
+                defaultColIndex = i;
+                break;
+            }
+        }
+
+        // Place each non-HEADER card into the best-matching column.
+        for (TCard card : cards) {
+            if (card.getCardType() == TCardType.HEADER) {
+                continue;
+            }
+            int colIndex = defaultColIndex;
+            String matchStatus   = card.getStatus()   == null ? "" : card.getStatus();
+            String matchLocation = card.getLocation() == null ? "" : card.getLocation();
+            boolean matched = false;
+            for (int i = 0; i < sectionHeaders.size(); i++) {
+                String headerLabel = sectionHeaders.get(i).getDisplayLabel();
+                if (!matchStatus.isBlank() && headerLabel.equalsIgnoreCase(matchStatus)) {
+                    colIndex = i;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                for (int i = 0; i < sectionHeaders.size(); i++) {
+                    String headerLabel = sectionHeaders.get(i).getDisplayLabel();
+                    if (!matchLocation.isBlank() && headerLabel.equalsIgnoreCase(matchLocation)) {
+                        colIndex = i;
+                        break;
+                    }
+                }
+            }
+            sectionCards.get(colIndex).add(card);
+        }
+
+        // Build list of visible columns: filter out "Enroute" and "Ordered" headers
+        // when they have no resource cards assigned to them.
+        List<TCard> visibleHeaders = new ArrayList<>();
+        List<List<TCard>> visibleCards = new ArrayList<>();
+        for (int i = 0; i < sectionHeaders.size(); i++) {
+            String label = sectionHeaders.get(i).getDisplayLabel();
+            boolean hiddenWhenEmpty = "Enroute".equalsIgnoreCase(label)
+                    || "Ordered".equalsIgnoreCase(label);
+            if (hiddenWhenEmpty && sectionCards.get(i).isEmpty()) {
+                continue;
+            }
+            visibleHeaders.add(sectionHeaders.get(i));
+            visibleCards.add(sectionCards.get(i));
+        }
+
+        int cols = Math.max(1, visibleHeaders.size());
+        JPanel rack = new JPanel(new GridLayout(1, cols, 6, 0));
+        rack.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+
+        for (int i = 0; i < visibleHeaders.size(); i++) {
+            TCard header = visibleHeaders.get(i);
+            List<TCard> children = visibleCards.get(i);
+
+            JPanel col = new JPanel();
+            col.setLayout(new javax.swing.BoxLayout(col, javax.swing.BoxLayout.Y_AXIS));
+
+            col.add(buildHeaderCardWidget(header));
+            col.add(javax.swing.Box.createVerticalStrut(4));
+
+            // Check if this is the "Assigned" column — if so, sub-group by task.
+            String colLabel = header.getDisplayLabel();
+            if ("Assigned".equalsIgnoreCase(colLabel)) {
+                addTaskGroupedCards(col, children);
+            } else {
+                addHandlerGroupedCards(col, children);
+            }
+            col.add(javax.swing.Box.createVerticalGlue());
+            rack.add(col);
+        }
+        return rack;
+    }
+
+    /**
+     * Adds resource cards to a column panel, grouped by SAR task assignment.
+     *
+     * <p>Cards with a {@code sourceRef} beginning with {@code "sar:<assignmentId>:"}
+     * are clustered under a small task-label banner showing the resource count.
+     * Clicking the banner collapses or expands the group.  Cards linked to the same
+     * handler are kept together within each group.</p>
+     */
+    private void addTaskGroupedCards(JPanel col, List<TCard> children) {
+        // Group children by assignment ID (prefix of sourceRef "sar:<id>:...").
+        Map<String, List<TCard>> byTask = new LinkedHashMap<>();
+        byTask.put("", new ArrayList<>()); // unnamed / non-task cards
+        for (TCard card : children) {
+            String ref = card.getSourceRef();
+            String taskKey = "";
+            if (ref.startsWith("sar:")) {
+                String[] parts = ref.split(":", 3);
+                if (parts.length >= 2 && !parts[1].isBlank()) {
+                    taskKey = parts[1];
+                }
+            }
+            byTask.computeIfAbsent(taskKey, k -> new ArrayList<>()).add(card);
+        }
+
+        // Render non-task cards first, then each task group.
+        List<TCard> unassigned = byTask.remove("");
+        if (unassigned != null && !unassigned.isEmpty()) {
+            addHandlerGroupedCards(col, unassigned);
+        }
+        for (Map.Entry<String, List<TCard>> entry : byTask.entrySet()) {
+            String taskKey  = entry.getKey();
+            String teamLabel = assignmentTeamByRef.getOrDefault(taskKey, taskKey);
+            String resId     = assignmentResIdByRef.getOrDefault(taskKey, "");
+            List<TCard> groupCards = entry.getValue();
+            if (!teamLabel.isBlank()) {
+                boolean collapsed = collapsedTaskKeys.contains(taskKey);
+                int people = (int) groupCards.stream().filter(c -> c.getCardType() == TCardType.PERSONNEL).count();
+                int other  = groupCards.size() - people;
+                col.add(buildTaskBannerWidget(teamLabel, resId, people, other, collapsed, taskKey));
+                col.add(javax.swing.Box.createVerticalStrut(2));
+                if (!collapsed) {
+                    addHandlerGroupedCards(col, groupCards);
+                    col.add(javax.swing.Box.createVerticalStrut(4));
+                } else {
+                    // Show only the leader card when the group is collapsed (with paperclip icon).
+                    groupCards.stream()
+                            .filter(c -> c.getSourceRef().endsWith(":leader"))
+                            .findFirst()
+                            .ifPresent(leader -> {
+                                col.add(buildRackCard(leader, true));
+                                col.add(javax.swing.Box.createVerticalStrut(3));
+                            });
+                }
+            } else {
+                addHandlerGroupedCards(col, groupCards);
+                col.add(javax.swing.Box.createVerticalStrut(4));
+            }
+        }
+    }
+
+    /**
+     * Adds resource cards to a column panel, with canine/equipment cards grouped
+     * immediately below their handler's personnel card.
+     */
+    private void addHandlerGroupedCards(JPanel col, List<TCard> cards) {
+        // Separate handler-linked (canine) cards from the rest.
+        Map<String, List<TCard>> caninesByHandler = new LinkedHashMap<>();
+        List<TCard> topLevel = new ArrayList<>();
+        for (TCard card : cards) {
+            String handler = card.getHandlerName();
+            if (!handler.isBlank()) {
+                caninesByHandler.computeIfAbsent(handler, k -> new ArrayList<>()).add(card);
+            } else {
+                topLevel.add(card);
+            }
+        }
+
+        for (TCard card : topLevel) {
+            col.add(buildRackCard(card));
+            col.add(javax.swing.Box.createVerticalStrut(3));
+            // Append any linked canines directly below.
+            String personName = card.getPersonName();
+            List<TCard> linked = caninesByHandler.get(personName);
+            if (linked != null) {
+                for (TCard canine : linked) {
+                    col.add(buildCanineRackCard(canine));
+                    col.add(javax.swing.Box.createVerticalStrut(2));
+                }
+                caninesByHandler.remove(personName);
+            }
+        }
+
+        // Any canines whose handler card isn't in this column — render standalone.
+        for (List<TCard> orphaned : caninesByHandler.values()) {
+            for (TCard card : orphaned) {
+                col.add(buildRackCard(card));
+                col.add(javax.swing.Box.createVerticalStrut(3));
+            }
+        }
+    }
+
+    /**
+     * Builds a narrow task-label banner for sub-grouping within the Assigned column.
+     *
+     * <p>The banner shows the assignment number, optional resource identifier, and the
+     * people/resource breakdown as {@code (n)} for n people, or {@code (n, m)} when
+     * m non-personnel resources are also present.
+     * Clicking the banner toggles the collapsed/expanded state of the group.</p>
+     */
+    private JPanel buildTaskBannerWidget(String teamLabel, String resId, int people, int other,
+                                         boolean collapsed, String taskKey) {
+        JPanel p = new JPanel(new BorderLayout());
+        p.setBackground(new Color(200, 220, 255));
+        p.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(100, 140, 220), 1),
+                BorderFactory.createEmptyBorder(2, 6, 2, 6)));
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
+
+        String arrow = collapsed ? "▶" : "▼";
+        StringBuilder bannerText = new StringBuilder(arrow).append(" ").append(teamLabel);
+        if (!resId.isBlank()) {
+            bannerText.append(":").append(resId);
+        }
+        bannerText.append(" (").append(people);
+        if (other > 0) {
+            bannerText.append(", ").append(other);
+        }
+        bannerText.append(")");
+
+        JLabel lbl = new JLabel(bannerText.toString());
+        lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, 10.5f));
+        lbl.setForeground(new Color(30, 60, 130));
+        p.add(lbl, BorderLayout.CENTER);
+
+        p.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        p.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    if (collapsedTaskKeys.contains(taskKey)) {
+                        collapsedTaskKeys.remove(taskKey);
+                    } else {
+                        collapsedTaskKeys.add(taskKey);
+                    }
+                    rebuildRackView();
+                }
+            }
+        });
+        return p;
+    }
+
+    /**
+     * Builds a rack panel grouped by card type — used when no HEADER cards are present.
+     */
+    private JPanel buildTypeBasedRack(List<TCard> allCards) {
+        List<TCardType> typeOrder = Arrays.asList(TCardType.values());
+        Map<TCardType, List<TCard>> byType = new LinkedHashMap<>();
+        for (TCardType t : typeOrder) {
+            byType.put(t, new ArrayList<>());
+        }
+        for (TCard card : allCards) {
+            byType.get(card.getCardType()).add(card);
+        }
+
+        List<TCardType> usedTypes = new ArrayList<>();
+        for (TCardType t : typeOrder) {
+            if (!byType.get(t).isEmpty()) {
+                usedTypes.add(t);
+            }
+        }
+        int cols = Math.max(1, usedTypes.size());
+
+        JPanel rack = new JPanel(new GridLayout(1, cols, 6, 0));
+        rack.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+
+        for (TCardType type : usedTypes) {
+            JPanel col = new JPanel();
+            col.setLayout(new javax.swing.BoxLayout(col, javax.swing.BoxLayout.Y_AXIS));
+            col.setBorder(BorderFactory.createTitledBorder(type.getLabel()));
+
+            for (TCard card : byType.get(type)) {
+                col.add(buildRackCard(card));
+                col.add(javax.swing.Box.createVerticalStrut(3));
+            }
+            col.add(javax.swing.Box.createVerticalGlue());
+            rack.add(col);
+        }
+        return rack;
+    }
+
+    /** Builds the compact grey column-heading widget for a HEADER card in the rack view. */
+    private JPanel buildHeaderCardWidget(TCard header) {
+        JPanel p = new JPanel(new BorderLayout(2, 0));
+        p.setBackground(cardColor(TCardType.HEADER));
+        p.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Color.DARK_GRAY, 2),
+                BorderFactory.createEmptyBorder(3, 6, 3, 6)));
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+
+        JLabel titleLabel = new JLabel(header.getDisplayLabel());
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
+        p.add(titleLabel, BorderLayout.CENTER);
+        return p;
+    }
+
+    /**
+     * Builds a single narrow resource card widget for the rack view, with a mouse listener
+     * that marks the card as selected and enables "Edit Selected…".
+     */
+    private JPanel buildRackCard(TCard card) {
+        return buildRackCardWidget(card, false, false);
+    }
+
+    /**
+     * Builds a rack card optionally displaying a paperclip icon in the upper-right corner
+     * to indicate the task group is collapsed and more resources are hidden.
+     */
+    private JPanel buildRackCard(TCard card, boolean showPaperclip) {
+        return buildRackCardWidget(card, false, showPaperclip);
+    }
+
+    /** Builds a slightly narrower canine/equipment card indented below a handler card. */
+    private JPanel buildCanineRackCard(TCard card) {
+        return buildRackCardWidget(card, true, false);
+    }
+
+    private JPanel buildRackCardWidget(TCard card, boolean indented, boolean showPaperclip) {
+        JPanel p = new JPanel(new BorderLayout(2, 2));
+        p.setBackground(cardColor(card.getCardType()));
+        boolean isSelected = card == selectedRackCard;
+        p.setBorder(rackCardBorder(isSelected, indented));
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 55));
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // Store card reference so click handler can retrieve it.
+        p.putClientProperty("tcard", card);
+        // Register in widget map for in-place border updates.
+        rackCardWidgets.put(card, p);
+
+        JLabel nameLabel = new JLabel(card.getDisplayLabel());
+        nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD));
+
+        StringBuilder detail = new StringBuilder();
+        if (!card.getHomeAgency().isBlank()) {
+            detail.append(card.getHomeAgency());
+        }
+        if (!card.getPhoneNumber().isBlank()) {
+            if (!detail.isEmpty()) detail.append(" · ");
+            detail.append(card.getPhoneNumber());
+        }
+
+        JPanel northRow = new JPanel(new BorderLayout());
+        northRow.setOpaque(false);
+        northRow.add(nameLabel, BorderLayout.CENTER);
+        if (showPaperclip) {
+            JLabel paperclip = new JLabel("📎");
+            paperclip.setFont(paperclip.getFont().deriveFont(11f));
+            northRow.add(paperclip, BorderLayout.EAST);
+        }
+        p.add(northRow, BorderLayout.NORTH);
+        if (!detail.isEmpty()) {
+            JLabel detailLabel = new JLabel(detail.toString());
+            detailLabel.setFont(detailLabel.getFont().deriveFont(10.5f));
+            p.add(detailLabel, BorderLayout.CENTER);
+        }
+
+        // Right-click popup for rack cards.
+        JPopupMenu rackPopup = new JPopupMenu();
+        JMenuItem rackEditItem   = new JMenuItem("Edit…");
+        JMenuItem rackRemoveItem = new JMenuItem("Remove");
+        rackEditItem.addActionListener(e -> {
+            selectedRackCard = card;
+            editSelectedCard();
+        });
+        rackRemoveItem.addActionListener(e -> {
+            List<TCard> cards = tableModel.getCards();
+            for (int i = 0; i < cards.size(); i++) {
+                if (cards.get(i) == card) {
+                    tableModel.removeCard(i);
+                    break;
+                }
+            }
+            if (selectedRackCard == card) {
+                selectedRackCard = null;
+            }
+            controller.markDirty();
+        });
+        rackPopup.add(rackEditItem);
+        rackPopup.add(rackRemoveItem);
+        p.setComponentPopupMenu(rackPopup);
+
+        p.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                // Selection update without full rack rebuild so that double-click events
+                // are still delivered to the same panel instance.
+                if (javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    updateRackSelection(card, indented);
+                }
+            }
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    selectedRackCard = card;
+                    editSelectedCard();
+                }
+            }
+        });
+        return p;
+    }
+
+    /** Builds the compound border for a rack card. */
+    private static javax.swing.border.Border rackCardBorder(boolean selected, boolean indented) {
+        return BorderFactory.createCompoundBorder(
+                selected
+                        ? BorderFactory.createLineBorder(new Color(0, 100, 200), 2)
+                        : BorderFactory.createLineBorder(Color.DARK_GRAY),
+                BorderFactory.createEmptyBorder(3, indented ? 12 : 5, 3, 5));
+    }
+
+    /**
+     * Selects a rack card, updating just the borders of the old and new selection panels
+     * without a full rack rebuild (which would break double-click detection).
+     */
+    private void updateRackSelection(TCard card, boolean indented) {
+        if (selectedRackCard != null && selectedRackCard != card) {
+            JPanel old = rackCardWidgets.get(selectedRackCard);
+            if (old != null) {
+                old.setBorder(rackCardBorder(false, Boolean.TRUE.equals(old.getClientProperty("indented"))));
+                old.repaint();
+            }
+        }
+        selectedRackCard = card;
+        JPanel p = rackCardWidgets.get(card);
+        if (p != null) {
+            p.putClientProperty("indented", indented);
+            p.setBorder(rackCardBorder(true, indented));
+            p.repaint();
+        }
+    }
+
+
+
+    private void addCardWithTypeChoice() {
+        JComboBox<TCardType> typeChooser = new JComboBox<>(TCardType.values());
+        typeChooser.setSelectedItem(TCardType.PERSONNEL);
+        int result = JOptionPane.showConfirmDialog(this,
+                new Object[]{"Select card type:", typeChooser},
+                "Add T-Card", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
+        TCard card = new TCard();
+        card.setCardType((TCardType) typeChooser.getSelectedItem());
+        if (openEditDialog(card)) {
+            tableModel.addCard(card);
+            controller.markDirty();
+        }
+    }
+
+    private void addPersonnelCard() {
+        TCard card = new TCard();
+        card.setCardType(TCardType.PERSONNEL);
+        if (openEditDialog(card)) {
+            tableModel.addCard(card);
+            controller.markDirty();
+        }
+    }
+
+    private void addHeaderCard() {
+        TCard card = new TCard();
+        card.setCardType(TCardType.HEADER);
+        if (openEditDialog(card)) {
+            tableModel.addCard(card);
+            controller.markDirty();
+        }
+    }
+
+    private void editSelectedCard() {
+        if (currentView.equals(VIEW_RACK)) {
+            if (selectedRackCard == null) {
+                return;
+            }
+            TCard copy = copyCard(selectedRackCard);
+            if (openEditDialog(copy)) {
+                List<TCard> cards = tableModel.getCards();
+                for (int i = 0; i < cards.size(); i++) {
+                    if (cards.get(i) == selectedRackCard) {
+                        tableModel.replaceCard(i, copy);
+                        break;
+                    }
+                }
+                selectedRackCard = copy;
+                controller.markDirty();
+                rebuildRackView();
+            }
+            return;
+        }
+        int row = table.getSelectedRow();
+        if (row < 0) {
+            return;
+        }
+        TCard card = tableModel.getCard(row);
+        TCard copy = copyCard(card);
+        if (openEditDialog(copy)) {
+            tableModel.replaceCard(row, copy);
+            controller.markDirty();
+        }
+    }
+
+    private void removeSelectedCard() {
+        int row = table.getSelectedRow();
+        if (row < 0) {
+            return;
+        }
+        tableModel.removeCard(row);
+        controller.markDirty();
+    }
+
+    // -------------------------------------------------------------------------
+    // CSV import
+    // -------------------------------------------------------------------------
+
+    /**
+     * Opens a file chooser, reads a CSV file, and shows a preview dialog so the operator
+     * can select which rows to import as T-cards.
+     *
+     * <p>Expected CSV column order (header row optional):
+     * {@code name, home agency, home state, phone, type}.<br>
+     * If the first row contains text matching column names it is treated as a header and
+     * skipped.  The {@code type} column accepts the full card-type label (e.g.
+     * {@code "219-5 Personnel"}) or a keyword such as {@code "person"}, {@code "canine"},
+     * {@code "drone"}, {@code "crew"}, {@code "engine"}, {@code "helicopter"},
+     * {@code "dozer"}.  Unrecognised values default to {@link TCardType#PERSONNEL}.</p>
+     */
+    private void importFromCsv() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
+        chooser.setDialogTitle("Select CSV resource file");
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File file = chooser.getSelectedFile();
+        List<String[]> rows;
+        try {
+            rows = parseCsv(file);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Could not read file: " + ex.getMessage(),
+                    "Import Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        if (rows.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "CSV file is empty.", "Import", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // Detect and skip a header row.
+        int dataStart = 0;
+        String[] first = rows.get(0);
+        if (first.length > 0 && looksLikeHeader(first[0])) {
+            dataStart = 1;
+        }
+
+        if (dataStart >= rows.size()) {
+            JOptionPane.showMessageDialog(this, "No data rows found after the header.", "Import", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // Build preview with checkboxes.
+        int dataRows = rows.size() - dataStart;
+        String[] colNames = {"Import?", "Name", "Home Agency", "Home State", "Phone", "Type"};
+        Object[][] previewData = new Object[dataRows][colNames.length];
+        for (int i = 0; i < dataRows; i++) {
+            String[] row = rows.get(dataStart + i);
+            previewData[i][0] = Boolean.TRUE;
+            previewData[i][1] = cell(row, 0);
+            previewData[i][2] = cell(row, 1);
+            previewData[i][3] = cell(row, 2);
+            previewData[i][4] = cell(row, 3);
+            previewData[i][5] = cell(row, 4);
+        }
+
+        CsvPreviewTableModel previewModel = new CsvPreviewTableModel(previewData, colNames);
+        JTable previewTable = new JTable(previewModel);
+        previewTable.setRowHeight(22);
+        previewTable.getColumnModel().getColumn(0).setMaxWidth(65);
+        JScrollPane scroll = new JScrollPane(previewTable);
+        scroll.setPreferredSize(new Dimension(620, Math.min(400, dataRows * 25 + 60)));
+
+        int choice = JOptionPane.showConfirmDialog(this, scroll,
+                "Select resources to import", JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        int imported = 0;
+        for (int i = 0; i < dataRows; i++) {
+            if (Boolean.TRUE.equals(previewModel.getValueAt(i, 0))) {
+                TCard card = csvRowToCard(
+                        (String) previewModel.getValueAt(i, 1),
+                        (String) previewModel.getValueAt(i, 2),
+                        (String) previewModel.getValueAt(i, 3),
+                        (String) previewModel.getValueAt(i, 4),
+                        (String) previewModel.getValueAt(i, 5));
+                tableModel.addCard(card);
+                imported++;
+            }
+        }
+        if (imported > 0) {
+            controller.markDirty();
+        }
+        JOptionPane.showMessageDialog(this, "Imported " + imported + " T-card(s).",
+                "Import Complete", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /** Converts a CSV row's fields into a new T-card. */
+    private TCard csvRowToCard(String name, String agency, String state, String phone, String typeStr) {
+        TCard card = new TCard();
+        card.setPersonName(name == null ? "" : name.trim());
+        card.setHomeAgency(agency == null ? "" : agency.trim());
+        card.setHomeState(state == null ? "" : state.trim());
+        card.setPhoneNumber(phone == null ? "" : phone.trim());
+        card.setCardType(inferCardType(typeStr));
+        card.setLocation("ICP");
+        return card;
+    }
+
+    /**
+     * Infers a {@link TCardType} from a free-form string.
+     *
+     * <p>Checks for keyword substrings (case-insensitive) before falling back to
+     * {@link TCardType#PERSONNEL}.</p>
+     */
+    static TCardType inferCardType(String value) {
+        if (value == null || value.isBlank()) {
+            return TCardType.PERSONNEL;
+        }
+        String v = value.trim().toLowerCase();
+        // 219-7 Equipment: canines are working assets/equipment in ICS.
+        if (v.contains("canine") || v.contains("handler") || v.contains("k9")
+                || v.contains("dozer") || v.contains("equipment") || v.contains("219-7")) {
+            return TCardType.EQUIPMENT;
+        }
+        // 219-8 Misc. Equipment / Task Force
+        if (v.contains("219-8") || v.contains("misc") || v.contains("task force")) {
+            return TCardType.MISC_EQUIPMENT;
+        }
+        // 219-6 Fixed-Wing (drones / UAS also fall here)
+        if (v.contains("fixed") || v.contains("drone") || v.contains("uas") || v.contains("uav")
+                || v.contains("aircraft") || v.contains("219-6")) {
+            return TCardType.FIXED_WING;
+        }
+        if (v.contains("helicopter") || v.contains("219-4")) {
+            return TCardType.HELICOPTER;
+        }
+        if (v.contains("engine") || v.contains("219-3")) {
+            return TCardType.ENGINE;
+        }
+        if (v.contains("crew") || v.contains("team") || v.contains("219-2")) {
+            return TCardType.CREW;
+        }
+        // Check GENERIC before HEADER: "219-1" is a prefix of "219-10", so checking GENERIC
+        // first prevents "219-10" from matching the HEADER branch's v.contains("219-1") test.
+        if (v.contains("generic") || v.contains("219-10")) {
+            return TCardType.GENERIC;
+        }
+        if (v.contains("header") || v.contains("219-1")) {
+            return TCardType.HEADER;
+        }
+        return TCardType.PERSONNEL;
+    }
+
+    /** Reads a CSV file and returns rows as string arrays. */
+    static List<String[]> parseCsv(File file) throws IOException {
+        List<String[]> rows = new ArrayList<>();
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (!line.isBlank()) {
+                    rows.add(splitCsvLine(line));
+                }
+            }
+        }
+        return rows;
+    }
+
+    /** Splits a single CSV line respecting double-quoted fields. */
+    static String[] splitCsvLine(String line) {
+        List<String> fields = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '"') {
+                if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    current.append('"');
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (c == ',' && !inQuotes) {
+                fields.add(current.toString());
+                current.setLength(0);
+            } else {
+                current.append(c);
+            }
+        }
+        fields.add(current.toString());
+        return fields.toArray(new String[0]);
+    }
+
+    private static String cell(String[] row, int index) {
+        return (row != null && index < row.length) ? row[index].trim() : "";
+    }
+
+    private static boolean looksLikeHeader(String value) {
+        if (value == null) return false;
+        String v = value.trim().toLowerCase();
+        return v.contains("name") || v.contains("agency") || v.contains("person");
+    }
+
+    // -------------------------------------------------------------------------
+    // Card edit dialog
+    // -------------------------------------------------------------------------
+
+    /**
+     * Opens an edit dialog for the given card.  A "Card type" combo is shown at the top;
+     * changing it switches the visible set of type-specific fields.  The card is updated
+     * in-place on confirmation.
+     *
+     * @param card card to edit in-place.
+     * @return {@code true} when the user confirmed.
+     */
+    private boolean openEditDialog(TCard card) {
+        // ── shared fields ──────────────────────────────────────────────────
+        JComboBox<TCardType> typeCombo = new JComboBox<>(TCardType.values());
+        typeCombo.setSelectedItem(card.getCardType());
+        // Item 4: in SAR mode, show "Equipment (inc. Canine)" for EQUIPMENT type.
+        boolean sarMode = controller.getIncidentMode() == IncidentMode.SAR;
+        if (sarMode) {
+            typeCombo.setRenderer(new javax.swing.DefaultListCellRenderer() {
+                @Override
+                public java.awt.Component getListCellRendererComponent(
+                        javax.swing.JList<?> list, Object value, int index,
+                        boolean isSelected, boolean cellHasFocus) {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if (value == TCardType.EQUIPMENT) {
+                        setText("219-7 Equipment (inc. Canine)");
+                    }
+                    return this;
+                }
+            });
+        }
+
+        // ── HEADER sub-form fields (separate instances) ────────────────────
+        JTextField headerResourceIdField = UiSupport.textField();
+        JTextField headerLocationField   = UiSupport.textField();
+        JTextField headerNotesField      = UiSupport.textField();
+
+        headerResourceIdField.setText(card.getResourceIdentifier());
+        headerLocationField.setText(card.getLocation());
+        headerNotesField.setText(card.getNotes());
+
+        // ── PERSONNEL sub-form fields ──────────────────────────────────────
+        JTextField personNameField    = UiSupport.textField();
+        JTextField homeAgencyField    = UiSupport.textField();
+        JTextField homeStateField     = UiSupport.textField();
+        homeStateField.setPreferredSize(new Dimension(48, homeStateField.getPreferredSize().height));
+        JTextField phoneField         = UiSupport.textField();
+        JTextField radioChannelField  = UiSupport.textField();
+        JTextField personnelResIdField = UiSupport.textField();
+        JTextField personnelLocField  = UiSupport.textField();
+        JComboBox<String> personnelStatusCombo = new JComboBox<>(STATUS_OPTIONS);
+        JTextField personnelNotesField = UiSupport.textField();
+
+        SpinnerDateModel checkInModel = new SpinnerDateModel();
+        JSpinner checkInSpinner = new JSpinner(checkInModel);
+        checkInSpinner.setEditor(new JSpinner.DateEditor(checkInSpinner, "yyyy-MM-dd HH:mm"));
+
+        personNameField.setText(card.getPersonName());
+        homeAgencyField.setText(card.getHomeAgency());
+        homeStateField.setText(card.getHomeState());
+        phoneField.setText(card.getPhoneNumber());
+        radioChannelField.setText(card.getRadioChannel());
+        personnelResIdField.setText(card.getResourceIdentifier());
+        personnelLocField.setText(card.getLocation());
+        personnelStatusCombo.setSelectedItem(card.getStatus());
+        personnelNotesField.setText(card.getNotes());
+        if (card.getCheckInDateTime() != null) {
+            checkInModel.setValue(Date.from(card.getCheckInDateTime().atZone(ZoneId.systemDefault()).toInstant()));
+        }
+
+        // ── OTHER resource sub-form fields ────────────────────────────────
+        JTextField handlerNameField   = UiSupport.textField();
+        JTextField resourceResIdField = UiSupport.textField();
+        JTextField resourceLocField   = UiSupport.textField();
+        JComboBox<String> resourceStatusCombo = new JComboBox<>(STATUS_OPTIONS);
+        JTextField resourceNotesField = UiSupport.textField();
+
+        handlerNameField.setText(card.getHandlerName());
+        resourceResIdField.setText(card.getResourceIdentifier());
+        resourceLocField.setText(card.getLocation());
+        resourceStatusCombo.setSelectedItem(card.getStatus());
+        resourceNotesField.setText(card.getNotes());
+
+        // ── build three sub-forms (HEADER / PERSONNEL / other) ──────────
+        CardLayout subLayout = new CardLayout();
+        JPanel subContainer = new JPanel(subLayout);
+
+        JPanel headerForm = UiSupport.formPanel();
+        int r = 0;
+        UiSupport.addRow(headerForm, r++, "Heading text (column label)", headerResourceIdField);
+        UiSupport.addRow(headerForm, r++, "Location note",               headerLocationField);
+        UiSupport.addRow(headerForm, r,   "Notes",                       headerNotesField);
+
+        JPanel personnelForm = UiSupport.formPanel();
+        r = 0;
+        UiSupport.addRow(personnelForm, r++, "Person name",             personNameField);
+        UiSupport.addRow(personnelForm, r++, "Home agency",             homeAgencyField);
+        UiSupport.addRow(personnelForm, r++, "Home state (2-letter)",   homeStateField);
+        UiSupport.addRow(personnelForm, r++, "Phone number",            phoneField);
+        UiSupport.addRow(personnelForm, r++, "Radio channel/talkgroup", radioChannelField);
+        UiSupport.addRow(personnelForm, r++, "Check-in date/time",      checkInSpinner);
+        UiSupport.addRow(personnelForm, r++, "Resource identifier",     personnelResIdField);
+        UiSupport.addRow(personnelForm, r++, "Location (e.g. ICP)",     personnelLocField);
+        UiSupport.addRow(personnelForm, r++, "Status",                  personnelStatusCombo);
+        UiSupport.addRow(personnelForm, r,   "Notes",                   personnelNotesField);
+
+        JPanel resourceForm = UiSupport.formPanel();
+        r = 0;
+        UiSupport.addRow(resourceForm, r++, "Handler/operator name", handlerNameField);
+        UiSupport.addRow(resourceForm, r++, "Resource identifier",   resourceResIdField);
+        UiSupport.addRow(resourceForm, r++, "Location (e.g. ICP)",   resourceLocField);
+        UiSupport.addRow(resourceForm, r++, "Status",                resourceStatusCombo);
+        UiSupport.addRow(resourceForm, r,   "Notes",                 resourceNotesField);
+
+        subContainer.add(headerForm,    "HEADER");
+        subContainer.add(personnelForm, "PERSONNEL");
+        subContainer.add(resourceForm,  "OTHER");
+
+        Runnable showSubForm = () -> {
+            TCardType t = (TCardType) typeCombo.getSelectedItem();
+            if (t == TCardType.HEADER) {
+                subLayout.show(subContainer, "HEADER");
+            } else if (t == TCardType.PERSONNEL) {
+                subLayout.show(subContainer, "PERSONNEL");
+            } else {
+                subLayout.show(subContainer, "OTHER");
+            }
+        };
+        showSubForm.run();
+        typeCombo.addActionListener(e -> showSubForm.run());
+
+        // ── outer container: type combo on top, sub-form below ───────────
+        JPanel typeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        typeRow.add(new javax.swing.JLabel("Card type:"));
+        typeRow.add(typeCombo);
+
+        JPanel outerPanel = new JPanel(new BorderLayout(0, 4));
+        outerPanel.add(typeRow, BorderLayout.NORTH);
+        outerPanel.add(subContainer, BorderLayout.CENTER);
+
+        JScrollPane scroll = new JScrollPane(outerPanel);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        if (!UiSupport.showResizableConfirmDialog(
+                javax.swing.SwingUtilities.getWindowAncestor(this), "Edit T-Card", scroll,
+                new Dimension(520, 460))) {
+            return false;
+        }
+
+        TCardType chosenType = (TCardType) typeCombo.getSelectedItem();
+        card.setCardType(chosenType);
+        if (chosenType == TCardType.HEADER) {
+            card.setResourceIdentifier(headerResourceIdField.getText().trim());
+            card.setLocation(headerLocationField.getText().trim());
+            card.setNotes(headerNotesField.getText().trim());
+        } else {
+            if (chosenType == TCardType.PERSONNEL) {
+                card.setPersonName(personNameField.getText().trim());
+                card.setHomeAgency(homeAgencyField.getText().trim());
+                card.setHomeState(homeStateField.getText().trim());
+                card.setPhoneNumber(phoneField.getText().trim());
+                card.setRadioChannel(radioChannelField.getText().trim());
+                Object spinnerVal = checkInSpinner.getValue();
+                if (spinnerVal instanceof Date d) {
+                    card.setCheckInDateTime(LocalDateTime.ofInstant(d.toInstant(), ZoneId.systemDefault()));
+                }
+                card.setResourceIdentifier(personnelResIdField.getText().trim());
+                card.setLocation(personnelLocField.getText().trim());
+                card.setStatus((String) personnelStatusCombo.getSelectedItem());
+                card.setNotes(personnelNotesField.getText().trim());
+            } else {
+                card.setHandlerName(handlerNameField.getText().trim());
+                card.setResourceIdentifier(resourceResIdField.getText().trim());
+                card.setLocation(resourceLocField.getText().trim());
+                card.setStatus((String) resourceStatusCombo.getSelectedItem());
+                card.setNotes(resourceNotesField.getText().trim());
+            }
+        }
+        return true;
+    }
+
+    private static TCard copyCard(TCard src) {
+        TCard copy = new TCard();
+        copy.setCardType(src.getCardType());
+        copy.setPersonName(src.getPersonName());
+        copy.setHomeAgency(src.getHomeAgency());
+        copy.setHomeState(src.getHomeState());
+        copy.setPhoneNumber(src.getPhoneNumber());
+        copy.setRadioChannel(src.getRadioChannel());
+        copy.setCheckInDateTime(src.getCheckInDateTime());
+        copy.setResourceIdentifier(src.getResourceIdentifier());
+        copy.setLocation(src.getLocation());
+        copy.setStatus(src.getStatus());
+        copy.setNotes(src.getNotes());
+        copy.setSourceRef(src.getSourceRef());
+        copy.setHandlerName(src.getHandlerName());
+        return copy;
+    }
+
+    // -------------------------------------------------------------------------
+    // Table model
+    // -------------------------------------------------------------------------
+
+    private static final class TCardTableModel extends AbstractTableModel {
+        private static final String[] COLUMNS = {
+                "Type", "Name / Resource", "Agency", "State", "Phone",
+                "Check-In", "Location", "Status", "Task"
+        };
+
+        private final List<TCard> cards = new ArrayList<>();
+        private Map<String, String> assignmentTeamByRef = new LinkedHashMap<>();
+
+        void setAssignmentTeamByRef(Map<String, String> map) {
+            this.assignmentTeamByRef = map == null ? new LinkedHashMap<>() : map;
+            fireTableDataChanged();
+        }
+
+        void setCards(List<TCard> newCards) {
+            cards.clear();
+            cards.addAll(newCards);
+            fireTableDataChanged();
+        }
+
+        List<TCard> getCards() {
+            return new ArrayList<>(cards);
+        }
+
+        TCard getCard(int row) {
+            return cards.get(row);
+        }
+
+        void addCard(TCard card) {
+            cards.add(card);
+            fireTableRowsInserted(cards.size() - 1, cards.size() - 1);
+        }
+
+        void replaceCard(int row, TCard card) {
+            cards.set(row, card);
+            fireTableRowsUpdated(row, row);
+        }
+
+        void removeCard(int row) {
+            cards.remove(row);
+            fireTableRowsDeleted(row, row);
+        }
+
+        @Override public int getRowCount()    { return cards.size(); }
+        @Override public int getColumnCount() { return COLUMNS.length; }
+        @Override public String getColumnName(int col) { return COLUMNS[col]; }
+        @Override public boolean isCellEditable(int row, int col) { return false; }
+
+        @Override
+        public Object getValueAt(int row, int col) {
+            TCard card = cards.get(row);
+            return switch (col) {
+                case 0 -> card.getCardType().getLabel();
+                case 1 -> card.getDisplayLabel();
+                case 2 -> card.getHomeAgency();
+                case 3 -> card.getHomeState();
+                case 4 -> card.getPhoneNumber();
+                case 5 -> card.getCheckInDateTime() != null
+                        ? card.getCheckInDateTime().toString().replace('T', ' ') : "";
+                case 6 -> card.getLocation();
+                case 7 -> card.getStatus();
+                case 8 -> {
+                    String ref = card.getSourceRef();
+                    if (ref.startsWith("sar:")) {
+                        String[] parts = ref.split(":", 3);
+                        if (parts.length >= 2 && !parts[1].isBlank()) {
+                            String teamNum = assignmentTeamByRef.get(parts[1]);
+                            yield teamNum != null ? teamNum : "";
+                        }
+                    }
+                    yield "";
+                }
+                default -> "";
+            };
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // CSV preview table model
+    // -------------------------------------------------------------------------
+
+    private static final class CsvPreviewTableModel extends AbstractTableModel {
+        private final Object[][] data;
+        private final String[] columns;
+
+        CsvPreviewTableModel(Object[][] data, String[] columns) {
+            this.data = data;
+            this.columns = columns;
+        }
+
+        @Override public int getRowCount()    { return data.length; }
+        @Override public int getColumnCount() { return columns.length; }
+        @Override public String getColumnName(int col) { return columns[col]; }
+        @Override public Class<?> getColumnClass(int col) { return col == 0 ? Boolean.class : String.class; }
+        @Override public boolean isCellEditable(int row, int col) { return col == 0; }
+        @Override public Object getValueAt(int row, int col) { return data[row][col]; }
+
+        @Override
+        public void setValueAt(Object value, int row, int col) {
+            data[row][col] = value;
+            fireTableCellUpdated(row, col);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Cell renderer (table view)
+    // -------------------------------------------------------------------------
+
+    private static final class TCardCellRenderer extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(JTable t, Object value, boolean isSelected,
+                                                       boolean hasFocus, int row, int col) {
+            Component c = super.getTableCellRendererComponent(t, value, isSelected, hasFocus, row, col);
+            if (!isSelected && t.getModel() instanceof TCardTableModel model) {
+                TCardType type = model.getCard(row).getCardType();
+                c.setBackground(cardColor(type));
+                c.setForeground(Color.BLACK);
+            }
+            if (c instanceof JLabel lbl) {
+                lbl.setHorizontalAlignment(SwingConstants.LEFT);
+            }
+            return c;
+        }
+    }
+
+    static Color cardColor(TCardType type) {
+        return switch (type) {
+            case HEADER        -> new Color(180, 180, 180);
+            case CREW          -> new Color(144, 238, 144);
+            case ENGINE        -> new Color(255, 182, 193);
+            case HELICOPTER    -> new Color(173, 216, 230);
+            case PERSONNEL     -> Color.WHITE;
+            case FIXED_WING    -> new Color(255, 200, 100);
+            case EQUIPMENT     -> new Color(255, 255, 153);
+            case MISC_EQUIPMENT -> new Color(240, 220, 180);
+            case GENERIC       -> new Color(210, 180, 240);
+        };
+    }
+}

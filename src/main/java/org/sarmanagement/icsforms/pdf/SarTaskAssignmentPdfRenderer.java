@@ -129,7 +129,8 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
             drawPreparedBySection(stream, bold, regular, layout.x(), y - row8, pageWidth, row8,
                     "11. Prepared by", task.getPreparedByName(), task.getPreparedByPositionTitle(), task.getPreparedDateTime(),
-                    "SAR Task Assignment Form - Page 1 of 2");
+                    "SAR Task Assignment Form - Page 1 of 2"
+                    + (task.getIapPage().isBlank() ? "" : "   IAP Page " + task.getIapPage()));
         }
     }
 

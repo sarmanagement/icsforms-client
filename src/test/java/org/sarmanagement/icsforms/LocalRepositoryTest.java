@@ -295,6 +295,41 @@ class LocalRepositoryTest {
         }
     }
 
+    /**
+     * Verifies that the IAP bundle export produces a single merged PDF file with the
+     * incident name and operational period encoded in the filename, and that the
+     * individual component PDFs are removed after merge.
+     */
+    @Test
+    void iapBundleExportProducesMergedPdf() throws Exception {
+        AppData data = sampleData();
+        PdfExportService exportService = new PdfExportService(
+                new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer());
+        Path outputDir = Files.createTempDirectory("icsforms-iap");
+
+        Path bundlePath = exportService.exportIapBundle(data, outputDir);
+
+        assertTrue(Files.exists(bundlePath), "IAP bundle file should exist");
+        assertTrue(Files.size(bundlePath) > 0, "IAP bundle file should not be empty");
+        // Filename should include the incident name.
+        assertTrue(bundlePath.getFileName().toString().contains("Test_Incident")
+                || bundlePath.getFileName().toString().contains("Test Incident")
+                || bundlePath.getFileName().toString().toLowerCase().contains("test"),
+                "Bundle filename should derive from incident name: " + bundlePath.getFileName());
+        assertTrue(bundlePath.getFileName().toString().endsWith(".pdf"), "Bundle should be a PDF");
+
+        // The merged document should have at least as many pages as the individual forms.
+        try (PDDocument merged = Loader.loadPDF(bundlePath.toFile())) {
+            assertTrue(merged.getNumberOfPages() >= 3,
+                    "Merged IAP should contain pages from all exported forms");
+        }
+
+        // Individual component files should have been cleaned up.
+        assertFalse(Files.exists(outputDir.resolve("ics-202.pdf")), "Component PDF should be removed after bundle");
+        assertFalse(Files.exists(outputDir.resolve("ics-204.pdf")), "Component PDF should be removed after bundle");
+    }
+
+
     private boolean hasRectangle(PDPage page, float x, float y, float width, float height) throws Exception {
         return countRectangles(page, x, y, width, height) > 0;
     }

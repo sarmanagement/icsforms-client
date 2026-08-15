@@ -2,6 +2,8 @@ package org.sarmanagement.icsforms.ui;
 
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import javax.swing.JSpinner;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -11,13 +13,22 @@ import javax.swing.SpinnerDateModel;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JViewport;
+import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Dimension;
 import java.awt.Color;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Shared Swing layout helpers for compact form editing panels.
@@ -222,5 +233,71 @@ final class UiSupport {
         Object value = optionPane.getValue();
         dialog.dispose();
         return Integer.valueOf(JOptionPane.OK_OPTION).equals(value);
+    }
+
+    /**
+     * Installs a drop-down name autocomplete on a text field.
+     *
+     * <p>When the user types at least one character a popup menu appears below the field
+     * showing matching suggestions (prefix match, case-insensitive, up to 10 results).
+     * Selecting a suggestion fills the field and, if {@code onSelected} is non-null,
+     * invokes the callback so callers can auto-fill adjacent contact fields.</p>
+     *
+     * @param nameField  target text field.
+     * @param suggestions lazy supplier of the current suggestion list.
+     * @param onSelected optional callback fired when a suggestion is chosen; receives the
+     *                   selected name string.  May be {@code null}.
+     */
+    static void installNameAutocomplete(JTextField nameField,
+                                        Supplier<List<String>> suggestions,
+                                        Consumer<String> onSelected) {
+        JPopupMenu popup = new JPopupMenu();
+        boolean[] updating = {false};
+
+        DocumentListener listener = new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { update(); }
+            @Override public void removeUpdate(DocumentEvent e) { update(); }
+            @Override public void changedUpdate(DocumentEvent e) {}
+
+            private void update() {
+                if (updating[0]) return;
+                SwingUtilities.invokeLater(() -> {
+                    String text = nameField.getText().trim().toLowerCase(Locale.ROOT);
+                    popup.removeAll();
+                    if (text.isEmpty()) {
+                        popup.setVisible(false);
+                        return;
+                    }
+                    List<String> matched = suggestions.get().stream()
+                            .filter(s -> s.trim().toLowerCase(Locale.ROOT).startsWith(text))
+                            .limit(10)
+                            .toList();
+                    if (matched.isEmpty()) {
+                        popup.setVisible(false);
+                        return;
+                    }
+                    for (String s : matched) {
+                        JMenuItem item = new JMenuItem(s);
+                        item.addActionListener(ev -> {
+                            updating[0] = true;
+                            nameField.setText(s);
+                            updating[0] = false;
+                            popup.setVisible(false);
+                            if (onSelected != null) {
+                                onSelected.accept(s);
+                            }
+                        });
+                        popup.add(item);
+                    }
+                    if (nameField.isShowing()) {
+                        popup.show(nameField, 0, nameField.getHeight());
+                    }
+                });
+            }
+        };
+        nameField.getDocument().addDocumentListener(listener);
+        nameField.addFocusListener(new FocusAdapter() {
+            @Override public void focusLost(FocusEvent e) { popup.setVisible(false); }
+        });
     }
 }

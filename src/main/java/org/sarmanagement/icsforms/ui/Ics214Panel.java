@@ -6,8 +6,10 @@ import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.TCard;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -26,6 +28,8 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
@@ -51,6 +55,7 @@ public class Ics214Panel extends JPanel {
     private final JTextField preparedBySignatureField = UiSupport.textField();
     private final JSpinner preparedDateTimeField = UiSupport.dateTimeSpinner();
     private final JButton pickPreparerButton = new JButton("Pick preparer from task…");
+    private final JButton syncResourcesBtn = new JButton("Sync resources…");
     private final ResourcesTableModel resourcesTableModel = new ResourcesTableModel();
     private final ActivityLogTableModel activityLogTableModel = new ActivityLogTableModel();
     private final JTable resourcesTable = new JTable(resourcesTableModel);
@@ -85,9 +90,23 @@ public class Ics214Panel extends JPanel {
         resourcesTable.setFillsViewportHeight(true);
         activityLogTable.setFillsViewportHeight(true);
 
+        // Item 6: Double-click on a resource row shows its linked T-card (read-only).
+        resourcesTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    showTCardForSelectedResource();
+                }
+            }
+        });
+
         JPanel resourcesPanel = new JPanel(new BorderLayout());
         resourcesPanel.setBorder(BorderFactory.createTitledBorder("Section 6 - Resources Assigned"));
+        syncResourcesBtn.addActionListener(e -> syncResources());
+        JPanel resourcesButtonRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        resourcesButtonRow.add(syncResourcesBtn);
         resourcesPanel.add(new JScrollPane(resourcesTable), BorderLayout.CENTER);
+        resourcesPanel.add(resourcesButtonRow, BorderLayout.SOUTH);
 
         JPanel activityPanel = new JPanel(new BorderLayout());
         activityPanel.setBorder(BorderFactory.createTitledBorder("Section 7 - Activity Log"));
@@ -134,8 +153,15 @@ public class Ics214Panel extends JPanel {
         preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
         resourcesTableModel.setRows(currentForm.getResourcesAssigned());
         activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
-        pickPreparerButton.setEnabled(currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT
-                && !linkedTaskResources().isEmpty());
+        boolean isTask = currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT;
+        pickPreparerButton.setEnabled(isTask && !linkedTaskResources().isEmpty());
+        if (isTask) {
+            syncResourcesBtn.setText("Sync from Task Assignment…");
+            syncResourcesBtn.setToolTipText("Replace the resource list with the leader and resources from the linked task assignment");
+        } else {
+            syncResourcesBtn.setText("Refresh from ICP & 204…");
+            syncResourcesBtn.setToolTipText("Add resources from T-cards at ICP and from 204 assignment forms");
+        }
     }
 
     /** Saves current field values into the stored model reference. */
@@ -375,6 +401,178 @@ public class Ics214Panel extends JPanel {
         return panel;
     }
 
+    /**
+     * Item 6: Shows a non-editable view of the T-card linked to the selected resource row.
+     * Looks up the T-card by person name from the controller's current T-card list.
+     */
+    private void showTCardForSelectedResource() {
+        int row = resourcesTable.getSelectedRow();
+        if (row < 0 || currentData == null) {
+            return;
+        }
+        int modelRow = resourcesTable.convertRowIndexToModel(row);
+        SarTaskResource resource = resourcesTableModel.getRows().get(modelRow);
+        String name = resource.getName().isBlank() ? resource.getIcsPosition() : resource.getName();
+        TCard tcard = currentData.getTCards().stream()
+                .filter(c -> !c.getPersonName().isBlank() && c.getPersonName().equalsIgnoreCase(name))
+                .findFirst()
+                .orElse(null);
+        if (tcard == null) {
+            JOptionPane.showMessageDialog(this,
+                    "No T-card record found for: " + name,
+                    "T-Card", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JPanel form = UiSupport.formPanel();
+        int r = 0;
+        UiSupport.addRow(form, r++, "Card type",         new JLabel(tcard.getCardType().getLabel()));
+        UiSupport.addRow(form, r++, "Name",               new JLabel(tcard.getPersonName()));
+        UiSupport.addRow(form, r++, "Home agency",        new JLabel(tcard.getHomeAgency()));
+        UiSupport.addRow(form, r++, "Home state",         new JLabel(tcard.getHomeState()));
+        UiSupport.addRow(form, r++, "Phone",              new JLabel(tcard.getPhoneNumber()));
+        UiSupport.addRow(form, r++, "Radio channel",      new JLabel(tcard.getRadioChannel()));
+        UiSupport.addRow(form, r++, "Resource identifier",new JLabel(tcard.getResourceIdentifier()));
+        UiSupport.addRow(form, r++, "Location",           new JLabel(tcard.getLocation()));
+        UiSupport.addRow(form, r++, "Status",             new JLabel(tcard.getStatus()));
+        UiSupport.addRow(form, r,   "Notes",              new JLabel(tcard.getNotes()));
+        JScrollPane scroll = new JScrollPane(form);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        JOptionPane.showMessageDialog(this, scroll, "T-Card: " + tcard.getPersonName(),
+                JOptionPane.PLAIN_MESSAGE);
+    }
+
+    /**
+     * Dispatches to the appropriate sync strategy based on the current form's scope:
+     * TASK_ASSIGNMENT replaces the list from the linked task; ICP/ASSIGNMENT_LIST adds
+     * missing resources from ICP T-cards and 204 assignment leaders.
+     */
+    private void syncResources() {
+        if (currentForm == null || currentData == null) {
+            return;
+        }
+        if (currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT) {
+            syncResourcesFromTask();
+        } else {
+            refreshResourcesFromIcp();
+        }
+    }
+
+    /**
+     * Replaces the resource list with the leader and resources from the linked
+     * SAR task assignment only, so the 214 matches exactly the people on that task.
+     */
+    private void syncResourcesFromTask() {
+        String taskId = currentForm.getLinkedSarTaskAssignmentId();
+        if (taskId == null || taskId.isBlank()) {
+            JOptionPane.showMessageDialog(this,
+                    "This form is not linked to a task assignment.",
+                    "Sync from Task", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        SarTaskAssignment task = currentData.getSarTaskAssignments().stream()
+                .filter(t -> taskId.equals(t.getAssignmentId()))
+                .findFirst().orElse(null);
+        if (task == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Linked task assignment not found.",
+                    "Sync from Task", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        List<SarTaskResource> fromTask = new ArrayList<>(task.getResourcesAssigned());
+        if (fromTask.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "The linked task assignment has no resources.",
+                    "Sync from Task", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        String summary = fromTask.stream()
+                .map(r -> "  \u2022 " + (r.getName().isBlank() ? r.getFunction() : r.getName())
+                        + (r.getIcsPosition().isBlank() ? "" : " (" + r.getIcsPosition() + ")"))
+                .collect(Collectors.joining("\n"));
+        int choice = JOptionPane.showConfirmDialog(this,
+                "Replace the current resource list with the following " + fromTask.size()
+                        + " resource(s) from the task assignment?\n" + summary,
+                "Sync from Task Assignment", JOptionPane.OK_CANCEL_OPTION);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        resourcesTableModel.setRows(fromTask);
+        currentForm.setResourcesAssigned(new ArrayList<>(fromTask));
+        controller.markDirty();
+    }
+
+    /**
+     * Adds missing resources from ICP T-cards and 204 assignment leaders.
+     * Uses T-card notes as the ICS position for org-chart-sourced personnel
+     * so their role (e.g. "Safety Officer") appears in the table.
+     */
+    private void refreshResourcesFromIcp() {
+        List<SarTaskResource> toAdd = new ArrayList<>();
+        // T-cards at ICP.
+        for (TCard card : currentData.getTCards()) {
+            if (card.getCardType() == org.sarmanagement.icsforms.model.TCardType.HEADER) {
+                continue;
+            }
+            String loc = card.getLocation() == null ? "" : card.getLocation();
+            if ("ICP".equalsIgnoreCase(loc) && !card.getPersonName().isBlank()) {
+                SarTaskResource r = new SarTaskResource();
+                r.setName(card.getPersonName());
+                r.setHomeAgency(card.getHomeAgency());
+                // Notes on org-sourced cards carry the role label (e.g. "Safety Officer").
+                if (!card.getNotes().isBlank()) {
+                    r.setIcsPosition(card.getNotes());
+                }
+                toAdd.add(r);
+            }
+        }
+        // Leaders from 204 assignment forms.
+        for (ResourceAssignment ra : currentData.getForm204().getResourcesAssigned()) {
+            if (!ra.getLeader().isBlank()) {
+                SarTaskResource r = new SarTaskResource();
+                r.setName(ra.getLeader());
+                r.setIcsPosition(ra.getLeaderRole());
+                toAdd.add(r);
+            }
+        }
+        if (toAdd.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "No ICP resources or 204 assignments found to add.",
+                    "Refresh Resources", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        // Remove duplicates against existing list.
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        for (SarTaskResource r : resourcesTableModel.getRows()) {
+            String n = r.getName().isBlank() ? r.getFunction() : r.getName();
+            existing.add(n.trim().toLowerCase());
+        }
+        toAdd.removeIf(r -> {
+            String n = r.getName().isBlank() ? r.getFunction() : r.getName();
+            return existing.contains(n.trim().toLowerCase());
+        });
+        if (toAdd.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "All ICP resources are already in the list.",
+                    "Refresh Resources", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        String summary = toAdd.stream()
+                .map(r -> "  \u2022 " + (r.getName().isBlank() ? r.getFunction() : r.getName())
+                        + (r.getIcsPosition().isBlank() ? "" : " (" + r.getIcsPosition() + ")"))
+                .collect(Collectors.joining("\n"));
+        int choice = JOptionPane.showConfirmDialog(this,
+                "Add the following resources to this form?\n" + summary,
+                "Refresh from ICP & 204", JOptionPane.OK_CANCEL_OPTION);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        List<SarTaskResource> merged = new ArrayList<>(resourcesTableModel.getRows());
+        merged.addAll(toAdd);
+        resourcesTableModel.setRows(merged);
+        currentForm.setResourcesAssigned(merged);
+        controller.markDirty();
+    }
+
     private void clearFields() {
         nameField.setText("");
         icsPositionField.setText("");
@@ -566,7 +764,8 @@ public class Ics214Panel extends JPanel {
         public Object getValueAt(int row, int col) {
             SarTaskResource r = rows.get(row);
             return switch (col) {
-                case 0 -> r.getName();
+                // Show resource identifier (function) when name is blank (e.g. canine resources).
+                case 0 -> r.getName().isBlank() ? r.getFunction() : r.getName();
                 case 1 -> r.getIcsPosition();
                 default -> r.getHomeAgency();
             };

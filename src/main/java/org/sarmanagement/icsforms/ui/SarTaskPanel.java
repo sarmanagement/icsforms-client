@@ -22,12 +22,17 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.RowFilter;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -43,6 +48,7 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Editable SAR task assignment and debriefing grid linked from ICS 204 resource assignments.
@@ -50,7 +56,8 @@ import java.util.Set;
 public class SarTaskPanel extends JPanel {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final int MAX_RESOURCE_ROWS = 18;
-    private static final Set<Integer> READ_ONLY_COLUMNS = Set.of(3, 4, 5, 6, 7, 18, 19);
+    /** Read-only columns in the summary table view: Status (0), Resource (4), Leader (5), People (6). */
+    private static final Set<Integer> READ_ONLY_COLUMNS = Set.of(0, 4, 5, 6);
     private static final int RESOURCE_EDITOR_WIDTH = 420;
     private static final int RESOURCE_EDITOR_VISIBLE_ROWS = 9;
     private static final int RESOURCE_EDITOR_PADDING = 8;
@@ -66,6 +73,18 @@ public class SarTaskPanel extends JPanel {
     private final AppController controller;
     private final SarTaskTableModel tableModel = new SarTaskTableModel();
     private final JTable table = new JTable(tableModel);
+    private final TableRowSorter<SarTaskTableModel> rowSorter = new TableRowSorter<>(tableModel);
+    private final JComboBox<String> statusFilterCombo = new JComboBox<>(
+            new String[]{"All", "Planning", "On Task", "Returned"});
+    private java.util.function.Consumer<SarTaskAssignment> on214Request;
+
+    private static final String VIEW_TABLE = "table";
+    private static final String VIEW_BOARD = "board";
+    private final CardLayout viewCardLayout = new CardLayout();
+    private final JPanel viewContainer = new JPanel(viewCardLayout);
+    private final JScrollPane boardScroll = new JScrollPane();
+    private final JButton toggleBoardBtn = new JButton("Board View");
+    private String currentSarView = VIEW_TABLE;
 
     /**
      * Creates the SAR task assignment panel.
@@ -75,12 +94,298 @@ public class SarTaskPanel extends JPanel {
     public SarTaskPanel(AppController controller) {
         super(new BorderLayout());
         this.controller = controller;
-        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
         table.setFillsViewportHeight(true);
-        table.getColumnModel().getColumn(0).setCellRenderer(new RequiredFieldCellRenderer());
+        // Col 0 = Task Status (color-coded by lifecycle); col 1 = Team # (required field highlight).
+        table.getColumnModel().getColumn(0).setCellRenderer(new LifecycleStatusCellRenderer());
+        table.getColumnModel().getColumn(1).setCellRenderer(new RequiredFieldCellRenderer());
+        table.setRowSorter(rowSorter);
         installRowEditor();
         setBorder(BorderFactory.createTitledBorder("SAR Task Assignment / Debriefing"));
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        JPanel tablePanel = new JPanel(new BorderLayout());
+        tablePanel.add(buildFilterPanel(), BorderLayout.NORTH);
+        tablePanel.add(new JScrollPane(table), BorderLayout.CENTER);
+        viewContainer.add(tablePanel, VIEW_TABLE);
+        viewContainer.add(boardScroll, VIEW_BOARD);
+        add(viewContainer, BorderLayout.CENTER);
+        add(buildButtonPanel(), BorderLayout.SOUTH);
+    }
+
+    /** Builds the filter bar shown above the task table. */
+    private JPanel buildFilterPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        panel.add(new JLabel("Filter by status:"));
+        panel.add(statusFilterCombo);
+        statusFilterCombo.addActionListener(e -> applyStatusFilter());
+        return panel;
+    }
+
+    /** Applies the selected status filter to the table row sorter. */
+    private void applyStatusFilter() {
+        String selected = (String) statusFilterCombo.getSelectedItem();
+        if (selected == null || selected.equals("All")) {
+            rowSorter.setRowFilter(null);
+        } else {
+            rowSorter.setRowFilter(RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(selected) + "$", 0));
+        }
+    }
+
+    /** Builds the bottom action button row. */
+    private JPanel buildButtonPanel() {
+        JButton addBtn     = new JButton("Add Task");
+        JButton editBtn    = new JButton("Edit Assignment…");
+        JButton debriefBtn = new JButton("Debrief…");
+        JButton open214Btn = new JButton("Open ICS 214…");
+        JButton removeBtn  = new JButton("Remove Task");
+
+        editBtn.setEnabled(false);
+        debriefBtn.setEnabled(false);
+        open214Btn.setEnabled(false);
+        removeBtn.setEnabled(false);
+
+        table.getSelectionModel().addListSelectionListener(event -> {
+            boolean selected = table.getSelectedRow() >= 0;
+            editBtn.setEnabled(selected);
+            debriefBtn.setEnabled(selected);
+            open214Btn.setEnabled(selected && on214Request != null);
+            removeBtn.setEnabled(selected);
+        });
+
+        addBtn.addActionListener(e -> addNewTask());
+        editBtn.addActionListener(e -> openSelectedRowEditor(EditorMode.ASSIGNMENT));
+        debriefBtn.addActionListener(e -> openSelectedRowEditor(EditorMode.DEBRIEFING));
+        open214Btn.addActionListener(e -> openIcs214ForSelected());
+        removeBtn.addActionListener(e -> removeSelectedTask());
+        toggleBoardBtn.addActionListener(e -> toggleBoardView());
+
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+        row.add(addBtn);
+        row.add(editBtn);
+        row.add(debriefBtn);
+        row.add(open214Btn);
+        row.add(removeBtn);
+        row.add(toggleBoardBtn);
+        return row;
+    }
+
+    /** Toggles between the table view and the task lifecycle board view. */
+    private void toggleBoardView() {
+        if (currentSarView.equals(VIEW_TABLE)) {
+            currentSarView = VIEW_BOARD;
+            toggleBoardBtn.setText("Table View");
+            rebuildBoardView();
+            viewCardLayout.show(viewContainer, VIEW_BOARD);
+        } else {
+            currentSarView = VIEW_TABLE;
+            toggleBoardBtn.setText("Board View");
+            viewCardLayout.show(viewContainer, VIEW_TABLE);
+        }
+    }
+
+    /**
+     * Rebuilds the task lifecycle board view from the current task list.
+     *
+     * <p>Tasks are shown in four columns based on their lifecycle status:
+     * <ol>
+     *   <li><b>Planning</b> — taskLifecycleStatus is "Planning"</li>
+     *   <li><b>On Task</b>  — taskLifecycleStatus is "On Task"</li>
+     *   <li><b>Returned</b> — taskLifecycleStatus is "Returned" but no debriefing supervisor set</li>
+     *   <li><b>Completed</b> — taskLifecycleStatus is "Returned" and a debriefing supervisor is set</li>
+     * </ol>
+     * Clicking a task card opens the assignment editor for that task.</p>
+     */
+    private void rebuildBoardView() {
+        List<SarTaskAssignment> tasks = tableModel.getRows();
+
+        List<SarTaskAssignment> planning  = new ArrayList<>();
+        List<SarTaskAssignment> onTask    = new ArrayList<>();
+        List<SarTaskAssignment> returned  = new ArrayList<>();
+        List<SarTaskAssignment> completed = new ArrayList<>();
+
+        for (SarTaskAssignment task : tasks) {
+            String lc = task.getTaskLifecycleStatus();
+            if ("On Task".equalsIgnoreCase(lc)) {
+                onTask.add(task);
+            } else if ("Returned".equalsIgnoreCase(lc)) {
+                if (task.getDebriefingSupervisor() != null && !task.getDebriefingSupervisor().isBlank()) {
+                    completed.add(task);
+                } else {
+                    returned.add(task);
+                }
+            } else {
+                planning.add(task); // "Planning" or unknown
+            }
+        }
+
+        JPanel board = new JPanel(new GridLayout(1, 4, 8, 0));
+        board.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        board.add(buildBoardColumn("Planning", new Color(173, 216, 230), planning));
+        board.add(buildBoardColumn("On Task",  new Color(255, 200, 100), onTask));
+        board.add(buildBoardColumn("Returned (not debriefed)", new Color(144, 238, 144), returned));
+        board.add(buildBoardColumn("Completed", new Color(200, 200, 200), completed));
+
+        boardScroll.setViewportView(board);
+        boardScroll.revalidate();
+        boardScroll.repaint();
+    }
+
+    /** Builds a single Kanban board column for a lifecycle status. */
+    private JPanel buildBoardColumn(String title, Color headerColor, List<SarTaskAssignment> tasks) {
+        JPanel col = new JPanel();
+        col.setLayout(new javax.swing.BoxLayout(col, javax.swing.BoxLayout.Y_AXIS));
+        col.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY, 1));
+
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(headerColor);
+        header.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        JLabel titleLabel = new JLabel(title + " (" + tasks.size() + ")");
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
+        header.add(titleLabel, BorderLayout.CENTER);
+        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        col.add(header);
+        col.add(javax.swing.Box.createVerticalStrut(4));
+
+        for (SarTaskAssignment task : tasks) {
+            col.add(buildBoardTaskCard(task, headerColor));
+            col.add(javax.swing.Box.createVerticalStrut(4));
+        }
+        col.add(javax.swing.Box.createVerticalGlue());
+        return col;
+    }
+
+    /** Builds a single task card widget for the board view. */
+    private JPanel buildBoardTaskCard(SarTaskAssignment task, Color bgColor) {
+        JPanel p = new JPanel(new BorderLayout(4, 2));
+        p.setBackground(bgColor.brighter());
+        p.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Color.GRAY),
+                BorderFactory.createEmptyBorder(5, 8, 5, 8)));
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 80));
+
+        String teamNum = task.getAssignmentTeamNumber();
+        String resId   = task.getResourceIdentifier();
+        String leader  = task.getLeader();
+        int resourceCount = task.getResourcesAssigned() == null ? 0 : task.getResourcesAssigned().size();
+
+        JLabel topLabel = new JLabel(teamNum.isBlank() ? "(no team number)" : teamNum);
+        topLabel.setFont(topLabel.getFont().deriveFont(Font.BOLD, 11f));
+
+        StringBuilder detail = new StringBuilder();
+        if (!resId.isBlank()) detail.append(resId);
+        if (!leader.isBlank()) {
+            if (!detail.isEmpty()) detail.append(" · ");
+            detail.append("Leader: ").append(leader);
+        }
+        if (resourceCount > 0) {
+            if (!detail.isEmpty()) detail.append(" · ");
+            detail.append(resourceCount).append(" resource(s)");
+        }
+
+        p.add(topLabel, BorderLayout.NORTH);
+        if (!detail.isEmpty()) {
+            JLabel detailLabel = new JLabel("<html><small>" + detail + "</small></html>");
+            p.add(detailLabel, BorderLayout.CENTER);
+        }
+
+        // Right-click context menu (mirrors the table popup and bottom buttons).
+        JPopupMenu cardMenu = new JPopupMenu();
+        JMenuItem editItem    = new JMenuItem("Edit assignment…");
+        JMenuItem debriefItem = new JMenuItem("Debrief…");
+        JMenuItem open214Item = new JMenuItem("Open ICS 214 for Task…");
+        editItem.addActionListener(e -> openBoardTaskEditor(task, EditorMode.ASSIGNMENT));
+        debriefItem.addActionListener(e -> openBoardTaskEditor(task, EditorMode.DEBRIEFING));
+        open214Item.addActionListener(e -> {
+            if (on214Request != null) on214Request.accept(task);
+        });
+        cardMenu.add(editItem);
+        cardMenu.add(debriefItem);
+        cardMenu.add(open214Item);
+        p.setComponentPopupMenu(cardMenu);
+
+        // Double-click opens edit dialog; hover highlights border.
+        p.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
+                    openBoardTaskEditor(task, EditorMode.ASSIGNMENT);
+                }
+            }
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                p.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(0, 80, 180), 2),
+                        BorderFactory.createEmptyBorder(4, 7, 4, 7)));
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                p.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(Color.GRAY),
+                        BorderFactory.createEmptyBorder(5, 8, 5, 8)));
+            }
+        });
+        return p;
+    }
+
+    /** Opens the assignment or debrief editor for a task clicked in the board view. */
+    private void openBoardTaskEditor(SarTaskAssignment task, EditorMode mode) {
+        int modelRow = tableModel.getRows().indexOf(task);
+        if (modelRow >= 0) {
+            editRow(modelRow, mode);
+            if (currentSarView.equals(VIEW_BOARD)) {
+                rebuildBoardView();
+            }
+        }
+    }
+
+    /** Creates a new standalone SAR task, opens the assignment editor, and adds it on confirm. */
+    private void addNewTask() {
+        SarTaskAssignment task = new SarTaskAssignment();
+        task.setAssignmentId(UUID.randomUUID().toString());
+        SarTaskEditor editor = new SarTaskEditor(task, EditorMode.ASSIGNMENT,
+                controller.getData().getClueLogEntries(), 1);
+        JScrollPane scrollPane = new JScrollPane(editor.panel);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        if (!UiSupport.showResizableConfirmDialog(this, "Add SAR Task", scrollPane,
+                new Dimension(1040, 680))) {
+            return;
+        }
+        controller.getData().setClueLogEntries(editor.applyTo(task, controller.getData().getClueLogEntries()));
+        List<SarTaskAssignment> rows = new ArrayList<>(tableModel.getRows());
+        rows.add(task);
+        controller.getData().setSarTaskAssignments(rows);
+        tableModel.setRows(rows, controller.getData().getClueLogEntries(),
+                controller.getData().getForm204().getResourcesAssigned());
+        controller.markDirty();
+        int newViewRow = table.convertRowIndexToView(rows.size() - 1);
+        if (newViewRow >= 0) {
+            table.setRowSelectionInterval(newViewRow, newViewRow);
+        }
+    }
+
+    /** Removes the currently selected SAR task row after confirmation. */
+    private void removeSelectedTask() {
+        int viewRow = table.getSelectedRow();
+        if (viewRow < 0) {
+            return;
+        }
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        if (modelRow < 0 || modelRow >= tableModel.getRows().size()) {
+            return;
+        }
+        SarTaskAssignment task = tableModel.getRows().get(modelRow);
+        String label = task.getAssignmentTeamNumber().isBlank() ? "this task" : task.getAssignmentTeamNumber();
+        int result = javax.swing.JOptionPane.showConfirmDialog(this,
+                "Remove " + label + "?", "Remove Task", javax.swing.JOptionPane.YES_NO_OPTION);
+        if (result != javax.swing.JOptionPane.YES_OPTION) {
+            return;
+        }
+        List<SarTaskAssignment> rows = new ArrayList<>(tableModel.getRows());
+        rows.remove(modelRow);
+        controller.getData().setSarTaskAssignments(rows);
+        tableModel.setRows(rows, controller.getData().getClueLogEntries(),
+                controller.getData().getForm204().getResourcesAssigned());
+        controller.markDirty();
     }
 
     /**
@@ -91,6 +396,9 @@ public class SarTaskPanel extends JPanel {
         tableModel.setRows(controller.getData().getSarTaskAssignments(),
                 controller.getData().getClueLogEntries(),
                 controller.getData().getForm204().getResourcesAssigned());
+        if (currentSarView.equals(VIEW_BOARD)) {
+            rebuildBoardView();
+        }
     }
 
     /**
@@ -99,6 +407,26 @@ public class SarTaskPanel extends JPanel {
     public void pushToModel() {
         controller.getData().setSarTaskAssignments(tableModel.getRows());
         controller.syncIcs204ResourcesFromSarTasks();
+    }
+
+    /**
+     * Sets the callback invoked when the user requests to open/show the ICS 214 for a task.
+     *
+     * @param handler callback accepting the selected {@link SarTaskAssignment}.
+     */
+    public void setOn214Request(java.util.function.Consumer<SarTaskAssignment> handler) {
+        this.on214Request = handler;
+    }
+
+    private void openIcs214ForSelected() {
+        int viewRow = table.getSelectedRow();
+        if (viewRow < 0 || on214Request == null) {
+            return;
+        }
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        if (modelRow >= 0 && modelRow < tableModel.getRows().size()) {
+            on214Request.accept(tableModel.getRows().get(modelRow));
+        }
     }
 
     static String formatDateTimeValue(LocalDateTime value) {
@@ -124,6 +452,13 @@ public class SarTaskPanel extends JPanel {
         JMenuItem editDebriefingItem = new JMenuItem("Debrief…");
         editDebriefingItem.addActionListener(event -> openSelectedRowEditor(EditorMode.DEBRIEFING));
         menu.add(editDebriefingItem);
+        JMenuItem open214Item = new JMenuItem("Open ICS 214 for Task…");
+        open214Item.addActionListener(event -> openIcs214ForSelected());
+        menu.add(open214Item);
+        menu.addSeparator();
+        JMenuItem removeItem = new JMenuItem("Remove Task");
+        removeItem.addActionListener(event -> removeSelectedTask());
+        menu.add(removeItem);
         table.setComponentPopupMenu(menu);
         table.addMouseListener(new MouseAdapter() {
             @Override
@@ -744,11 +1079,14 @@ public class SarTaskPanel extends JPanel {
     }
 
     private static class SarTaskEditor {
+        private static final String[] LIFECYCLE_OPTIONS = {"Planning", "On Task", "Returned"};
+
         private final JPanel panel = UiSupport.formPanel();
         private final EditorMode mode;
         private final JTextField assignmentTeamNumberField;
         private final JComboBox<String> resourceTypeField;
         private final JComboBox<String> taskTypeField;
+        private final JComboBox<String> taskLifecycleField;
         private final JTextField incidentNameField;
         private final JTextField resourceIdentifierField;
         private final JTextField leaderRoleField;
@@ -792,6 +1130,8 @@ public class SarTaskPanel extends JPanel {
             taskTypeField = new JComboBox<>(SarTaskSupport.taskTypes().toArray(String[]::new));
             taskTypeField.setEditable(true);
             taskTypeField.setSelectedItem(row.getTaskType());
+            taskLifecycleField = new JComboBox<>(LIFECYCLE_OPTIONS);
+            taskLifecycleField.setSelectedItem(row.getTaskLifecycleStatus());
             incidentNameField = textField(row.getIncidentName(), false);
             resourceIdentifierField = textField(row.getResourceIdentifier(), false);
             leaderRoleField = textField(row.getLeaderRole(), false);
@@ -841,6 +1181,7 @@ public class SarTaskPanel extends JPanel {
                     new LabeledComponent("Resource type", resourceTypeField),
                     new LabeledComponent("Task Geometry", taskTypeField)));
             if (mode == EditorMode.ASSIGNMENT) {
+                UiSupport.addRow(panel, rowIndex++, "Task status",         taskLifecycleField);
                 UiSupport.addRow(panel, rowIndex++, "Inherited task data", assignmentSummaryField);
                 UiSupport.addRow(panel, rowIndex++, "Operations personnel", operationsField);
                 UiSupport.addRow(panel, rowIndex++, "Context", contextField);
@@ -963,6 +1304,7 @@ public class SarTaskPanel extends JPanel {
             row.setResourceType(selectedComboValue(resourceTypeField));
             row.setTaskType(selectedComboValue(taskTypeField));
             if (mode == EditorMode.ASSIGNMENT) {
+                row.setTaskLifecycleStatus((String) taskLifecycleField.getSelectedItem());
                 row.setResourcesAssigned(resourceValuesFrom(resourceEntryTableModel));
                 row.setAssignment(textAreaFrom(assignmentField).getText().trim());
                 row.setTransportationInstructions(textAreaFrom(transportationField).getText().trim());
@@ -1029,13 +1371,22 @@ public class SarTaskPanel extends JPanel {
 
     /**
      * Table model for editable SAR task rows.
+     *
+     * <p>The table shows only the essential summary columns.  All other fields
+     * (work assignment, transportation, special equipment, clues, POD factors,
+     * debriefing notes, etc.) are accessible exclusively through the edit dialogs.</p>
      */
     private static class SarTaskTableModel extends AbstractTableModel {
         private final String[] columns = {
-                "Assignment/Team # (required)", "Resource Type", "Task Geometry", "Resource", "Leader Role", "Leader", "Contact", "People",
-                "Work Assignment", "Transportation", "Task Map", "Special Equipment", "Communications",
-                "Debrief Supervisor", "Time On Start", "Time On End", "Vehicle Miles", "Reported POD",
-                "Clues Detected", "POD Factors", "Debriefing", "Areas Not Covered", "Hazards Observed"
+                "Task Status",
+                "Assignment/Team # (required)",
+                "Resource Type",
+                "Task Geometry",
+                "Resource",
+                "Leader",
+                "People",
+                "Time On Start",
+                "Time On End"
         };
         private List<SarTaskAssignment> rows = new ArrayList<>();
         private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
@@ -1061,29 +1412,15 @@ public class SarTaskPanel extends JPanel {
         public Object getValueAt(int rowIndex, int columnIndex) {
             SarTaskAssignment row = rows.get(rowIndex);
             return switch (columnIndex) {
-                case 0 -> row.getAssignmentTeamNumber();
-                case 1 -> row.getResourceType();
-                case 2 -> row.getTaskType();
-                case 3 -> row.getResourceIdentifier();
-                case 4 -> row.getLeaderRole();
+                case 0 -> row.getTaskLifecycleStatus();
+                case 1 -> row.getAssignmentTeamNumber();
+                case 2 -> row.getResourceType();
+                case 3 -> row.getTaskType();
+                case 4 -> row.getResourceIdentifier();
                 case 5 -> row.getLeader();
-                case 6 -> row.getContact();
-                case 7 -> linkedPeople(row, resourceAssignments);
-                case 8 -> row.getAssignment();
-                case 9 -> row.getTransportationInstructions();
-                case 10 -> row.getTaskMap();
-                case 11 -> row.getSpecialEquipment();
-                case 12 -> formatCommunications(row.getCommunications());
-                case 13 -> row.getDebriefingSupervisor();
-                case 14 -> formatDateTimeValue(row.getAssignmentStart());
-                case 15 -> formatDateTimeValue(row.getAssignmentEnd());
-                case 16 -> row.getVehicleMiles();
-                case 17 -> row.getReportedPod();
-                case 18 -> formatClues(row, clueLogEntries);
-                case 19 -> formatPodFactors(row.getQualitativePodFactors());
-                case 20 -> row.getDebriefNotes();
-                case 21 -> row.getAreasNotCovered();
-                case 22 -> row.getHazardsObserved();
+                case 6 -> linkedPeople(row, resourceAssignments);
+                case 7 -> formatDateTimeValue(row.getAssignmentStart());
+                case 8 -> formatDateTimeValue(row.getAssignmentEnd());
                 default -> "";
             };
         }
@@ -1093,22 +1430,11 @@ public class SarTaskPanel extends JPanel {
             SarTaskAssignment row = rows.get(rowIndex);
             String value = aValue == null ? "" : aValue.toString();
             switch (columnIndex) {
-                case 0 -> row.setAssignmentTeamNumber(value);
-                case 1 -> row.setResourceType(value);
-                case 2 -> row.setTaskType(value);
-                case 8 -> row.setAssignment(value);
-                case 9 -> row.setTransportationInstructions(value);
-                case 10 -> row.setTaskMap(value);
-                case 11 -> row.setSpecialEquipment(value);
-                case 12 -> row.setCommunications(parseCommunications(value));
-                case 13 -> row.setDebriefingSupervisor(value);
-                case 14 -> row.setAssignmentStart(parseDateTimeValue(value));
-                case 15 -> row.setAssignmentEnd(parseDateTimeValue(value));
-                case 16 -> row.setVehicleMiles(value);
-                case 17 -> row.setReportedPod(value);
-                case 20 -> row.setDebriefNotes(value);
-                case 21 -> row.setAreasNotCovered(value);
-                case 22 -> row.setHazardsObserved(value);
+                case 1 -> row.setAssignmentTeamNumber(value);
+                case 2 -> row.setResourceType(value);
+                case 3 -> row.setTaskType(value);
+                case 7 -> row.setAssignmentStart(parseDateTimeValue(value));
+                case 8 -> row.setAssignmentEnd(parseDateTimeValue(value));
                 default -> { return; }
             }
             fireTableCellUpdated(rowIndex, columnIndex);
@@ -1233,6 +1559,36 @@ public class SarTaskPanel extends JPanel {
                 }
             }
             return entries;
+        }
+    }
+
+    /**
+     * Cell renderer for the "Task Status" column: colour-codes each cell to match
+     * the board-view column colours (Planning=blue, On Task=orange, Returned=green,
+     * Completed=grey).
+     */
+    private static class LifecycleStatusCellRenderer extends DefaultTableCellRenderer {
+        private static final Color COLOR_PLANNING  = new Color(173, 216, 230);
+        private static final Color COLOR_ON_TASK   = new Color(255, 200, 100);
+        private static final Color COLOR_RETURNED  = new Color(144, 238, 144);
+        private static final Color COLOR_COMPLETED = new Color(200, 200, 200);
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                                                       boolean hasFocus, int row, int column) {
+            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            if (!isSelected) {
+                String status = value == null ? "" : value.toString();
+                component.setBackground(switch (status) {
+                    case "Planning"  -> COLOR_PLANNING;
+                    case "On Task"   -> COLOR_ON_TASK;
+                    case "Returned"  -> COLOR_RETURNED;
+                    case "Completed" -> COLOR_COMPLETED;
+                    default          -> table.getBackground();
+                });
+                component.setForeground(Color.BLACK);
+            }
+            return component;
         }
     }
 
