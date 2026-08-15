@@ -41,7 +41,7 @@ class Ics204PanelTest {
         assertEquals("Assignment/Team #", table.getColumnName(0));
         assertEquals("Resource Type", table.getColumnName(1));
         assertNotNull(menu);
-        assertEquals("Edit assignment…", ((JMenuItem) menu.getComponent(0)).getText());
+        assertEquals("Add assignment…", ((JMenuItem) menu.getComponent(0)).getText());
     }
 
     @Test

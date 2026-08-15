@@ -1,5 +1,6 @@
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
@@ -43,6 +44,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +78,8 @@ public class TCardPanel extends JPanel {
     private final Map<String, String> assignmentTeamByRef = new LinkedHashMap<>();
     /** Set of assignment task keys (from sourceRef) whose rack-view group is collapsed. */
     private final java.util.Set<String> collapsedTaskKeys = new java.util.HashSet<>();
+    /** Maps each T-card to its rack-view widget panel for in-place border updates without full rebuild. */
+    private final Map<TCard, JPanel> rackCardWidgets = new IdentityHashMap<>();
 
     /**
      * Creates the T-card panel.
@@ -202,6 +206,7 @@ public class TCardPanel extends JPanel {
      * When no HEADER cards exist the rack falls back to grouping by card type.</p>
      */
     private void rebuildRackView() {
+        rackCardWidgets.clear();
         List<TCard> allCards = tableModel.getCards();
 
         // Determine if there are any HEADER cards; if so use header-based layout.
@@ -362,6 +367,15 @@ public class TCardPanel extends JPanel {
                 if (!collapsed) {
                     addHandlerGroupedCards(col, groupCards);
                     col.add(javax.swing.Box.createVerticalStrut(4));
+                } else {
+                    // Show only the leader card when the group is collapsed.
+                    groupCards.stream()
+                            .filter(c -> c.getSourceRef().endsWith(":leader"))
+                            .findFirst()
+                            .ifPresent(leader -> {
+                                col.add(buildRackCard(leader));
+                                col.add(javax.swing.Box.createVerticalStrut(3));
+                            });
                 }
             } else {
                 addHandlerGroupedCards(col, groupCards);
@@ -522,15 +536,13 @@ public class TCardPanel extends JPanel {
         JPanel p = new JPanel(new BorderLayout(2, 2));
         p.setBackground(cardColor(card.getCardType()));
         boolean isSelected = card == selectedRackCard;
-        p.setBorder(BorderFactory.createCompoundBorder(
-                isSelected
-                        ? BorderFactory.createLineBorder(new Color(0, 100, 200), 2)
-                        : BorderFactory.createLineBorder(Color.DARK_GRAY),
-                BorderFactory.createEmptyBorder(3, indented ? 12 : 5, 3, 5)));
+        p.setBorder(rackCardBorder(isSelected, indented));
         p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 55));
         p.setAlignmentX(Component.LEFT_ALIGNMENT);
         // Store card reference so click handler can retrieve it.
         p.putClientProperty("tcard", card);
+        // Register in widget map for in-place border updates.
+        rackCardWidgets.put(card, p);
 
         JLabel nameLabel = new JLabel(card.getDisplayLabel());
         nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD));
@@ -551,14 +563,44 @@ public class TCardPanel extends JPanel {
             p.add(detailLabel, BorderLayout.CENTER);
         }
 
+        // Right-click popup for rack cards.
+        JPopupMenu rackPopup = new JPopupMenu();
+        JMenuItem rackEditItem   = new JMenuItem("Edit…");
+        JMenuItem rackRemoveItem = new JMenuItem("Remove");
+        rackEditItem.addActionListener(e -> {
+            selectedRackCard = card;
+            editSelectedCard();
+        });
+        rackRemoveItem.addActionListener(e -> {
+            List<TCard> cards = tableModel.getCards();
+            for (int i = 0; i < cards.size(); i++) {
+                if (cards.get(i) == card) {
+                    tableModel.removeCard(i);
+                    break;
+                }
+            }
+            if (selectedRackCard == card) {
+                selectedRackCard = null;
+            }
+            controller.markDirty();
+        });
+        rackPopup.add(rackEditItem);
+        rackPopup.add(rackRemoveItem);
+        p.setComponentPopupMenu(rackPopup);
+
         p.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                selectRackCard(card);
+                // Selection update without full rack rebuild so that double-click events
+                // are still delivered to the same panel instance.
+                if (javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    updateRackSelection(card, indented);
+                }
             }
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    selectedRackCard = card;
                     editSelectedCard();
                 }
             }
@@ -566,12 +608,34 @@ public class TCardPanel extends JPanel {
         return p;
     }
 
+    /** Builds the compound border for a rack card. */
+    private static javax.swing.border.Border rackCardBorder(boolean selected, boolean indented) {
+        return BorderFactory.createCompoundBorder(
+                selected
+                        ? BorderFactory.createLineBorder(new Color(0, 100, 200), 2)
+                        : BorderFactory.createLineBorder(Color.DARK_GRAY),
+                BorderFactory.createEmptyBorder(3, indented ? 12 : 5, 3, 5));
+    }
+
     /**
-     * Selects a card in the rack view and repaints the rack to show the new selection.
+     * Selects a rack card, updating just the borders of the old and new selection panels
+     * without a full rack rebuild (which would break double-click detection).
      */
-    private void selectRackCard(TCard card) {
+    private void updateRackSelection(TCard card, boolean indented) {
+        if (selectedRackCard != null && selectedRackCard != card) {
+            JPanel old = rackCardWidgets.get(selectedRackCard);
+            if (old != null) {
+                old.setBorder(rackCardBorder(false, Boolean.TRUE.equals(old.getClientProperty("indented"))));
+                old.repaint();
+            }
+        }
         selectedRackCard = card;
-        rebuildRackView();
+        JPanel p = rackCardWidgets.get(card);
+        if (p != null) {
+            p.putClientProperty("indented", indented);
+            p.setBorder(rackCardBorder(true, indented));
+            p.repaint();
+        }
     }
 
 
@@ -872,18 +936,43 @@ public class TCardPanel extends JPanel {
         // ── shared fields ──────────────────────────────────────────────────
         JComboBox<TCardType> typeCombo = new JComboBox<>(TCardType.values());
         typeCombo.setSelectedItem(card.getCardType());
+        // Item 4: in SAR mode, show "Equipment (inc. Canine)" for EQUIPMENT type.
+        boolean sarMode = controller.getIncidentMode() == IncidentMode.SAR;
+        if (sarMode) {
+            typeCombo.setRenderer(new javax.swing.DefaultListCellRenderer() {
+                @Override
+                public java.awt.Component getListCellRendererComponent(
+                        javax.swing.JList<?> list, Object value, int index,
+                        boolean isSelected, boolean cellHasFocus) {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if (value == TCardType.EQUIPMENT) {
+                        setText("219-7 Equipment (inc. Canine)");
+                    }
+                    return this;
+                }
+            });
+        }
 
-        JTextField personNameField   = UiSupport.textField();
-        JTextField homeAgencyField   = UiSupport.textField();
-        JTextField homeStateField    = UiSupport.textField();
+        // ── HEADER sub-form fields (separate instances) ────────────────────
+        JTextField headerResourceIdField = UiSupport.textField();
+        JTextField headerLocationField   = UiSupport.textField();
+        JTextField headerNotesField      = UiSupport.textField();
+
+        headerResourceIdField.setText(card.getResourceIdentifier());
+        headerLocationField.setText(card.getLocation());
+        headerNotesField.setText(card.getNotes());
+
+        // ── PERSONNEL sub-form fields ──────────────────────────────────────
+        JTextField personNameField    = UiSupport.textField();
+        JTextField homeAgencyField    = UiSupport.textField();
+        JTextField homeStateField     = UiSupport.textField();
         homeStateField.setPreferredSize(new Dimension(48, homeStateField.getPreferredSize().height));
-        JTextField phoneField        = UiSupport.textField();
-        JTextField radioChannelField = UiSupport.textField();
-        JTextField handlerNameField  = UiSupport.textField();
-        JTextField resourceIdField   = UiSupport.textField();
-        JTextField locationField     = UiSupport.textField();
-        JComboBox<String> statusCombo = new JComboBox<>(STATUS_OPTIONS);
-        JTextField notesField        = UiSupport.textField();
+        JTextField phoneField         = UiSupport.textField();
+        JTextField radioChannelField  = UiSupport.textField();
+        JTextField personnelResIdField = UiSupport.textField();
+        JTextField personnelLocField  = UiSupport.textField();
+        JComboBox<String> personnelStatusCombo = new JComboBox<>(STATUS_OPTIONS);
+        JTextField personnelNotesField = UiSupport.textField();
 
         SpinnerDateModel checkInModel = new SpinnerDateModel();
         JSpinner checkInSpinner = new JSpinner(checkInModel);
@@ -894,14 +983,26 @@ public class TCardPanel extends JPanel {
         homeStateField.setText(card.getHomeState());
         phoneField.setText(card.getPhoneNumber());
         radioChannelField.setText(card.getRadioChannel());
-        handlerNameField.setText(card.getHandlerName());
-        resourceIdField.setText(card.getResourceIdentifier());
-        locationField.setText(card.getLocation());
-        statusCombo.setSelectedItem(card.getStatus());
-        notesField.setText(card.getNotes());
+        personnelResIdField.setText(card.getResourceIdentifier());
+        personnelLocField.setText(card.getLocation());
+        personnelStatusCombo.setSelectedItem(card.getStatus());
+        personnelNotesField.setText(card.getNotes());
         if (card.getCheckInDateTime() != null) {
             checkInModel.setValue(Date.from(card.getCheckInDateTime().atZone(ZoneId.systemDefault()).toInstant()));
         }
+
+        // ── OTHER resource sub-form fields ────────────────────────────────
+        JTextField handlerNameField   = UiSupport.textField();
+        JTextField resourceResIdField = UiSupport.textField();
+        JTextField resourceLocField   = UiSupport.textField();
+        JComboBox<String> resourceStatusCombo = new JComboBox<>(STATUS_OPTIONS);
+        JTextField resourceNotesField = UiSupport.textField();
+
+        handlerNameField.setText(card.getHandlerName());
+        resourceResIdField.setText(card.getResourceIdentifier());
+        resourceLocField.setText(card.getLocation());
+        resourceStatusCombo.setSelectedItem(card.getStatus());
+        resourceNotesField.setText(card.getNotes());
 
         // ── build three sub-forms (HEADER / PERSONNEL / other) ──────────
         CardLayout subLayout = new CardLayout();
@@ -909,9 +1010,9 @@ public class TCardPanel extends JPanel {
 
         JPanel headerForm = UiSupport.formPanel();
         int r = 0;
-        UiSupport.addRow(headerForm, r++, "Heading text (column label)", resourceIdField);
-        UiSupport.addRow(headerForm, r++, "Location note",               locationField);
-        UiSupport.addRow(headerForm, r,   "Notes",                       notesField);
+        UiSupport.addRow(headerForm, r++, "Heading text (column label)", headerResourceIdField);
+        UiSupport.addRow(headerForm, r++, "Location note",               headerLocationField);
+        UiSupport.addRow(headerForm, r,   "Notes",                       headerNotesField);
 
         JPanel personnelForm = UiSupport.formPanel();
         r = 0;
@@ -921,18 +1022,18 @@ public class TCardPanel extends JPanel {
         UiSupport.addRow(personnelForm, r++, "Phone number",            phoneField);
         UiSupport.addRow(personnelForm, r++, "Radio channel/talkgroup", radioChannelField);
         UiSupport.addRow(personnelForm, r++, "Check-in date/time",      checkInSpinner);
-        UiSupport.addRow(personnelForm, r++, "Resource identifier",     resourceIdField);
-        UiSupport.addRow(personnelForm, r++, "Location (e.g. ICP)",     locationField);
-        UiSupport.addRow(personnelForm, r++, "Status",                  statusCombo);
-        UiSupport.addRow(personnelForm, r,   "Notes",                   notesField);
+        UiSupport.addRow(personnelForm, r++, "Resource identifier",     personnelResIdField);
+        UiSupport.addRow(personnelForm, r++, "Location (e.g. ICP)",     personnelLocField);
+        UiSupport.addRow(personnelForm, r++, "Status",                  personnelStatusCombo);
+        UiSupport.addRow(personnelForm, r,   "Notes",                   personnelNotesField);
 
         JPanel resourceForm = UiSupport.formPanel();
         r = 0;
         UiSupport.addRow(resourceForm, r++, "Handler/operator name", handlerNameField);
-        UiSupport.addRow(resourceForm, r++, "Resource identifier",   resourceIdField);
-        UiSupport.addRow(resourceForm, r++, "Location (e.g. ICP)",   locationField);
-        UiSupport.addRow(resourceForm, r++, "Status",                statusCombo);
-        UiSupport.addRow(resourceForm, r,   "Notes",                 notesField);
+        UiSupport.addRow(resourceForm, r++, "Resource identifier",   resourceResIdField);
+        UiSupport.addRow(resourceForm, r++, "Location (e.g. ICP)",   resourceLocField);
+        UiSupport.addRow(resourceForm, r++, "Status",                resourceStatusCombo);
+        UiSupport.addRow(resourceForm, r,   "Notes",                 resourceNotesField);
 
         subContainer.add(headerForm,    "HEADER");
         subContainer.add(personnelForm, "PERSONNEL");
@@ -971,9 +1072,9 @@ public class TCardPanel extends JPanel {
         TCardType chosenType = (TCardType) typeCombo.getSelectedItem();
         card.setCardType(chosenType);
         if (chosenType == TCardType.HEADER) {
-            card.setResourceIdentifier(resourceIdField.getText().trim());
-            card.setLocation(locationField.getText().trim());
-            card.setNotes(notesField.getText().trim());
+            card.setResourceIdentifier(headerResourceIdField.getText().trim());
+            card.setLocation(headerLocationField.getText().trim());
+            card.setNotes(headerNotesField.getText().trim());
         } else {
             if (chosenType == TCardType.PERSONNEL) {
                 card.setPersonName(personNameField.getText().trim());
@@ -985,13 +1086,17 @@ public class TCardPanel extends JPanel {
                 if (spinnerVal instanceof Date d) {
                     card.setCheckInDateTime(LocalDateTime.ofInstant(d.toInstant(), ZoneId.systemDefault()));
                 }
+                card.setResourceIdentifier(personnelResIdField.getText().trim());
+                card.setLocation(personnelLocField.getText().trim());
+                card.setStatus((String) personnelStatusCombo.getSelectedItem());
+                card.setNotes(personnelNotesField.getText().trim());
             } else {
                 card.setHandlerName(handlerNameField.getText().trim());
+                card.setResourceIdentifier(resourceResIdField.getText().trim());
+                card.setLocation(resourceLocField.getText().trim());
+                card.setStatus((String) resourceStatusCombo.getSelectedItem());
+                card.setNotes(resourceNotesField.getText().trim());
             }
-            card.setResourceIdentifier(resourceIdField.getText().trim());
-            card.setLocation(locationField.getText().trim());
-            card.setStatus((String) statusCombo.getSelectedItem());
-            card.setNotes(notesField.getText().trim());
         }
         return true;
     }

@@ -7,7 +7,6 @@ import org.sarmanagement.icsforms.model.SarTaskSupport;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
-import javax.swing.DefaultCellEditor;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -115,18 +114,21 @@ public class Ics204Panel extends JPanel {
         JTable communicationsTable = new JTable(communicationsTableModel);
         resourceTable.setFillsViewportHeight(true);
         communicationsTable.setFillsViewportHeight(true);
-        resourceTable.getColumnModel().getColumn(1).setCellEditor(new DefaultCellEditor(
-                new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new))));
-        resourceTable.getColumnModel().getColumn(2).setCellEditor(new DefaultCellEditor(
-                new JComboBox<>(SarTaskSupport.taskTypes().toArray(String[]::new))));
         installResourceRowEditor();
 
         JPanel resourcesPanel = new JPanel(new BorderLayout());
         resourcesPanel.setBorder(BorderFactory.createTitledBorder("Resources Assigned"));
         resourcesPanel.add(new JScrollPane(resourceTable), BorderLayout.CENTER);
         resourcesPanel.add(buttonsPanel(
-                () -> resourceTableModel.addRow(),
-                () -> resourceTableModel.removeRow(resourceTable.getSelectedRow())
+                () -> {
+                    resourceTableModel.addRow();
+                    int last = resourceTableModel.getRowCount() - 1;
+                    resourceTable.setRowSelectionInterval(last, last);
+                    resourceTable.scrollRectToVisible(resourceTable.getCellRect(last, 0, true));
+                    openSelectedResourceEditor();
+                    controller.markDirty();
+                },
+                () -> { resourceTableModel.removeRow(resourceTable.getSelectedRow()); controller.markDirty(); }
         ), BorderLayout.SOUTH);
 
         JPanel communicationsPanel = new JPanel(new BorderLayout());
@@ -430,11 +432,24 @@ public class Ics204Panel extends JPanel {
 
     private void installResourceRowEditor() {
         JPopupMenu menu = new JPopupMenu();
-        JMenuItem editItem = new JMenuItem("Edit assignment…");
-        editItem.addActionListener(event -> openSelectedResourceEditor());
+        JMenuItem addItem    = new JMenuItem("Add assignment…");
+        JMenuItem editItem   = new JMenuItem("Edit assignment…");
+        JMenuItem removeItem = new JMenuItem("Remove assignment");
         JMenuItem log214Item = new JMenuItem("Add ICS 214 Log…");
+        addItem.addActionListener(event -> { resourceTableModel.addRow(); controller.markDirty(); });
+        editItem.addActionListener(event -> openSelectedResourceEditor());
+        removeItem.addActionListener(event -> {
+            int viewRow = resourceTable.getSelectedRow();
+            if (viewRow >= 0) {
+                resourceTableModel.removeRow(resourceTable.convertRowIndexToModel(viewRow));
+                controller.markDirty();
+            }
+        });
         log214Item.addActionListener(event -> open214ForSelectedResource());
+        menu.add(addItem);
         menu.add(editItem);
+        menu.add(removeItem);
+        menu.addSeparator();
         menu.add(log214Item);
         menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
             @Override
@@ -678,7 +693,7 @@ public class Ics204Panel extends JPanel {
         @Override public int getRowCount() { return rows.size(); }
         @Override public int getColumnCount() { return columns.length; }
         @Override public String getColumnName(int column) { return columns[column]; }
-        @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return true; }
+        @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return false; }
         @Override public Object getValueAt(int rowIndex, int columnIndex) {
             ResourceAssignment row = rows.get(rowIndex);
             return switch (columnIndex) {
