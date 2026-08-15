@@ -104,11 +104,16 @@ class SarTaskPanelTest {
         tableField.setAccessible(true);
         JTable table = (JTable) tableField.get(panel);
 
-        assertEquals("Assignment/Team # (required)", table.getColumnName(0));
-        assertEquals("Task Geometry", table.getColumnName(2));
-        assertEquals("People", table.getColumnName(7));
-        assertEquals(3, table.getValueAt(0, 7));
-        Component component = table.prepareRenderer(table.getCellRenderer(0, 0), 0, 0);
+        // Column layout: 0=Task Status, 1=Team#(required), 2=Resource Type, 3=Task Geometry,
+        //                4=Resource, 5=Leader, 6=People, 7=Start, 8=End
+        assertEquals("Task Status",                    table.getColumnName(0));
+        assertEquals("Assignment/Team # (required)",   table.getColumnName(1));
+        assertEquals("Resource Type",                  table.getColumnName(2));
+        assertEquals("Task Geometry",                  table.getColumnName(3));
+        assertEquals("People",                         table.getColumnName(6));
+        assertEquals(3, table.getValueAt(0, 6));
+        // Col 1 (Team #) must be rendered with the required-field background.
+        Component component = table.prepareRenderer(table.getCellRenderer(0, 1), 0, 1);
         assertEquals(UiSupport.REQUIRED_FIELD_BACKGROUND, component.getBackground());
     }
 

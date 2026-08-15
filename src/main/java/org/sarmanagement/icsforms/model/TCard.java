@@ -9,8 +9,9 @@ import java.time.LocalDateTime;
  *
  * <p>The minimal implementation focuses on the 219-5 Personnel card.  All other card
  * types are scaffolded with a common set of fields and a {@link TCardType} discriminator.
- * Special mappings: canine+handler resources are stored as {@link TCardType#MISC_EQUIPMENT};
- * drone resources are stored as {@link TCardType#AIRCRAFT}.</p>
+ * Special mappings: canine resources are stored as {@link TCardType#EQUIPMENT} (219-7,
+ * yellow — canines are treated as working assets/equipment in ICS);
+ * drone/fixed-wing resources are stored as {@link TCardType#FIXED_WING} (219-6).</p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TCard {

@@ -54,7 +54,8 @@ import java.util.UUID;
 public class SarTaskPanel extends JPanel {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final int MAX_RESOURCE_ROWS = 18;
-    private static final Set<Integer> READ_ONLY_COLUMNS = Set.of(3, 4, 5, 6, 7, 18, 19, 23);
+    /** Read-only columns in the summary table view: Status (0), Resource (4), Leader (5), People (6). */
+    private static final Set<Integer> READ_ONLY_COLUMNS = Set.of(0, 4, 5, 6);
     private static final int RESOURCE_EDITOR_WIDTH = 420;
     private static final int RESOURCE_EDITOR_VISIBLE_ROWS = 9;
     private static final int RESOURCE_EDITOR_PADDING = 8;
@@ -90,7 +91,9 @@ public class SarTaskPanel extends JPanel {
         this.controller = controller;
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         table.setFillsViewportHeight(true);
-        table.getColumnModel().getColumn(0).setCellRenderer(new RequiredFieldCellRenderer());
+        // Col 0 = Task Status (color-coded by lifecycle); col 1 = Team # (required field highlight).
+        table.getColumnModel().getColumn(0).setCellRenderer(new LifecycleStatusCellRenderer());
+        table.getColumnModel().getColumn(1).setCellRenderer(new RequiredFieldCellRenderer());
         installRowEditor();
         setBorder(BorderFactory.createTitledBorder("SAR Task Assignment / Debriefing"));
         viewContainer.add(new JScrollPane(table), VIEW_TABLE);
@@ -257,13 +260,27 @@ public class SarTaskPanel extends JPanel {
             p.add(detailLabel, BorderLayout.CENTER);
         }
 
-        // Double-click opens the edit dialog; single click does nothing but
-        // visual feedback could be added in future.
+        // Right-click context menu (mirrors the table popup and bottom buttons).
+        JPopupMenu cardMenu = new JPopupMenu();
+        JMenuItem editItem    = new JMenuItem("Edit assignment…");
+        JMenuItem debriefItem = new JMenuItem("Debrief…");
+        JMenuItem open214Item = new JMenuItem("Open ICS 214 for Task…");
+        editItem.addActionListener(e -> openBoardTaskEditor(task, EditorMode.ASSIGNMENT));
+        debriefItem.addActionListener(e -> openBoardTaskEditor(task, EditorMode.DEBRIEFING));
+        open214Item.addActionListener(e -> {
+            if (on214Request != null) on214Request.accept(task);
+        });
+        cardMenu.add(editItem);
+        cardMenu.add(debriefItem);
+        cardMenu.add(open214Item);
+        p.setComponentPopupMenu(cardMenu);
+
+        // Double-click opens edit dialog; hover highlights border.
         p.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
-                    openBoardTaskEditor(task);
+                    openBoardTaskEditor(task, EditorMode.ASSIGNMENT);
                 }
             }
             @Override
@@ -282,11 +299,11 @@ public class SarTaskPanel extends JPanel {
         return p;
     }
 
-    /** Opens the assignment editor for a task clicked in the board view. */
-    private void openBoardTaskEditor(SarTaskAssignment task) {
+    /** Opens the assignment or debrief editor for a task clicked in the board view. */
+    private void openBoardTaskEditor(SarTaskAssignment task, EditorMode mode) {
         int modelRow = tableModel.getRows().indexOf(task);
         if (modelRow >= 0) {
-            editRow(modelRow, EditorMode.ASSIGNMENT);
+            editRow(modelRow, mode);
             if (currentSarView.equals(VIEW_BOARD)) {
                 rebuildBoardView();
             }
@@ -410,6 +427,10 @@ public class SarTaskPanel extends JPanel {
         JMenuItem open214Item = new JMenuItem("Open ICS 214 for Task…");
         open214Item.addActionListener(event -> openIcs214ForSelected());
         menu.add(open214Item);
+        menu.addSeparator();
+        JMenuItem removeItem = new JMenuItem("Remove Task");
+        removeItem.addActionListener(event -> removeSelectedTask());
+        menu.add(removeItem);
         table.setComponentPopupMenu(menu);
         table.addMouseListener(new MouseAdapter() {
             @Override
@@ -1322,14 +1343,22 @@ public class SarTaskPanel extends JPanel {
 
     /**
      * Table model for editable SAR task rows.
+     *
+     * <p>The table shows only the essential summary columns.  All other fields
+     * (work assignment, transportation, special equipment, clues, POD factors,
+     * debriefing notes, etc.) are accessible exclusively through the edit dialogs.</p>
      */
     private static class SarTaskTableModel extends AbstractTableModel {
         private final String[] columns = {
-                "Assignment/Team # (required)", "Resource Type", "Task Geometry", "Resource", "Leader Role", "Leader", "Contact", "People",
-                "Work Assignment", "Transportation", "Task Map", "Special Equipment", "Communications",
-                "Debrief Supervisor", "Time On Start", "Time On End", "Vehicle Miles", "Reported POD",
-                "Clues Detected", "POD Factors", "Debriefing", "Areas Not Covered", "Hazards Observed",
-                "Task Status"
+                "Task Status",
+                "Assignment/Team # (required)",
+                "Resource Type",
+                "Task Geometry",
+                "Resource",
+                "Leader",
+                "People",
+                "Time On Start",
+                "Time On End"
         };
         private List<SarTaskAssignment> rows = new ArrayList<>();
         private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
@@ -1355,30 +1384,15 @@ public class SarTaskPanel extends JPanel {
         public Object getValueAt(int rowIndex, int columnIndex) {
             SarTaskAssignment row = rows.get(rowIndex);
             return switch (columnIndex) {
-                case 0 -> row.getAssignmentTeamNumber();
-                case 1 -> row.getResourceType();
-                case 2 -> row.getTaskType();
-                case 3 -> row.getResourceIdentifier();
-                case 4 -> row.getLeaderRole();
+                case 0 -> row.getTaskLifecycleStatus();
+                case 1 -> row.getAssignmentTeamNumber();
+                case 2 -> row.getResourceType();
+                case 3 -> row.getTaskType();
+                case 4 -> row.getResourceIdentifier();
                 case 5 -> row.getLeader();
-                case 6 -> row.getContact();
-                case 7 -> linkedPeople(row, resourceAssignments);
-                case 8 -> row.getAssignment();
-                case 9 -> row.getTransportationInstructions();
-                case 10 -> row.getTaskMap();
-                case 11 -> row.getSpecialEquipment();
-                case 12 -> formatCommunications(row.getCommunications());
-                case 13 -> row.getDebriefingSupervisor();
-                case 14 -> formatDateTimeValue(row.getAssignmentStart());
-                case 15 -> formatDateTimeValue(row.getAssignmentEnd());
-                case 16 -> row.getVehicleMiles();
-                case 17 -> row.getReportedPod();
-                case 18 -> formatClues(row, clueLogEntries);
-                case 19 -> formatPodFactors(row.getQualitativePodFactors());
-                case 20 -> row.getDebriefNotes();
-                case 21 -> row.getAreasNotCovered();
-                case 22 -> row.getHazardsObserved();
-                case 23 -> row.getTaskLifecycleStatus();
+                case 6 -> linkedPeople(row, resourceAssignments);
+                case 7 -> formatDateTimeValue(row.getAssignmentStart());
+                case 8 -> formatDateTimeValue(row.getAssignmentEnd());
                 default -> "";
             };
         }
@@ -1388,22 +1402,11 @@ public class SarTaskPanel extends JPanel {
             SarTaskAssignment row = rows.get(rowIndex);
             String value = aValue == null ? "" : aValue.toString();
             switch (columnIndex) {
-                case 0 -> row.setAssignmentTeamNumber(value);
-                case 1 -> row.setResourceType(value);
-                case 2 -> row.setTaskType(value);
-                case 8 -> row.setAssignment(value);
-                case 9 -> row.setTransportationInstructions(value);
-                case 10 -> row.setTaskMap(value);
-                case 11 -> row.setSpecialEquipment(value);
-                case 12 -> row.setCommunications(parseCommunications(value));
-                case 13 -> row.setDebriefingSupervisor(value);
-                case 14 -> row.setAssignmentStart(parseDateTimeValue(value));
-                case 15 -> row.setAssignmentEnd(parseDateTimeValue(value));
-                case 16 -> row.setVehicleMiles(value);
-                case 17 -> row.setReportedPod(value);
-                case 20 -> row.setDebriefNotes(value);
-                case 21 -> row.setAreasNotCovered(value);
-                case 22 -> row.setHazardsObserved(value);
+                case 1 -> row.setAssignmentTeamNumber(value);
+                case 2 -> row.setResourceType(value);
+                case 3 -> row.setTaskType(value);
+                case 7 -> row.setAssignmentStart(parseDateTimeValue(value));
+                case 8 -> row.setAssignmentEnd(parseDateTimeValue(value));
                 default -> { return; }
             }
             fireTableCellUpdated(rowIndex, columnIndex);
@@ -1528,6 +1531,36 @@ public class SarTaskPanel extends JPanel {
                 }
             }
             return entries;
+        }
+    }
+
+    /**
+     * Cell renderer for the "Task Status" column: colour-codes each cell to match
+     * the board-view column colours (Planning=blue, On Task=orange, Returned=green,
+     * Completed=grey).
+     */
+    private static class LifecycleStatusCellRenderer extends DefaultTableCellRenderer {
+        private static final Color COLOR_PLANNING  = new Color(173, 216, 230);
+        private static final Color COLOR_ON_TASK   = new Color(255, 200, 100);
+        private static final Color COLOR_RETURNED  = new Color(144, 238, 144);
+        private static final Color COLOR_COMPLETED = new Color(200, 200, 200);
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                                                       boolean hasFocus, int row, int column) {
+            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            if (!isSelected) {
+                String status = value == null ? "" : value.toString();
+                component.setBackground(switch (status) {
+                    case "Planning"  -> COLOR_PLANNING;
+                    case "On Task"   -> COLOR_ON_TASK;
+                    case "Returned"  -> COLOR_RETURNED;
+                    case "Completed" -> COLOR_COMPLETED;
+                    default          -> table.getBackground();
+                });
+                component.setForeground(Color.BLACK);
+            }
+            return component;
         }
     }
 

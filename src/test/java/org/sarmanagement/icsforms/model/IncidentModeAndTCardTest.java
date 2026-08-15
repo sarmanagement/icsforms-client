@@ -104,23 +104,39 @@ class IncidentModeAndTCardTest {
     }
 
     @Test
-    void tCardCanineHandlerMapsToMiscEquipment() throws IOException {
+    void tCardCanineMapToEquipment() throws IOException {
         TCard card = new TCard();
-        card.setCardType(TCardType.MISC_EQUIPMENT);
+        card.setCardType(TCardType.EQUIPMENT);
         card.setResourceIdentifier("Canine K9-1 / Handler Smith");
         String json = mapper.writeValueAsString(card);
         TCard loaded = mapper.readValue(json, TCard.class);
-        assertEquals(TCardType.MISC_EQUIPMENT, loaded.getCardType());
+        assertEquals(TCardType.EQUIPMENT, loaded.getCardType());
     }
 
     @Test
-    void tCardDroneMapsToAircraft() throws IOException {
+    void tCardDroneMapsToFixedWing() throws IOException {
         TCard card = new TCard();
-        card.setCardType(TCardType.AIRCRAFT);
+        card.setCardType(TCardType.FIXED_WING);
         card.setResourceIdentifier("Drone Unit-3");
         String json = mapper.writeValueAsString(card);
         TCard loaded = mapper.readValue(json, TCard.class);
-        assertEquals(TCardType.AIRCRAFT, loaded.getCardType());
+        assertEquals(TCardType.FIXED_WING, loaded.getCardType());
+    }
+
+    @Test
+    void tCardBackwardCompatDeserializesOldAircraftName() throws IOException {
+        // Old JSON files stored the enum value as "AIRCRAFT"; must deserialize to FIXED_WING.
+        String json = "{\"cardType\":\"AIRCRAFT\",\"resourceIdentifier\":\"UAS-1\"}";
+        TCard loaded = mapper.readValue(json, TCard.class);
+        assertEquals(TCardType.FIXED_WING, loaded.getCardType());
+    }
+
+    @Test
+    void tCardBackwardCompatDeserializesOldDozerName() throws IOException {
+        // Old JSON files stored the enum value as "DOZER"; must deserialize to EQUIPMENT.
+        String json = "{\"cardType\":\"DOZER\",\"resourceIdentifier\":\"D8-1\"}";
+        TCard loaded = mapper.readValue(json, TCard.class);
+        assertEquals(TCardType.EQUIPMENT, loaded.getCardType());
     }
 
     @Test

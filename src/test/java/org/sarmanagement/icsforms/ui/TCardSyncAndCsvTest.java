@@ -209,13 +209,18 @@ class TCardSyncAndCsvTest {
 
     @Test
     void inferCardTypeRecognisesKeywords() {
-        assertEquals(TCardType.MISC_EQUIPMENT, TCardPanel.inferCardType("canine handler"));
-        assertEquals(TCardType.AIRCRAFT,       TCardPanel.inferCardType("drone"));
-        assertEquals(TCardType.AIRCRAFT,       TCardPanel.inferCardType("219-6 Aircraft"));
+        // Canine and handler → 219-7 Equipment (canines are working assets/equipment in ICS)
+        assertEquals(TCardType.EQUIPMENT,      TCardPanel.inferCardType("canine handler"));
+        assertEquals(TCardType.EQUIPMENT,      TCardPanel.inferCardType("k9"));
+        // Fixed-wing / drone
+        assertEquals(TCardType.FIXED_WING,     TCardPanel.inferCardType("drone"));
+        assertEquals(TCardType.FIXED_WING,     TCardPanel.inferCardType("219-6 Fixed-Wing"));
         assertEquals(TCardType.HELICOPTER,     TCardPanel.inferCardType("Helicopter"));
-        assertEquals(TCardType.DOZER,          TCardPanel.inferCardType("dozer"));
+        // Equipment (219-7) also matches dozer
+        assertEquals(TCardType.EQUIPMENT,      TCardPanel.inferCardType("dozer"));
         assertEquals(TCardType.ENGINE,         TCardPanel.inferCardType("engine 219-3"));
         assertEquals(TCardType.CREW,           TCardPanel.inferCardType("Crew"));
+        assertEquals(TCardType.GENERIC,        TCardPanel.inferCardType("219-10 generic"));
         assertEquals(TCardType.PERSONNEL,      TCardPanel.inferCardType("person"));
         assertEquals(TCardType.PERSONNEL,      TCardPanel.inferCardType(null));
         assertEquals(TCardType.PERSONNEL,      TCardPanel.inferCardType(""));

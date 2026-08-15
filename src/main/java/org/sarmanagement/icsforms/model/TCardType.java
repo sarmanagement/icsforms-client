@@ -1,29 +1,45 @@
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 /**
  * ICS 219 T-Card (Resource Status Card) type taxonomy.
  *
- * <p>Each value corresponds to a standard ICS 219 card colour and resource category.
- * Only {@link #PERSONNEL} is fully editable in the current implementation; the other
- * types exist as model scaffolding for future form-filling support.</p>
+ * <p>Each value corresponds to a standard ICS 219 card colour and resource category.</p>
  */
 public enum TCardType {
     /** 219-1 Header card (grey). Groups cards by location or status. */
     HEADER("219-1 Header", "grey"),
-    /** 219-2 Crew card (green). */
-    CREW("219-2 Crew", "green"),
+    /** 219-2 Crew/Team card (green). */
+    CREW("219-2 Crew/Team", "green"),
     /** 219-3 Engine card (rose). */
     ENGINE("219-3 Engine", "rose"),
     /** 219-4 Helicopter card (blue). */
     HELICOPTER("219-4 Helicopter", "blue"),
     /** 219-5 Personnel card (white). */
     PERSONNEL("219-5 Personnel", "white"),
-    /** 219-6 Aircraft card (orange). Used for drones. */
-    AIRCRAFT("219-6 Aircraft", "orange"),
-    /** 219-7 Dozer card (yellow). */
-    DOZER("219-7 Dozer", "yellow"),
-    /** 219-8 Miscellaneous Equipment card (buff/tan). Used for canine+handler. */
-    MISC_EQUIPMENT("219-8 Misc. Equipment", "buff/tan");
+    /**
+     * 219-6 Fixed-Wing card (orange). Used for fixed-wing aircraft and drones/UAS.
+     * JSON alias {@code "AIRCRAFT"} accepted for backward compatibility.
+     */
+    @JsonAlias("AIRCRAFT")
+    FIXED_WING("219-6 Fixed-Wing", "orange"),
+    /**
+     * 219-7 Equipment card (yellow). Used for ground equipment including canines
+     * (which are treated as working assets/equipment in ICS).
+     * JSON alias {@code "DOZER"} accepted for backward compatibility.
+     */
+    @JsonAlias("DOZER")
+    EQUIPMENT("219-7 Equipment", "yellow"),
+    /** 219-8 Miscellaneous Equipment / Task Force card (tan). */
+    MISC_EQUIPMENT("219-8 Misc. Equipment", "tan"),
+    /**
+     * 219-10 Generic card (light purple).
+     *
+     * <p>Application-defined extension card for general-purpose resources that do not
+     * fit any of the standard ICS 219-1 through 219-8 categories.</p>
+     */
+    GENERIC("219-10 Generic", "light purple");
 
     private final String label;
     private final String color;
