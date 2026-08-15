@@ -22,8 +22,10 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.RowFilter;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
@@ -71,6 +73,9 @@ public class SarTaskPanel extends JPanel {
     private final AppController controller;
     private final SarTaskTableModel tableModel = new SarTaskTableModel();
     private final JTable table = new JTable(tableModel);
+    private final TableRowSorter<SarTaskTableModel> rowSorter = new TableRowSorter<>(tableModel);
+    private final JComboBox<String> statusFilterCombo = new JComboBox<>(
+            new String[]{"All", "Planning", "On Task", "Returned"});
     private java.util.function.Consumer<SarTaskAssignment> on214Request;
 
     private static final String VIEW_TABLE = "table";
@@ -89,17 +94,40 @@ public class SarTaskPanel extends JPanel {
     public SarTaskPanel(AppController controller) {
         super(new BorderLayout());
         this.controller = controller;
-        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
         table.setFillsViewportHeight(true);
         // Col 0 = Task Status (color-coded by lifecycle); col 1 = Team # (required field highlight).
         table.getColumnModel().getColumn(0).setCellRenderer(new LifecycleStatusCellRenderer());
         table.getColumnModel().getColumn(1).setCellRenderer(new RequiredFieldCellRenderer());
+        table.setRowSorter(rowSorter);
         installRowEditor();
         setBorder(BorderFactory.createTitledBorder("SAR Task Assignment / Debriefing"));
-        viewContainer.add(new JScrollPane(table), VIEW_TABLE);
+        JPanel tablePanel = new JPanel(new BorderLayout());
+        tablePanel.add(buildFilterPanel(), BorderLayout.NORTH);
+        tablePanel.add(new JScrollPane(table), BorderLayout.CENTER);
+        viewContainer.add(tablePanel, VIEW_TABLE);
         viewContainer.add(boardScroll, VIEW_BOARD);
         add(viewContainer, BorderLayout.CENTER);
         add(buildButtonPanel(), BorderLayout.SOUTH);
+    }
+
+    /** Builds the filter bar shown above the task table. */
+    private JPanel buildFilterPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        panel.add(new JLabel("Filter by status:"));
+        panel.add(statusFilterCombo);
+        statusFilterCombo.addActionListener(e -> applyStatusFilter());
+        return panel;
+    }
+
+    /** Applies the selected status filter to the table row sorter. */
+    private void applyStatusFilter() {
+        String selected = (String) statusFilterCombo.getSelectedItem();
+        if (selected == null || selected.equals("All")) {
+            rowSorter.setRowFilter(null);
+        } else {
+            rowSorter.setRowFilter(RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(selected) + "$", 0));
+        }
     }
 
     /** Builds the bottom action button row. */

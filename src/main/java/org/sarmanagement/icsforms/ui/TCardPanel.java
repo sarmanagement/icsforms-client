@@ -76,6 +76,8 @@ public class TCardPanel extends JPanel {
     private TCard selectedRackCard = null;
     /** Assignment ID → team number, used to label task groups in table and rack views. */
     private final Map<String, String> assignmentTeamByRef = new LinkedHashMap<>();
+    /** Assignment ID → resource identifier, used in rack view task banners. */
+    private final Map<String, String> assignmentResIdByRef = new LinkedHashMap<>();
     /** Set of assignment task keys (from sourceRef) whose rack-view group is collapsed. */
     private final java.util.Set<String> collapsedTaskKeys = new java.util.HashSet<>();
     /** Maps each T-card to its rack-view widget panel for in-place border updates without full rebuild. */
@@ -159,9 +161,11 @@ public class TCardPanel extends JPanel {
     public void refreshFromModel() {
         // Build assignment ID → team number map for task grouping.
         assignmentTeamByRef.clear();
+        assignmentResIdByRef.clear();
         for (SarTaskAssignment task : controller.getData().getSarTaskAssignments()) {
             if (!task.getAssignmentId().isBlank()) {
                 assignmentTeamByRef.put(task.getAssignmentId(), task.getAssignmentTeamNumber());
+                assignmentResIdByRef.put(task.getAssignmentId(), task.getResourceIdentifier());
             }
         }
         tableModel.setAssignmentTeamByRef(new LinkedHashMap<>(assignmentTeamByRef));
@@ -359,21 +363,24 @@ public class TCardPanel extends JPanel {
         for (Map.Entry<String, List<TCard>> entry : byTask.entrySet()) {
             String taskKey  = entry.getKey();
             String teamLabel = assignmentTeamByRef.getOrDefault(taskKey, taskKey);
+            String resId     = assignmentResIdByRef.getOrDefault(taskKey, "");
             List<TCard> groupCards = entry.getValue();
             if (!teamLabel.isBlank()) {
                 boolean collapsed = collapsedTaskKeys.contains(taskKey);
-                col.add(buildTaskBannerWidget(teamLabel, groupCards.size(), collapsed, taskKey));
+                int people = (int) groupCards.stream().filter(c -> c.getCardType() == TCardType.PERSONNEL).count();
+                int other  = groupCards.size() - people;
+                col.add(buildTaskBannerWidget(teamLabel, resId, people, other, collapsed, taskKey));
                 col.add(javax.swing.Box.createVerticalStrut(2));
                 if (!collapsed) {
                     addHandlerGroupedCards(col, groupCards);
                     col.add(javax.swing.Box.createVerticalStrut(4));
                 } else {
-                    // Show only the leader card when the group is collapsed.
+                    // Show only the leader card when the group is collapsed (with paperclip icon).
                     groupCards.stream()
                             .filter(c -> c.getSourceRef().endsWith(":leader"))
                             .findFirst()
                             .ifPresent(leader -> {
-                                col.add(buildRackCard(leader));
+                                col.add(buildRackCard(leader, true));
                                 col.add(javax.swing.Box.createVerticalStrut(3));
                             });
                 }
@@ -428,10 +435,13 @@ public class TCardPanel extends JPanel {
     /**
      * Builds a narrow task-label banner for sub-grouping within the Assigned column.
      *
-     * <p>The banner shows the team label and the number of resources in the group.
+     * <p>The banner shows the assignment number, optional resource identifier, and the
+     * people/resource breakdown as {@code (n)} for n people, or {@code (n, m)} when
+     * m non-personnel resources are also present.
      * Clicking the banner toggles the collapsed/expanded state of the group.</p>
      */
-    private JPanel buildTaskBannerWidget(String teamLabel, int resourceCount, boolean collapsed, String taskKey) {
+    private JPanel buildTaskBannerWidget(String teamLabel, String resId, int people, int other,
+                                         boolean collapsed, String taskKey) {
         JPanel p = new JPanel(new BorderLayout());
         p.setBackground(new Color(200, 220, 255));
         p.setBorder(BorderFactory.createCompoundBorder(
@@ -441,8 +451,17 @@ public class TCardPanel extends JPanel {
         p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
 
         String arrow = collapsed ? "▶" : "▼";
-        String countLabel = resourceCount > 0 ? " (" + resourceCount + ")" : "";
-        JLabel lbl = new JLabel(arrow + " " + teamLabel + countLabel);
+        StringBuilder bannerText = new StringBuilder(arrow).append(" ").append(teamLabel);
+        if (!resId.isBlank()) {
+            bannerText.append(":").append(resId);
+        }
+        bannerText.append(" (").append(people);
+        if (other > 0) {
+            bannerText.append(", ").append(other);
+        }
+        bannerText.append(")");
+
+        JLabel lbl = new JLabel(bannerText.toString());
         lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, 10.5f));
         lbl.setForeground(new Color(30, 60, 130));
         p.add(lbl, BorderLayout.CENTER);
@@ -524,15 +543,23 @@ public class TCardPanel extends JPanel {
      * that marks the card as selected and enables "Edit Selected…".
      */
     private JPanel buildRackCard(TCard card) {
-        return buildRackCardWidget(card, false);
+        return buildRackCardWidget(card, false, false);
+    }
+
+    /**
+     * Builds a rack card optionally displaying a paperclip icon in the upper-right corner
+     * to indicate the task group is collapsed and more resources are hidden.
+     */
+    private JPanel buildRackCard(TCard card, boolean showPaperclip) {
+        return buildRackCardWidget(card, false, showPaperclip);
     }
 
     /** Builds a slightly narrower canine/equipment card indented below a handler card. */
     private JPanel buildCanineRackCard(TCard card) {
-        return buildRackCardWidget(card, true);
+        return buildRackCardWidget(card, true, false);
     }
 
-    private JPanel buildRackCardWidget(TCard card, boolean indented) {
+    private JPanel buildRackCardWidget(TCard card, boolean indented, boolean showPaperclip) {
         JPanel p = new JPanel(new BorderLayout(2, 2));
         p.setBackground(cardColor(card.getCardType()));
         boolean isSelected = card == selectedRackCard;
@@ -556,7 +583,15 @@ public class TCardPanel extends JPanel {
             detail.append(card.getPhoneNumber());
         }
 
-        p.add(nameLabel, BorderLayout.NORTH);
+        JPanel northRow = new JPanel(new BorderLayout());
+        northRow.setOpaque(false);
+        northRow.add(nameLabel, BorderLayout.CENTER);
+        if (showPaperclip) {
+            JLabel paperclip = new JLabel("📎");
+            paperclip.setFont(paperclip.getFont().deriveFont(11f));
+            northRow.add(paperclip, BorderLayout.EAST);
+        }
+        p.add(northRow, BorderLayout.NORTH);
         if (!detail.isEmpty()) {
             JLabel detailLabel = new JLabel(detail.toString());
             detailLabel.setFont(detailLabel.getFont().deriveFont(10.5f));
