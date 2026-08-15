@@ -25,9 +25,12 @@ import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -69,6 +72,14 @@ public class SarTaskPanel extends JPanel {
     private final JTable table = new JTable(tableModel);
     private java.util.function.Consumer<SarTaskAssignment> on214Request;
 
+    private static final String VIEW_TABLE = "table";
+    private static final String VIEW_BOARD = "board";
+    private final CardLayout viewCardLayout = new CardLayout();
+    private final JPanel viewContainer = new JPanel(viewCardLayout);
+    private final JScrollPane boardScroll = new JScrollPane();
+    private final JButton toggleBoardBtn = new JButton("Board View");
+    private String currentSarView = VIEW_TABLE;
+
     /**
      * Creates the SAR task assignment panel.
      *
@@ -82,7 +93,9 @@ public class SarTaskPanel extends JPanel {
         table.getColumnModel().getColumn(0).setCellRenderer(new RequiredFieldCellRenderer());
         installRowEditor();
         setBorder(BorderFactory.createTitledBorder("SAR Task Assignment / Debriefing"));
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        viewContainer.add(new JScrollPane(table), VIEW_TABLE);
+        viewContainer.add(boardScroll, VIEW_BOARD);
+        add(viewContainer, BorderLayout.CENTER);
         add(buildButtonPanel(), BorderLayout.SOUTH);
     }
 
@@ -112,6 +125,7 @@ public class SarTaskPanel extends JPanel {
         debriefBtn.addActionListener(e -> openSelectedRowEditor(EditorMode.DEBRIEFING));
         open214Btn.addActionListener(e -> openIcs214ForSelected());
         removeBtn.addActionListener(e -> removeSelectedTask());
+        toggleBoardBtn.addActionListener(e -> toggleBoardView());
 
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
         row.add(addBtn);
@@ -119,7 +133,164 @@ public class SarTaskPanel extends JPanel {
         row.add(debriefBtn);
         row.add(open214Btn);
         row.add(removeBtn);
+        row.add(toggleBoardBtn);
         return row;
+    }
+
+    /** Toggles between the table view and the task lifecycle board view. */
+    private void toggleBoardView() {
+        if (currentSarView.equals(VIEW_TABLE)) {
+            currentSarView = VIEW_BOARD;
+            toggleBoardBtn.setText("Table View");
+            rebuildBoardView();
+            viewCardLayout.show(viewContainer, VIEW_BOARD);
+        } else {
+            currentSarView = VIEW_TABLE;
+            toggleBoardBtn.setText("Board View");
+            viewCardLayout.show(viewContainer, VIEW_TABLE);
+        }
+    }
+
+    /**
+     * Rebuilds the task lifecycle board view from the current task list.
+     *
+     * <p>Tasks are shown in four columns based on their lifecycle status:
+     * <ol>
+     *   <li><b>Planning</b> — taskLifecycleStatus is "Planning"</li>
+     *   <li><b>On Task</b>  — taskLifecycleStatus is "On Task"</li>
+     *   <li><b>Returned</b> — taskLifecycleStatus is "Returned" but no debriefing supervisor set</li>
+     *   <li><b>Completed</b> — taskLifecycleStatus is "Returned" and a debriefing supervisor is set</li>
+     * </ol>
+     * Clicking a task card opens the assignment editor for that task.</p>
+     */
+    private void rebuildBoardView() {
+        List<SarTaskAssignment> tasks = tableModel.getRows();
+
+        List<SarTaskAssignment> planning  = new ArrayList<>();
+        List<SarTaskAssignment> onTask    = new ArrayList<>();
+        List<SarTaskAssignment> returned  = new ArrayList<>();
+        List<SarTaskAssignment> completed = new ArrayList<>();
+
+        for (SarTaskAssignment task : tasks) {
+            String lc = task.getTaskLifecycleStatus();
+            if ("On Task".equalsIgnoreCase(lc)) {
+                onTask.add(task);
+            } else if ("Returned".equalsIgnoreCase(lc)) {
+                if (task.getDebriefingSupervisor() != null && !task.getDebriefingSupervisor().isBlank()) {
+                    completed.add(task);
+                } else {
+                    returned.add(task);
+                }
+            } else {
+                planning.add(task); // "Planning" or unknown
+            }
+        }
+
+        JPanel board = new JPanel(new GridLayout(1, 4, 8, 0));
+        board.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        board.add(buildBoardColumn("Planning", new Color(173, 216, 230), planning));
+        board.add(buildBoardColumn("On Task",  new Color(255, 200, 100), onTask));
+        board.add(buildBoardColumn("Returned (not debriefed)", new Color(144, 238, 144), returned));
+        board.add(buildBoardColumn("Completed", new Color(200, 200, 200), completed));
+
+        boardScroll.setViewportView(board);
+        boardScroll.revalidate();
+        boardScroll.repaint();
+    }
+
+    /** Builds a single Kanban board column for a lifecycle status. */
+    private JPanel buildBoardColumn(String title, Color headerColor, List<SarTaskAssignment> tasks) {
+        JPanel col = new JPanel();
+        col.setLayout(new javax.swing.BoxLayout(col, javax.swing.BoxLayout.Y_AXIS));
+        col.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY, 1));
+
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(headerColor);
+        header.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        JLabel titleLabel = new JLabel(title + " (" + tasks.size() + ")");
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
+        header.add(titleLabel, BorderLayout.CENTER);
+        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        col.add(header);
+        col.add(javax.swing.Box.createVerticalStrut(4));
+
+        for (SarTaskAssignment task : tasks) {
+            col.add(buildBoardTaskCard(task, headerColor));
+            col.add(javax.swing.Box.createVerticalStrut(4));
+        }
+        col.add(javax.swing.Box.createVerticalGlue());
+        return col;
+    }
+
+    /** Builds a single task card widget for the board view. */
+    private JPanel buildBoardTaskCard(SarTaskAssignment task, Color bgColor) {
+        JPanel p = new JPanel(new BorderLayout(4, 2));
+        p.setBackground(bgColor.brighter());
+        p.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Color.GRAY),
+                BorderFactory.createEmptyBorder(5, 8, 5, 8)));
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 80));
+
+        String teamNum = task.getAssignmentTeamNumber();
+        String resId   = task.getResourceIdentifier();
+        String leader  = task.getLeader();
+        int resourceCount = task.getResourcesAssigned() == null ? 0 : task.getResourcesAssigned().size();
+
+        JLabel topLabel = new JLabel(teamNum.isBlank() ? "(no team number)" : teamNum);
+        topLabel.setFont(topLabel.getFont().deriveFont(Font.BOLD, 11f));
+
+        StringBuilder detail = new StringBuilder();
+        if (!resId.isBlank()) detail.append(resId);
+        if (!leader.isBlank()) {
+            if (!detail.isEmpty()) detail.append(" · ");
+            detail.append("Leader: ").append(leader);
+        }
+        if (resourceCount > 0) {
+            if (!detail.isEmpty()) detail.append(" · ");
+            detail.append(resourceCount).append(" resource(s)");
+        }
+
+        p.add(topLabel, BorderLayout.NORTH);
+        if (!detail.isEmpty()) {
+            JLabel detailLabel = new JLabel("<html><small>" + detail + "</small></html>");
+            p.add(detailLabel, BorderLayout.CENTER);
+        }
+
+        // Double-click opens the edit dialog; single click does nothing but
+        // visual feedback could be added in future.
+        p.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
+                    openBoardTaskEditor(task);
+                }
+            }
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                p.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(0, 80, 180), 2),
+                        BorderFactory.createEmptyBorder(4, 7, 4, 7)));
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                p.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(Color.GRAY),
+                        BorderFactory.createEmptyBorder(5, 8, 5, 8)));
+            }
+        });
+        return p;
+    }
+
+    /** Opens the assignment editor for a task clicked in the board view. */
+    private void openBoardTaskEditor(SarTaskAssignment task) {
+        int modelRow = tableModel.getRows().indexOf(task);
+        if (modelRow >= 0) {
+            editRow(modelRow, EditorMode.ASSIGNMENT);
+            if (currentSarView.equals(VIEW_BOARD)) {
+                rebuildBoardView();
+            }
+        }
     }
 
     /** Creates a new standalone SAR task, opens the assignment editor, and adds it on confirm. */
@@ -180,6 +351,9 @@ public class SarTaskPanel extends JPanel {
         tableModel.setRows(controller.getData().getSarTaskAssignments(),
                 controller.getData().getClueLogEntries(),
                 controller.getData().getForm204().getResourcesAssigned());
+        if (currentSarView.equals(VIEW_BOARD)) {
+            rebuildBoardView();
+        }
     }
 
     /**

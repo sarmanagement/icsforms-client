@@ -54,6 +54,14 @@ public class TCard {
     private String sourceRef = "";
 
     /**
+     * For canine (and other resource) T-cards: the name of the handler or operator
+     * who manages this resource.  When set, the rack view groups this card below the
+     * handler's personnel card.  A handler may be linked to more than one canine card.
+     * Blank when not applicable.
+     */
+    private String handlerName = "";
+
+    /**
      * Creates an empty T-card defaulting to a Personnel card.
      */
     public TCard() {
@@ -274,6 +282,27 @@ public class TCard {
      */
     public void setSourceRef(String sourceRef) {
         this.sourceRef = sourceRef == null ? "" : sourceRef;
+    }
+
+    /**
+     * Returns the name of the handler or operator who manages this resource.
+     *
+     * <p>Used to group canine (and other resource) cards below their handler's
+     * personnel card in the rack view.  Blank when not applicable.</p>
+     *
+     * @return handler name, never {@code null}.
+     */
+    public String getHandlerName() {
+        return handlerName == null ? "" : handlerName;
+    }
+
+    /**
+     * Sets the name of the handler or operator who manages this resource.
+     *
+     * @param handlerName handler name; {@code null} is treated as blank.
+     */
+    public void setHandlerName(String handlerName) {
+        this.handlerName = handlerName == null ? "" : handlerName;
     }
 
     /**

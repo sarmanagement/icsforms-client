@@ -1,5 +1,6 @@
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 
@@ -42,7 +43,9 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Panel displaying and editing ICS 219 T-Card (Resource Status Card) records.
@@ -67,6 +70,10 @@ public class TCardPanel extends JPanel {
     private final JScrollPane rackScroll = new JScrollPane();
     private final JButton toggleViewBtn = new JButton("Rack View");
     private String currentView = VIEW_TABLE;
+    /** Currently selected card in rack view; {@code null} when nothing is selected. */
+    private TCard selectedRackCard = null;
+    /** Assignment ID → team number, used to label task groups in table and rack views. */
+    private final Map<String, String> assignmentTeamByRef = new LinkedHashMap<>();
 
     /**
      * Creates the T-card panel.
@@ -144,6 +151,14 @@ public class TCardPanel extends JPanel {
      * Reloads table rows from the model.
      */
     public void refreshFromModel() {
+        // Build assignment ID → team number map for task grouping.
+        assignmentTeamByRef.clear();
+        for (SarTaskAssignment task : controller.getData().getSarTaskAssignments()) {
+            if (!task.getAssignmentId().isBlank()) {
+                assignmentTeamByRef.put(task.getAssignmentId(), task.getAssignmentTeamNumber());
+            }
+        }
+        tableModel.setAssignmentTeamByRef(new LinkedHashMap<>(assignmentTeamByRef));
         tableModel.setCards(new ArrayList<>(controller.getData().getTCards()));
         if (currentView.equals(VIEW_RACK)) {
             rebuildRackView();
@@ -165,11 +180,13 @@ public class TCardPanel extends JPanel {
         if (currentView.equals(VIEW_TABLE)) {
             currentView = VIEW_RACK;
             toggleViewBtn.setText("Table View");
+            selectedRackCard = null;
             rebuildRackView();
             viewLayout.show(viewContainer, VIEW_RACK);
         } else {
             currentView = VIEW_TABLE;
             toggleViewBtn.setText("Rack View");
+            selectedRackCard = null;
             viewLayout.show(viewContainer, VIEW_TABLE);
         }
     }
@@ -204,12 +221,9 @@ public class TCardPanel extends JPanel {
      * Builds a rack panel where each HEADER card is a column heading and resource cards are
      * placed into the column whose label best matches the card's status or location.
      *
-     * <p>Matching priority:
-     * <ol>
-     *   <li>Card's {@code status} matches a HEADER's display label (case-insensitive).</li>
-     *   <li>Card's {@code location} matches a HEADER's display label (case-insensitive).</li>
-     *   <li>Default: the "Available" column if present, otherwise the first column.</li>
-     * </ol>
+     * <p>Within the "Assigned" column, cards are further sub-grouped by SAR task assignment.
+     * Canine/equipment cards with a {@code handlerName} are rendered immediately below
+     * their handler's personnel card in every column.</p>
      */
     private JPanel buildHeaderBasedRack(List<TCard> cards) {
         // Collect HEADER cards in order.
@@ -241,7 +255,6 @@ public class TCardPanel extends JPanel {
                 continue;
             }
             int colIndex = defaultColIndex;
-            // Try matching by status first, then by location.
             String matchStatus   = card.getStatus()   == null ? "" : card.getStatus();
             String matchLocation = card.getLocation() == null ? "" : card.getLocation();
             boolean matched = false;
@@ -266,7 +279,7 @@ public class TCardPanel extends JPanel {
         }
 
         // Build list of visible columns: filter out "Enroute" and "Ordered" headers
-        // when they have no resource cards assigned to them (items 4 + 5).
+        // when they have no resource cards assigned to them.
         List<TCard> visibleHeaders = new ArrayList<>();
         List<List<TCard>> visibleCards = new ArrayList<>();
         for (int i = 0; i < sectionHeaders.size(); i++) {
@@ -294,9 +307,12 @@ public class TCardPanel extends JPanel {
             col.add(buildHeaderCardWidget(header));
             col.add(javax.swing.Box.createVerticalStrut(4));
 
-            for (TCard card : children) {
-                col.add(buildRackCard(card));
-                col.add(javax.swing.Box.createVerticalStrut(3));
+            // Check if this is the "Assigned" column — if so, sub-group by task.
+            String colLabel = header.getDisplayLabel();
+            if ("Assigned".equalsIgnoreCase(colLabel)) {
+                addTaskGroupedCards(col, children);
+            } else {
+                addHandlerGroupedCards(col, children);
             }
             col.add(javax.swing.Box.createVerticalGlue());
             rack.add(col);
@@ -305,11 +321,108 @@ public class TCardPanel extends JPanel {
     }
 
     /**
+     * Adds resource cards to a column panel, grouped by SAR task assignment.
+     *
+     * <p>Cards with a {@code sourceRef} beginning with {@code "sar:<assignmentId>:"}
+     * are clustered under a small task-label banner.  Cards linked to the same
+     * handler are kept together within each group.</p>
+     */
+    private void addTaskGroupedCards(JPanel col, List<TCard> children) {
+        // Group children by assignment ID (prefix of sourceRef "sar:<id>:...").
+        Map<String, List<TCard>> byTask = new LinkedHashMap<>();
+        byTask.put("", new ArrayList<>()); // unnamed / non-task cards
+        for (TCard card : children) {
+            String ref = card.getSourceRef();
+            String taskKey = "";
+            if (ref.startsWith("sar:")) {
+                String[] parts = ref.split(":", 3);
+                // parts[1] is the assignment ID; guard against "sar:" with no ID.
+                if (parts.length >= 2 && !parts[1].isBlank()) {
+                    taskKey = parts[1];
+                }
+            }
+            byTask.computeIfAbsent(taskKey, k -> new ArrayList<>()).add(card);
+        }
+
+        // Render non-task cards first, then each task group.
+        List<TCard> unassigned = byTask.remove("");
+        if (unassigned != null && !unassigned.isEmpty()) {
+            addHandlerGroupedCards(col, unassigned);
+        }
+        for (Map.Entry<String, List<TCard>> entry : byTask.entrySet()) {
+            String teamLabel = assignmentTeamByRef.getOrDefault(entry.getKey(), entry.getKey());
+            if (!teamLabel.isBlank()) {
+                col.add(buildTaskBannerWidget(teamLabel));
+                col.add(javax.swing.Box.createVerticalStrut(2));
+            }
+            addHandlerGroupedCards(col, entry.getValue());
+            col.add(javax.swing.Box.createVerticalStrut(4));
+        }
+    }
+
+    /**
+     * Adds resource cards to a column panel, with canine/equipment cards grouped
+     * immediately below their handler's personnel card.
+     */
+    private void addHandlerGroupedCards(JPanel col, List<TCard> cards) {
+        // Separate handler-linked (canine) cards from the rest.
+        Map<String, List<TCard>> caninesByHandler = new LinkedHashMap<>();
+        List<TCard> topLevel = new ArrayList<>();
+        for (TCard card : cards) {
+            String handler = card.getHandlerName();
+            if (!handler.isBlank()) {
+                caninesByHandler.computeIfAbsent(handler, k -> new ArrayList<>()).add(card);
+            } else {
+                topLevel.add(card);
+            }
+        }
+
+        for (TCard card : topLevel) {
+            col.add(buildRackCard(card));
+            col.add(javax.swing.Box.createVerticalStrut(3));
+            // Append any linked canines directly below.
+            String personName = card.getPersonName();
+            List<TCard> linked = caninesByHandler.get(personName);
+            if (linked != null) {
+                for (TCard canine : linked) {
+                    col.add(buildCanineRackCard(canine));
+                    col.add(javax.swing.Box.createVerticalStrut(2));
+                }
+                caninesByHandler.remove(personName);
+            }
+        }
+
+        // Any canines whose handler card isn't in this column — render standalone.
+        for (List<TCard> orphaned : caninesByHandler.values()) {
+            for (TCard card : orphaned) {
+                col.add(buildRackCard(card));
+                col.add(javax.swing.Box.createVerticalStrut(3));
+            }
+        }
+    }
+
+    /** Builds a narrow task-label banner for sub-grouping within the Assigned column. */
+    private JPanel buildTaskBannerWidget(String teamLabel) {
+        JPanel p = new JPanel(new BorderLayout());
+        p.setBackground(new Color(200, 220, 255));
+        p.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(100, 140, 220), 1),
+                BorderFactory.createEmptyBorder(2, 6, 2, 6)));
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
+        JLabel lbl = new JLabel("⊳ " + teamLabel);
+        lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, 10.5f));
+        lbl.setForeground(new Color(30, 60, 130));
+        p.add(lbl, BorderLayout.CENTER);
+        return p;
+    }
+
+    /**
      * Builds a rack panel grouped by card type — used when no HEADER cards are present.
      */
     private JPanel buildTypeBasedRack(List<TCard> allCards) {
         List<TCardType> typeOrder = Arrays.asList(TCardType.values());
-        java.util.Map<TCardType, List<TCard>> byType = new java.util.LinkedHashMap<>();
+        Map<TCardType, List<TCard>> byType = new LinkedHashMap<>();
         for (TCardType t : typeOrder) {
             byType.put(t, new ArrayList<>());
         }
@@ -350,7 +463,7 @@ public class TCardPanel extends JPanel {
         p.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(Color.DARK_GRAY, 2),
                 BorderFactory.createEmptyBorder(3, 6, 3, 6)));
-        p.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
         p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 
         JLabel titleLabel = new JLabel(header.getDisplayLabel());
@@ -360,19 +473,31 @@ public class TCardPanel extends JPanel {
     }
 
     /**
-     * Builds a single narrow resource card widget for the rack view.
-     *
-     * <p>Location and status are omitted here because they are conveyed by the HEADER
-     * card above the column.  Only name, agency and phone are shown.</p>
+     * Builds a single narrow resource card widget for the rack view, with a mouse listener
+     * that marks the card as selected and enables "Edit Selected…".
      */
     private JPanel buildRackCard(TCard card) {
+        return buildRackCardWidget(card, false);
+    }
+
+    /** Builds a slightly narrower canine/equipment card indented below a handler card. */
+    private JPanel buildCanineRackCard(TCard card) {
+        return buildRackCardWidget(card, true);
+    }
+
+    private JPanel buildRackCardWidget(TCard card, boolean indented) {
         JPanel p = new JPanel(new BorderLayout(2, 2));
         p.setBackground(cardColor(card.getCardType()));
+        boolean isSelected = card == selectedRackCard;
         p.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(Color.DARK_GRAY),
-                BorderFactory.createEmptyBorder(3, 5, 3, 5)));
+                isSelected
+                        ? BorderFactory.createLineBorder(new Color(0, 100, 200), 2)
+                        : BorderFactory.createLineBorder(Color.DARK_GRAY),
+                BorderFactory.createEmptyBorder(3, indented ? 12 : 5, 3, 5)));
         p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 55));
-        p.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // Store card reference so click handler can retrieve it.
+        p.putClientProperty("tcard", card);
 
         JLabel nameLabel = new JLabel(card.getDisplayLabel());
         nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD));
@@ -392,12 +517,31 @@ public class TCardPanel extends JPanel {
             detailLabel.setFont(detailLabel.getFont().deriveFont(10.5f));
             p.add(detailLabel, BorderLayout.CENTER);
         }
+
+        p.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                selectRackCard(card);
+            }
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    editSelectedCard();
+                }
+            }
+        });
         return p;
     }
 
-    // -------------------------------------------------------------------------
-    // Card add / edit / remove
-    // -------------------------------------------------------------------------
+    /**
+     * Selects a card in the rack view and repaints the rack to show the new selection.
+     */
+    private void selectRackCard(TCard card) {
+        selectedRackCard = card;
+        rebuildRackView();
+    }
+
+
 
     private void addPersonnelCard() {
         TCard card = new TCard();
@@ -418,6 +562,25 @@ public class TCardPanel extends JPanel {
     }
 
     private void editSelectedCard() {
+        if (currentView.equals(VIEW_RACK)) {
+            if (selectedRackCard == null) {
+                return;
+            }
+            TCard copy = copyCard(selectedRackCard);
+            if (openEditDialog(copy)) {
+                List<TCard> cards = tableModel.getCards();
+                for (int i = 0; i < cards.size(); i++) {
+                    if (cards.get(i) == selectedRackCard) {
+                        tableModel.replaceCard(i, copy);
+                        break;
+                    }
+                }
+                selectedRackCard = copy;
+                controller.markDirty();
+                rebuildRackView();
+            }
+            return;
+        }
         int row = table.getSelectedRow();
         if (row < 0) {
             return;
@@ -650,6 +813,7 @@ public class TCardPanel extends JPanel {
         homeStateField.setPreferredSize(new Dimension(48, homeStateField.getPreferredSize().height));
         JTextField phoneField         = UiSupport.textField();
         JTextField radioChannelField  = UiSupport.textField();
+        JTextField handlerNameField   = UiSupport.textField();
         JTextField resourceIdField    = UiSupport.textField();
         JTextField locationField      = UiSupport.textField();
         JComboBox<String> statusCombo = new JComboBox<>(STATUS_OPTIONS);
@@ -664,6 +828,7 @@ public class TCardPanel extends JPanel {
         homeStateField.setText(card.getHomeState());
         phoneField.setText(card.getPhoneNumber());
         radioChannelField.setText(card.getRadioChannel());
+        handlerNameField.setText(card.getHandlerName());
         resourceIdField.setText(card.getResourceIdentifier());
         locationField.setText(card.getLocation());
         statusCombo.setSelectedItem(card.getStatus());
@@ -686,6 +851,9 @@ public class TCardPanel extends JPanel {
                 UiSupport.addRow(form, row++, "Phone number",             phoneField);
                 UiSupport.addRow(form, row++, "Radio channel/talkgroup",  radioChannelField);
                 UiSupport.addRow(form, row++, "Check-in date/time",       checkInSpinner);
+            } else {
+                // Non-personnel resource cards (canine, drone, etc.) may name their handler.
+                UiSupport.addRow(form, row++, "Handler/operator name",    handlerNameField);
             }
             UiSupport.addRow(form, row++, "Resource identifier", resourceIdField);
             UiSupport.addRow(form, row++, "Location (e.g. ICP)", locationField);
@@ -707,14 +875,18 @@ public class TCardPanel extends JPanel {
             card.setLocation(locationField.getText().trim());
             card.setNotes(notesField.getText().trim());
         } else {
-            card.setPersonName(personNameField.getText().trim());
-            card.setHomeAgency(homeAgencyField.getText().trim());
-            card.setHomeState(homeStateField.getText().trim());
-            card.setPhoneNumber(phoneField.getText().trim());
-            card.setRadioChannel(radioChannelField.getText().trim());
-            Object spinnerVal = checkInSpinner.getValue();
-            if (spinnerVal instanceof Date d) {
-                card.setCheckInDateTime(LocalDateTime.ofInstant(d.toInstant(), ZoneId.systemDefault()));
+            if (card.getCardType() == TCardType.PERSONNEL) {
+                card.setPersonName(personNameField.getText().trim());
+                card.setHomeAgency(homeAgencyField.getText().trim());
+                card.setHomeState(homeStateField.getText().trim());
+                card.setPhoneNumber(phoneField.getText().trim());
+                card.setRadioChannel(radioChannelField.getText().trim());
+                Object spinnerVal = checkInSpinner.getValue();
+                if (spinnerVal instanceof Date d) {
+                    card.setCheckInDateTime(LocalDateTime.ofInstant(d.toInstant(), ZoneId.systemDefault()));
+                }
+            } else {
+                card.setHandlerName(handlerNameField.getText().trim());
             }
             card.setResourceIdentifier(resourceIdField.getText().trim());
             card.setLocation(locationField.getText().trim());
@@ -738,6 +910,7 @@ public class TCardPanel extends JPanel {
         copy.setStatus(src.getStatus());
         copy.setNotes(src.getNotes());
         copy.setSourceRef(src.getSourceRef());
+        copy.setHandlerName(src.getHandlerName());
         return copy;
     }
 
@@ -748,10 +921,16 @@ public class TCardPanel extends JPanel {
     private static final class TCardTableModel extends AbstractTableModel {
         private static final String[] COLUMNS = {
                 "Type", "Name / Resource", "Agency", "State", "Phone",
-                "Check-In", "Location", "Status"
+                "Check-In", "Location", "Status", "Task"
         };
 
         private final List<TCard> cards = new ArrayList<>();
+        private Map<String, String> assignmentTeamByRef = new LinkedHashMap<>();
+
+        void setAssignmentTeamByRef(Map<String, String> map) {
+            this.assignmentTeamByRef = map == null ? new LinkedHashMap<>() : map;
+            fireTableDataChanged();
+        }
 
         void setCards(List<TCard> newCards) {
             cards.clear();
@@ -800,6 +979,17 @@ public class TCardPanel extends JPanel {
                         ? card.getCheckInDateTime().toString().replace('T', ' ') : "";
                 case 6 -> card.getLocation();
                 case 7 -> card.getStatus();
+                case 8 -> {
+                    String ref = card.getSourceRef();
+                    if (ref.startsWith("sar:")) {
+                        String[] parts = ref.split(":", 3);
+                        if (parts.length >= 2 && !parts[1].isBlank()) {
+                            String teamNum = assignmentTeamByRef.get(parts[1]);
+                            yield teamNum != null ? teamNum : "";
+                        }
+                    }
+                    yield "";
+                }
                 default -> "";
             };
         }
