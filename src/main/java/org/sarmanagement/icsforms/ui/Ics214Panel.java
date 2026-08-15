@@ -55,6 +55,7 @@ public class Ics214Panel extends JPanel {
     private final JTextField preparedBySignatureField = UiSupport.textField();
     private final JSpinner preparedDateTimeField = UiSupport.dateTimeSpinner();
     private final JButton pickPreparerButton = new JButton("Pick preparer from task…");
+    private final JButton syncResourcesBtn = new JButton("Sync resources…");
     private final ResourcesTableModel resourcesTableModel = new ResourcesTableModel();
     private final ActivityLogTableModel activityLogTableModel = new ActivityLogTableModel();
     private final JTable resourcesTable = new JTable(resourcesTableModel);
@@ -101,12 +102,9 @@ public class Ics214Panel extends JPanel {
 
         JPanel resourcesPanel = new JPanel(new BorderLayout());
         resourcesPanel.setBorder(BorderFactory.createTitledBorder("Section 6 - Resources Assigned"));
-        // Item 7: "Refresh from ICP" button populates resources from ICP T-cards and 204 forms.
-        JButton refreshResourcesBtn = new JButton("Refresh from ICP & 204…");
-        refreshResourcesBtn.setToolTipText("Populate resources list from T-cards at ICP and from 204 assignment forms");
-        refreshResourcesBtn.addActionListener(e -> refreshResourcesFromIcp());
+        syncResourcesBtn.addActionListener(e -> syncResources());
         JPanel resourcesButtonRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        resourcesButtonRow.add(refreshResourcesBtn);
+        resourcesButtonRow.add(syncResourcesBtn);
         resourcesPanel.add(new JScrollPane(resourcesTable), BorderLayout.CENTER);
         resourcesPanel.add(resourcesButtonRow, BorderLayout.SOUTH);
 
@@ -155,8 +153,15 @@ public class Ics214Panel extends JPanel {
         preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
         resourcesTableModel.setRows(currentForm.getResourcesAssigned());
         activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
-        pickPreparerButton.setEnabled(currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT
-                && !linkedTaskResources().isEmpty());
+        boolean isTask = currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT;
+        pickPreparerButton.setEnabled(isTask && !linkedTaskResources().isEmpty());
+        if (isTask) {
+            syncResourcesBtn.setText("Sync from Task Assignment…");
+            syncResourcesBtn.setToolTipText("Replace the resource list with the leader and resources from the linked task assignment");
+        } else {
+            syncResourcesBtn.setText("Refresh from ICP & 204…");
+            syncResourcesBtn.setToolTipText("Add resources from T-cards at ICP and from 204 assignment forms");
+        }
     }
 
     /** Saves current field values into the stored model reference. */
@@ -437,14 +442,71 @@ public class Ics214Panel extends JPanel {
     }
 
     /**
-     * Item 7: Populates the resources list of the current ICP-scoped form from T-cards
-     * placed at the ICP and from resources on ICS 204 assignment forms.
-     * Shows a confirmation dialog listing the proposed resources before adding.
+     * Dispatches to the appropriate sync strategy based on the current form's scope:
+     * TASK_ASSIGNMENT replaces the list from the linked task; ICP/ASSIGNMENT_LIST adds
+     * missing resources from ICP T-cards and 204 assignment leaders.
      */
-    private void refreshResourcesFromIcp() {
+    private void syncResources() {
         if (currentForm == null || currentData == null) {
             return;
         }
+        if (currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT) {
+            syncResourcesFromTask();
+        } else {
+            refreshResourcesFromIcp();
+        }
+    }
+
+    /**
+     * Replaces the resource list with the leader and resources from the linked
+     * SAR task assignment only, so the 214 matches exactly the people on that task.
+     */
+    private void syncResourcesFromTask() {
+        String taskId = currentForm.getLinkedSarTaskAssignmentId();
+        if (taskId == null || taskId.isBlank()) {
+            JOptionPane.showMessageDialog(this,
+                    "This form is not linked to a task assignment.",
+                    "Sync from Task", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        SarTaskAssignment task = currentData.getSarTaskAssignments().stream()
+                .filter(t -> taskId.equals(t.getAssignmentId()))
+                .findFirst().orElse(null);
+        if (task == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Linked task assignment not found.",
+                    "Sync from Task", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        List<SarTaskResource> fromTask = new ArrayList<>(task.getResourcesAssigned());
+        if (fromTask.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "The linked task assignment has no resources.",
+                    "Sync from Task", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        String summary = fromTask.stream()
+                .map(r -> "  \u2022 " + (r.getName().isBlank() ? r.getFunction() : r.getName())
+                        + (r.getIcsPosition().isBlank() ? "" : " (" + r.getIcsPosition() + ")"))
+                .collect(Collectors.joining("\n"));
+        int choice = JOptionPane.showConfirmDialog(this,
+                "Replace the current resource list with the following " + fromTask.size()
+                        + " resource(s) from the task assignment?\n" + summary,
+                "Sync from Task Assignment", JOptionPane.OK_CANCEL_OPTION);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        resourcesTableModel.setRows(fromTask);
+        currentForm.setResourcesAssigned(new ArrayList<>(fromTask));
+        controller.markDirty();
+    }
+
+    /**
+     * Adds missing resources from ICP T-cards and 204 assignment leaders.
+     * Uses T-card notes as the ICS position for org-chart-sourced personnel
+     * so their role (e.g. "Safety Officer") appears in the table.
+     */
+    private void refreshResourcesFromIcp() {
         List<SarTaskResource> toAdd = new ArrayList<>();
         // T-cards at ICP.
         for (TCard card : currentData.getTCards()) {
@@ -456,10 +518,14 @@ public class Ics214Panel extends JPanel {
                 SarTaskResource r = new SarTaskResource();
                 r.setName(card.getPersonName());
                 r.setHomeAgency(card.getHomeAgency());
+                // Notes on org-sourced cards carry the role label (e.g. "Safety Officer").
+                if (!card.getNotes().isBlank()) {
+                    r.setIcsPosition(card.getNotes());
+                }
                 toAdd.add(r);
             }
         }
-        // Resources from 204 forms.
+        // Leaders from 204 assignment forms.
         for (ResourceAssignment ra : currentData.getForm204().getResourcesAssigned()) {
             if (!ra.getLeader().isBlank()) {
                 SarTaskResource r = new SarTaskResource();
@@ -477,11 +543,11 @@ public class Ics214Panel extends JPanel {
         // Remove duplicates against existing list.
         java.util.Set<String> existing = new java.util.HashSet<>();
         for (SarTaskResource r : resourcesTableModel.getRows()) {
-            String n = r.getName().isBlank() ? r.getIcsPosition() : r.getName();
+            String n = r.getName().isBlank() ? r.getFunction() : r.getName();
             existing.add(n.trim().toLowerCase());
         }
         toAdd.removeIf(r -> {
-            String n = r.getName().isBlank() ? r.getIcsPosition() : r.getName();
+            String n = r.getName().isBlank() ? r.getFunction() : r.getName();
             return existing.contains(n.trim().toLowerCase());
         });
         if (toAdd.isEmpty()) {
@@ -491,7 +557,8 @@ public class Ics214Panel extends JPanel {
             return;
         }
         String summary = toAdd.stream()
-                .map(r -> "  • " + (r.getName().isBlank() ? r.getIcsPosition() : r.getName()))
+                .map(r -> "  \u2022 " + (r.getName().isBlank() ? r.getFunction() : r.getName())
+                        + (r.getIcsPosition().isBlank() ? "" : " (" + r.getIcsPosition() + ")"))
                 .collect(Collectors.joining("\n"));
         int choice = JOptionPane.showConfirmDialog(this,
                 "Add the following resources to this form?\n" + summary,
@@ -502,9 +569,7 @@ public class Ics214Panel extends JPanel {
         List<SarTaskResource> merged = new ArrayList<>(resourcesTableModel.getRows());
         merged.addAll(toAdd);
         resourcesTableModel.setRows(merged);
-        if (currentForm != null) {
-            currentForm.setResourcesAssigned(merged);
-        }
+        currentForm.setResourcesAssigned(merged);
         controller.markDirty();
     }
 
