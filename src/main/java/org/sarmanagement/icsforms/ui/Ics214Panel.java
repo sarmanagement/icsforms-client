@@ -699,8 +699,8 @@ public class Ics214Panel extends JPanel {
         public Object getValueAt(int row, int col) {
             SarTaskResource r = rows.get(row);
             return switch (col) {
-                // Item 5: show ICS position when name is blank (e.g. canine resources).
-                case 0 -> r.getName().isBlank() ? r.getIcsPosition() : r.getName();
+                // Show resource identifier (function) when name is blank (e.g. canine resources).
+                case 0 -> r.getName().isBlank() ? r.getFunction() : r.getName();
                 case 1 -> r.getIcsPosition();
                 default -> r.getHomeAgency();
             };
