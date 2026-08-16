@@ -17,12 +17,16 @@ java -jar target/icsforms-client-0.1.0-SNAPSHOT.jar
 ## Features in this first cut
 
 - Shared incident context for incident name, operational period, and preparer identity
-- Tabbed editors for ICS 202, ICS 204, and linked SAR task scaffolding
+- Tabbed editors for ICS 202, ICS 204, linked SAR task assignments, and T-cards.
+- Initial support for ICS 214 Activity Logs.
+- A Clue Log.
+- SAR Task Assignment forms include Debriefing, and POD Factoring fields for Debriefing.
+- Generic incident or SAR modes, with SAR Task Assignment forms and Clue Log only visible in SAR mode.
 - Local JSON workspace persistence at `~/.icsforms/incident.json`
 - Backup-assisted recovery via `~/.icsforms/incident.json.bak`
-- Menu actions for new/open/save/save-as/export
-- PDF export for ICS 202 and ICS 204 to a chosen directory
-- Validation that blocks export when required fields are missing
+- Menu actions for new/open/save/save-as/export.
+- PDF export for forms to a chosen directory.
+- Validation that blocks export when required fields are missing.
 
 ## Manual export flow
 
@@ -39,3 +43,9 @@ java -jar target/icsforms-client-0.1.0-SNAPSHOT.jar
 - SAR scaffolding is derived from ICS 204 assignments and displayed read-only in this first cut.
 - Date/time entry currently uses validated text fields in `yyyy-MM-dd HH:mm` format.
 - Validation feedback is summarized in the status bar and blocking dialogs rather than rich per-field decorations.
+
+## Development
+
+### Generative AI
+
+GitHub Copilot is being used to assist with the development of this project. 
