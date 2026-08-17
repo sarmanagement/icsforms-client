@@ -372,8 +372,6 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         lines.addAll(wrap("Planning Section Chief: " + safe(chart.getPlanningSectionChiefName()), 90));
         lines.addAll(wrap("Logistics Section Chief: " + safe(chart.getLogisticsSectionChiefName()), 90));
         lines.addAll(wrap("Finance/Admin Section Chief: " + safe(chart.getFinanceAdminSectionChiefName()), 90));
-        lines.add("");
-        lines.add("Edit organizational chart on the 'Org Chart' tab.");
         return lines;
     }
 
