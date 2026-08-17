@@ -242,7 +242,7 @@ public class Ics201Panel extends JPanel {
 
     private JPanel createPreparerPanel(int index) {
         JPanel panel = UiSupport.formPanel();
-        panel.setBorder(BorderFactory.createTitledBorder("6. Prepared by"));
+        panel.setBorder(BorderFactory.createTitledBorder(index == 0 ? "6. Prepared by" : "Prepared by"));
         preparedByNameFields[index] = UiSupport.textField();
         preparedByPositionFields[index] = UiSupport.textField();
         preparedDateTimeFields[index] = UiSupport.textField();
