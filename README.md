@@ -55,69 +55,19 @@ ICS 201 is available in both IAP phases:
 
 ## Repository structure
 
-```text
-src/main/java/org/sarmanagement/icsforms/
-├── App.java                       # application entry point
-├── model/
-│   ├── AppData.java
-│   ├── IncidentContext.java
-│   ├── Ics201Form.java
-│   ├── Ics202Form.java
-│   ├── Ics204Form.java
-│   ├── Ics214Form.java
-│   ├── OrganizationalChart.java
-│   ├── SarTaskAssignment.java
-│   ├── TCard.java
-│   ├── ClueLogEntry.java
-│   ├── ActivityEventType.java
-│   ├── ActivityLogEntry.java
-│   ├── ActivityLogScope.java
-│   ├── CommunicationEntry.java
-│   ├── IncidentMode.java
-│   ├── IapPhase.java
-│   ├── PodFactorRating.java
-│   ├── ResourceAssignment.java
-│   ├── SarTaskResource.java
-│   ├── SarTaskSupport.java
-│   ├── TCardType.java
-│   └── package-info.java
-├── ui/
-│   ├── MainFrame.java
-│   ├── AppController.java
-│   ├── IncidentContextPanel.java
-│   ├── OrganizationalChartPanel.java
-│   ├── Ics201Panel.java
-│   ├── Ics202Panel.java
-│   ├── Ics204Panel.java
-│   ├── Ics214Panel.java
-│   ├── SarTaskPanel.java
-│   ├── ClueLogPanel.java
-│   ├── TCardPanel.java
-│   ├── UiSupport.java
-│   └── package-info.java
-├── pdf/
-│   ├── AbstractPdfRenderer.java
-│   ├── PdfFormRenderer.java
-│   ├── PdfExportService.java
-│   ├── CoverPageRenderer.java
-│   ├── Ics201PdfRenderer.java
-│   ├── Ics202PdfRenderer.java
-│   ├── Ics204PdfRenderer.java
-│   ├── Ics214PdfRenderer.java
-│   ├── SarTaskAssignmentPdfRenderer.java
-│   ├── ClueLogPdfRenderer.java
-│   └── package-info.java
-├── persistence/
-│   ├── LocalRepository.java
-│   └── package-info.java
-└── validation/
-    ├── IncidentValidator.java
-    ├── ValidationMessage.java
-    └── package-info.java
+All production source lives under `src/main/java/org/sarmanagement/icsforms/`, with unit tests mirroring that layout under `src/test/java/`. The Maven build is defined in `pom.xml`.
 
-src/test/java/                    # unit tests mirroring the main source structure
-pom.xml                           # Maven build definition
-```
+**`App.java`** is the application entry point. It initialises the Swing look-and-feel, constructs the top-level `AppController`, and opens the `MainFrame` window.
+
+**`model/`** holds the plain-Java data model. `AppData` is the root object that is serialised to and deserialised from `~/.icsforms/incident.json`; it owns `IncidentContext` (shared header fields, mode, and IAP phase) alongside one instance of each form model class (`Ics201Form`, `Ics202Form`, `Ics204Form`, `Ics214Form`, etc.). Supporting value types for SAR task assignments, T-cards, clue log entries, activity log entries, and the organizational chart also live here.
+
+**`ui/`** contains the Swing presentation layer. `MainFrame` builds the top-level tabbed pane and houses all the per-form panels. `AppController` wires the model to the UI and drives save, load, and export actions. Each form has a dedicated panel class (e.g. `Ics201Panel`, `Ics202Panel`) that owns its own sub-tabs or sections. `UiSupport` provides shared Swing helper utilities used across panels.
+
+**`pdf/`** is responsible for turning the in-memory model into PDF files. `AbstractPdfRenderer` and `PdfFormRenderer` provide the shared drawing infrastructure (Apache PDFBox). Each form has a dedicated renderer (e.g. `Ics201PdfRenderer`, `Ics204PdfRenderer`). `CoverPageRenderer` produces the IAP bundle cover page. `PdfExportService` coordinates single-form export, bulk export, and the merged IAP bundle export.
+
+**`persistence/`** handles reading and writing the incident workspace. `LocalRepository` serialises `AppData` to JSON (Jackson) and maintains a rolling backup at `incident.json.bak`.
+
+**`validation/`** contains pre-export checks. `IncidentValidator` walks the model and collects `ValidationMessage` instances for any required fields that are missing or invalid, blocking PDF export until the workspace is clean.
 
 ## Build
 
