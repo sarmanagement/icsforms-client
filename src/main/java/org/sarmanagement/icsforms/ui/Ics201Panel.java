@@ -148,8 +148,8 @@ public class Ics201Panel extends JPanel {
         form.setBorder(BorderFactory.createTitledBorder("ICS 201 - Page 1"));
         UiSupport.addRow(form, 0, "1. Incident Name", incidentNameField);
         UiSupport.addRow(form, 1, "2. Incident Number", incidentNumberField);
-        UiSupport.addRow(form, 2, "3. Date Initiated (yyyy-MM-dd)", dateInitiatedField);
-        UiSupport.addRow(form, 3, "3. Time Initiated (HH:mm)", timeInitiatedField);
+        UiSupport.addRow(form, 2, "3a. Date Initiated (yyyy-MM-dd)", dateInitiatedField);
+        UiSupport.addRow(form, 3, "3b. Time Initiated (HH:mm)", timeInitiatedField);
         UiSupport.addRow(form, 4, "4. Map/Sketch (description/reference)", new JScrollPane(mapSketchArea));
         UiSupport.addRow(form, 5, "5. Situation Summary and Health and Safety Briefing", new JScrollPane(situationSummaryArea));
         UiSupport.addWideRow(form, 6, createPreparerPanel(0));
