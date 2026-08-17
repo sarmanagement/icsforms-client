@@ -9,13 +9,14 @@ import java.util.List;
  */
 public class AppData {
     /** Current persistence schema version for JSON storage. */
-    public static final int CURRENT_SCHEMA_VERSION = 3;
+    public static final int CURRENT_SCHEMA_VERSION = 4;
 
     private int schemaVersion = CURRENT_SCHEMA_VERSION;
     private IncidentMode incidentMode = IncidentMode.SAR;
     private IapPhase iapPhase = IapPhase.PRE_OP;
     private IncidentContext incidentContext = new IncidentContext();
     private OrganizationalChart organizationalChart = new OrganizationalChart();
+    private Ics201Form form201 = new Ics201Form();
     private Ics202Form form202 = new Ics202Form();
     private Ics204Form form204 = new Ics204Form();
     private List<Ics204Form> additionalForms204 = new ArrayList<>();
@@ -42,6 +43,7 @@ public class AppData {
     public AppData(IncidentContext incidentContext, Ics202Form form202, Ics204Form form204, List<SarTaskAssignment> sarTaskAssignments) {
         this.incidentContext = incidentContext == null ? new IncidentContext() : incidentContext;
         this.organizationalChart = new OrganizationalChart();
+        this.form201 = new Ics201Form();
         this.form202 = form202 == null ? new Ics202Form() : form202;
         this.form204 = form204 == null ? new Ics204Form() : form204;
         if (sarTaskAssignments != null) {
@@ -101,6 +103,25 @@ public class AppData {
      */
     public void setOrganizationalChart(OrganizationalChart organizationalChart) {
         this.organizationalChart = organizationalChart == null ? new OrganizationalChart() : organizationalChart;
+    }
+
+
+    /**
+     * Returns ICS 201 content.
+     *
+     * @return incident briefing form.
+     */
+    public Ics201Form getForm201() {
+        return form201;
+    }
+
+    /**
+     * Sets ICS 201 content.
+     *
+     * @param form201 incident briefing form.
+     */
+    public void setForm201(Ics201Form form201) {
+        this.form201 = form201 == null ? new Ics201Form() : form201;
     }
 
     /**

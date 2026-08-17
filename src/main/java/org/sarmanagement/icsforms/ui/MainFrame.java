@@ -57,6 +57,7 @@ public class MainFrame extends JFrame {
     private final JLabel validationLabel = new JLabel("Ready", SwingConstants.LEFT);
     private final IncidentContextPanel incidentContextPanel;
     private final OrganizationalChartPanel organizationalChartPanel;
+    private final Ics201Panel ics201Panel;
     private final Ics202Panel ics202Panel;
     private final Ics204Panel ics204Panel;
     private final List<Ics214Panel> ics214Panels = new ArrayList<>();
@@ -85,6 +86,7 @@ public class MainFrame extends JFrame {
         this.controller = new AppController(data, repository, exportService, validator);
         this.incidentContextPanel = new IncidentContextPanel(controller);
         this.organizationalChartPanel = new OrganizationalChartPanel(controller);
+        this.ics201Panel = new Ics201Panel(controller);
         this.ics202Panel = new Ics202Panel(controller);
         this.ics204Panel = new Ics204Panel(controller);
         this.sarTaskPanel = new SarTaskPanel(controller);
@@ -98,6 +100,7 @@ public class MainFrame extends JFrame {
         groupVisible.put(T_CARDS_GROUP, true);
         registerTab("Shared", incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
         registerTab("Org Chart", organizationalChartPanel, AppController.LinkSource.ORG_CHART, CORE_GROUP);
+        registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, CORE_GROUP);
         registerTab("ICS 202", ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
         registerTab("ICS 204", ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
         registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
@@ -202,6 +205,9 @@ public class MainFrame extends JFrame {
             viewMenu.add(item);
         }
 
+        JMenuItem export201Item = new JMenuItem("Export ICS 201 PDF…");
+        export201Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 201"));
+
         JMenuItem export202Item = new JMenuItem("Export ICS 202 PDF…");
         export202Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 202"));
 
@@ -227,7 +233,7 @@ public class MainFrame extends JFrame {
                 pushToModel(source);
                 try {
                     controller.exportAll(directory, source);
-                    JOptionPane.showMessageDialog(this, "Exported ICS 202, ICS 204, ICS 214, and SAR Task Assignment PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Exported available PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
                 } catch (IOException exception) {
                     showError("Failed to export PDFs", exception);
                 }
@@ -278,6 +284,7 @@ public class MainFrame extends JFrame {
         fileMenu.add(saveAsItem);
         fileMenu.addSeparator();
         fileMenu.add(exitItem);
+        exportMenu.add(export201Item);
         exportMenu.add(export202Item);
         exportMenu.add(export204Item);
         exportMenu.add(export214Item);
@@ -355,6 +362,7 @@ public class MainFrame extends JFrame {
     private void pushToModel(AppController.LinkSource source) {
         incidentContextPanel.pushToModel();
         organizationalChartPanel.pushToModel();
+        ics201Panel.pushToModel();
         ics202Panel.pushToModel();
         ics204Panel.pushToModel();
         for (Ics214Panel panel : ics214Panels) {
@@ -404,6 +412,7 @@ public class MainFrame extends JFrame {
         int selectedLogIndex = selectedLogIndex(selectedComponent);
         incidentContextPanel.refreshFromModel();
         organizationalChartPanel.refreshFromModel();
+        ics201Panel.refreshFromModel();
         ics202Panel.refreshFromModel();
         ics204Panel.refreshFromModel();
         ensureLogs(controller.getData());
@@ -427,6 +436,7 @@ public class MainFrame extends JFrame {
             tabs.removeAll();
             addVisibleTab(incidentContextPanel);
             addVisibleTab(organizationalChartPanel);
+            addVisibleTab(ics201Panel);
             addVisibleTab(ics202Panel);
             addVisibleTab(ics204Panel);
             // sarTaskPanel and clueLogPanel belong to SAR_ONLY_GROUP; addVisibleTab() checks

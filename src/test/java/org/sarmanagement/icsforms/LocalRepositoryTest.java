@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
+import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
@@ -13,6 +14,7 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.pdf.Ics201PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
@@ -61,6 +63,7 @@ class LocalRepositoryTest {
         assertEquals("Test Incident", loaded.getIncidentContext().getIncidentName());
         assertEquals(List.of("IC One", "IC Two"), loaded.getOrganizationalChart().getIncidentCommanders());
         assertEquals("Ops Chief", loaded.getOrganizationalChart().getOperationsSectionChiefName());
+        assertEquals("INC-201", loaded.getForm201().getIncidentNumber());
         assertEquals(1, loaded.getForm204().getResourcesAssigned().size());
         assertEquals("assign-1", loaded.getForm204().getResourcesAssigned().get(0).getAssignmentId());
         assertEquals("A-1", loaded.getForm204().getResourcesAssigned().get(0).getAssignmentTeamNumber());
@@ -181,7 +184,7 @@ class LocalRepositoryTest {
     void syncSarTasksPreservesDebriefData() throws Exception {
         Path tempDir = Files.createTempDirectory("icsforms");
         AppController controller = new AppController(sampleData(), new LocalRepository(tempDir.resolve("incident.json")),
-                new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer()),
+                new PdfExportService(new Ics201PdfRenderer(), new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer()),
                 new IncidentValidator());
 
         SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(0);
@@ -210,7 +213,7 @@ class LocalRepositoryTest {
     void organizationalChartLinksAcrossTabs() throws Exception {
         Path tempDir = Files.createTempDirectory("icsforms");
         AppController controller = new AppController(sampleData(), new LocalRepository(tempDir.resolve("incident.json")),
-                new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
+                new PdfExportService(new Ics201PdfRenderer(), new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
 
         controller.getData().getForm202().setApprovedByIncidentCommanderName("IC Alpha; IC Bravo");
         controller.synchronizeLinkedFields(AppController.LinkSource.ICS202);
@@ -231,13 +234,16 @@ class LocalRepositoryTest {
     @Test
     void pdfExportsAreGenerated() throws Exception {
         AppData data = sampleData();
-        PdfExportService exportService = new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer());
+        PdfExportService exportService = new PdfExportService(new Ics201PdfRenderer(), new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer());
         Path outputDir = Files.createTempDirectory("icsforms-pdf");
 
+        Path pdf201 = exportService.exportSelected("ICS 201", data, outputDir);
         Path pdf202 = exportService.exportSelected("ICS 202", data, outputDir);
         Path pdf204 = exportService.exportSelected("ICS 204", data, outputDir);
         Path sarPdf = exportService.exportSelected("SAR Task Assignment", data, outputDir);
 
+        assertTrue(Files.exists(pdf201));
+        assertTrue(Files.size(pdf201) > 0);
         assertTrue(Files.exists(pdf202));
         assertTrue(Files.size(pdf202) > 0);
         assertTrue(Files.exists(pdf204));
@@ -246,13 +252,23 @@ class LocalRepositoryTest {
         assertTrue(Files.exists(sarPdf));
         assertTrue(Files.size(sarPdf) > 0);
 
+        try (PDDocument pdf = Loader.loadPDF(pdf201.toFile())) {
+            String text = new PDFTextStripper().getText(pdf);
+            assertEquals(4, pdf.getNumberOfPages());
+            assertTrue(text.contains("ICS 201 INCIDENT BRIEFING"));
+            assertTrue(text.contains("1. Incident Name"));
+            assertTrue(text.contains("10. Resource Summary"));
+            assertTrue(text.contains("ICS 201, Page 4"));
+            assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 706f));
+        }
+
         try (PDDocument pdf = Loader.loadPDF(pdf202.toFile())) {
             String text = new PDFTextStripper().getText(pdf);
             assertTrue(text.contains("ICS 202 INCIDENT OBJECTIVES"));
             assertTrue(text.contains("1. Incident Name"));
             assertTrue(text.contains("2. Operational Period"));
             assertTrue(text.contains("8. Approved By Incident Commander"));
-            assertTrue(text.contains("IAP Page: 1"));
+            assertTrue(text.contains("IAP Page: 2"));
             assertTrue(text.contains("Date/Time:"));
             assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 706f));
             assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 80f));
@@ -270,7 +286,7 @@ class LocalRepositoryTest {
             assertTrue(text.contains("Contact"));
             assertTrue(text.contains("Reporting Location"));
             assertTrue(text.contains("9. Prepared By"));
-            assertTrue(text.contains("IAP Page: 2"));
+            assertTrue(text.contains("IAP Page: 3"));
             assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 706f));
         }
 
@@ -304,7 +320,7 @@ class LocalRepositoryTest {
     void iapBundleExportProducesMergedPdf() throws Exception {
         AppData data = sampleData();
         PdfExportService exportService = new PdfExportService(
-                new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer());
+                new Ics201PdfRenderer(), new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer());
         Path outputDir = Files.createTempDirectory("icsforms-iap");
 
         Path bundlePath = exportService.exportIapBundle(data, outputDir);
@@ -320,11 +336,18 @@ class LocalRepositoryTest {
 
         // The merged document should have at least as many pages as the individual forms.
         try (PDDocument merged = Loader.loadPDF(bundlePath.toFile())) {
-            assertTrue(merged.getNumberOfPages() >= 3,
-                    "Merged IAP should contain pages from all exported forms");
+            assertTrue(merged.getNumberOfPages() >= 9,
+                    "Merged IAP should contain the cover page and all exported forms");
+            PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setStartPage(1);
+            stripper.setEndPage(1);
+            String firstPageText = stripper.getText(merged);
+            assertTrue(firstPageText.contains("INCIDENT ACTION PLAN"));
+            assertTrue(firstPageText.contains("Operational Period:"));
         }
 
         // Individual component files should have been cleaned up.
+        assertFalse(Files.exists(outputDir.resolve("ics-201.pdf")), "Component PDF should be removed after bundle");
         assertFalse(Files.exists(outputDir.resolve("ics-202.pdf")), "Component PDF should be removed after bundle");
         assertFalse(Files.exists(outputDir.resolve("ics-204.pdf")), "Component PDF should be removed after bundle");
     }
@@ -372,6 +395,32 @@ class LocalRepositoryTest {
         IncidentContext context = new IncidentContext("Test Incident", LocalDateTime.parse("2026-01-01T00:00:00"), LocalDateTime.parse("2026-01-01T12:00:00"), "Planner", "Planning Section Chief");
         context.setTaskMap("Map-42");
 
+        Ics201Form form201 = new Ics201Form();
+        form201.setIncidentName("Test Incident");
+        form201.setIncidentNumber("INC-201");
+        form201.setDateInitiated(java.time.LocalDate.parse("2026-01-01"));
+        form201.setTimeInitiated(java.time.LocalTime.parse("06:30"));
+        form201.setMapSketch("Grid map attached");
+        form201.setSituationSummary("Initial briefing summary");
+        form201.setCurrentObjectives(List.of("Protect life", "Stabilize scene"));
+        Ics201Form.ActionEntry actionEntry = new Ics201Form.ActionEntry();
+        actionEntry.setTime("07:00");
+        actionEntry.setActions("Dispatch initial resources");
+        form201.setCurrentActions(List.of(actionEntry));
+        Ics201Form.ResourceSummaryEntry resourceSummary = new Ics201Form.ResourceSummaryEntry();
+        resourceSummary.setResource("Ground Team");
+        resourceSummary.setResourceIdentifier("GT-1");
+        resourceSummary.setDateTimeOrdered(LocalDateTime.parse("2026-01-01T07:05:00"));
+        resourceSummary.setEta(LocalDateTime.parse("2026-01-01T07:35:00"));
+        resourceSummary.setArrived(true);
+        resourceSummary.setNotes("Ready at ICP");
+        form201.setResources(List.of(resourceSummary));
+        form201.setPreparedByName("Planner");
+        form201.setPreparedByPositionTitle("Planning Section Chief");
+        form201.setPreparedDateTime(LocalDateTime.parse("2026-01-01T00:30:00"));
+        form201.setPreparedBySignature("Planner");
+        form201.setIapPage("1");
+
         Ics202Form form202 = new Ics202Form();
         form202.setObjectives(List.of("Protect life", "Stabilize scene"));
         form202.setCommandEmphasis("Responder accountability");
@@ -380,7 +429,7 @@ class LocalRepositoryTest {
         form202.setIncidentActionPlanAttachments(List.of("ICS 203", "Map packet"));
         form202.setApprovedByIncidentCommanderName("IC Name");
         form202.setApprovedDateTime(LocalDateTime.parse("2026-01-01T01:00:00"));
-        form202.setIapPage("1");
+        form202.setIapPage("2");
 
         ResourceAssignment resource = new ResourceAssignment();
         resource.setAssignmentId("assign-1");
@@ -418,7 +467,7 @@ class LocalRepositoryTest {
         form204.setPreparedByName("Planner");
         form204.setPreparedByPositionTitle("Planning Section Chief");
         form204.setPreparedDateTime(LocalDateTime.parse("2026-01-01T02:00:00"));
-        form204.setIapPage("2");
+        form204.setIapPage("3");
 
         SarTaskAssignment task = SarTaskAssignment.fromResourceAssignment(resource, context, form204);
         task.setPreparedDateTime(form204.getPreparedDateTime());
@@ -432,6 +481,7 @@ class LocalRepositoryTest {
         task.setCanineWindSpeed("8 mph");
         task.setQualitativePodFactors(samplePodFactors());
         AppData data = new AppData(context, form202, form204, List.of(task));
+        data.setForm201(form201);
         ClueLogEntry clue = new ClueLogEntry();
         clue.setAssignmentId("assign-1");
         clue.setDetectingTask("A-1");

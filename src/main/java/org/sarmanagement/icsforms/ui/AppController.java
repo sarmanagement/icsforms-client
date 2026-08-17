@@ -3,6 +3,7 @@ package org.sarmanagement.icsforms.ui;
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
@@ -82,6 +83,25 @@ public class AppController {
      */
     public AppData getData() {
         return data;
+    }
+
+    /**
+     * Returns the ICS 201 incident briefing data.
+     *
+     * @return ICS 201 form data.
+     */
+    public Ics201Form getData201() {
+        return data.getForm201();
+    }
+
+    /**
+     * Replaces the ICS 201 incident briefing data and marks the document dirty.
+     *
+     * @param form ICS 201 form data.
+     */
+    public void setData201(Ics201Form form) {
+        data.setForm201(form);
+        markDirty();
     }
 
     /**
@@ -306,15 +326,17 @@ public class AppController {
             source = activeLinkSource;
         }
         IncidentContext context = data.getIncidentContext();
+        Ics201Form form201 = data.getForm201();
         org.sarmanagement.icsforms.model.Ics202Form form202 = data.getForm202();
         Ics204Form form204 = data.getForm204();
         OrganizationalChart organizationalChart = data.getOrganizationalChart();
-        if (context == null || form202 == null || form204 == null || organizationalChart == null) {
+        if (context == null || form201 == null || form202 == null || form204 == null || organizationalChart == null) {
             return;
         }
 
         String preparerName = safe(context.getCurrentUser());
         String preparerTitle = safe(context.getCurrentUserPositionTitle());
+        form201.setIncidentName(safe(context.getIncidentName()));
 
         List<String> incidentCommanders = linkedIncidentCommanders(source, form202, organizationalChart);
         if (source == LinkSource.SHARED && matchesIncidentCommanderRole(preparerTitle) && !preparerName.isBlank()) {
@@ -880,6 +902,9 @@ public class AppController {
         }
         if (data.getOrganizationalChart() == null) {
             data.setOrganizationalChart(new OrganizationalChart());
+        }
+        if (data.getForm201() == null) {
+            data.setForm201(new Ics201Form());
         }
         if (data.getForm202() == null) {
             data.setForm202(new org.sarmanagement.icsforms.model.Ics202Form());

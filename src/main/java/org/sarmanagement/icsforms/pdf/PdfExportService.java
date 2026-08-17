@@ -90,26 +90,35 @@ public class PdfExportService {
      * @throws IOException when export or merge fails.
      */
     public Path exportIapBundle(AppData data, Path outputDirectory) throws IOException {
-        assignIapPageNumbers(data);
-        Map<String, Path> parts = exportAll(data, outputDirectory);
-        String bundleName = iapBundleFileName(data.getIncidentContext());
-        Path bundlePath = outputDirectory.resolve(bundleName);
-        PDFMergerUtility merger = new PDFMergerUtility();
-        merger.setDestinationFileName(bundlePath.toString());
-        List<Path> tempFiles = new ArrayList<>(parts.values());
-        for (Path part : tempFiles) {
-            merger.addSource(part.toFile());
-        }
-        merger.mergeDocuments(null); // null = in-memory; suitable for typical IAP sizes (< ~50 pages)
-        // Remove individual component files now that the bundle is written.
-        for (Path part : tempFiles) {
-            try {
-                Files.deleteIfExists(part);
-            } catch (IOException ignored) {
-                // Best-effort cleanup; do not fail the export.
+        Files.createDirectories(outputDirectory);
+        CoverPageRenderer coverPageRenderer = new CoverPageRenderer();
+        Path coverPath = Files.createTempFile(outputDirectory, "cover-page-", ".pdf");
+        List<Path> tempFiles = new ArrayList<>();
+        try {
+            coverPageRenderer.render(data, coverPath);
+            tempFiles.add(coverPath);
+            assignIapPageNumbers(data);
+            Map<String, Path> parts = exportAll(data, outputDirectory);
+            tempFiles.addAll(parts.values());
+            String bundleName = iapBundleFileName(data.getIncidentContext());
+            Path bundlePath = outputDirectory.resolve(bundleName);
+            PDFMergerUtility merger = new PDFMergerUtility();
+            merger.setDestinationFileName(bundlePath.toString());
+            merger.addSource(coverPath.toFile());
+            for (Path part : parts.values()) {
+                merger.addSource(part.toFile());
+            }
+            merger.mergeDocuments(null); // null = in-memory; suitable for typical IAP sizes (< ~50 pages)
+            return bundlePath;
+        } finally {
+            for (Path part : tempFiles) {
+                try {
+                    Files.deleteIfExists(part);
+                } catch (IOException ignored) {
+                    // Best-effort cleanup; do not fail the export.
+                }
             }
         }
-        return bundlePath;
     }
 
     /**
@@ -120,8 +129,8 @@ public class PdfExportService {
      */
     /**
      * Assigns sequential IAP page numbers to all forms in the document, ordered by ICS form
-     * number: ICS 202 (page 1), ICS 204 forms (primary then additional), SAR Task Assignment
-     * forms, ICS 214 activity logs.
+     * number: ICS 201 (page 1), ICS 202, ICS 204 forms (primary then additional), SAR
+     * Task Assignment forms, ICS 214 activity logs.
      *
      * <p>This method mutates the forms in {@code data} in-place and is called just before the
      * IAP bundle export so the page numbers printed on the PDFs are accurate.</p>
@@ -130,6 +139,8 @@ public class PdfExportService {
      */
     static void assignIapPageNumbers(AppData data) {
         int page = 1;
+        // ICS 201
+        data.getForm201().setIapPage(String.valueOf(page++));
         // ICS 202
         data.getForm202().setIapPage(String.valueOf(page++));
         // ICS 204 — primary form
