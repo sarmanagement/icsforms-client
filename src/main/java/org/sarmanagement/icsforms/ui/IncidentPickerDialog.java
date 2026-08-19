@@ -4,7 +4,6 @@ import org.sarmanagement.icsforms.persistence.IncidentSummary;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 
 import javax.swing.BorderFactory;
-import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JDialog;
@@ -115,7 +114,6 @@ public class IncidentPickerDialog extends JDialog {
         list.addListSelectionListener(e -> openButton.setEnabled(list.getSelectedIndex() >= 0));
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        buttons.add(Box.createHorizontalGlue());
         buttons.add(openButton);
         buttons.add(browseButton);
         buttons.add(cancelButton);

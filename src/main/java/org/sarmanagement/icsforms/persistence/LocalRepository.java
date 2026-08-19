@@ -23,6 +23,11 @@ public class LocalRepository {
     private static final String FILE_NAME = "incident.json";
     private static final String BACKUP_FILE_NAME = "incident.json.bak";
 
+    /** Shared, thread-safe mapper used by both instance save/load and static listing. */
+    private static final ObjectMapper SHARED_MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
     private final Path filePath;
     private final Path backupPath;
     private final ObjectMapper objectMapper;
@@ -42,9 +47,7 @@ public class LocalRepository {
     public LocalRepository(Path filePath) {
         this.filePath = filePath;
         this.backupPath = filePath.resolveSibling(BACKUP_FILE_NAME);
-        this.objectMapper = new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        this.objectMapper = SHARED_MAPPER;
     }
 
     /**
@@ -126,16 +129,13 @@ public class LocalRepository {
         if (!Files.isDirectory(directory)) {
             return List.of();
         }
-        ObjectMapper mapper = new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         List<IncidentSummary> results = new ArrayList<>();
         try (var stream = Files.list(directory)) {
             stream.filter(p -> p.toString().endsWith(".json"))
                   .forEach(p -> {
                       try {
                           Instant modified = Files.getLastModifiedTime(p).toInstant();
-                          org.sarmanagement.icsforms.model.AppData data = mapper.readValue(p.toFile(),
+                          org.sarmanagement.icsforms.model.AppData data = SHARED_MAPPER.readValue(p.toFile(),
                                   org.sarmanagement.icsforms.model.AppData.class);
                           String name = "";
                           if (data.getIncidentContext() != null) {

@@ -170,11 +170,12 @@ public class MainFrame extends JFrame {
                     controller.open(startup.getChosenPath());
                     controller.newOperationalPeriod();
                 }
-                default -> {
+                case NEW_PRE_OP, NEW_INITIAL_RESPONSE, NEW_OPERATIONAL_PERIOD -> {
                     controller.newDocument();
                     IapPhase phase = switch (action) {
                         case NEW_INITIAL_RESPONSE -> IapPhase.INITIAL_RESPONSE;
                         case NEW_OPERATIONAL_PERIOD -> IapPhase.DURING_OP;
+                        case NEW_PRE_OP -> IapPhase.PRE_OP;
                         default -> IapPhase.PRE_OP;
                     };
                     controller.setIapPhase(phase);
