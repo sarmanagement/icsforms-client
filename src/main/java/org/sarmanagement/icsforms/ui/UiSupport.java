@@ -309,14 +309,13 @@ final class UiSupport {
         nameField.getDocument().addDocumentListener(listener);
         nameField.addFocusListener(new FocusAdapter() {
             @Override public void focusGained(FocusEvent e) {
-                // Only show suggestions when the user actively clicked into or tabbed into the
-                // field — not when focus moves programmatically (e.g. tab switching in MainFrame).
+                // Only show suggestions when the user actively clicked or tabbed into the field.
+                // Exclude programmatic focus changes (e.g. main-window tab switching) which have
+                // cause UNKNOWN, ACTIVATION, or ROLLBACK.
                 FocusEvent.Cause cause = e.getCause();
-                if (cause == FocusEvent.Cause.MOUSE_EVENT || cause == FocusEvent.Cause.TRAVERSAL
-                        || cause == FocusEvent.Cause.TRAVERSAL_FORWARD
-                        || cause == FocusEvent.Cause.TRAVERSAL_BACKWARD
-                        || cause == FocusEvent.Cause.TRAVERSAL_UP
-                        || cause == FocusEvent.Cause.TRAVERSAL_DOWN) {
+                if (cause != FocusEvent.Cause.UNKNOWN
+                        && cause != FocusEvent.Cause.ACTIVATION
+                        && cause != FocusEvent.Cause.ROLLBACK) {
                     if (!suggestions.get().isEmpty()) {
                         showSuggestions.run();
                     }
