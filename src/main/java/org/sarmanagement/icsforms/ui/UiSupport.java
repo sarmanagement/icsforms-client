@@ -254,6 +254,42 @@ final class UiSupport {
         JPopupMenu popup = new JPopupMenu();
         boolean[] updating = {false};
 
+        // Shared logic: rebuild and (if non-empty) show the popup for the current text.
+        Runnable showSuggestions = () -> SwingUtilities.invokeLater(() -> {
+            String text = nameField.getText().trim().toLowerCase(Locale.ROOT);
+            popup.removeAll();
+            List<String> matched;
+            if (text.isEmpty()) {
+                // With a blank field show all available names (up to 10).
+                matched = suggestions.get().stream().limit(10).toList();
+            } else {
+                matched = suggestions.get().stream()
+                        .filter(s -> s.trim().toLowerCase(Locale.ROOT).startsWith(text))
+                        .limit(10)
+                        .toList();
+            }
+            if (matched.isEmpty()) {
+                popup.setVisible(false);
+                return;
+            }
+            for (String s : matched) {
+                JMenuItem item = new JMenuItem(s);
+                item.addActionListener(ev -> {
+                    updating[0] = true;
+                    nameField.setText(s);
+                    updating[0] = false;
+                    popup.setVisible(false);
+                    if (onSelected != null) {
+                        onSelected.accept(s);
+                    }
+                });
+                popup.add(item);
+            }
+            if (nameField.isShowing()) {
+                popup.show(nameField, 0, nameField.getHeight());
+            }
+        });
+
         DocumentListener listener = new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent e) { update(); }
             @Override public void removeUpdate(DocumentEvent e) { update(); }
@@ -261,42 +297,24 @@ final class UiSupport {
 
             private void update() {
                 if (updating[0]) return;
-                SwingUtilities.invokeLater(() -> {
-                    String text = nameField.getText().trim().toLowerCase(Locale.ROOT);
-                    popup.removeAll();
-                    if (text.isEmpty()) {
-                        popup.setVisible(false);
-                        return;
-                    }
-                    List<String> matched = suggestions.get().stream()
-                            .filter(s -> s.trim().toLowerCase(Locale.ROOT).startsWith(text))
-                            .limit(10)
-                            .toList();
-                    if (matched.isEmpty()) {
-                        popup.setVisible(false);
-                        return;
-                    }
-                    for (String s : matched) {
-                        JMenuItem item = new JMenuItem(s);
-                        item.addActionListener(ev -> {
-                            updating[0] = true;
-                            nameField.setText(s);
-                            updating[0] = false;
-                            popup.setVisible(false);
-                            if (onSelected != null) {
-                                onSelected.accept(s);
-                            }
-                        });
-                        popup.add(item);
-                    }
-                    if (nameField.isShowing()) {
-                        popup.show(nameField, 0, nameField.getHeight());
-                    }
-                });
+                // Only show while typing when text is non-empty.
+                String text = nameField.getText().trim();
+                if (text.isEmpty()) {
+                    popup.setVisible(false);
+                    return;
+                }
+                showSuggestions.run();
             }
         };
         nameField.getDocument().addDocumentListener(listener);
         nameField.addFocusListener(new FocusAdapter() {
+            @Override public void focusGained(FocusEvent e) {
+                // Show suggestions whenever the field is focused (whether blank or pre-filled),
+                // so operators can easily see who is available and change the assignment.
+                if (!suggestions.get().isEmpty()) {
+                    showSuggestions.run();
+                }
+            }
             @Override public void focusLost(FocusEvent e) { popup.setVisible(false); }
         });
     }

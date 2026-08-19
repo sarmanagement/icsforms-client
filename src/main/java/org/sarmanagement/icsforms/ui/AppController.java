@@ -77,6 +77,15 @@ public class AppController {
     }
 
     /**
+     * Returns the file path where the active document is persisted.
+     *
+     * @return workspace file path.
+     */
+    public java.nio.file.Path getFilePath() {
+        return repository.getFilePath();
+    }
+
+    /**
      * Returns the active incident document.
      *
      * @return active document.
@@ -382,6 +391,22 @@ public class AppController {
             form204.setOperationsSectionChiefContact(opsContact);
         }
 
+        if (source == LinkSource.SHARED && matchesPlanningSectionChiefRole(preparerTitle) && !preparerName.isBlank()) {
+            organizationalChart.setPlanningSectionChiefName(preparerName);
+        }
+        if (source == LinkSource.SHARED && matchesLogisticsSectionChiefRole(preparerTitle) && !preparerName.isBlank()) {
+            organizationalChart.setLogisticsSectionChiefName(preparerName);
+        }
+        if (source == LinkSource.SHARED && matchesFinanceAdminSectionChiefRole(preparerTitle) && !preparerName.isBlank()) {
+            organizationalChart.setFinanceAdminSectionChiefName(preparerName);
+        }
+        if (source == LinkSource.SHARED && matchesDocumentationUnitLeaderRole(preparerTitle) && !preparerName.isBlank()) {
+            organizationalChart.setDocumentationUnitLeaderName(preparerName);
+        }
+        if (source == LinkSource.SHARED && matchesSafetyOfficerRole(preparerTitle) && !preparerName.isBlank()) {
+            organizationalChart.setSafetyOfficerName(preparerName);
+        }
+
         if (!preparerName.isBlank() || !preparerTitle.isBlank() || source == LinkSource.SHARED) {
             form202.setPreparedByName(preparerName);
             form202.setPreparedByPositionTitle(preparerTitle);
@@ -587,6 +612,30 @@ public class AppController {
             addOrgCard(wanted, byRef, byName, "org:commTechnician",
                     chart.getCommunicationsTechnicianName(), chart.getCommunicationsTechnicianRadio(),
                     chart.getCommunicationsTechnicianPhone(), "Communications Technician");
+        }
+
+        // --- Context preparer ---
+        // Always maintain a T-card for the named preparer/current user, regardless of whether
+        // their title maps to a specific org chart slot.  This is keyed by a fixed sourceRef so
+        // it survives sync cycles even when the person's name changes.
+        IncidentContext ctx = data.getIncidentContext();
+        if (ctx != null && !safe(ctx.getCurrentUser()).isBlank()) {
+            String preparerCardName = safe(ctx.getCurrentUser());
+            String preparerCardTitle = safe(ctx.getCurrentUserPositionTitle());
+            String preparerRef = "context:preparer";
+            TCard preparerCard;
+            if (byRef.containsKey(preparerRef)) {
+                preparerCard = byRef.get(preparerRef);
+            } else {
+                String nameKey = preparerCardName.trim().toLowerCase();
+                preparerCard = byName.containsKey(nameKey) ? byName.get(nameKey) : newPersonnelCard(preparerCardName);
+            }
+            preparerCard.setPersonName(preparerCardName);
+            preparerCard.setSourceRef(preparerCard.getSourceRef().isBlank() ? preparerRef : preparerCard.getSourceRef());
+            preparerCard.setNotes(notePreserving(preparerCard.getNotes(),
+                    preparerCardTitle.isBlank() ? "Preparer" : preparerCardTitle));
+            wanted.put(preparerRef, preparerCard);
+            byName.putIfAbsent(preparerCardName.trim().toLowerCase(), preparerCard);
         }
 
         // --- SAR task resources ---
@@ -1058,6 +1107,29 @@ public class AppController {
 
     private boolean matchesOperationsSectionChiefRole(String value) {
         return normalizeRole(value).equals("operations section chief");
+    }
+
+    private boolean matchesPlanningSectionChiefRole(String value) {
+        return normalizeRole(value).equals("planning section chief");
+    }
+
+    private boolean matchesLogisticsSectionChiefRole(String value) {
+        return normalizeRole(value).equals("logistics section chief");
+    }
+
+    private boolean matchesFinanceAdminSectionChiefRole(String value) {
+        String normalized = normalizeRole(value);
+        return normalized.equals("finance admin section chief")
+                || normalized.equals("finance section chief")
+                || normalized.equals("finance administration section chief");
+    }
+
+    private boolean matchesDocumentationUnitLeaderRole(String value) {
+        return normalizeRole(value).equals("documentation unit leader");
+    }
+
+    private boolean matchesSafetyOfficerRole(String value) {
+        return normalizeRole(value).equals("safety officer");
     }
 
     private String normalizeRole(String value) {

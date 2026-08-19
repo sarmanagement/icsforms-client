@@ -1,5 +1,8 @@
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,9 +14,41 @@ public class AppData {
     /** Current persistence schema version for JSON storage. */
     public static final int CURRENT_SCHEMA_VERSION = 4;
 
+    /**
+     * A lightweight snapshot of the shared context at the end of one operational period,
+     * captured when the incident advances to the next period.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class OperationalPeriodRecord {
+        private LocalDateTime periodStart;
+        private LocalDateTime periodEnd;
+        private List<String> incidentCommanders = new ArrayList<>();
+
+        /** Creates an empty record. */
+        public OperationalPeriodRecord() {}
+
+        /** Returns the operational period start date/time. */
+        public LocalDateTime getPeriodStart() { return periodStart; }
+        /** Sets the operational period start date/time. */
+        public void setPeriodStart(LocalDateTime periodStart) { this.periodStart = periodStart; }
+
+        /** Returns the operational period end date/time. */
+        public LocalDateTime getPeriodEnd() { return periodEnd; }
+        /** Sets the operational period end date/time. */
+        public void setPeriodEnd(LocalDateTime periodEnd) { this.periodEnd = periodEnd; }
+
+        /** Returns the incident commander / unified-command names for this period. */
+        public List<String> getIncidentCommanders() { return incidentCommanders; }
+        /** Sets the incident commander / unified-command names for this period. */
+        public void setIncidentCommanders(List<String> incidentCommanders) {
+            this.incidentCommanders = incidentCommanders == null ? new ArrayList<>() : incidentCommanders;
+        }
+    }
+
     private int schemaVersion = CURRENT_SCHEMA_VERSION;
     private IncidentMode incidentMode = IncidentMode.SAR;
     private IapPhase iapPhase = IapPhase.PRE_OP;
+    private List<OperationalPeriodRecord> operationalPeriodHistory = new ArrayList<>();
     private IncidentContext incidentContext = new IncidentContext();
     private OrganizationalChart organizationalChart = new OrganizationalChart();
     private Ics201Form form201 = new Ics201Form();
@@ -61,6 +96,17 @@ public class AppData {
      * types are retained.</p>
      */
     public void advanceToNewOperationalPeriod() {
+        // Capture the current operational period context before clearing.
+        OperationalPeriodRecord record = new OperationalPeriodRecord();
+        if (incidentContext != null) {
+            record.setPeriodStart(incidentContext.getOperationalPeriodStart());
+            record.setPeriodEnd(incidentContext.getOperationalPeriodEnd());
+        }
+        if (organizationalChart != null) {
+            record.setIncidentCommanders(new ArrayList<>(organizationalChart.getIncidentCommanders()));
+        }
+        operationalPeriodHistory.add(record);
+
         this.iapPhase = IapPhase.DURING_OP;
         this.form202 = new Ics202Form();
         this.form204 = new Ics204Form();
@@ -87,6 +133,26 @@ public class AppData {
      */
     public void setSchemaVersion(int schemaVersion) {
         this.schemaVersion = schemaVersion;
+    }
+
+    /**
+     * Returns the operational period history — one record per completed period, in chronological
+     * order.  The current (in-progress) period is NOT included; it appears only after
+     * {@link #advanceToNewOperationalPeriod()} is called.
+     *
+     * @return operational period history (never {@code null}).
+     */
+    public List<OperationalPeriodRecord> getOperationalPeriodHistory() {
+        return operationalPeriodHistory;
+    }
+
+    /**
+     * Sets the operational period history.
+     *
+     * @param operationalPeriodHistory period history; {@code null} is treated as empty.
+     */
+    public void setOperationalPeriodHistory(List<OperationalPeriodRecord> operationalPeriodHistory) {
+        this.operationalPeriodHistory = operationalPeriodHistory == null ? new ArrayList<>() : operationalPeriodHistory;
     }
 
     /**
