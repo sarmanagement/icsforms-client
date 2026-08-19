@@ -144,7 +144,7 @@ public class IncidentContextPanel extends JPanel {
                 history.size() + 1,
                 formatDateTime(context.getOperationalPeriodStart()),
                 formatDateTime(context.getOperationalPeriodEnd()),
-                String.join("; ", currentIcs) + " (current)"
+                currentIcs.isEmpty() ? "(current)" : String.join("; ", currentIcs) + " (current)"
         });
     }
 

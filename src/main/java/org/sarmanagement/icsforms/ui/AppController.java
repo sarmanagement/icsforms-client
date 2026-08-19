@@ -631,7 +631,7 @@ public class AppController {
                 preparerCard = byName.containsKey(nameKey) ? byName.get(nameKey) : newPersonnelCard(preparerCardName);
             }
             preparerCard.setPersonName(preparerCardName);
-            preparerCard.setSourceRef(preparerCard.getSourceRef().isBlank() ? preparerRef : preparerCard.getSourceRef());
+            preparerCard.setSourceRef(preparerRef);
             preparerCard.setNotes(notePreserving(preparerCard.getNotes(),
                     preparerCardTitle.isBlank() ? "Preparer" : preparerCardTitle));
             wanted.put(preparerRef, preparerCard);
@@ -1120,7 +1120,6 @@ public class AppController {
     private boolean matchesFinanceAdminSectionChiefRole(String value) {
         String normalized = normalizeRole(value);
         return normalized.equals("finance admin section chief")
-                || normalized.equals("finance section chief")
                 || normalized.equals("finance administration section chief");
     }
 
