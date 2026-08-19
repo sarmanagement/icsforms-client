@@ -307,20 +307,17 @@ final class UiSupport {
             }
         };
         nameField.getDocument().addDocumentListener(listener);
-        nameField.addFocusListener(new FocusAdapter() {
-            @Override public void focusGained(FocusEvent e) {
-                // Only show suggestions when the user actively clicked or tabbed into the field.
-                // Exclude programmatic focus changes (e.g. main-window tab switching) which have
-                // cause UNKNOWN, ACTIVATION, or ROLLBACK.
-                FocusEvent.Cause cause = e.getCause();
-                if (cause != FocusEvent.Cause.UNKNOWN
-                        && cause != FocusEvent.Cause.ACTIVATION
-                        && cause != FocusEvent.Cause.ROLLBACK) {
-                    if (!suggestions.get().isEmpty()) {
-                        showSuggestions.run();
-                    }
+        // Show suggestions when the user clicks directly into the field (MOUSE_EVENT cause only).
+        // Tab-key traversal and programmatic focus changes (tab switching, activation) must NOT
+        // open the popup — only explicit mouse clicks should trigger it on an already-filled field.
+        nameField.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (!suggestions.get().isEmpty()) {
+                    showSuggestions.run();
                 }
             }
+        });
+        nameField.addFocusListener(new FocusAdapter() {
             @Override public void focusLost(FocusEvent e) { popup.setVisible(false); }
         });
     }
