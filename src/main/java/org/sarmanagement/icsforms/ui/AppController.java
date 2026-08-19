@@ -1102,7 +1102,8 @@ public class AppController {
 
     private boolean matchesIncidentCommanderRole(String value) {
         String normalized = normalizeRole(value);
-        return normalized.equals("incident commander") || normalized.equals("unified command");
+        return normalized.equals("incident commander") || normalized.equals("unified command")
+                || normalized.equals("ic");
     }
 
     private boolean matchesOperationsSectionChiefRole(String value) {

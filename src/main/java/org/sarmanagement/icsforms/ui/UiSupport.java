@@ -309,10 +309,17 @@ final class UiSupport {
         nameField.getDocument().addDocumentListener(listener);
         nameField.addFocusListener(new FocusAdapter() {
             @Override public void focusGained(FocusEvent e) {
-                // Show suggestions whenever the field is focused (whether blank or pre-filled),
-                // so operators can easily see who is available and change the assignment.
-                if (!suggestions.get().isEmpty()) {
-                    showSuggestions.run();
+                // Only show suggestions when the user actively clicked into or tabbed into the
+                // field — not when focus moves programmatically (e.g. tab switching in MainFrame).
+                FocusEvent.Cause cause = e.getCause();
+                if (cause == FocusEvent.Cause.MOUSE_EVENT || cause == FocusEvent.Cause.TRAVERSAL
+                        || cause == FocusEvent.Cause.TRAVERSAL_FORWARD
+                        || cause == FocusEvent.Cause.TRAVERSAL_BACKWARD
+                        || cause == FocusEvent.Cause.TRAVERSAL_UP
+                        || cause == FocusEvent.Cause.TRAVERSAL_DOWN) {
+                    if (!suggestions.get().isEmpty()) {
+                        showSuggestions.run();
+                    }
                 }
             }
             @Override public void focusLost(FocusEvent e) { popup.setVisible(false); }
