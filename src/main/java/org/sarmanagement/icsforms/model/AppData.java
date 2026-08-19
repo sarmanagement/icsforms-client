@@ -52,6 +52,26 @@ public class AppData {
     }
 
     /**
+     * Advances this document to a new subsequent operational period in place.
+     *
+     * <p>The organizational chart and ICS 201 initial-response record are preserved as
+     * historical context. ICS 202, ICS 204, SAR tasks, clue log, T-cards, and activity logs
+     * are cleared so that the new period starts fresh. The IAP phase is set to
+     * {@link IapPhase#DURING_OP}. The incident context, incident mode, and activity event
+     * types are retained.</p>
+     */
+    public void advanceToNewOperationalPeriod() {
+        this.iapPhase = IapPhase.DURING_OP;
+        this.form202 = new Ics202Form();
+        this.form204 = new Ics204Form();
+        this.additionalForms204 = new ArrayList<>();
+        this.sarTaskAssignments = new ArrayList<>();
+        this.clueLogEntries = new ArrayList<>();
+        this.tCards = new ArrayList<>();
+        this.activityLogs = new ArrayList<>();
+    }
+
+    /**
      * Returns the JSON schema version.
      *
      * @return persisted schema version.

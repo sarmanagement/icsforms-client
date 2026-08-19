@@ -358,10 +358,40 @@ public class Ics201Panel extends JPanel {
     }
 
     private void refreshPhaseNote() {
-        String phaseText = controller.getIapPhase() == IapPhase.PRE_OP
-                ? "In PRE_OP phase, ICS 201 captures initial response data. In subsequent periods, it serves as a historical record attached to the IAP."
-                : "This incident is in DURING_OP phase. ICS 201 remains available as the initial response record attached to the IAP history.";
+        IapPhase phase = controller.getIapPhase();
+        String phaseText;
+        if (phase == IapPhase.PRE_OP) {
+            phaseText = "Pre-Operational (planning) phase: no incident response has started yet. "
+                    + "ICS 201 is available to pre-stage information but is not yet in active use.";
+        } else if (phase == IapPhase.INITIAL_RESPONSE) {
+            phaseText = "Initial Incident Response phase: ICS 201 is the primary capture tool. "
+                    + "All fields are editable. Transition to a subsequent operational period when moving to ICS 202/204 as primary forms.";
+        } else {
+            phaseText = "Subsequent Operational Period phase: ICS 201 is locked as the historical initial-response record attached to the IAP. "
+                    + "Use ICS 202 and ICS 204 as the primary forms for this period.";
+        }
         phaseNoteLabel.setText("<html><body style='width: 900px'>" + phaseText + "</body></html>");
+        boolean editable = phase != IapPhase.DURING_OP;
+        setFormEditable(editable);
+    }
+
+    private void setFormEditable(boolean editable) {
+        incidentNumberField.setEditable(editable);
+        dateInitiatedField.setEditable(editable);
+        timeInitiatedField.setEditable(editable);
+        mapSketchArea.setEditable(editable);
+        situationSummaryArea.setEditable(editable);
+        objectivesArea.setEditable(editable);
+        actionTable.setEnabled(editable);
+        resourceSummaryTable.setEnabled(editable);
+        for (int i = 0; i < PAGE_COUNT; i++) {
+            if (preparedByNameFields[i] != null) {
+                preparedByNameFields[i].setEditable(editable);
+                preparedByPositionFields[i].setEditable(editable);
+                preparedDateTimeFields[i].setEditable(editable);
+                preparedSignatureFields[i].setEditable(editable);
+            }
+        }
     }
 
     private void setPreparerValues(Ics201Form form, IncidentContext context) {

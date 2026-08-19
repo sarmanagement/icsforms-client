@@ -230,6 +230,23 @@ public class AppController {
     }
 
     /**
+     * Advances the current incident workspace to a new subsequent operational period.
+     *
+     * <p>The organizational chart and ICS 201 initial-response record are preserved as
+     * historical context.  Operational-period forms are cleared so the new period starts fresh.
+     * See {@link org.sarmanagement.icsforms.model.AppData#advanceToNewOperationalPeriod()} for
+     * the full list of fields that are reset.</p>
+     */
+    public void newOperationalPeriod() {
+        data.advanceToNewOperationalPeriod();
+        ensureDefaults(data);
+        syncSarTasks();
+        dirty = true;
+        activeLinkSource = LinkSource.NONE;
+        autosaveTimer.restart();
+    }
+
+    /**
      * Validates the active document.
      *
      * @return validation messages.

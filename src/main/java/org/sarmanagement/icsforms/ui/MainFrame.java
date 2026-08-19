@@ -318,13 +318,18 @@ public class MainFrame extends JFrame {
         ButtonGroup phaseGroup = new ButtonGroup();
         JRadioButtonMenuItem preOpItem  = new JRadioButtonMenuItem("Pre-Operational (planning)",
                 controller.getIapPhase() == IapPhase.PRE_OP);
-        JRadioButtonMenuItem duringOpItem = new JRadioButtonMenuItem("During Operational Period",
+        JRadioButtonMenuItem initialResponseItem = new JRadioButtonMenuItem("Initial Incident Response",
+                controller.getIapPhase() == IapPhase.INITIAL_RESPONSE);
+        JRadioButtonMenuItem duringOpItem = new JRadioButtonMenuItem("Subsequent Operational Period",
                 controller.getIapPhase() == IapPhase.DURING_OP);
         preOpItem.addActionListener(e -> { controller.setIapPhase(IapPhase.PRE_OP); refreshFromModel(); });
+        initialResponseItem.addActionListener(e -> { controller.setIapPhase(IapPhase.INITIAL_RESPONSE); refreshFromModel(); });
         duringOpItem.addActionListener(e -> { controller.setIapPhase(IapPhase.DURING_OP); refreshFromModel(); });
         phaseGroup.add(preOpItem);
+        phaseGroup.add(initialResponseItem);
         phaseGroup.add(duringOpItem);
         iapPhaseMenu.add(preOpItem);
+        iapPhaseMenu.add(initialResponseItem);
         iapPhaseMenu.add(duringOpItem);
         configMenu.addSeparator();
         configMenu.add(iapPhaseMenu);

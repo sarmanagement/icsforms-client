@@ -4,30 +4,28 @@
 
 ## Current UI workflow
 
-1. Launch the desktop application.
-2. Enter shared incident context values on the **Shared** tab:
+1. At launch a startup dialog appears asking you to select an action:
+   - **New incident — Pre-Operational (planning):** start a workspace before the incident response begins.
+   - **New incident — Initial Incident Response:** an incident has started; ICS 201 is the primary capture tool.
+   - **New incident — Subsequent Operational Period:** open a fresh workspace for a new operational period, with ICS 201 read-only.
+   - **Open existing incident:** continue working on a previously saved incident.
+   - **Open existing incident and add a new operational period:** load an existing workspace and advance it to the next operational period, preserving the org chart and ICS 201 history while clearing the operational-period forms.
+2. Select the incident mode: **SAR** (default) or **Generic**.
+3. Enter shared incident context values on the **Shared** tab:
    - incident name
    - operational period
    - preparer identity
-   - incident mode (**SAR** or **Generic**)
-   - IAP phase (**PRE_OP** or **DURING_OP**)
-3. Maintain the current organization on **Org Chart**.
-4. Use **ICS 201** during the initial operational period to capture the initial briefing, objectives, current organization, and resource summary.
-5. Complete the operational-period forms on the remaining tabs:
-   - **ICS 202**
-   - **ICS 204**
-   - **SAR Tasks** (SAR mode only)
-   - **Clue Log** (SAR mode only)
-   - **T-Cards**
-   - **Activity Logs (ICS 214)**
+4. Maintain the current organization on **Org Chart**.
+5. Complete the appropriate forms based on the current phase (see below).
 6. Save locally or allow autosave to persist the incident workspace.
 7. Export individual PDFs, all PDFs as separate files, or the merged **Export IAP Bundle** PDF.
 
 ## Current features
 
 - Shared incident context for incident name, operational period, and preparer identity.
+- Startup dialog to choose incident phase and mode before the main window opens.
 - Incident mode toggle for **SAR** and **Generic** workflows.
-- IAP phase toggle for **PRE_OP** and **DURING_OP** workflows.
+- Three IAP phases: **Pre-Operational**, **Initial Incident Response**, and **Subsequent Operational Period**.
 - Tabbed Swing UI for:
   - Shared context
   - Org Chart
@@ -46,12 +44,21 @@
 - **Export IAP Bundle** for a single merged PDF bundle with a cover page.
 - Validation that blocks export when required fields are missing.
 
-## ICS 201 operational behavior
+## Incident phases
 
-ICS 201 is available in both IAP phases:
+The application models three phases of an incident lifecycle, selectable at startup and changeable from the **Configuration → IAP Phase** menu:
 
-- In **PRE_OP**, ICS 201 is the primary place to capture the initial response picture, including objectives, organization, and resources.
-- In **DURING_OP**, that operational data flows into the current-period forms such as ICS 202 and ICS 204, while ICS 201 remains available as the historical initial briefing record attached to the IAP.
+### (a) Pre-Operational (planning)
+
+The team is preparing for a potential or anticipated incident before any response has begun. ICS 201 is available to pre-stage information but is not yet in active use. Resources may be placed in an "Ordered" status on the T-card rack.
+
+### (b) Initial Incident Response
+
+An incident has started. ICS 201 – Incident Briefing is the **primary capture tool** for the incident commander: map/sketch, situation summary, health and safety briefing, objectives, current actions, and the organizational chart and resource summary. All ICS 201 fields are fully editable. ICS 202 and ICS 204 are also available for concurrent planning.
+
+### (c) Subsequent Operational Periods
+
+The incident has progressed beyond the initial response. ICS 201 is **locked (read-only)** and attached to the IAP bundle as the historical initial-response record. ICS 202 (Incident Objectives) and ICS 204 (Assignment List) become the primary forms for each subsequent operational period. When advancing to a new operational period the operational-period forms are cleared while the organizational chart and ICS 201 are preserved as historical context.
 
 ## Repository structure
 
