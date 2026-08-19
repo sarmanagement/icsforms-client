@@ -103,20 +103,23 @@ public class TCardPanel extends JPanel {
         viewContainer.add(rackScroll, VIEW_RACK);
 
         JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
-        JButton addCardBtn     = new JButton("Add Card…");
-        JButton editBtn        = new JButton("Edit Selected…");
-        JButton removeBtn      = new JButton("Remove Selected");
-        JButton importCsvBtn   = new JButton("Import from CSV…");
+        JButton addCardBtn       = new JButton("Add Card…");
+        JButton editBtn          = new JButton("Edit Selected…");
+        JButton removeBtn        = new JButton("Remove Selected");
+        JButton mergeDupBtn      = new JButton("Merge Duplicates…");
+        JButton importCsvBtn     = new JButton("Import from CSV…");
 
         addCardBtn.addActionListener(e -> addCardWithTypeChoice());
         editBtn.addActionListener(e -> editSelectedCard());
         removeBtn.addActionListener(e -> removeSelectedCard());
+        mergeDupBtn.addActionListener(e -> mergeDuplicates());
         importCsvBtn.addActionListener(e -> importFromCsv());
         toggleViewBtn.addActionListener(e -> toggleView());
 
         buttonRow.add(addCardBtn);
         buttonRow.add(editBtn);
         buttonRow.add(removeBtn);
+        buttonRow.add(mergeDupBtn);
         buttonRow.add(importCsvBtn);
         buttonRow.add(toggleViewBtn);
 
@@ -749,6 +752,280 @@ public class TCardPanel extends JPanel {
         }
         tableModel.removeCard(row);
         controller.markDirty();
+    }
+
+    // -------------------------------------------------------------------------
+    // Merge duplicates
+    // -------------------------------------------------------------------------
+
+    /**
+     * Finds T-cards that share the same name (case-insensitive), presents a merge
+     * dialog for each pair, and removes the card that was merged into the other.
+     *
+     * <p>Merge rules applied field by field:
+     * <ul>
+     *   <li>If one value is blank and the other is not, the non-blank value wins.</li>
+     *   <li>If both values are identical (after trimming), they are kept as-is.</li>
+     *   <li>If both values are non-blank and differ, a selection dialog lets the
+     *       operator choose or edit the value to retain.</li>
+     * </ul>
+     * The first card (lower index) is the target that receives the merged data;
+     * the second (duplicate) is removed once the merge is confirmed.</p>
+     */
+    private void mergeDuplicates() {
+        int mergedCount = 0;
+
+        // Walk through the list looking for cards with the same effective name.
+        // Iterate from the beginning; after each merge restart the scan because
+        // indices have changed.
+        outer:
+        while (true) {
+            List<TCard> current = tableModel.getCards();
+            for (int i = 0; i < current.size(); i++) {
+                TCard a = current.get(i);
+                String nameA = effectiveName(a).toLowerCase();
+                if (nameA.isBlank()) {
+                    continue;
+                }
+                for (int j = i + 1; j < current.size(); j++) {
+                    TCard b = current.get(j);
+                    if (!nameA.equals(effectiveName(b).toLowerCase())) {
+                        continue;
+                    }
+                    // Found a duplicate pair (a, b). Show the merge dialog.
+                    int[] outcome = new int[1]; // 0=merged, 1=skip, 2=cancel
+                    TCard merged = showMergeDialog(a, b, outcome);
+                    if (outcome[0] == 2) {
+                        break outer; // user cancelled all
+                    }
+                    if (outcome[0] == 1 || merged == null) {
+                        continue; // skip this pair; continue scanning
+                    }
+                    // Replace a with the merged card and remove b.
+                    tableModel.replaceCard(i, merged);
+                    tableModel.removeCard(j);
+                    mergedCount++;
+                    continue outer; // restart after structural change
+                }
+            }
+            break; // no more pairs found
+        }
+
+        if (mergedCount == 0) {
+            JOptionPane.showMessageDialog(this,
+                    "No duplicate T-cards (by name) found.",
+                    "Merge Duplicates", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            controller.markDirty();
+            refreshFromModel();
+            JOptionPane.showMessageDialog(this,
+                    mergedCount + " duplicate pair(s) merged.",
+                    "Merge Duplicates", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    /** Returns the effective name used for duplicate detection. */
+    private static String effectiveName(TCard card) {
+        String name = card.getPersonName();
+        if (!name.isBlank()) return name.trim();
+        name = card.getResourceIdentifier();
+        return name == null ? "" : name.trim();
+    }
+
+    /**
+     * Opens a field-by-field merge dialog for two T-cards with the same name.
+     *
+     * <p>Each field is shown as a row with "Card A" and "Card B" values. Where
+     * both values are non-blank and differ, the operator can select which to keep
+     * (or edit the value directly). Where values are the same or one is blank the
+     * row is pre-resolved automatically and displayed read-only.</p>
+     *
+     * @param a       target card (will receive merged data).
+     * @param b       duplicate card (will be removed on confirmation).
+     * @param outcome single-element array set to: 0=merge confirmed, 1=skip, 2=cancel all.
+     * @return a new merged card when outcome is 0, {@code null} otherwise.
+     */
+    private TCard showMergeDialog(TCard a, TCard b, int[] outcome) {
+        // Define the fields to compare.
+        String[] fieldLabels = {
+            "Card type", "Person name", "Home agency", "Home state",
+            "Phone", "Radio channel", "Resource identifier", "Location",
+            "Status", "Notes", "Handler/operator"
+        };
+        String[] valuesA = {
+            a.getCardType().getLabel(),
+            a.getPersonName(), a.getHomeAgency(), a.getHomeState(),
+            a.getPhoneNumber(), a.getRadioChannel(), a.getResourceIdentifier(),
+            a.getLocation(), a.getStatus(), a.getNotes(), a.getHandlerName()
+        };
+        String[] valuesB = {
+            b.getCardType().getLabel(),
+            b.getPersonName(), b.getHomeAgency(), b.getHomeState(),
+            b.getPhoneNumber(), b.getRadioChannel(), b.getResourceIdentifier(),
+            b.getLocation(), b.getStatus(), b.getNotes(), b.getHandlerName()
+        };
+
+        int fieldCount = fieldLabels.length;
+        // For each field: auto-resolved value (null when conflict requires user choice).
+        String[] autoResolved = new String[fieldCount];
+        // True when the field is a conflict requiring user input.
+        boolean[] isConflict = new boolean[fieldCount];
+        JTextField[] editFields = new JTextField[fieldCount];
+        // Radio buttons: 0 = A, 1 = B; only created for conflict rows.
+        javax.swing.ButtonGroup[] groups = new javax.swing.ButtonGroup[fieldCount];
+        javax.swing.JRadioButton[] radioA = new javax.swing.JRadioButton[fieldCount];
+        javax.swing.JRadioButton[] radioB = new javax.swing.JRadioButton[fieldCount];
+
+        for (int i = 0; i < fieldCount; i++) {
+            String va = valuesA[i] == null ? "" : valuesA[i].trim();
+            String vb = valuesB[i] == null ? "" : valuesB[i].trim();
+            if (va.equalsIgnoreCase(vb)) {
+                autoResolved[i] = va;
+            } else if (va.isBlank()) {
+                autoResolved[i] = vb;
+            } else if (vb.isBlank()) {
+                autoResolved[i] = va;
+            } else {
+                isConflict[i] = true;
+            }
+        }
+
+        // Build the dialog panel.
+        JPanel panel = new JPanel(new java.awt.GridBagLayout());
+        java.awt.GridBagConstraints gbc = new java.awt.GridBagConstraints();
+        gbc.insets = new java.awt.Insets(2, 4, 2, 4);
+        gbc.anchor = java.awt.GridBagConstraints.WEST;
+
+        // Header row.
+        gbc.gridy = 0; gbc.gridx = 0; gbc.weightx = 0;
+        panel.add(boldLabel("Field"), gbc);
+        gbc.gridx = 1; gbc.weightx = 0.4;
+        panel.add(boldLabel("Card A — " + effectiveName(a)), gbc);
+        gbc.gridx = 2; gbc.weightx = 0.4;
+        panel.add(boldLabel("Card B — " + effectiveName(b)), gbc);
+        gbc.gridx = 3; gbc.weightx = 0.2;
+        panel.add(boldLabel("Keep"), gbc);
+
+        for (int i = 0; i < fieldCount; i++) {
+            int row = i + 1;
+            gbc.gridy = row; gbc.gridx = 0; gbc.weightx = 0;
+            panel.add(new JLabel(fieldLabels[i] + ":"), gbc);
+
+            gbc.gridx = 1; gbc.weightx = 0.4;
+            JLabel lblA = new JLabel("<html>" + htmlEscape(valuesA[i]) + "</html>");
+            panel.add(lblA, gbc);
+
+            gbc.gridx = 2; gbc.weightx = 0.4;
+            JLabel lblB = new JLabel("<html>" + htmlEscape(valuesB[i]) + "</html>");
+            panel.add(lblB, gbc);
+
+            gbc.gridx = 3; gbc.weightx = 0.2;
+            if (isConflict[i]) {
+                // Show radio buttons A / B plus an editable override field.
+                groups[i] = new javax.swing.ButtonGroup();
+                radioA[i] = new javax.swing.JRadioButton("A");
+                radioB[i] = new javax.swing.JRadioButton("B");
+                radioA[i].setSelected(true);
+                groups[i].add(radioA[i]);
+                groups[i].add(radioB[i]);
+                editFields[i] = new JTextField(valuesA[i], 12);
+                // Capture effectively-final references for use in lambdas.
+                final JTextField editField = editFields[i];
+                final String va = valuesA[i];
+                final String vb = valuesB[i];
+                // Selecting a radio button copies its value into the edit field.
+                radioA[i].addActionListener(e -> editField.setText(va));
+                radioB[i].addActionListener(e -> editField.setText(vb));
+                JPanel conflictPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+                conflictPanel.add(radioA[i]);
+                conflictPanel.add(radioB[i]);
+                conflictPanel.add(editFields[i]);
+                panel.add(conflictPanel, gbc);
+            } else {
+                panel.add(new JLabel(autoResolved[i].isBlank() ? "—" : autoResolved[i]), gbc);
+            }
+        }
+
+        JScrollPane scroll = new JScrollPane(panel);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.setPreferredSize(new Dimension(720, 360));
+
+        String[] options = {"Merge", "Skip this pair", "Cancel all"};
+        int choice = JOptionPane.showOptionDialog(
+                javax.swing.SwingUtilities.getWindowAncestor(this),
+                scroll,
+                "Merge duplicate T-cards: " + effectiveName(a),
+                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE,
+                null, options, options[0]);
+
+        if (choice == 2 || choice == JOptionPane.CLOSED_OPTION) {
+            outcome[0] = 2; // cancel all
+            return null;
+        }
+        if (choice == 1) {
+            outcome[0] = 1; // skip this pair
+            return null;
+        }
+        outcome[0] = 0; // merge confirmed
+
+        // Build the merged card: start from a copy of card A.
+        TCard merged = copyCard(a);
+        for (int i = 0; i < fieldCount; i++) {
+            String resolved = isConflict[i] ? editFields[i].getText().trim() : autoResolved[i];
+            applyMergedField(merged, i, resolved);
+        }
+        // Preserve check-in date from whichever card has one; prefer A.
+        if (merged.getCheckInDateTime() == null && b.getCheckInDateTime() != null) {
+            merged.setCheckInDateTime(b.getCheckInDateTime());
+        }
+        // Preserve sourceRef: keep the non-blank one, preferring A.
+        if (merged.getSourceRef().isBlank() && !b.getSourceRef().isBlank()) {
+            merged.setSourceRef(b.getSourceRef());
+        }
+        return merged;
+    }
+
+    /**
+     * Applies a resolved field value back to the merged card.
+     *
+     * @param merged   card being built.
+     * @param fieldIdx index matching the {@code fieldLabels} array in {@link #showMergeDialog}.
+     * @param value    resolved value to apply.
+     */
+    private static void applyMergedField(TCard merged, int fieldIdx, String value) {
+        switch (fieldIdx) {
+            case 0 -> {
+                // Card type: find the TCardType whose label matches.
+                for (TCardType t : TCardType.values()) {
+                    if (t.getLabel().equalsIgnoreCase(value)) {
+                        merged.setCardType(t);
+                        break;
+                    }
+                }
+            }
+            case 1  -> merged.setPersonName(value);
+            case 2  -> merged.setHomeAgency(value);
+            case 3  -> merged.setHomeState(value);
+            case 4  -> merged.setPhoneNumber(value);
+            case 5  -> merged.setRadioChannel(value);
+            case 6  -> merged.setResourceIdentifier(value);
+            case 7  -> merged.setLocation(value);
+            case 8  -> merged.setStatus(value);
+            case 9  -> merged.setNotes(value);
+            case 10 -> merged.setHandlerName(value);
+            default -> { /* no-op */ }
+        }
+    }
+
+    private static JLabel boldLabel(String text) {
+        JLabel lbl = new JLabel(text);
+        lbl.setFont(lbl.getFont().deriveFont(Font.BOLD));
+        return lbl;
+    }
+
+    private static String htmlEscape(String s) {
+        if (s == null || s.isBlank()) return "<i>(blank)</i>";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     // -------------------------------------------------------------------------
