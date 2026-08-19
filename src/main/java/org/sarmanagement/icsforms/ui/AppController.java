@@ -675,24 +675,9 @@ public class AppController {
                 byName.putIfAbsent(leaderName.trim().toLowerCase(), card);
                 applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
 
-                // For canine tasks the resource identifier is the canine call sign.
-                // Maintain a separate EQUIPMENT card for the animal, linked to the handler.
-                if (isCanineTask) {
-                    String canineId = safe(task.getResourceIdentifier());
-                    if (!canineId.isBlank()) {
-                        String canineRef = "sar:" + assignmentId + ":canine";
-                        TCard canineCard = findOrCreateEquipmentCard(canineRef, canineId, byRef, byEquipmentId);
-                        canineCard.setCardType(TCardType.EQUIPMENT);
-                        canineCard.setResourceIdentifier(canineId);
-                        canineCard.setHandlerName(leaderName);
-                        canineCard.setSourceRef(canineCard.getSourceRef().isBlank() ? canineRef : canineCard.getSourceRef());
-                        canineCard.setNotes(notePreserving(canineCard.getNotes(),
-                                "Canine — " + safe(task.getAssignmentTeamNumber())));
-                        wanted.put(canineRef, canineCard);
-                        byEquipmentId.putIfAbsent(canineId.toLowerCase(), canineCard);
-                        applyHigherPriorityStatus(taskDrivenStatus, canineCard, lifecycleCardStatus);
-                    }
-                }
+                // For canine tasks, the canine T-card is added via the resources-assigned
+                // list (picked by the operator), not synthesised from the task identifier.
+                // Handler linking is performed when iterating resourcesAssigned below.
             }
             // Assigned resources
             List<SarTaskResource> resources = task.getResourcesAssigned();
@@ -929,6 +914,32 @@ public class AppController {
             }
         }
         return result;
+    }
+
+    /**
+     * Returns a sorted list of all known resource names (personnel names and equipment
+     * identifiers) from the current T-card rack.  Used to populate pick lists in the
+     * SAR task editor's Resources Assigned table.
+     *
+     * @return sorted list of non-blank resource names/identifiers.
+     */
+    public List<String> getAvailableResourceNames() {
+        List<String> names = new ArrayList<>();
+        for (TCard card : data.getTCards()) {
+            if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+                String rid = card.getResourceIdentifier().trim();
+                if (!rid.isBlank()) {
+                    names.add(rid);
+                }
+            } else {
+                String n = card.getPersonName().trim();
+                if (!n.isBlank()) {
+                    names.add(n);
+                }
+            }
+        }
+        names.sort(String.CASE_INSENSITIVE_ORDER);
+        return names;
     }
 
     /** Creates or updates a single org-chart staff T-card. */

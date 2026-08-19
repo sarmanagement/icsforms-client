@@ -345,7 +345,8 @@ public class SarTaskPanel extends JPanel {
         task.setAssignmentId(UUID.randomUUID().toString());
         SarTaskEditor editor = new SarTaskEditor(task, EditorMode.ASSIGNMENT,
                 controller.getData().getClueLogEntries(), 1,
-                handlerName -> controller.findEquipmentForHandler(handlerName));
+                handlerName -> controller.findEquipmentForHandler(handlerName),
+                controller.getAvailableResourceNames());
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(this, "Add SAR Task", scrollPane,
@@ -508,7 +509,8 @@ public class SarTaskPanel extends JPanel {
         SarTaskAssignment row = tableModel.getRows().get(rowIndex);
         SarTaskEditor editor = new SarTaskEditor(row, mode, controller.getData().getClueLogEntries(),
                 defaultResourceEditorRowCount(row),
-                handlerName -> controller.findEquipmentForHandler(handlerName));
+                handlerName -> controller.findEquipmentForHandler(handlerName),
+                controller.getAvailableResourceNames());
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         String title = mode.dialogTitle(row.getAssignmentTeamNumber());
@@ -625,11 +627,28 @@ public class SarTaskPanel extends JPanel {
         return area;
     }
 
-    private static JPanel resourceEditorPanel(SarTaskAssignment row, ResourceEntriesTableModel model, int minimumRows) {
+    private static JPanel resourceEditorPanel(SarTaskAssignment row, ResourceEntriesTableModel model,
+                                               int minimumRows, List<String> availableNames) {
         model.setRows(editableResources(row), minimumRows);
         JTable table = new JTable(model);
         table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         table.setFillsViewportHeight(true);
+
+        // Install an editable combo-box cell editor on the Name column so that the
+        // operator can pick from the existing T-card roster or type a new name freely.
+        if (availableNames != null && !availableNames.isEmpty()) {
+            JComboBox<String> namePickList = new JComboBox<>(availableNames.toArray(String[]::new));
+            namePickList.setEditable(true);
+            namePickList.setSelectedItem(null);
+            javax.swing.DefaultCellEditor nameEditor = new javax.swing.DefaultCellEditor(namePickList) {
+                @Override
+                public Object getCellEditorValue() {
+                    Object selected = namePickList.getEditor().getItem();
+                    return selected == null ? "" : selected.toString();
+                }
+            };
+            table.getColumnModel().getColumn(1).setCellEditor(nameEditor);
+        }
 
         JScrollPane scrollPane = new JScrollPane(table);
         scrollPane.setPreferredSize(new Dimension(RESOURCE_EDITOR_WIDTH,
@@ -1126,7 +1145,8 @@ public class SarTaskPanel extends JPanel {
 
         private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries,
                               int resourceRowCount,
-                              java.util.function.Function<String, java.util.List<String>> canineForHandler) {
+                              java.util.function.Function<String, java.util.List<String>> canineForHandler,
+                              List<String> availableResourceNames) {
             this.mode = mode;
             assignmentTeamNumberField = textField(row.getAssignmentTeamNumber(), true);
             resourceTypeField = new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new));
@@ -1196,7 +1216,7 @@ public class SarTaskPanel extends JPanel {
                     "Resource: " + safeValue(row.getResourceIdentifier()));
             operationsField = textArea(SarTaskTableModel.joinOperations(row), 2, false);
             contextField = textArea(SarTaskTableModel.joinContext(row), 2, false);
-            resourcesAssignedField = resourceEditorPanel(row, resourceEntryTableModel, resourceRowCount);
+            resourcesAssignedField = resourceEditorPanel(row, resourceEntryTableModel, resourceRowCount, availableResourceNames);
             assignmentField = textArea(row.getAssignment(), 3, true);
             transportationField = textArea(row.getTransportationInstructions(), 2, true);
             taskMapField = textField(row.getTaskMap(), true, 14);
