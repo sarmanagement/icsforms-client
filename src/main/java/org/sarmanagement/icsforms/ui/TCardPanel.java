@@ -47,6 +47,7 @@ import java.util.Date;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -783,13 +784,13 @@ public class TCardPanel extends JPanel {
             List<TCard> current = tableModel.getCards();
             for (int i = 0; i < current.size(); i++) {
                 TCard a = current.get(i);
-                String nameA = effectiveName(a).toLowerCase();
+                String nameA = effectiveName(a).toLowerCase(Locale.ROOT);
                 if (nameA.isBlank()) {
                     continue;
                 }
                 for (int j = i + 1; j < current.size(); j++) {
                     TCard b = current.get(j);
-                    if (!nameA.equals(effectiveName(b).toLowerCase())) {
+                    if (!nameA.equals(effectiveName(b).toLowerCase(Locale.ROOT))) {
                         continue;
                     }
                     // Found a duplicate pair (a, b). Show the merge dialog.
@@ -958,12 +959,12 @@ public class TCardPanel extends JPanel {
                 JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE,
                 null, options, options[0]);
 
-        if (choice == 2 || choice == JOptionPane.CLOSED_OPTION) {
+        if (choice == 2) {
             outcome[0] = 2; // cancel all
             return null;
         }
-        if (choice == 1) {
-            outcome[0] = 1; // skip this pair
+        if (choice == 1 || choice == JOptionPane.CLOSED_OPTION) {
+            outcome[0] = 1; // skip this pair (dismissing the window = skip, not cancel all)
             return null;
         }
         outcome[0] = 0; // merge confirmed
