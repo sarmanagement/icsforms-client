@@ -37,6 +37,32 @@ final class UiSupport {
     static final Color REQUIRED_FIELD_BACKGROUND = new Color(255, 248, 225);
     private static final String FORM_SPACER_PROPERTY = "uiSupport.formSpacer";
 
+    /**
+     * When set to a future timestamp, all autocomplete suggestion popups are suppressed until
+     * that time has passed.  This covers both the {@code DocumentListener} path (which fires
+     * when {@code setText()} is called during a model refresh) and the {@code focusGained}
+     * path (which fires when the tab panel programmatically moves focus to the first field).
+     * See {@link #suppressSuggestionsFor(long)}.
+     */
+    private static volatile long suppressSuggestionsUntil = 0;
+
+    /**
+     * Suppresses all autocomplete suggestion popups for the given duration.  Call this
+     * immediately before any batch of programmatic {@code setText()} calls on fields that
+     * have autocomplete installed (e.g. at the start of {@code refreshFromModel()}), so
+     * that neither the document-change trigger nor the focus-gained trigger opens the popup
+     * during a tab switch.  Normal user interaction resumes once the window expires.
+     *
+     * @param durationMs how long (in ms from now) to suppress suggestions.
+     */
+    static void suppressSuggestionsFor(long durationMs) {
+        suppressSuggestionsUntil = System.currentTimeMillis() + durationMs;
+    }
+
+    private static boolean isSuggestionsSuppressed() {
+        return System.currentTimeMillis() < suppressSuggestionsUntil;
+    }
+
     private UiSupport() {
     }
 
@@ -297,6 +323,7 @@ final class UiSupport {
 
             private void update() {
                 if (updating[0]) return;
+                if (isSuggestionsSuppressed()) return;
                 // Only show while typing when text is non-empty.
                 String text = nameField.getText().trim();
                 if (text.isEmpty()) {
@@ -307,17 +334,16 @@ final class UiSupport {
             }
         };
         nameField.getDocument().addDocumentListener(listener);
-        // Show suggestions when the user clicks directly into the field (MOUSE_EVENT cause only).
-        // Tab-key traversal and programmatic focus changes (tab switching, activation) must NOT
-        // open the popup — only explicit mouse clicks should trigger it on an already-filled field.
-        nameField.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override public void mouseClicked(java.awt.event.MouseEvent e) {
-                if (!suggestions.get().isEmpty()) {
+        nameField.addFocusListener(new FocusAdapter() {
+            @Override public void focusGained(FocusEvent e) {
+                // Show suggestions when the user navigates to the field (mouse click or keyboard
+                // Tab traversal), but not when the tab panel moves focus programmatically during
+                // a model refresh.  The suppression flag is set by refreshFromModel() callers
+                // before setText() calls, so it covers both the DocumentListener and this handler.
+                if (!isSuggestionsSuppressed() && !suggestions.get().isEmpty()) {
                     showSuggestions.run();
                 }
             }
-        });
-        nameField.addFocusListener(new FocusAdapter() {
             @Override public void focusLost(FocusEvent e) { popup.setVisible(false); }
         });
     }
