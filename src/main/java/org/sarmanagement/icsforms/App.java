@@ -41,7 +41,7 @@ public final class App {
             Path homeDir = Path.of(System.getProperty("user.home"));
             Path defaultDir = homeDir.resolve(".icsforms");
 
-            StartupDialog startup = new StartupDialog(null, defaultDir);
+            StartupDialog startup = new StartupDialog(null, defaultDir, true);
             startup.setVisible(true);
 
             // The dialog is modal; execution continues here after it is dismissed.

@@ -19,12 +19,13 @@ import java.awt.Frame;
 import java.nio.file.Path;
 
 /**
- * Modal startup dialog presented when the application launches.
+ * Modal startup dialog presented when the application launches or when File → New is chosen.
  *
  * <p>The operator selects an action (start a new incident in one of the three phases, open an
  * existing incident, or open an existing incident and advance to a new operational period) and
- * chooses the incident mode (SAR or Generic).  The dialog is dismissed when an action button is
- * clicked or when the window is closed, in which case the application exits.</p>
+ * chooses the incident mode (SAR or Generic).  When {@code exitOnClose} is {@code true} (the
+ * default for application startup) dismissing the dialog without a selection terminates the JVM;
+ * when {@code false} (used from the File → New menu action) it simply disposes the dialog.</p>
  */
 public class StartupDialog extends JDialog {
 
@@ -45,15 +46,19 @@ public class StartupDialog extends JDialog {
     private StartupAction chosenAction;
     private IncidentMode chosenMode = IncidentMode.SAR;
     private Path chosenPath;
+    private final boolean exitOnClose;
 
     /**
      * Creates the startup dialog.
      *
-     * @param owner owning frame (may be {@code null}).
-     * @param defaultDirectory directory offered to the file chooser.
+     * @param owner          owning frame (may be {@code null}).
+     * @param defaultDirectory directory offered to the incident picker and file chooser.
+     * @param exitOnClose    when {@code true}, closing without a selection terminates the JVM;
+     *                       when {@code false}, the dialog is simply disposed (used from File → New).
      */
-    public StartupDialog(Frame owner, Path defaultDirectory) {
+    public StartupDialog(Frame owner, Path defaultDirectory, boolean exitOnClose) {
         super(owner, "ICS Forms Desktop — Start", true);
+        this.exitOnClose = exitOnClose;
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
         JPanel content = new JPanel(new BorderLayout(12, 12));
@@ -67,11 +72,13 @@ public class StartupDialog extends JDialog {
         setMinimumSize(new Dimension(480, getHeight()));
         setLocationRelativeTo(owner);
 
-        // Exit the application if the dialog is closed without choosing an action.
+        // Exit the application if the dialog is closed without choosing an action at startup.
         addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
             public void windowClosing(java.awt.event.WindowEvent event) {
-                System.exit(0);
+                if (exitOnClose) {
+                    System.exit(0);
+                }
             }
         });
     }
@@ -157,7 +164,7 @@ public class StartupDialog extends JDialog {
         button.setAlignmentX(LEFT_ALIGNMENT);
         button.addActionListener(event -> {
             if (action == StartupAction.OPEN_EXISTING || action == StartupAction.OPEN_NEW_PERIOD) {
-                Path chosen = chooseFile(defaultDirectory);
+                Path chosen = pickIncident(defaultDirectory);
                 if (chosen == null) {
                     return;
                 }
@@ -179,17 +186,10 @@ public class StartupDialog extends JDialog {
         return row;
     }
 
-    private Path chooseFile(Path defaultDirectory) {
-        javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
-        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON files", "json"));
-        if (defaultDirectory != null && defaultDirectory.toFile().exists()) {
-            chooser.setCurrentDirectory(defaultDirectory.toFile());
-        }
-        int result = chooser.showOpenDialog(this);
-        if (result == javax.swing.JFileChooser.APPROVE_OPTION) {
-            return chooser.getSelectedFile().toPath();
-        }
-        return null;
+    private Path pickIncident(Path defaultDirectory) {
+        IncidentPickerDialog picker = new IncidentPickerDialog(this, defaultDirectory);
+        picker.setVisible(true);
+        return picker.getChosenPath();
     }
 
     private JPanel buildModePanel() {

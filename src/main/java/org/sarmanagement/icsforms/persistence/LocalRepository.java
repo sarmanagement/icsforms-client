@@ -9,6 +9,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * JSON-backed local persistence for the first-cut desktop workspace.
@@ -106,5 +110,47 @@ public class LocalRepository {
      */
     public Path getFilePath() {
         return filePath;
+    }
+
+    /**
+     * Scans a directory for JSON workspace files and returns a lightweight summary for each one,
+     * sorted by last-modified time (most recent first).
+     *
+     * <p>Files that cannot be read are silently skipped.  Backup ({@code .bak}) files are
+     * excluded.</p>
+     *
+     * @param directory directory to scan; returns an empty list when the directory does not exist.
+     * @return list of incident summaries sorted by last-modified descending.
+     */
+    public static List<IncidentSummary> listLocalIncidents(Path directory) {
+        if (!Files.isDirectory(directory)) {
+            return List.of();
+        }
+        ObjectMapper mapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        List<IncidentSummary> results = new ArrayList<>();
+        try (var stream = Files.list(directory)) {
+            stream.filter(p -> p.toString().endsWith(".json"))
+                  .forEach(p -> {
+                      try {
+                          Instant modified = Files.getLastModifiedTime(p).toInstant();
+                          org.sarmanagement.icsforms.model.AppData data = mapper.readValue(p.toFile(),
+                                  org.sarmanagement.icsforms.model.AppData.class);
+                          String name = "";
+                          if (data.getIncidentContext() != null) {
+                              name = data.getIncidentContext().getIncidentName();
+                          }
+                          org.sarmanagement.icsforms.model.IapPhase phase = data.getIapPhase();
+                          results.add(new IncidentSummary(p, name, phase, modified));
+                      } catch (IOException ignored) {
+                          // skip unreadable or non-incident files
+                      }
+                  });
+        } catch (IOException ignored) {
+            // directory listing failure — return whatever was gathered so far
+        }
+        results.sort(Comparator.comparing(IncidentSummary::lastModified).reversed());
+        return results;
     }
 }

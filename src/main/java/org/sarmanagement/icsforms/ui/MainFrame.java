@@ -154,17 +154,46 @@ public class MainFrame extends JFrame {
         JMenu configMenu = new JMenu("Configuration");
         JMenu logsListMenu = new JMenu("Go to Log");
 
-        JMenuItem newItem = new JMenuItem("New");
+        JMenuItem newItem = new JMenuItem("New…");
         newItem.addActionListener(event -> {
-            controller.newDocument();
+            StartupDialog startup = new StartupDialog(MainFrame.this, defaultDirectory, false);
+            startup.setVisible(true);
+            StartupDialog.StartupAction action = startup.getChosenAction();
+            if (action == null) {
+                return; // cancelled
+            }
+            switch (action) {
+                case OPEN_EXISTING -> {
+                    controller.open(startup.getChosenPath());
+                }
+                case OPEN_NEW_PERIOD -> {
+                    controller.open(startup.getChosenPath());
+                    controller.newOperationalPeriod();
+                }
+                default -> {
+                    controller.newDocument();
+                    IapPhase phase = switch (action) {
+                        case NEW_INITIAL_RESPONSE -> IapPhase.INITIAL_RESPONSE;
+                        case NEW_OPERATIONAL_PERIOD -> IapPhase.DURING_OP;
+                        default -> IapPhase.PRE_OP;
+                    };
+                    controller.setIapPhase(phase);
+                    controller.setIncidentMode(startup.getChosenMode());
+                }
+            }
             refreshFromModel();
         });
 
         JMenuItem openItem = new JMenuItem("Open…");
-        openItem.addActionListener(event -> chooseFile(defaultDirectory, false, path -> {
-            controller.open(path);
-            refreshFromModel();
-        }));
+        openItem.addActionListener(event -> {
+            IncidentPickerDialog picker = new IncidentPickerDialog(MainFrame.this, defaultDirectory);
+            picker.setVisible(true);
+            Path chosen = picker.getChosenPath();
+            if (chosen != null) {
+                controller.open(chosen);
+                refreshFromModel();
+            }
+        });
 
         JMenuItem saveItem = new JMenuItem("Save");
         saveItem.addActionListener(event -> {
