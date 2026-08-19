@@ -287,9 +287,9 @@ class SarTaskPanelTest {
         Class<?> editorClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$SarTaskEditor");
         Class<?> modeClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$EditorMode");
         Object mode = enumConstant(modeClass, modeName);
-        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass, List.class, int.class);
+        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass, List.class, int.class, java.util.function.Function.class);
         constructor.setAccessible(true);
-        return constructor.newInstance(task, mode, List.of(), resourceRows);
+        return constructor.newInstance(task, mode, List.of(), resourceRows, null);
     }
 
     private static Object enumConstant(Class<?> enumClass, String name) {

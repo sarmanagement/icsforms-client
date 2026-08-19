@@ -14,6 +14,7 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
@@ -343,7 +344,8 @@ public class SarTaskPanel extends JPanel {
         SarTaskAssignment task = new SarTaskAssignment();
         task.setAssignmentId(UUID.randomUUID().toString());
         SarTaskEditor editor = new SarTaskEditor(task, EditorMode.ASSIGNMENT,
-                controller.getData().getClueLogEntries(), 1);
+                controller.getData().getClueLogEntries(), 1,
+                handlerName -> controller.findEquipmentForHandler(handlerName));
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(this, "Add SAR Task", scrollPane,
@@ -505,7 +507,8 @@ public class SarTaskPanel extends JPanel {
         }
         SarTaskAssignment row = tableModel.getRows().get(rowIndex);
         SarTaskEditor editor = new SarTaskEditor(row, mode, controller.getData().getClueLogEntries(),
-                defaultResourceEditorRowCount(row));
+                defaultResourceEditorRowCount(row),
+                handlerName -> controller.findEquipmentForHandler(handlerName));
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         String title = mode.dialogTitle(row.getAssignmentTeamNumber());
@@ -1121,7 +1124,9 @@ public class SarTaskPanel extends JPanel {
         private final JScrollPane areasNotCoveredField;
         private final JScrollPane hazardsObservedField;
 
-        private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries, int resourceRowCount) {
+        private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries,
+                              int resourceRowCount,
+                              java.util.function.Function<String, java.util.List<String>> canineForHandler) {
             this.mode = mode;
             assignmentTeamNumberField = textField(row.getAssignmentTeamNumber(), true);
             resourceTypeField = new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new));
@@ -1137,6 +1142,49 @@ public class SarTaskPanel extends JPanel {
             leaderRoleField = textField(row.getLeaderRole(), false);
             leaderField = textField(row.getLeader(), false);
             contactField = textField(row.getContact(), false);
+
+            // When the leader field loses focus and the resource type is Canine, check
+            // whether that handler has a linked canine T-card and offer to pre-fill the
+            // resource identifier if the field is still blank.
+            if (canineForHandler != null) {
+                leaderField.addFocusListener(new java.awt.event.FocusAdapter() {
+                    @Override
+                    public void focusLost(java.awt.event.FocusEvent e) {
+                        if (!SarTaskSupport.usesCanineFactors(selectedComboValue(resourceTypeField))) {
+                            return;
+                        }
+                        if (!resourceIdentifierField.getText().trim().isEmpty()) {
+                            return;
+                        }
+                        String handler = leaderField.getText().trim();
+                        if (handler.isEmpty()) {
+                            return;
+                        }
+                        java.util.List<String> linked = canineForHandler.apply(handler);
+                        if (linked.isEmpty()) {
+                            return;
+                        }
+                        // Single linked canine: auto-fill silently.
+                        if (linked.size() == 1) {
+                            resourceIdentifierField.setText(linked.get(0));
+                            return;
+                        }
+                        // Multiple linked canines: show a chooser.
+                        String chosen = (String) JOptionPane.showInputDialog(
+                                leaderField,
+                                "Select the canine resource for handler " + handler + ":",
+                                "Linked canine",
+                                JOptionPane.PLAIN_MESSAGE,
+                                null,
+                                linked.toArray(),
+                                linked.get(0));
+                        if (chosen != null) {
+                            resourceIdentifierField.setText(chosen);
+                        }
+                    }
+                });
+            }
+
             assignmentSummaryField = inlineSummaryPanel(2,
                     "Incident: " + safeValue(row.getIncidentName()),
                     "Resource: " + safeValue(row.getResourceIdentifier()),

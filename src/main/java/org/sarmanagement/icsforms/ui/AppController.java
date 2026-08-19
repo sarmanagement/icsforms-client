@@ -10,6 +10,7 @@ import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
@@ -560,6 +561,18 @@ public class AppController {
             }
         }
 
+        // Build a resourceIdentifier → card map for equipment/canine cards so that
+        // SAR task resources can be matched back to existing EQUIPMENT T-cards.
+        Map<String, TCard> byEquipmentId = new LinkedHashMap<>();
+        for (TCard card : cards) {
+            if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+                String rid = card.getResourceIdentifier().trim().toLowerCase();
+                if (!rid.isBlank()) {
+                    byEquipmentId.putIfAbsent(rid, card);
+                }
+            }
+        }
+
         // Collect the set of sourceRefs that should exist after this sync.
         Map<String, TCard> wanted = new LinkedHashMap<>();
 
@@ -649,6 +662,7 @@ public class AppController {
             String lifecycleCardStatus = lifecycleToCardStatus(task.getTaskLifecycleStatus());
             // Task leader
             String leaderName = safe(task.getLeader());
+            boolean isCanineTask = SarTaskSupport.usesCanineFactors(task.getResourceType());
             if (!leaderName.isBlank()) {
                 String ref = "sar:" + assignmentId + ":leader";
                 TCard card = findOrCreatePersonCard(ref, leaderName, byRef, byName, wanted);
@@ -660,6 +674,25 @@ public class AppController {
                 wanted.put(ref, card);
                 byName.putIfAbsent(leaderName.trim().toLowerCase(), card);
                 applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+
+                // For canine tasks the resource identifier is the canine call sign.
+                // Maintain a separate EQUIPMENT card for the animal, linked to the handler.
+                if (isCanineTask) {
+                    String canineId = safe(task.getResourceIdentifier());
+                    if (!canineId.isBlank()) {
+                        String canineRef = "sar:" + assignmentId + ":canine";
+                        TCard canineCard = findOrCreateEquipmentCard(canineRef, canineId, byRef, byEquipmentId);
+                        canineCard.setCardType(TCardType.EQUIPMENT);
+                        canineCard.setResourceIdentifier(canineId);
+                        canineCard.setHandlerName(leaderName);
+                        canineCard.setSourceRef(canineCard.getSourceRef().isBlank() ? canineRef : canineCard.getSourceRef());
+                        canineCard.setNotes(notePreserving(canineCard.getNotes(),
+                                "Canine — " + safe(task.getAssignmentTeamNumber())));
+                        wanted.put(canineRef, canineCard);
+                        byEquipmentId.putIfAbsent(canineId.toLowerCase(), canineCard);
+                        applyHigherPriorityStatus(taskDrivenStatus, canineCard, lifecycleCardStatus);
+                    }
+                }
             }
             // Assigned resources
             List<SarTaskResource> resources = task.getResourcesAssigned();
@@ -671,15 +704,34 @@ public class AppController {
                         continue;
                     }
                     String ref = "sar:" + assignmentId + ":r:" + i;
-                    TCard card = findOrCreatePersonCard(ref, resName, byRef, byName, wanted);
-                    card.setPersonName(resName);
-                    card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
-                    card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
-                    card.setNotes(notePreserving(card.getNotes(),
-                            safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
-                    wanted.put(ref, card);
-                    byName.putIfAbsent(resName.trim().toLowerCase(), card);
-                    applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+                    // If the resource name matches an existing equipment card (e.g. a canine
+                    // call sign already tracked above or manually created), preserve its type.
+                    TCard equipCard = byEquipmentId.get(resName.trim().toLowerCase());
+                    TCard card;
+                    if (equipCard != null) {
+                        card = equipCard;
+                        if (card.getSourceRef().isBlank()) {
+                            card.setSourceRef(ref);
+                        }
+                        // Ensure the handler link is set when the task is a canine task.
+                        if (isCanineTask && !leaderName.isBlank() && card.getHandlerName().isBlank()) {
+                            card.setHandlerName(leaderName);
+                        }
+                        card.setNotes(notePreserving(card.getNotes(),
+                                safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
+                        wanted.put(ref, card);
+                        applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+                    } else {
+                        card = findOrCreatePersonCard(ref, resName, byRef, byName, wanted);
+                        card.setPersonName(resName);
+                        card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
+                        card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
+                        card.setNotes(notePreserving(card.getNotes(),
+                                safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
+                        wanted.put(ref, card);
+                        byName.putIfAbsent(resName.trim().toLowerCase(), card);
+                        applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+                    }
                 }
             }
         }
@@ -825,6 +877,58 @@ public class AppController {
             return byName.get(nameKey);
         }
         return newPersonnelCard(personName);
+    }
+
+    /**
+     * Finds an existing equipment T-card for {@code resourceId} or creates a new one.
+     *
+     * <p>Lookup priority:
+     * <ol>
+     *   <li>Card already registered under {@code ref} in {@code byRef}.</li>
+     *   <li>Card in {@code byEquipmentId} matched by resource identifier.</li>
+     *   <li>New blank EQUIPMENT card.</li>
+     * </ol>
+     */
+    private TCard findOrCreateEquipmentCard(String ref, String resourceId,
+                                             Map<String, TCard> byRef,
+                                             Map<String, TCard> byEquipmentId) {
+        if (byRef.containsKey(ref)) {
+            return byRef.get(ref);
+        }
+        String idKey = resourceId.trim().toLowerCase();
+        if (byEquipmentId.containsKey(idKey)) {
+            return byEquipmentId.get(idKey);
+        }
+        TCard card = new TCard();
+        card.setCardType(TCardType.EQUIPMENT);
+        card.setResourceIdentifier(resourceId);
+        return card;
+    }
+
+    /**
+     * Returns the resource identifiers of all EQUIPMENT T-cards whose {@code handlerName}
+     * matches {@code handlerName} (case-insensitive).  Used by the SAR task editor to
+     * suggest the handler's linked canine when creating a Canine task.
+     *
+     * @param handlerName handler name to look up.
+     * @return list of matching resource identifiers, never {@code null}.
+     */
+    public List<String> findEquipmentForHandler(String handlerName) {
+        if (handlerName == null || handlerName.isBlank()) {
+            return List.of();
+        }
+        String key = handlerName.trim().toLowerCase();
+        List<String> result = new ArrayList<>();
+        for (TCard card : data.getTCards()) {
+            if ((card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT)
+                    && key.equals(card.getHandlerName().trim().toLowerCase())) {
+                String rid = card.getResourceIdentifier().trim();
+                if (!rid.isBlank()) {
+                    result.add(rid);
+                }
+            }
+        }
+        return result;
     }
 
     /** Creates or updates a single org-chart staff T-card. */
