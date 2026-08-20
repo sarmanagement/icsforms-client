@@ -312,11 +312,22 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void writeLines(PDPageContentStream stream, PDType1Font font, float x, float startY,
                             List<String> lines, int maxLines) throws IOException {
+        // Expand any embedded newlines so each physical line is a separate string.
+        List<String> expanded = new java.util.ArrayList<>();
+        for (String line : lines) {
+            if (line == null) {
+                expanded.add("");
+            } else {
+                for (String part : line.split("\n", -1)) {
+                    expanded.add(part);
+                }
+            }
+        }
         stream.beginText();
         stream.setFont(font, BODY_FONT_SIZE);
         stream.newLineAtOffset(x, startY);
         int lineCount = 0;
-        for (String line : lines) {
+        for (String line : expanded) {
             if (lineCount >= maxLines) {
                 stream.showText("Additional content not shown");
                 break;
@@ -398,6 +409,8 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private String safe(String value) {
-        return value == null ? "" : value;
+        if (value == null) return "";
+        // PDFBox WinAnsiEncoding cannot encode control characters; strip them.
+        return value.replaceAll("[\\p{Cntrl}]", "");
     }
 }
