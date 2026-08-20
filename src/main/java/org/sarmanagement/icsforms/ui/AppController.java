@@ -717,6 +717,7 @@ public class AppController {
                     TCard card;
                     if (equipCard != null) {
                         card = equipCard;
+                        res.setCardType(card.getCardType());
                         if (card.getSourceRef().isBlank()) {
                             card.setSourceRef(ref);
                         }
@@ -730,6 +731,7 @@ public class AppController {
                         applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
                     } else {
                         card = findOrCreatePersonCard(ref, resName, byRef, byName, wanted);
+                        res.setCardType(card.getCardType());
                         card.setPersonName(resName);
                         card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
                         card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
@@ -969,6 +971,35 @@ public class AppController {
         }
         names.sort(String.CASE_INSENSITIVE_ORDER);
         return names;
+    }
+
+    /**
+     * Returns T-cards suitable for picking as SAR task resources (excludes header cards).
+     *
+     * @return list of non-header T-cards sorted by effective name.
+     */
+    public List<TCard> getAvailableTCards() {
+        List<TCard> result = new ArrayList<>();
+        for (TCard card : data.getTCards()) {
+            if (card.getCardType() == TCardType.HEADER) {
+                continue;
+            }
+            String effectiveName = (card.getCardType() == TCardType.EQUIPMENT
+                    || card.getCardType() == TCardType.MISC_EQUIPMENT)
+                    ? card.getResourceIdentifier().trim()
+                    : card.getPersonName().trim();
+            if (!effectiveName.isBlank()) {
+                result.add(card);
+            }
+        }
+        result.sort((a, b) -> {
+            String nameA = (a.getCardType() == TCardType.EQUIPMENT || a.getCardType() == TCardType.MISC_EQUIPMENT)
+                    ? a.getResourceIdentifier() : a.getPersonName();
+            String nameB = (b.getCardType() == TCardType.EQUIPMENT || b.getCardType() == TCardType.MISC_EQUIPMENT)
+                    ? b.getResourceIdentifier() : b.getPersonName();
+            return String.CASE_INSENSITIVE_ORDER.compare(nameA, nameB);
+        });
+        return result;
     }
 
     /** Creates or updates a single org-chart staff T-card. */

@@ -182,7 +182,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         String[] headings = {
                 "Resource Identifier",
                 "Leader",
-                "# of\nPersons",
+                "# of\nPer-\nsons",
                 "Contact\n(Radio/Phone)",
                 "Reporting Location,\nSpecial Equipment\nand Supplies,\nRemarks, Notes,\nInformation"
         };
@@ -469,7 +469,10 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private List<List<String>> resourceColumns(ResourceAssignment resource, boolean appendContinuationNotice) {
         List<List<String>> columns = new ArrayList<>();
-        columns.add(wrap(safe(resource.getResourceIdentifier()), 18));
+        String teamNum = safe(resource.getAssignmentTeamNumber());
+        String resId = safe(resource.getResourceIdentifier());
+        String identifier = teamNum.isBlank() ? resId : (teamNum + ": " + resId);
+        columns.add(wrap(identifier, 18));
         columns.add(wrap(safe(resource.getLeader()), 18));
         int personCount = resource.getNumberOfPersons();
         columns.add(List.of(personCount > 0 ? String.valueOf(personCount) : ""));

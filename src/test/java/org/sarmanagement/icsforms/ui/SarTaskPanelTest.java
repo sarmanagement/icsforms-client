@@ -159,12 +159,12 @@ class SarTaskPanelTest {
         AbstractTableModel resourceModel = (AbstractTableModel) getFieldValue(resourceModelField, editor);
         assertNull(communicationsLabel[0]);
         assertEquals(2, resourceModel.getRowCount());
-        assertEquals("Leader/Handler", resourceModel.getValueAt(0, 0));
-        assertEquals("Leader A", resourceModel.getValueAt(0, 1));
-        assertEquals("Medic", resourceModel.getValueAt(1, 0));
-        assertEquals("Alex", resourceModel.getValueAt(1, 1));
+        assertEquals("Leader/Handler", resourceModel.getValueAt(0, 1));
+        assertEquals("Leader A", resourceModel.getValueAt(0, 2));
+        assertEquals("Medic", resourceModel.getValueAt(1, 1));
+        assertEquals("Alex", resourceModel.getValueAt(1, 2));
         for (int rowIndex = 0; rowIndex < resourceModel.getRowCount(); rowIndex++) {
-            assertNotEquals("Team 1", resourceModel.getValueAt(rowIndex, 1));
+            assertNotEquals("Team 1", resourceModel.getValueAt(rowIndex, 2));
         }
     }
 
@@ -287,9 +287,9 @@ class SarTaskPanelTest {
         Class<?> editorClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$SarTaskEditor");
         Class<?> modeClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$EditorMode");
         Object mode = enumConstant(modeClass, modeName);
-        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass, List.class, int.class, java.util.function.Function.class, List.class);
+        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass, List.class, int.class, java.util.function.Function.class, List.class, List.class);
         constructor.setAccessible(true);
-        return constructor.newInstance(task, mode, List.of(), resourceRows, null, List.of());
+        return constructor.newInstance(task, mode, List.of(), resourceRows, null, List.of(), List.of());
     }
 
     private static Object enumConstant(Class<?> enumClass, String name) {

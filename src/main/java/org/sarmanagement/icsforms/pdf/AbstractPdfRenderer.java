@@ -105,9 +105,17 @@ abstract class AbstractPdfRenderer {
             boolean isPrimary = !taskResourceId.isBlank()
                     && name.equals(taskResourceId)
                     && (function.isBlank() || "resource".equalsIgnoreCase(function));
-            if (!isPrimary) {
-                count++;
+            if (isPrimary) {
+                continue;
             }
+            // Exclude equipment/canine resources from the personnel count.
+            org.sarmanagement.icsforms.model.TCardType ct = r.getCardType();
+            if (ct != null && ct != org.sarmanagement.icsforms.model.TCardType.PERSONNEL
+                    && ct != org.sarmanagement.icsforms.model.TCardType.CREW
+                    && ct != org.sarmanagement.icsforms.model.TCardType.GENERIC) {
+                continue;
+            }
+            count++;
         }
         return count;
     }
