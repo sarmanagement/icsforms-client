@@ -695,7 +695,19 @@ public class AppController {
                     String ref = "sar:" + assignmentId + ":r:" + i;
                     // If the resource name matches an existing equipment card (e.g. a canine
                     // call sign already tracked above or manually created), preserve its type.
-                    TCard equipCard = byEquipmentId.get(resName.trim().toLowerCase());
+                    String resNameKey = resName.trim().toLowerCase();
+                    TCard equipCard = byEquipmentId.get(resNameKey);
+                    // Guard against a stale EQUIPMENT card whose resourceIdentifier happens to
+                    // match a known person name (can arise from old sync logic that incorrectly
+                    // used the task's resource-identifier field as the canine T-card key).
+                    // When a proper PERSONNEL card already exists for the same name, prefer it.
+                    if (equipCard != null) {
+                        TCard existingPersonCard = byName.get(resNameKey);
+                        if (existingPersonCard != null
+                                && existingPersonCard.getCardType() == TCardType.PERSONNEL) {
+                            equipCard = null;
+                        }
+                    }
                     TCard card;
                     if (equipCard != null) {
                         card = equipCard;
@@ -855,7 +867,12 @@ public class AppController {
                                           Map<String, TCard> byName,
                                           Map<String, TCard> wanted) {
         if (byRef.containsKey(ref)) {
-            return byRef.get(ref);
+            TCard candidate = byRef.get(ref);
+            // A stale EQUIPMENT card may have been stored under this ref by an older sync
+            // cycle.  Do not reuse it for a PERSONNEL entry — fall through to name lookup.
+            if (candidate.getCardType() == TCardType.PERSONNEL) {
+                return candidate;
+            }
         }
         String nameKey = personName.trim().toLowerCase();
         // Check if we already placed this person's card into wanted under a different ref.
