@@ -10,6 +10,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -126,7 +127,7 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             drawTopHeader(stream, bold, regular, layout, form, data.getIncidentContext(), y - headerHeight, headerHeight);
             y -= headerHeight;
             drawOrgChartSection(stream, bold, regular, layout.x(), y - orgHeight, layout.width(), orgHeight,
-                    data.getOrganizationalChart(), data.getSarTaskAssignments().size());
+                    data.getOrganizationalChart(), data.getSarTaskAssignments());
             y -= orgHeight;
             drawPreparedBySection(stream, bold, regular, layout.x(), y - footerHeight, layout.width(), footerHeight, form, 3);
         }
@@ -390,7 +391,7 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     /** Draws a graphical ICS organizational chart (boxes and connecting lines) for section 9. */
     private void drawOrgChartSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                      float sectionX, float sectionY, float width, float height,
-                                     OrganizationalChart chart, int taskCount) throws IOException {
+                                     OrganizationalChart chart, List<SarTaskAssignment> tasks) throws IOException {
         drawCell(stream, sectionX, sectionY, width, height);
         drawHeading(stream, bold, sectionX, sectionY + height, "9. Current Organization");
 
@@ -424,17 +425,14 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         float icTop    = TOP - 4f;
         float icBottom = icTop - icBoxH;
 
-        // --- Command Staff boxes (Safety, PIO, Liaison) to the right of IC box ---
+        // --- Command Staff boxes (Safety, PIO, Liaison) — always shown ---
         List<String[]> cmdStaff = new ArrayList<>();
-        if (!safe(chart.getSafetyOfficerName()).isBlank())
-            cmdStaff.add(new String[]{"Safety Officer", chart.getSafetyOfficerName()});
-        if (!safe(chart.getPublicInformationOfficerName()).isBlank())
-            cmdStaff.add(new String[]{"PIO", chart.getPublicInformationOfficerName()});
-        if (!safe(chart.getLiaisonOfficerName()).isBlank())
-            cmdStaff.add(new String[]{"Liaison Officer", chart.getLiaisonOfficerName()});
+        cmdStaff.add(new String[]{"Safety Officer",            safe(chart.getSafetyOfficerName())});
+        cmdStaff.add(new String[]{"Public Info. Officer",      safe(chart.getPublicInformationOfficerName())});
+        cmdStaff.add(new String[]{"Liaison Officer",           safe(chart.getLiaisonOfficerName())});
 
         float cmdBottom = icBottom;
-        if (!cmdStaff.isEmpty()) {
+        {
             float sBoxH = 22f, sGap = 4f;
             float sLeft  = icLeft + icBoxW + 16f;
             float sBoxW  = Math.max(40f, Math.min(150f, LEFT + CWIDTH - sLeft - 4f));
@@ -503,6 +501,7 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             safe(chart.getLogisticsSectionChiefName()),
             safe(chart.getFinanceAdminSectionChiefName())
         };
+        // Taller section boxes to accommodate title + name
         float[] secCX = new float[4];
         for (int i = 0; i < 4; i++) {
             float secLeft = LEFT + i * secW;
@@ -515,28 +514,46 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             float bLeft = secLeft + 4f, bWidth = secW - 8f;
             stream.addRect(bLeft, secBoxBot, bWidth, secBoxH);
             stream.stroke();
-            // "Operations\nSection" on two lines + chief name
-            drawCentered(stream, bold, 8f, secTitles[i], bLeft, secBoxTop - 10f, bWidth);
-            drawCentered(stream, bold, 8f, "Section",    bLeft, secBoxTop - 20f, bWidth);
+            // Title line 1: e.g. "Operations", line 2: "Section Chief"
+            drawCentered(stream, bold, 7f, secTitles[i],  bLeft, secBoxTop - 10f, bWidth);
+            drawCentered(stream, bold, 7f, "Section Chief", bLeft, secBoxTop - 19f, bWidth);
             if (!secChiefs[i].isBlank()) {
                 drawCentered(stream, regular, 7f, truncate(secChiefs[i], (int) (bWidth / 4.3f)),
-                             bLeft, secBoxTop - 32f, bWidth);
+                             bLeft, secBoxTop - 30f, bWidth);
             }
         }
 
         // --- Sub-unit boxes below the relevant sections ---
         float subTop = secBoxBot - 8f, subH = 24f, subBot = subTop - subH;
 
-        // Operations: number of SAR tasks
-        if (taskCount > 0) {
+        // Operations: one box per SAR task, showing task name and number of people
+        if (!tasks.isEmpty()) {
             float bLeft = LEFT + 4f, bWidth = secW - 8f;
+            float taskSubTop = subTop;
+            float taskSubH = 24f;
+            // Draw a single connector from the Operations section box center down
             stream.moveTo(secCX[0], secBoxBot);
-            stream.lineTo(secCX[0], subTop);
+            stream.lineTo(secCX[0], taskSubTop);
             stream.stroke();
-            stream.addRect(bLeft, subBot, bWidth, subH);
-            stream.stroke();
-            drawCentered(stream, regular, 8f, taskCount == 1 ? "1 task" : taskCount + " tasks",
-                         bLeft, subTop - 10f, bWidth);
+            for (SarTaskAssignment task : tasks) {
+                float taskSubBot = taskSubTop - taskSubH;
+                stream.addRect(bLeft, taskSubBot, bWidth, taskSubH);
+                stream.stroke();
+                String assignmentId = safe(task.getAssignmentTeamNumber()).isBlank()
+                        ? safe(task.getAssignmentId()) : safe(task.getAssignmentTeamNumber());
+                String taskLabel = assignmentId.isBlank() ? "Task" : truncate(assignmentId, (int) (bWidth / 4.8f));
+                int people = task.getResourcesAssigned() == null ? 0 : task.getResourcesAssigned().size();
+                String peopleStr = people == 1 ? "1 person" : people + " people";
+                drawCentered(stream, bold,    7f, taskLabel,  bLeft, taskSubTop - 10f, bWidth);
+                drawCentered(stream, regular, 7f, peopleStr,  bLeft, taskSubTop - 19f, bWidth);
+                // connector to next task box
+                if (tasks.indexOf(task) < tasks.size() - 1) {
+                    stream.moveTo(secCX[0], taskSubBot);
+                    stream.lineTo(secCX[0], taskSubBot - 2f);
+                    stream.stroke();
+                }
+                taskSubTop = taskSubBot - 2f;
+            }
         }
 
         // Planning: Documentation Unit Leader
