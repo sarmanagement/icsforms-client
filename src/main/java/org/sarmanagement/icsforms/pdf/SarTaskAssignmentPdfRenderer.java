@@ -130,7 +130,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             drawPreparedBySection(stream, bold, regular, layout.x(), y - row8, pageWidth, row8,
                     "11. Prepared by", task.getPreparedByName(), task.getPreparedByPositionTitle(), task.getPreparedDateTime(),
                     "SAR Task Assignment Form - Page 1 of 2"
-                    + (task.getIapPage().isBlank() ? "" : "   IAP Page " + task.getIapPage()));
+                    + (task.getIapPage().isBlank() ? "" : " | IAP Page " + task.getIapPage()));
         }
     }
 
@@ -339,11 +339,23 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, contentY, "Name", safe(name));
         drawInlinePair(stream, bold, regular, x + (width * 0.42f), contentY, "Position/Title", safe(title));
         drawInlinePair(stream, bold, regular, x + (width * 0.74f), contentY, "Date/Time", formatDateTime(dateTime));
+        // Split footerLabel on " | " to allow an IAP-page portion on the right side.
+        int sepIdx = footerLabel.indexOf(" | ");
+        String leftLabel  = sepIdx >= 0 ? footerLabel.substring(0, sepIdx)   : footerLabel;
+        String rightLabel = sepIdx >= 0 ? footerLabel.substring(sepIdx + 3)  : "";
         stream.beginText();
         stream.setFont(regular, 8f);
         stream.newLineAtOffset(x + CELL_PADDING, y + 3f);
-        stream.showText(footerLabel);
+        stream.showText(leftLabel);
         stream.endText();
+        if (!rightLabel.isBlank()) {
+            float rightWidth = regular.getStringWidth(rightLabel) / 1000f * 8f;
+            stream.beginText();
+            stream.setFont(regular, 8f);
+            stream.newLineAtOffset(x + width - CELL_PADDING - rightWidth, y + 3f);
+            stream.showText(rightLabel);
+            stream.endText();
+        }
     }
 
     private void drawDebriefingSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,

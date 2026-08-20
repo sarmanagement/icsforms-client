@@ -32,7 +32,10 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.BufferedReader;
@@ -817,6 +820,7 @@ public class TCardPanel extends JPanel {
                     "No duplicate T-cards (by name) found.",
                     "Merge Duplicates", JOptionPane.INFORMATION_MESSAGE);
         } else {
+            pushToModel();
             controller.markDirty();
             refreshFromModel();
             JOptionPane.showMessageDialog(this,
@@ -1374,11 +1378,17 @@ public class TCardPanel extends JPanel {
         outerPanel.add(typeRow, BorderLayout.NORTH);
         outerPanel.add(subContainer, BorderLayout.CENTER);
 
+        // ── related resources section ─────────────────────────────────────
+        JPanel relatedPanel = buildRelatedResourcesPanel(card);
+        if (relatedPanel != null) {
+            outerPanel.add(relatedPanel, BorderLayout.SOUTH);
+        }
+
         JScrollPane scroll = new JScrollPane(outerPanel);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(
                 javax.swing.SwingUtilities.getWindowAncestor(this), "Edit T-Card", scroll,
-                new Dimension(520, 460))) {
+                new Dimension(520, relatedPanel != null ? 520 : 460))) {
             return false;
         }
 
@@ -1430,6 +1440,97 @@ public class TCardPanel extends JPanel {
         copy.setSourceRef(src.getSourceRef());
         copy.setHandlerName(src.getHandlerName());
         return copy;
+    }
+
+    // -------------------------------------------------------------------------
+    // Related resources panel (handler ↔ equipment navigation)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Builds a panel listing resources related to the given card via handler/equipment links.
+     * For a PERSONNEL card, lists EQUIPMENT cards whose handlerName matches this card's person name.
+     * For an EQUIPMENT card, lists the PERSONNEL card whose personName matches this card's handlerName.
+     * Returns {@code null} when no related resources are found.
+     */
+    private JPanel buildRelatedResourcesPanel(TCard card) {
+        List<TCard> allCards = tableModel.getCards();
+        List<TCard> related = new ArrayList<>();
+
+        if (card.getCardType() == TCardType.PERSONNEL) {
+            String name = card.getPersonName().trim();
+            if (!name.isBlank()) {
+                for (TCard c : allCards) {
+                    if (c != card
+                            && (c.getCardType() == TCardType.EQUIPMENT || c.getCardType() == TCardType.MISC_EQUIPMENT)
+                            && name.equalsIgnoreCase(c.getHandlerName().trim())) {
+                        related.add(c);
+                    }
+                }
+            }
+        } else if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+            String handlerName = card.getHandlerName().trim();
+            if (!handlerName.isBlank()) {
+                for (TCard c : allCards) {
+                    if (c != card
+                            && c.getCardType() == TCardType.PERSONNEL
+                            && handlerName.equalsIgnoreCase(c.getPersonName().trim())) {
+                        related.add(c);
+                    }
+                }
+            }
+        }
+
+        if (related.isEmpty()) {
+            return null;
+        }
+
+        String sectionTitle = card.getCardType() == TCardType.PERSONNEL
+                ? "Linked equipment / canines"
+                : "Handler / operator";
+
+        JPanel panel = new JPanel(new BorderLayout(0, 2));
+        panel.setOpaque(false);
+        panel.setBorder(BorderFactory.createTitledBorder(sectionTitle));
+
+        JPanel rows = new JPanel(new GridBagLayout());
+        rows.setOpaque(false);
+        int rowIdx = 0;
+        for (TCard rel : related) {
+            GridBagConstraints labelConstraints = new GridBagConstraints();
+            labelConstraints.gridx = 0;
+            labelConstraints.gridy = rowIdx;
+            labelConstraints.weightx = 1.0;
+            labelConstraints.fill = GridBagConstraints.HORIZONTAL;
+            labelConstraints.anchor = GridBagConstraints.WEST;
+            labelConstraints.insets = new Insets(2, 4, 2, 8);
+            String labelText = rel.getCardType().toString()
+                    + ": " + effectiveName(rel)
+                    + (rel.getResourceIdentifier().isBlank() ? "" : " (" + rel.getResourceIdentifier() + ")");
+            rows.add(new JLabel(labelText), labelConstraints);
+
+            GridBagConstraints btnConstraints = new GridBagConstraints();
+            btnConstraints.gridx = 1;
+            btnConstraints.gridy = rowIdx;
+            btnConstraints.anchor = GridBagConstraints.EAST;
+            btnConstraints.insets = new Insets(2, 0, 2, 4);
+            JButton openBtn = new JButton("Open…");
+            final TCard relCard = rel;
+            openBtn.addActionListener(ev -> {
+                // Re-resolve the index at click time to handle any intervening model changes.
+                int currentIdx = tableModel.getCards().indexOf(relCard);
+                if (currentIdx >= 0) {
+                    TCard copy = copyCard(tableModel.getCard(currentIdx));
+                    if (openEditDialog(copy)) {
+                        tableModel.replaceCard(currentIdx, copy);
+                        controller.markDirty();
+                    }
+                }
+            });
+            rows.add(openBtn, btnConstraints);
+            rowIdx++;
+        }
+        panel.add(rows, BorderLayout.CENTER);
+        return panel;
     }
 
     // -------------------------------------------------------------------------
