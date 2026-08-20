@@ -79,7 +79,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             float row8 = rows[7];
 
             float leftWidth = pageWidth * 0.30f;
-            float middleWidth = pageWidth * 0.44f;
+            float middleWidth = pageWidth * 0.41f;  // slightly narrower to give section 3 more room
             float rightWidth = pageWidth - leftWidth - middleWidth;
 
             drawCell(stream, layout.x(), y - row1, leftWidth, row1);
@@ -235,7 +235,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     private void drawCommunicationsSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                            float x, float y, float width, float height, List<CommunicationEntry> communications) throws IOException {
         drawHeading(stream, bold, x, y + height, "10. Communications");
-        float tableTop = y + height - 18f;
+        float tableTop = y + height - 14f;
         float headerHeight = 20f;
         float headerBottom = tableTop - headerHeight;
         float[] widths = {0.30f, 0.30f, 0.40f};
@@ -251,7 +251,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         for (int i = 0; i < headings.length; i++) {
             writeWrappedCellText(stream, bold, starts[i], headerBottom, width * widths[i], headerHeight, List.of(headings[i]));
         }
-        int rows = Math.max(4, communications.size());
+        int rows = Math.max(3, communications.size());
         float rowHeight = (headerBottom - y) / rows;
         for (int rowIndex = 0; rowIndex < rows; rowIndex++) {
             float rowTop = headerBottom - (rowIndex * rowHeight);
@@ -421,7 +421,9 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     private void writeWrappedCellText(PDPageContentStream stream, PDType1Font font,
                                       float x, float y, float width, float height, List<String> lines) throws IOException {
         List<String> normalized = lines == null || lines.isEmpty() ? List.of("") : lines;
-        float startY = y + height - CELL_PADDING - BODY_FONT_SIZE - 2f;
+        // Clamp startY so the text baseline stays within the cell: prefer near-top but
+        // never below the bottom border (y + 2f floor prevents overlap with separator lines).
+        float startY = Math.max(y + 2f, y + height - CELL_PADDING - BODY_FONT_SIZE);
         stream.beginText();
         stream.setFont(font, BODY_FONT_SIZE);
         stream.newLineAtOffset(x + CELL_PADDING, startY);

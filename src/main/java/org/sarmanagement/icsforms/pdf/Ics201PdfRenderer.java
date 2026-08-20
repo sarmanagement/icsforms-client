@@ -125,8 +125,8 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
             drawTopHeader(stream, bold, regular, layout, form, data.getIncidentContext(), y - headerHeight, headerHeight);
             y -= headerHeight;
-            drawSection(stream, bold, regular, layout.x(), y - orgHeight, layout.width(), orgHeight,
-                    "9. Current Organization", organizationLines(data.getOrganizationalChart()));
+            drawOrgChartSection(stream, bold, regular, layout.x(), y - orgHeight, layout.width(), orgHeight,
+                    data.getOrganizationalChart(), data.getSarTaskAssignments().size());
             y -= orgHeight;
             drawPreparedBySection(stream, bold, regular, layout.x(), y - footerHeight, layout.width(), footerHeight, form, 3);
         }
@@ -173,11 +173,25 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawDateTimeInitiatedSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                               float x, float y, float width, float height, Ics201Form form) throws IOException {
-        drawCell(stream, x, y, width, height);
-        drawHeading(stream, bold, x, y + height, "3. Date/Time Initiated");
-        float baseline = y + height - CELL_PADDING - HEADING_FONT_SIZE - 16f;
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, baseline, "Date", formatDate(form.getDateInitiated()));
-        drawInlinePair(stream, bold, regular, x + (width / 2f), baseline, "Time", formatTime(form.getTimeInitiated()));
+        // Draw two separate sub-cells side by side: 3a Date | 3b Time
+        float halfWidth = width / 2f;
+        drawCell(stream, x, y, halfWidth, height);
+        drawCell(stream, x + halfWidth, y, halfWidth, height);
+        float valueY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 16f;
+        // 3a Date
+        drawHeading(stream, bold, x, y + height, "3a. Date Initiated");
+        stream.beginText();
+        stream.setFont(regular, BODY_FONT_SIZE);
+        stream.newLineAtOffset(x + CELL_PADDING, valueY);
+        stream.showText(safe(formatDate(form.getDateInitiated())));
+        stream.endText();
+        // 3b Time
+        drawHeading(stream, bold, x + halfWidth, y + height, "3b. Time Initiated");
+        stream.beginText();
+        stream.setFont(regular, BODY_FONT_SIZE);
+        stream.newLineAtOffset(x + halfWidth + CELL_PADDING, valueY);
+        stream.showText(safe(formatTime(form.getTimeInitiated())));
+        stream.endText();
     }
 
     private void drawActionsSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -371,6 +385,211 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             }
         }
         return lines;
+    }
+
+    /** Draws a graphical ICS organizational chart (boxes and connecting lines) for section 9. */
+    private void drawOrgChartSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                     float sectionX, float sectionY, float width, float height,
+                                     OrganizationalChart chart, int taskCount) throws IOException {
+        drawCell(stream, sectionX, sectionY, width, height);
+        drawHeading(stream, bold, sectionX, sectionY + height, "9. Current Organization");
+
+        final float LEFT   = sectionX + CELL_PADDING;
+        final float CWIDTH = width - 2f * CELL_PADDING;
+        // Content top: below the section heading text
+        final float TOP    = sectionY + height - CELL_PADDING - HEADING_FONT_SIZE - 8f;
+
+        // --- Incident Commander / Unified Command box ---
+        List<String> icNames = chart.getIncidentCommanders();
+        List<String> nonBlankIc = new ArrayList<>();
+        if (icNames != null) {
+            for (String n : icNames) {
+                if (!safe(n).isBlank()) nonBlankIc.add(n);
+            }
+        }
+        boolean isUC = nonBlankIc.size() > 1;
+        String icLabel = isUC ? "Unified Command" : "Incident Commander";
+        StringBuilder icSb = new StringBuilder();
+        for (String n : nonBlankIc) {
+            if (icSb.length() > 0) icSb.append(", ");
+            icSb.append(n);
+        }
+        String icNameLine = icSb.toString();
+
+        float icBoxW   = Math.min(200f, CWIDTH * 0.38f);
+        float icBoxH   = 36f;
+        // Offset IC center slightly left so the command staff boxes fit on the right
+        float icCX     = LEFT + CWIDTH * 0.42f;
+        float icLeft   = icCX - icBoxW / 2f;
+        float icTop    = TOP - 4f;
+        float icBottom = icTop - icBoxH;
+
+        // --- Command Staff boxes (Safety, PIO, Liaison) to the right of IC box ---
+        List<String[]> cmdStaff = new ArrayList<>();
+        if (!safe(chart.getSafetyOfficerName()).isBlank())
+            cmdStaff.add(new String[]{"Safety Officer", chart.getSafetyOfficerName()});
+        if (!safe(chart.getPublicInformationOfficerName()).isBlank())
+            cmdStaff.add(new String[]{"PIO", chart.getPublicInformationOfficerName()});
+        if (!safe(chart.getLiaisonOfficerName()).isBlank())
+            cmdStaff.add(new String[]{"Liaison Officer", chart.getLiaisonOfficerName()});
+
+        float cmdBottom = icBottom;
+        if (!cmdStaff.isEmpty()) {
+            float sBoxH = 22f, sGap = 4f;
+            float sLeft  = icLeft + icBoxW + 16f;
+            float sBoxW  = Math.max(40f, Math.min(150f, LEFT + CWIDTH - sLeft - 4f));
+            float vLineX = sLeft - 6f;
+            float vTop   = icTop - 4f;
+            float vBot   = vTop - (cmdStaff.size() - 1) * (sBoxH + sGap) - sBoxH / 2f;
+
+            // Horizontal connector from IC box right-edge midpoint to vertical branch line
+            float icMidY = icBottom + icBoxH / 2f;
+            stream.moveTo(icLeft + icBoxW, icMidY);
+            stream.lineTo(vLineX, icMidY);
+            stream.stroke();
+            // Vertical branch line connecting all staff boxes (extends from vBot to vTop)
+            stream.moveTo(vLineX, vBot);
+            stream.lineTo(vLineX, vTop);
+            stream.stroke();
+
+            for (int i = 0; i < cmdStaff.size(); i++) {
+                float sTop  = icTop - 4f - i * (sBoxH + sGap);
+                float sBotY = sTop - sBoxH;
+                cmdBottom = Math.min(cmdBottom, sBotY);
+                // Horizontal connector to each staff box
+                float midY = sTop - sBoxH / 2f;
+                stream.moveTo(vLineX, midY);
+                stream.lineTo(sLeft, midY);
+                stream.stroke();
+                // Staff box
+                stream.addRect(sLeft, sBotY, sBoxW, sBoxH);
+                stream.stroke();
+                // Title (bold, top) + name (regular, below)
+                drawOrgText(stream, bold,    7f, cmdStaff.get(i)[0], sLeft + 2f, sTop - 10f);
+                drawOrgText(stream, regular, 7f, truncate(cmdStaff.get(i)[1], (int) (sBoxW / 4.5f)),
+                            sLeft + 2f, sTop - 19f);
+            }
+        }
+
+        // Draw IC box on top of connectors so borders stay clean
+        stream.addRect(icLeft, icBottom, icBoxW, icBoxH);
+        stream.stroke();
+        drawCentered(stream, bold,    8f, icLabel,                              icLeft, icTop - 10f, icBoxW);
+        drawCentered(stream, regular, 8f, truncate(icNameLine, (int) (icBoxW / 4.8f)), icLeft, icTop - 22f, icBoxW);
+
+        // --- Vertical stem from IC box bottom to section bar ---
+        float sBarY = Math.min(cmdBottom, icBottom) - 16f;
+        stream.moveTo(icCX, icBottom);
+        stream.lineTo(icCX, sBarY);
+        stream.stroke();
+
+        // --- Four General Staff section boxes ---
+        float secW    = CWIDTH / 4f;
+        float secBoxH = 36f;
+        float barLeft  = LEFT + secW / 2f;
+        float barRight = LEFT + CWIDTH - secW / 2f;
+        // Horizontal bar connecting section midpoints
+        stream.moveTo(barLeft, sBarY);
+        stream.lineTo(barRight, sBarY);
+        stream.stroke();
+
+        float secBoxTop = sBarY - 14f;
+        float secBoxBot = secBoxTop - secBoxH;
+
+        String[] secTitles = {"Operations", "Planning", "Logistics", "Finance/Admin"};
+        String[] secChiefs = {
+            safe(chart.getOperationsSectionChiefName()),
+            safe(chart.getPlanningSectionChiefName()),
+            safe(chart.getLogisticsSectionChiefName()),
+            safe(chart.getFinanceAdminSectionChiefName())
+        };
+        float[] secCX = new float[4];
+        for (int i = 0; i < 4; i++) {
+            float secLeft = LEFT + i * secW;
+            secCX[i] = secLeft + secW / 2f;
+            // Vertical drop from bar to box
+            stream.moveTo(secCX[i], sBarY);
+            stream.lineTo(secCX[i], secBoxTop);
+            stream.stroke();
+            // Section box
+            float bLeft = secLeft + 4f, bWidth = secW - 8f;
+            stream.addRect(bLeft, secBoxBot, bWidth, secBoxH);
+            stream.stroke();
+            // "Operations\nSection" on two lines + chief name
+            drawCentered(stream, bold, 8f, secTitles[i], bLeft, secBoxTop - 10f, bWidth);
+            drawCentered(stream, bold, 8f, "Section",    bLeft, secBoxTop - 20f, bWidth);
+            if (!secChiefs[i].isBlank()) {
+                drawCentered(stream, regular, 7f, truncate(secChiefs[i], (int) (bWidth / 4.3f)),
+                             bLeft, secBoxTop - 32f, bWidth);
+            }
+        }
+
+        // --- Sub-unit boxes below the relevant sections ---
+        float subTop = secBoxBot - 8f, subH = 24f, subBot = subTop - subH;
+
+        // Operations: number of SAR tasks
+        if (taskCount > 0) {
+            float bLeft = LEFT + 4f, bWidth = secW - 8f;
+            stream.moveTo(secCX[0], secBoxBot);
+            stream.lineTo(secCX[0], subTop);
+            stream.stroke();
+            stream.addRect(bLeft, subBot, bWidth, subH);
+            stream.stroke();
+            drawCentered(stream, regular, 8f, taskCount == 1 ? "1 task" : taskCount + " tasks",
+                         bLeft, subTop - 10f, bWidth);
+        }
+
+        // Planning: Documentation Unit Leader
+        String docLeader = safe(chart.getDocumentationUnitLeaderName());
+        if (!docLeader.isBlank()) {
+            float bLeft = LEFT + secW + 4f, bWidth = secW - 8f;
+            stream.moveTo(secCX[1], secBoxBot);
+            stream.lineTo(secCX[1], subTop);
+            stream.stroke();
+            stream.addRect(bLeft, subBot, bWidth, subH);
+            stream.stroke();
+            drawCentered(stream, bold,    7f, "Doc Unit Leader",                        bLeft, subTop - 10f, bWidth);
+            drawCentered(stream, regular, 7f, truncate(docLeader, (int) (bWidth / 4.3f)), bLeft, subTop - 20f, bWidth);
+        }
+
+        // Logistics: Communications Unit Leader
+        String commLeader = safe(chart.getCommunicationsUnitLeaderName());
+        if (!commLeader.isBlank()) {
+            float bLeft = LEFT + 2f * secW + 4f, bWidth = secW - 8f;
+            stream.moveTo(secCX[2], secBoxBot);
+            stream.lineTo(secCX[2], subTop);
+            stream.stroke();
+            stream.addRect(bLeft, subBot, bWidth, subH);
+            stream.stroke();
+            drawCentered(stream, bold,    7f, "Comms Unit Leader",                         bLeft, subTop - 10f, bWidth);
+            drawCentered(stream, regular, 7f, truncate(commLeader, (int) (bWidth / 4.3f)), bLeft, subTop - 20f, bWidth);
+        }
+    }
+
+    /** Draws horizontally-centered text with its baseline at {@code baselineY}. */
+    private void drawCentered(PDPageContentStream stream, PDType1Font font, float size,
+                               String text, float boxLeft, float baselineY, float boxWidth) throws IOException {
+        String s = safe(text);
+        if (s.isBlank()) return;
+        float tw  = font.getStringWidth(s) / 1000f * size;
+        float off = Math.max(0f, (boxWidth - tw) / 2f);
+        stream.beginText();
+        stream.setFont(font, size);
+        stream.newLineAtOffset(boxLeft + off, baselineY);
+        stream.showText(s);
+        stream.endText();
+    }
+
+    /** Draws left-aligned org-chart label text at the given position. */
+    private void drawOrgText(PDPageContentStream stream, PDType1Font font, float size,
+                              String text, float x, float y) throws IOException {
+        String s = safe(text);
+        if (s.isBlank()) return;
+        stream.beginText();
+        stream.setFont(font, size);
+        stream.newLineAtOffset(x, y);
+        stream.showText(s);
+        stream.endText();
     }
 
     private List<String> organizationLines(OrganizationalChart chart) {
