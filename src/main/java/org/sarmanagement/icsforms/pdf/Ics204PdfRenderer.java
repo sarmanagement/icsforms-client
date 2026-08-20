@@ -190,9 +190,8 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         float[] starts = columnStarts(x, width, widths);
         for (int i = 0; i < headings.length; i++) {
             List<String> headingLines = List.of(headings[i].split("\n"));
-            PDType1Font hFont = i == headings.length - 1 ? bold : bold;
             float hFontSize = i == headings.length - 1 ? SMALL_FONT_SIZE : BODY_FONT_SIZE;
-            writeWrappedCellTextFont(stream, hFont, hFontSize, starts[i], headerBottom, width * widths[i], headerHeight, headingLines);
+            writeWrappedCellTextFont(stream, bold, hFontSize, starts[i], headerBottom, width * widths[i], headerHeight, headingLines);
         }
 
         List<ResourceAssignment> resources = form.getResourcesAssigned();
@@ -286,6 +285,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         // Column headers
         drawHorizontalLine(stream, x, x + width, tableTop);
         drawHorizontalLine(stream, x, x + width, tableTop - colHeadH);
+        float dataTop = tableTop - colHeadH;
         drawVerticalLine(stream, x + halfW, y, tableTop);
         writeWrappedCellTextFont(stream, bold, SMALL_FONT_SIZE, x, tableTop - colHeadH, halfW, colHeadH,
                 List.of("Name / Function"));
@@ -293,7 +293,6 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                 List.of("Primary Contact:", "cell, pager, or radio (freq/system/channel)"));
 
         List<CommunicationEntry> comms = form.getCommunications();
-        float dataTop = tableTop - colHeadH;
         float dataH = dataTop - y;
         int commsCount = comms == null ? 0 : comms.size();
         int visibleRows = Math.max(3, commsCount);

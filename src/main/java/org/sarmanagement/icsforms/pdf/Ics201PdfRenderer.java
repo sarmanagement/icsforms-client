@@ -11,7 +11,6 @@ import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
-import org.sarmanagement.icsforms.model.SarTaskResource;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -646,29 +645,6 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         String safeValue = safe(value);
         return safeValue.length() <= maxLength ? safeValue : safeValue.substring(0, Math.max(0, maxLength - 1)) + "...";
     }
-
-    private int countPeople(SarTaskAssignment task) {
-        if (task.getResourcesAssigned() == null) {
-            return 0;
-        }
-        String taskResourceId = safe(task.getResourceIdentifier()).trim().toLowerCase();
-        int count = 0;
-        for (SarTaskResource r : task.getResourcesAssigned()) {
-            if (r == null) {
-                continue;
-            }
-            String name = safe(r.getName()).trim().toLowerCase();
-            String function = safe(r.getFunction()).trim();
-            boolean isPrimary = !taskResourceId.isBlank()
-                    && name.equals(taskResourceId)
-                    && (function.isBlank() || "resource".equalsIgnoreCase(function));
-            if (!isPrimary) {
-                count++;
-            }
-        }
-        return count;
-    }
-
 
     private String safe(String value) {
         if (value == null) return "";

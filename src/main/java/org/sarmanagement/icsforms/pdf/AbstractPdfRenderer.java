@@ -6,6 +6,8 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -79,6 +81,35 @@ abstract class AbstractPdfRenderer {
             y = boxBottom - BLOCK_SPACING;
         }
         stream.close();
+    }
+
+    /**
+     * Counts the people in a SAR task's resource list, excluding the primary task resource
+     * (which is typically equipment such as a canine or vehicle).
+     *
+     * @param task SAR task assignment.
+     * @return number of human resources assigned to the task.
+     */
+    protected int countPeople(SarTaskAssignment task) {
+        if (task.getResourcesAssigned() == null) {
+            return 0;
+        }
+        String taskResourceId = (task.getResourceIdentifier() == null ? "" : task.getResourceIdentifier()).trim().toLowerCase();
+        int count = 0;
+        for (SarTaskResource r : task.getResourcesAssigned()) {
+            if (r == null) {
+                continue;
+            }
+            String name = (r.getName() == null ? "" : r.getName()).trim().toLowerCase();
+            String function = (r.getFunction() == null ? "" : r.getFunction()).trim();
+            boolean isPrimary = !taskResourceId.isBlank()
+                    && name.equals(taskResourceId)
+                    && (function.isBlank() || "resource".equalsIgnoreCase(function));
+            if (!isPrimary) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**
