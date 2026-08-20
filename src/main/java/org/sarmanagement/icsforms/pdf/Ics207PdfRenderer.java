@@ -132,7 +132,6 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         float lineY1 = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
         float lineY2 = lineY1 - 16f;
         float col2X  = x + width * 0.4f;
-        float col3X  = x + width * 0.7f;
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, lineY1,
                 "Name", safe(form.getPreparedByName()));
         drawInlinePair(stream, bold, regular, col2X, lineY1,
@@ -141,9 +140,12 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                 "Date/Time", formatDateTime(form.getPreparedDateTime()));
         drawInlinePair(stream, bold, regular, col2X, lineY2, "Signature", "");
 
-        float iapW = bold.getStringWidth("ICS 207") / 1000f * BODY_FONT_SIZE;
-        writeCellText(stream, bold, col3X, y + 10f, "IAP Page: " + safe(form.getIapPage()));
-        writeCellText(stream, bold, x + width - iapW - CELL_PADDING, y + 10f, "ICS 207");
+        // Bottom band: "IAP Page: X" left-aligned, "ICS 207" right-aligned
+        String iapLabel = "IAP Page: " + safe(form.getIapPage());
+        writeCellText(stream, bold, x + CELL_PADDING, y + 10f, iapLabel);
+        String formLabel = "ICS 207";
+        float formLabelW = bold.getStringWidth(formLabel) / 1000f * BODY_FONT_SIZE;
+        writeCellText(stream, bold, x + width - formLabelW - CELL_PADDING, y + 10f, formLabel);
     }
 
     // -----------------------------------------------------------------------
@@ -296,14 +298,15 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         stream.stroke();
 
         float curTop = connectorTop;
-        for (String[] unit : subUnits) {
+        for (int i = 0; i < subUnits.size(); i++) {
+            String[] unit = subUnits.get(i);
             float botY = curTop - subH;
             if (botY < minY + 4f) break; // don't draw below section bottom
             stream.addRect(bL, botY, bW, subH);
             stream.stroke();
             drawCentered(stream, bold,    6.5f, unit[0],     bL, curTop - 8f,  bW);
             drawCentered(stream, regular, 6.5f, truncate(unit[1], (int) (bW / 3.9f)), bL, curTop - 15f, bW);
-            if (subUnits.indexOf(unit) < subUnits.size() - 1) {
+            if (i < subUnits.size() - 1) {
                 stream.moveTo(sectionCX, botY);
                 stream.lineTo(sectionCX, botY - subGap);
                 stream.stroke();
