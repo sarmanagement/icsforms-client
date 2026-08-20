@@ -41,7 +41,9 @@ import java.awt.event.MouseEvent;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -325,12 +327,12 @@ public class TCardPanel extends JPanel {
             col.add(buildHeaderCardWidget(header));
             col.add(javax.swing.Box.createVerticalStrut(4));
 
-            // Check if this is the "Assigned" column — if so, sub-group by task.
+            // Group Available and Assigned columns by task; other columns stay handler-grouped.
             String colLabel = header.getDisplayLabel();
-            if ("Assigned".equalsIgnoreCase(colLabel)) {
+            if ("Assigned".equalsIgnoreCase(colLabel) || "Available".equalsIgnoreCase(colLabel)) {
                 addTaskGroupedCards(col, children);
             } else {
-                addHandlerGroupedCards(col, children);
+                addHandlerGroupedCards(col, children, false);
             }
             col.add(javax.swing.Box.createVerticalGlue());
             rack.add(col);
@@ -365,7 +367,7 @@ public class TCardPanel extends JPanel {
         // Render non-task cards first, then each task group.
         List<TCard> unassigned = byTask.remove("");
         if (unassigned != null && !unassigned.isEmpty()) {
-            addHandlerGroupedCards(col, unassigned);
+            addHandlerGroupedCards(col, unassigned, false);
         }
         for (Map.Entry<String, List<TCard>> entry : byTask.entrySet()) {
             String taskKey  = entry.getKey();
@@ -377,9 +379,8 @@ public class TCardPanel extends JPanel {
                 int people = (int) groupCards.stream().filter(c -> c.getCardType() == TCardType.PERSONNEL).count();
                 int other  = groupCards.size() - people;
                 col.add(buildTaskBannerWidget(teamLabel, resId, people, other, collapsed, taskKey));
-                col.add(javax.swing.Box.createVerticalStrut(2));
                 if (!collapsed) {
-                    addHandlerGroupedCards(col, groupCards);
+                    addHandlerGroupedCards(col, groupCards, true);
                     col.add(javax.swing.Box.createVerticalStrut(4));
                 } else {
                     // Show only the leader card when the group is collapsed (with paperclip icon).
@@ -392,7 +393,7 @@ public class TCardPanel extends JPanel {
                             });
                 }
             } else {
-                addHandlerGroupedCards(col, groupCards);
+                addHandlerGroupedCards(col, groupCards, false);
                 col.add(javax.swing.Box.createVerticalStrut(4));
             }
         }
@@ -402,7 +403,7 @@ public class TCardPanel extends JPanel {
      * Adds resource cards to a column panel, with canine/equipment cards grouped
      * immediately below their handler's personnel card.
      */
-    private void addHandlerGroupedCards(JPanel col, List<TCard> cards) {
+    private void addHandlerGroupedCards(JPanel col, List<TCard> cards, boolean inTaskGroup) {
         // Separate handler-linked (canine) cards from the rest.
         Map<String, List<TCard>> caninesByHandler = new LinkedHashMap<>();
         List<TCard> topLevel = new ArrayList<>();
@@ -417,14 +418,14 @@ public class TCardPanel extends JPanel {
 
         for (TCard card : topLevel) {
             col.add(buildRackCard(card));
-            col.add(javax.swing.Box.createVerticalStrut(3));
+            col.add(javax.swing.Box.createVerticalStrut(inTaskGroup ? 0 : 3));
             // Append any linked canines directly below.
             String personName = card.getPersonName();
             List<TCard> linked = caninesByHandler.get(personName);
             if (linked != null) {
                 for (TCard canine : linked) {
                     col.add(buildCanineRackCard(canine));
-                    col.add(javax.swing.Box.createVerticalStrut(2));
+                    col.add(javax.swing.Box.createVerticalStrut(inTaskGroup ? 0 : 2));
                 }
                 caninesByHandler.remove(personName);
             }
@@ -434,7 +435,7 @@ public class TCardPanel extends JPanel {
         for (List<TCard> orphaned : caninesByHandler.values()) {
             for (TCard card : orphaned) {
                 col.add(buildRackCard(card));
-                col.add(javax.swing.Box.createVerticalStrut(3));
+                col.add(javax.swing.Box.createVerticalStrut(inTaskGroup ? 0 : 3));
             }
         }
     }
@@ -1034,8 +1035,45 @@ public class TCardPanel extends JPanel {
     }
 
     // -------------------------------------------------------------------------
-    // CSV import
+    // CSV import/export
     // -------------------------------------------------------------------------
+
+    public void exportToCsv() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
+        chooser.setDialogTitle("Export resources as CSV");
+        chooser.setSelectedFile(new File("resources.csv"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File file = chooser.getSelectedFile();
+        if (file != null && !file.getName().toLowerCase(Locale.ROOT).endsWith(".csv")) {
+            file = new File(file.getParentFile(), file.getName() + ".csv");
+        }
+        try {
+            exportToCsv(file);
+            JOptionPane.showMessageDialog(this, "Exported resources to " + file.getName() + ".",
+                    "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Could not export CSV: " + ex.getMessage(),
+                    "Export Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    public void exportToCsv(File outputFile) throws IOException {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(outputFile))) {
+            writer.println("Name, Agency, State, Phone, Type");
+            for (TCard card : tableModel.getCards()) {
+                String name = card.getPersonName().isBlank() ? card.getResourceIdentifier() : card.getPersonName();
+                writer.println(csvValue(name) + ","
+                        + csvValue(card.getHomeAgency()) + ","
+                        + csvValue(card.getHomeState()) + ","
+                        + csvValue(card.getPhoneNumber()) + ","
+                        + csvValue(card.getCardType().name()));
+            }
+        }
+    }
 
     /**
      * Opens a file chooser, reads a CSV file, and shows a preview dialog so the operator
@@ -1235,6 +1273,14 @@ public class TCardPanel extends JPanel {
         if (value == null) return false;
         String v = value.trim().toLowerCase();
         return v.contains("name") || v.contains("agency") || v.contains("person");
+    }
+
+    private static String csvValue(String value) {
+        String safe = value == null ? "" : value;
+        if (safe.contains(",") || safe.contains("\"") || safe.contains("\n") || safe.contains("\r")) {
+            return "\"" + safe.replace("\"", "\"\"") + "\"";
+        }
+        return safe;
     }
 
     // -------------------------------------------------------------------------

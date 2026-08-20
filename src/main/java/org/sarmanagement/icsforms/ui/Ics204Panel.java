@@ -84,10 +84,10 @@ public class Ics204Panel extends JPanel {
         iapPageField.setColumns(8);
         iapPageField.setEditable(false);
         iapPageField.setToolTipText("Assigned automatically when the IAP bundle PDF is exported");
-        JPanel selectedContextPanel = new JPanel(new BorderLayout(0, 2));
+        JPanel selectedContextPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         selectedContextPanel.setOpaque(false);
-        selectedContextPanel.add(selectedContextLabel, BorderLayout.NORTH);
-        selectedContextPanel.add(selectedContextValueField, BorderLayout.CENTER);
+        selectedContextPanel.add(selectedContextLabel);
+        selectedContextPanel.add(selectedContextValueField);
 
         // Management level + selected context on a single row
         JPanel managementLevelRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));

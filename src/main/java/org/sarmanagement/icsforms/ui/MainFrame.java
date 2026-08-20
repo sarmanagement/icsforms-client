@@ -287,6 +287,9 @@ public class MainFrame extends JFrame {
             });
         });
 
+        JMenuItem exportResourcesCsvItem = new JMenuItem("Export Resources as CSV…");
+        exportResourcesCsvItem.addActionListener(event -> tCardPanel.exportToCsv());
+
         JMenuItem addLogItem = new JMenuItem("Add Log");
         addLogItem.addActionListener(event -> addLog());
 
@@ -320,6 +323,7 @@ public class MainFrame extends JFrame {
         exportMenu.add(export214Item);
         exportMenu.add(exportSarTaskItem);
         exportMenu.add(exportClueLogItem);
+        exportMenu.add(exportResourcesCsvItem);
         exportMenu.add(exportAllItem);
         exportMenu.addSeparator();
         exportMenu.add(exportIapBundleItem);
@@ -410,7 +414,7 @@ public class MainFrame extends JFrame {
     }
 
     private void ensureLogs(AppData data) {
-        if (data.getActivityLogs().isEmpty()) {
+        if (data.getActivityLogs().isEmpty() && data.getIapPhase() != IapPhase.PRE_OP) {
             Ics214Form form = new Ics214Form();
             form.setPreparedByName(data.getForm204().getPreparedByName());
             form.setPreparedByPositionTitle(data.getForm204().getPreparedByPositionTitle());

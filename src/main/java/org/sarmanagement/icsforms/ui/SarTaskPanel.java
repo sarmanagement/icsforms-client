@@ -76,7 +76,7 @@ public class SarTaskPanel extends JPanel {
     private final JTable table = new JTable(tableModel);
     private final TableRowSorter<SarTaskTableModel> rowSorter = new TableRowSorter<>(tableModel);
     private final JComboBox<String> statusFilterCombo = new JComboBox<>(
-            new String[]{"All", "Planning", "On Task", "Returned"});
+            new String[]{"All", "Planned", "On Task", "Returned"});
     private java.util.function.Consumer<SarTaskAssignment> on214Request;
 
     private static final String VIEW_TABLE = "table";
@@ -188,7 +188,7 @@ public class SarTaskPanel extends JPanel {
      *
      * <p>Tasks are shown in four columns based on their lifecycle status:
      * <ol>
-     *   <li><b>Planning</b> — taskLifecycleStatus is "Planning"</li>
+     *   <li><b>Planned</b> — taskLifecycleStatus is "Planned"</li>
      *   <li><b>On Task</b>  — taskLifecycleStatus is "On Task"</li>
      *   <li><b>Returned</b> — taskLifecycleStatus is "Returned" but no debriefing supervisor set</li>
      *   <li><b>Completed</b> — taskLifecycleStatus is "Returned" and a debriefing supervisor is set</li>
@@ -214,13 +214,13 @@ public class SarTaskPanel extends JPanel {
                     returned.add(task);
                 }
             } else {
-                planning.add(task); // "Planning" or unknown
+                planning.add(task); // "Planned" or unknown
             }
         }
 
         JPanel board = new JPanel(new GridLayout(1, 4, 8, 0));
         board.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        board.add(buildBoardColumn("Planning", new Color(173, 216, 230), planning));
+        board.add(buildBoardColumn("Planned", new Color(173, 216, 230), planning));
         board.add(buildBoardColumn("On Task",  new Color(255, 200, 100), onTask));
         board.add(buildBoardColumn("Returned (not debriefed)", new Color(144, 238, 144), returned));
         board.add(buildBoardColumn("Completed", new Color(200, 200, 200), completed));
@@ -628,8 +628,9 @@ public class SarTaskPanel extends JPanel {
     }
 
     private static JPanel resourceEditorPanel(SarTaskAssignment row, ResourceEntriesTableModel model,
-                                               int minimumRows, List<String> availableNames) {
-        model.setRows(editableResources(row), minimumRows);
+                                              int minimumRows, List<String> availableNames,
+                                              List<String> canineNamesFirst) {
+        model.setRows(editableResources(row, canineNamesFirst), minimumRows);
         JTable table = new JTable(model);
         table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         table.setFillsViewportHeight(true);
@@ -691,6 +692,10 @@ public class SarTaskPanel extends JPanel {
     }
 
     private static List<SarTaskResource> editableResources(SarTaskAssignment row) {
+        return editableResources(row, List.of());
+    }
+
+    private static List<SarTaskResource> editableResources(SarTaskAssignment row, List<String> canineNamesFirst) {
         List<SarTaskResource> resources = new ArrayList<>();
         if (row == null || row.getResourcesAssigned() == null) {
             return resources;
@@ -700,6 +705,16 @@ public class SarTaskPanel extends JPanel {
                 continue;
             }
             resources.add(resource);
+        }
+        if (canineNamesFirst != null && !canineNamesFirst.isEmpty()) {
+            resources.sort((a, b) -> {
+                boolean aCanine = canineNamesFirst.contains(a.getName());
+                boolean bCanine = canineNamesFirst.contains(b.getName());
+                if (aCanine == bCanine) {
+                    return 0;
+                }
+                return aCanine ? -1 : 1;
+            });
         }
         return resources;
     }
@@ -1101,7 +1116,7 @@ public class SarTaskPanel extends JPanel {
     }
 
     private static class SarTaskEditor {
-        private static final String[] LIFECYCLE_OPTIONS = {"Planning", "On Task", "Returned"};
+        private static final String[] LIFECYCLE_OPTIONS = {"Planned", "On Task", "Returned"};
 
         private final JPanel panel = UiSupport.formPanel();
         private final EditorMode mode;
@@ -1148,6 +1163,7 @@ public class SarTaskPanel extends JPanel {
                               java.util.function.Function<String, java.util.List<String>> canineForHandler,
                               List<String> availableResourceNames) {
             this.mode = mode;
+            boolean isCanineTask = SarTaskSupport.usesCanineFactors(row.getResourceType());
             assignmentTeamNumberField = textField(row.getAssignmentTeamNumber(), true);
             resourceTypeField = new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new));
             resourceTypeField.setEditable(true);
@@ -1205,10 +1221,11 @@ public class SarTaskPanel extends JPanel {
                 });
             }
 
+            String leaderLabel = isCanineTask ? "Leader/Handler: " : "Leader: ";
             assignmentSummaryField = inlineSummaryPanel(2,
                     "Incident: " + safeValue(row.getIncidentName()),
                     "Resource: " + safeValue(row.getResourceIdentifier()),
-                    "Leader: " + safeValue(row.getLeader()),
+                    leaderLabel + safeValue(row.getLeader()),
                     "Leader Role: " + safeValue(row.getLeaderRole()),
                     "Leader Contact: " + safeValue(row.getContact()));
             debriefSummaryField = inlineSummaryPanel(2,
@@ -1216,7 +1233,11 @@ public class SarTaskPanel extends JPanel {
                     "Resource: " + safeValue(row.getResourceIdentifier()));
             operationsField = textArea(SarTaskTableModel.joinOperations(row), 2, false);
             contextField = textArea(SarTaskTableModel.joinContext(row), 2, false);
-            resourcesAssignedField = resourceEditorPanel(row, resourceEntryTableModel, resourceRowCount, availableResourceNames);
+            List<String> leaderCanines = isCanineTask && canineForHandler != null
+                    ? canineForHandler.apply(row.getLeader())
+                    : List.of();
+            resourcesAssignedField = resourceEditorPanel(row, resourceEntryTableModel, resourceRowCount,
+                    availableResourceNames, leaderCanines == null ? List.of() : leaderCanines);
             assignmentField = textArea(row.getAssignment(), 3, true);
             transportationField = textArea(row.getTransportationInstructions(), 2, true);
             taskMapField = textField(row.getTaskMap(), true, 14);
@@ -1632,7 +1653,7 @@ public class SarTaskPanel extends JPanel {
 
     /**
      * Cell renderer for the "Task Status" column: colour-codes each cell to match
-     * the board-view column colours (Planning=blue, On Task=orange, Returned=green,
+     * the board-view column colours (Planned=blue, On Task=orange, Returned=green,
      * Completed=grey).
      */
     private static class LifecycleStatusCellRenderer extends DefaultTableCellRenderer {
@@ -1648,7 +1669,7 @@ public class SarTaskPanel extends JPanel {
             if (!isSelected) {
                 String status = value == null ? "" : value.toString();
                 component.setBackground(switch (status) {
-                    case "Planning"  -> COLOR_PLANNING;
+                    case "Planning", "Planned" -> COLOR_PLANNING;
                     case "On Task"   -> COLOR_ON_TASK;
                     case "Returned"  -> COLOR_RETURNED;
                     case "Completed" -> COLOR_COMPLETED;

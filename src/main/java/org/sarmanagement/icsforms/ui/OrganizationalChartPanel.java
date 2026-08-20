@@ -30,6 +30,8 @@ import java.util.List;
 public class OrganizationalChartPanel extends JPanel {
     private final AppController controller;
     private final JTextArea incidentCommanderArea = UiSupport.textArea(4);
+    private final JTextField incidentCommanderRadioField = UiSupport.textField();
+    private final JTextField incidentCommanderPhoneField = UiSupport.textField();
 
     // Command Staff
     private final JTextField safetyOfficerNameField = UiSupport.textField();
@@ -87,6 +89,8 @@ public class OrganizationalChartPanel extends JPanel {
         JPanel icSection = UiSupport.formPanel();
         icSection.setBorder(BorderFactory.createTitledBorder("Incident Command"));
         UiSupport.addRow(icSection, 0, "Incident commander / unified command (one per line)", new JScrollPane(incidentCommanderArea));
+        UiSupport.addRow(icSection, 1, "IC / UC radio", incidentCommanderRadioField);
+        UiSupport.addRow(icSection, 2, "IC / UC phone", incidentCommanderPhoneField);
 
         JPanel commandSection = buildSection("Command Staff",
                 new String[]{"Safety Officer", "PIO / Public Information Officer", "Liaison Officer"},
@@ -202,6 +206,8 @@ public class OrganizationalChartPanel extends JPanel {
         UiSupport.suppressSuggestionsFor(300);
         OrganizationalChart chart = controller.getData().getOrganizationalChart();
         incidentCommanderArea.setText(String.join("\n", chart.getIncidentCommanders()));
+        incidentCommanderRadioField.setText(safe(chart.getIncidentCommanderRadio()));
+        incidentCommanderPhoneField.setText(safe(chart.getIncidentCommanderPhone()));
 
         safetyOfficerNameField.setText(safe(chart.getSafetyOfficerName()));
         safetyOfficerRadioField.setText(safe(chart.getSafetyOfficerRadio()));
@@ -250,6 +256,8 @@ public class OrganizationalChartPanel extends JPanel {
     public void pushToModel() {
         OrganizationalChart chart = controller.getData().getOrganizationalChart();
         chart.setIncidentCommanders(lines(incidentCommanderArea.getText()));
+        chart.setIncidentCommanderRadio(incidentCommanderRadioField.getText().trim());
+        chart.setIncidentCommanderPhone(incidentCommanderPhoneField.getText().trim());
 
         chart.setSafetyOfficerName(safetyOfficerNameField.getText().trim());
         chart.setSafetyOfficerRadio(safetyOfficerRadioField.getText().trim());

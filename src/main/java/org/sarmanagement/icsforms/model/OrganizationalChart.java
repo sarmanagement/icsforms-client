@@ -18,6 +18,8 @@ import java.util.List;
 public class OrganizationalChart {
     // Incident command
     private List<String> incidentCommanders = new ArrayList<>();
+    private String incidentCommanderRadio = "";
+    private String incidentCommanderPhone = "";
 
     // Command Staff (optional positions)
     private String safetyOfficerName = "";
@@ -76,6 +78,10 @@ public class OrganizationalChart {
      */
     public List<String> getIncidentCommanders() { return incidentCommanders; }
     public void setIncidentCommanders(List<String> v) { incidentCommanders = v == null ? new ArrayList<>() : new ArrayList<>(v); }
+    public String getIncidentCommanderRadio() { return incidentCommanderRadio; }
+    public void setIncidentCommanderRadio(String v) { incidentCommanderRadio = v == null ? "" : v; }
+    public String getIncidentCommanderPhone() { return incidentCommanderPhone; }
+    public void setIncidentCommanderPhone(String v) { incidentCommanderPhone = v == null ? "" : v; }
 
     // --- Safety Officer ---
     public String getSafetyOfficerName()  { return safetyOfficerName; }

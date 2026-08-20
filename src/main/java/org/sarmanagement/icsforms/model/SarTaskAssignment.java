@@ -58,11 +58,11 @@ public class SarTaskAssignment {
     /**
      * Lifecycle status of this task assignment.
      *
-     * <p>Values: {@code "Planning"} (default), {@code "On Task"} (resources Assigned),
+     * <p>Values: {@code "Planned"} (default), {@code "On Task"} (resources Assigned),
      * {@code "Returned"} (resources Out of Service or Available depending on incident
      * configuration).</p>
      */
-    private String taskLifecycleStatus = "Planning";
+    private String taskLifecycleStatus = "Planned";
     private String iapPage = "";
 
     /**
@@ -336,16 +336,16 @@ public class SarTaskAssignment {
     /**
      * Returns the task lifecycle status.
      *
-     * @return "Planning", "On Task", or "Returned"; never {@code null}.
+     * @return "Planned", "On Task", or "Returned"; never {@code null}.
      */
-    public String getTaskLifecycleStatus() { return taskLifecycleStatus == null ? "Planning" : taskLifecycleStatus; }
+    public String getTaskLifecycleStatus() { return taskLifecycleStatus == null ? "Planned" : taskLifecycleStatus; }
     /**
      * Sets the task lifecycle status.
      *
-     * @param taskLifecycleStatus "Planning", "On Task", or "Returned"; null treated as "Planning".
+     * @param taskLifecycleStatus "Planned", "On Task", or "Returned"; null treated as "Planned".
      */
     public void setTaskLifecycleStatus(String taskLifecycleStatus) {
-        this.taskLifecycleStatus = taskLifecycleStatus == null ? "Planning" : taskLifecycleStatus;
+        this.taskLifecycleStatus = taskLifecycleStatus == null ? "Planned" : taskLifecycleStatus;
     }
 
     /** @return IAP page number string for this form in the bundle. */

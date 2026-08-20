@@ -588,6 +588,10 @@ public class AppController {
                         String ref = "org:ic:" + i;
                         TCard card = byRef.containsKey(ref) ? byRef.get(ref) : newOrgCard(name, "", "");
                         card.setPersonName(name);
+                        String icRadio = safe(chart.getIncidentCommanderRadio());
+                        String icPhone = safe(chart.getIncidentCommanderPhone());
+                        if (!icRadio.isBlank()) card.setRadioChannel(icRadio);
+                        if (!icPhone.isBlank()) card.setPhoneNumber(icPhone);
                         card.setSourceRef(ref);
                         card.setNotes(notePreserving(card.getNotes(), "Incident Commander"));
                         wanted.put(ref, card);
@@ -792,7 +796,7 @@ public class AppController {
     /**
      * Converts a task lifecycle status string to the equivalent T-card status.
      *
-     * @param lifecycle "Planning", "On Task", or "Returned".
+     * @param lifecycle "Planned", "On Task", or "Returned".
      * @return T-card status string ("Assigned", "Out of Service", or blank).
      */
     static String lifecycleToCardStatus(String lifecycle) {
@@ -800,7 +804,7 @@ public class AppController {
         return switch (lifecycle) {
             case "On Task"  -> "Assigned";
             case "Returned" -> "Out of Service";
-            default         -> "";           // Planning or unknown → blank
+            default         -> "";           // Planned/Planning or unknown → blank
         };
     }
 
@@ -808,15 +812,17 @@ public class AppController {
      * Records a lifecycle-driven status for {@code card}, keeping the highest-priority
      * value when the same card is referenced from multiple tasks.
      *
-     * <p>Only non-blank statuses ("Assigned", "Out of Service") are tracked.  A blank
-     * status from a "Planning" task is ignored so that operator-set statuses are not
-     * overwritten when no active lifecycle state applies.</p>
+     * <p>Blank statuses are recorded as the baseline so resources can move back to
+     * available when a task is reverted to Planned. Higher-priority non-blank statuses
+     * ("Assigned", "Out of Service") still win when the same card appears on multiple
+     * tasks.</p>
      *
      * <p>Priority: "Assigned" &gt; "Out of Service".</p>
      */
     private static void applyHigherPriorityStatus(Map<TCard, String> map, TCard card, String status) {
         if (status == null || status.isBlank()) {
-            return;  // Planning → do not touch the operator's existing status
+            map.putIfAbsent(card, "");
+            return;
         }
         String current = map.getOrDefault(card, "");
         if (statusPriority(status) > statusPriority(current)) {
