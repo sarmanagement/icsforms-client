@@ -27,6 +27,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final float BODY_FONT_SIZE = 10f;
+    private static final float SMALL_FONT_SIZE = 7f;
     private static final float HEADING_FONT_SIZE = 10f;
     private static final float LINE_HEIGHT = 12f;
     private static final float CELL_PADDING = 4f;
@@ -67,13 +68,14 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             float gridHeight = layout.height();
             float pageWidth = layout.width();
 
-            float[] rows = expandRowToFill(gridHeight, 3, 60f, 64f, 282f, 108f, 120f, 72f);
+            float[] rows = expandRowToFill(gridHeight, 3, 60f, 64f, 282f, 108f, 60f, 84f, 72f);
             float row1 = rows[0];
             float row2 = rows[1];
             float row5 = rows[2];
             float row6 = rows[3];
             float row7 = rows[4];
             float row8 = rows[5];
+            float row9 = rows[6];
 
             float y = gridTop;
             float halfWidth = pageWidth / 2f;
@@ -103,14 +105,15 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             y -= row6;
 
             drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row7);
-            drawVerticalLine(stream, layout.x() + halfWidth, y - row7, y);
-            overflowSections.addAll(drawSection(stream, bold, regular, layout.x(), y - row7, halfWidth, row7,
-                    "7. Special Instructions", wrap(form.getSpecialInstructions(), 42), "7. Special Instructions"));
-            overflowSections.addAll(drawSection(stream, bold, regular, layout.x() + halfWidth, y - row7, halfWidth, row7,
-                    "8. Communications", communicationLines(form.getCommunications()), "8. Communications"));
+            overflowSections.addAll(drawSection(stream, bold, regular, layout.x(), y - row7, pageWidth, row7,
+                    "7. Special Instructions", wrap(form.getSpecialInstructions(), 92), "7. Special Instructions"));
             y -= row7;
 
-            drawPreparedBySection(stream, bold, regular, layout.x(), y - row8, pageWidth, row8, 24f, form);
+            drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row8);
+            drawCommunicationsSection(stream, bold, regular, layout.x(), y - row8, pageWidth, row8, form);
+            y -= row8;
+
+            drawPreparedBySection(stream, bold, regular, layout.x(), y - row9, pageWidth, row9, 24f, form);
         }
 
         for (OverflowSection overflow : overflowSections) {
@@ -163,7 +166,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         List<OverflowSection> overflowSections = new ArrayList<>();
         drawHeading(stream, bold, x, y + height, "5. Resources Assigned");
         float tableTop = y + height - 18f;
-        float headerHeight = 42f;
+        float headerHeight = 52f;
         float headerBottom = tableTop - headerHeight;
         float rowHeight = (headerBottom - y) / RESOURCE_ROW_COUNT;
         drawHorizontalLine(stream, x, x + width, tableTop);
@@ -179,15 +182,17 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         String[] headings = {
                 "Resource Identifier",
                 "Leader",
-                "# of Persons",
-                "Contact",
-                "Reporting Location / Special Equipment / Remarks"
+                "# of\nPersons",
+                "Contact\n(Radio/Phone)",
+                "Reporting Location,\nSpecial Equipment\nand Supplies,\nRemarks, Notes,\nInformation"
         };
 
         float[] starts = columnStarts(x, width, widths);
         for (int i = 0; i < headings.length; i++) {
-            writeWrappedCellText(stream, bold, starts[i], headerBottom, width * widths[i], headerHeight,
-                    wrap(headings[i], widths[i] <= (1f / 18f) ? 10 : widths[i] <= (4f / 18f) ? 18 : 24));
+            List<String> headingLines = List.of(headings[i].split("\n"));
+            PDType1Font hFont = i == headings.length - 1 ? bold : bold;
+            float hFontSize = i == headings.length - 1 ? SMALL_FONT_SIZE : BODY_FONT_SIZE;
+            writeWrappedCellTextFont(stream, hFont, hFontSize, starts[i], headerBottom, width * widths[i], headerHeight, headingLines);
         }
 
         List<ResourceAssignment> resources = form.getResourcesAssigned();
@@ -270,6 +275,48 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         return overflowSections;
     }
 
+    private void drawCommunicationsSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                           float x, float y, float width, float height, Ics204Form form) throws IOException {
+        drawHeading(stream, bold, x, y + height,
+                "8. Communications (radio and/or phone contact numbers needed for this assignment):");
+        float tableTop = y + height - 18f;
+        float halfW = width / 2f;
+        float colHeadH = 22f;
+
+        // Column headers
+        drawHorizontalLine(stream, x, x + width, tableTop);
+        drawHorizontalLine(stream, x, x + width, tableTop - colHeadH);
+        drawVerticalLine(stream, x + halfW, y, tableTop);
+        writeWrappedCellTextFont(stream, bold, SMALL_FONT_SIZE, x, tableTop - colHeadH, halfW, colHeadH,
+                List.of("Name / Function"));
+        writeWrappedCellTextFont(stream, bold, SMALL_FONT_SIZE, x + halfW, tableTop - colHeadH, halfW, colHeadH,
+                List.of("Primary Contact:", "cell, pager, or radio (freq/system/channel)"));
+
+        List<CommunicationEntry> comms = form.getCommunications();
+        float dataTop = tableTop - colHeadH;
+        float dataH = dataTop - y;
+        int commsCount = comms == null ? 0 : comms.size();
+        int visibleRows = Math.max(3, commsCount);
+        float rowH = dataH / visibleRows;
+
+        for (int i = 0; i < visibleRows; i++) {
+            float rowTop = dataTop - (i * rowH);
+            float rowBot = Math.max(y, rowTop - rowH);
+            drawHorizontalLine(stream, x, x + width, rowBot);
+            if (comms != null && i < commsCount) {
+                CommunicationEntry entry = comms.get(i);
+                String nameFunc = safe(entry.getName());
+                if (!safe(entry.getFunction()).isBlank()) {
+                    nameFunc = nameFunc.isBlank() ? safe(entry.getFunction()) : nameFunc + " / " + safe(entry.getFunction());
+                }
+                writeWrappedCellTextFont(stream, regular, BODY_FONT_SIZE, x, rowBot, halfW, rowH, wrap(nameFunc, 24));
+                writeWrappedCellTextFont(stream, regular, BODY_FONT_SIZE, x + halfW, rowBot, halfW, rowH,
+                        wrap(safe(entry.getPrimaryContact()), 36));
+            }
+        }
+    }
+
+
     private void drawTextBlock(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                float x, float y, float width, float height, String heading, List<String> lines) throws IOException {
         drawHeading(stream, bold, x, y + height, heading);
@@ -333,14 +380,20 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void writeWrappedCellText(PDPageContentStream stream, PDType1Font font,
                                       float x, float bottomY, float width, float height, List<String> lines) throws IOException {
-        int maxLines = Math.max(1, (int) ((height - (CELL_PADDING * 2)) / LINE_HEIGHT));
+        writeWrappedCellTextFont(stream, font, BODY_FONT_SIZE, x, bottomY, width, height, lines);
+    }
+
+    private void writeWrappedCellTextFont(PDPageContentStream stream, PDType1Font font, float fontSize,
+                                          float x, float bottomY, float width, float height, List<String> lines) throws IOException {
+        float lineH = fontSize * 1.2f;
+        int maxLines = Math.max(1, (int) ((height - (CELL_PADDING * 2)) / lineH));
         List<String> visible = lines == null || lines.isEmpty() ? List.of("") : lines.subList(0, Math.min(maxLines, lines.size()));
         stream.beginText();
-        stream.setFont(font, BODY_FONT_SIZE);
-        stream.newLineAtOffset(x + CELL_PADDING, bottomY + height - CELL_PADDING - BODY_FONT_SIZE);
+        stream.setFont(font, fontSize);
+        stream.newLineAtOffset(x + CELL_PADDING, bottomY + height - CELL_PADDING - fontSize);
         for (String line : visible) {
             stream.showText(safe(line));
-            stream.newLineAtOffset(0, -LINE_HEIGHT);
+            stream.newLineAtOffset(0, -lineH);
         }
         stream.endText();
     }
@@ -417,15 +470,10 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private List<List<String>> resourceColumns(ResourceAssignment resource, boolean appendContinuationNotice) {
         List<List<String>> columns = new ArrayList<>();
-        String resourceIdentifier = safe(resource.getResourceIdentifier());
-        if (!safe(resource.getResourceType()).isBlank() || !safe(resource.getTaskType()).isBlank()) {
-            resourceIdentifier = joinAvailable(resourceIdentifier,
-                    labelValue("Type", resource.getResourceType()),
-                    labelValue("Task", resource.getTaskType()));
-        }
-        columns.add(wrap(resourceIdentifier, 18));
+        columns.add(wrap(safe(resource.getResourceIdentifier()), 18));
         columns.add(wrap(safe(resource.getLeader()), 18));
-        columns.add(List.of(resource.getNumberOfPersons() > 0 ? String.valueOf(resource.getNumberOfPersons()) : ""));
+        int personCount = resource.getNumberOfPersons();
+        columns.add(List.of(personCount > 0 ? String.valueOf(personCount) : ""));
         columns.add(wrap(safe(resource.getContact()), 24));
 
         List<String> lastColumn = new ArrayList<>();

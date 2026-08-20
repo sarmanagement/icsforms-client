@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -336,10 +337,11 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         List<String[]> list = new ArrayList<>();
         addIfNamed(list, "Staging Area Mgr", chart.getStagingAreaManagerName());
         for (SarTaskAssignment t : tasks) {
-            String id = safe(t.getAssignmentTeamNumber()).isBlank()
-                    ? safe(t.getAssignmentId()) : safe(t.getAssignmentTeamNumber());
-            int people = t.getResourcesAssigned() == null ? 0 : t.getResourcesAssigned().size();
-            list.add(new String[]{id.isBlank() ? "Task" : truncate(id, 14),
+            String label = safe(t.getResourceIdentifier()).isBlank()
+                    ? (safe(t.getAssignmentTeamNumber()).isBlank() ? "Task" : safe(t.getAssignmentTeamNumber()))
+                    : safe(t.getResourceIdentifier());
+            int people = countPeople(t);
+            list.add(new String[]{truncate(label, 14),
                     people == 1 ? "1 person" : people + " people"});
         }
         for (OrgChartEntry e : chart.getAdditionalPositions()) {
@@ -349,6 +351,30 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         }
         return list;
     }
+
+    private int countPeople(SarTaskAssignment task) {
+        if (task.getResourcesAssigned() == null) {
+            return 0;
+        }
+        String taskResourceId = safe(task.getResourceIdentifier()).trim().toLowerCase();
+        int count = 0;
+        for (SarTaskResource r : task.getResourcesAssigned()) {
+            if (r == null) {
+                continue;
+            }
+            String name = safe(r.getName()).trim().toLowerCase();
+            String function = safe(r.getFunction()).trim();
+            boolean isPrimary = !taskResourceId.isBlank()
+                    && name.equals(taskResourceId)
+                    && (function.isBlank() || "resource".equalsIgnoreCase(function));
+            if (!isPrimary) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+
 
     private List<String[]> buildPlanningSubUnits(OrganizationalChart chart) {
         List<String[]> list = new ArrayList<>();

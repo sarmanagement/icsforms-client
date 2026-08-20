@@ -625,6 +625,7 @@ public class Ics204Panel extends JPanel {
             personsField.setColumns(4);
             personsField.setText(row.getNumberOfPersons() <= 0 ? "" : String.valueOf(row.getNumberOfPersons()));
             contactField.setText(row.getContact());
+            contactField.setToolTipText("Radio channel or phone number for contacting the team leader");
             reportingField.setText(row.getReportingLocation());
             equipmentField = textArea(row.getSpecialEquipment(), 2);
             suppliesField = textArea(row.getSupplies(), 2);
@@ -654,7 +655,7 @@ public class Ics204Panel extends JPanel {
                     new LabeledComponent("Persons", personsField)));
             UiSupport.addRow(panel, rowIndex++, "Resource", inlineFieldPanel(
                     new LabeledComponent("Identifier", resourceField),
-                    new LabeledComponent("Primary contact", contactField)));
+                    new LabeledComponent("Radio/Phone (contact)", contactField)));
             UiSupport.addRow(panel, rowIndex++, "Leadership", inlineFieldPanel(
                     new LabeledComponent("Leader role", leaderRoleField),
                     new LabeledComponent("Leader", leaderField)));
