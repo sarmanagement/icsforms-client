@@ -535,7 +535,8 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             stream.moveTo(secCX[0], secBoxBot);
             stream.lineTo(secCX[0], taskSubTop);
             stream.stroke();
-            for (SarTaskAssignment task : tasks) {
+            for (int ti = 0; ti < tasks.size(); ti++) {
+                SarTaskAssignment task = tasks.get(ti);
                 float taskSubBot = taskSubTop - taskSubH;
                 stream.addRect(bLeft, taskSubBot, bWidth, taskSubH);
                 stream.stroke();
@@ -547,7 +548,7 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                 drawCentered(stream, bold,    7f, taskLabel,  bLeft, taskSubTop - 10f, bWidth);
                 drawCentered(stream, regular, 7f, peopleStr,  bLeft, taskSubTop - 19f, bWidth);
                 // connector to next task box
-                if (tasks.indexOf(task) < tasks.size() - 1) {
+                if (ti < tasks.size() - 1) {
                     stream.moveTo(secCX[0], taskSubBot);
                     stream.lineTo(secCX[0], taskSubBot - 2f);
                     stream.stroke();
