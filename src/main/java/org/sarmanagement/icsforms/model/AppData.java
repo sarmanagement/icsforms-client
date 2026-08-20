@@ -12,7 +12,7 @@ import java.util.List;
  */
 public class AppData {
     /** Current persistence schema version for JSON storage. */
-    public static final int CURRENT_SCHEMA_VERSION = 4;
+    public static final int CURRENT_SCHEMA_VERSION = 5;
 
     /**
      * A lightweight snapshot of the shared context at the end of one operational period,
@@ -53,6 +53,7 @@ public class AppData {
     private OrganizationalChart organizationalChart = new OrganizationalChart();
     private Ics201Form form201 = new Ics201Form();
     private Ics202Form form202 = new Ics202Form();
+    private Ics207Form form207 = new Ics207Form();
     private Ics204Form form204 = new Ics204Form();
     private List<Ics204Form> additionalForms204 = new ArrayList<>();
     private List<Ics214Form> activityLogs = new ArrayList<>();
@@ -226,6 +227,24 @@ public class AppData {
      */
     public void setForm202(Ics202Form form202) {
         this.form202 = form202 == null ? new Ics202Form() : form202;
+    }
+
+    /**
+     * Returns ICS 207 content.
+     *
+     * @return organization chart form.
+     */
+    public Ics207Form getForm207() {
+        return form207;
+    }
+
+    /**
+     * Sets ICS 207 content.
+     *
+     * @param form207 organization chart form.
+     */
+    public void setForm207(Ics207Form form207) {
+        this.form207 = form207 == null ? new Ics207Form() : form207;
     }
 
     /**

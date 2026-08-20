@@ -64,6 +64,23 @@ public class OrganizationalChart {
     @JsonAlias("documentationUnitLeaderContact")
     private String documentationUnitLeaderPhone = "";
 
+    private String resourcesUnitLeaderName = "";
+    private String resourcesUnitLeaderRadio = "";
+    private String resourcesUnitLeaderPhone = "";
+
+    private String situationUnitLeaderName = "";
+    private String situationUnitLeaderRadio = "";
+    private String situationUnitLeaderPhone = "";
+
+    private String demobilizationUnitLeaderName = "";
+    private String demobilizationUnitLeaderRadio = "";
+    private String demobilizationUnitLeaderPhone = "";
+
+    // Operations Section positions
+    private String stagingAreaManagerName = "";
+    private String stagingAreaManagerRadio = "";
+    private String stagingAreaManagerPhone = "";
+
     // Logistics Section positions
     private String communicationsUnitLeaderName = "";
     private String communicationsUnitLeaderRadio = "";
@@ -72,6 +89,42 @@ public class OrganizationalChart {
     private String communicationsTechnicianName = "";
     private String communicationsTechnicianRadio = "";
     private String communicationsTechnicianPhone = "";
+
+    private String supplyUnitLeaderName = "";
+    private String supplyUnitLeaderRadio = "";
+    private String supplyUnitLeaderPhone = "";
+
+    private String facilitiesUnitLeaderName = "";
+    private String facilitiesUnitLeaderRadio = "";
+    private String facilitiesUnitLeaderPhone = "";
+
+    private String groundSupportUnitLeaderName = "";
+    private String groundSupportUnitLeaderRadio = "";
+    private String groundSupportUnitLeaderPhone = "";
+
+    private String foodUnitLeaderName = "";
+    private String foodUnitLeaderRadio = "";
+    private String foodUnitLeaderPhone = "";
+
+    // Finance/Admin Section positions
+    private String timeUnitLeaderName = "";
+    private String timeUnitLeaderRadio = "";
+    private String timeUnitLeaderPhone = "";
+
+    private String procurementUnitLeaderName = "";
+    private String procurementUnitLeaderRadio = "";
+    private String procurementUnitLeaderPhone = "";
+
+    private String compClaimsUnitLeaderName = "";
+    private String compClaimsUnitLeaderRadio = "";
+    private String compClaimsUnitLeaderPhone = "";
+
+    private String costUnitLeaderName = "";
+    private String costUnitLeaderRadio = "";
+    private String costUnitLeaderPhone = "";
+
+    // User-defined additional positions
+    private List<OrgChartEntry> additionalPositions = new ArrayList<>();
 
     /**
      * Returns the incident commander or unified command names.
@@ -162,4 +215,106 @@ public class OrganizationalChart {
     public void setCommunicationsTechnicianRadio(String v) { communicationsTechnicianRadio = v == null ? "" : v; }
     public String getCommunicationsTechnicianPhone() { return communicationsTechnicianPhone; }
     public void setCommunicationsTechnicianPhone(String v) { communicationsTechnicianPhone = v == null ? "" : v; }
+
+    // --- Staging Area Manager (Operations) ---
+    public String getStagingAreaManagerName()  { return stagingAreaManagerName; }
+    public void setStagingAreaManagerName(String v)  { stagingAreaManagerName  = v == null ? "" : v; }
+    public String getStagingAreaManagerRadio() { return stagingAreaManagerRadio; }
+    public void setStagingAreaManagerRadio(String v) { stagingAreaManagerRadio = v == null ? "" : v; }
+    public String getStagingAreaManagerPhone() { return stagingAreaManagerPhone; }
+    public void setStagingAreaManagerPhone(String v) { stagingAreaManagerPhone = v == null ? "" : v; }
+
+    // --- Resources Unit Leader (Planning) ---
+    public String getResourcesUnitLeaderName()  { return resourcesUnitLeaderName; }
+    public void setResourcesUnitLeaderName(String v)  { resourcesUnitLeaderName  = v == null ? "" : v; }
+    public String getResourcesUnitLeaderRadio() { return resourcesUnitLeaderRadio; }
+    public void setResourcesUnitLeaderRadio(String v) { resourcesUnitLeaderRadio = v == null ? "" : v; }
+    public String getResourcesUnitLeaderPhone() { return resourcesUnitLeaderPhone; }
+    public void setResourcesUnitLeaderPhone(String v) { resourcesUnitLeaderPhone = v == null ? "" : v; }
+
+    // --- Situation Unit Leader (Planning) ---
+    public String getSituationUnitLeaderName()  { return situationUnitLeaderName; }
+    public void setSituationUnitLeaderName(String v)  { situationUnitLeaderName  = v == null ? "" : v; }
+    public String getSituationUnitLeaderRadio() { return situationUnitLeaderRadio; }
+    public void setSituationUnitLeaderRadio(String v) { situationUnitLeaderRadio = v == null ? "" : v; }
+    public String getSituationUnitLeaderPhone() { return situationUnitLeaderPhone; }
+    public void setSituationUnitLeaderPhone(String v) { situationUnitLeaderPhone = v == null ? "" : v; }
+
+    // --- Demobilization Unit Leader (Planning) ---
+    public String getDemobilizationUnitLeaderName()  { return demobilizationUnitLeaderName; }
+    public void setDemobilizationUnitLeaderName(String v)  { demobilizationUnitLeaderName  = v == null ? "" : v; }
+    public String getDemobilizationUnitLeaderRadio() { return demobilizationUnitLeaderRadio; }
+    public void setDemobilizationUnitLeaderRadio(String v) { demobilizationUnitLeaderRadio = v == null ? "" : v; }
+    public String getDemobilizationUnitLeaderPhone() { return demobilizationUnitLeaderPhone; }
+    public void setDemobilizationUnitLeaderPhone(String v) { demobilizationUnitLeaderPhone = v == null ? "" : v; }
+
+    // --- Supply Unit Leader (Logistics) ---
+    public String getSupplyUnitLeaderName()  { return supplyUnitLeaderName; }
+    public void setSupplyUnitLeaderName(String v)  { supplyUnitLeaderName  = v == null ? "" : v; }
+    public String getSupplyUnitLeaderRadio() { return supplyUnitLeaderRadio; }
+    public void setSupplyUnitLeaderRadio(String v) { supplyUnitLeaderRadio = v == null ? "" : v; }
+    public String getSupplyUnitLeaderPhone() { return supplyUnitLeaderPhone; }
+    public void setSupplyUnitLeaderPhone(String v) { supplyUnitLeaderPhone = v == null ? "" : v; }
+
+    // --- Facilities Unit Leader (Logistics) ---
+    public String getFacilitiesUnitLeaderName()  { return facilitiesUnitLeaderName; }
+    public void setFacilitiesUnitLeaderName(String v)  { facilitiesUnitLeaderName  = v == null ? "" : v; }
+    public String getFacilitiesUnitLeaderRadio() { return facilitiesUnitLeaderRadio; }
+    public void setFacilitiesUnitLeaderRadio(String v) { facilitiesUnitLeaderRadio = v == null ? "" : v; }
+    public String getFacilitiesUnitLeaderPhone() { return facilitiesUnitLeaderPhone; }
+    public void setFacilitiesUnitLeaderPhone(String v) { facilitiesUnitLeaderPhone = v == null ? "" : v; }
+
+    // --- Ground Support Unit Leader (Logistics) ---
+    public String getGroundSupportUnitLeaderName()  { return groundSupportUnitLeaderName; }
+    public void setGroundSupportUnitLeaderName(String v)  { groundSupportUnitLeaderName  = v == null ? "" : v; }
+    public String getGroundSupportUnitLeaderRadio() { return groundSupportUnitLeaderRadio; }
+    public void setGroundSupportUnitLeaderRadio(String v) { groundSupportUnitLeaderRadio = v == null ? "" : v; }
+    public String getGroundSupportUnitLeaderPhone() { return groundSupportUnitLeaderPhone; }
+    public void setGroundSupportUnitLeaderPhone(String v) { groundSupportUnitLeaderPhone = v == null ? "" : v; }
+
+    // --- Food Unit Leader (Logistics) ---
+    public String getFoodUnitLeaderName()  { return foodUnitLeaderName; }
+    public void setFoodUnitLeaderName(String v)  { foodUnitLeaderName  = v == null ? "" : v; }
+    public String getFoodUnitLeaderRadio() { return foodUnitLeaderRadio; }
+    public void setFoodUnitLeaderRadio(String v) { foodUnitLeaderRadio = v == null ? "" : v; }
+    public String getFoodUnitLeaderPhone() { return foodUnitLeaderPhone; }
+    public void setFoodUnitLeaderPhone(String v) { foodUnitLeaderPhone = v == null ? "" : v; }
+
+    // --- Time Unit Leader (Finance/Admin) ---
+    public String getTimeUnitLeaderName()  { return timeUnitLeaderName; }
+    public void setTimeUnitLeaderName(String v)  { timeUnitLeaderName  = v == null ? "" : v; }
+    public String getTimeUnitLeaderRadio() { return timeUnitLeaderRadio; }
+    public void setTimeUnitLeaderRadio(String v) { timeUnitLeaderRadio = v == null ? "" : v; }
+    public String getTimeUnitLeaderPhone() { return timeUnitLeaderPhone; }
+    public void setTimeUnitLeaderPhone(String v) { timeUnitLeaderPhone = v == null ? "" : v; }
+
+    // --- Procurement Unit Leader (Finance/Admin) ---
+    public String getProcurementUnitLeaderName()  { return procurementUnitLeaderName; }
+    public void setProcurementUnitLeaderName(String v)  { procurementUnitLeaderName  = v == null ? "" : v; }
+    public String getProcurementUnitLeaderRadio() { return procurementUnitLeaderRadio; }
+    public void setProcurementUnitLeaderRadio(String v) { procurementUnitLeaderRadio = v == null ? "" : v; }
+    public String getProcurementUnitLeaderPhone() { return procurementUnitLeaderPhone; }
+    public void setProcurementUnitLeaderPhone(String v) { procurementUnitLeaderPhone = v == null ? "" : v; }
+
+    // --- Comp/Claims Unit Leader (Finance/Admin) ---
+    public String getCompClaimsUnitLeaderName()  { return compClaimsUnitLeaderName; }
+    public void setCompClaimsUnitLeaderName(String v)  { compClaimsUnitLeaderName  = v == null ? "" : v; }
+    public String getCompClaimsUnitLeaderRadio() { return compClaimsUnitLeaderRadio; }
+    public void setCompClaimsUnitLeaderRadio(String v) { compClaimsUnitLeaderRadio = v == null ? "" : v; }
+    public String getCompClaimsUnitLeaderPhone() { return compClaimsUnitLeaderPhone; }
+    public void setCompClaimsUnitLeaderPhone(String v) { compClaimsUnitLeaderPhone = v == null ? "" : v; }
+
+    // --- Cost Unit Leader (Finance/Admin) ---
+    public String getCostUnitLeaderName()  { return costUnitLeaderName; }
+    public void setCostUnitLeaderName(String v)  { costUnitLeaderName  = v == null ? "" : v; }
+    public String getCostUnitLeaderRadio() { return costUnitLeaderRadio; }
+    public void setCostUnitLeaderRadio(String v) { costUnitLeaderRadio = v == null ? "" : v; }
+    public String getCostUnitLeaderPhone() { return costUnitLeaderPhone; }
+    public void setCostUnitLeaderPhone(String v) { costUnitLeaderPhone = v == null ? "" : v; }
+
+    // --- Additional / custom positions ---
+    public List<OrgChartEntry> getAdditionalPositions() { return additionalPositions; }
+    public void setAdditionalPositions(List<OrgChartEntry> v) {
+        additionalPositions = v == null ? new ArrayList<>() : new ArrayList<>(v);
+    }
 }

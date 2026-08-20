@@ -7,6 +7,7 @@ import org.sarmanagement.icsforms.pdf.ClueLogPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics201PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics207PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics214PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
@@ -77,6 +78,7 @@ public final class App {
             PdfExportService exportService = new PdfExportService(
                     new Ics201PdfRenderer(),
                     new Ics202PdfRenderer(),
+                    new Ics207PdfRenderer(),
                     new Ics204PdfRenderer(),
                     new Ics214PdfRenderer(),
                     new SarTaskAssignmentPdfRenderer(),

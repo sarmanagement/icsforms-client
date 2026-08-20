@@ -241,6 +241,9 @@ public class MainFrame extends JFrame {
         JMenuItem export202Item = new JMenuItem("Export ICS 202 PDF…");
         export202Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 202"));
 
+        JMenuItem export207Item = new JMenuItem("Export ICS 207 PDF…");
+        export207Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 207"));
+
         JMenuItem export204Item = new JMenuItem("Export ICS 204 PDF…");
         export204Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 204"));
 
@@ -319,6 +322,7 @@ public class MainFrame extends JFrame {
         fileMenu.add(exitItem);
         exportMenu.add(export201Item);
         exportMenu.add(export202Item);
+        exportMenu.add(export207Item);
         exportMenu.add(export204Item);
         exportMenu.add(export214Item);
         exportMenu.add(exportSarTaskItem);

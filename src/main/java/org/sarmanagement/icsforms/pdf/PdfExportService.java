@@ -143,6 +143,8 @@ public class PdfExportService {
         data.getForm201().setIapPage(String.valueOf(page++));
         // ICS 202
         data.getForm202().setIapPage(String.valueOf(page++));
+        // ICS 207
+        data.getForm207().setIapPage(String.valueOf(page++));
         // ICS 204 — primary form
         data.getForm204().setIapPage(String.valueOf(page++));
         // ICS 204 — additional forms
