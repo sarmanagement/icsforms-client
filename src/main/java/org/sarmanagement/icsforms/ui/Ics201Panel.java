@@ -20,7 +20,8 @@ import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;import java.time.format.DateTimeFormatter;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
@@ -298,22 +299,11 @@ public class Ics201Panel extends JPanel {
         return items;
     }
 
-    private LocalDateTime parseDateTime(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalDateTime.parse(value.trim(), DATE_TIME_FORMATTER);
-        } catch (DateTimeParseException exception) {
-            return null;
-        }
-    }
-
     private static LocalDateTime toDateTime(LocalDate date, LocalTime time) {
         if (date == null && time == null) {
             return null;
         }
-        LocalDate d = date != null ? date : LocalDate.now();
+        LocalDate d = date != null ? date : LocalDate.of(1970, 1, 1);
         LocalTime t = time != null ? time : LocalTime.MIDNIGHT;
         return LocalDateTime.of(d, t);
     }
