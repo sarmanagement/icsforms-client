@@ -10,19 +10,17 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.table.AbstractTableModel;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
+import java.time.LocalTime;import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,9 +29,6 @@ import java.util.List;
  * Multi-page editor for the Incident Briefing (ICS 201) form.
  */
 public class Ics201Panel extends JPanel {
-    private static final int PAGE_COUNT = 4;
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final AppController controller;
@@ -41,8 +36,7 @@ public class Ics201Panel extends JPanel {
     private final JLabel phaseNoteLabel = new JLabel();
     private final JTextField incidentNameField = UiSupport.textField();
     private final JTextField incidentNumberField = UiSupport.textField();
-    private final JTextField dateInitiatedField = UiSupport.textField();
-    private final JTextField timeInitiatedField = UiSupport.textField();
+    private final JSpinner dateTimeInitiatedSpinner = UiSupport.dateTimeSpinner();
     private final JTextArea mapSketchArea = UiSupport.textArea(8);
     private final JTextArea situationSummaryArea = UiSupport.textArea(8);
     private final JTextArea objectivesArea = UiSupport.textArea(8);
@@ -58,14 +52,10 @@ public class Ics201Panel extends JPanel {
     private final JLabel planningSectionChiefLabel = new JLabel();
     private final JLabel logisticsSectionChiefLabel = new JLabel();
     private final JLabel financeAdminSectionChiefLabel = new JLabel();
-    private final JLabel[] incidentNameHeaderLabels = new JLabel[3];
-    private final JLabel[] incidentNumberHeaderLabels = new JLabel[3];
-    private final JLabel[] initiatedHeaderLabels = new JLabel[3];
-    private final JTextField[] preparedByNameFields = new JTextField[PAGE_COUNT];
-    private final JTextField[] preparedByPositionFields = new JTextField[PAGE_COUNT];
-    private final JTextField[] preparedDateTimeFields = new JTextField[PAGE_COUNT];
-    private final JTextField[] preparedSignatureFields = new JTextField[PAGE_COUNT];
-    private boolean syncingFields;
+    private final JTextField preparedByNameField = UiSupport.textField();
+    private final JTextField preparedByPositionField = UiSupport.textField();
+    private final JSpinner preparedDateTimeSpinner = UiSupport.dateTimeSpinner();
+    private final JTextField preparedSignatureField = UiSupport.textField();
 
     /**
      * Creates the ICS 201 editor panel.
@@ -79,8 +69,6 @@ public class Ics201Panel extends JPanel {
         incidentNameField.setEditable(false);
         configureNoteLabel();
         buildPages();
-        installHeaderRefresh();
-        installPreparerMirrors();
 
         add(phaseNoteLabel, BorderLayout.NORTH);
         add(pages, BorderLayout.CENTER);
@@ -90,24 +78,18 @@ public class Ics201Panel extends JPanel {
     public void refreshFromModel() {
         Ics201Form form = controller.getData201();
         IncidentContext context = controller.getData().getIncidentContext();
-        syncingFields = true;
-        try {
-            incidentNameField.setText(resolveIncidentName(form, context));
-            incidentNumberField.setText(safe(form.getIncidentNumber()));
-            dateInitiatedField.setText(formatDate(form.getDateInitiated()));
-            timeInitiatedField.setText(formatTime(form.getTimeInitiated()));
-            mapSketchArea.setText(safe(form.getMapSketch()));
-            situationSummaryArea.setText(safe(form.getSituationSummary()));
-            objectivesArea.setText(String.join("\n", form.getCurrentObjectives()));
-            actionTableModel.setRows(form.getCurrentActions());
-            resourceSummaryTableModel.setRows(form.getResources());
-            setPreparerValues(form, context);
-            refreshOrgChart();
-            refreshHeaderDisplays();
-            refreshPhaseNote();
-        } finally {
-            syncingFields = false;
-        }
+        incidentNameField.setText(resolveIncidentName(form, context));
+        incidentNumberField.setText(safe(form.getIncidentNumber()));
+        dateTimeInitiatedSpinner.setValue(
+                AppController.toDate(toDateTime(form.getDateInitiated(), form.getTimeInitiated())));
+        mapSketchArea.setText(safe(form.getMapSketch()));
+        situationSummaryArea.setText(safe(form.getSituationSummary()));
+        objectivesArea.setText(String.join("\n", form.getCurrentObjectives()));
+        actionTableModel.setRows(form.getCurrentActions());
+        resourceSummaryTableModel.setRows(form.getResources());
+        setPreparerValues(form, context);
+        refreshOrgChart();
+        refreshPhaseNote();
     }
 
     /** Applies field values to the model. */
@@ -116,17 +98,18 @@ public class Ics201Panel extends JPanel {
         IncidentContext context = controller.getData().getIncidentContext();
         form.setIncidentName(resolveIncidentName(form, context));
         form.setIncidentNumber(incidentNumberField.getText().trim());
-        form.setDateInitiated(parseDate(dateInitiatedField.getText()));
-        form.setTimeInitiated(parseTime(timeInitiatedField.getText()));
+        LocalDateTime dt = AppController.toLocalDateTime((java.util.Date) dateTimeInitiatedSpinner.getValue());
+        form.setDateInitiated(dt == null ? null : dt.toLocalDate());
+        form.setTimeInitiated(dt == null ? null : dt.toLocalTime());
         form.setMapSketch(mapSketchArea.getText().trim());
         form.setSituationSummary(situationSummaryArea.getText().trim());
         form.setCurrentObjectives(lines(objectivesArea.getText()));
         form.setCurrentActions(actionTableModel.getRows());
         form.setResources(resourceSummaryTableModel.getRows());
-        form.setPreparedByName(preparedByNameFields[0].getText().trim());
-        form.setPreparedByPositionTitle(preparedByPositionFields[0].getText().trim());
-        form.setPreparedDateTime(parseDateTime(preparedDateTimeFields[0].getText()));
-        form.setPreparedBySignature(preparedSignatureFields[0].getText().trim());
+        form.setPreparedByName(preparedByNameField.getText().trim());
+        form.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
+        form.setPreparedDateTime(AppController.toLocalDateTime((java.util.Date) preparedDateTimeSpinner.getValue()));
+        form.setPreparedBySignature(preparedSignatureField.getText().trim());
     }
 
     private void configureNoteLabel() {
@@ -148,21 +131,16 @@ public class Ics201Panel extends JPanel {
         form.setBorder(BorderFactory.createTitledBorder("ICS 201 - Page 1"));
         UiSupport.addRow(form, 0, "1. Incident Name", incidentNameField);
         UiSupport.addRow(form, 1, "2. Incident Number", incidentNumberField);
-        UiSupport.addRow(form, 2, "3a. Date Initiated (yyyy-MM-dd)", dateInitiatedField);
-        UiSupport.addRow(form, 3, "3b. Time Initiated (HH:mm)", timeInitiatedField);
-        UiSupport.addRow(form, 4, "4. Map/Sketch (description/reference)", new JScrollPane(mapSketchArea));
-        UiSupport.addRow(form, 5, "5. Situation Summary and Health and Safety Briefing", new JScrollPane(situationSummaryArea));
-        UiSupport.addWideRow(form, 6, createPreparerPanel(0));
+        UiSupport.addRow(form, 2, "3. Date/Time Initiated", dateTimeInitiatedSpinner);
+        UiSupport.addRow(form, 3, "4. Map/Sketch (description/reference)", new JScrollPane(mapSketchArea));
+        UiSupport.addRow(form, 4, "5. Situation Summary and Health and Safety Briefing", new JScrollPane(situationSummaryArea));
+        UiSupport.addWideRow(form, 5, buildPreparerPanel());
         return form;
     }
 
     private JPanel buildPageTwo() {
         JPanel page = new JPanel(new BorderLayout(8, 8));
         page.setBorder(BorderFactory.createTitledBorder("ICS 201 - Page 2"));
-        page.add(createHeaderDisplayPanel(0), BorderLayout.NORTH);
-
-        JPanel center = new JPanel(new BorderLayout(8, 8));
-        center.setOpaque(false);
 
         JPanel objectivesPanel = new JPanel(new BorderLayout());
         objectivesPanel.setOpaque(false);
@@ -179,17 +157,17 @@ public class Ics201Panel extends JPanel {
                 () -> { actionTableModel.removeRow(actionTable.getSelectedRow()); controller.markDirty(); }
         ), BorderLayout.SOUTH);
 
+        JPanel center = new JPanel(new BorderLayout(8, 8));
+        center.setOpaque(false);
         center.add(objectivesPanel, BorderLayout.NORTH);
         center.add(actionsPanel, BorderLayout.CENTER);
         page.add(center, BorderLayout.CENTER);
-        page.add(createPreparerPanel(1), BorderLayout.SOUTH);
         return page;
     }
 
     private JPanel buildPageThree() {
         JPanel page = new JPanel(new BorderLayout(8, 8));
         page.setBorder(BorderFactory.createTitledBorder("ICS 201 - Page 3"));
-        page.add(createHeaderDisplayPanel(1), BorderLayout.NORTH);
 
         JPanel orgPanel = UiSupport.formPanel();
         orgPanel.setBorder(BorderFactory.createTitledBorder("9. Current Organization"));
@@ -204,14 +182,12 @@ public class Ics201Panel extends JPanel {
         UiSupport.addWideRow(orgPanel, 8, new JLabel("Edit organizational chart on the 'Org Chart' tab"));
 
         page.add(orgPanel, BorderLayout.CENTER);
-        page.add(createPreparerPanel(2), BorderLayout.SOUTH);
         return page;
     }
 
     private JPanel buildPageFour() {
         JPanel page = new JPanel(new BorderLayout(8, 8));
         page.setBorder(BorderFactory.createTitledBorder("ICS 201 - Page 4"));
-        page.add(createHeaderDisplayPanel(2), BorderLayout.NORTH);
 
         resourceSummaryTable.setFillsViewportHeight(true);
         JPanel resourcesPanel = new JPanel(new BorderLayout());
@@ -224,33 +200,16 @@ public class Ics201Panel extends JPanel {
         ), BorderLayout.SOUTH);
 
         page.add(resourcesPanel, BorderLayout.CENTER);
-        page.add(createPreparerPanel(3), BorderLayout.SOUTH);
         return page;
     }
 
-    private JPanel createHeaderDisplayPanel(int index) {
-        JPanel header = UiSupport.formPanel();
-        header.setBorder(BorderFactory.createTitledBorder("Incident Header"));
-        incidentNameHeaderLabels[index] = new JLabel();
-        incidentNumberHeaderLabels[index] = new JLabel();
-        initiatedHeaderLabels[index] = new JLabel();
-        UiSupport.addRow(header, 0, "1. Incident Name", incidentNameHeaderLabels[index]);
-        UiSupport.addRow(header, 1, "2. Incident Number", incidentNumberHeaderLabels[index]);
-        UiSupport.addRow(header, 2, "3. Date/Time Initiated", initiatedHeaderLabels[index]);
-        return header;
-    }
-
-    private JPanel createPreparerPanel(int index) {
+    private JPanel buildPreparerPanel() {
         JPanel panel = UiSupport.formPanel();
-        panel.setBorder(BorderFactory.createTitledBorder(index == 0 ? "6. Prepared by" : "Prepared by"));
-        preparedByNameFields[index] = UiSupport.textField();
-        preparedByPositionFields[index] = UiSupport.textField();
-        preparedDateTimeFields[index] = UiSupport.textField();
-        preparedSignatureFields[index] = UiSupport.textField();
-        UiSupport.addRow(panel, 0, "Name", preparedByNameFields[index]);
-        UiSupport.addRow(panel, 1, "Position/Title", preparedByPositionFields[index]);
-        UiSupport.addRow(panel, 2, "Date/Time (yyyy-MM-dd HH:mm)", preparedDateTimeFields[index]);
-        UiSupport.addRow(panel, 3, "Signature", preparedSignatureFields[index]);
+        panel.setBorder(BorderFactory.createTitledBorder("6. Prepared by"));
+        UiSupport.addRow(panel, 0, "Name", preparedByNameField);
+        UiSupport.addRow(panel, 1, "Position/Title", preparedByPositionField);
+        UiSupport.addRow(panel, 2, "Date/Time", preparedDateTimeSpinner);
+        UiSupport.addRow(panel, 3, "Signature", preparedSignatureField);
         return panel;
     }
 
@@ -263,86 +222,6 @@ public class Ics201Panel extends JPanel {
         panel.add(addButton);
         panel.add(removeButton);
         return panel;
-    }
-
-    private void installHeaderRefresh() {
-        DocumentListener listener = new DocumentListener() {
-            @Override
-            public void insertUpdate(DocumentEvent event) {
-                refreshHeaderDisplays();
-            }
-
-            @Override
-            public void removeUpdate(DocumentEvent event) {
-                refreshHeaderDisplays();
-            }
-
-            @Override
-            public void changedUpdate(DocumentEvent event) {
-                refreshHeaderDisplays();
-            }
-        };
-        incidentNumberField.getDocument().addDocumentListener(listener);
-        dateInitiatedField.getDocument().addDocumentListener(listener);
-        timeInitiatedField.getDocument().addDocumentListener(listener);
-    }
-
-    private void installPreparerMirrors() {
-        installMirror(preparedByNameFields);
-        installMirror(preparedByPositionFields);
-        installMirror(preparedDateTimeFields);
-        installMirror(preparedSignatureFields);
-    }
-
-    private void installMirror(JTextField[] fields) {
-        for (JTextField field : fields) {
-            field.getDocument().addDocumentListener(new DocumentListener() {
-                @Override
-                public void insertUpdate(DocumentEvent event) {
-                    mirror(field, fields);
-                }
-
-                @Override
-                public void removeUpdate(DocumentEvent event) {
-                    mirror(field, fields);
-                }
-
-                @Override
-                public void changedUpdate(DocumentEvent event) {
-                    mirror(field, fields);
-                }
-            });
-        }
-    }
-
-    private void mirror(JTextField source, JTextField[] fields) {
-        if (syncingFields) {
-            return;
-        }
-        syncingFields = true;
-        try {
-            String value = source.getText();
-            for (JTextField field : fields) {
-                if (field != source && !value.equals(field.getText())) {
-                    field.setText(value);
-                }
-            }
-        } finally {
-            syncingFields = false;
-        }
-    }
-
-    private void refreshHeaderDisplays() {
-        String incidentName = incidentNameField.getText().trim();
-        String incidentNumber = incidentNumberField.getText().trim();
-        String initiated = joinDateTime(dateInitiatedField.getText().trim(), timeInitiatedField.getText().trim());
-        for (int i = 0; i < incidentNameHeaderLabels.length; i++) {
-            if (incidentNameHeaderLabels[i] != null) {
-                incidentNameHeaderLabels[i].setText(blankToPlaceholder(incidentName));
-                incidentNumberHeaderLabels[i].setText(blankToPlaceholder(incidentNumber));
-                initiatedHeaderLabels[i].setText(blankToPlaceholder(initiated));
-            }
-        }
     }
 
     private void refreshOrgChart() {
@@ -377,21 +256,16 @@ public class Ics201Panel extends JPanel {
 
     private void setFormEditable(boolean editable) {
         incidentNumberField.setEditable(editable);
-        dateInitiatedField.setEditable(editable);
-        timeInitiatedField.setEditable(editable);
+        dateTimeInitiatedSpinner.setEnabled(editable);
         mapSketchArea.setEditable(editable);
         situationSummaryArea.setEditable(editable);
         objectivesArea.setEditable(editable);
         actionTable.setEnabled(editable);
         resourceSummaryTable.setEnabled(editable);
-        for (int i = 0; i < PAGE_COUNT; i++) {
-            if (preparedByNameFields[i] != null) {
-                preparedByNameFields[i].setEditable(editable);
-                preparedByPositionFields[i].setEditable(editable);
-                preparedDateTimeFields[i].setEditable(editable);
-                preparedSignatureFields[i].setEditable(editable);
-            }
-        }
+        preparedByNameField.setEditable(editable);
+        preparedByPositionField.setEditable(editable);
+        preparedDateTimeSpinner.setEnabled(editable);
+        preparedSignatureField.setEditable(editable);
     }
 
     private void setPreparerValues(Ics201Form form, IncidentContext context) {
@@ -403,14 +277,10 @@ public class Ics201Panel extends JPanel {
         if (preparedByPosition.isBlank()) {
             preparedByPosition = safe(context == null ? "" : context.getCurrentUserPositionTitle());
         }
-        String preparedDateTime = formatDateTime(form.getPreparedDateTime());
-        String preparedSignature = safe(form.getPreparedBySignature());
-        for (int i = 0; i < PAGE_COUNT; i++) {
-            preparedByNameFields[i].setText(preparedByName);
-            preparedByPositionFields[i].setText(preparedByPosition);
-            preparedDateTimeFields[i].setText(preparedDateTime);
-            preparedSignatureFields[i].setText(preparedSignature);
-        }
+        preparedByNameField.setText(preparedByName);
+        preparedByPositionField.setText(preparedByPosition);
+        preparedDateTimeSpinner.setValue(AppController.toDate(form.getPreparedDateTime()));
+        preparedSignatureField.setText(safe(form.getPreparedBySignature()));
     }
 
     private String resolveIncidentName(Ics201Form form, IncidentContext context) {
@@ -428,28 +298,6 @@ public class Ics201Panel extends JPanel {
         return items;
     }
 
-    private LocalDate parseDate(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalDate.parse(value.trim(), DATE_FORMATTER);
-        } catch (DateTimeParseException exception) {
-            return null;
-        }
-    }
-
-    private LocalTime parseTime(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalTime.parse(value.trim(), TIME_FORMATTER);
-        } catch (DateTimeParseException exception) {
-            return null;
-        }
-    }
-
     private LocalDateTime parseDateTime(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -461,29 +309,13 @@ public class Ics201Panel extends JPanel {
         }
     }
 
-    private String formatDate(LocalDate value) {
-        return value == null ? "" : DATE_FORMATTER.format(value);
-    }
-
-    private String formatTime(LocalTime value) {
-        return value == null ? "" : TIME_FORMATTER.format(value);
-    }
-
-    private String formatDateTime(LocalDateTime value) {
-        return value == null ? "" : DATE_TIME_FORMATTER.format(value);
-    }
-
-    private String joinDateTime(String date, String time) {
-        if (date.isBlank() && time.isBlank()) {
-            return "";
+    private static LocalDateTime toDateTime(LocalDate date, LocalTime time) {
+        if (date == null && time == null) {
+            return null;
         }
-        if (time.isBlank()) {
-            return date;
-        }
-        if (date.isBlank()) {
-            return time;
-        }
-        return date + " " + time;
+        LocalDate d = date != null ? date : LocalDate.now();
+        LocalTime t = time != null ? time : LocalTime.MIDNIGHT;
+        return LocalDateTime.of(d, t);
     }
 
     private static JTextArea readOnlyTextArea(int rows) {

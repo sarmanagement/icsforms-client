@@ -586,13 +586,19 @@ public class AppController {
                     String name = safe(ics.get(i));
                     if (!name.isBlank()) {
                         String ref = "org:ic:" + i;
-                        TCard card = byRef.containsKey(ref) ? byRef.get(ref) : newOrgCard(name, "", "");
+                        TCard card;
+                        if (byRef.containsKey(ref)) {
+                            card = byRef.get(ref);
+                        } else {
+                            String nameKey = name.trim().toLowerCase();
+                            card = byName.containsKey(nameKey) ? byName.get(nameKey) : newOrgCard(name, "", "");
+                        }
                         card.setPersonName(name);
                         String icRadio = safe(chart.getIncidentCommanderRadio());
                         String icPhone = safe(chart.getIncidentCommanderPhone());
                         if (!icRadio.isBlank()) card.setRadioChannel(icRadio);
                         if (!icPhone.isBlank()) card.setPhoneNumber(icPhone);
-                        card.setSourceRef(ref);
+                        card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
                         card.setNotes(notePreserving(card.getNotes(), "Incident Commander"));
                         wanted.put(ref, card);
                         byName.putIfAbsent(name.trim().toLowerCase(), card);
@@ -648,7 +654,7 @@ public class AppController {
                 preparerCard = byName.containsKey(nameKey) ? byName.get(nameKey) : newPersonnelCard(preparerCardName);
             }
             preparerCard.setPersonName(preparerCardName);
-            preparerCard.setSourceRef(preparerRef);
+            preparerCard.setSourceRef(preparerCard.getSourceRef().isBlank() ? preparerRef : preparerCard.getSourceRef());
             preparerCard.setNotes(notePreserving(preparerCard.getNotes(),
                     preparerCardTitle.isBlank() ? "Preparer" : preparerCardTitle));
             wanted.put(preparerRef, preparerCard);

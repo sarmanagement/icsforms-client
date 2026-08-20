@@ -112,6 +112,18 @@ public class IncidentPickerDialog extends JDialog {
         cancelButton.addActionListener(e -> dispose());
 
         list.addListSelectionListener(e -> openButton.setEnabled(list.getSelectedIndex() >= 0));
+        list.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    int idx = list.locationToIndex(e.getPoint());
+                    if (idx >= 0) {
+                        chosenPath = summaries.get(idx).path();
+                        dispose();
+                    }
+                }
+            }
+        });
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         buttons.add(openButton);
