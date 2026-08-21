@@ -626,6 +626,17 @@ public class Ics204Panel extends JPanel {
             personsField.setText(row.getNumberOfPersons() <= 0 ? "" : String.valueOf(row.getNumberOfPersons()));
             contactField.setText(row.getContact());
             contactField.setToolTipText("Radio channel or phone number for contacting the team leader");
+            // Auto-fill contact from the leader's T-card radio/phone when the field is blank on open.
+            if (contactField.getText().isBlank() && !leaderField.getText().isBlank()) {
+                var card = controller.findPersonCard(leaderField.getText());
+                if (card != null) {
+                    String autoContact = card.getRadioChannel().isBlank()
+                            ? card.getPhoneNumber() : card.getRadioChannel();
+                    if (!autoContact.isBlank()) {
+                        contactField.setText(autoContact);
+                    }
+                }
+            }
             reportingField.setText(row.getReportingLocation());
             equipmentField = textArea(row.getSpecialEquipment(), 2);
             suppliesField = textArea(row.getSupplies(), 2);

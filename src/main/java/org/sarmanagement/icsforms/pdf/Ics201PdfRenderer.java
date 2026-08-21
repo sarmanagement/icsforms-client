@@ -279,6 +279,9 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                        float x, float y, float width, float height,
                                        Ics201Form form, int pageNumber) throws IOException {
+        float footerH = 18f;
+        float footerCellW = width / 4f;
+
         drawCell(stream, x, y, width, height);
         drawHeading(stream, bold, x, y + height, "6. Prepared by");
         float firstLineY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 16f;
@@ -287,9 +290,12 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         drawInlinePair(stream, bold, regular, x + (width * 0.45f), firstLineY, "Position/Title", safe(form.getPreparedByPositionTitle()));
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, secondLineY, "Date/Time", formatDateTime(form.getPreparedDateTime()));
         drawInlinePair(stream, bold, regular, x + (width * 0.45f), secondLineY, "Signature", safe(form.getPreparedBySignature()));
-        writeCellText(stream, bold, x + CELL_PADDING, y + 10f, "IAP Page: " + safe(form.getIapPage()));
-        float indicatorWidth = bold.getStringWidth("ICS 201, Page " + pageNumber) / 1000f * BODY_FONT_SIZE;
-        writeCellText(stream, bold, x + width - indicatorWidth - CELL_PADDING, y + 10f, "ICS 201, Page " + pageNumber);
+        // Footer band boxes: ICS 201 page indicator | IAP page — matching ICS 202 section 8 style
+        drawCell(stream, x, y, footerCellW, footerH);
+        drawCell(stream, x + footerCellW, y, footerCellW, footerH);
+        float footerTextY = y + footerH - CELL_PADDING - BODY_FONT_SIZE;
+        writeCellText(stream, bold, x + CELL_PADDING, footerTextY, "ICS 201, Page " + pageNumber + " of 4");
+        writeCellText(stream, bold, x + footerCellW + CELL_PADDING, footerTextY, "IAP Page: " + safe(form.getIapPage()));
     }
 
     private void drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -419,54 +425,41 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
         float icBoxW   = Math.min(200f, CWIDTH * 0.38f);
         float icBoxH   = 36f;
-        // Offset IC center slightly left so the command staff boxes fit on the right
-        float icCX     = LEFT + CWIDTH * 0.42f;
+        // Center the IC box; command staff branch off the vertical stem to the left
+        float icCX     = LEFT + CWIDTH * 0.5f;
         float icLeft   = icCX - icBoxW / 2f;
         float icTop    = TOP - 4f;
         float icBottom = icTop - icBoxH;
 
-        // --- Command Staff boxes (Safety, PIO, Liaison) — always shown ---
+        // --- Command Staff boxes (Safety, PIO, Liaison) — always shown, left of vertical stem ---
         List<String[]> cmdStaff = new ArrayList<>();
         cmdStaff.add(new String[]{"Safety Officer",            safe(chart.getSafetyOfficerName())});
         cmdStaff.add(new String[]{"Public Info. Officer",      safe(chart.getPublicInformationOfficerName())});
         cmdStaff.add(new String[]{"Liaison Officer",           safe(chart.getLiaisonOfficerName())});
 
+        float sBoxH = 22f, sGap = 4f;
+        // Staff boxes sit to the left of the IC box; right edge abuts IC box left minus a small gap
+        float sRight = icLeft - 4f;
+        float sBoxW  = Math.max(40f, Math.min(150f, sRight - LEFT - 4f));
+        float sLeft  = sRight - sBoxW;
+
         float cmdBottom = icBottom;
-        {
-            float sBoxH = 22f, sGap = 4f;
-            float sLeft  = icLeft + icBoxW + 16f;
-            float sBoxW  = Math.max(40f, Math.min(150f, LEFT + CWIDTH - sLeft - 4f));
-            float vLineX = sLeft - 6f;
-            float vTop   = icTop - 4f;
-            float vBot   = vTop - (cmdStaff.size() - 1) * (sBoxH + sGap) - sBoxH / 2f;
-
-            // Horizontal connector from IC box right-edge midpoint to vertical branch line
-            float icMidY = icBottom + icBoxH / 2f;
-            stream.moveTo(icLeft + icBoxW, icMidY);
-            stream.lineTo(vLineX, icMidY);
+        for (int i = 0; i < cmdStaff.size(); i++) {
+            float sTop  = icBottom - 4f - i * (sBoxH + sGap);
+            float sBotY = sTop - sBoxH;
+            cmdBottom = Math.min(cmdBottom, sBotY);
+            float midY = sTop - sBoxH / 2f;
+            // Horizontal connector from vertical stem (icCX) leftward to staff box right edge
+            stream.moveTo(icCX, midY);
+            stream.lineTo(sRight, midY);
             stream.stroke();
-            // Vertical branch line connecting all staff boxes (extends from vBot to vTop)
-            stream.moveTo(vLineX, vBot);
-            stream.lineTo(vLineX, vTop);
+            // Staff box
+            stream.addRect(sLeft, sBotY, sBoxW, sBoxH);
             stream.stroke();
-
-            for (int i = 0; i < cmdStaff.size(); i++) {
-                float sTop  = icTop - 4f - i * (sBoxH + sGap);
-                float sBotY = sTop - sBoxH;
-                cmdBottom = Math.min(cmdBottom, sBotY);
-                // Horizontal connector to each staff box
-                float midY = sTop - sBoxH / 2f;
-                stream.moveTo(vLineX, midY);
-                stream.lineTo(sLeft, midY);
-                stream.stroke();
-                // Staff box
-                stream.addRect(sLeft, sBotY, sBoxW, sBoxH);
-                stream.stroke();
-                // Title (bold, top) + name (regular, below)
-                drawOrgText(stream, bold,    7f, cmdStaff.get(i)[0], sLeft + 2f, sTop - 10f);
-                drawOrgText(stream, regular, 7f, truncate(cmdStaff.get(i)[1], (int) (sBoxW / 4.5f)),
-                            sLeft + 2f, sTop - 19f);
-            }
+            // Title (bold, top) + name (regular, below)
+            drawOrgText(stream, bold,    7f, cmdStaff.get(i)[0], sLeft + 2f, sTop - 10f);
+            drawOrgText(stream, regular, 7f, truncate(cmdStaff.get(i)[1], (int) (sBoxW / 4.5f)),
+                        sLeft + 2f, sTop - 19f);
         }
 
         // Draw IC box on top of connectors so borders stay clean

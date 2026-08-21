@@ -11,6 +11,7 @@ import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,7 +19,9 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Structured PDF renderer for the Assignment List (ICS 204) form.
@@ -53,6 +56,16 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         IncidentContext context = data.getIncidentContext();
         Ics204Form form = data.getForm204();
         List<OverflowSection> overflowSections = new ArrayList<>();
+
+        // Build task map for accurate person count (excludes canines/equipment)
+        Map<String, SarTaskAssignment> tasksByAssignmentId = new LinkedHashMap<>();
+        if (data.getSarTaskAssignments() != null) {
+            for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+                if (task.getAssignmentId() != null && !task.getAssignmentId().isBlank()) {
+                    tasksByAssignmentId.put(task.getAssignmentId(), task);
+                }
+            }
+        }
 
         PDPage page = new PDPage(PDRectangle.LETTER);
         document.addPage(page);
@@ -96,7 +109,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             y -= row2;
 
             drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row5);
-            overflowSections.addAll(drawResourcesSection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5, form));
+            overflowSections.addAll(drawResourcesSection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5, form, tasksByAssignmentId));
             y -= row5;
 
             drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row6);
@@ -162,7 +175,8 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private List<OverflowSection> drawResourcesSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
-                                                       float x, float y, float width, float height, Ics204Form form) throws IOException {
+                                                       float x, float y, float width, float height, Ics204Form form,
+                                                       Map<String, SarTaskAssignment> tasksByAssignmentId) throws IOException {
         List<OverflowSection> overflowSections = new ArrayList<>();
         drawHeading(stream, bold, x, y + height, "5. Resources Assigned");
         float tableTop = y + height - 18f;
@@ -206,7 +220,8 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             }
 
             ResourceAssignment resource = resources.get(rowIndex);
-            List<List<String>> columns = resourceColumns(resource, rowIndex == (visibleCount - 1) && resources.size() > RESOURCE_ROW_COUNT);
+            SarTaskAssignment linkedTask = tasksByAssignmentId.get(resource.getAssignmentId());
+            List<List<String>> columns = resourceColumns(resource, linkedTask, rowIndex == (visibleCount - 1) && resources.size() > RESOURCE_ROW_COUNT);
             for (int col = 0; col < columns.size(); col++) {
                 writeWrappedCellText(stream, regular, starts[col], rowBottom, width * widths[col], rowTop - rowBottom, columns.get(col));
             }
@@ -467,14 +482,16 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         return starts;
     }
 
-    private List<List<String>> resourceColumns(ResourceAssignment resource, boolean appendContinuationNotice) {
+    private List<List<String>> resourceColumns(ResourceAssignment resource, SarTaskAssignment linkedTask, boolean appendContinuationNotice) {
         List<List<String>> columns = new ArrayList<>();
         String teamNum = safe(resource.getAssignmentTeamNumber());
         String resId = safe(resource.getResourceIdentifier());
         String identifier = teamNum.isBlank() ? resId : (teamNum + ": " + resId);
         columns.add(wrap(identifier, 18));
         columns.add(wrap(safe(resource.getLeader()), 18));
-        int personCount = resource.getNumberOfPersons();
+        // Use countPeople() from the linked SAR task (excludes canines/equipment) if available;
+        // fall back to the manually entered number of persons.
+        int personCount = linkedTask != null ? countPeople(linkedTask) : resource.getNumberOfPersons();
         columns.add(List.of(personCount > 0 ? String.valueOf(personCount) : ""));
         columns.add(wrap(safe(resource.getContact()), 24));
 

@@ -519,6 +519,18 @@ public class AppController {
             resource.setAssignmentTeamNumber(task.getAssignmentTeamNumber());
             resource.setResourceType(task.getResourceType());
             resource.setTaskType(task.getTaskType());
+            // Auto-fill contact from the leader's T-card radio/phone when the field is blank.
+            if (safe(resource.getContact()).isBlank() && !safe(resource.getLeader()).isBlank()) {
+                TCard leaderCard = findPersonCard(resource.getLeader());
+                if (leaderCard != null) {
+                    String radioPhone = safe(leaderCard.getRadioChannel()).isBlank()
+                            ? safe(leaderCard.getPhoneNumber())
+                            : safe(leaderCard.getRadioChannel());
+                    if (!radioPhone.isBlank()) {
+                        resource.setContact(radioPhone);
+                    }
+                }
+            }
         }
         updateClueTaskLabels(tasksById);
     }

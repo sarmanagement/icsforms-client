@@ -196,7 +196,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         float detailLineY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 16f;
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, detailLineY, "Resource Type", safe(task.getResourceType()));
         drawInlinePair(stream, bold, regular, x + (width * 0.42f), detailLineY, "Task Geometry", safe(task.getTaskType()));
-        float tableTop = y + height - 30f;
+        float tableTop = detailLineY - BODY_FONT_SIZE - 4f;
         float headerHeight = 20f;
         float headerBottom = tableTop - headerHeight;
         float rowHeight = (headerBottom - y) / 9f;

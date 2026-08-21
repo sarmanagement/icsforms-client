@@ -127,6 +127,9 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     private void drawFooter(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                              float x, float y, float width, float height,
                              Ics207Form form) throws IOException {
+        float footerH = 18f;
+        float footerCellW = width / 4f;
+
         drawCell(stream, x, y, width, height);
         drawHeading(stream, bold, x, y + height, "4. Prepared by");
         float lineY1 = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
@@ -140,12 +143,12 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                 "Date/Time", formatDateTime(form.getPreparedDateTime()));
         drawInlinePair(stream, bold, regular, col2X, lineY2, "Signature", "");
 
-        // Bottom band: "IAP Page: X" left-aligned, "ICS 207" right-aligned
-        String iapLabel = "IAP Page: " + safe(form.getIapPage());
-        writeCellText(stream, bold, x + CELL_PADDING, y + 10f, iapLabel);
-        String formLabel = "ICS 207";
-        float formLabelW = bold.getStringWidth(formLabel) / 1000f * BODY_FONT_SIZE;
-        writeCellText(stream, bold, x + width - formLabelW - CELL_PADDING, y + 10f, formLabel);
+        // Footer band boxes: ICS 207 identifier | IAP page — matching ICS 202 section 8 style
+        drawCell(stream, x, y, footerCellW, footerH);
+        drawCell(stream, x + footerCellW, y, footerCellW, footerH);
+        float footerTextY = y + footerH - CELL_PADDING - BODY_FONT_SIZE;
+        writeCellText(stream, bold, x + CELL_PADDING, footerTextY, "ICS 207");
+        writeCellText(stream, bold, x + footerCellW + CELL_PADDING, footerTextY, "IAP Page: " + safe(form.getIapPage()));
     }
 
     // -----------------------------------------------------------------------
@@ -174,45 +177,37 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
         float icBoxW  = Math.min(180f, CWIDTH * 0.36f);
         float icBoxH  = 32f;
-        float icCX    = LEFT + CWIDTH * 0.42f;
+        // Center the IC box; command staff branch off the vertical stem to the left
+        float icCX    = LEFT + CWIDTH * 0.5f;
         float icLeft  = icCX - icBoxW / 2f;
         float icTop   = TOP - 4f;
         float icBot   = icTop - icBoxH;
 
-        // --- Command staff (always shown) ---
+        // --- Command staff (always shown), left of vertical stem ---
         List<String[]> cmdStaff = buildCmdStaff(chart);
 
+        float sBoxH = 18f, sGap = 3f;
+        // Staff boxes sit to the left of the IC box; right edge abuts IC box left minus a small gap
+        float sRight = icLeft - 4f;
+        float sBoxW  = Math.max(36f, Math.min(140f, sRight - LEFT - 4f));
+        float sLeft  = sRight - sBoxW;
+
         float cmdBot = icBot;
-        {
-            float sBoxH = 18f, sGap = 3f;
-            float sLeft = icLeft + icBoxW + 14f;
-            float sBoxW = Math.max(36f, Math.min(140f, LEFT + CWIDTH - sLeft - 4f));
-            float vLineX = sLeft - 6f;
-            float vTop   = icTop - 4f;
-            float vBot   = vTop - (cmdStaff.size() - 1) * (sBoxH + sGap) - sBoxH / 2f;
-
-            float icMidY = icBot + icBoxH / 2f;
-            stream.moveTo(icLeft + icBoxW, icMidY);
-            stream.lineTo(vLineX, icMidY);
+        for (int i = 0; i < cmdStaff.size(); i++) {
+            float sTop  = icBot - 4f - i * (sBoxH + sGap);
+            float sBotY = sTop - sBoxH;
+            cmdBot = Math.min(cmdBot, sBotY);
+            float midY = sTop - sBoxH / 2f;
+            // Horizontal connector from vertical stem (icCX) leftward to staff box right edge
+            stream.moveTo(icCX, midY);
+            stream.lineTo(sRight, midY);
             stream.stroke();
-            stream.moveTo(vLineX, vBot);
-            stream.lineTo(vLineX, vTop);
+            // Staff box
+            stream.addRect(sLeft, sBotY, sBoxW, sBoxH);
             stream.stroke();
-
-            for (int i = 0; i < cmdStaff.size(); i++) {
-                float sTop  = icTop - 4f - i * (sBoxH + sGap);
-                float sBotY = sTop - sBoxH;
-                cmdBot = Math.min(cmdBot, sBotY);
-                float midY = sTop - sBoxH / 2f;
-                stream.moveTo(vLineX, midY);
-                stream.lineTo(sLeft, midY);
-                stream.stroke();
-                stream.addRect(sLeft, sBotY, sBoxW, sBoxH);
-                stream.stroke();
-                drawOrgText(stream, bold,    7f, cmdStaff.get(i)[0], sLeft + 2f, sTop - 9f);
-                drawOrgText(stream, regular, 7f, truncate(cmdStaff.get(i)[1], (int) (sBoxW / 4.3f)),
-                            sLeft + 2f, sTop - 17f);
-            }
+            drawOrgText(stream, bold,    7f, cmdStaff.get(i)[0], sLeft + 2f, sTop - 9f);
+            drawOrgText(stream, regular, 7f, truncate(cmdStaff.get(i)[1], (int) (sBoxW / 4.3f)),
+                        sLeft + 2f, sTop - 17f);
         }
 
         // IC box on top of connectors
