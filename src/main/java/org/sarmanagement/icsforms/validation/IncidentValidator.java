@@ -7,6 +7,10 @@ import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.SarTaskSupport;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +35,7 @@ public class IncidentValidator {
         validateContext(data.getIncidentContext(), messages);
         validate202(data.getForm202(), messages);
         validate204(data.getForm204(), messages);
-        validateSarTasks(data.getSarTaskAssignments(), messages);
+        validateSarTasks(data.getSarTaskAssignments(), data.getTCards(), messages);
         return messages;
     }
 
@@ -161,12 +165,46 @@ public class IncidentValidator {
      * @param tasks SAR task assignments.
      * @param messages collector for validation messages.
      */
-    private void validateSarTasks(List<SarTaskAssignment> tasks, List<ValidationMessage> messages) {
+    private void validateSarTasks(List<SarTaskAssignment> tasks, List<TCard> tCards,
+                                    List<ValidationMessage> messages) {
+        // Build a set of EQUIPMENT T-card resource identifiers for cross-referencing.
+        java.util.Set<String> equipmentIds = new java.util.HashSet<>();
+        if (tCards != null) {
+            for (TCard card : tCards) {
+                if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+                    String rid = card.getResourceIdentifier().trim().toLowerCase();
+                    if (!rid.isBlank()) {
+                        equipmentIds.add(rid);
+                    }
+                }
+            }
+        }
         for (int i = 0; i < tasks.size(); i++) {
             SarTaskAssignment task = tasks.get(i);
             if (blank(task.getAssignmentTeamNumber())) {
                 messages.add(new ValidationMessage("sarTaskAssignments[" + i + "].assignmentTeamNumber",
                         "Assignment/Team Number is required on each SAR task assignment form."));
+            }
+            // Canine tasks must include at least one canine (EQUIPMENT T-card) resource in
+            // the resources-assigned list.
+            if (SarTaskSupport.usesCanineFactors(task.getResourceType())) {
+                boolean hasCanineResource = false;
+                List<SarTaskResource> resources = task.getResourcesAssigned();
+                if (resources != null) {
+                    for (SarTaskResource res : resources) {
+                        String name = res.getName() == null ? "" : res.getName().trim().toLowerCase();
+                        if (!name.isBlank() && equipmentIds.contains(name)) {
+                            hasCanineResource = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasCanineResource) {
+                    messages.add(new ValidationMessage(
+                            "sarTaskAssignments[" + i + "].resourcesAssigned",
+                            "Canine task '" + task.getAssignmentTeamNumber()
+                                    + "' must include at least one canine resource (EQUIPMENT T-card) in resources assigned."));
+                }
             }
         }
     }

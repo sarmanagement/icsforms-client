@@ -57,6 +57,7 @@ public class MainFrame extends JFrame {
     private final JLabel validationLabel = new JLabel("Ready", SwingConstants.LEFT);
     private final IncidentContextPanel incidentContextPanel;
     private final OrganizationalChartPanel organizationalChartPanel;
+    private final Ics201Panel ics201Panel;
     private final Ics202Panel ics202Panel;
     private final Ics204Panel ics204Panel;
     private final List<Ics214Panel> ics214Panels = new ArrayList<>();
@@ -85,6 +86,7 @@ public class MainFrame extends JFrame {
         this.controller = new AppController(data, repository, exportService, validator);
         this.incidentContextPanel = new IncidentContextPanel(controller);
         this.organizationalChartPanel = new OrganizationalChartPanel(controller);
+        this.ics201Panel = new Ics201Panel(controller);
         this.ics202Panel = new Ics202Panel(controller);
         this.ics204Panel = new Ics204Panel(controller);
         this.sarTaskPanel = new SarTaskPanel(controller);
@@ -98,6 +100,7 @@ public class MainFrame extends JFrame {
         groupVisible.put(T_CARDS_GROUP, true);
         registerTab("Shared", incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
         registerTab("Org Chart", organizationalChartPanel, AppController.LinkSource.ORG_CHART, CORE_GROUP);
+        registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, CORE_GROUP);
         registerTab("ICS 202", ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
         registerTab("ICS 204", ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
         registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
@@ -151,17 +154,47 @@ public class MainFrame extends JFrame {
         JMenu configMenu = new JMenu("Configuration");
         JMenu logsListMenu = new JMenu("Go to Log");
 
-        JMenuItem newItem = new JMenuItem("New");
+        JMenuItem newItem = new JMenuItem("New…");
         newItem.addActionListener(event -> {
-            controller.newDocument();
+            StartupDialog startup = new StartupDialog(MainFrame.this, defaultDirectory, false);
+            startup.setVisible(true);
+            StartupDialog.StartupAction action = startup.getChosenAction();
+            if (action == null) {
+                return; // cancelled
+            }
+            switch (action) {
+                case OPEN_EXISTING -> {
+                    controller.open(startup.getChosenPath());
+                }
+                case OPEN_NEW_PERIOD -> {
+                    controller.open(startup.getChosenPath());
+                    controller.newOperationalPeriod();
+                }
+                case NEW_PRE_OP, NEW_INITIAL_RESPONSE, NEW_OPERATIONAL_PERIOD -> {
+                    controller.newDocument();
+                    IapPhase phase = switch (action) {
+                        case NEW_INITIAL_RESPONSE -> IapPhase.INITIAL_RESPONSE;
+                        case NEW_OPERATIONAL_PERIOD -> IapPhase.DURING_OP;
+                        case NEW_PRE_OP -> IapPhase.PRE_OP;
+                        default -> IapPhase.PRE_OP;
+                    };
+                    controller.setIapPhase(phase);
+                    controller.setIncidentMode(startup.getChosenMode());
+                }
+            }
             refreshFromModel();
         });
 
         JMenuItem openItem = new JMenuItem("Open…");
-        openItem.addActionListener(event -> chooseFile(defaultDirectory, false, path -> {
-            controller.open(path);
-            refreshFromModel();
-        }));
+        openItem.addActionListener(event -> {
+            IncidentPickerDialog picker = new IncidentPickerDialog(MainFrame.this, defaultDirectory);
+            picker.setVisible(true);
+            Path chosen = picker.getChosenPath();
+            if (chosen != null) {
+                controller.open(chosen);
+                refreshFromModel();
+            }
+        });
 
         JMenuItem saveItem = new JMenuItem("Save");
         saveItem.addActionListener(event -> {
@@ -202,8 +235,14 @@ public class MainFrame extends JFrame {
             viewMenu.add(item);
         }
 
+        JMenuItem export201Item = new JMenuItem("Export ICS 201 PDF…");
+        export201Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 201"));
+
         JMenuItem export202Item = new JMenuItem("Export ICS 202 PDF…");
         export202Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 202"));
+
+        JMenuItem export207Item = new JMenuItem("Export ICS 207 PDF…");
+        export207Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 207"));
 
         JMenuItem export204Item = new JMenuItem("Export ICS 204 PDF…");
         export204Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 204"));
@@ -227,7 +266,7 @@ public class MainFrame extends JFrame {
                 pushToModel(source);
                 try {
                     controller.exportAll(directory, source);
-                    JOptionPane.showMessageDialog(this, "Exported ICS 202, ICS 204, ICS 214, and SAR Task Assignment PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Exported available PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
                 } catch (IOException exception) {
                     showError("Failed to export PDFs", exception);
                 }
@@ -250,6 +289,9 @@ public class MainFrame extends JFrame {
                 }
             });
         });
+
+        JMenuItem exportResourcesCsvItem = new JMenuItem("Export Resources as CSV…");
+        exportResourcesCsvItem.addActionListener(event -> tCardPanel.exportToCsv());
 
         JMenuItem addLogItem = new JMenuItem("Add Log");
         addLogItem.addActionListener(event -> addLog());
@@ -278,11 +320,14 @@ public class MainFrame extends JFrame {
         fileMenu.add(saveAsItem);
         fileMenu.addSeparator();
         fileMenu.add(exitItem);
+        exportMenu.add(export201Item);
         exportMenu.add(export202Item);
+        exportMenu.add(export207Item);
         exportMenu.add(export204Item);
         exportMenu.add(export214Item);
         exportMenu.add(exportSarTaskItem);
         exportMenu.add(exportClueLogItem);
+        exportMenu.add(exportResourcesCsvItem);
         exportMenu.add(exportAllItem);
         exportMenu.addSeparator();
         exportMenu.add(exportIapBundleItem);
@@ -311,13 +356,18 @@ public class MainFrame extends JFrame {
         ButtonGroup phaseGroup = new ButtonGroup();
         JRadioButtonMenuItem preOpItem  = new JRadioButtonMenuItem("Pre-Operational (planning)",
                 controller.getIapPhase() == IapPhase.PRE_OP);
-        JRadioButtonMenuItem duringOpItem = new JRadioButtonMenuItem("During Operational Period",
+        JRadioButtonMenuItem initialResponseItem = new JRadioButtonMenuItem("Initial Incident Response",
+                controller.getIapPhase() == IapPhase.INITIAL_RESPONSE);
+        JRadioButtonMenuItem duringOpItem = new JRadioButtonMenuItem("Subsequent Operational Period",
                 controller.getIapPhase() == IapPhase.DURING_OP);
         preOpItem.addActionListener(e -> { controller.setIapPhase(IapPhase.PRE_OP); refreshFromModel(); });
+        initialResponseItem.addActionListener(e -> { controller.setIapPhase(IapPhase.INITIAL_RESPONSE); refreshFromModel(); });
         duringOpItem.addActionListener(e -> { controller.setIapPhase(IapPhase.DURING_OP); refreshFromModel(); });
         phaseGroup.add(preOpItem);
+        phaseGroup.add(initialResponseItem);
         phaseGroup.add(duringOpItem);
         iapPhaseMenu.add(preOpItem);
+        iapPhaseMenu.add(initialResponseItem);
         iapPhaseMenu.add(duringOpItem);
         configMenu.addSeparator();
         configMenu.add(iapPhaseMenu);
@@ -355,6 +405,7 @@ public class MainFrame extends JFrame {
     private void pushToModel(AppController.LinkSource source) {
         incidentContextPanel.pushToModel();
         organizationalChartPanel.pushToModel();
+        ics201Panel.pushToModel();
         ics202Panel.pushToModel();
         ics204Panel.pushToModel();
         for (Ics214Panel panel : ics214Panels) {
@@ -367,7 +418,7 @@ public class MainFrame extends JFrame {
     }
 
     private void ensureLogs(AppData data) {
-        if (data.getActivityLogs().isEmpty()) {
+        if (data.getActivityLogs().isEmpty() && data.getIapPhase() != IapPhase.PRE_OP) {
             Ics214Form form = new Ics214Form();
             form.setPreparedByName(data.getForm204().getPreparedByName());
             form.setPreparedByPositionTitle(data.getForm204().getPreparedByPositionTitle());
@@ -404,6 +455,7 @@ public class MainFrame extends JFrame {
         int selectedLogIndex = selectedLogIndex(selectedComponent);
         incidentContextPanel.refreshFromModel();
         organizationalChartPanel.refreshFromModel();
+        ics201Panel.refreshFromModel();
         ics202Panel.refreshFromModel();
         ics204Panel.refreshFromModel();
         ensureLogs(controller.getData());
@@ -427,6 +479,7 @@ public class MainFrame extends JFrame {
             tabs.removeAll();
             addVisibleTab(incidentContextPanel);
             addVisibleTab(organizationalChartPanel);
+            addVisibleTab(ics201Panel);
             addVisibleTab(ics202Panel);
             addVisibleTab(ics204Panel);
             // sarTaskPanel and clueLogPanel belong to SAR_ONLY_GROUP; addVisibleTab() checks

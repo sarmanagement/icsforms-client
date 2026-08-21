@@ -37,6 +37,32 @@ final class UiSupport {
     static final Color REQUIRED_FIELD_BACKGROUND = new Color(255, 248, 225);
     private static final String FORM_SPACER_PROPERTY = "uiSupport.formSpacer";
 
+    /**
+     * When set to a future timestamp, all autocomplete suggestion popups are suppressed until
+     * that time has passed.  This covers both the {@code DocumentListener} path (which fires
+     * when {@code setText()} is called during a model refresh) and the {@code focusGained}
+     * path (which fires when the tab panel programmatically moves focus to the first field).
+     * See {@link #suppressSuggestionsFor(long)}.
+     */
+    private static volatile long suppressSuggestionsUntil = 0;
+
+    /**
+     * Suppresses all autocomplete suggestion popups for the given duration.  Call this
+     * immediately before any batch of programmatic {@code setText()} calls on fields that
+     * have autocomplete installed (e.g. at the start of {@code refreshFromModel()}), so
+     * that neither the document-change trigger nor the focus-gained trigger opens the popup
+     * during a tab switch.  Normal user interaction resumes once the window expires.
+     *
+     * @param durationMs how long (in ms from now) to suppress suggestions.
+     */
+    static void suppressSuggestionsFor(long durationMs) {
+        suppressSuggestionsUntil = System.currentTimeMillis() + durationMs;
+    }
+
+    private static boolean isSuggestionsSuppressed() {
+        return System.currentTimeMillis() < suppressSuggestionsUntil;
+    }
+
     private UiSupport() {
     }
 
@@ -254,6 +280,42 @@ final class UiSupport {
         JPopupMenu popup = new JPopupMenu();
         boolean[] updating = {false};
 
+        // Shared logic: rebuild and (if non-empty) show the popup for the current text.
+        Runnable showSuggestions = () -> SwingUtilities.invokeLater(() -> {
+            String text = nameField.getText().trim().toLowerCase(Locale.ROOT);
+            popup.removeAll();
+            List<String> matched;
+            if (text.isEmpty()) {
+                // With a blank field show all available names (up to 10).
+                matched = suggestions.get().stream().limit(10).toList();
+            } else {
+                matched = suggestions.get().stream()
+                        .filter(s -> s.trim().toLowerCase(Locale.ROOT).startsWith(text))
+                        .limit(10)
+                        .toList();
+            }
+            if (matched.isEmpty()) {
+                popup.setVisible(false);
+                return;
+            }
+            for (String s : matched) {
+                JMenuItem item = new JMenuItem(s);
+                item.addActionListener(ev -> {
+                    updating[0] = true;
+                    nameField.setText(s);
+                    updating[0] = false;
+                    popup.setVisible(false);
+                    if (onSelected != null) {
+                        onSelected.accept(s);
+                    }
+                });
+                popup.add(item);
+            }
+            if (nameField.isShowing()) {
+                popup.show(nameField, 0, nameField.getHeight());
+            }
+        });
+
         DocumentListener listener = new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent e) { update(); }
             @Override public void removeUpdate(DocumentEvent e) { update(); }
@@ -261,42 +323,27 @@ final class UiSupport {
 
             private void update() {
                 if (updating[0]) return;
-                SwingUtilities.invokeLater(() -> {
-                    String text = nameField.getText().trim().toLowerCase(Locale.ROOT);
-                    popup.removeAll();
-                    if (text.isEmpty()) {
-                        popup.setVisible(false);
-                        return;
-                    }
-                    List<String> matched = suggestions.get().stream()
-                            .filter(s -> s.trim().toLowerCase(Locale.ROOT).startsWith(text))
-                            .limit(10)
-                            .toList();
-                    if (matched.isEmpty()) {
-                        popup.setVisible(false);
-                        return;
-                    }
-                    for (String s : matched) {
-                        JMenuItem item = new JMenuItem(s);
-                        item.addActionListener(ev -> {
-                            updating[0] = true;
-                            nameField.setText(s);
-                            updating[0] = false;
-                            popup.setVisible(false);
-                            if (onSelected != null) {
-                                onSelected.accept(s);
-                            }
-                        });
-                        popup.add(item);
-                    }
-                    if (nameField.isShowing()) {
-                        popup.show(nameField, 0, nameField.getHeight());
-                    }
-                });
+                if (isSuggestionsSuppressed()) return;
+                // Only show while typing when text is non-empty.
+                String text = nameField.getText().trim();
+                if (text.isEmpty()) {
+                    popup.setVisible(false);
+                    return;
+                }
+                showSuggestions.run();
             }
         };
         nameField.getDocument().addDocumentListener(listener);
         nameField.addFocusListener(new FocusAdapter() {
+            @Override public void focusGained(FocusEvent e) {
+                // Show suggestions when the user navigates to the field (mouse click or keyboard
+                // Tab traversal), but not when the tab panel moves focus programmatically during
+                // a model refresh.  The suppression flag is set by refreshFromModel() callers
+                // before setText() calls, so it covers both the DocumentListener and this handler.
+                if (!isSuggestionsSuppressed() && !suggestions.get().isEmpty()) {
+                    showSuggestions.run();
+                }
+            }
             @Override public void focusLost(FocusEvent e) { popup.setVisible(false); }
         });
     }

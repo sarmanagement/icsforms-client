@@ -1,18 +1,32 @@
 package org.sarmanagement.icsforms.model;
 
 /**
- * Indicates whether the IAP is being prepared before the operational period starts
- * or is being updated during an active operational period.
+ * Identifies the current incident phase and drives which forms are active vs. read-only.
  *
- * <p>In {@link #PRE_OP} mode resources may be placed in an "Ordered" status on the T-card
- * rack; an "Ordered" rack column is shown when resources carry that status.  No automatic
- * check-in time is assigned when a resource card is created.
- * In {@link #DURING_OP} mode resources are checked in as they arrive; the "Ordered" rack
- * column is hidden when empty.</p>
+ * <ul>
+ *   <li>{@link #PRE_OP} – pre-operational planning: the team is preparing for a potential or
+ *       anticipated incident.  No ICS 201 has been generated yet; resources may be placed in an
+ *       "Ordered" status on the T-card rack.</li>
+ *   <li>{@link #INITIAL_RESPONSE} – initial incident response: an ICS 201 Incident Briefing is
+ *       the primary capture tool.  The 201 is fully editable; ICS 202 and ICS 204 are also
+ *       available for concurrent planning.  Resources may still be in an "Ordered" status.</li>
+ *   <li>{@link #DURING_OP} – subsequent full operational period: the ICS 201 from the initial
+ *       response is locked (read-only) and attached to the IAP as a historical record.  ICS 202
+ *       and ICS 204 are the primary operational forms.  The "Ordered" rack column is hidden
+ *       when empty.</li>
+ * </ul>
  */
 public enum IapPhase {
-    /** IAP preparation phase — before the operational period begins. */
+    /** Pre-operational planning phase — before the incident response begins. */
     PRE_OP,
-    /** Active operational period — resources are checking in. */
+    /**
+     * Initial incident response phase — ICS 201 is the primary capture tool and is fully
+     * editable.
+     */
+    INITIAL_RESPONSE,
+    /**
+     * Subsequent full operational period — ICS 201 is locked as a historical record; ICS 202
+     * and ICS 204 are the primary forms.
+     */
     DURING_OP
 }

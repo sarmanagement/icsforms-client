@@ -54,7 +54,9 @@ public class Ics202Panel extends JPanel {
         preparedByPositionField.setEditable(false);
         UiSupport.addRow(form, 7, "Incident commander", approvedByNameField);
         UiSupport.addRow(form, 8, "IC Approval date/time", approvedDateTimeField);
-        UiSupport.addRow(form, 9, "IAP page", iapPageField);
+        iapPageField.setEditable(false);
+        iapPageField.setToolTipText("Assigned automatically when the IAP bundle PDF is exported");
+        UiSupport.addRow(form, 9, "IAP page (auto)", iapPageField);
         JScrollPane scrollPane = new JScrollPane(form);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         add(scrollPane, BorderLayout.CENTER);

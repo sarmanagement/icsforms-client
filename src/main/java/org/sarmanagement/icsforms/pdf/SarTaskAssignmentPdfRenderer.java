@@ -79,7 +79,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             float row8 = rows[7];
 
             float leftWidth = pageWidth * 0.30f;
-            float middleWidth = pageWidth * 0.44f;
+            float middleWidth = pageWidth * 0.41f;  // slightly narrower to give section 3 more room
             float rightWidth = pageWidth - leftWidth - middleWidth;
 
             drawCell(stream, layout.x(), y - row1, leftWidth, row1);
@@ -130,7 +130,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             drawPreparedBySection(stream, bold, regular, layout.x(), y - row8, pageWidth, row8,
                     "11. Prepared by", task.getPreparedByName(), task.getPreparedByPositionTitle(), task.getPreparedDateTime(),
                     "SAR Task Assignment Form - Page 1 of 2"
-                    + (task.getIapPage().isBlank() ? "" : "   IAP Page " + task.getIapPage()));
+                    + (task.getIapPage().isBlank() ? "" : " | IAP Page " + task.getIapPage()));
         }
     }
 
@@ -196,7 +196,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         float detailLineY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 16f;
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, detailLineY, "Resource Type", safe(task.getResourceType()));
         drawInlinePair(stream, bold, regular, x + (width * 0.42f), detailLineY, "Task Geometry", safe(task.getTaskType()));
-        float tableTop = y + height - 30f;
+        float tableTop = detailLineY - BODY_FONT_SIZE - 4f;
         float headerHeight = 20f;
         float headerBottom = tableTop - headerHeight;
         float rowHeight = (headerBottom - y) / 9f;
@@ -235,7 +235,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     private void drawCommunicationsSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                            float x, float y, float width, float height, List<CommunicationEntry> communications) throws IOException {
         drawHeading(stream, bold, x, y + height, "10. Communications");
-        float tableTop = y + height - 18f;
+        float tableTop = y + height - 14f;
         float headerHeight = 20f;
         float headerBottom = tableTop - headerHeight;
         float[] widths = {0.30f, 0.30f, 0.40f};
@@ -251,7 +251,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         for (int i = 0; i < headings.length; i++) {
             writeWrappedCellText(stream, bold, starts[i], headerBottom, width * widths[i], headerHeight, List.of(headings[i]));
         }
-        int rows = Math.max(4, communications.size());
+        int rows = Math.max(3, communications.size());
         float rowHeight = (headerBottom - y) / rows;
         for (int rowIndex = 0; rowIndex < rows; rowIndex++) {
             float rowTop = headerBottom - (rowIndex * rowHeight);
@@ -339,11 +339,23 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, contentY, "Name", safe(name));
         drawInlinePair(stream, bold, regular, x + (width * 0.42f), contentY, "Position/Title", safe(title));
         drawInlinePair(stream, bold, regular, x + (width * 0.74f), contentY, "Date/Time", formatDateTime(dateTime));
+        // Split footerLabel on " | " to allow an IAP-page portion on the right side.
+        int sepIdx = footerLabel.indexOf(" | ");
+        String leftLabel  = sepIdx >= 0 ? footerLabel.substring(0, sepIdx)   : footerLabel;
+        String rightLabel = sepIdx >= 0 ? footerLabel.substring(sepIdx + 3)  : "";
         stream.beginText();
         stream.setFont(regular, 8f);
         stream.newLineAtOffset(x + CELL_PADDING, y + 3f);
-        stream.showText(footerLabel);
+        stream.showText(leftLabel);
         stream.endText();
+        if (!rightLabel.isBlank()) {
+            float rightWidth = regular.getStringWidth(rightLabel) / 1000f * 8f;
+            stream.beginText();
+            stream.setFont(regular, 8f);
+            stream.newLineAtOffset(x + width - CELL_PADDING - rightWidth, y + 3f);
+            stream.showText(rightLabel);
+            stream.endText();
+        }
     }
 
     private void drawDebriefingSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -409,7 +421,9 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
     private void writeWrappedCellText(PDPageContentStream stream, PDType1Font font,
                                       float x, float y, float width, float height, List<String> lines) throws IOException {
         List<String> normalized = lines == null || lines.isEmpty() ? List.of("") : lines;
-        float startY = y + height - CELL_PADDING - BODY_FONT_SIZE - 2f;
+        // Clamp startY so the text baseline stays within the cell: prefer near-top but
+        // never below the bottom border (y + 2f floor prevents overlap with separator lines).
+        float startY = Math.max(y + 2f, y + height - CELL_PADDING - BODY_FONT_SIZE);
         stream.beginText();
         stream.setFont(font, BODY_FONT_SIZE);
         stream.newLineAtOffset(x + CELL_PADDING, startY);

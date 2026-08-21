@@ -8,6 +8,7 @@ public class SarTaskResource {
     private String icsPosition = "";
     private String homeAgency = "";
     private String name = "";
+    private TCardType cardType = TCardType.PERSONNEL;
 
     /** @return resource function or role. */
     public String getFunction() {
@@ -47,5 +48,15 @@ public class SarTaskResource {
     /** @param name resource name. */
     public void setName(String name) {
         this.name = name == null ? "" : name;
+    }
+
+    /** @return T-card type for this resource ({@code null} treated as PERSONNEL). */
+    public TCardType getCardType() {
+        return cardType;
+    }
+
+    /** @param cardType T-card type for this resource. */
+    public void setCardType(TCardType cardType) {
+        this.cardType = cardType;
     }
 }

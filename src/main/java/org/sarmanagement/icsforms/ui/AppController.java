@@ -3,12 +3,14 @@ package org.sarmanagement.icsforms.ui;
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
@@ -76,12 +78,40 @@ public class AppController {
     }
 
     /**
+     * Returns the file path where the active document is persisted.
+     *
+     * @return workspace file path.
+     */
+    public java.nio.file.Path getFilePath() {
+        return repository.getFilePath();
+    }
+
+    /**
      * Returns the active incident document.
      *
      * @return active document.
      */
     public AppData getData() {
         return data;
+    }
+
+    /**
+     * Returns the ICS 201 incident briefing data.
+     *
+     * @return ICS 201 form data.
+     */
+    public Ics201Form getData201() {
+        return data.getForm201();
+    }
+
+    /**
+     * Replaces the ICS 201 incident briefing data and marks the document dirty.
+     *
+     * @param form ICS 201 form data.
+     */
+    public void setData201(Ics201Form form) {
+        data.setForm201(form);
+        markDirty();
     }
 
     /**
@@ -210,6 +240,23 @@ public class AppController {
     }
 
     /**
+     * Advances the current incident workspace to a new subsequent operational period.
+     *
+     * <p>The organizational chart and ICS 201 initial-response record are preserved as
+     * historical context.  Operational-period forms are cleared so the new period starts fresh.
+     * See {@link org.sarmanagement.icsforms.model.AppData#advanceToNewOperationalPeriod()} for
+     * the full list of fields that are reset.</p>
+     */
+    public void newOperationalPeriod() {
+        data.advanceToNewOperationalPeriod();
+        ensureDefaults(data);
+        syncSarTasks();
+        dirty = true;
+        activeLinkSource = LinkSource.NONE;
+        autosaveTimer.restart();
+    }
+
+    /**
      * Validates the active document.
      *
      * @return validation messages.
@@ -306,15 +353,17 @@ public class AppController {
             source = activeLinkSource;
         }
         IncidentContext context = data.getIncidentContext();
+        Ics201Form form201 = data.getForm201();
         org.sarmanagement.icsforms.model.Ics202Form form202 = data.getForm202();
         Ics204Form form204 = data.getForm204();
         OrganizationalChart organizationalChart = data.getOrganizationalChart();
-        if (context == null || form202 == null || form204 == null || organizationalChart == null) {
+        if (context == null || form201 == null || form202 == null || form204 == null || organizationalChart == null) {
             return;
         }
 
         String preparerName = safe(context.getCurrentUser());
         String preparerTitle = safe(context.getCurrentUserPositionTitle());
+        form201.setIncidentName(safe(context.getIncidentName()));
 
         List<String> incidentCommanders = linkedIncidentCommanders(source, form202, organizationalChart);
         if (source == LinkSource.SHARED && matchesIncidentCommanderRole(preparerTitle) && !preparerName.isBlank()) {
@@ -341,6 +390,22 @@ public class AppController {
                 && (safe(form204.getOperationsSectionChiefContact()).isBlank()
                 || source == LinkSource.ORG_CHART)) {
             form204.setOperationsSectionChiefContact(opsContact);
+        }
+
+        if (source == LinkSource.SHARED && matchesPlanningSectionChiefRole(preparerTitle) && !preparerName.isBlank()) {
+            organizationalChart.setPlanningSectionChiefName(preparerName);
+        }
+        if (source == LinkSource.SHARED && matchesLogisticsSectionChiefRole(preparerTitle) && !preparerName.isBlank()) {
+            organizationalChart.setLogisticsSectionChiefName(preparerName);
+        }
+        if (source == LinkSource.SHARED && matchesFinanceAdminSectionChiefRole(preparerTitle) && !preparerName.isBlank()) {
+            organizationalChart.setFinanceAdminSectionChiefName(preparerName);
+        }
+        if (source == LinkSource.SHARED && matchesDocumentationUnitLeaderRole(preparerTitle) && !preparerName.isBlank()) {
+            organizationalChart.setDocumentationUnitLeaderName(preparerName);
+        }
+        if (source == LinkSource.SHARED && matchesSafetyOfficerRole(preparerTitle) && !preparerName.isBlank()) {
+            organizationalChart.setSafetyOfficerName(preparerName);
         }
 
         if (!preparerName.isBlank() || !preparerTitle.isBlank() || source == LinkSource.SHARED) {
@@ -454,6 +519,18 @@ public class AppController {
             resource.setAssignmentTeamNumber(task.getAssignmentTeamNumber());
             resource.setResourceType(task.getResourceType());
             resource.setTaskType(task.getTaskType());
+            // Auto-fill contact from the leader's T-card radio/phone when the field is blank.
+            if (safe(resource.getContact()).isBlank() && !safe(resource.getLeader()).isBlank()) {
+                TCard leaderCard = findPersonCard(resource.getLeader());
+                if (leaderCard != null) {
+                    String radioPhone = safe(leaderCard.getRadioChannel()).isBlank()
+                            ? safe(leaderCard.getPhoneNumber())
+                            : safe(leaderCard.getRadioChannel());
+                    if (!radioPhone.isBlank()) {
+                        resource.setContact(radioPhone);
+                    }
+                }
+            }
         }
         updateClueTaskLabels(tasksById);
     }
@@ -496,6 +573,18 @@ public class AppController {
             }
         }
 
+        // Build a resourceIdentifier → card map for equipment/canine cards so that
+        // SAR task resources can be matched back to existing EQUIPMENT T-cards.
+        Map<String, TCard> byEquipmentId = new LinkedHashMap<>();
+        for (TCard card : cards) {
+            if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+                String rid = card.getResourceIdentifier().trim().toLowerCase();
+                if (!rid.isBlank()) {
+                    byEquipmentId.putIfAbsent(rid, card);
+                }
+            }
+        }
+
         // Collect the set of sourceRefs that should exist after this sync.
         Map<String, TCard> wanted = new LinkedHashMap<>();
 
@@ -509,9 +598,19 @@ public class AppController {
                     String name = safe(ics.get(i));
                     if (!name.isBlank()) {
                         String ref = "org:ic:" + i;
-                        TCard card = byRef.containsKey(ref) ? byRef.get(ref) : newOrgCard(name, "", "");
+                        TCard card;
+                        if (byRef.containsKey(ref)) {
+                            card = byRef.get(ref);
+                        } else {
+                            String nameKey = name.trim().toLowerCase();
+                            card = byName.containsKey(nameKey) ? byName.get(nameKey) : newOrgCard(name, "", "");
+                        }
                         card.setPersonName(name);
-                        card.setSourceRef(ref);
+                        String icRadio = safe(chart.getIncidentCommanderRadio());
+                        String icPhone = safe(chart.getIncidentCommanderPhone());
+                        if (!icRadio.isBlank()) card.setRadioChannel(icRadio);
+                        if (!icPhone.isBlank()) card.setPhoneNumber(icPhone);
+                        card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
                         card.setNotes(notePreserving(card.getNotes(), "Incident Commander"));
                         wanted.put(ref, card);
                         byName.putIfAbsent(name.trim().toLowerCase(), card);
@@ -550,6 +649,30 @@ public class AppController {
                     chart.getCommunicationsTechnicianPhone(), "Communications Technician");
         }
 
+        // --- Context preparer ---
+        // Always maintain a T-card for the named preparer/current user, regardless of whether
+        // their title maps to a specific org chart slot.  This is keyed by a fixed sourceRef so
+        // it survives sync cycles even when the person's name changes.
+        IncidentContext ctx = data.getIncidentContext();
+        if (ctx != null && !safe(ctx.getCurrentUser()).isBlank()) {
+            String preparerCardName = safe(ctx.getCurrentUser());
+            String preparerCardTitle = safe(ctx.getCurrentUserPositionTitle());
+            String preparerRef = "context:preparer";
+            TCard preparerCard;
+            if (byRef.containsKey(preparerRef)) {
+                preparerCard = byRef.get(preparerRef);
+            } else {
+                String nameKey = preparerCardName.trim().toLowerCase();
+                preparerCard = byName.containsKey(nameKey) ? byName.get(nameKey) : newPersonnelCard(preparerCardName);
+            }
+            preparerCard.setPersonName(preparerCardName);
+            preparerCard.setSourceRef(preparerCard.getSourceRef().isBlank() ? preparerRef : preparerCard.getSourceRef());
+            preparerCard.setNotes(notePreserving(preparerCard.getNotes(),
+                    preparerCardTitle.isBlank() ? "Preparer" : preparerCardTitle));
+            wanted.put(preparerRef, preparerCard);
+            byName.putIfAbsent(preparerCardName.trim().toLowerCase(), preparerCard);
+        }
+
         // --- SAR task resources ---
         // Track desired T-card status from task lifecycle (identity-keyed for dedup safety).
         Map<TCard, String> taskDrivenStatus = new java.util.IdentityHashMap<>();
@@ -561,6 +684,7 @@ public class AppController {
             String lifecycleCardStatus = lifecycleToCardStatus(task.getTaskLifecycleStatus());
             // Task leader
             String leaderName = safe(task.getLeader());
+            boolean isCanineTask = SarTaskSupport.usesCanineFactors(task.getResourceType());
             if (!leaderName.isBlank()) {
                 String ref = "sar:" + assignmentId + ":leader";
                 TCard card = findOrCreatePersonCard(ref, leaderName, byRef, byName, wanted);
@@ -572,6 +696,10 @@ public class AppController {
                 wanted.put(ref, card);
                 byName.putIfAbsent(leaderName.trim().toLowerCase(), card);
                 applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+
+                // For canine tasks, the canine T-card is added via the resources-assigned
+                // list (picked by the operator), not synthesised from the task identifier.
+                // Handler linking is performed when iterating resourcesAssigned below.
             }
             // Assigned resources
             List<SarTaskResource> resources = task.getResourcesAssigned();
@@ -583,15 +711,48 @@ public class AppController {
                         continue;
                     }
                     String ref = "sar:" + assignmentId + ":r:" + i;
-                    TCard card = findOrCreatePersonCard(ref, resName, byRef, byName, wanted);
-                    card.setPersonName(resName);
-                    card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
-                    card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
-                    card.setNotes(notePreserving(card.getNotes(),
-                            safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
-                    wanted.put(ref, card);
-                    byName.putIfAbsent(resName.trim().toLowerCase(), card);
-                    applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+                    // If the resource name matches an existing equipment card (e.g. a canine
+                    // call sign already tracked above or manually created), preserve its type.
+                    String resNameKey = resName.trim().toLowerCase();
+                    TCard equipCard = byEquipmentId.get(resNameKey);
+                    // Guard against a stale EQUIPMENT card whose resourceIdentifier happens to
+                    // match a known person name (can arise from old sync logic that incorrectly
+                    // used the task's resource-identifier field as the canine T-card key).
+                    // When a proper PERSONNEL card already exists for the same name, prefer it.
+                    if (equipCard != null) {
+                        TCard existingPersonCard = byName.get(resNameKey);
+                        if (existingPersonCard != null
+                                && existingPersonCard.getCardType() == TCardType.PERSONNEL) {
+                            equipCard = null;
+                        }
+                    }
+                    TCard card;
+                    if (equipCard != null) {
+                        card = equipCard;
+                        res.setCardType(card.getCardType());
+                        if (card.getSourceRef().isBlank()) {
+                            card.setSourceRef(ref);
+                        }
+                        // Ensure the handler link is set when the task is a canine task.
+                        if (isCanineTask && !leaderName.isBlank() && card.getHandlerName().isBlank()) {
+                            card.setHandlerName(leaderName);
+                        }
+                        card.setNotes(notePreserving(card.getNotes(),
+                                safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
+                        wanted.put(ref, card);
+                        applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+                    } else {
+                        card = findOrCreatePersonCard(ref, resName, byRef, byName, wanted);
+                        res.setCardType(card.getCardType());
+                        card.setPersonName(resName);
+                        card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
+                        card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
+                        card.setNotes(notePreserving(card.getNotes(),
+                                safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
+                        wanted.put(ref, card);
+                        byName.putIfAbsent(resName.trim().toLowerCase(), card);
+                        applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+                    }
                 }
             }
         }
@@ -667,7 +828,7 @@ public class AppController {
     /**
      * Converts a task lifecycle status string to the equivalent T-card status.
      *
-     * @param lifecycle "Planning", "On Task", or "Returned".
+     * @param lifecycle "Planned", "On Task", or "Returned".
      * @return T-card status string ("Assigned", "Out of Service", or blank).
      */
     static String lifecycleToCardStatus(String lifecycle) {
@@ -675,7 +836,7 @@ public class AppController {
         return switch (lifecycle) {
             case "On Task"  -> "Assigned";
             case "Returned" -> "Out of Service";
-            default         -> "";           // Planning or unknown → blank
+            default         -> "";           // Planned/Planning or unknown → blank
         };
     }
 
@@ -683,15 +844,17 @@ public class AppController {
      * Records a lifecycle-driven status for {@code card}, keeping the highest-priority
      * value when the same card is referenced from multiple tasks.
      *
-     * <p>Only non-blank statuses ("Assigned", "Out of Service") are tracked.  A blank
-     * status from a "Planning" task is ignored so that operator-set statuses are not
-     * overwritten when no active lifecycle state applies.</p>
+     * <p>Blank statuses are recorded as the baseline so resources can move back to
+     * available when a task is reverted to Planned. Higher-priority non-blank statuses
+     * ("Assigned", "Out of Service") still win when the same card appears on multiple
+     * tasks.</p>
      *
      * <p>Priority: "Assigned" &gt; "Out of Service".</p>
      */
     private static void applyHigherPriorityStatus(Map<TCard, String> map, TCard card, String status) {
         if (status == null || status.isBlank()) {
-            return;  // Planning → do not touch the operator's existing status
+            map.putIfAbsent(card, "");
+            return;
         }
         String current = map.getOrDefault(card, "");
         if (statusPriority(status) > statusPriority(current)) {
@@ -724,7 +887,12 @@ public class AppController {
                                           Map<String, TCard> byName,
                                           Map<String, TCard> wanted) {
         if (byRef.containsKey(ref)) {
-            return byRef.get(ref);
+            TCard candidate = byRef.get(ref);
+            // A stale EQUIPMENT card may have been stored under this ref by an older sync
+            // cycle.  Do not reuse it for a PERSONNEL entry — fall through to name lookup.
+            if (candidate.getCardType() == TCardType.PERSONNEL) {
+                return candidate;
+            }
         }
         String nameKey = personName.trim().toLowerCase();
         // Check if we already placed this person's card into wanted under a different ref.
@@ -737,6 +905,113 @@ public class AppController {
             return byName.get(nameKey);
         }
         return newPersonnelCard(personName);
+    }
+
+    /**
+     * Finds an existing equipment T-card for {@code resourceId} or creates a new one.
+     *
+     * <p>Lookup priority:
+     * <ol>
+     *   <li>Card already registered under {@code ref} in {@code byRef}.</li>
+     *   <li>Card in {@code byEquipmentId} matched by resource identifier.</li>
+     *   <li>New blank EQUIPMENT card.</li>
+     * </ol>
+     */
+    private TCard findOrCreateEquipmentCard(String ref, String resourceId,
+                                             Map<String, TCard> byRef,
+                                             Map<String, TCard> byEquipmentId) {
+        if (byRef.containsKey(ref)) {
+            return byRef.get(ref);
+        }
+        String idKey = resourceId.trim().toLowerCase();
+        if (byEquipmentId.containsKey(idKey)) {
+            return byEquipmentId.get(idKey);
+        }
+        TCard card = new TCard();
+        card.setCardType(TCardType.EQUIPMENT);
+        card.setResourceIdentifier(resourceId);
+        return card;
+    }
+
+    /**
+     * Returns the resource identifiers of all EQUIPMENT T-cards whose {@code handlerName}
+     * matches {@code handlerName} (case-insensitive).  Used by the SAR task editor to
+     * suggest the handler's linked canine when creating a Canine task.
+     *
+     * @param handlerName handler name to look up.
+     * @return list of matching resource identifiers, never {@code null}.
+     */
+    public List<String> findEquipmentForHandler(String handlerName) {
+        if (handlerName == null || handlerName.isBlank()) {
+            return List.of();
+        }
+        String key = handlerName.trim().toLowerCase();
+        List<String> result = new ArrayList<>();
+        for (TCard card : data.getTCards()) {
+            if ((card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT)
+                    && key.equals(card.getHandlerName().trim().toLowerCase())) {
+                String rid = card.getResourceIdentifier().trim();
+                if (!rid.isBlank()) {
+                    result.add(rid);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Returns a sorted list of all known resource names (personnel names and equipment
+     * identifiers) from the current T-card rack.  Used to populate pick lists in the
+     * SAR task editor's Resources Assigned table.
+     *
+     * @return sorted list of non-blank resource names/identifiers.
+     */
+    public List<String> getAvailableResourceNames() {
+        List<String> names = new ArrayList<>();
+        for (TCard card : data.getTCards()) {
+            if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+                String rid = card.getResourceIdentifier().trim();
+                if (!rid.isBlank()) {
+                    names.add(rid);
+                }
+            } else {
+                String n = card.getPersonName().trim();
+                if (!n.isBlank()) {
+                    names.add(n);
+                }
+            }
+        }
+        names.sort(String.CASE_INSENSITIVE_ORDER);
+        return names;
+    }
+
+    /**
+     * Returns T-cards suitable for picking as SAR task resources (excludes header cards).
+     *
+     * @return list of non-header T-cards sorted by effective name.
+     */
+    public List<TCard> getAvailableTCards() {
+        List<TCard> result = new ArrayList<>();
+        for (TCard card : data.getTCards()) {
+            if (card.getCardType() == TCardType.HEADER) {
+                continue;
+            }
+            String effectiveName = (card.getCardType() == TCardType.EQUIPMENT
+                    || card.getCardType() == TCardType.MISC_EQUIPMENT)
+                    ? card.getResourceIdentifier().trim()
+                    : card.getPersonName().trim();
+            if (!effectiveName.isBlank()) {
+                result.add(card);
+            }
+        }
+        result.sort((a, b) -> {
+            String nameA = (a.getCardType() == TCardType.EQUIPMENT || a.getCardType() == TCardType.MISC_EQUIPMENT)
+                    ? a.getResourceIdentifier() : a.getPersonName();
+            String nameB = (b.getCardType() == TCardType.EQUIPMENT || b.getCardType() == TCardType.MISC_EQUIPMENT)
+                    ? b.getResourceIdentifier() : b.getPersonName();
+            return String.CASE_INSENSITIVE_ORDER.compare(nameA, nameB);
+        });
+        return result;
     }
 
     /** Creates or updates a single org-chart staff T-card. */
@@ -881,6 +1156,9 @@ public class AppController {
         if (data.getOrganizationalChart() == null) {
             data.setOrganizationalChart(new OrganizationalChart());
         }
+        if (data.getForm201() == null) {
+            data.setForm201(new Ics201Form());
+        }
         if (data.getForm202() == null) {
             data.setForm202(new org.sarmanagement.icsforms.model.Ics202Form());
         }
@@ -1011,11 +1289,34 @@ public class AppController {
 
     private boolean matchesIncidentCommanderRole(String value) {
         String normalized = normalizeRole(value);
-        return normalized.equals("incident commander") || normalized.equals("unified command");
+        return normalized.equals("incident commander") || normalized.equals("unified command")
+                || normalized.equals("ic");
     }
 
     private boolean matchesOperationsSectionChiefRole(String value) {
         return normalizeRole(value).equals("operations section chief");
+    }
+
+    private boolean matchesPlanningSectionChiefRole(String value) {
+        return normalizeRole(value).equals("planning section chief");
+    }
+
+    private boolean matchesLogisticsSectionChiefRole(String value) {
+        return normalizeRole(value).equals("logistics section chief");
+    }
+
+    private boolean matchesFinanceAdminSectionChiefRole(String value) {
+        String normalized = normalizeRole(value);
+        return normalized.equals("finance admin section chief")
+                || normalized.equals("finance administration section chief");
+    }
+
+    private boolean matchesDocumentationUnitLeaderRole(String value) {
+        return normalizeRole(value).equals("documentation unit leader");
+    }
+
+    private boolean matchesSafetyOfficerRole(String value) {
+        return normalizeRole(value).equals("safety officer");
     }
 
     private String normalizeRole(String value) {

@@ -1,5 +1,8 @@
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,14 +12,48 @@ import java.util.List;
  */
 public class AppData {
     /** Current persistence schema version for JSON storage. */
-    public static final int CURRENT_SCHEMA_VERSION = 3;
+    public static final int CURRENT_SCHEMA_VERSION = 5;
+
+    /**
+     * A lightweight snapshot of the shared context at the end of one operational period,
+     * captured when the incident advances to the next period.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class OperationalPeriodRecord {
+        private LocalDateTime periodStart;
+        private LocalDateTime periodEnd;
+        private List<String> incidentCommanders = new ArrayList<>();
+
+        /** Creates an empty record. */
+        public OperationalPeriodRecord() {}
+
+        /** Returns the operational period start date/time. */
+        public LocalDateTime getPeriodStart() { return periodStart; }
+        /** Sets the operational period start date/time. */
+        public void setPeriodStart(LocalDateTime periodStart) { this.periodStart = periodStart; }
+
+        /** Returns the operational period end date/time. */
+        public LocalDateTime getPeriodEnd() { return periodEnd; }
+        /** Sets the operational period end date/time. */
+        public void setPeriodEnd(LocalDateTime periodEnd) { this.periodEnd = periodEnd; }
+
+        /** Returns the incident commander / unified-command names for this period. */
+        public List<String> getIncidentCommanders() { return incidentCommanders; }
+        /** Sets the incident commander / unified-command names for this period. */
+        public void setIncidentCommanders(List<String> incidentCommanders) {
+            this.incidentCommanders = incidentCommanders == null ? new ArrayList<>() : incidentCommanders;
+        }
+    }
 
     private int schemaVersion = CURRENT_SCHEMA_VERSION;
     private IncidentMode incidentMode = IncidentMode.SAR;
     private IapPhase iapPhase = IapPhase.PRE_OP;
+    private List<OperationalPeriodRecord> operationalPeriodHistory = new ArrayList<>();
     private IncidentContext incidentContext = new IncidentContext();
     private OrganizationalChart organizationalChart = new OrganizationalChart();
+    private Ics201Form form201 = new Ics201Form();
     private Ics202Form form202 = new Ics202Form();
+    private Ics207Form form207 = new Ics207Form();
     private Ics204Form form204 = new Ics204Form();
     private List<Ics204Form> additionalForms204 = new ArrayList<>();
     private List<Ics214Form> activityLogs = new ArrayList<>();
@@ -42,11 +79,43 @@ public class AppData {
     public AppData(IncidentContext incidentContext, Ics202Form form202, Ics204Form form204, List<SarTaskAssignment> sarTaskAssignments) {
         this.incidentContext = incidentContext == null ? new IncidentContext() : incidentContext;
         this.organizationalChart = new OrganizationalChart();
+        this.form201 = new Ics201Form();
         this.form202 = form202 == null ? new Ics202Form() : form202;
         this.form204 = form204 == null ? new Ics204Form() : form204;
         if (sarTaskAssignments != null) {
             this.sarTaskAssignments = sarTaskAssignments;
         }
+    }
+
+    /**
+     * Advances this document to a new subsequent operational period in place.
+     *
+     * <p>The organizational chart and ICS 201 initial-response record are preserved as
+     * historical context. ICS 202, ICS 204, SAR tasks, clue log, T-cards, and activity logs
+     * are cleared so that the new period starts fresh. The IAP phase is set to
+     * {@link IapPhase#DURING_OP}. The incident context, incident mode, and activity event
+     * types are retained.</p>
+     */
+    public void advanceToNewOperationalPeriod() {
+        // Capture the current operational period context before clearing.
+        OperationalPeriodRecord record = new OperationalPeriodRecord();
+        if (incidentContext != null) {
+            record.setPeriodStart(incidentContext.getOperationalPeriodStart());
+            record.setPeriodEnd(incidentContext.getOperationalPeriodEnd());
+        }
+        if (organizationalChart != null) {
+            record.setIncidentCommanders(new ArrayList<>(organizationalChart.getIncidentCommanders()));
+        }
+        operationalPeriodHistory.add(record);
+
+        this.iapPhase = IapPhase.DURING_OP;
+        this.form202 = new Ics202Form();
+        this.form204 = new Ics204Form();
+        this.additionalForms204 = new ArrayList<>();
+        this.sarTaskAssignments = new ArrayList<>();
+        this.clueLogEntries = new ArrayList<>();
+        this.tCards = new ArrayList<>();
+        this.activityLogs = new ArrayList<>();
     }
 
     /**
@@ -65,6 +134,26 @@ public class AppData {
      */
     public void setSchemaVersion(int schemaVersion) {
         this.schemaVersion = schemaVersion;
+    }
+
+    /**
+     * Returns the operational period history — one record per completed period, in chronological
+     * order.  The current (in-progress) period is NOT included; it appears only after
+     * {@link #advanceToNewOperationalPeriod()} is called.
+     *
+     * @return operational period history (never {@code null}).
+     */
+    public List<OperationalPeriodRecord> getOperationalPeriodHistory() {
+        return operationalPeriodHistory;
+    }
+
+    /**
+     * Sets the operational period history.
+     *
+     * @param operationalPeriodHistory period history; {@code null} is treated as empty.
+     */
+    public void setOperationalPeriodHistory(List<OperationalPeriodRecord> operationalPeriodHistory) {
+        this.operationalPeriodHistory = operationalPeriodHistory == null ? new ArrayList<>() : operationalPeriodHistory;
     }
 
     /**
@@ -103,6 +192,25 @@ public class AppData {
         this.organizationalChart = organizationalChart == null ? new OrganizationalChart() : organizationalChart;
     }
 
+
+    /**
+     * Returns ICS 201 content.
+     *
+     * @return incident briefing form.
+     */
+    public Ics201Form getForm201() {
+        return form201;
+    }
+
+    /**
+     * Sets ICS 201 content.
+     *
+     * @param form201 incident briefing form.
+     */
+    public void setForm201(Ics201Form form201) {
+        this.form201 = form201 == null ? new Ics201Form() : form201;
+    }
+
     /**
      * Returns ICS 202 content.
      *
@@ -119,6 +227,24 @@ public class AppData {
      */
     public void setForm202(Ics202Form form202) {
         this.form202 = form202 == null ? new Ics202Form() : form202;
+    }
+
+    /**
+     * Returns ICS 207 content.
+     *
+     * @return organization chart form.
+     */
+    public Ics207Form getForm207() {
+        return form207;
+    }
+
+    /**
+     * Sets ICS 207 content.
+     *
+     * @param form207 organization chart form.
+     */
+    public void setForm207(Ics207Form form207) {
+        this.form207 = form207 == null ? new Ics207Form() : form207;
     }
 
     /**

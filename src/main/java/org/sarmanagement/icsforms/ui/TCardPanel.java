@@ -32,13 +32,18 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -47,6 +52,7 @@ import java.util.Date;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -103,20 +109,23 @@ public class TCardPanel extends JPanel {
         viewContainer.add(rackScroll, VIEW_RACK);
 
         JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
-        JButton addCardBtn     = new JButton("Add Card…");
-        JButton editBtn        = new JButton("Edit Selected…");
-        JButton removeBtn      = new JButton("Remove Selected");
-        JButton importCsvBtn   = new JButton("Import from CSV…");
+        JButton addCardBtn       = new JButton("Add Card…");
+        JButton editBtn          = new JButton("Edit Selected…");
+        JButton removeBtn        = new JButton("Remove Selected");
+        JButton mergeDupBtn      = new JButton("Merge Duplicates…");
+        JButton importCsvBtn     = new JButton("Import from CSV…");
 
         addCardBtn.addActionListener(e -> addCardWithTypeChoice());
         editBtn.addActionListener(e -> editSelectedCard());
         removeBtn.addActionListener(e -> removeSelectedCard());
+        mergeDupBtn.addActionListener(e -> mergeDuplicates());
         importCsvBtn.addActionListener(e -> importFromCsv());
         toggleViewBtn.addActionListener(e -> toggleView());
 
         buttonRow.add(addCardBtn);
         buttonRow.add(editBtn);
         buttonRow.add(removeBtn);
+        buttonRow.add(mergeDupBtn);
         buttonRow.add(importCsvBtn);
         buttonRow.add(toggleViewBtn);
 
@@ -318,12 +327,12 @@ public class TCardPanel extends JPanel {
             col.add(buildHeaderCardWidget(header));
             col.add(javax.swing.Box.createVerticalStrut(4));
 
-            // Check if this is the "Assigned" column — if so, sub-group by task.
+            // Group Available and Assigned columns by task; other columns stay handler-grouped.
             String colLabel = header.getDisplayLabel();
-            if ("Assigned".equalsIgnoreCase(colLabel)) {
+            if ("Assigned".equalsIgnoreCase(colLabel) || "Available".equalsIgnoreCase(colLabel)) {
                 addTaskGroupedCards(col, children);
             } else {
-                addHandlerGroupedCards(col, children);
+                addHandlerGroupedCards(col, children, false);
             }
             col.add(javax.swing.Box.createVerticalGlue());
             rack.add(col);
@@ -358,7 +367,7 @@ public class TCardPanel extends JPanel {
         // Render non-task cards first, then each task group.
         List<TCard> unassigned = byTask.remove("");
         if (unassigned != null && !unassigned.isEmpty()) {
-            addHandlerGroupedCards(col, unassigned);
+            addHandlerGroupedCards(col, unassigned, false);
         }
         for (Map.Entry<String, List<TCard>> entry : byTask.entrySet()) {
             String taskKey  = entry.getKey();
@@ -370,9 +379,8 @@ public class TCardPanel extends JPanel {
                 int people = (int) groupCards.stream().filter(c -> c.getCardType() == TCardType.PERSONNEL).count();
                 int other  = groupCards.size() - people;
                 col.add(buildTaskBannerWidget(teamLabel, resId, people, other, collapsed, taskKey));
-                col.add(javax.swing.Box.createVerticalStrut(2));
                 if (!collapsed) {
-                    addHandlerGroupedCards(col, groupCards);
+                    addHandlerGroupedCards(col, groupCards, true);
                     col.add(javax.swing.Box.createVerticalStrut(4));
                 } else {
                     // Show only the leader card when the group is collapsed (with paperclip icon).
@@ -385,7 +393,7 @@ public class TCardPanel extends JPanel {
                             });
                 }
             } else {
-                addHandlerGroupedCards(col, groupCards);
+                addHandlerGroupedCards(col, groupCards, false);
                 col.add(javax.swing.Box.createVerticalStrut(4));
             }
         }
@@ -395,7 +403,7 @@ public class TCardPanel extends JPanel {
      * Adds resource cards to a column panel, with canine/equipment cards grouped
      * immediately below their handler's personnel card.
      */
-    private void addHandlerGroupedCards(JPanel col, List<TCard> cards) {
+    private void addHandlerGroupedCards(JPanel col, List<TCard> cards, boolean inTaskGroup) {
         // Separate handler-linked (canine) cards from the rest.
         Map<String, List<TCard>> caninesByHandler = new LinkedHashMap<>();
         List<TCard> topLevel = new ArrayList<>();
@@ -410,14 +418,14 @@ public class TCardPanel extends JPanel {
 
         for (TCard card : topLevel) {
             col.add(buildRackCard(card));
-            col.add(javax.swing.Box.createVerticalStrut(3));
+            col.add(javax.swing.Box.createVerticalStrut(inTaskGroup ? 0 : 3));
             // Append any linked canines directly below.
             String personName = card.getPersonName();
             List<TCard> linked = caninesByHandler.get(personName);
             if (linked != null) {
                 for (TCard canine : linked) {
                     col.add(buildCanineRackCard(canine));
-                    col.add(javax.swing.Box.createVerticalStrut(2));
+                    col.add(javax.swing.Box.createVerticalStrut(inTaskGroup ? 0 : 2));
                 }
                 caninesByHandler.remove(personName);
             }
@@ -427,7 +435,7 @@ public class TCardPanel extends JPanel {
         for (List<TCard> orphaned : caninesByHandler.values()) {
             for (TCard card : orphaned) {
                 col.add(buildRackCard(card));
-                col.add(javax.swing.Box.createVerticalStrut(3));
+                col.add(javax.swing.Box.createVerticalStrut(inTaskGroup ? 0 : 3));
             }
         }
     }
@@ -752,8 +760,320 @@ public class TCardPanel extends JPanel {
     }
 
     // -------------------------------------------------------------------------
-    // CSV import
+    // Merge duplicates
     // -------------------------------------------------------------------------
+
+    /**
+     * Finds T-cards that share the same name (case-insensitive), presents a merge
+     * dialog for each pair, and removes the card that was merged into the other.
+     *
+     * <p>Merge rules applied field by field:
+     * <ul>
+     *   <li>If one value is blank and the other is not, the non-blank value wins.</li>
+     *   <li>If both values are identical (after trimming), they are kept as-is.</li>
+     *   <li>If both values are non-blank and differ, a selection dialog lets the
+     *       operator choose or edit the value to retain.</li>
+     * </ul>
+     * The first card (lower index) is the target that receives the merged data;
+     * the second (duplicate) is removed once the merge is confirmed.</p>
+     */
+    private void mergeDuplicates() {
+        int mergedCount = 0;
+
+        // Walk through the list looking for cards with the same effective name.
+        // Iterate from the beginning; after each merge restart the scan because
+        // indices have changed.
+        outer:
+        while (true) {
+            List<TCard> current = tableModel.getCards();
+            for (int i = 0; i < current.size(); i++) {
+                TCard a = current.get(i);
+                String nameA = effectiveName(a).toLowerCase(Locale.ROOT);
+                if (nameA.isBlank()) {
+                    continue;
+                }
+                for (int j = i + 1; j < current.size(); j++) {
+                    TCard b = current.get(j);
+                    if (!nameA.equals(effectiveName(b).toLowerCase(Locale.ROOT))) {
+                        continue;
+                    }
+                    // Found a duplicate pair (a, b). Show the merge dialog.
+                    int[] outcome = new int[1]; // 0=merged, 1=skip, 2=cancel
+                    TCard merged = showMergeDialog(a, b, outcome);
+                    if (outcome[0] == 2) {
+                        break outer; // user cancelled all
+                    }
+                    if (outcome[0] == 1 || merged == null) {
+                        continue; // skip this pair; continue scanning
+                    }
+                    // Replace a with the merged card and remove b.
+                    tableModel.replaceCard(i, merged);
+                    tableModel.removeCard(j);
+                    mergedCount++;
+                    continue outer; // restart after structural change
+                }
+            }
+            break; // no more pairs found
+        }
+
+        if (mergedCount == 0) {
+            JOptionPane.showMessageDialog(this,
+                    "No duplicate T-cards (by name) found.",
+                    "Merge Duplicates", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            pushToModel();
+            controller.markDirty();
+            refreshFromModel();
+            JOptionPane.showMessageDialog(this,
+                    mergedCount + " duplicate pair(s) merged.",
+                    "Merge Duplicates", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    /** Returns the effective name used for duplicate detection. */
+    private static String effectiveName(TCard card) {
+        String name = card.getPersonName();
+        if (!name.isBlank()) return name.trim();
+        name = card.getResourceIdentifier();
+        return name == null ? "" : name.trim();
+    }
+
+    /**
+     * Opens a field-by-field merge dialog for two T-cards with the same name.
+     *
+     * <p>Each field is shown as a row with "Card A" and "Card B" values. Where
+     * both values are non-blank and differ, the operator can select which to keep
+     * (or edit the value directly). Where values are the same or one is blank the
+     * row is pre-resolved automatically and displayed read-only.</p>
+     *
+     * @param a       target card (will receive merged data).
+     * @param b       duplicate card (will be removed on confirmation).
+     * @param outcome single-element array set to: 0=merge confirmed, 1=skip, 2=cancel all.
+     * @return a new merged card when outcome is 0, {@code null} otherwise.
+     */
+    private TCard showMergeDialog(TCard a, TCard b, int[] outcome) {
+        // Define the fields to compare.
+        String[] fieldLabels = {
+            "Card type", "Person name", "Home agency", "Home state",
+            "Phone", "Radio channel", "Resource identifier", "Location",
+            "Status", "Notes", "Handler/operator"
+        };
+        String[] valuesA = {
+            a.getCardType().getLabel(),
+            a.getPersonName(), a.getHomeAgency(), a.getHomeState(),
+            a.getPhoneNumber(), a.getRadioChannel(), a.getResourceIdentifier(),
+            a.getLocation(), a.getStatus(), a.getNotes(), a.getHandlerName()
+        };
+        String[] valuesB = {
+            b.getCardType().getLabel(),
+            b.getPersonName(), b.getHomeAgency(), b.getHomeState(),
+            b.getPhoneNumber(), b.getRadioChannel(), b.getResourceIdentifier(),
+            b.getLocation(), b.getStatus(), b.getNotes(), b.getHandlerName()
+        };
+
+        int fieldCount = fieldLabels.length;
+        // For each field: auto-resolved value (null when conflict requires user choice).
+        String[] autoResolved = new String[fieldCount];
+        // True when the field is a conflict requiring user input.
+        boolean[] isConflict = new boolean[fieldCount];
+        JTextField[] editFields = new JTextField[fieldCount];
+        // Radio buttons: 0 = A, 1 = B; only created for conflict rows.
+        javax.swing.ButtonGroup[] groups = new javax.swing.ButtonGroup[fieldCount];
+        javax.swing.JRadioButton[] radioA = new javax.swing.JRadioButton[fieldCount];
+        javax.swing.JRadioButton[] radioB = new javax.swing.JRadioButton[fieldCount];
+
+        for (int i = 0; i < fieldCount; i++) {
+            String va = valuesA[i] == null ? "" : valuesA[i].trim();
+            String vb = valuesB[i] == null ? "" : valuesB[i].trim();
+            if (va.equalsIgnoreCase(vb)) {
+                autoResolved[i] = va;
+            } else if (va.isBlank()) {
+                autoResolved[i] = vb;
+            } else if (vb.isBlank()) {
+                autoResolved[i] = va;
+            } else {
+                isConflict[i] = true;
+            }
+        }
+
+        // Build the dialog panel.
+        JPanel panel = new JPanel(new java.awt.GridBagLayout());
+        java.awt.GridBagConstraints gbc = new java.awt.GridBagConstraints();
+        gbc.insets = new java.awt.Insets(2, 4, 2, 4);
+        gbc.anchor = java.awt.GridBagConstraints.WEST;
+
+        // Header row.
+        gbc.gridy = 0; gbc.gridx = 0; gbc.weightx = 0;
+        panel.add(boldLabel("Field"), gbc);
+        gbc.gridx = 1; gbc.weightx = 0.4;
+        panel.add(boldLabel("Card A — " + effectiveName(a)), gbc);
+        gbc.gridx = 2; gbc.weightx = 0.4;
+        panel.add(boldLabel("Card B — " + effectiveName(b)), gbc);
+        gbc.gridx = 3; gbc.weightx = 0.2;
+        panel.add(boldLabel("Keep"), gbc);
+
+        for (int i = 0; i < fieldCount; i++) {
+            int row = i + 1;
+            gbc.gridy = row; gbc.gridx = 0; gbc.weightx = 0;
+            panel.add(new JLabel(fieldLabels[i] + ":"), gbc);
+
+            gbc.gridx = 1; gbc.weightx = 0.4;
+            JLabel lblA = new JLabel("<html>" + htmlEscape(valuesA[i]) + "</html>");
+            panel.add(lblA, gbc);
+
+            gbc.gridx = 2; gbc.weightx = 0.4;
+            JLabel lblB = new JLabel("<html>" + htmlEscape(valuesB[i]) + "</html>");
+            panel.add(lblB, gbc);
+
+            gbc.gridx = 3; gbc.weightx = 0.2;
+            if (isConflict[i]) {
+                // Show radio buttons A / B plus an editable override field.
+                groups[i] = new javax.swing.ButtonGroup();
+                radioA[i] = new javax.swing.JRadioButton("A");
+                radioB[i] = new javax.swing.JRadioButton("B");
+                radioA[i].setSelected(true);
+                groups[i].add(radioA[i]);
+                groups[i].add(radioB[i]);
+                editFields[i] = new JTextField(valuesA[i], 12);
+                // Capture effectively-final references for use in lambdas.
+                final JTextField editField = editFields[i];
+                final String va = valuesA[i];
+                final String vb = valuesB[i];
+                // Selecting a radio button copies its value into the edit field.
+                radioA[i].addActionListener(e -> editField.setText(va));
+                radioB[i].addActionListener(e -> editField.setText(vb));
+                JPanel conflictPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+                conflictPanel.add(radioA[i]);
+                conflictPanel.add(radioB[i]);
+                conflictPanel.add(editFields[i]);
+                panel.add(conflictPanel, gbc);
+            } else {
+                panel.add(new JLabel(autoResolved[i].isBlank() ? "—" : autoResolved[i]), gbc);
+            }
+        }
+
+        JScrollPane scroll = new JScrollPane(panel);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.setPreferredSize(new Dimension(720, 360));
+
+        String[] options = {"Merge", "Skip this pair", "Cancel all"};
+        int choice = JOptionPane.showOptionDialog(
+                javax.swing.SwingUtilities.getWindowAncestor(this),
+                scroll,
+                "Merge duplicate T-cards: " + effectiveName(a),
+                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE,
+                null, options, options[0]);
+
+        if (choice == 2) {
+            outcome[0] = 2; // cancel all
+            return null;
+        }
+        if (choice == 1 || choice == JOptionPane.CLOSED_OPTION) {
+            outcome[0] = 1; // skip this pair (dismissing the window = skip, not cancel all)
+            return null;
+        }
+        outcome[0] = 0; // merge confirmed
+
+        // Build the merged card: start from a copy of card A.
+        TCard merged = copyCard(a);
+        for (int i = 0; i < fieldCount; i++) {
+            String resolved = isConflict[i] ? editFields[i].getText().trim() : autoResolved[i];
+            applyMergedField(merged, i, resolved);
+        }
+        // Preserve check-in date from whichever card has one; prefer A.
+        if (merged.getCheckInDateTime() == null && b.getCheckInDateTime() != null) {
+            merged.setCheckInDateTime(b.getCheckInDateTime());
+        }
+        // Preserve sourceRef: keep the non-blank one, preferring A.
+        if (merged.getSourceRef().isBlank() && !b.getSourceRef().isBlank()) {
+            merged.setSourceRef(b.getSourceRef());
+        }
+        return merged;
+    }
+
+    /**
+     * Applies a resolved field value back to the merged card.
+     *
+     * @param merged   card being built.
+     * @param fieldIdx index matching the {@code fieldLabels} array in {@link #showMergeDialog}.
+     * @param value    resolved value to apply.
+     */
+    private static void applyMergedField(TCard merged, int fieldIdx, String value) {
+        switch (fieldIdx) {
+            case 0 -> {
+                // Card type: find the TCardType whose label matches.
+                for (TCardType t : TCardType.values()) {
+                    if (t.getLabel().equalsIgnoreCase(value)) {
+                        merged.setCardType(t);
+                        break;
+                    }
+                }
+            }
+            case 1  -> merged.setPersonName(value);
+            case 2  -> merged.setHomeAgency(value);
+            case 3  -> merged.setHomeState(value);
+            case 4  -> merged.setPhoneNumber(value);
+            case 5  -> merged.setRadioChannel(value);
+            case 6  -> merged.setResourceIdentifier(value);
+            case 7  -> merged.setLocation(value);
+            case 8  -> merged.setStatus(value);
+            case 9  -> merged.setNotes(value);
+            case 10 -> merged.setHandlerName(value);
+            default -> { /* no-op */ }
+        }
+    }
+
+    private static JLabel boldLabel(String text) {
+        JLabel lbl = new JLabel(text);
+        lbl.setFont(lbl.getFont().deriveFont(Font.BOLD));
+        return lbl;
+    }
+
+    private static String htmlEscape(String s) {
+        if (s == null || s.isBlank()) return "<i>(blank)</i>";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    // -------------------------------------------------------------------------
+    // CSV import/export
+    // -------------------------------------------------------------------------
+
+    public void exportToCsv() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
+        chooser.setDialogTitle("Export resources as CSV");
+        chooser.setSelectedFile(new File("resources.csv"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File file = chooser.getSelectedFile();
+        if (file != null && !file.getName().toLowerCase(Locale.ROOT).endsWith(".csv")) {
+            file = new File(file.getParentFile(), file.getName() + ".csv");
+        }
+        try {
+            exportToCsv(file);
+            JOptionPane.showMessageDialog(this, "Exported resources to " + file.getName() + ".",
+                    "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Could not export CSV: " + ex.getMessage(),
+                    "Export Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    public void exportToCsv(File outputFile) throws IOException {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(outputFile))) {
+            writer.println("Name, Agency, State, Phone, Type");
+            for (TCard card : tableModel.getCards()) {
+                String name = card.getPersonName().isBlank() ? card.getResourceIdentifier() : card.getPersonName();
+                writer.println(csvValue(name) + ","
+                        + csvValue(card.getHomeAgency()) + ","
+                        + csvValue(card.getHomeState()) + ","
+                        + csvValue(card.getPhoneNumber()) + ","
+                        + csvValue(card.getCardType().name()));
+            }
+        }
+    }
 
     /**
      * Opens a file chooser, reads a CSV file, and shows a preview dialog so the operator
@@ -955,6 +1275,14 @@ public class TCardPanel extends JPanel {
         return v.contains("name") || v.contains("agency") || v.contains("person");
     }
 
+    private static String csvValue(String value) {
+        String safe = value == null ? "" : value;
+        if (safe.contains(",") || safe.contains("\"") || safe.contains("\n") || safe.contains("\r")) {
+            return "\"" + safe.replace("\"", "\"\"") + "\"";
+        }
+        return safe;
+    }
+
     // -------------------------------------------------------------------------
     // Card edit dialog
     // -------------------------------------------------------------------------
@@ -1096,11 +1424,17 @@ public class TCardPanel extends JPanel {
         outerPanel.add(typeRow, BorderLayout.NORTH);
         outerPanel.add(subContainer, BorderLayout.CENTER);
 
+        // ── related resources section ─────────────────────────────────────
+        JPanel relatedPanel = buildRelatedResourcesPanel(card);
+        if (relatedPanel != null) {
+            outerPanel.add(relatedPanel, BorderLayout.SOUTH);
+        }
+
         JScrollPane scroll = new JScrollPane(outerPanel);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(
                 javax.swing.SwingUtilities.getWindowAncestor(this), "Edit T-Card", scroll,
-                new Dimension(520, 460))) {
+                new Dimension(520, relatedPanel != null ? 520 : 460))) {
             return false;
         }
 
@@ -1152,6 +1486,97 @@ public class TCardPanel extends JPanel {
         copy.setSourceRef(src.getSourceRef());
         copy.setHandlerName(src.getHandlerName());
         return copy;
+    }
+
+    // -------------------------------------------------------------------------
+    // Related resources panel (handler ↔ equipment navigation)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Builds a panel listing resources related to the given card via handler/equipment links.
+     * For a PERSONNEL card, lists EQUIPMENT cards whose handlerName matches this card's person name.
+     * For an EQUIPMENT card, lists the PERSONNEL card whose personName matches this card's handlerName.
+     * Returns {@code null} when no related resources are found.
+     */
+    private JPanel buildRelatedResourcesPanel(TCard card) {
+        List<TCard> allCards = tableModel.getCards();
+        List<TCard> related = new ArrayList<>();
+
+        if (card.getCardType() == TCardType.PERSONNEL) {
+            String name = card.getPersonName().trim();
+            if (!name.isBlank()) {
+                for (TCard c : allCards) {
+                    if (c != card
+                            && (c.getCardType() == TCardType.EQUIPMENT || c.getCardType() == TCardType.MISC_EQUIPMENT)
+                            && name.equalsIgnoreCase(c.getHandlerName().trim())) {
+                        related.add(c);
+                    }
+                }
+            }
+        } else if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+            String handlerName = card.getHandlerName().trim();
+            if (!handlerName.isBlank()) {
+                for (TCard c : allCards) {
+                    if (c != card
+                            && c.getCardType() == TCardType.PERSONNEL
+                            && handlerName.equalsIgnoreCase(c.getPersonName().trim())) {
+                        related.add(c);
+                    }
+                }
+            }
+        }
+
+        if (related.isEmpty()) {
+            return null;
+        }
+
+        String sectionTitle = card.getCardType() == TCardType.PERSONNEL
+                ? "Linked equipment / canines"
+                : "Handler / operator";
+
+        JPanel panel = new JPanel(new BorderLayout(0, 2));
+        panel.setOpaque(false);
+        panel.setBorder(BorderFactory.createTitledBorder(sectionTitle));
+
+        JPanel rows = new JPanel(new GridBagLayout());
+        rows.setOpaque(false);
+        int rowIdx = 0;
+        for (TCard rel : related) {
+            GridBagConstraints labelConstraints = new GridBagConstraints();
+            labelConstraints.gridx = 0;
+            labelConstraints.gridy = rowIdx;
+            labelConstraints.weightx = 1.0;
+            labelConstraints.fill = GridBagConstraints.HORIZONTAL;
+            labelConstraints.anchor = GridBagConstraints.WEST;
+            labelConstraints.insets = new Insets(2, 4, 2, 8);
+            String labelText = rel.getCardType().toString()
+                    + ": " + effectiveName(rel)
+                    + (rel.getResourceIdentifier().isBlank() ? "" : " (" + rel.getResourceIdentifier() + ")");
+            rows.add(new JLabel(labelText), labelConstraints);
+
+            GridBagConstraints btnConstraints = new GridBagConstraints();
+            btnConstraints.gridx = 1;
+            btnConstraints.gridy = rowIdx;
+            btnConstraints.anchor = GridBagConstraints.EAST;
+            btnConstraints.insets = new Insets(2, 0, 2, 4);
+            JButton openBtn = new JButton("Open…");
+            final TCard relCard = rel;
+            openBtn.addActionListener(ev -> {
+                // Re-resolve the index at click time to handle any intervening model changes.
+                int currentIdx = tableModel.getCards().indexOf(relCard);
+                if (currentIdx >= 0) {
+                    TCard copy = copyCard(tableModel.getCard(currentIdx));
+                    if (openEditDialog(copy)) {
+                        tableModel.replaceCard(currentIdx, copy);
+                        controller.markDirty();
+                    }
+                }
+            });
+            rows.add(openBtn, btnConstraints);
+            rowIdx++;
+        }
+        panel.add(rows, BorderLayout.CENTER);
+        return panel;
     }
 
     // -------------------------------------------------------------------------

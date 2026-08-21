@@ -82,20 +82,39 @@ public class Ics204Panel extends JPanel {
         preparedByNameField.setColumns(18);
         preparedByPositionField.setColumns(18);
         iapPageField.setColumns(8);
-        JPanel selectedContextPanel = new JPanel(new BorderLayout(0, 2));
+        iapPageField.setEditable(false);
+        iapPageField.setToolTipText("Assigned automatically when the IAP bundle PDF is exported");
+        JPanel selectedContextPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         selectedContextPanel.setOpaque(false);
-        selectedContextPanel.add(selectedContextLabel, BorderLayout.NORTH);
-        selectedContextPanel.add(selectedContextValueField, BorderLayout.CENTER);
+        selectedContextPanel.add(selectedContextLabel);
+        selectedContextPanel.add(selectedContextValueField);
+
+        // Management level + selected context on a single row
+        JPanel managementLevelRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        managementLevelRow.setOpaque(false);
+        managementLevelRow.add(managementContextSelector);
+        managementLevelRow.add(selectedContextPanel);
+
+        // Prepared by (name, position, date/time) on a single row
+        JPanel preparedByRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        preparedByRow.setOpaque(false);
+        JLabel nameLabel = new JLabel("Name:");
+        JLabel posLabel  = new JLabel("  Position/title:");
+        JLabel dtLabel   = new JLabel("  Date/time:");
+        preparedByRow.add(nameLabel);
+        preparedByRow.add(preparedByNameField);
+        preparedByRow.add(posLabel);
+        preparedByRow.add(preparedByPositionField);
+        preparedByRow.add(dtLabel);
+        preparedByRow.add(preparedDateTimeField);
+
         form.setBorder(BorderFactory.createTitledBorder("ICS 204 Assignment Context"));
-        UiSupport.addRow(form, 0, "Management level", managementContextSelector);
-        UiSupport.addRow(form, 1, "Selected context", selectedContextPanel);
-        UiSupport.addRow(form, 2, "Management contacts", managementContactsPanel);
-        UiSupport.addRow(form, 3, "Shared work assignment", new JScrollPane(sharedAssignmentArea));
-        UiSupport.addRow(form, 4, "Special instructions", new JScrollPane(specialInstructionsArea));
-        UiSupport.addRow(form, 5, "Prepared by name", preparedByNameField);
-        UiSupport.addRow(form, 6, "Prepared by position/title", preparedByPositionField);
-        UiSupport.addRow(form, 7, "Prepared date/time", preparedDateTimeField);
-        UiSupport.addRow(form, 8, "IAP page", iapPageField);
+        UiSupport.addRow(form, 0, "Management level / context", managementLevelRow);
+        UiSupport.addRow(form, 1, "Management contacts", managementContactsPanel);
+        UiSupport.addRow(form, 2, "Shared work assignment", new JScrollPane(sharedAssignmentArea));
+        UiSupport.addRow(form, 3, "Special instructions", new JScrollPane(specialInstructionsArea));
+        UiSupport.addRow(form, 4, "Prepared by", preparedByRow);
+        UiSupport.addRow(form, 5, "IAP page (auto)", iapPageField);
         preparedByNameField.setEditable(false);
         preparedByPositionField.setEditable(false);
         managementContextSelector.addActionListener(event -> {
@@ -606,6 +625,18 @@ public class Ics204Panel extends JPanel {
             personsField.setColumns(4);
             personsField.setText(row.getNumberOfPersons() <= 0 ? "" : String.valueOf(row.getNumberOfPersons()));
             contactField.setText(row.getContact());
+            contactField.setToolTipText("Radio channel or phone number for contacting the team leader");
+            // Auto-fill contact from the leader's T-card radio/phone when the field is blank on open.
+            if (contactField.getText().isBlank() && !leaderField.getText().isBlank()) {
+                var card = controller.findPersonCard(leaderField.getText());
+                if (card != null) {
+                    String autoContact = card.getRadioChannel().isBlank()
+                            ? card.getPhoneNumber() : card.getRadioChannel();
+                    if (!autoContact.isBlank()) {
+                        contactField.setText(autoContact);
+                    }
+                }
+            }
             reportingField.setText(row.getReportingLocation());
             equipmentField = textArea(row.getSpecialEquipment(), 2);
             suppliesField = textArea(row.getSupplies(), 2);
@@ -635,7 +666,7 @@ public class Ics204Panel extends JPanel {
                     new LabeledComponent("Persons", personsField)));
             UiSupport.addRow(panel, rowIndex++, "Resource", inlineFieldPanel(
                     new LabeledComponent("Identifier", resourceField),
-                    new LabeledComponent("Primary contact", contactField)));
+                    new LabeledComponent("Radio/Phone (contact)", contactField)));
             UiSupport.addRow(panel, rowIndex++, "Leadership", inlineFieldPanel(
                     new LabeledComponent("Leader role", leaderRoleField),
                     new LabeledComponent("Leader", leaderField)));

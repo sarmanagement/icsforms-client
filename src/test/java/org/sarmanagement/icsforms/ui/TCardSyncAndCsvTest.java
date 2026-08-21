@@ -176,6 +176,69 @@ class TCardSyncAndCsvTest {
     }
 
     // -----------------------------------------------------------------------
+    // syncTCards — canine/handler deduplication
+    // -----------------------------------------------------------------------
+
+    /**
+     * Regression: a stale EQUIPMENT card whose {@code resourceIdentifier} matches the
+     * handler's name (created by an older sync version) must not produce a duplicate.
+     * After sync the handler should appear exactly once as PERSONNEL, and the stale
+     * EQUIPMENT card (which is no longer referenced) must be removed.
+     */
+    @Test
+    void syncTCardsDoesNotDuplicateHandlerWhenStaleEquipmentCardExists() {
+        AppData data = new AppData();
+
+        // Stale EQUIPMENT card: resourceIdentifier = handler name (old bug artefact).
+        TCard staleEquipCard = new TCard();
+        staleEquipCard.setCardType(TCardType.EQUIPMENT);
+        staleEquipCard.setResourceIdentifier("John Smith");
+        staleEquipCard.setSourceRef("sar:T100:r:0"); // non-blank → not a manual card
+        data.getTCards().add(staleEquipCard);
+
+        // Correct PERSONNEL card for the handler.
+        TCard handlerPersonnelCard = new TCard();
+        handlerPersonnelCard.setCardType(TCardType.PERSONNEL);
+        handlerPersonnelCard.setPersonName("John Smith");
+        handlerPersonnelCard.setSourceRef("sar:T100:leader");
+        data.getTCards().add(handlerPersonnelCard);
+
+        AppController ctrl = TestAppController.create(data);
+
+        // Add SAR task after construction so that syncSarTasks() in the constructor
+        // does not clear it (the task list is derived from the ICS 204 form on sync).
+        SarTaskAssignment task = new SarTaskAssignment();
+        task.setAssignmentId("T100");
+        task.setResourceType("Canine");
+        task.setLeader("John Smith");
+        task.setLeaderRole("Leader/Handler");
+
+        SarTaskResource handlerRes = new SarTaskResource();
+        handlerRes.setName("John Smith");
+        handlerRes.setFunction("Leader/Handler");
+        task.setResourcesAssigned(new ArrayList<>(List.of(handlerRes)));
+        data.getSarTaskAssignments().add(task);
+        ctrl.syncTCards();
+
+        List<TCard> cards = data.getTCards();
+
+        long personnelCount = cards.stream()
+                .filter(c -> c.getCardType() == TCardType.PERSONNEL
+                        && "John Smith".equals(c.getPersonName()))
+                .count();
+        assertEquals(1, personnelCount,
+                "Handler must appear exactly once as PERSONNEL; found " + personnelCount);
+
+        long equipCount = cards.stream()
+                .filter(c -> (c.getCardType() == TCardType.EQUIPMENT
+                        || c.getCardType() == TCardType.MISC_EQUIPMENT)
+                        && "John Smith".equals(c.getResourceIdentifier()))
+                .count();
+        assertEquals(0, equipCount,
+                "Stale EQUIPMENT card with handler name must be removed after sync");
+    }
+
+    // -----------------------------------------------------------------------
     // CSV helper unit tests
     // -----------------------------------------------------------------------
 
