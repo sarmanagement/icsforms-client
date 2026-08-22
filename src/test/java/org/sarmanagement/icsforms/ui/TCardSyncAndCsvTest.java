@@ -530,6 +530,101 @@ class TCardSyncAndCsvTest {
         assertEquals(TCardType.PERSONNEL,      TCardPanel.inferCardType(""));
     }
 
+    /**
+     * On a canine task the resource list may contain the handler's own name typed as EQUIPMENT
+     * (a legacy UI artefact).  That entry must be treated as PERSONNEL — not used to create a
+     * canine T-card — and the canine card must not have the handler's name as its identifier.
+     */
+    @Test
+    void syncTCardsDoesNotConflateHandlerNameWithCanineResource() {
+        AppData data = new AppData();
+        AppController ctrl = TestAppController.create(data);
+
+        SarTaskAssignment task = new SarTaskAssignment();
+        task.setAssignmentId("task-k9");
+        task.setResourceType("Canine");
+        task.setLeader("Jane Doe");
+        task.setLeaderRole("Handler");
+
+        // Resource list has the handler's own name typed as EQUIPMENT (old bug artefact)
+        // plus a real canine entry.
+        SarTaskResource handlerAsEquip = new SarTaskResource();
+        handlerAsEquip.setName("Jane Doe");
+        handlerAsEquip.setCardType(TCardType.EQUIPMENT);
+
+        SarTaskResource canineRes = new SarTaskResource();
+        canineRes.setName("K9 Rex");
+        canineRes.setCardType(TCardType.EQUIPMENT);
+
+        task.setResourcesAssigned(new ArrayList<>(List.of(handlerAsEquip, canineRes)));
+        data.getSarTaskAssignments().add(task);
+
+        ctrl.syncTCards();
+
+        List<TCard> cards = data.getTCards();
+
+        // Handler must have exactly one PERSONNEL card.
+        long handlerPersonnel = cards.stream()
+                .filter(c -> c.getCardType() == TCardType.PERSONNEL
+                        && "Jane Doe".equalsIgnoreCase(c.getPersonName()))
+                .count();
+        assertEquals(1, handlerPersonnel, "Handler must have exactly one PERSONNEL card");
+
+        // No phantom equipment card with the handler's name as resourceIdentifier.
+        long phantomEquip = cards.stream()
+                .filter(c -> c.getCardType() != TCardType.PERSONNEL
+                        && "Jane Doe".equalsIgnoreCase(c.getResourceIdentifier()))
+                .count();
+        assertEquals(0, phantomEquip,
+                "No equipment card may have the handler's name as resourceIdentifier");
+
+        // Canine card must exist with correct name and handler link.
+        TCard canineCard = cards.stream()
+                .filter(c -> "K9 Rex".equalsIgnoreCase(c.getResourceIdentifier()))
+                .findFirst().orElse(null);
+        assertNotNull(canineCard, "Canine T-card must exist");
+        assertEquals(TCardType.EQUIPMENT, canineCard.getCardType());
+        assertEquals("Jane Doe", canineCard.getHandlerName(),
+                "Canine card must reference the handler's name");
+    }
+
+    /**
+     * A resource assigned to a second task must appear under that task in the rack view
+     * (last-assignment-wins), not remain locked to the first task's ref.
+     */
+    @Test
+    void syncTCardsUpdatesSourceRefWhenResourceReassignedToAnotherTask() {
+        AppData data = new AppData();
+        AppController ctrl = TestAppController.create(data);
+
+        SarTaskAssignment task1 = new SarTaskAssignment();
+        task1.setAssignmentId("task-alpha");
+        task1.setLeader("Bob Jones");
+
+        SarTaskAssignment task2 = new SarTaskAssignment();
+        task2.setAssignmentId("task-bravo");
+        SarTaskResource bobRes = new SarTaskResource();
+        bobRes.setName("Bob Jones");
+        bobRes.setCardType(TCardType.PERSONNEL);
+        task2.setResourcesAssigned(new ArrayList<>(List.of(bobRes)));
+
+        data.getSarTaskAssignments().add(task1);
+        data.getSarTaskAssignments().add(task2);
+
+        ctrl.syncTCards();
+
+        List<TCard> cards = data.getTCards();
+        TCard bobCard = cards.stream()
+                .filter(c -> "Bob Jones".equalsIgnoreCase(c.getPersonName()))
+                .findFirst().orElse(null);
+        assertNotNull(bobCard, "T-card for Bob Jones must exist");
+        // Bob is the leader of task-alpha AND appears in task-bravo resources.
+        // The last task processed (task-bravo resource) must win.
+        assertTrue(bobCard.getSourceRef().startsWith("sar:task-bravo"),
+                "Bob's sourceRef must reflect the last task that claimed him, got: "
+                        + bobCard.getSourceRef());
+    }
+
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------

@@ -746,7 +746,12 @@ public class AppController {
                     // If the resource name matches an existing equipment card (e.g. a canine
                     // call sign already tracked above or manually created), preserve its type.
                     String resNameKey = resName.trim().toLowerCase();
-                    TCard equipCard = byEquipmentId.get(resNameKey);
+                    // On a canine task the leader is the handler (a person).  If a resource
+                    // entry has the same name as the leader it IS that person — never treat it
+                    // as a canine/equipment card regardless of the stored cardType.
+                    boolean resNameIsLeader = !leaderName.isBlank()
+                            && resNameKey.equals(leaderName.trim().toLowerCase());
+                    TCard equipCard = resNameIsLeader ? null : byEquipmentId.get(resNameKey);
                     // Guard against a stale EQUIPMENT card whose resourceIdentifier happens to
                     // match a known person name (can arise from old sync logic that incorrectly
                     // used the task's resource-identifier field as the canine T-card key).
@@ -763,15 +768,18 @@ public class AppController {
                         card = equipCard;
                         res.setCardType(card.getCardType());
                         setTaskSourceRef(card, ref);
-                        // Ensure the handler link is set when the task is a canine task.
-                        if (isCanineTask && !leaderName.isBlank() && card.getHandlerName().isBlank()) {
+                        // Ensure the handler link is set when the task is a canine task and
+                        // this card is not the handler themselves (name must differ from leader).
+                        if (isCanineTask && !leaderName.isBlank() && !resNameIsLeader
+                                && card.getHandlerName().isBlank()) {
                             card.setHandlerName(leaderName);
                         }
                         card.setNotes(notePreserving(card.getNotes(),
                                 safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
                         wanted.put(ref, card);
                         applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
-                    } else if (res.getCardType() != null && res.getCardType() != TCardType.PERSONNEL) {
+                    } else if (!resNameIsLeader && res.getCardType() != null
+                            && res.getCardType() != TCardType.PERSONNEL) {
                         // Resource was explicitly typed as non-PERSONNEL (e.g. EQUIPMENT for a canine)
                         // when it was added to the task.  But if the name matches a known person,
                         // the stored cardType is a stale artefact — correct it to PERSONNEL.
@@ -796,7 +804,8 @@ public class AppController {
                             card.setResourceIdentifier(coalesce(card.getResourceIdentifier(), resName));
                             card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
                             setTaskSourceRef(card, ref);
-                            if (isCanineTask && !leaderName.isBlank() && card.getHandlerName().isBlank()) {
+                            if (isCanineTask && !leaderName.isBlank() && !resNameIsLeader
+                                    && card.getHandlerName().isBlank()) {
                                 card.setHandlerName(leaderName);
                             }
                             card.setNotes(notePreserving(card.getNotes(),
@@ -1123,14 +1132,15 @@ public class AppController {
     /**
      * Sets the {@code sourceRef} of a T-card to {@code ref} for a task assignment.
      *
-     * <p>A task assignment ({@code "sar:..."}) takes priority over an org chart slot
-     * ({@code "org:..."}) so that the card appears in the correct task group in the
-     * rack view.  A {@code "sar:"} ref is never overridden by another {@code "sar:"}
-     * ref — the first task to claim a card keeps its ref.</p>
+     * <p>A task assignment ({@code "sar:..."}) always takes priority over an org chart slot
+     * ({@code "org:..."}).  Within a sync pass, the last task to claim a card wins so that
+     * a resource reassigned from one task to another moves to the new task group in the rack
+     * view.  A person may be on multiple tasks across an operational period (sequentially,
+     * not simultaneously), and the rack should reflect their current assignment.</p>
      */
     private static void setTaskSourceRef(TCard card, String ref) {
         String current = card.getSourceRef();
-        if (current.isBlank() || current.startsWith("org:")) {
+        if (current.isBlank() || current.startsWith("org:") || current.startsWith("sar:")) {
             card.setSourceRef(ref);
         }
     }
