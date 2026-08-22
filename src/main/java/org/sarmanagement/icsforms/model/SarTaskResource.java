@@ -10,6 +10,14 @@ public class SarTaskResource {
     private String name = "";
     private TCardType cardType = TCardType.PERSONNEL;
 
+    /**
+     * Stable UUID referencing the {@link TCard#getResourceId()} of the linked T-card.
+     * When set, lookups in {@code syncTCards} use this ID rather than the display name,
+     * preventing type-corruption when a resource name coincidentally matches another card.
+     * Blank for legacy entries created before UUID linking was introduced.
+     */
+    private String resourceId = "";
+
     /** @return resource function or role. */
     public String getFunction() {
         return function;
@@ -58,5 +66,23 @@ public class SarTaskResource {
     /** @param cardType T-card type for this resource. */
     public void setCardType(TCardType cardType) {
         this.cardType = cardType;
+    }
+
+    /**
+     * Returns the stable UUID of the linked {@link TCard}, or blank for legacy entries.
+     *
+     * @return resource UUID, never {@code null}.
+     */
+    public String getResourceId() {
+        return resourceId == null ? "" : resourceId;
+    }
+
+    /**
+     * Sets the stable UUID referencing the linked {@link TCard}.
+     *
+     * @param resourceId resource UUID; {@code null} treated as blank.
+     */
+    public void setResourceId(String resourceId) {
+        this.resourceId = resourceId == null ? "" : resourceId;
     }
 }

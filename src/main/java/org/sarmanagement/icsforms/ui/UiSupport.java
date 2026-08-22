@@ -1,29 +1,33 @@
 package org.sarmanagement.icsforms.ui;
 
+import javax.swing.BorderFactory;
+import javax.swing.DefaultListModel;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
-import javax.swing.JMenuItem;
-import javax.swing.JPopupMenu;
+import javax.swing.JList;
 import javax.swing.JSpinner;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerDateModel;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JViewport;
-import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Dimension;
 import java.awt.Color;
-import java.awt.event.FocusAdapter;
-import java.awt.event.FocusEvent;
+import java.awt.Window;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -36,32 +40,6 @@ import java.util.function.Supplier;
 final class UiSupport {
     static final Color REQUIRED_FIELD_BACKGROUND = new Color(255, 248, 225);
     private static final String FORM_SPACER_PROPERTY = "uiSupport.formSpacer";
-
-    /**
-     * When set to a future timestamp, all autocomplete suggestion popups are suppressed until
-     * that time has passed.  This covers both the {@code DocumentListener} path (which fires
-     * when {@code setText()} is called during a model refresh) and the {@code focusGained}
-     * path (which fires when the tab panel programmatically moves focus to the first field).
-     * See {@link #suppressSuggestionsFor(long)}.
-     */
-    private static volatile long suppressSuggestionsUntil = 0;
-
-    /**
-     * Suppresses all autocomplete suggestion popups for the given duration.  Call this
-     * immediately before any batch of programmatic {@code setText()} calls on fields that
-     * have autocomplete installed (e.g. at the start of {@code refreshFromModel()}), so
-     * that neither the document-change trigger nor the focus-gained trigger opens the popup
-     * during a tab switch.  Normal user interaction resumes once the window expires.
-     *
-     * @param durationMs how long (in ms from now) to suppress suggestions.
-     */
-    static void suppressSuggestionsFor(long durationMs) {
-        suppressSuggestionsUntil = System.currentTimeMillis() + durationMs;
-    }
-
-    private static boolean isSuggestionsSuppressed() {
-        return System.currentTimeMillis() < suppressSuggestionsUntil;
-    }
 
     private UiSupport() {
     }
@@ -262,89 +240,128 @@ final class UiSupport {
     }
 
     /**
-     * Installs a drop-down name autocomplete on a text field.
+     * Installs a name picker on a text field.
      *
-     * <p>When the user types at least one character a popup menu appears below the field
-     * showing matching suggestions (prefix match, case-insensitive, up to 10 results).
-     * Selecting a suggestion fills the field and, if {@code onSelected} is non-null,
-     * invokes the callback so callers can auto-fill adjacent contact fields.</p>
+     * <p>The field remains fully editable for free-form input.  Clicking the field when the
+     * suggestion list is non-empty opens a modal pick-list dialog: a filter text box narrows
+     * the list in real time, and double-clicking (or pressing Enter on) an entry fills the
+     * field and fires the optional {@code onSelected} callback to auto-fill adjacent fields.
+     * This avoids focus-stealing and flicker problems associated with pop-up menu approaches.</p>
      *
-     * @param nameField  target text field.
-     * @param suggestions lazy supplier of the current suggestion list.
-     * @param onSelected optional callback fired when a suggestion is chosen; receives the
-     *                   selected name string.  May be {@code null}.
+     * @param nameField   target text field.
+     * @param suggestions lazy supplier of the current suggestion list (queried at dialog-open time).
+     * @param onSelected  optional callback fired when a suggestion is chosen; receives the
+     *                    selected name string.  May be {@code null}.
      */
     static void installNameAutocomplete(JTextField nameField,
                                         Supplier<List<String>> suggestions,
                                         Consumer<String> onSelected) {
-        JPopupMenu popup = new JPopupMenu();
-        boolean[] updating = {false};
-
-        // Shared logic: rebuild and (if non-empty) show the popup for the current text.
-        Runnable showSuggestions = () -> SwingUtilities.invokeLater(() -> {
-            String text = nameField.getText().trim().toLowerCase(Locale.ROOT);
-            popup.removeAll();
-            List<String> matched;
-            if (text.isEmpty()) {
-                // With a blank field show all available names (up to 10).
-                matched = suggestions.get().stream().limit(10).toList();
-            } else {
-                matched = suggestions.get().stream()
-                        .filter(s -> s.trim().toLowerCase(Locale.ROOT).startsWith(text))
-                        .limit(10)
-                        .toList();
-            }
-            if (matched.isEmpty()) {
-                popup.setVisible(false);
-                return;
-            }
-            for (String s : matched) {
-                JMenuItem item = new JMenuItem(s);
-                item.addActionListener(ev -> {
-                    updating[0] = true;
-                    nameField.setText(s);
-                    updating[0] = false;
-                    popup.setVisible(false);
-                    if (onSelected != null) {
-                        onSelected.accept(s);
-                    }
-                });
-                popup.add(item);
-            }
-            if (nameField.isShowing()) {
-                popup.show(nameField, 0, nameField.getHeight());
+        nameField.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                if (e.getButton() != MouseEvent.BUTTON1) return;
+                List<String> all = suggestions.get();
+                if (all.isEmpty()) return;
+                openPickerDialog(nameField, all, onSelected);
             }
         });
+    }
 
-        DocumentListener listener = new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent e) { update(); }
-            @Override public void removeUpdate(DocumentEvent e) { update(); }
-            @Override public void changedUpdate(DocumentEvent e) {}
+    /**
+     * Opens the modal name-picker dialog anchored to {@code anchor}.
+     *
+     * <p>The dialog contains a filter field and a scrollable list.  Typing in the filter field
+     * narrows the list to prefix-matching entries.  Double-clicking an item (or pressing Enter
+     * when one is selected) fills {@code nameField} and fires {@code onSelected}.</p>
+     */
+    private static void openPickerDialog(JTextField nameField,
+                                         List<String> allNames,
+                                         Consumer<String> onSelected) {
+        Window owner = nameField.isShowing()
+                ? (Window) javax.swing.SwingUtilities.getWindowAncestor(nameField) : null;
+        JDialog dialog = new JDialog(owner, "Select person", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
 
-            private void update() {
-                if (updating[0]) return;
-                if (isSuggestionsSuppressed()) return;
-                // Only show while typing when text is non-empty.
-                String text = nameField.getText().trim();
-                if (text.isEmpty()) {
-                    popup.setVisible(false);
-                    return;
-                }
-                showSuggestions.run();
+        // Filter field
+        JTextField filterField = new JTextField(nameField.getText().trim(), 20);
+
+        // List model + list
+        DefaultListModel<String> listModel = new DefaultListModel<>();
+        JList<String> list = new JList<>(listModel);
+        list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        list.setVisibleRowCount(10);
+
+        // Populate list according to current filter text
+        Runnable applyFilter = () -> {
+            String filter = filterField.getText().trim().toLowerCase(Locale.ROOT);
+            listModel.clear();
+            allNames.stream()
+                    .filter(s -> filter.isEmpty() || s.trim().toLowerCase(Locale.ROOT).contains(filter))
+                    .forEach(listModel::addElement);
+            if (!listModel.isEmpty()) {
+                list.setSelectedIndex(0);
             }
         };
-        nameField.getDocument().addDocumentListener(listener);
-        nameField.addFocusListener(new FocusAdapter() {
-            @Override public void focusGained(FocusEvent e) {
-                // Show suggestions when the user navigates to the field (mouse click or keyboard
-                // Tab traversal), but not when the tab panel moves focus programmatically during
-                // a model refresh.  The suppression flag is set by refreshFromModel() callers
-                // before setText() calls, so it covers both the DocumentListener and this handler.
-                if (!isSuggestionsSuppressed() && !suggestions.get().isEmpty()) {
-                    showSuggestions.run();
+        applyFilter.run();
+
+        filterField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e)  { applyFilter.run(); }
+            @Override public void removeUpdate(DocumentEvent e)  { applyFilter.run(); }
+            @Override public void changedUpdate(DocumentEvent e) {}
+        });
+
+        // Accept selection and close
+        Runnable accept = () -> {
+            String selected = list.getSelectedValue();
+            if (selected != null) {
+                nameField.setText(selected);
+                dialog.dispose();
+                if (onSelected != null) {
+                    onSelected.accept(selected);
                 }
             }
-            @Override public void focusLost(FocusEvent e) { popup.setVisible(false); }
+        };
+
+        // Double-click on list item
+        list.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() >= 2) accept.run();
+            }
         });
+
+        // Enter key in filter field or list triggers acceptance
+        filterField.addActionListener(ev -> accept.run());
+        list.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override public void keyPressed(java.awt.event.KeyEvent e) {
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) accept.run();
+            }
+        });
+
+        // Buttons
+        JButton okButton = new JButton("Select");
+        okButton.addActionListener(ev -> accept.run());
+        JButton cancelButton = new JButton("Cancel");
+        cancelButton.addActionListener(ev -> dialog.dispose());
+
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+
+        JPanel top = new JPanel(new BorderLayout(4, 4));
+        top.setBorder(BorderFactory.createEmptyBorder(4, 4, 0, 4));
+        top.add(new JLabel("Filter:"), BorderLayout.WEST);
+        top.add(filterField, BorderLayout.CENTER);
+
+        JPanel center = new JPanel(new BorderLayout());
+        center.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        center.add(new JScrollPane(list), BorderLayout.CENTER);
+
+        dialog.getContentPane().setLayout(new BorderLayout());
+        dialog.getContentPane().add(top, BorderLayout.NORTH);
+        dialog.getContentPane().add(center, BorderLayout.CENTER);
+        dialog.getContentPane().add(buttonPanel, BorderLayout.SOUTH);
+        dialog.pack();
+        dialog.setMinimumSize(new Dimension(260, 280));
+        dialog.setLocationRelativeTo(nameField);
+        filterField.requestFocusInWindow();
+        dialog.setVisible(true);
     }
 }

@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class IncidentContextPanel extends JPanel {
     private static final String[] POSITION_PRESETS = {
-            "", "IC", "Incident Commander", "Unified Command",
+            "", "Incident Commander", "Unified Command",
             "Safety Officer", "Operations Section Chief",
             "Planning Section Chief", "Logistics Section Chief",
             "Finance / Admin Section Chief", "Documentation Unit Leader"

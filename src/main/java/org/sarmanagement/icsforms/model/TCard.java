@@ -3,6 +3,7 @@ package org.sarmanagement.icsforms.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * ICS 219 Resource Status (T-Card) record.
@@ -15,6 +16,18 @@ import java.time.LocalDateTime;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TCard {
+
+    /**
+     * Stable UUID assigned once at creation and never changed.
+     * Used by {@link SarTaskResource#getResourceId()} to reference this card without
+     * relying on mutable display-name strings.
+     * Initialized to {@code null}; a UUID is generated on first access via
+     * {@link #getResourceId()} to ensure legacy records deserialized without a
+     * {@code resourceId} field receive a stable value rather than a new random one
+     * each time.
+     */
+    private String resourceId = null;
+
     private TCardType cardType = TCardType.PERSONNEL;
 
     // 219-5 Personnel fields (used when cardType == PERSONNEL)
@@ -63,6 +76,12 @@ public class TCard {
     private String handlerName = "";
 
     /**
+     * Number of persons represented by this T-card.  Meaningful for CREW cards
+     * (a crew of N people) and PERSONNEL cards (always 1).  Zero means unspecified.
+     */
+    private int numberOfPersons = 0;
+
+    /**
      * Creates an empty T-card defaulting to a Personnel card.
      */
     public TCard() {
@@ -84,6 +103,29 @@ public class TCard {
      */
     public void setCardType(TCardType cardType) {
         this.cardType = cardType == null ? TCardType.PERSONNEL : cardType;
+    }
+
+    /**
+     * Returns the stable resource identifier (UUID) for this card.
+     * Used by {@link SarTaskResource} to reference this card without relying on names.
+     *
+     * @return resource UUID, never {@code null}.
+     */
+    public String getResourceId() {
+        if (resourceId == null || resourceId.isBlank()) {
+            resourceId = UUID.randomUUID().toString();
+        }
+        return resourceId;
+    }
+
+    /**
+     * Sets the stable resource identifier.  Should only be called during deserialization.
+     *
+     * @param resourceId resource UUID string; blank/null generates a new UUID.
+     */
+    public void setResourceId(String resourceId) {
+        this.resourceId = (resourceId == null || resourceId.isBlank())
+                ? UUID.randomUUID().toString() : resourceId;
     }
 
     /**
@@ -307,12 +349,63 @@ public class TCard {
     }
 
     /**
+     * Returns the stored number of persons for this card.  Zero means unspecified.
+     * For PERSONNEL cards the effective count is always 1; use {@link #personCount()}
+     * when computing headcounts.
+     *
+     * @return stored number of persons (&ge; 0).
+     */
+    public int getNumberOfPersons() {
+        return numberOfPersons;
+    }
+
+    /**
+     * Sets the number of persons for this card.  Values below zero are clamped to zero.
+     *
+     * @param numberOfPersons number of persons (&ge; 0).
+     */
+    public void setNumberOfPersons(int numberOfPersons) {
+        this.numberOfPersons = Math.max(0, numberOfPersons);
+    }
+
+    /**
+     * Returns the number of people contributed by this card to an assignment headcount.
+     *
+     * <ul>
+     *   <li>PERSONNEL — always 1.</li>
+     *   <li>CREW — {@code numberOfPersons} when set (&gt; 0), otherwise 1.</li>
+     *   <li>All other types (equipment, canine, aircraft, …) — 0.</li>
+     * </ul>
+     *
+     * @return person count contribution.
+     */
+    public int personCount() {
+        if (cardType == TCardType.PERSONNEL) {
+            return 1;
+        }
+        if (cardType == TCardType.CREW) {
+            return numberOfPersons > 0 ? numberOfPersons : 1;
+        }
+        return 0;
+    }
+
+    /**
      * Returns a display label for this card.
+     *
+     * <p>For PERSONNEL cards, the person's name ({@code personName}) is used.
+     * For all other card types (equipment, canines, aircraft, etc.),
+     * {@code resourceIdentifier} is the primary display name — that is the
+     * generalised identifier: dog call sign, apparatus name, tail number, etc.</p>
      *
      * @return display label.
      */
     public String getDisplayLabel() {
-        String name = personName.isBlank() ? resourceIdentifier : personName;
-        return name.isBlank() ? cardType.getLabel() : name;
+        if (cardType == TCardType.PERSONNEL) {
+            String name = personName.isBlank() ? resourceIdentifier : personName;
+            return name.isBlank() ? cardType.getLabel() : name;
+        } else {
+            String name = resourceIdentifier.isBlank() ? personName : resourceIdentifier;
+            return name.isBlank() ? cardType.getLabel() : name;
+        }
     }
 }
