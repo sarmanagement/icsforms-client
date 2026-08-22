@@ -13,7 +13,7 @@ import javax.swing.SpinnerDateModel;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JViewport;
-import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.Component;
@@ -280,8 +280,8 @@ final class UiSupport {
         JPopupMenu popup = new JPopupMenu();
         boolean[] updating = {false};
 
-        // Shared logic: rebuild and (if non-empty) show the popup for the current text.
-        Runnable showSuggestions = () -> SwingUtilities.invokeLater(() -> {
+        // Actual popup-rebuild logic, always runs on the EDT (called from Timer or focusGained).
+        Runnable rebuildPopup = () -> {
             String text = nameField.getText().trim().toLowerCase(Locale.ROOT);
             popup.removeAll();
             List<String> matched;
@@ -321,7 +321,12 @@ final class UiSupport {
                     popup.show(nameField, 0, nameField.getHeight());
                 }
             }
-        });
+        };
+
+        // Debounce timer: fires once after the user pauses typing, so the suggestion list is
+        // rebuilt at most once per burst of keystrokes rather than on every character change.
+        Timer debounce = new Timer(150, ev -> rebuildPopup.run());
+        debounce.setRepeats(false);
 
         DocumentListener listener = new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent e) { update(); }
@@ -334,10 +339,12 @@ final class UiSupport {
                 // Only show while typing when text is non-empty.
                 String text = nameField.getText().trim();
                 if (text.isEmpty()) {
+                    debounce.stop();
                     popup.setVisible(false);
                     return;
                 }
-                showSuggestions.run();
+                // Restart the debounce timer so we only compute suggestions after the user pauses.
+                debounce.restart();
             }
         };
         nameField.getDocument().addDocumentListener(listener);
@@ -348,10 +355,13 @@ final class UiSupport {
                 // a model refresh.  The suppression flag is set by refreshFromModel() callers
                 // before setText() calls, so it covers both the DocumentListener and this handler.
                 if (!isSuggestionsSuppressed() && !suggestions.get().isEmpty()) {
-                    showSuggestions.run();
+                    rebuildPopup.run();
                 }
             }
-            @Override public void focusLost(FocusEvent e) { popup.setVisible(false); }
+            @Override public void focusLost(FocusEvent e) {
+                debounce.stop();
+                popup.setVisible(false);
+            }
         });
     }
 }
