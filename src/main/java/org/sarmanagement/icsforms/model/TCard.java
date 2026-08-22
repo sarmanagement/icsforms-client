@@ -63,6 +63,12 @@ public class TCard {
     private String handlerName = "";
 
     /**
+     * Number of persons represented by this T-card.  Meaningful for CREW cards
+     * (a crew of N people) and PERSONNEL cards (always 1).  Zero means unspecified.
+     */
+    private int numberOfPersons = 0;
+
+    /**
      * Creates an empty T-card defaulting to a Personnel card.
      */
     public TCard() {
@@ -304,6 +310,47 @@ public class TCard {
      */
     public void setHandlerName(String handlerName) {
         this.handlerName = handlerName == null ? "" : handlerName;
+    }
+
+    /**
+     * Returns the stored number of persons for this card.  Zero means unspecified.
+     * For PERSONNEL cards the effective count is always 1; use {@link #personCount()}
+     * when computing headcounts.
+     *
+     * @return stored number of persons (&ge; 0).
+     */
+    public int getNumberOfPersons() {
+        return numberOfPersons;
+    }
+
+    /**
+     * Sets the number of persons for this card.  Values below zero are clamped to zero.
+     *
+     * @param numberOfPersons number of persons (&ge; 0).
+     */
+    public void setNumberOfPersons(int numberOfPersons) {
+        this.numberOfPersons = Math.max(0, numberOfPersons);
+    }
+
+    /**
+     * Returns the number of people contributed by this card to an assignment headcount.
+     *
+     * <ul>
+     *   <li>PERSONNEL — always 1.</li>
+     *   <li>CREW — {@code numberOfPersons} when set (&gt; 0), otherwise 1.</li>
+     *   <li>All other types (equipment, canine, aircraft, …) — 0.</li>
+     * </ul>
+     *
+     * @return person count contribution.
+     */
+    public int personCount() {
+        if (cardType == TCardType.PERSONNEL) {
+            return 1;
+        }
+        if (cardType == TCardType.CREW) {
+            return numberOfPersons > 0 ? numberOfPersons : 1;
+        }
+        return 0;
     }
 
     /**

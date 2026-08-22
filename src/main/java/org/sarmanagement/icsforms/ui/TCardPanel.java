@@ -1387,17 +1387,22 @@ public class TCardPanel extends JPanel {
         }
 
         // ── OTHER resource sub-form fields ────────────────────────────────
-        JTextField handlerNameField   = UiSupport.textField();
-        JTextField resourceResIdField = UiSupport.textField();
-        JTextField resourceLocField   = UiSupport.textField();
+        JTextField handlerNameField      = UiSupport.textField();
+        JTextField resourceResIdField    = UiSupport.textField();
+        JTextField resourceLocField      = UiSupport.textField();
         JComboBox<String> resourceStatusCombo = new JComboBox<>(STATUS_OPTIONS);
-        JTextField resourceNotesField = UiSupport.textField();
+        JTextField resourceNotesField    = UiSupport.textField();
+        JTextField crewSizeField         = UiSupport.textField();
+        crewSizeField.setPreferredSize(new Dimension(60, crewSizeField.getPreferredSize().height));
 
         handlerNameField.setText(card.getHandlerName());
         resourceResIdField.setText(card.getResourceIdentifier());
         resourceLocField.setText(card.getLocation());
         resourceStatusCombo.setSelectedItem(card.getStatus());
         resourceNotesField.setText(card.getNotes());
+        if (card.getNumberOfPersons() > 0) {
+            crewSizeField.setText(String.valueOf(card.getNumberOfPersons()));
+        }
 
         // ── build three sub-forms (HEADER / PERSONNEL / other) ──────────
         CardLayout subLayout = new CardLayout();
@@ -1426,6 +1431,7 @@ public class TCardPanel extends JPanel {
         r = 0;
         UiSupport.addRow(resourceForm, r++, "Handler/operator name", handlerNameField);
         UiSupport.addRow(resourceForm, r++, "Resource identifier",   resourceResIdField);
+        UiSupport.addRow(resourceForm, r++, "Number of persons",     crewSizeField);
         UiSupport.addRow(resourceForm, r++, "Location (e.g. ICP)",   resourceLocField);
         UiSupport.addRow(resourceForm, r++, "Status",                resourceStatusCombo);
         UiSupport.addRow(resourceForm, r,   "Notes",                 resourceNotesField);
@@ -1529,6 +1535,8 @@ public class TCardPanel extends JPanel {
                 card.setLocation(resourceLocField.getText().trim());
                 card.setStatus((String) resourceStatusCombo.getSelectedItem());
                 card.setNotes(resourceNotesField.getText().trim());
+                String crewSizeText = crewSizeField.getText().trim();
+                card.setNumberOfPersons(crewSizeText.isEmpty() ? 0 : parseIntOrZero(crewSizeText));
             }
         }
         return true;
@@ -1934,5 +1942,13 @@ public class TCardPanel extends JPanel {
             case MISC_EQUIPMENT -> new Color(240, 220, 180);
             case GENERIC       -> new Color(210, 180, 240);
         };
+    }
+
+    private static int parseIntOrZero(String s) {
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 }

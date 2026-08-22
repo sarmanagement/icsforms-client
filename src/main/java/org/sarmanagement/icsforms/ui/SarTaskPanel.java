@@ -1267,6 +1267,9 @@ public class SarTaskPanel extends JPanel {
         private final JTextField canineWindSpeedField;
         private final JScrollPane areasNotCoveredField;
         private final JScrollPane hazardsObservedField;
+        private final List<TCard> availableTCards;
+        /** Pre-built name→TCard lookup used by {@link #resourceCount()}. */
+        private final java.util.Map<String, TCard> tCardByDisplayName;
 
         private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries,
                               int resourceRowCount,
@@ -1274,6 +1277,15 @@ public class SarTaskPanel extends JPanel {
                               List<String> availableResourceNames,
                               List<TCard> availableTCards) {
             this.mode = mode;
+            this.availableTCards = availableTCards == null ? List.of() : availableTCards;
+            java.util.Map<String, TCard> nameMap = new java.util.HashMap<>();
+            for (TCard tc : this.availableTCards) {
+                String key = tc.getDisplayLabel().trim().toLowerCase(java.util.Locale.ROOT);
+                if (!key.isBlank()) {
+                    nameMap.putIfAbsent(key, tc);
+                }
+            }
+            this.tCardByDisplayName = java.util.Collections.unmodifiableMap(nameMap);
             boolean isCanineTask = SarTaskSupport.usesCanineFactors(row.getResourceType());
             assignmentTeamNumberField = textField(row.getAssignmentTeamNumber(), true);
             resourceTypeField = new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new));
@@ -1550,13 +1562,21 @@ public class SarTaskPanel extends JPanel {
         }
 
         private int resourceCount() {
-            // Only count PERSONNEL resources; non-PERSONNEL (canines, equipment, aircraft,
-            // etc.) should not be included in the ICS 204 "number of persons" field.
-            // SarTaskResource.cardType defaults to PERSONNEL, so only explicit non-PERSONNEL
-            // types are excluded.
-            return (int) resourceValuesFrom(resourceEntryTableModel).stream()
-                    .filter(r -> r.getCardType() == TCardType.PERSONNEL)
-                    .count();
+            // Sum personCount() contributions from matched T-cards.
+            // PERSONNEL: 1 each; CREW: numberOfPersons (default 1); others: 0.
+            int total = 0;
+            for (SarTaskResource res : resourceValuesFrom(resourceEntryTableModel)) {
+                String key = res.getName().trim().toLowerCase(java.util.Locale.ROOT);
+                TCard matched = tCardByDisplayName.get(key);
+                if (matched != null) {
+                    total += matched.personCount();
+                } else if (res.getCardType() == TCardType.PERSONNEL) {
+                    // Resource not yet backed by a T-card; count as 1 person.
+                    total += 1;
+                }
+                // Non-PERSONNEL resources with no matched card contribute 0.
+            }
+            return total;
         }
     }
 
