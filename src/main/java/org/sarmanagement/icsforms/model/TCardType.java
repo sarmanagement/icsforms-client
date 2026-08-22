@@ -30,7 +30,7 @@ public enum TCardType {
      * JSON alias {@code "DOZER"} accepted for backward compatibility.
      */
     @JsonAlias("DOZER")
-    EQUIPMENT("219-7 Equipment", "yellow"),
+    EQUIPMENT("219-7 Equipment (inc. Canine)", "yellow"),
     /** 219-8 Miscellaneous Equipment / Task Force card (tan). */
     MISC_EQUIPMENT("219-8 Misc. Equipment", "tan"),
     /**

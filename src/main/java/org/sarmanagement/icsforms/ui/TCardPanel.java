@@ -1,11 +1,12 @@
 package org.sarmanagement.icsforms.ui;
 
-import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -696,6 +697,9 @@ public class TCardPanel extends JPanel {
         card.setCardType((TCardType) typeChooser.getSelectedItem());
         if (openEditDialog(card)) {
             tableModel.addCard(card);
+            if (currentView.equals(VIEW_RACK)) {
+                rebuildRackView();
+            }
             controller.markDirty();
         }
     }
@@ -705,6 +709,9 @@ public class TCardPanel extends JPanel {
         card.setCardType(TCardType.PERSONNEL);
         if (openEditDialog(card)) {
             tableModel.addCard(card);
+            if (currentView.equals(VIEW_RACK)) {
+                rebuildRackView();
+            }
             controller.markDirty();
         }
     }
@@ -714,6 +721,9 @@ public class TCardPanel extends JPanel {
         card.setCardType(TCardType.HEADER);
         if (openEditDialog(card)) {
             tableModel.addCard(card);
+            if (currentView.equals(VIEW_RACK)) {
+                rebuildRackView();
+            }
             controller.markDirty();
         }
     }
@@ -822,6 +832,7 @@ public class TCardPanel extends JPanel {
                     "Merge Duplicates", JOptionPane.INFORMATION_MESSAGE);
         } else {
             pushToModel();
+            controller.deduplicateSarTaskResources();
             controller.markDirty();
             refreshFromModel();
             JOptionPane.showMessageDialog(this,
@@ -1307,22 +1318,6 @@ public class TCardPanel extends JPanel {
         // ── shared fields ──────────────────────────────────────────────────
         JComboBox<TCardType> typeCombo = new JComboBox<>(TCardType.values());
         typeCombo.setSelectedItem(card.getCardType());
-        // Item 4: in SAR mode, show "Equipment (inc. Canine)" for EQUIPMENT type.
-        boolean sarMode = controller.getIncidentMode() == IncidentMode.SAR;
-        if (sarMode) {
-            typeCombo.setRenderer(new javax.swing.DefaultListCellRenderer() {
-                @Override
-                public java.awt.Component getListCellRendererComponent(
-                        javax.swing.JList<?> list, Object value, int index,
-                        boolean isSelected, boolean cellHasFocus) {
-                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                    if (value == TCardType.EQUIPMENT) {
-                        setText("219-7 Equipment (inc. Canine)");
-                    }
-                    return this;
-                }
-            });
-        }
 
         // ── HEADER sub-form fields (separate instances) ────────────────────
         JTextField headerResourceIdField = UiSupport.textField();
@@ -1432,17 +1427,49 @@ public class TCardPanel extends JPanel {
         outerPanel.add(typeRow, BorderLayout.NORTH);
         outerPanel.add(subContainer, BorderLayout.CENTER);
 
-        // ── related resources section ─────────────────────────────────────
+        // ── related resources + Add-to-Assignment section ─────────────────
         JPanel relatedPanel = buildRelatedResourcesPanel(card);
+
+        // Button that reads the current name from the active sub-form and opens
+        // an assignment picker dialog without closing this edit dialog.
+        JButton addToAssignBtn = new JButton("Add to Assignment…");
+        addToAssignBtn.addActionListener(e -> {
+            TCardType currentType = (TCardType) typeCombo.getSelectedItem();
+            String currentName;
+            if (currentType == TCardType.PERSONNEL) {
+                currentName = personNameField.getText().trim();
+            } else if (currentType == TCardType.HEADER) {
+                currentName = headerResourceIdField.getText().trim();
+            } else {
+                currentName = resourceResIdField.getText().trim();
+            }
+            if (currentName.isBlank()) {
+                JOptionPane.showMessageDialog(
+                        javax.swing.SwingUtilities.getWindowAncestor(this),
+                        "Please enter a name or identifier before adding to an assignment.",
+                        "Add to Assignment", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            showAddToAssignmentDialog(
+                    javax.swing.SwingUtilities.getWindowAncestor(this),
+                    currentName, currentType);
+        });
+        JPanel addToAssignRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 2));
+        addToAssignRow.add(addToAssignBtn);
+
+        JPanel southPanel = new JPanel();
+        southPanel.setLayout(new BoxLayout(southPanel, BoxLayout.Y_AXIS));
         if (relatedPanel != null) {
-            outerPanel.add(relatedPanel, BorderLayout.SOUTH);
+            southPanel.add(relatedPanel);
         }
+        southPanel.add(addToAssignRow);
+        outerPanel.add(southPanel, BorderLayout.SOUTH);
 
         JScrollPane scroll = new JScrollPane(outerPanel);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(
                 javax.swing.SwingUtilities.getWindowAncestor(this), "Edit T-Card", scroll,
-                new Dimension(520, relatedPanel != null ? 520 : 460))) {
+                new Dimension(520, relatedPanel != null ? 540 : 480))) {
             return false;
         }
 
@@ -1476,6 +1503,151 @@ public class TCardPanel extends JPanel {
             }
         }
         return true;
+    }
+
+    /**
+     * Opens a modal dialog allowing the user to add the T-card resource to a SAR task
+     * assignment or (for PERSONNEL cards) to an ICS org chart role.
+     *
+     * <p>Changes are applied immediately and {@link AppController#markDirty()} is called.</p>
+     *
+     * @param parent      parent window for the dialog.
+     * @param resourceName the effective name of the resource (from the currently open edit form).
+     * @param cardType    the card type currently selected in the edit form.
+     */
+    private void showAddToAssignmentDialog(java.awt.Window parent, String resourceName, TCardType cardType) {
+        List<SarTaskAssignment> tasks = controller.getData().getSarTaskAssignments();
+
+        // ── SAR Task tab ──────────────────────────────────────────────────
+        String[] sarCols = {"Team #", "Type", "Leader", "Assignment"};
+        javax.swing.table.DefaultTableModel sarModel = new javax.swing.table.DefaultTableModel(sarCols, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+        for (SarTaskAssignment t : tasks) {
+            sarModel.addRow(new Object[]{
+                    t.getAssignmentTeamNumber(),
+                    t.getResourceType(),
+                    t.getLeader(),
+                    t.getAssignment()
+            });
+        }
+        JTable sarTable = new JTable(sarModel);
+        sarTable.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+        sarTable.getTableHeader().setReorderingAllowed(false);
+        JScrollPane sarScroll = new JScrollPane(sarTable);
+        sarScroll.setPreferredSize(new Dimension(480, 160));
+
+        JButton addAsResBtn  = new JButton("Add as Resource");
+        JButton setAsLeaderBtn = new JButton("Set as Leader");
+        JPanel sarBtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        sarBtnRow.add(addAsResBtn);
+        sarBtnRow.add(setAsLeaderBtn);
+
+        JPanel sarTab = new JPanel(new BorderLayout(0, 4));
+        sarTab.add(sarScroll, BorderLayout.CENTER);
+        sarTab.add(sarBtnRow, BorderLayout.SOUTH);
+
+        // Wire SAR buttons — they apply to the selected task and close the dialog.
+        javax.swing.JDialog[] dlgRef = new javax.swing.JDialog[1];
+
+        addAsResBtn.addActionListener(e -> {
+            int row = sarTable.getSelectedRow();
+            if (row < 0 || row >= tasks.size()) {
+                JOptionPane.showMessageDialog(parent,
+                        "Please select a task.", "Add to Assignment", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            // Build a temporary TCard carrying the name/type from the edit form.
+            TCard stub = new TCard();
+            stub.setCardType(cardType);
+            if (cardType == TCardType.PERSONNEL) {
+                stub.setPersonName(resourceName);
+            } else {
+                stub.setResourceIdentifier(resourceName);
+            }
+            controller.addTCardToSarTask(stub, tasks.get(row), false);
+            controller.markDirty();
+            if (dlgRef[0] != null) dlgRef[0].dispose();
+        });
+
+        setAsLeaderBtn.addActionListener(e -> {
+            int row = sarTable.getSelectedRow();
+            if (row < 0 || row >= tasks.size()) {
+                JOptionPane.showMessageDialog(parent,
+                        "Please select a task.", "Add to Assignment", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            TCard stub = new TCard();
+            stub.setCardType(cardType);
+            if (cardType == TCardType.PERSONNEL) {
+                stub.setPersonName(resourceName);
+            } else {
+                stub.setResourceIdentifier(resourceName);
+            }
+            controller.addTCardToSarTask(stub, tasks.get(row), true);
+            controller.markDirty();
+            if (dlgRef[0] != null) dlgRef[0].dispose();
+        });
+
+        // ── Org Chart Role tab (PERSONNEL only) ───────────────────────────
+        javax.swing.JTabbedPane tabs = new javax.swing.JTabbedPane();
+        tabs.addTab("SAR Task", sarTab);
+
+        if (cardType == TCardType.PERSONNEL) {
+            List<String> roles = AppController.getOrgChartRoleLabels();
+            javax.swing.DefaultListModel<String> roleListModel = new javax.swing.DefaultListModel<>();
+            roles.forEach(roleListModel::addElement);
+            javax.swing.JList<String> roleList = new javax.swing.JList<>(roleListModel);
+            roleList.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+            JScrollPane roleScroll = new JScrollPane(roleList);
+            roleScroll.setPreferredSize(new Dimension(480, 160));
+
+            JButton assignRoleBtn = new JButton("Assign to Role");
+            assignRoleBtn.addActionListener(e -> {
+                String selectedRole = roleList.getSelectedValue();
+                if (selectedRole == null) {
+                    JOptionPane.showMessageDialog(parent,
+                            "Please select a role.", "Add to Assignment", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                controller.setOrgChartRoleName(selectedRole, resourceName);
+                controller.markDirty();
+                if (dlgRef[0] != null) dlgRef[0].dispose();
+            });
+
+            JPanel orgTab = new JPanel(new BorderLayout(0, 4));
+            orgTab.add(roleScroll, BorderLayout.CENTER);
+            JPanel orgBtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+            orgBtnRow.add(assignRoleBtn);
+            orgTab.add(orgBtnRow, BorderLayout.SOUTH);
+            tabs.addTab("Org Chart Role", orgTab);
+        }
+
+        tabs.setPreferredSize(new Dimension(500, 230));
+
+        if (tasks.isEmpty()) {
+            sarTable.setEnabled(false);
+            addAsResBtn.setEnabled(false);
+            setAsLeaderBtn.setEnabled(false);
+        }
+
+        javax.swing.JDialog dlg = new javax.swing.JDialog(parent, "Add to Assignment",
+                java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        dlgRef[0] = dlg;
+        dlg.setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
+        JPanel content = new JPanel(new BorderLayout(6, 6));
+        content.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        content.add(new javax.swing.JLabel("Add \"" + resourceName + "\" to:"), BorderLayout.NORTH);
+        content.add(tabs, BorderLayout.CENTER);
+        JButton cancelBtn = new JButton("Cancel");
+        cancelBtn.addActionListener(e -> dlg.dispose());
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        btnRow.add(cancelBtn);
+        content.add(btnRow, BorderLayout.SOUTH);
+        dlg.setContentPane(content);
+        dlg.pack();
+        dlg.setLocationRelativeTo(parent);
+        dlg.setVisible(true);
     }
 
     private static TCard copyCard(TCard src) {

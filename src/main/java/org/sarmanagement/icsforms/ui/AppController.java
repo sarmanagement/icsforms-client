@@ -588,7 +588,10 @@ public class AppController {
                     card.setPersonName("");
                 }
             }
-            if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+            // Index all non-PERSONNEL, non-HEADER cards by resourceIdentifier so that
+            // canines or other resources stored with an unexpected card type (e.g. due to a
+            // previous sync bug) are still found by name and not silently recreated.
+            if (card.getCardType() != TCardType.PERSONNEL && card.getCardType() != TCardType.HEADER) {
                 String rid = card.getResourceIdentifier().trim().toLowerCase();
                 if (!rid.isBlank()) {
                     byEquipmentId.putIfAbsent(rid, card);
@@ -978,6 +981,36 @@ public class AppController {
             }
         }
         return result;
+    }
+
+    /**
+     * Removes duplicate {@link SarTaskResource} entries from every SAR task assignment
+     * by comparing effective names (case-insensitive).  When the same resource name appears
+     * more than once in a task's resources list (which can happen after T-card deduplication
+     * merges two cards that were separately referenced), all occurrences beyond the first
+     * are dropped.
+     *
+     * <p>Call this after merging duplicate T-cards so that the SAR task display does not
+     * show the same resource twice.</p>
+     */
+    public void deduplicateSarTaskResources() {
+        for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+            List<SarTaskResource> resources = task.getResourcesAssigned();
+            if (resources == null || resources.size() <= 1) {
+                continue;
+            }
+            Set<String> seen = new java.util.HashSet<>();
+            List<SarTaskResource> deduped = new ArrayList<>();
+            for (SarTaskResource res : resources) {
+                String key = res.getName() == null ? "" : res.getName().trim().toLowerCase();
+                if (seen.add(key)) {
+                    deduped.add(res);
+                }
+            }
+            if (deduped.size() < resources.size()) {
+                task.setResourcesAssigned(deduped);
+            }
+        }
     }
 
     /**
@@ -1376,5 +1409,115 @@ public class AppController {
         String digits = value.replaceAll("[\\-. ()+\\s]", "");
         // Must be all digits after stripping and have at least 7 of them.
         return digits.length() >= 7 && digits.chars().allMatch(Character::isDigit);
+    }
+
+    /**
+     * Adds the given T-card as a resource entry to the specified SAR task assignment.
+     *
+     * <p>If the task's {@code resourcesAssigned} list already contains an entry with the
+     * same name (case-insensitive) the call is a no-op to avoid creating duplicates.</p>
+     *
+     * @param card T-card to add.
+     * @param task target SAR task assignment.
+     * @param asLeader when {@code true}, sets the card as the task's leader instead of
+     *                 appending to the resources list.
+     */
+    public void addTCardToSarTask(TCard card, SarTaskAssignment task, boolean asLeader) {
+        if (card == null || task == null) {
+            return;
+        }
+        String name = effectiveTCardName(card);
+        if (name.isBlank()) {
+            return;
+        }
+        if (asLeader) {
+            task.setLeader(name);
+            if (card.getPhoneNumber() != null && !card.getPhoneNumber().isBlank()) {
+                task.setContact(card.getPhoneNumber());
+            } else if (card.getRadioChannel() != null && !card.getRadioChannel().isBlank()) {
+                task.setContact(card.getRadioChannel());
+            }
+        } else {
+            List<SarTaskResource> resources = task.getResourcesAssigned();
+            if (resources == null) {
+                resources = new ArrayList<>();
+                task.setResourcesAssigned(resources);
+            }
+            String nameLower = name.trim().toLowerCase();
+            boolean alreadyPresent = resources.stream()
+                    .anyMatch(r -> nameLower.equals(r.getName() == null ? "" : r.getName().trim().toLowerCase()));
+            if (!alreadyPresent) {
+                SarTaskResource res = new SarTaskResource();
+                res.setName(name);
+                res.setCardType(card.getCardType());
+                if (card.getCardType() == TCardType.PERSONNEL) {
+                    res.setHomeAgency(card.getHomeAgency() == null ? "" : card.getHomeAgency());
+                }
+                resources.add(res);
+            }
+        }
+    }
+
+    /**
+     * Sets the name field for an ICS org chart role.
+     *
+     * <p>The {@code roleLabel} must match one of the values returned by
+     * {@link #getOrgChartRoleLabels()}.  If the label is not recognised the call is a no-op.</p>
+     *
+     * @param roleLabel human-readable role label (e.g. {@code "Safety Officer"}).
+     * @param personName name to assign to the role.
+     */
+    public void setOrgChartRoleName(String roleLabel, String personName) {
+        OrganizationalChart chart = data.getOrganizationalChart();
+        if (chart == null || roleLabel == null) {
+            return;
+        }
+        String name = personName == null ? "" : personName;
+        switch (roleLabel) {
+            case "Incident Commander"        -> { List<String> ics = chart.getIncidentCommanders(); if (!ics.contains(name)) { ics.add(name); chart.setIncidentCommanders(ics); } }
+            case "Safety Officer"            -> chart.setSafetyOfficerName(name);
+            case "Public Information Officer"-> chart.setPublicInformationOfficerName(name);
+            case "Liaison Officer"           -> chart.setLiaisonOfficerName(name);
+            case "Operations Section Chief"  -> chart.setOperationsSectionChiefName(name);
+            case "Planning Section Chief"    -> chart.setPlanningSectionChiefName(name);
+            case "Logistics Section Chief"   -> chart.setLogisticsSectionChiefName(name);
+            case "Finance/Admin Section Chief"-> chart.setFinanceAdminSectionChiefName(name);
+            case "Documentation Unit Leader" -> chart.setDocumentationUnitLeaderName(name);
+            case "Communications Unit Leader"-> chart.setCommunicationsUnitLeaderName(name);
+            case "Communications Technician" -> chart.setCommunicationsTechnicianName(name);
+            case "Staging Area Manager"      -> chart.setStagingAreaManagerName(name);
+            case "Resources Unit Leader"     -> chart.setResourcesUnitLeaderName(name);
+            case "Situation Unit Leader"     -> chart.setSituationUnitLeaderName(name);
+            case "Demobilization Unit Leader"-> chart.setDemobilizationUnitLeaderName(name);
+            case "Supply Unit Leader"        -> chart.setSupplyUnitLeaderName(name);
+            default                          -> { /* unrecognised role — no-op */ }
+        }
+    }
+
+    /**
+     * Returns the ordered list of ICS org chart role labels supported by
+     * {@link #setOrgChartRoleName}.
+     *
+     * @return unmodifiable list of role label strings.
+     */
+    public static List<String> getOrgChartRoleLabels() {
+        return List.of(
+                "Incident Commander",
+                "Safety Officer",
+                "Public Information Officer",
+                "Liaison Officer",
+                "Operations Section Chief",
+                "Planning Section Chief",
+                "Logistics Section Chief",
+                "Finance/Admin Section Chief",
+                "Documentation Unit Leader",
+                "Communications Unit Leader",
+                "Communications Technician",
+                "Staging Area Manager",
+                "Resources Unit Leader",
+                "Situation Unit Leader",
+                "Demobilization Unit Leader",
+                "Supply Unit Leader"
+        );
     }
 }
