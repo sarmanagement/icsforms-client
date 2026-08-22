@@ -394,11 +394,6 @@ public class OrganizationalChartPanel extends JPanel {
      * Loads field values from the model.
      */
     public void refreshFromModel() {
-        // Suppress autocomplete popups while we set field values from the model.
-        // This prevents the DocumentListener and focusGained handler from opening the
-        // suggestions popup when refreshFromModel() is called during a tab switch.
-        // 300 ms is enough for all setText() calls and the subsequent focus transfer to complete.
-        UiSupport.suppressSuggestionsFor(300);
         OrganizationalChart chart = controller.getData().getOrganizationalChart();
         incidentCommanderArea.setText(String.join("\n", chart.getIncidentCommanders()));
         incidentCommanderRadioField.setText(safe(chart.getIncidentCommanderRadio()));
