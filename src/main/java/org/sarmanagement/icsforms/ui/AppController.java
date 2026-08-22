@@ -578,13 +578,17 @@ public class AppController {
         // Legacy data: old CSV imports stored the canine name in personName with a blank
         // resourceIdentifier.  Migrate those records now so all downstream logic can rely
         // on resourceIdentifier as the authoritative display name for non-personnel cards.
+        // This migration is idempotent: if the migrated data is not immediately saved, the
+        // same transformation will re-apply on the next sync with the same result.
         Map<String, TCard> byEquipmentId = new LinkedHashMap<>();
         for (TCard card : cards) {
-            if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+            if (card.getCardType() != TCardType.PERSONNEL) {
                 if (card.getResourceIdentifier().isBlank() && !card.getPersonName().isBlank()) {
                     card.setResourceIdentifier(card.getPersonName());
                     card.setPersonName("");
                 }
+            }
+            if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
                 String rid = card.getResourceIdentifier().trim().toLowerCase();
                 if (!rid.isBlank()) {
                     byEquipmentId.putIfAbsent(rid, card);
@@ -1067,12 +1071,12 @@ public class AppController {
      * Returns the display name to use when matching or listing a T-card.
      *
      * <p>For PERSONNEL cards the person's name ({@code personName}) is used.
-     * For all other card types (equipment, canines, aircraft, etc.)
+     * For all other card types (equipment, canines, aircraft, crews, etc.)
      * {@code resourceIdentifier} is the authoritative display name —
      * the generalised identifier: dog call sign, apparatus name, tail number, etc.</p>
      */
     private static String effectiveTCardName(TCard card) {
-        if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+        if (card.getCardType() != TCardType.PERSONNEL) {
             return card.getResourceIdentifier().trim();
         }
         return card.getPersonName().trim();
