@@ -82,6 +82,23 @@ public enum TCardType {
     }
 
     /**
+     * Returns {@code true} when {@code candidate} matches either the standard label or the
+     * SAR-mode label of this type (case-insensitive).
+     *
+     * <p>Useful when deserialising a stored label whose mode-context is unknown.</p>
+     *
+     * @param candidate the label string to test.
+     * @return {@code true} when the candidate matches any label variant for this type.
+     */
+    public boolean matchesLabel(String candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        return label.equalsIgnoreCase(candidate)
+                || (sarLabel != null && sarLabel.equalsIgnoreCase(candidate));
+    }
+
+    /**
      * Returns the standard colour name for this card type.
      *
      * @return card colour name.

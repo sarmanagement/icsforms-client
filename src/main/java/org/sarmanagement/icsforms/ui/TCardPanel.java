@@ -72,8 +72,8 @@ public class TCardPanel extends JPanel {
     private static final String VIEW_RACK  = "rack";
 
     private final AppController controller;
-    private final TCardTableModel tableModel = new TCardTableModel();
-    private final JTable table = new JTable(tableModel);
+    private final TCardTableModel tableModel;
+    private final JTable table;
     private final CardLayout viewLayout = new CardLayout();
     private final JPanel viewContainer = new JPanel(viewLayout);
     private final JScrollPane rackScroll = new JScrollPane();
@@ -122,6 +122,8 @@ public class TCardPanel extends JPanel {
     public TCardPanel(AppController controller) {
         super(new BorderLayout());
         this.controller = controller;
+        this.tableModel = new TCardTableModel(this::isSarMode);
+        this.table = new JTable(tableModel);
         setBorder(BorderFactory.createTitledBorder("T-Cards (ICS 219 Resource Status)"));
 
         table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
@@ -1037,10 +1039,10 @@ public class TCardPanel extends JPanel {
     private static void applyMergedField(TCard merged, int fieldIdx, String value) {
         switch (fieldIdx) {
             case 0 -> {
-                // Card type: find the TCardType whose label matches (either standard or SAR).
+                // Card type: match against any label variant (standard or SAR) so that
+                // a label stored in one mode is still recognised after a mode switch.
                 for (TCardType t : TCardType.values()) {
-                    if (t.getLabel().equalsIgnoreCase(value)
-                            || t.getLabel(true).equalsIgnoreCase(value)) {
+                    if (t.matchesLabel(value)) {
                         merged.setCardType(t);
                         break;
                     }
@@ -1790,14 +1792,19 @@ public class TCardPanel extends JPanel {
     // Table model
     // -------------------------------------------------------------------------
 
-    private final class TCardTableModel extends AbstractTableModel {
+    private static final class TCardTableModel extends AbstractTableModel {
         private static final String[] COLUMNS = {
                 "Type", "Name / Resource", "Agency", "State", "Phone",
                 "Check-In", "Location", "Status", "Task"
         };
 
+        private final java.util.function.BooleanSupplier sarModeSupplier;
         private final List<TCard> cards = new ArrayList<>();
         private Map<String, String> assignmentTeamByRef = new LinkedHashMap<>();
+
+        TCardTableModel(java.util.function.BooleanSupplier sarModeSupplier) {
+            this.sarModeSupplier = sarModeSupplier;
+        }
 
         void setAssignmentTeamByRef(Map<String, String> map) {
             this.assignmentTeamByRef = map == null ? new LinkedHashMap<>() : map;
@@ -1842,7 +1849,7 @@ public class TCardPanel extends JPanel {
         public Object getValueAt(int row, int col) {
             TCard card = cards.get(row);
             return switch (col) {
-                case 0 -> card.getCardType().getLabel(isSarMode());
+                case 0 -> card.getCardType().getLabel(sarModeSupplier.getAsBoolean());
                 case 1 -> card.getDisplayLabel();
                 case 2 -> card.getHomeAgency();
                 case 3 -> card.getHomeState();
