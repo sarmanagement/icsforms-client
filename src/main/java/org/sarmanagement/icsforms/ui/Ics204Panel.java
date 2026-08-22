@@ -185,6 +185,30 @@ public class Ics204Panel extends JPanel {
         this.on214Request = handler;
     }
 
+    /**
+     * Opens the "Create assignment" dialog (same editor used for editing existing assignments),
+     * adds the new record to the ICS 204 form if the user confirms, and returns it.
+     *
+     * <p>Call this from the SAR Tasks panel so that a new SAR task always has a backing ICS 204
+     * resource assignment created first.</p>
+     *
+     * @return the newly created {@link ResourceAssignment}, or {@code null} if the user cancelled.
+     */
+    public ResourceAssignment openNewAssignmentEditor() {
+        ResourceAssignment row = new ResourceAssignment();
+        ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
+        JScrollPane scrollPane = new JScrollPane(editor.panel);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        if (!UiSupport.showResizableConfirmDialog(this, "Create ICS 204 Assignment", scrollPane,
+                new Dimension(920, 560))) {
+            return null;
+        }
+        editor.applyTo(row);
+        resourceTableModel.addRow(row);
+        controller.markDirty();
+        return row;
+    }
+
     /** Loads values from the model. */
     public void refreshFromModel() {
         Ics204Form form = controller.getData().getForm204();
@@ -719,6 +743,8 @@ public class Ics204Panel extends JPanel {
         java.util.List<ResourceAssignment> getRows() { return rows; }
         /** Adds a blank row. */
         void addRow() { rows.add(new ResourceAssignment()); fireTableRowsInserted(rows.size() - 1, rows.size() - 1); }
+        /** Adds a specific row. */
+        void addRow(ResourceAssignment assignment) { rows.add(assignment); fireTableRowsInserted(rows.size() - 1, rows.size() - 1); }
         /** @param row row index to remove. */
         void removeRow(int row) { if (row >= 0 && row < rows.size()) { rows.remove(row); fireTableRowsDeleted(row, row); } }
         @Override public int getRowCount() { return rows.size(); }

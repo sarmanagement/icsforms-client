@@ -684,6 +684,7 @@ public class AppController {
                 preparerCard = byName.containsKey(nameKey) ? byName.get(nameKey) : newPersonnelCard(preparerCardName);
             }
             preparerCard.setPersonName(preparerCardName);
+            preparerCard.setLocation(coalesce(preparerCard.getLocation(), "ICP"));
             preparerCard.setSourceRef(preparerCard.getSourceRef().isBlank() ? preparerRef : preparerCard.getSourceRef());
             preparerCard.setNotes(notePreserving(preparerCard.getNotes(),
                     preparerCardTitle.isBlank() ? "Preparer" : preparerCardTitle));
@@ -1121,6 +1122,7 @@ public class AppController {
             card = byName.containsKey(nameKey) ? byName.get(nameKey) : newOrgCard(safeName, radio, phone);
         }
         card.setPersonName(safeName);
+        card.setLocation(coalesce(card.getLocation(), "ICP"));
         card.setRadioChannel(coalesce(card.getRadioChannel(), radio));
         card.setPhoneNumber(coalesce(card.getPhoneNumber(), phone));
         card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());

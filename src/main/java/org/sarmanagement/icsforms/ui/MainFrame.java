@@ -52,6 +52,8 @@ public class MainFrame extends JFrame {
     private static final String SAR_ONLY_GROUP = "SAR Features";
     /** Tab group for T-Card (ICS 219) resource status tabs. */
     private static final String T_CARDS_GROUP = "T-Cards";
+    /** Tab group for ICS 201 – shown by default only in the Initial Response phase. */
+    private static final String ICS_201_GROUP = "ICS 201 (Initial Response)";
 
     private final AppController controller;
     private final JLabel validationLabel = new JLabel("Ready", SwingConstants.LEFT);
@@ -71,6 +73,7 @@ public class MainFrame extends JFrame {
     private final Map<String, Boolean> groupVisible = new LinkedHashMap<>();
     private int lastSelectedTabIndex = -1;
     private boolean rebuildingTabs;
+    private IapPhase lastKnownPhase;
 
     /**
      * Creates the main application frame.
@@ -94,13 +97,15 @@ public class MainFrame extends JFrame {
         this.tCardPanel = new TCardPanel(controller);
         ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
         sarTaskPanel.setOn214Request(this::openIcs214ForSarTask);
+        sarTaskPanel.setOnNewAssignmentRequest(ics204Panel::openNewAssignmentEditor);
         groupVisible.put(CORE_GROUP, true);
         groupVisible.put(ACTIVITY_LOGS_GROUP, true);
         groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
+        groupVisible.put(ICS_201_GROUP, controller.getIapPhase() == IapPhase.INITIAL_RESPONSE);
         groupVisible.put(T_CARDS_GROUP, true);
         registerTab("Shared", incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
         registerTab("Org Chart", organizationalChartPanel, AppController.LinkSource.ORG_CHART, CORE_GROUP);
-        registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, CORE_GROUP);
+        registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, ICS_201_GROUP);
         registerTab("ICS 202", ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
         registerTab("ICS 204", ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
         registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
@@ -465,6 +470,14 @@ public class MainFrame extends JFrame {
         tCardPanel.refreshFromModel();
         // Keep SAR-only tabs visible only in SAR mode.
         groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
+        // Reset ICS 201 group visibility to the phase-based default only when the phase changes
+        // (e.g. on document load or explicit phase switch).  User toggles via the View menu are
+        // preserved during routine tab-switch refreshes where the phase has not changed.
+        IapPhase currentPhase = controller.getIapPhase();
+        if (currentPhase != lastKnownPhase) {
+            groupVisible.put(ICS_201_GROUP, currentPhase == IapPhase.INITIAL_RESPONSE);
+            lastKnownPhase = currentPhase;
+        }
         rebuildVisibleTabs(selectedComponent, selectedLogIndex);
         refreshStatus();
     }

@@ -80,6 +80,8 @@ public class SarTaskPanel extends JPanel {
     private final JComboBox<String> statusFilterCombo = new JComboBox<>(
             new String[]{"All", "Planned", "On Task", "Returned"});
     private java.util.function.Consumer<SarTaskAssignment> on214Request;
+    /** Callback that opens the "Create ICS 204 Assignment" dialog and returns the new assignment. */
+    private java.util.function.Supplier<ResourceAssignment> onNewAssignmentRequest;
 
     private static final String VIEW_TABLE = "table";
     private static final String VIEW_BOARD = "board";
@@ -343,8 +345,25 @@ public class SarTaskPanel extends JPanel {
 
     /** Creates a new standalone SAR task, opens the assignment editor, and adds it on confirm. */
     private void addNewTask() {
-        SarTaskAssignment task = new SarTaskAssignment();
-        task.setAssignmentId(UUID.randomUUID().toString());
+        // If a callback is registered, open the ICS 204 "Create Assignment" dialog first.
+        // The new assignment record is created in the ICS 204 form; the SAR task is then
+        // pre-populated from it so the two records stay linked from the start.
+        ResourceAssignment linkedAssignment = null;
+        if (onNewAssignmentRequest != null) {
+            linkedAssignment = onNewAssignmentRequest.get();
+            if (linkedAssignment == null) {
+                return; // user cancelled the ICS 204 assignment dialog
+            }
+        }
+
+        SarTaskAssignment task = linkedAssignment != null
+                ? SarTaskAssignment.fromResourceAssignment(linkedAssignment,
+                        controller.getData().getIncidentContext(),
+                        controller.getData().getForm204())
+                : new SarTaskAssignment();
+        if (task.getAssignmentId() == null || task.getAssignmentId().isBlank()) {
+            task.setAssignmentId(UUID.randomUUID().toString());
+        }
         SarTaskEditor editor = new SarTaskEditor(task, EditorMode.ASSIGNMENT,
                 controller.getData().getClueLogEntries(), 1,
                 handlerName -> controller.findEquipmentForHandler(handlerName),
@@ -422,6 +441,17 @@ public class SarTaskPanel extends JPanel {
      */
     public void setOn214Request(java.util.function.Consumer<SarTaskAssignment> handler) {
         this.on214Request = handler;
+    }
+
+    /**
+     * Sets the callback invoked when the user adds a new task, to first create a backing
+     * ICS 204 resource assignment record.  The supplier opens the "Create ICS 204 Assignment"
+     * dialog and returns the new {@link ResourceAssignment}, or {@code null} if cancelled.
+     *
+     * @param handler supplier that creates and returns a new {@link ResourceAssignment}.
+     */
+    public void setOnNewAssignmentRequest(java.util.function.Supplier<ResourceAssignment> handler) {
+        this.onNewAssignmentRequest = handler;
     }
 
     private void openIcs214ForSelected() {
@@ -671,9 +701,11 @@ public class SarTaskPanel extends JPanel {
             if (table.isEditing() && table.getCellEditor() != null) {
                 table.getCellEditor().stopCellEditing();
             }
-            SarTaskResource picked = showResourcePickerDialog(parentComponent, availableTCards);
+            List<SarTaskResource> picked = showResourcePickerDialog(parentComponent, availableTCards);
             if (picked != null) {
-                model.addRow(picked);
+                for (SarTaskResource res : picked) {
+                    model.addRow(res);
+                }
             }
         });
         JButton removeButton = new JButton("Remove");
@@ -699,20 +731,31 @@ public class SarTaskPanel extends JPanel {
     }
 
     /**
-     * Opens a dialog to pick a T-card resource or manually enter a new one.
+     * Opens a dialog to pick one or more T-card resources or manually enter a new one.
      *
-     * @param parent         parent component for the dialog.
-     * @param availableTCards list of T-cards to display.
-     * @return a populated SarTaskResource, or {@code null} if the user cancelled.
+     * <p>Only resources whose location is {@code "Available"} are shown in the picker table so
+     * the user cannot inadvertently double-assign an already-assigned or out-of-service resource.
+     * Multiple rows may be selected using the standard Ctrl/Shift click conventions; all selected
+     * cards are added to the task in a single action.</p>
+     *
+     * @param parent          parent component for the dialog.
+     * @param availableTCards full list of T-cards (filtered internally to "Available").
+     * @return a non-empty list of populated {@link SarTaskResource} objects, or {@code null} if
+     *         the user cancelled or made no valid selection.
      */
-    private static SarTaskResource showResourcePickerDialog(java.awt.Component parent, List<TCard> availableTCards) {
+    private static List<SarTaskResource> showResourcePickerDialog(java.awt.Component parent, List<TCard> availableTCards) {
+        // Filter to only "Available" resources so we don't double-assign.
+        List<TCard> cardList = (availableTCards == null ? List.<TCard>of() : availableTCards)
+                .stream()
+                .filter(c -> "Available".equalsIgnoreCase(c.getLocation()))
+                .collect(java.util.stream.Collectors.toList());
+
         // Build a table model for the T-card picker.
         String[] cols = {"Type", "Name / Identifier", "Agency", "Status"};
         javax.swing.table.DefaultTableModel pickerModel = new javax.swing.table.DefaultTableModel(cols, 0) {
             @Override
             public boolean isCellEditable(int row, int col) { return false; }
         };
-        List<TCard> cardList = availableTCards == null ? List.of() : availableTCards;
         for (TCard card : cardList) {
             String effectiveName = card.getCardType() != TCardType.PERSONNEL
                     ? card.getResourceIdentifier().trim()
@@ -726,10 +769,15 @@ public class SarTaskPanel extends JPanel {
         }
 
         JTable pickerTable = new JTable(pickerModel);
-        pickerTable.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+        pickerTable.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         pickerTable.getTableHeader().setReorderingAllowed(false);
         JScrollPane pickerScroll = new JScrollPane(pickerTable);
         pickerScroll.setPreferredSize(new Dimension(480, 220));
+
+        JLabel hint = new JLabel(cardList.isEmpty()
+                ? "No resources are currently in the \"Available\" column."
+                : "Select one or more resources (Ctrl/Shift+click for multiple):");
+        hint.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 2, 0));
 
         // Manual-entry fields shown below the table for creating a new resource.
         JTextField manualNameField = new JTextField(16);
@@ -749,7 +797,7 @@ public class SarTaskPanel extends JPanel {
         manualPanel.add(manualFunctionField);
 
         JPanel dialogPanel = new JPanel(new BorderLayout(0, 6));
-        dialogPanel.add(new JLabel("Select an existing T-card resource:"), BorderLayout.NORTH);
+        dialogPanel.add(hint, BorderLayout.NORTH);
         dialogPanel.add(pickerScroll, BorderLayout.CENTER);
         dialogPanel.add(manualPanel, BorderLayout.SOUTH);
 
@@ -759,17 +807,26 @@ public class SarTaskPanel extends JPanel {
             return null;
         }
 
-        // If a row is selected in the table, use that card.
-        int selectedRow = pickerTable.getSelectedRow();
-        if (selectedRow >= 0 && selectedRow < cardList.size()) {
-            TCard card = cardList.get(selectedRow);
-            SarTaskResource res = new SarTaskResource();
-            res.setCardType(card.getCardType());
-            boolean isNonPersonnel = card.getCardType() != TCardType.PERSONNEL;
-            String resourceName = card.getResourceIdentifier().trim();
-            res.setName(isNonPersonnel ? resourceName : card.getPersonName().trim());
-            res.setHomeAgency(card.getHomeAgency() == null ? "" : card.getHomeAgency().trim());
-            return res;
+        // Build results from all selected table rows.
+        int[] selectedRows = pickerTable.getSelectedRows();
+        if (selectedRows.length > 0) {
+            List<SarTaskResource> results = new ArrayList<>();
+            for (int selectedRow : selectedRows) {
+                if (selectedRow < 0 || selectedRow >= cardList.size()) {
+                    continue;
+                }
+                TCard card = cardList.get(selectedRow);
+                SarTaskResource res = new SarTaskResource();
+                res.setCardType(card.getCardType());
+                boolean isNonPersonnel = card.getCardType() != TCardType.PERSONNEL;
+                String resourceName = card.getResourceIdentifier().trim();
+                res.setName(isNonPersonnel ? resourceName : card.getPersonName().trim());
+                res.setHomeAgency(card.getHomeAgency() == null ? "" : card.getHomeAgency().trim());
+                results.add(res);
+            }
+            if (!results.isEmpty()) {
+                return results;
+            }
         }
 
         // Otherwise use the manual entry fields.
@@ -779,7 +836,7 @@ public class SarTaskPanel extends JPanel {
             res.setName(manualName);
             res.setFunction(manualFunctionField.getText().trim());
             res.setCardType((TCardType) manualTypeField.getSelectedItem());
-            return res;
+            return List.of(res);
         }
 
         return null;
