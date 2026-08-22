@@ -90,6 +90,30 @@ public class TCardPanel extends JPanel {
     /** Maps each T-card to its rack-view widget panel for in-place border updates without full rebuild. */
     private final Map<TCard, JPanel> rackCardWidgets = new IdentityHashMap<>();
 
+    /** Returns {@code true} when the incident is running in SAR mode. */
+    private boolean isSarMode() {
+        return controller.getIncidentMode() == org.sarmanagement.icsforms.model.IncidentMode.SAR;
+    }
+
+    /**
+     * Returns a {@link javax.swing.ListCellRenderer} for {@link TCardType} combo boxes that
+     * displays the SAR-mode label when the incident is in SAR mode.
+     */
+    private javax.swing.DefaultListCellRenderer tCardTypeRenderer() {
+        return new javax.swing.DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(
+                    javax.swing.JList<?> list, Object value, int index,
+                    boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof TCardType t) {
+                    setText(t.getLabel(isSarMode()));
+                }
+                return this;
+            }
+        };
+    }
+
     /**
      * Creates the T-card panel.
      *
@@ -519,7 +543,7 @@ public class TCardPanel extends JPanel {
         for (TCardType type : usedTypes) {
             JPanel col = new JPanel();
             col.setLayout(new javax.swing.BoxLayout(col, javax.swing.BoxLayout.Y_AXIS));
-            col.setBorder(BorderFactory.createTitledBorder(type.getLabel()));
+            col.setBorder(BorderFactory.createTitledBorder(type.getLabel(isSarMode())));
 
             for (TCard card : byType.get(type)) {
                 col.add(buildRackCard(card));
@@ -686,6 +710,7 @@ public class TCardPanel extends JPanel {
 
     private void addCardWithTypeChoice() {
         JComboBox<TCardType> typeChooser = new JComboBox<>(TCardType.values());
+        typeChooser.setRenderer(tCardTypeRenderer());
         typeChooser.setSelectedItem(TCardType.PERSONNEL);
         int result = JOptionPane.showConfirmDialog(this,
                 new Object[]{"Select card type:", typeChooser},
@@ -870,13 +895,13 @@ public class TCardPanel extends JPanel {
             "Status", "Notes", "Handler/operator"
         };
         String[] valuesA = {
-            a.getCardType().getLabel(),
+            a.getCardType().getLabel(isSarMode()),
             a.getPersonName(), a.getHomeAgency(), a.getHomeState(),
             a.getPhoneNumber(), a.getRadioChannel(), a.getResourceIdentifier(),
             a.getLocation(), a.getStatus(), a.getNotes(), a.getHandlerName()
         };
         String[] valuesB = {
-            b.getCardType().getLabel(),
+            b.getCardType().getLabel(isSarMode()),
             b.getPersonName(), b.getHomeAgency(), b.getHomeState(),
             b.getPhoneNumber(), b.getRadioChannel(), b.getResourceIdentifier(),
             b.getLocation(), b.getStatus(), b.getNotes(), b.getHandlerName()
@@ -1012,9 +1037,10 @@ public class TCardPanel extends JPanel {
     private static void applyMergedField(TCard merged, int fieldIdx, String value) {
         switch (fieldIdx) {
             case 0 -> {
-                // Card type: find the TCardType whose label matches.
+                // Card type: find the TCardType whose label matches (either standard or SAR).
                 for (TCardType t : TCardType.values()) {
-                    if (t.getLabel().equalsIgnoreCase(value)) {
+                    if (t.getLabel().equalsIgnoreCase(value)
+                            || t.getLabel(true).equalsIgnoreCase(value)) {
                         merged.setCardType(t);
                         break;
                     }
@@ -1317,6 +1343,7 @@ public class TCardPanel extends JPanel {
     private boolean openEditDialog(TCard card) {
         // ── shared fields ──────────────────────────────────────────────────
         JComboBox<TCardType> typeCombo = new JComboBox<>(TCardType.values());
+        typeCombo.setRenderer(tCardTypeRenderer());
         typeCombo.setSelectedItem(card.getCardType());
 
         // ── HEADER sub-form fields (separate instances) ────────────────────
@@ -1763,7 +1790,7 @@ public class TCardPanel extends JPanel {
     // Table model
     // -------------------------------------------------------------------------
 
-    private static final class TCardTableModel extends AbstractTableModel {
+    private final class TCardTableModel extends AbstractTableModel {
         private static final String[] COLUMNS = {
                 "Type", "Name / Resource", "Agency", "State", "Phone",
                 "Check-In", "Location", "Status", "Task"
@@ -1815,7 +1842,7 @@ public class TCardPanel extends JPanel {
         public Object getValueAt(int row, int col) {
             TCard card = cards.get(row);
             return switch (col) {
-                case 0 -> card.getCardType().getLabel();
+                case 0 -> card.getCardType().getLabel(isSarMode());
                 case 1 -> card.getDisplayLabel();
                 case 2 -> card.getHomeAgency();
                 case 3 -> card.getHomeState();
