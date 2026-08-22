@@ -573,14 +573,22 @@ public class AppController {
             }
         }
 
-        // Build a resourceIdentifier → card map for equipment/canine cards so that
+        // Build a resourceIdentifier/personName → card map for equipment/canine cards so that
         // SAR task resources can be matched back to existing EQUIPMENT T-cards.
+        // Canine cards store the dog's name in personName (resourceIdentifier is blank),
+        // so both fields are indexed.
         Map<String, TCard> byEquipmentId = new LinkedHashMap<>();
         for (TCard card : cards) {
             if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
                 String rid = card.getResourceIdentifier().trim().toLowerCase();
                 if (!rid.isBlank()) {
                     byEquipmentId.putIfAbsent(rid, card);
+                } else {
+                    // Canines have a blank resourceIdentifier; index by personName instead.
+                    String pn = card.getPersonName().trim().toLowerCase();
+                    if (!pn.isBlank()) {
+                        byEquipmentId.putIfAbsent(pn, card);
+                    }
                 }
             }
         }
@@ -960,9 +968,9 @@ public class AppController {
         for (TCard card : data.getTCards()) {
             if ((card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT)
                     && key.equals(card.getHandlerName().trim().toLowerCase())) {
-                String rid = card.getResourceIdentifier().trim();
-                if (!rid.isBlank()) {
-                    result.add(rid);
+                String name = effectiveTCardName(card);
+                if (!name.isBlank()) {
+                    result.add(name);
                 }
             }
         }
@@ -979,16 +987,9 @@ public class AppController {
     public List<String> getAvailableResourceNames() {
         List<String> names = new ArrayList<>();
         for (TCard card : data.getTCards()) {
-            if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
-                String rid = card.getResourceIdentifier().trim();
-                if (!rid.isBlank()) {
-                    names.add(rid);
-                }
-            } else {
-                String n = card.getPersonName().trim();
-                if (!n.isBlank()) {
-                    names.add(n);
-                }
+            String n = effectiveTCardName(card).trim();
+            if (!n.isBlank()) {
+                names.add(n);
             }
         }
         names.sort(String.CASE_INSENSITIVE_ORDER);
@@ -1006,19 +1007,14 @@ public class AppController {
             if (card.getCardType() == TCardType.HEADER) {
                 continue;
             }
-            String effectiveName = (card.getCardType() == TCardType.EQUIPMENT
-                    || card.getCardType() == TCardType.MISC_EQUIPMENT)
-                    ? card.getResourceIdentifier().trim()
-                    : card.getPersonName().trim();
-            if (!effectiveName.isBlank()) {
+            String effName = effectiveTCardName(card);
+            if (!effName.isBlank()) {
                 result.add(card);
             }
         }
         result.sort((a, b) -> {
-            String nameA = (a.getCardType() == TCardType.EQUIPMENT || a.getCardType() == TCardType.MISC_EQUIPMENT)
-                    ? a.getResourceIdentifier() : a.getPersonName();
-            String nameB = (b.getCardType() == TCardType.EQUIPMENT || b.getCardType() == TCardType.MISC_EQUIPMENT)
-                    ? b.getResourceIdentifier() : b.getPersonName();
+            String nameA = effectiveTCardName(a);
+            String nameB = effectiveTCardName(b);
             return String.CASE_INSENSITIVE_ORDER.compare(nameA, nameB);
         });
         return result;
@@ -1065,6 +1061,20 @@ public class AppController {
             card.setPhoneNumber(phone);
         }
         return card;
+    }
+
+    /**
+     * Returns the effective display name for a T-card.
+     * For EQUIPMENT/MISC_EQUIPMENT cards (including canines), uses {@code resourceIdentifier}
+     * when set, and falls back to {@code personName} (used by canine cards whose call sign
+     * is stored there with a blank {@code resourceIdentifier}).
+     */
+    private static String effectiveTCardName(TCard card) {
+        if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+            String rid = card.getResourceIdentifier().trim();
+            return rid.isBlank() ? card.getPersonName().trim() : rid;
+        }
+        return card.getPersonName().trim();
     }
 
     /** Returns {@code preferred} if non-blank, otherwise {@code fallback}. */

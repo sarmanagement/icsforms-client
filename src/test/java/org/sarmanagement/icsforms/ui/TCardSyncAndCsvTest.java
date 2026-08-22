@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -236,6 +237,63 @@ class TCardSyncAndCsvTest {
                 .count();
         assertEquals(0, equipCount,
                 "Stale EQUIPMENT card with handler name must be removed after sync");
+    }
+
+    /**
+     * Regression: a canine T-card that stores the dog's name in {@code personName}
+     * (with a blank {@code resourceIdentifier}) must remain as EQUIPMENT after
+     * {@code syncTCards()} and must not flip to PERSONNEL or display the handler's name.
+     */
+    @Test
+    void syncTCardsPreservesCanineCardTypeWhenNameStoredInPersonName() {
+        AppData data = new AppData();
+
+        // Canine T-card: name stored in personName, resourceIdentifier blank.
+        TCard canineCard = new TCard();
+        canineCard.setCardType(TCardType.EQUIPMENT);
+        canineCard.setPersonName("Rex");
+        canineCard.setHandlerName("John Smith");
+        data.getTCards().add(canineCard);
+
+        // Handler T-card.
+        TCard handlerCard = new TCard();
+        handlerCard.setCardType(TCardType.PERSONNEL);
+        handlerCard.setPersonName("John Smith");
+        data.getTCards().add(handlerCard);
+
+        AppController ctrl = TestAppController.create(data);
+
+        SarTaskAssignment task = new SarTaskAssignment();
+        task.setAssignmentId("T200");
+        task.setResourceType("Canine");
+        task.setLeader("John Smith");
+        task.setLeaderRole("Handler");
+
+        // The canine appears in resourcesAssigned with the dog's name and EQUIPMENT type.
+        SarTaskResource canineRes = new SarTaskResource();
+        canineRes.setName("Rex");
+        canineRes.setCardType(TCardType.EQUIPMENT);
+        canineRes.setFunction("Canine");
+        task.setResourcesAssigned(new ArrayList<>(List.of(canineRes)));
+        data.getSarTaskAssignments().add(task);
+        ctrl.syncTCards();
+
+        List<TCard> cards = data.getTCards();
+
+        // The canine card must still be EQUIPMENT with the dog's name.
+        Optional<TCard> rex = cards.stream()
+                .filter(c -> "Rex".equalsIgnoreCase(c.getPersonName())
+                        || "Rex".equalsIgnoreCase(c.getResourceIdentifier()))
+                .findFirst();
+        assertTrue(rex.isPresent(), "Canine card 'Rex' must still exist after sync");
+        assertEquals(TCardType.EQUIPMENT, rex.get().getCardType(),
+                "Canine card must remain EQUIPMENT, not flip to PERSONNEL");
+        assertNotEquals("John Smith", rex.get().getPersonName(),
+                "Canine card personName must not be overwritten with handler name");
+
+        // The resource entry must also keep the EQUIPMENT type.
+        assertEquals(TCardType.EQUIPMENT, canineRes.getCardType(),
+                "SarTaskResource cardType must remain EQUIPMENT after sync");
     }
 
     // -----------------------------------------------------------------------
