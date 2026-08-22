@@ -689,7 +689,17 @@ public class AppController {
                 String ref = "sar:" + assignmentId + ":leader";
                 TCard card = findOrCreatePersonCard(ref, leaderName, byRef, byName, wanted);
                 card.setPersonName(leaderName);
-                card.setPhoneNumber(coalesce(card.getPhoneNumber(), task.getContact()));
+                String taskContact = safe(task.getContact());
+                if (!taskContact.isBlank()) {
+                    // Route the contact value to the correct field: phone numbers (≥7 digits
+                    // after stripping formatting) go to phoneNumber; anything else (radio
+                    // channel names, talkgroup IDs, VHF/UHF frequencies) goes to radioChannel.
+                    if (looksLikePhoneNumber(taskContact)) {
+                        card.setPhoneNumber(coalesce(card.getPhoneNumber(), taskContact));
+                    } else {
+                        card.setRadioChannel(coalesce(card.getRadioChannel(), taskContact));
+                    }
+                }
                 card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
                 card.setNotes(notePreserving(card.getNotes(),
                         safe(task.getLeaderRole()) + " — " + safe(task.getAssignmentTeamNumber())));
@@ -1325,5 +1335,31 @@ public class AppController {
 
     private String safe(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    /**
+     * Returns {@code true} when {@code value} looks like a phone number rather than a radio
+     * channel name or frequency.
+     *
+     * <p>A value is treated as a phone number when — after stripping common phone-number
+     * formatting characters ({@code - . ( ) + space}) — the remaining string contains at
+     * least 7 digit characters and no other non-digit characters.  Values that contain
+     * letters, or that have fewer than 7 digits after stripping (e.g. short radio channel
+     * codes like "Ch 5" or "UHF-3"), are treated as radio channel identifiers.
+     * VHF/UHF frequencies with a decimal point (e.g. "155.340") are also rejected because
+     * they contain a decimal separator that survives stripping and they have fewer than 7
+     * digits total.</p>
+     *
+     * @param value string to classify; {@code null} or blank returns {@code false}.
+     * @return {@code true} if the value looks like a phone number.
+     */
+    static boolean looksLikePhoneNumber(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        // Strip characters that appear in formatted phone numbers but not channel names.
+        String digits = value.replaceAll("[\\-. ()+\\s]", "");
+        // Must be all digits after stripping and have at least 7 of them.
+        return digits.length() >= 7 && digits.chars().allMatch(Character::isDigit);
     }
 }

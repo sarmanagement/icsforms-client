@@ -164,8 +164,8 @@ public class OrganizationalChartPanel extends JPanel {
         JPanel icSection = UiSupport.formPanel();
         icSection.setBorder(BorderFactory.createTitledBorder("Incident Command"));
         UiSupport.addRow(icSection, 0, "Incident commander / unified command (one per line)", new JScrollPane(incidentCommanderArea));
-        UiSupport.addRow(icSection, 1, "IC / UC radio", incidentCommanderRadioField);
-        UiSupport.addRow(icSection, 2, "IC / UC phone", incidentCommanderPhoneField);
+        UiSupport.addRow(icSection, 1, "Incident Commander / UC radio", incidentCommanderRadioField);
+        UiSupport.addRow(icSection, 2, "Incident Commander / UC phone", incidentCommanderPhoneField);
 
         JPanel commandSection = buildSection("Command Staff",
                 new String[]{"Safety Officer", "PIO / Public Information Officer", "Liaison Officer"},

@@ -312,7 +312,14 @@ final class UiSupport {
                 popup.add(item);
             }
             if (nameField.isShowing()) {
-                popup.show(nameField, 0, nameField.getHeight());
+                if (popup.isVisible()) {
+                    // Popup is already open — refresh items in-place to avoid the
+                    // hide/reshow cycle that causes cursor flicker on every keystroke.
+                    popup.revalidate();
+                    popup.repaint();
+                } else {
+                    popup.show(nameField, 0, nameField.getHeight());
+                }
             }
         });
 
