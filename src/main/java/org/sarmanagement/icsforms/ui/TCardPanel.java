@@ -1487,7 +1487,7 @@ public class TCardPanel extends JPanel {
             }
             showAddToAssignmentDialog(
                     javax.swing.SwingUtilities.getWindowAncestor(this),
-                    currentName, currentType);
+                    currentName, currentType, card.getResourceId());
         });
         JPanel addToAssignRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 2));
         addToAssignRow.add(addToAssignBtn);
@@ -1551,8 +1551,11 @@ public class TCardPanel extends JPanel {
      * @param parent      parent window for the dialog.
      * @param resourceName the effective name of the resource (from the currently open edit form).
      * @param cardType    the card type currently selected in the edit form.
+     * @param cardResourceId stable UUID of the T-card being edited, used to link the
+     *                       SarTaskResource by UUID rather than by name.
      */
-    private void showAddToAssignmentDialog(java.awt.Window parent, String resourceName, TCardType cardType) {
+    private void showAddToAssignmentDialog(java.awt.Window parent, String resourceName,
+                                           TCardType cardType, String cardResourceId) {
         List<SarTaskAssignment> tasks = controller.getData().getSarTaskAssignments();
 
         // ── SAR Task tab ──────────────────────────────────────────────────
@@ -1597,6 +1600,7 @@ public class TCardPanel extends JPanel {
             // Build a temporary TCard carrying the name/type from the edit form.
             TCard stub = new TCard();
             stub.setCardType(cardType);
+            stub.setResourceId(cardResourceId);
             if (cardType == TCardType.PERSONNEL) {
                 stub.setPersonName(resourceName);
             } else {
@@ -1616,6 +1620,7 @@ public class TCardPanel extends JPanel {
             }
             TCard stub = new TCard();
             stub.setCardType(cardType);
+            stub.setResourceId(cardResourceId);
             if (cardType == TCardType.PERSONNEL) {
                 stub.setPersonName(resourceName);
             } else {

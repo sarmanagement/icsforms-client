@@ -3,6 +3,7 @@ package org.sarmanagement.icsforms.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * ICS 219 Resource Status (T-Card) record.
@@ -15,6 +16,14 @@ import java.time.LocalDateTime;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TCard {
+
+    /**
+     * Stable UUID assigned once at creation and never changed.
+     * Used by {@link SarTaskResource#getResourceId()} to reference this card without
+     * relying on mutable display-name strings.
+     */
+    private String resourceId = UUID.randomUUID().toString();
+
     private TCardType cardType = TCardType.PERSONNEL;
 
     // 219-5 Personnel fields (used when cardType == PERSONNEL)
@@ -90,6 +99,29 @@ public class TCard {
      */
     public void setCardType(TCardType cardType) {
         this.cardType = cardType == null ? TCardType.PERSONNEL : cardType;
+    }
+
+    /**
+     * Returns the stable resource identifier (UUID) for this card.
+     * Used by {@link SarTaskResource} to reference this card without relying on names.
+     *
+     * @return resource UUID, never {@code null}.
+     */
+    public String getResourceId() {
+        if (resourceId == null || resourceId.isBlank()) {
+            resourceId = UUID.randomUUID().toString();
+        }
+        return resourceId;
+    }
+
+    /**
+     * Sets the stable resource identifier.  Should only be called during deserialization.
+     *
+     * @param resourceId resource UUID string; blank/null generates a new UUID.
+     */
+    public void setResourceId(String resourceId) {
+        this.resourceId = (resourceId == null || resourceId.isBlank())
+                ? UUID.randomUUID().toString() : resourceId;
     }
 
     /**

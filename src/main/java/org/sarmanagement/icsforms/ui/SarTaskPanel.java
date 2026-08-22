@@ -818,6 +818,7 @@ public class SarTaskPanel extends JPanel {
                 TCard card = cardList.get(selectedRow);
                 SarTaskResource res = new SarTaskResource();
                 res.setCardType(card.getCardType());
+                res.setResourceId(card.getResourceId());
                 boolean isNonPersonnel = card.getCardType() != TCardType.PERSONNEL;
                 String resourceName = card.getResourceIdentifier().trim();
                 res.setName(isNonPersonnel ? resourceName : card.getPersonName().trim());
@@ -953,6 +954,7 @@ public class SarTaskPanel extends JPanel {
             resource.setFunction(function);
             resource.setName(name);
             resource.setCardType(entry.getCardType());
+            resource.setResourceId(entry.getResourceId());
             resources.add(resource);
         }
         return resources;
@@ -1187,6 +1189,7 @@ public class SarTaskPanel extends JPanel {
                     copy.setFunction(resource.getFunction());
                     copy.setName(resource.getName());
                     copy.setCardType(resource.getCardType());
+                    copy.setResourceId(resource.getResourceId());
                     rows.add(copy);
                 }
             }

@@ -581,6 +581,9 @@ public class AppController {
         // This migration is idempotent: if the migrated data is not immediately saved, the
         // same transformation will re-apply on the next sync with the same result.
         Map<String, TCard> byEquipmentId = new LinkedHashMap<>();
+        // UUID → card index — the authoritative lookup used when a SarTaskResource carries
+        // a resourceId reference, ensuring we find the exact card regardless of name.
+        Map<String, TCard> byCardId = new LinkedHashMap<>();
         for (TCard card : cards) {
             if (card.getCardType() != TCardType.PERSONNEL) {
                 if (card.getResourceIdentifier().isBlank() && !card.getPersonName().isBlank()) {
@@ -601,6 +604,8 @@ public class AppController {
                     byEquipmentId.putIfAbsent(rid, card);
                 }
             }
+            // Always index every card by its stable UUID.
+            byCardId.putIfAbsent(card.getResourceId(), card);
         }
 
         // Collect the set of sourceRefs that should exist after this sync.
@@ -744,14 +749,38 @@ public class AppController {
                         continue;
                     }
                     String ref = "sar:" + assignmentId + ":r:" + i;
-                    // If the resource name matches an existing equipment card (e.g. a canine
-                    // call sign already tracked above or manually created), preserve its type.
                     String resNameKey = resName.trim().toLowerCase();
+                    boolean resNameIsLeader = !leaderName.isBlank()
+                            && resNameKey.equals(leaderName.trim().toLowerCase());
+
+                    // --- UUID-based lookup (preferred) -----------------------------------------
+                    // When the SarTaskResource carries a resourceId, find the exact TCard by UUID.
+                    // This is the authoritative path: the TCard's type is never mutated from
+                    // SarTaskResource.cardType — the stored card type wins unconditionally.
+                    TCard card;
+                    String linkedId = res.getResourceId();
+                    if (!linkedId.isBlank() && byCardId.containsKey(linkedId)) {
+                        card = byCardId.get(linkedId);
+                        // Synchronise the SarTaskResource's display-helper fields from the card.
+                        res.setCardType(card.getCardType());
+                        res.setName(card.getDisplayLabel());
+                        setTaskSourceRef(card, ref);
+                        if (card.getCardType() != TCardType.PERSONNEL
+                                && isCanineTask && !leaderName.isBlank() && !resNameIsLeader
+                                && card.getHandlerName().isBlank()) {
+                            card.setHandlerName(leaderName);
+                        }
+                        card.setNotes(notePreserving(card.getNotes(),
+                                safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
+                        wanted.put(ref, card);
+                        applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+                        continue;
+                    }
+
+                    // --- Legacy name-based lookup (fallback for entries without a resourceId) ---
                     // On a canine task the leader is the handler (a person).  If a resource
                     // entry has the same name as the leader it IS that person — never treat it
                     // as a canine/equipment card regardless of the stored cardType.
-                    boolean resNameIsLeader = !leaderName.isBlank()
-                            && resNameKey.equals(leaderName.trim().toLowerCase());
                     TCard equipCard = resNameIsLeader ? null : byEquipmentId.get(resNameKey);
                     // Guard against a stale EQUIPMENT card whose resourceIdentifier happens to
                     // match a known person name (can arise from old sync logic that incorrectly
@@ -764,13 +793,12 @@ public class AppController {
                             equipCard = null;
                         }
                     }
-                    TCard card;
                     if (equipCard != null) {
                         card = equipCard;
                         res.setCardType(card.getCardType());
+                        // Back-fill resourceId so future syncs use the fast UUID path.
+                        res.setResourceId(card.getResourceId());
                         setTaskSourceRef(card, ref);
-                        // Ensure the handler link is set when the task is a canine task and
-                        // this card is not the handler themselves (name must differ from leader).
                         if (isCanineTask && !leaderName.isBlank() && !resNameIsLeader
                                 && card.getHandlerName().isBlank()) {
                             card.setHandlerName(leaderName);
@@ -791,6 +819,7 @@ public class AppController {
                             card = findOrCreatePersonCard(ref, resName, byRef, byName, wanted);
                             card.setPersonName(resName);
                             card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
+                            res.setResourceId(card.getResourceId());
                             setTaskSourceRef(card, ref);
                             card.setNotes(notePreserving(card.getNotes(),
                                     safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
@@ -801,9 +830,15 @@ public class AppController {
                             // Honour the stored non-PERSONNEL type rather than falling through
                             // to findOrCreatePersonCard, which would create a PERSONNEL card.
                             card = findOrCreateEquipmentCard(ref, resName, byRef, byEquipmentId);
-                            card.setCardType(res.getCardType());
+                            // Never overwrite the card's existing type: if the card was already
+                            // created with a specific type, preserve it.
+                            if (card.getCardType() == TCardType.PERSONNEL) {
+                                card.setCardType(res.getCardType());
+                            }
+                            res.setCardType(card.getCardType());
                             card.setResourceIdentifier(coalesce(card.getResourceIdentifier(), resName));
                             card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
+                            res.setResourceId(card.getResourceId());
                             setTaskSourceRef(card, ref);
                             if (isCanineTask && !leaderName.isBlank() && !resNameIsLeader
                                     && card.getHandlerName().isBlank()) {
@@ -820,6 +855,7 @@ public class AppController {
                         res.setCardType(card.getCardType());
                         card.setPersonName(resName);
                         card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
+                        res.setResourceId(card.getResourceId());
                         setTaskSourceRef(card, ref);
                         card.setNotes(notePreserving(card.getNotes(),
                                 safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
@@ -1148,14 +1184,23 @@ public class AppController {
     }
 
     /**
-     * Returns a deduplicated view of {@code resources} where entries with the same
-     * name (case-insensitive) are collapsed to a single entry.
+     * Returns a deduplicated view of {@code resources} where entries for the same
+     * resource (same UUID or same name case-insensitive) are collapsed to one entry.
      *
-     * <p>When duplicates exist the entry with the most specific card type (i.e. a
-     * non-{@code PERSONNEL} type such as {@code EQUIPMENT} for a canine) is
-     * preferred; if all duplicates are {@code PERSONNEL} the first occurrence wins.</p>
+     * <p>UUID-based deduplication (when {@code resourceId} is set) takes priority over
+     * name-based deduplication.  Among duplicates the entry with a non-blank
+     * {@code resourceId} is preferred; otherwise the most specific card type wins.</p>
      */
     private static List<SarTaskResource> deduplicateResources(List<SarTaskResource> resources) {
+        // First pass: index by resourceId for entries that carry one.
+        Map<String, SarTaskResource> byId = new LinkedHashMap<>();
+        for (SarTaskResource res : resources) {
+            String id = res.getResourceId();
+            if (!id.isBlank()) {
+                byId.putIfAbsent(id, res);
+            }
+        }
+        // Second pass: deduplicate by name, preferring entries already seen by UUID.
         Map<String, SarTaskResource> seen = new LinkedHashMap<>();
         for (SarTaskResource res : resources) {
             String name = res.getName();
@@ -1163,15 +1208,23 @@ public class AppController {
             if (key.isBlank()) {
                 continue;
             }
+            // If this entry's UUID matches one already indexed, skip — already handled.
+            String id = res.getResourceId();
+            if (!id.isBlank() && byId.containsKey(id)) {
+                if (!seen.containsKey(key)) {
+                    seen.put(key, byId.get(id));
+                }
+                continue;
+            }
             if (!seen.containsKey(key)) {
                 seen.put(key, res);
             } else {
-                // When duplicates exist, prefer PERSONNEL over a non-PERSONNEL type so that a
-                // person with a stale EQUIPMENT entry does not receive a phantom equipment card.
-                // The canine/equipment case is handled downstream via byEquipmentId — if an
-                // EQUIPMENT T-card already exists for the name it will be matched there.
+                // Prefer the entry with a resourceId; if neither has one, prefer PERSONNEL
+                // over non-PERSONNEL so that stale equipment entries do not survive.
                 SarTaskResource existing = seen.get(key);
-                if (existing.getCardType() != null
+                if (!id.isBlank() && existing.getResourceId().isBlank()) {
+                    seen.put(key, res);
+                } else if (existing.getCardType() != null
                         && existing.getCardType() != TCardType.PERSONNEL
                         && (res.getCardType() == null || res.getCardType() == TCardType.PERSONNEL)) {
                     seen.put(key, res);
@@ -1545,13 +1598,20 @@ public class AppController {
                 resources = new ArrayList<>();
                 task.setResourcesAssigned(resources);
             }
-            String nameLower = name.trim().toLowerCase();
-            boolean alreadyPresent = resources.stream()
-                    .anyMatch(r -> nameLower.equals(r.getName() == null ? "" : r.getName().trim().toLowerCase()));
+            String cardId = card.getResourceId();
+            // Prefer UUID-based duplicate check; fall back to name for legacy entries.
+            boolean alreadyPresent = resources.stream().anyMatch(r -> {
+                if (!cardId.isBlank() && !r.getResourceId().isBlank()) {
+                    return cardId.equals(r.getResourceId());
+                }
+                String nameLower = name.trim().toLowerCase();
+                return nameLower.equals(r.getName() == null ? "" : r.getName().trim().toLowerCase());
+            });
             if (!alreadyPresent) {
                 SarTaskResource res = new SarTaskResource();
                 res.setName(name);
                 res.setCardType(card.getCardType());
+                res.setResourceId(cardId);
                 if (card.getCardType() == TCardType.PERSONNEL) {
                     res.setHomeAgency(card.getHomeAgency() == null ? "" : card.getHomeAgency());
                 }
