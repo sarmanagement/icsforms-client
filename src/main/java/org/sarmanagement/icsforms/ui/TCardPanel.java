@@ -1224,7 +1224,7 @@ public class TCardPanel extends JPanel {
         card.setHomeAgency(agency == null ? "" : agency.trim());
         card.setHomeState(state == null ? "" : state.trim());
         card.setPhoneNumber(phone == null ? "" : phone.trim());
-        card.setLocation("ICP");
+        card.setLocation("Available");
         return card;
     }
 

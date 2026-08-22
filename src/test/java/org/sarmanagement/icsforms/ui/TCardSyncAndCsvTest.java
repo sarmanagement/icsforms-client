@@ -361,6 +361,128 @@ class TCardSyncAndCsvTest {
 
 
 
+    // -----------------------------------------------------------------------
+    // syncTCards — task assignment overrides org chart sourceRef
+    // -----------------------------------------------------------------------
+
+    /**
+     * A person in both an org chart role and a task assignment must appear in the
+     * task group (sourceRef starts with "sar:"), not under ICP (sourceRef "org:...").
+     */
+    @Test
+    void syncTCardsTaskRefOverridesOrgChartRef() {
+        AppData data = new AppData();
+        // Person is Operations Section Chief in the org chart.
+        data.getOrganizationalChart().setOperationsSectionChiefName("Alice Johnson");
+
+        AppController ctrl = TestAppController.create(data);
+
+        // Add SAR task after construction (bypasses syncSarTasks cleanup).
+        SarTaskAssignment task = new SarTaskAssignment();
+        task.setAssignmentId("task-1");
+        SarTaskResource res = new SarTaskResource();
+        res.setName("Alice Johnson");
+        res.setCardType(TCardType.PERSONNEL);
+        task.setResourcesAssigned(new ArrayList<>(List.of(res)));
+        data.getSarTaskAssignments().add(task);
+
+        ctrl.syncTCards();
+
+        List<TCard> cards = data.getTCards();
+        // Alice should have exactly one T-card.
+        long aliceCount = cards.stream()
+                .filter(c -> "Alice Johnson".equalsIgnoreCase(c.getPersonName()))
+                .count();
+        assertEquals(1, aliceCount, "Alice must have exactly one T-card");
+
+        TCard alice = cards.stream()
+                .filter(c -> "Alice Johnson".equalsIgnoreCase(c.getPersonName()))
+                .findFirst().get();
+        // The sourceRef must be a task ref so she appears in the task group, not ICP.
+        assertTrue(alice.getSourceRef().startsWith("sar:"),
+                "Task assignment must override org chart sourceRef; was: " + alice.getSourceRef());
+    }
+
+    /**
+     * A resource entry with a stale non-PERSONNEL cardType whose name matches a known
+     * person must be corrected to PERSONNEL rather than creating a phantom equipment card.
+     */
+    @Test
+    void syncTCardsCorrectedStaleEquipmentCardTypeForKnownPerson() {
+        AppData data = new AppData();
+        // Pre-existing PERSONNEL card for "John Doe".
+        TCard handler = new TCard();
+        handler.setCardType(TCardType.PERSONNEL);
+        handler.setPersonName("John Doe");
+        data.getTCards().add(handler);
+
+        AppController ctrl = TestAppController.create(data);
+
+        // resourcesAssigned has two stale entries: one EQUIPMENT and one PERSONNEL for same name.
+        SarTaskAssignment task = new SarTaskAssignment();
+        task.setAssignmentId("task-dup");
+        SarTaskResource eqRes = new SarTaskResource();
+        eqRes.setName("John Doe");
+        eqRes.setCardType(TCardType.EQUIPMENT);   // stale type from previous bug
+        SarTaskResource perRes = new SarTaskResource();
+        perRes.setName("John Doe");
+        perRes.setCardType(TCardType.PERSONNEL);
+        task.setResourcesAssigned(new ArrayList<>(List.of(eqRes, perRes)));
+        data.getSarTaskAssignments().add(task);
+
+        ctrl.syncTCards();
+
+        List<TCard> cards = data.getTCards();
+        // There must be exactly one card for "John Doe" (no phantom EQUIPMENT card).
+        long handlerCardCount = cards.stream()
+                .filter(c -> "John Doe".equalsIgnoreCase(c.getPersonName()))
+                .count();
+        long phantomEquipCount = cards.stream()
+                .filter(c -> c.getCardType() != TCardType.PERSONNEL
+                        && "John Doe".equalsIgnoreCase(c.getResourceIdentifier()))
+                .count();
+        assertEquals(1, handlerCardCount, "John Doe must appear exactly once as PERSONNEL");
+        assertEquals(0, phantomEquipCount, "No phantom EQUIPMENT card must be created for a known person");
+    }
+
+    /**
+     * A newly created PERSONNEL card must have numberOfPersons == 1 (not 0).
+     */
+    @Test
+    void syncTCardsPersonnelCardHasDefaultNumberOfPersonsOne() {
+        AppData data = new AppData();
+        data.getOrganizationalChart().setSafetyOfficerName("Bob Smith");
+        AppController ctrl = TestAppController.create(data);
+        ctrl.syncTCards();
+
+        TCard card = data.getTCards().stream()
+                .filter(c -> "Bob Smith".equalsIgnoreCase(c.getPersonName()))
+                .findFirst().orElse(null);
+        assertNotNull(card);
+        assertEquals(1, card.getNumberOfPersons(),
+                "PERSONNEL card must default to numberOfPersons = 1");
+    }
+
+    /**
+     * Existing PERSONNEL cards with numberOfPersons == 0 (legacy data) must be migrated to 1.
+     */
+    @Test
+    void syncTCardsMigratesLegacyPersonnelCardsWithZeroPersonCount() {
+        AppData data = new AppData();
+        TCard legacy = new TCard();
+        legacy.setCardType(TCardType.PERSONNEL);
+        legacy.setPersonName("Carol White");
+        legacy.setNumberOfPersons(0);
+        data.getTCards().add(legacy);
+
+        AppController ctrl = TestAppController.create(data);
+        ctrl.syncTCards();
+
+        assertEquals(1, legacy.getNumberOfPersons(),
+                "Legacy PERSONNEL card with numberOfPersons=0 must be migrated to 1");
+    }
+
+
     @Test
     void parseCsvSplitsSimpleLine() {
         String[] fields = TCardPanel.splitCsvLine("Alice,Marin SAR,CA,415-555-1111,person");

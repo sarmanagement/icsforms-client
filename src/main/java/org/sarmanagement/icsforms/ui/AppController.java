@@ -588,6 +588,10 @@ public class AppController {
                     card.setPersonName("");
                 }
             }
+            // Migrate legacy PERSONNEL cards that have numberOfPersons == 0 (pre-default era).
+            if (card.getCardType() == TCardType.PERSONNEL && card.getNumberOfPersons() == 0) {
+                card.setNumberOfPersons(1);
+            }
             // Index all non-PERSONNEL, non-HEADER cards by resourceIdentifier so that
             // canines or other resources stored with an unexpected card type (e.g. due to a
             // previous sync bug) are still found by name and not silently recreated.
@@ -714,7 +718,10 @@ public class AppController {
                         card.setRadioChannel(coalesce(card.getRadioChannel(), taskContact));
                     }
                 }
-                card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
+                // A task assignment overrides an org chart slot so the card appears in the
+                // correct task group in the rack view.  A sar: ref is never overridden by
+                // another sar: ref — the first task to claim a person wins.
+                setTaskSourceRef(card, ref);
                 card.setNotes(notePreserving(card.getNotes(),
                         safe(task.getLeaderRole()) + " — " + safe(task.getAssignmentTeamNumber())));
                 wanted.put(ref, card);
@@ -725,9 +732,10 @@ public class AppController {
                 // list (picked by the operator), not synthesised from the task identifier.
                 // Handler linking is performed when iterating resourcesAssigned below.
             }
-            // Assigned resources
+            // Assigned resources — deduplicate by name first to avoid phantom cards.
             List<SarTaskResource> resources = task.getResourcesAssigned();
             if (resources != null) {
+                resources = deduplicateResources(resources);
                 for (int i = 0; i < resources.size(); i++) {
                     SarTaskResource res = resources.get(i);
                     String resName = safe(res.getName());
@@ -754,9 +762,7 @@ public class AppController {
                     if (equipCard != null) {
                         card = equipCard;
                         res.setCardType(card.getCardType());
-                        if (card.getSourceRef().isBlank()) {
-                            card.setSourceRef(ref);
-                        }
+                        setTaskSourceRef(card, ref);
                         // Ensure the handler link is set when the task is a canine task.
                         if (isCanineTask && !leaderName.isBlank() && card.getHandlerName().isBlank()) {
                             card.setHandlerName(leaderName);
@@ -767,29 +773,44 @@ public class AppController {
                         applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
                     } else if (res.getCardType() != null && res.getCardType() != TCardType.PERSONNEL) {
                         // Resource was explicitly typed as non-PERSONNEL (e.g. EQUIPMENT for a canine)
-                        // when it was added to the task.  Honour that type rather than falling through
-                        // to findOrCreatePersonCard, which would incorrectly create a PERSONNEL card.
-                        card = findOrCreateEquipmentCard(ref, resName, byRef, byEquipmentId);
-                        card.setCardType(res.getCardType());
-                        card.setResourceIdentifier(coalesce(card.getResourceIdentifier(), resName));
-                        card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
-                        if (card.getSourceRef().isBlank()) {
-                            card.setSourceRef(ref);
+                        // when it was added to the task.  But if the name matches a known person,
+                        // the stored cardType is a stale artefact — correct it to PERSONNEL.
+                        TCard existingPersonCard = byName.get(resNameKey);
+                        if (existingPersonCard != null
+                                && existingPersonCard.getCardType() == TCardType.PERSONNEL) {
+                            res.setCardType(TCardType.PERSONNEL);
+                            card = findOrCreatePersonCard(ref, resName, byRef, byName, wanted);
+                            card.setPersonName(resName);
+                            card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
+                            setTaskSourceRef(card, ref);
+                            card.setNotes(notePreserving(card.getNotes(),
+                                    safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
+                            wanted.put(ref, card);
+                            byName.putIfAbsent(resName.trim().toLowerCase(), card);
+                            applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+                        } else {
+                            // Honour the stored non-PERSONNEL type rather than falling through
+                            // to findOrCreatePersonCard, which would create a PERSONNEL card.
+                            card = findOrCreateEquipmentCard(ref, resName, byRef, byEquipmentId);
+                            card.setCardType(res.getCardType());
+                            card.setResourceIdentifier(coalesce(card.getResourceIdentifier(), resName));
+                            card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
+                            setTaskSourceRef(card, ref);
+                            if (isCanineTask && !leaderName.isBlank() && card.getHandlerName().isBlank()) {
+                                card.setHandlerName(leaderName);
+                            }
+                            card.setNotes(notePreserving(card.getNotes(),
+                                    safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
+                            wanted.put(ref, card);
+                            byEquipmentId.putIfAbsent(resName.trim().toLowerCase(), card);
+                            applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
                         }
-                        if (isCanineTask && !leaderName.isBlank() && card.getHandlerName().isBlank()) {
-                            card.setHandlerName(leaderName);
-                        }
-                        card.setNotes(notePreserving(card.getNotes(),
-                                safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
-                        wanted.put(ref, card);
-                        byEquipmentId.putIfAbsent(resName.trim().toLowerCase(), card);
-                        applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
                     } else {
                         card = findOrCreatePersonCard(ref, resName, byRef, byName, wanted);
                         res.setCardType(card.getCardType());
                         card.setPersonName(resName);
                         card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
-                        card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
+                        setTaskSourceRef(card, ref);
                         card.setNotes(notePreserving(card.getNotes(),
                                 safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
                         wanted.put(ref, card);
@@ -1099,10 +1120,60 @@ public class AppController {
         byName.putIfAbsent(safeName.trim().toLowerCase(), card);
     }
 
+    /**
+     * Sets the {@code sourceRef} of a T-card to {@code ref} for a task assignment.
+     *
+     * <p>A task assignment ({@code "sar:..."}) takes priority over an org chart slot
+     * ({@code "org:..."}) so that the card appears in the correct task group in the
+     * rack view.  A {@code "sar:"} ref is never overridden by another {@code "sar:"}
+     * ref — the first task to claim a card keeps its ref.</p>
+     */
+    private static void setTaskSourceRef(TCard card, String ref) {
+        String current = card.getSourceRef();
+        if (current.isBlank() || current.startsWith("org:")) {
+            card.setSourceRef(ref);
+        }
+    }
+
+    /**
+     * Returns a deduplicated view of {@code resources} where entries with the same
+     * name (case-insensitive) are collapsed to a single entry.
+     *
+     * <p>When duplicates exist the entry with the most specific card type (i.e. a
+     * non-{@code PERSONNEL} type such as {@code EQUIPMENT} for a canine) is
+     * preferred; if all duplicates are {@code PERSONNEL} the first occurrence wins.</p>
+     */
+    private static List<SarTaskResource> deduplicateResources(List<SarTaskResource> resources) {
+        Map<String, SarTaskResource> seen = new LinkedHashMap<>();
+        for (SarTaskResource res : resources) {
+            String name = res.getName();
+            String key = (name == null ? "" : name).trim().toLowerCase();
+            if (key.isBlank()) {
+                continue;
+            }
+            if (!seen.containsKey(key)) {
+                seen.put(key, res);
+            } else {
+                // When duplicates exist, prefer PERSONNEL over a non-PERSONNEL type so that a
+                // person with a stale EQUIPMENT entry does not receive a phantom equipment card.
+                // The canine/equipment case is handled downstream via byEquipmentId — if an
+                // EQUIPMENT T-card already exists for the name it will be matched there.
+                SarTaskResource existing = seen.get(key);
+                if (existing.getCardType() != null
+                        && existing.getCardType() != TCardType.PERSONNEL
+                        && (res.getCardType() == null || res.getCardType() == TCardType.PERSONNEL)) {
+                    seen.put(key, res);
+                }
+            }
+        }
+        return new ArrayList<>(seen.values());
+    }
+
     private TCard newPersonnelCard(String name) {
         TCard card = new TCard();
         card.setCardType(TCardType.PERSONNEL);
         card.setPersonName(name);
+        card.setNumberOfPersons(1);
         return card;
     }
 
