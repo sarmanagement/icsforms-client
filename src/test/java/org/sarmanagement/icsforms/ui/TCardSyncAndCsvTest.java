@@ -297,9 +297,69 @@ class TCardSyncAndCsvTest {
                 "SarTaskResource cardType must remain EQUIPMENT after sync");
     }
 
-    // -----------------------------------------------------------------------
-    // CSV helper unit tests
-    // -----------------------------------------------------------------------
+    /**
+     * Regression: when a canine is entered manually on the SAR task resource list with
+     * cardType=EQUIPMENT but no existing TCard exists for it yet (cold-start / post-restart),
+     * syncTCards must create an EQUIPMENT card, not a PERSONNEL card.
+     * Previously it fell through to findOrCreatePersonCard, which created a PERSONNEL card
+     * bearing the canine's name and then set res.cardType to PERSONNEL — causing handler
+     * name bleed-through on the next sync.
+     */
+    @Test
+    void syncTCardsCreatesEquipmentCardForManuallyTypedEquipmentResource() {
+        AppData data = new AppData();
+
+        // Handler T-card only — no canine TCard in the list yet.
+        TCard handlerCard = new TCard();
+        handlerCard.setCardType(TCardType.PERSONNEL);
+        handlerCard.setPersonName("Jane Doe");
+        data.getTCards().add(handlerCard);
+
+        AppController ctrl = TestAppController.create(data);
+
+        SarTaskAssignment task = new SarTaskAssignment();
+        task.setAssignmentId("T300");
+        task.setResourceType("Canine");
+        task.setLeader("Jane Doe");
+        task.setLeaderRole("Handler");
+
+        // Canine added manually with EQUIPMENT type — no pre-existing TCard.
+        SarTaskResource canineRes = new SarTaskResource();
+        canineRes.setName("Buddy");
+        canineRes.setCardType(TCardType.EQUIPMENT);
+        canineRes.setFunction("Canine");
+        task.setResourcesAssigned(new ArrayList<>(List.of(canineRes)));
+        data.getSarTaskAssignments().add(task);
+
+        ctrl.syncTCards();
+
+        List<TCard> cards = data.getTCards();
+
+        // A new EQUIPMENT card should have been created for "Buddy".
+        Optional<TCard> buddy = cards.stream()
+                .filter(c -> "Buddy".equalsIgnoreCase(c.getResourceIdentifier()))
+                .findFirst();
+        assertTrue(buddy.isPresent(), "EQUIPMENT card 'Buddy' must be created by syncTCards");
+        assertEquals(TCardType.EQUIPMENT, buddy.get().getCardType(),
+                "Card for canine 'Buddy' must be EQUIPMENT, not PERSONNEL");
+
+        // The SarTaskResource cardType must not have been overwritten to PERSONNEL.
+        assertEquals(TCardType.EQUIPMENT, canineRes.getCardType(),
+                "SarTaskResource.cardType must remain EQUIPMENT after sync");
+
+        // The handler card must not have changed its name to "Buddy".
+        assertEquals("Jane Doe", handlerCard.getPersonName(),
+                "Handler card personName must not be overwritten by canine name");
+
+        // The handler must appear exactly once.
+        long handlerCount = cards.stream()
+                .filter(c -> c.getCardType() == TCardType.PERSONNEL
+                        && "Jane Doe".equalsIgnoreCase(c.getPersonName()))
+                .count();
+        assertEquals(1, handlerCount, "Handler must not be duplicated");
+    }
+
+
 
     @Test
     void parseCsvSplitsSimpleLine() {

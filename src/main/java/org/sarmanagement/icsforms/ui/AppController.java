@@ -765,6 +765,25 @@ public class AppController {
                                 safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
                         wanted.put(ref, card);
                         applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+                    } else if (res.getCardType() != null && res.getCardType() != TCardType.PERSONNEL) {
+                        // Resource was explicitly typed as non-PERSONNEL (e.g. EQUIPMENT for a canine)
+                        // when it was added to the task.  Honour that type rather than falling through
+                        // to findOrCreatePersonCard, which would incorrectly create a PERSONNEL card.
+                        card = findOrCreateEquipmentCard(ref, resName, byRef, byEquipmentId);
+                        card.setCardType(res.getCardType());
+                        card.setResourceIdentifier(coalesce(card.getResourceIdentifier(), resName));
+                        card.setHomeAgency(coalesce(card.getHomeAgency(), res.getHomeAgency()));
+                        if (card.getSourceRef().isBlank()) {
+                            card.setSourceRef(ref);
+                        }
+                        if (isCanineTask && !leaderName.isBlank() && card.getHandlerName().isBlank()) {
+                            card.setHandlerName(leaderName);
+                        }
+                        card.setNotes(notePreserving(card.getNotes(),
+                                safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
+                        wanted.put(ref, card);
+                        byEquipmentId.putIfAbsent(resName.trim().toLowerCase(), card);
+                        applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
                     } else {
                         card = findOrCreatePersonCard(ref, resName, byRef, byName, wanted);
                         res.setCardType(card.getCardType());

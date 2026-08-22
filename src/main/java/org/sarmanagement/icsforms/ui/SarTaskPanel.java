@@ -1550,7 +1550,13 @@ public class SarTaskPanel extends JPanel {
         }
 
         private int resourceCount() {
-            return resourceValuesFrom(resourceEntryTableModel).size();
+            // Only count PERSONNEL resources; non-PERSONNEL (canines, equipment, aircraft,
+            // etc.) should not be included in the ICS 204 "number of persons" field.
+            // SarTaskResource.cardType defaults to PERSONNEL, so only explicit non-PERSONNEL
+            // types are excluded.
+            return (int) resourceValuesFrom(resourceEntryTableModel).stream()
+                    .filter(r -> r.getCardType() == TCardType.PERSONNEL)
+                    .count();
         }
     }
 
