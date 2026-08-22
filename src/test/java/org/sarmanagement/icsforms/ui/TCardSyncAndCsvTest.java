@@ -240,15 +240,17 @@ class TCardSyncAndCsvTest {
     }
 
     /**
-     * Regression: a canine T-card that stores the dog's name in {@code personName}
-     * (with a blank {@code resourceIdentifier}) must remain as EQUIPMENT after
-     * {@code syncTCards()} and must not flip to PERSONNEL or display the handler's name.
+     * Regression: a canine T-card that stores the dog's name in {@code resourceIdentifier}
+     * (the generalised identifier for all non-personnel resources) must remain as EQUIPMENT
+     * after {@code syncTCards()} and must not flip to PERSONNEL or display the handler's name.
+     * Legacy data that had the name in {@code personName} with a blank {@code resourceIdentifier}
+     * is automatically migrated by {@code syncTCards()} to use {@code resourceIdentifier}.
      */
     @Test
     void syncTCardsPreservesCanineCardTypeWhenNameStoredInPersonName() {
         AppData data = new AppData();
 
-        // Canine T-card: name stored in personName, resourceIdentifier blank.
+        // Canine T-card: legacy format — name stored in personName, resourceIdentifier blank.
         TCard canineCard = new TCard();
         canineCard.setCardType(TCardType.EQUIPMENT);
         canineCard.setPersonName("Rex");
@@ -280,16 +282,15 @@ class TCardSyncAndCsvTest {
 
         List<TCard> cards = data.getTCards();
 
-        // The canine card must still be EQUIPMENT with the dog's name.
+        // After sync, the name must have been migrated to resourceIdentifier.
         Optional<TCard> rex = cards.stream()
-                .filter(c -> "Rex".equalsIgnoreCase(c.getPersonName())
-                        || "Rex".equalsIgnoreCase(c.getResourceIdentifier()))
+                .filter(c -> "Rex".equalsIgnoreCase(c.getResourceIdentifier()))
                 .findFirst();
-        assertTrue(rex.isPresent(), "Canine card 'Rex' must still exist after sync");
+        assertTrue(rex.isPresent(), "Canine card 'Rex' must still exist after sync (via resourceIdentifier)");
         assertEquals(TCardType.EQUIPMENT, rex.get().getCardType(),
                 "Canine card must remain EQUIPMENT, not flip to PERSONNEL");
-        assertNotEquals("John Smith", rex.get().getPersonName(),
-                "Canine card personName must not be overwritten with handler name");
+        assertNotEquals("John Smith", rex.get().getResourceIdentifier(),
+                "Canine card resourceIdentifier must not be overwritten with handler name");
 
         // The resource entry must also keep the EQUIPMENT type.
         assertEquals(TCardType.EQUIPMENT, canineRes.getCardType(),

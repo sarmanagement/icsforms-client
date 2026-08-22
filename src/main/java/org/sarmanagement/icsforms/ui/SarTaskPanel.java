@@ -716,9 +716,7 @@ public class SarTaskPanel extends JPanel {
         for (TCard card : cardList) {
             String effectiveName = (card.getCardType() == TCardType.EQUIPMENT
                     || card.getCardType() == TCardType.MISC_EQUIPMENT)
-                    ? (card.getResourceIdentifier().isBlank()
-                            ? card.getPersonName().trim()
-                            : card.getResourceIdentifier().trim())
+                    ? card.getResourceIdentifier().trim()
                     : card.getPersonName().trim();
             pickerModel.addRow(new Object[]{
                     card.getCardType() == null ? TCardType.PERSONNEL.getLabel() : card.getCardType().getLabel(),
@@ -770,9 +768,7 @@ public class SarTaskPanel extends JPanel {
             res.setCardType(card.getCardType());
             boolean isEquipment = card.getCardType() == TCardType.EQUIPMENT
                     || card.getCardType() == TCardType.MISC_EQUIPMENT;
-            String equipName = card.getResourceIdentifier().isBlank()
-                    ? card.getPersonName().trim()
-                    : card.getResourceIdentifier().trim();
+            String equipName = card.getResourceIdentifier().trim();
             res.setName(isEquipment ? equipName : card.getPersonName().trim());
             res.setHomeAgency(card.getHomeAgency() == null ? "" : card.getHomeAgency().trim());
             return res;

@@ -1172,11 +1172,19 @@ public class TCardPanel extends JPanel {
     /** Converts a CSV row's fields into a new T-card. */
     private TCard csvRowToCard(String name, String agency, String state, String phone, String typeStr) {
         TCard card = new TCard();
-        card.setPersonName(name == null ? "" : name.trim());
+        TCardType type = inferCardType(typeStr);
+        card.setCardType(type);
+        String safeName = name == null ? "" : name.trim();
+        // For PERSONNEL cards, the name is the person's name; for all other card types
+        // (equipment, canines, aircraft, etc.) the name is the resource identifier.
+        if (type == TCardType.PERSONNEL) {
+            card.setPersonName(safeName);
+        } else {
+            card.setResourceIdentifier(safeName);
+        }
         card.setHomeAgency(agency == null ? "" : agency.trim());
         card.setHomeState(state == null ? "" : state.trim());
         card.setPhoneNumber(phone == null ? "" : phone.trim());
-        card.setCardType(inferCardType(typeStr));
         card.setLocation("ICP");
         return card;
     }

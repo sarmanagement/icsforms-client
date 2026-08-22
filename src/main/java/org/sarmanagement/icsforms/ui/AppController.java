@@ -573,22 +573,21 @@ public class AppController {
             }
         }
 
-        // Build a resourceIdentifier/personName → card map for equipment/canine cards so that
+        // Build a resourceIdentifier → card map for equipment/canine cards so that
         // SAR task resources can be matched back to existing EQUIPMENT T-cards.
-        // Canine cards store the dog's name in personName (resourceIdentifier is blank),
-        // so both fields are indexed.
+        // Legacy data: old CSV imports stored the canine name in personName with a blank
+        // resourceIdentifier.  Migrate those records now so all downstream logic can rely
+        // on resourceIdentifier as the authoritative display name for non-personnel cards.
         Map<String, TCard> byEquipmentId = new LinkedHashMap<>();
         for (TCard card : cards) {
             if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
+                if (card.getResourceIdentifier().isBlank() && !card.getPersonName().isBlank()) {
+                    card.setResourceIdentifier(card.getPersonName());
+                    card.setPersonName("");
+                }
                 String rid = card.getResourceIdentifier().trim().toLowerCase();
                 if (!rid.isBlank()) {
                     byEquipmentId.putIfAbsent(rid, card);
-                } else {
-                    // Canines have a blank resourceIdentifier; index by personName instead.
-                    String pn = card.getPersonName().trim().toLowerCase();
-                    if (!pn.isBlank()) {
-                        byEquipmentId.putIfAbsent(pn, card);
-                    }
                 }
             }
         }
@@ -1065,14 +1064,16 @@ public class AppController {
 
     /**
      * Returns the effective display name for a T-card.
-     * For EQUIPMENT/MISC_EQUIPMENT cards (including canines), uses {@code resourceIdentifier}
-     * when set, and falls back to {@code personName} (used by canine cards whose call sign
-     * is stored there with a blank {@code resourceIdentifier}).
+     * Returns the display name to use when matching or listing a T-card.
+     *
+     * <p>For PERSONNEL cards the person's name ({@code personName}) is used.
+     * For all other card types (equipment, canines, aircraft, etc.)
+     * {@code resourceIdentifier} is the authoritative display name —
+     * the generalised identifier: dog call sign, apparatus name, tail number, etc.</p>
      */
     private static String effectiveTCardName(TCard card) {
         if (card.getCardType() == TCardType.EQUIPMENT || card.getCardType() == TCardType.MISC_EQUIPMENT) {
-            String rid = card.getResourceIdentifier().trim();
-            return rid.isBlank() ? card.getPersonName().trim() : rid;
+            return card.getResourceIdentifier().trim();
         }
         return card.getPersonName().trim();
     }

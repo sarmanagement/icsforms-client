@@ -309,10 +309,20 @@ public class TCard {
     /**
      * Returns a display label for this card.
      *
+     * <p>For PERSONNEL cards, the person's name ({@code personName}) is used.
+     * For all other card types (equipment, canines, aircraft, etc.),
+     * {@code resourceIdentifier} is the primary display name — that is the
+     * generalised identifier: dog call sign, apparatus name, tail number, etc.</p>
+     *
      * @return display label.
      */
     public String getDisplayLabel() {
-        String name = personName.isBlank() ? resourceIdentifier : personName;
-        return name.isBlank() ? cardType.getLabel() : name;
+        if (cardType == TCardType.PERSONNEL) {
+            String name = personName.isBlank() ? resourceIdentifier : personName;
+            return name.isBlank() ? cardType.getLabel() : name;
+        } else {
+            String name = resourceIdentifier.isBlank() ? personName : resourceIdentifier;
+            return name.isBlank() ? cardType.getLabel() : name;
+        }
     }
 }
