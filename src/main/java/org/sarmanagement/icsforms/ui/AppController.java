@@ -1208,12 +1208,11 @@ public class AppController {
             if (key.isBlank()) {
                 continue;
             }
-            // If this entry's UUID matches one already indexed, skip — already handled.
+            // If this entry's UUID matches one already indexed, it is the authoritative
+            // entry — place it under the current name key unconditionally (covers rename).
             String id = res.getResourceId();
             if (!id.isBlank() && byId.containsKey(id)) {
-                if (!seen.containsKey(key)) {
-                    seen.put(key, byId.get(id));
-                }
+                seen.put(key, byId.get(id));
                 continue;
             }
             if (!seen.containsKey(key)) {

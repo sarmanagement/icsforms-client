@@ -21,8 +21,12 @@ public class TCard {
      * Stable UUID assigned once at creation and never changed.
      * Used by {@link SarTaskResource#getResourceId()} to reference this card without
      * relying on mutable display-name strings.
+     * Initialized to {@code null}; a UUID is generated on first access via
+     * {@link #getResourceId()} to ensure legacy records deserialized without a
+     * {@code resourceId} field receive a stable value rather than a new random one
+     * each time.
      */
-    private String resourceId = UUID.randomUUID().toString();
+    private String resourceId = null;
 
     private TCardType cardType = TCardType.PERSONNEL;
 
