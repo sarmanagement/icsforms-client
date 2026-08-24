@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.TCardType;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -787,51 +788,67 @@ public class SarTaskPanel extends JPanel {
     /**
      * Opens a dialog to pick one or more T-card resources or manually enter a new one.
      *
-     * <p>Only resources whose location is {@code "Available"} are shown in the picker table so
-     * the user cannot inadvertently double-assign an already-assigned or out-of-service resource.
-     * Multiple rows may be selected using the standard Ctrl/Shift click conventions; all selected
-     * cards are added to the task in a single action.</p>
+     * <p>By default only resources that are not currently on an active (non-Returned) task are
+     * shown.  A "Show all resources" checkbox reveals all T-cards so that a subsequent task can
+     * be planned for resources still on task.  Multiple rows may be selected using the standard
+     * Ctrl/Shift click conventions; all selected cards are added to the task in a single action.</p>
      *
      * @param parent          parent component for the dialog.
-     * @param availableTCards full list of T-cards (filtered internally to "Available").
+     * @param availableTCards full list of T-cards (filtered internally based on the checkbox).
      * @return a non-empty list of populated {@link SarTaskResource} objects, or {@code null} if
      *         the user cancelled or made no valid selection.
      */
     private static List<SarTaskResource> showResourcePickerDialog(java.awt.Component parent, List<TCard> availableTCards) {
-        // Filter to only "Available" resources so we don't double-assign.
-        List<TCard> cardList = (availableTCards == null ? List.<TCard>of() : availableTCards)
-                .stream()
-                .filter(c -> "Available".equalsIgnoreCase(c.getLocation()))
-                .collect(java.util.stream.Collectors.toList());
+        List<TCard> allCards = availableTCards == null ? List.<TCard>of() : availableTCards;
 
         // Build a table model for the T-card picker.
-        String[] cols = {"Type", "Name / Identifier", "Agency", "Status"};
+        String[] cols = {"Type", "Name / Identifier", "Agency", "Location", "Status"};
         javax.swing.table.DefaultTableModel pickerModel = new javax.swing.table.DefaultTableModel(cols, 0) {
             @Override
-            public boolean isCellEditable(int row, int col) { return false; }
+            public boolean isCellEditable(int r, int c) { return false; }
         };
-        for (TCard card : cardList) {
-            String effectiveName = card.getCardType() != TCardType.PERSONNEL
-                    ? card.getResourceIdentifier().trim()
-                    : card.getPersonName().trim();
-            pickerModel.addRow(new Object[]{
-                    card.getCardType() == null ? TCardType.PERSONNEL.getLabel() : card.getCardType().getLabel(),
-                    effectiveName,
-                    card.getHomeAgency() == null ? "" : card.getHomeAgency().trim(),
-                    card.getStatus() == null ? "" : card.getStatus().trim()
-            });
-        }
+
+        // currentCardList tracks which cards are currently shown so row indices stay valid.
+        final List<TCard>[] currentCardList = new List[]{new ArrayList<>(allCards)};
+
+        java.util.function.Consumer<Boolean> rebuildModel = (showAll) -> {
+            pickerModel.setRowCount(0);
+            List<TCard> filtered = showAll
+                    ? new ArrayList<>(allCards)
+                    : allCards.stream()
+                            .filter(c -> !"Assigned".equalsIgnoreCase(c.getStatus()))
+                            .collect(java.util.stream.Collectors.toList());
+            currentCardList[0] = filtered;
+            for (TCard card : filtered) {
+                String effectiveName = card.getCardType() != TCardType.PERSONNEL
+                        ? card.getResourceIdentifier().trim()
+                        : card.getPersonName().trim();
+                pickerModel.addRow(new Object[]{
+                        card.getCardType() == null ? TCardType.PERSONNEL.getLabel() : card.getCardType().getLabel(),
+                        effectiveName,
+                        card.getHomeAgency() == null ? "" : card.getHomeAgency().trim(),
+                        card.getLocation() == null ? "" : card.getLocation().trim(),
+                        card.getStatus() == null ? "" : card.getStatus().trim()
+                });
+            }
+        };
+        rebuildModel.accept(false);
 
         JTable pickerTable = new JTable(pickerModel);
         pickerTable.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         pickerTable.getTableHeader().setReorderingAllowed(false);
         JScrollPane pickerScroll = new JScrollPane(pickerTable);
-        pickerScroll.setPreferredSize(new Dimension(480, 220));
+        pickerScroll.setPreferredSize(new Dimension(520, 220));
 
-        JLabel hint = new JLabel(cardList.isEmpty()
-                ? "No resources are currently in the \"Available\" column."
-                : "Select one or more resources (Ctrl/Shift+click for multiple):");
+        JLabel hint = new JLabel("Select one or more resources (Ctrl/Shift+click for multiple):");
         hint.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 2, 0));
+
+        JCheckBox showAllCheckBox = new JCheckBox("Show all resources (including those currently on task)");
+        showAllCheckBox.addActionListener(e -> rebuildModel.accept(showAllCheckBox.isSelected()));
+
+        JPanel topPanel = new JPanel(new BorderLayout(0, 2));
+        topPanel.add(hint, BorderLayout.NORTH);
+        topPanel.add(showAllCheckBox, BorderLayout.SOUTH);
 
         // Manual-entry fields shown below the table for creating a new resource.
         JTextField manualNameField = new JTextField(16);
@@ -851,7 +868,7 @@ public class SarTaskPanel extends JPanel {
         manualPanel.add(manualFunctionField);
 
         JPanel dialogPanel = new JPanel(new BorderLayout(0, 6));
-        dialogPanel.add(hint, BorderLayout.NORTH);
+        dialogPanel.add(topPanel, BorderLayout.NORTH);
         dialogPanel.add(pickerScroll, BorderLayout.CENTER);
         dialogPanel.add(manualPanel, BorderLayout.SOUTH);
 
@@ -860,6 +877,8 @@ public class SarTaskPanel extends JPanel {
         if (result != JOptionPane.OK_OPTION) {
             return null;
         }
+
+        List<TCard> cardList = currentCardList[0];
 
         // Build results from all selected table rows.
         int[] selectedRows = pickerTable.getSelectedRows();

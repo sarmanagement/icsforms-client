@@ -419,10 +419,10 @@ public class TCardPanel extends JPanel {
             byTask.computeIfAbsent(taskKey, k -> new ArrayList<>()).add(card);
         }
 
-        // In the "Assigned" column only: add a phantom group for tasks whose resources are
-        // currently in another column (e.g. "Out of Service") so busy-indicator cards can be
-        // rendered.  This must not run for the "Available" column — doing so would cause every
-        // task that has any board presence to appear in both Available and Assigned columns.
+        // In the "Assigned" column only: add a phantom group for tasks that have at least one
+        // resource with "Assigned" status on a *different* group so busy-indicator cards can be
+        // rendered.  Only tasks whose resources are genuinely busy (Assigned status) qualify —
+        // planned tasks with resources still in Available must not appear here.
         // Returned tasks are always excluded from phantom groups.
         if (isAssignedColumn) {
             for (Map.Entry<String, SarTaskAssignment> taskEntry : sarTaskByAssignmentId.entrySet()) {
@@ -433,10 +433,13 @@ public class TCardPanel extends JPanel {
                 if ("Returned".equals(task.getTaskLifecycleStatus())) continue; // never show returned tasks
                 List<SarTaskResource> res = task.getResourcesAssigned();
                 if (res == null || res.isEmpty()) continue;
-                boolean hasCardOnBoard = res.stream()
+                // Only add phantom when at least one resource is "Assigned" (truly busy on another task).
+                boolean hasBusyCard = res.stream()
                         .anyMatch(r -> !r.getResourceId().isBlank()
-                                       && tCardByResourceId.containsKey(r.getResourceId()));
-                if (hasCardOnBoard) {
+                                       && tCardByResourceId.containsKey(r.getResourceId())
+                                       && "Assigned".equalsIgnoreCase(
+                                               tCardByResourceId.get(r.getResourceId()).getStatus()));
+                if (hasBusyCard) {
                     byTask.computeIfAbsent(taskId, k -> new ArrayList<>());
                 }
             }
