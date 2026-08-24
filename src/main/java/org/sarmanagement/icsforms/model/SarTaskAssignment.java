@@ -63,6 +63,14 @@ public class SarTaskAssignment {
      * configuration).</p>
      */
     private String taskLifecycleStatus = "Planned";
+    /**
+     * Whether the debriefing for this task assignment has been formally completed.
+     *
+     * <p>A debriefing is considered complete when the supervisor has been named and the
+     * debrief notes, areas-not-covered, and hazards-observed fields are all non-blank.
+     * This flag must be explicitly set by the operator via the debrief editor.</p>
+     */
+    private boolean debriefingCompleted = false;
     private String iapPage = "";
 
     /**
@@ -346,6 +354,22 @@ public class SarTaskAssignment {
      */
     public void setTaskLifecycleStatus(String taskLifecycleStatus) {
         this.taskLifecycleStatus = taskLifecycleStatus == null ? "Planned" : taskLifecycleStatus;
+    }
+
+    /**
+     * Returns whether the debriefing has been formally marked as completed.
+     *
+     * @return {@code true} when the debriefing is complete.
+     */
+    public boolean isDebriefingCompleted() { return debriefingCompleted; }
+
+    /**
+     * Sets the debriefing-completed flag.
+     *
+     * @param debriefingCompleted {@code true} to mark as complete.
+     */
+    public void setDebriefingCompleted(boolean debriefingCompleted) {
+        this.debriefingCompleted = debriefingCompleted;
     }
 
     /** @return IAP page number string for this form in the bundle. */

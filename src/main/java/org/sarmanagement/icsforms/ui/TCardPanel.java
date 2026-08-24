@@ -1,6 +1,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
 
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
@@ -89,6 +90,12 @@ public class TCardPanel extends JPanel {
     private final java.util.Set<String> collapsedTaskKeys = new java.util.HashSet<>();
     /** Maps each T-card to its rack-view widget panel for in-place border updates without full rebuild. */
     private final Map<TCard, JPanel> rackCardWidgets = new IdentityHashMap<>();
+    /**
+     * Snapshot of all SAR task assignments keyed by assignment ID, refreshed on each
+     * {@link #refreshFromModel()} call.  Used in the rack to detect when a resource
+     * appears in multiple task assignments and render busy-indicator cards.
+     */
+    private final Map<String, SarTaskAssignment> sarTaskByAssignmentId = new LinkedHashMap<>();
 
     /** Returns {@code true} when the incident is running in SAR mode. */
     private boolean isSarMode() {
@@ -198,10 +205,12 @@ public class TCardPanel extends JPanel {
         // Build assignment ID → team number map for task grouping.
         assignmentTeamByRef.clear();
         assignmentResIdByRef.clear();
+        sarTaskByAssignmentId.clear();
         for (SarTaskAssignment task : controller.getData().getSarTaskAssignments()) {
             if (!task.getAssignmentId().isBlank()) {
                 assignmentTeamByRef.put(task.getAssignmentId(), task.getAssignmentTeamNumber());
                 assignmentResIdByRef.put(task.getAssignmentId(), task.getResourceIdentifier());
+                sarTaskByAssignmentId.put(task.getAssignmentId(), task);
             }
         }
         tableModel.setAssignmentTeamByRef(new LinkedHashMap<>(assignmentTeamByRef));
@@ -376,9 +385,20 @@ public class TCardPanel extends JPanel {
      * handler are kept together within each group.</p>
      */
     private void addTaskGroupedCards(JPanel col, List<TCard> children) {
+        // Index all TCards by their stable UUID for fast lookups.
+        Map<String, TCard> tCardByResourceId = new LinkedHashMap<>();
+        for (TCard c : controller.getData().getTCards()) {
+            if (!c.getResourceId().isBlank()) {
+                tCardByResourceId.put(c.getResourceId(), c);
+            }
+        }
+
         // Group children by assignment ID (prefix of sourceRef "sar:<id>:...").
         Map<String, List<TCard>> byTask = new LinkedHashMap<>();
         byTask.put("", new ArrayList<>()); // unnamed / non-task cards
+        // Track which TCards are already placed under a specific task group so that
+        // resources whose primary task is elsewhere can be detected.
+        Map<TCard, String> tCardPrimaryTask = new java.util.IdentityHashMap<>(); // card → taskKey
         for (TCard card : children) {
             String ref = card.getSourceRef();
             String taskKey = "";
@@ -389,6 +409,14 @@ public class TCardPanel extends JPanel {
                 }
             }
             byTask.computeIfAbsent(taskKey, k -> new ArrayList<>()).add(card);
+            tCardPrimaryTask.put(card, taskKey);
+        }
+
+        // Also ensure every task group that appears in sarTaskByAssignmentId but has no
+        // cards in this column (because all its resources are primarily in other groups) is
+        // still represented in byTask so that busy-indicator cards are rendered.
+        for (String taskId : sarTaskByAssignmentId.keySet()) {
+            byTask.computeIfAbsent(taskId, k -> new ArrayList<>());
         }
 
         // Render non-task cards first, then each task group.
@@ -397,10 +425,30 @@ public class TCardPanel extends JPanel {
             addHandlerGroupedCards(col, unassigned, false);
         }
         for (Map.Entry<String, List<TCard>> entry : byTask.entrySet()) {
-            String taskKey  = entry.getKey();
+            String taskKey   = entry.getKey();
             String teamLabel = assignmentTeamByRef.getOrDefault(taskKey, taskKey);
             String resId     = assignmentResIdByRef.getOrDefault(taskKey, "");
-            List<TCard> groupCards = entry.getValue();
+            List<TCard> groupCards = new ArrayList<>(entry.getValue());
+
+            // Find busy-indicator resources: resources assigned to this task whose
+            // TCard is primarily rendered in a different task group (because they are
+            // currently "Assigned" to another task).
+            List<TCard> busyCards = new ArrayList<>();
+            SarTaskAssignment task = sarTaskByAssignmentId.get(taskKey);
+            if (task != null) {
+                java.util.Set<TCard> alreadyInGroup = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+                alreadyInGroup.addAll(groupCards);
+                for (SarTaskResource res : task.getResourcesAssigned()) {
+                    if (!res.getResourceId().isBlank()) {
+                        TCard candidate = tCardByResourceId.get(res.getResourceId());
+                        if (candidate != null && !alreadyInGroup.contains(candidate)
+                                && "Assigned".equalsIgnoreCase(candidate.getStatus())) {
+                            busyCards.add(candidate);
+                        }
+                    }
+                }
+            }
+
             if (!teamLabel.isBlank()) {
                 boolean collapsed = collapsedTaskKeys.contains(taskKey);
                 int people = (int) groupCards.stream().filter(c -> c.getCardType() == TCardType.PERSONNEL).count();
@@ -408,6 +456,15 @@ public class TCardPanel extends JPanel {
                 col.add(buildTaskBannerWidget(teamLabel, resId, people, other, collapsed, taskKey));
                 if (!collapsed) {
                     addHandlerGroupedCards(col, groupCards, true);
+                    // Append busy-indicator reference cards below the group's own cards.
+                    for (TCard busyCard : busyCards) {
+                        String primaryTeam = assignmentTeamByRef.getOrDefault(
+                                busyCard.getSourceRef().startsWith("sar:")
+                                        ? busyCard.getSourceRef().split(":", 3)[1] : "",
+                                "another task");
+                        col.add(buildBusyReferenceCard(busyCard, primaryTeam));
+                        col.add(javax.swing.Box.createVerticalStrut(1));
+                    }
                     col.add(javax.swing.Box.createVerticalStrut(4));
                 } else {
                     // Show only the leader card when the group is collapsed (with paperclip icon).
@@ -419,11 +476,43 @@ public class TCardPanel extends JPanel {
                                 col.add(javax.swing.Box.createVerticalStrut(3));
                             });
                 }
-            } else {
+            } else if (!groupCards.isEmpty()) {
                 addHandlerGroupedCards(col, groupCards, false);
                 col.add(javax.swing.Box.createVerticalStrut(4));
             }
         }
+    }
+
+    /**
+     * Builds a compact, visually-distinct "busy" reference card for a resource that is
+     * currently assigned to a different task.  The card shows the resource name and a
+     * ⚠ indicator with the team label of the task they are currently on.
+     *
+     * @param card           the resource T-card.
+     * @param primaryTeamLabel the team label of the task the resource is currently on.
+     * @return a read-only reference panel.
+     */
+    private JPanel buildBusyReferenceCard(TCard card, String primaryTeamLabel) {
+        JPanel p = new JPanel(new BorderLayout(2, 0));
+        p.setBackground(new Color(220, 220, 220)); // neutral grey
+        p.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(160, 160, 160)),
+                BorderFactory.createEmptyBorder(2, 4, 2, 4)));
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel nameLabel = new JLabel("⚠ " + card.getDisplayLabel());
+        nameLabel.setFont(nameLabel.getFont().deriveFont(Font.ITALIC, 10.5f));
+        nameLabel.setForeground(new Color(80, 80, 80));
+
+        String assignedTo = primaryTeamLabel.isBlank() ? "another task" : primaryTeamLabel;
+        JLabel detailLabel = new JLabel("Assigned: " + assignedTo);
+        detailLabel.setFont(detailLabel.getFont().deriveFont(9.5f));
+        detailLabel.setForeground(new Color(120, 60, 0));
+
+        p.add(nameLabel, BorderLayout.CENTER);
+        p.add(detailLabel, BorderLayout.SOUTH);
+        return p;
     }
 
     /**
@@ -1102,14 +1191,15 @@ public class TCardPanel extends JPanel {
 
     public void exportToCsv(File outputFile) throws IOException {
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputFile))) {
-            writer.println("Name, Agency, State, Phone, Type");
+            writer.println("Name, Agency, State, Phone, Type, Handler");
             for (TCard card : tableModel.getCards()) {
                 String name = card.getPersonName().isBlank() ? card.getResourceIdentifier() : card.getPersonName();
                 writer.println(csvValue(name) + ","
                         + csvValue(card.getHomeAgency()) + ","
                         + csvValue(card.getHomeState()) + ","
                         + csvValue(card.getPhoneNumber()) + ","
-                        + csvValue(card.getCardType().name()));
+                        + csvValue(card.getCardType().name()) + ","
+                        + csvValue(card.getHandlerName()));
             }
         }
     }
@@ -1162,7 +1252,7 @@ public class TCardPanel extends JPanel {
 
         // Build preview with checkboxes.
         int dataRows = rows.size() - dataStart;
-        String[] colNames = {"Import?", "Name", "Home Agency", "Home State", "Phone", "Type"};
+        String[] colNames = {"Import?", "Name", "Home Agency", "Home State", "Phone", "Type", "Handler"};
         Object[][] previewData = new Object[dataRows][colNames.length];
         for (int i = 0; i < dataRows; i++) {
             String[] row = rows.get(dataStart + i);
@@ -1172,6 +1262,7 @@ public class TCardPanel extends JPanel {
             previewData[i][3] = cell(row, 2);
             previewData[i][4] = cell(row, 3);
             previewData[i][5] = cell(row, 4);
+            previewData[i][6] = cell(row, 5); // handler/operator name (may be blank)
         }
 
         CsvPreviewTableModel previewModel = new CsvPreviewTableModel(previewData, colNames);
@@ -1179,7 +1270,7 @@ public class TCardPanel extends JPanel {
         previewTable.setRowHeight(22);
         previewTable.getColumnModel().getColumn(0).setMaxWidth(65);
         JScrollPane scroll = new JScrollPane(previewTable);
-        scroll.setPreferredSize(new Dimension(620, Math.min(400, dataRows * 25 + 60)));
+        scroll.setPreferredSize(new Dimension(720, Math.min(400, dataRows * 25 + 60)));
 
         int choice = JOptionPane.showConfirmDialog(this, scroll,
                 "Select resources to import", JOptionPane.OK_CANCEL_OPTION,
@@ -1196,7 +1287,8 @@ public class TCardPanel extends JPanel {
                         (String) previewModel.getValueAt(i, 2),
                         (String) previewModel.getValueAt(i, 3),
                         (String) previewModel.getValueAt(i, 4),
-                        (String) previewModel.getValueAt(i, 5));
+                        (String) previewModel.getValueAt(i, 5),
+                        (String) previewModel.getValueAt(i, 6));
                 tableModel.addCard(card);
                 imported++;
             }
@@ -1210,6 +1302,10 @@ public class TCardPanel extends JPanel {
 
     /** Converts a CSV row's fields into a new T-card. */
     private TCard csvRowToCard(String name, String agency, String state, String phone, String typeStr) {
+        return csvRowToCard(name, agency, state, phone, typeStr, null);
+    }
+
+    private TCard csvRowToCard(String name, String agency, String state, String phone, String typeStr, String handler) {
         TCard card = new TCard();
         TCardType type = inferCardType(typeStr);
         card.setCardType(type);
@@ -1225,6 +1321,9 @@ public class TCardPanel extends JPanel {
         card.setHomeState(state == null ? "" : state.trim());
         card.setPhoneNumber(phone == null ? "" : phone.trim());
         card.setLocation("Available");
+        if (handler != null && !handler.isBlank()) {
+            card.setHandlerName(handler.trim());
+        }
         return card;
     }
 

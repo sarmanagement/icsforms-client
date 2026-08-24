@@ -38,10 +38,14 @@ public class ClueLogPanel extends JPanel {
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton add = new JButton("Add");
         JButton findDuplicates = new JButton("Find Duplicates…");
+        JButton syncToLogs = new JButton("Sync to Activity Logs");
+        syncToLogs.setToolTipText("Propagate clues with an assigned task to their linked ICS 214 activity logs");
         add.addActionListener(event -> tableModel.addRow());
         findDuplicates.addActionListener(event -> findAndResolveDuplicates());
+        syncToLogs.addActionListener(event -> syncClueLogToActivityLogs());
         buttons.add(add);
         buttons.add(findDuplicates);
+        buttons.add(syncToLogs);
         add(buttons, BorderLayout.SOUTH);
     }
 
@@ -51,6 +55,23 @@ public class ClueLogPanel extends JPanel {
 
     public void pushToModel() {
         controller.getData().setClueLogEntries(tableModel.getRows());
+    }
+
+    /** Propagates all clues with an assigned task ID to their linked ICS 214 activity logs. */
+    private void syncClueLogToActivityLogs() {
+        pushToModel();
+        int count = 0;
+        for (ClueLogEntry clue : tableModel.getRows()) {
+            if (clue.getAssignmentId() != null && !clue.getAssignmentId().isBlank()) {
+                if (controller.propagateClueToActivityLog(clue)) {
+                    count++;
+                }
+            }
+        }
+        controller.markDirty();
+        JOptionPane.showMessageDialog(this,
+                count + " clue(s) propagated to linked activity logs.",
+                "Sync Complete", JOptionPane.INFORMATION_MESSAGE);
     }
 
     /**

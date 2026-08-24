@@ -140,11 +140,13 @@ public class SarTaskPanel extends JPanel {
         JButton addBtn     = new JButton("Add Task");
         JButton editBtn    = new JButton("Edit Assignment…");
         JButton debriefBtn = new JButton("Debrief…");
+        JButton markDebriefCompleteBtn = new JButton("Complete Debrief");
         JButton open214Btn = new JButton("Open ICS 214…");
         JButton removeBtn  = new JButton("Remove Task");
 
         editBtn.setEnabled(false);
         debriefBtn.setEnabled(false);
+        markDebriefCompleteBtn.setEnabled(false);
         open214Btn.setEnabled(false);
         removeBtn.setEnabled(false);
 
@@ -152,6 +154,7 @@ public class SarTaskPanel extends JPanel {
             boolean selected = table.getSelectedRow() >= 0;
             editBtn.setEnabled(selected);
             debriefBtn.setEnabled(selected);
+            markDebriefCompleteBtn.setEnabled(selected);
             open214Btn.setEnabled(selected && on214Request != null);
             removeBtn.setEnabled(selected);
         });
@@ -159,6 +162,7 @@ public class SarTaskPanel extends JPanel {
         addBtn.addActionListener(e -> addNewTask());
         editBtn.addActionListener(e -> openSelectedRowEditor(EditorMode.ASSIGNMENT));
         debriefBtn.addActionListener(e -> openSelectedRowEditor(EditorMode.DEBRIEFING));
+        markDebriefCompleteBtn.addActionListener(e -> markSelectedDebriefComplete());
         open214Btn.addActionListener(e -> openIcs214ForSelected());
         removeBtn.addActionListener(e -> removeSelectedTask());
         toggleBoardBtn.addActionListener(e -> toggleBoardView());
@@ -167,6 +171,7 @@ public class SarTaskPanel extends JPanel {
         row.add(addBtn);
         row.add(editBtn);
         row.add(debriefBtn);
+        row.add(markDebriefCompleteBtn);
         row.add(open214Btn);
         row.add(removeBtn);
         row.add(toggleBoardBtn);
@@ -465,6 +470,30 @@ public class SarTaskPanel extends JPanel {
         }
     }
 
+    /** Validates and marks the selected task's debriefing as complete (item 12). */
+    private void markSelectedDebriefComplete() {
+        int viewRow = table.getSelectedRow();
+        if (viewRow < 0) {
+            return;
+        }
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        if (modelRow < 0 || modelRow >= tableModel.getRows().size()) {
+            return;
+        }
+        SarTaskAssignment task = tableModel.getRows().get(modelRow);
+        List<String> errors = controller.markDebriefingComplete(task);
+        if (!errors.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    String.join("\n", errors),
+                    "Cannot Complete Debrief", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        tableModel.fireTableRowsUpdated(modelRow, modelRow);
+        JOptionPane.showMessageDialog(this,
+                "Debriefing marked as complete.",
+                "Debrief Complete", JOptionPane.INFORMATION_MESSAGE);
+    }
+
     static String formatDateTimeValue(LocalDateTime value) {
         return value == null ? "" : DATE_TIME_FORMATTER.format(value);
     }
@@ -540,6 +569,7 @@ public class SarTaskPanel extends JPanel {
             table.getCellEditor().stopCellEditing();
         }
         SarTaskAssignment row = tableModel.getRows().get(rowIndex);
+        String previousLifecycleStatus = row.getTaskLifecycleStatus();
         SarTaskEditor editor = new SarTaskEditor(row, mode, controller.getData().getClueLogEntries(),
                 defaultResourceEditorRowCount(row),
                 handlerName -> controller.findEquipmentForHandler(handlerName),
@@ -553,6 +583,11 @@ public class SarTaskPanel extends JPanel {
             return;
         }
         controller.getData().setClueLogEntries(editor.applyTo(row, controller.getData().getClueLogEntries()));
+        // Wire item 3: notify linked ICS 214 log when lifecycle status changes.
+        String newLifecycleStatus = row.getTaskLifecycleStatus();
+        if (!java.util.Objects.equals(previousLifecycleStatus, newLifecycleStatus)) {
+            controller.recordTaskLifecycleTransition(row, newLifecycleStatus);
+        }
         if (mode == EditorMode.ASSIGNMENT) {
             updateLinkedResourcePersonCount(row, editor.resourceCount());
         }

@@ -1,10 +1,12 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityEventType;
+import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
@@ -1142,7 +1144,103 @@ public class AppController {
         return result;
     }
 
-    /** Creates or updates a single org-chart staff T-card. */
+    /**
+     * Records a task lifecycle status change as an activity log entry in the linked ICS 214 form.
+     *
+     * <p>When a SAR task transitions between Planned → On Task → Returned, this method
+     * appends a timestamped entry to the task's linked 214 (if any) so that the activity
+     * log and T-card rack status stay synchronized.  The event type used is:
+     * <ul>
+     *   <li>{@link ActivityEventType#ID_RESOURCE_ON_TASK} when the new status is
+     *       {@code "On Task"}.</li>
+     *   <li>{@link ActivityEventType#ID_TASK_COMPLETED} when the new status is
+     *       {@code "Returned"}.</li>
+     * </ul>
+     * Transitions to {@code "Planned"} do not generate an entry.</p>
+     *
+     * @param task      the task whose lifecycle status changed.
+     * @param newStatus the new lifecycle status value.
+     */
+    public void recordTaskLifecycleTransition(SarTaskAssignment task, String newStatus) {
+        if (task == null || newStatus == null) {
+            return;
+        }
+        String eventTypeId;
+        String description;
+        switch (newStatus) {
+            case "On Task" -> {
+                eventTypeId = ActivityEventType.ID_RESOURCE_ON_TASK;
+                description = "Task status changed to On Task";
+            }
+            case "Returned" -> {
+                eventTypeId = ActivityEventType.ID_TASK_COMPLETED;
+                description = "Task status changed to Returned";
+            }
+            default -> {
+                return; // "Planned" or unknown — no log entry
+            }
+        }
+        // Find the linked ICS 214 form for this task.
+        String assignmentId = task.getAssignmentId();
+        for (Ics214Form log : data.getActivityLogs()) {
+            if (assignmentId.equals(log.getLinkedSarTaskAssignmentId())) {
+                ActivityLogEntry entry = new ActivityLogEntry();
+                entry.setTimestamp(LocalDateTime.now().withSecond(0).withNano(0));
+                entry.setEventTypeId(eventTypeId);
+                entry.setResourceIdentifier(safe(task.getResourceIdentifier()).isBlank()
+                        ? safe(task.getLeader()) : safe(task.getResourceIdentifier()));
+                entry.setNotableActivity(description);
+                log.getActivityLog().add(entry);
+                break;
+            }
+        }
+    }
+
+    /**
+     * Validates whether a task debriefing can be marked as completed and marks it if valid.
+     *
+     * <p>A debriefing is considered complete when all of the following are satisfied:</p>
+     * <ul>
+     *   <li>The task's lifecycle status is {@code "Returned"}.</li>
+     *   <li>A debriefing supervisor name is non-blank.</li>
+     *   <li>Debrief notes are non-blank.</li>
+     *   <li>Areas not covered is non-blank.</li>
+     *   <li>Hazards observed is non-blank.</li>
+     * </ul>
+     *
+     * @param task the task assignment to validate and mark.
+     * @return a list of human-readable validation errors, or an empty list when the
+     *         debriefing is complete and the flag has been set.
+     */
+    public List<String> markDebriefingComplete(SarTaskAssignment task) {
+        List<String> errors = new ArrayList<>();
+        if (task == null) {
+            errors.add("No task provided.");
+            return errors;
+        }
+        if (!"Returned".equals(task.getTaskLifecycleStatus())) {
+            errors.add("Task must be in 'Returned' status before debriefing can be completed.");
+        }
+        if (safe(task.getDebriefingSupervisor()).isBlank()) {
+            errors.add("Debriefing supervisor name is required.");
+        }
+        if (safe(task.getDebriefNotes()).isBlank()) {
+            errors.add("Debrief notes are required.");
+        }
+        if (safe(task.getAreasNotCovered()).isBlank()) {
+            errors.add("Areas not covered is required.");
+        }
+        if (safe(task.getHazardsObserved()).isBlank()) {
+            errors.add("Hazards observed is required.");
+        }
+        if (errors.isEmpty()) {
+            task.setDebriefingCompleted(true);
+            markDirty();
+        }
+        return errors;
+    }
+
+
     private void addOrgCard(Map<String, TCard> wanted, Map<String, TCard> existing,
                              Map<String, TCard> byName,
                              String ref, String name, String radio, String phone, String roleLabel) {
@@ -1353,7 +1451,18 @@ public class AppController {
         existingResources.get(0).setFunction(lead.getFunction());
         existingResources.get(0).setIcsPosition(lead.getIcsPosition());
         existingResources.get(0).setHomeAgency(lead.getHomeAgency());
-        existingResources.get(0).setName(lead.getName());
+        // Only overwrite the name from the ICS 204 scaffold when the existing resource does
+        // not already carry a UUID link to a canonical TCard.  When a UUID link is present,
+        // syncTCards() will propagate the canonical display label after this method returns,
+        // so overwriting here would clobber name edits made via the TCard editor.
+        if (existingResources.get(0).getResourceId().isBlank()) {
+            existingResources.get(0).setName(lead.getName());
+        }
+        // Back-fill the UUID from the existing resource so the scaffold carries it forward.
+        if (!existingResources.get(0).getResourceId().isBlank()
+                && lead.getResourceId().isBlank()) {
+            lead.setResourceId(existingResources.get(0).getResourceId());
+        }
     }
 
     /**
@@ -1485,6 +1594,47 @@ public class AppController {
                 entry.setDetectingTask(task.getAssignmentTeamNumber());
             }
         }
+    }
+
+    /**
+     * Records a clue log entry as an activity log entry in the linked ICS 214 form.
+     *
+     * <p>When a clue is added via the shared Clue Log panel and an {@code assignmentId} is
+     * set on the entry, this method appends a {@link ActivityEventType#ID_CLUE_DETECTED}
+     * entry to the matching task-linked ICS 214 form so both logs stay synchronized.</p>
+     *
+     * @param clue the newly added clue log entry.
+     */
+    public boolean propagateClueToActivityLog(ClueLogEntry clue) {
+        if (clue == null || safe(clue.getAssignmentId()).isBlank()) {
+            return false;
+        }
+        for (Ics214Form log : data.getActivityLogs()) {
+            if (clue.getAssignmentId().equals(log.getLinkedSarTaskAssignmentId())) {
+                LocalDateTime ts = clue.getDateTimeCollected() != null
+                        ? clue.getDateTimeCollected()
+                        : LocalDateTime.now().withSecond(0).withNano(0);
+                // Avoid duplicating entries already propagated with the same timestamp and clue type.
+                boolean alreadyPresent = log.getActivityLog().stream().anyMatch(e ->
+                        ActivityEventType.ID_CLUE_DETECTED.equals(e.getEventTypeId())
+                        && ts.equals(e.getTimestamp()));
+                if (alreadyPresent) {
+                    return false;
+                }
+                ActivityLogEntry entry = new ActivityLogEntry();
+                entry.setTimestamp(ts);
+                entry.setEventTypeId(ActivityEventType.ID_CLUE_DETECTED);
+                entry.setResourceIdentifier(safe(clue.getDetectingTask()));
+                String activity = safe(clue.getDescription());
+                if (!safe(clue.getLocation()).isBlank()) {
+                    activity = safe(clue.getLocation()) + (activity.isBlank() ? "" : ": " + activity);
+                }
+                entry.setNotableActivity(activity);
+                log.getActivityLog().add(entry);
+                return true;
+            }
+        }
+        return false;
     }
 
     private List<String> withAddedUnique(List<String> values, String value) {
