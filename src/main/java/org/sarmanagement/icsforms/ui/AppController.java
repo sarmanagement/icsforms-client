@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.time.ZoneId;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -1147,6 +1148,31 @@ public class AppController {
             return String.CASE_INSENSITIVE_ORDER.compare(nameA, nameB);
         });
         return result;
+    }
+
+    /**
+     * Returns the set of T-card resource IDs that are currently on an active ("On Task")
+     * SAR task assignment.  Used by the resource picker dialog to determine which cards to
+     * hide by default (cards whose resources are already committed to a live task).
+     *
+     * @return unmodifiable set of UUID resource IDs; never {@code null}.
+     */
+    public Set<String> getOnTaskResourceIds() {
+        Set<String> ids = new HashSet<>();
+        List<SarTaskAssignment> tasks = data.getSarTaskAssignments();
+        if (tasks == null) return Collections.unmodifiableSet(ids);
+        for (SarTaskAssignment task : tasks) {
+            if (!"On Task".equals(task.getTaskLifecycleStatus())) continue;
+            List<SarTaskResource> resources = task.getResourcesAssigned();
+            if (resources == null) continue;
+            for (SarTaskResource res : resources) {
+                String rid = res.getResourceId();
+                if (rid != null && !rid.isBlank()) {
+                    ids.add(rid);
+                }
+            }
+        }
+        return Collections.unmodifiableSet(ids);
     }
 
     /**
