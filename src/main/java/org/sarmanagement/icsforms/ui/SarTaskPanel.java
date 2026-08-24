@@ -20,6 +20,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.ScrollPaneConstants;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
@@ -87,7 +88,9 @@ public class SarTaskPanel extends JPanel {
     private static final String VIEW_BOARD = "board";
     private final CardLayout viewCardLayout = new CardLayout();
     private final JPanel viewContainer = new JPanel(viewCardLayout);
-    private final JScrollPane boardScroll = new JScrollPane();
+    private final JScrollPane boardScroll = new JScrollPane(
+            ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+            ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
     private final JButton toggleBoardBtn = new JButton("Board View");
     private String currentSarView = VIEW_TABLE;
 
@@ -248,6 +251,7 @@ public class SarTaskPanel extends JPanel {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(headerColor);
         header.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        header.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel titleLabel = new JLabel(title + " (" + tasks.size() + ")");
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
         header.add(titleLabel, BorderLayout.CENTER);

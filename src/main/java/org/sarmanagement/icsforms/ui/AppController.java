@@ -941,14 +941,15 @@ public class AppController {
      * Converts a task lifecycle status string to the equivalent T-card status.
      *
      * @param lifecycle "Planned", "On Task", or "Returned".
-     * @return T-card status string ("Assigned", "Out of Service", or blank).
+     * @return T-card status string ("Assigned", blank, or {@code null} for Returned).
      */
     static String lifecycleToCardStatus(String lifecycle) {
         if (lifecycle == null) return "";
         return switch (lifecycle) {
             case "On Task"  -> "Assigned";
-            case "Returned" -> "Out of Service";
-            default         -> "";           // Planned/Planning or unknown → blank
+            case "Returned" -> null;  // Returned tasks do not drive resource status —
+                                      // operators manage the card manually after return.
+            default         -> "";    // Planned/Planning or unknown → blank (available)
         };
     }
 
@@ -956,15 +957,19 @@ public class AppController {
      * Records a lifecycle-driven status for {@code card}, keeping the highest-priority
      * value when the same card is referenced from multiple tasks.
      *
-     * <p>Blank statuses are recorded as the baseline so resources can move back to
+     * <p>A {@code null} status means "do not touch this card's status" (used for
+     * Returned tasks so that manually-set statuses such as "At Staging" are preserved).
+     * Blank statuses are recorded as the baseline so resources can move back to
      * available when a task is reverted to Planned. Higher-priority non-blank statuses
-     * ("Assigned", "Out of Service") still win when the same card appears on multiple
-     * tasks.</p>
+     * ("Assigned") still win when the same card appears on multiple tasks.</p>
      *
-     * <p>Priority: "Assigned" &gt; "Out of Service".</p>
+     * <p>Priority: "Assigned" &gt; blank (available).</p>
      */
     private static void applyHigherPriorityStatus(Map<TCard, String> map, TCard card, String status) {
-        if (status == null || status.isBlank()) {
+        if (status == null) {
+            return; // Returned-task sentinel: leave the card's current status untouched.
+        }
+        if (status.isBlank()) {
             map.putIfAbsent(card, "");
             return;
         }

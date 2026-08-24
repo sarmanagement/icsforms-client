@@ -415,8 +415,21 @@ public class TCardPanel extends JPanel {
         // Also ensure every task group that appears in sarTaskByAssignmentId but has no
         // cards in this column (because all its resources are primarily in other groups) is
         // still represented in byTask so that busy-indicator cards are rendered.
-        for (String taskId : sarTaskByAssignmentId.keySet()) {
-            byTask.computeIfAbsent(taskId, k -> new ArrayList<>());
+        // Only add the task group when the task actually has at least one resource with a
+        // T-card on the board — tasks with no board presence at all are suppressed.
+        for (Map.Entry<String, SarTaskAssignment> taskEntry : sarTaskByAssignmentId.entrySet()) {
+            String taskId = taskEntry.getKey();
+            if (byTask.containsKey(taskId)) continue; // already present (has cards in this column)
+            SarTaskAssignment task = taskEntry.getValue();
+            if (task == null) continue;
+            List<SarTaskResource> res = task.getResourcesAssigned();
+            if (res == null || res.isEmpty()) continue;
+            boolean hasCardOnBoard = res.stream()
+                    .anyMatch(r -> !r.getResourceId().isBlank()
+                                   && tCardByResourceId.containsKey(r.getResourceId()));
+            if (hasCardOnBoard) {
+                byTask.computeIfAbsent(taskId, k -> new ArrayList<>());
+            }
         }
 
         // Render non-task cards first, then each task group.
