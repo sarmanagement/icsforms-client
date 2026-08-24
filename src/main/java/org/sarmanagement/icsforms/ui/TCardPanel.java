@@ -398,6 +398,8 @@ public class TCardPanel extends JPanel {
         }
 
         // Group children by assignment ID (prefix of sourceRef "sar:<id>:...").
+        // Cards whose task has been "Returned" are placed in the unnamed group so they
+        // appear freely under their current status header without a task banner.
         Map<String, List<TCard>> byTask = new LinkedHashMap<>();
         byTask.put("", new ArrayList<>()); // unnamed / non-task cards
         for (TCard card : children) {
@@ -406,7 +408,12 @@ public class TCardPanel extends JPanel {
             if (ref.startsWith("sar:")) {
                 String[] parts = ref.split(":", 3);
                 if (parts.length >= 2 && !parts[1].isBlank()) {
-                    taskKey = parts[1];
+                    String candidate = parts[1];
+                    SarTaskAssignment candidateTask = sarTaskByAssignmentId.get(candidate);
+                    // Treat returned tasks as ungrouped so their resources flow freely.
+                    if (candidateTask == null || !"Returned".equals(candidateTask.getTaskLifecycleStatus())) {
+                        taskKey = candidate;
+                    }
                 }
             }
             byTask.computeIfAbsent(taskKey, k -> new ArrayList<>()).add(card);
@@ -416,12 +423,14 @@ public class TCardPanel extends JPanel {
         // currently in another column (e.g. "Out of Service") so busy-indicator cards can be
         // rendered.  This must not run for the "Available" column — doing so would cause every
         // task that has any board presence to appear in both Available and Assigned columns.
+        // Returned tasks are always excluded from phantom groups.
         if (isAssignedColumn) {
             for (Map.Entry<String, SarTaskAssignment> taskEntry : sarTaskByAssignmentId.entrySet()) {
                 String taskId = taskEntry.getKey();
                 if (byTask.containsKey(taskId)) continue; // already present (has cards in this column)
                 SarTaskAssignment task = taskEntry.getValue();
                 if (task == null) continue;
+                if ("Returned".equals(task.getTaskLifecycleStatus())) continue; // never show returned tasks
                 List<SarTaskResource> res = task.getResourcesAssigned();
                 if (res == null || res.isEmpty()) continue;
                 boolean hasCardOnBoard = res.stream()

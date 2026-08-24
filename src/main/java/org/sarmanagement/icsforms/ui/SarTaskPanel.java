@@ -34,6 +34,7 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -237,9 +238,19 @@ public class SarTaskPanel extends JPanel {
         board.add(buildBoardColumn("Returned (not debriefed)", new Color(144, 238, 144), returned));
         board.add(buildBoardColumn("Completed", new Color(200, 200, 200), completed));
 
-        // Wrap in a BorderLayout.NORTH so the board stretches to the full viewport width
-        // without requiring each column to declare a fixed preferred width.
-        JPanel boardWrapper = new JPanel(new BorderLayout());
+        // Override getPreferredSize so the wrapper never exceeds the viewport width,
+        // allowing GridLayout to divide the available space into four equal columns.
+        JPanel boardWrapper = new JPanel(new BorderLayout()) {
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension d = super.getPreferredSize();
+                Container p = getParent();
+                if (p != null && p.getWidth() > 0) {
+                    return new Dimension(p.getWidth(), d.height);
+                }
+                return d;
+            }
+        };
         boardWrapper.add(board, BorderLayout.NORTH);
         boardScroll.setViewportView(boardWrapper);
         boardScroll.revalidate();
