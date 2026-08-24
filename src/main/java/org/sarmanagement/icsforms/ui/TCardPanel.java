@@ -366,7 +366,7 @@ public class TCardPanel extends JPanel {
             // Group Available and Assigned columns by task; other columns stay handler-grouped.
             String colLabel = header.getDisplayLabel();
             if ("Assigned".equalsIgnoreCase(colLabel) || "Available".equalsIgnoreCase(colLabel)) {
-                addTaskGroupedCards(col, children);
+                addTaskGroupedCards(col, children, "Assigned".equalsIgnoreCase(colLabel));
             } else {
                 addHandlerGroupedCards(col, children, false);
             }
@@ -383,8 +383,12 @@ public class TCardPanel extends JPanel {
      * are clustered under a small task-label banner showing the resource count.
      * Clicking the banner collapses or expands the group.  Cards linked to the same
      * handler are kept together within each group.</p>
+     *
+     * @param isAssignedColumn {@code true} when rendering the "Assigned" column — only then
+     *                         are phantom busy-indicator groups added for tasks whose resources
+     *                         are assigned to a different column.
      */
-    private void addTaskGroupedCards(JPanel col, List<TCard> children) {
+    private void addTaskGroupedCards(JPanel col, List<TCard> children, boolean isAssignedColumn) {
         // Index all TCards by their stable UUID for fast lookups.
         Map<String, TCard> tCardByResourceId = new LinkedHashMap<>();
         for (TCard c : controller.getData().getTCards()) {
@@ -396,9 +400,6 @@ public class TCardPanel extends JPanel {
         // Group children by assignment ID (prefix of sourceRef "sar:<id>:...").
         Map<String, List<TCard>> byTask = new LinkedHashMap<>();
         byTask.put("", new ArrayList<>()); // unnamed / non-task cards
-        // Track which TCards are already placed under a specific task group so that
-        // resources whose primary task is elsewhere can be detected.
-        Map<TCard, String> tCardPrimaryTask = new java.util.IdentityHashMap<>(); // card → taskKey
         for (TCard card : children) {
             String ref = card.getSourceRef();
             String taskKey = "";
@@ -409,26 +410,26 @@ public class TCardPanel extends JPanel {
                 }
             }
             byTask.computeIfAbsent(taskKey, k -> new ArrayList<>()).add(card);
-            tCardPrimaryTask.put(card, taskKey);
         }
 
-        // Also ensure every task group that appears in sarTaskByAssignmentId but has no
-        // cards in this column (because all its resources are primarily in other groups) is
-        // still represented in byTask so that busy-indicator cards are rendered.
-        // Only add the task group when the task actually has at least one resource with a
-        // T-card on the board — tasks with no board presence at all are suppressed.
-        for (Map.Entry<String, SarTaskAssignment> taskEntry : sarTaskByAssignmentId.entrySet()) {
-            String taskId = taskEntry.getKey();
-            if (byTask.containsKey(taskId)) continue; // already present (has cards in this column)
-            SarTaskAssignment task = taskEntry.getValue();
-            if (task == null) continue;
-            List<SarTaskResource> res = task.getResourcesAssigned();
-            if (res == null || res.isEmpty()) continue;
-            boolean hasCardOnBoard = res.stream()
-                    .anyMatch(r -> !r.getResourceId().isBlank()
-                                   && tCardByResourceId.containsKey(r.getResourceId()));
-            if (hasCardOnBoard) {
-                byTask.computeIfAbsent(taskId, k -> new ArrayList<>());
+        // In the "Assigned" column only: add a phantom group for tasks whose resources are
+        // currently in another column (e.g. "Out of Service") so busy-indicator cards can be
+        // rendered.  This must not run for the "Available" column — doing so would cause every
+        // task that has any board presence to appear in both Available and Assigned columns.
+        if (isAssignedColumn) {
+            for (Map.Entry<String, SarTaskAssignment> taskEntry : sarTaskByAssignmentId.entrySet()) {
+                String taskId = taskEntry.getKey();
+                if (byTask.containsKey(taskId)) continue; // already present (has cards in this column)
+                SarTaskAssignment task = taskEntry.getValue();
+                if (task == null) continue;
+                List<SarTaskResource> res = task.getResourcesAssigned();
+                if (res == null || res.isEmpty()) continue;
+                boolean hasCardOnBoard = res.stream()
+                        .anyMatch(r -> !r.getResourceId().isBlank()
+                                       && tCardByResourceId.containsKey(r.getResourceId()));
+                if (hasCardOnBoard) {
+                    byTask.computeIfAbsent(taskId, k -> new ArrayList<>());
+                }
             }
         }
 

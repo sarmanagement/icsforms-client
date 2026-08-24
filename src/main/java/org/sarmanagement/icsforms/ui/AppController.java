@@ -1453,20 +1453,38 @@ public class AppController {
             existingResources.add(lead);
             return;
         }
-        existingResources.get(0).setFunction(lead.getFunction());
-        existingResources.get(0).setIcsPosition(lead.getIcsPosition());
-        existingResources.get(0).setHomeAgency(lead.getHomeAgency());
+        // Find the existing resource that matches the scaffold leader by UUID or name so that
+        // leader-derived fields are only applied to the correct person, not to a canine or
+        // equipment resource that happens to be first in the list.
+        String leadId   = safe(lead.getResourceId());
+        String leadName = safe(lead.getName()).trim().toLowerCase();
+        SarTaskResource target = null;
+        for (SarTaskResource res : existingResources) {
+            if (!leadId.isBlank() && leadId.equals(safe(res.getResourceId()))) {
+                target = res;
+                break;
+            }
+            if (leadId.isBlank() && !leadName.isBlank()
+                    && leadName.equals(safe(res.getName()).trim().toLowerCase())) {
+                target = res;
+                break;
+            }
+        }
+        if (target == null) {
+            // No matching resource found — do not overwrite unrelated resources.
+            return;
+        }
+        target.setFunction(lead.getFunction());
+        target.setIcsPosition(lead.getIcsPosition());
+        target.setHomeAgency(lead.getHomeAgency());
         // Only overwrite the name from the ICS 204 scaffold when the existing resource does
-        // not already carry a UUID link to a canonical TCard.  When a UUID link is present,
-        // syncTCards() will propagate the canonical display label after this method returns,
-        // so overwriting here would clobber name edits made via the TCard editor.
-        if (existingResources.get(0).getResourceId().isBlank()) {
-            existingResources.get(0).setName(lead.getName());
+        // not already carry a UUID link to a canonical TCard.
+        if (target.getResourceId().isBlank()) {
+            target.setName(lead.getName());
         }
         // Back-fill the UUID from the existing resource so the scaffold carries it forward.
-        if (!existingResources.get(0).getResourceId().isBlank()
-                && lead.getResourceId().isBlank()) {
-            lead.setResourceId(existingResources.get(0).getResourceId());
+        if (!target.getResourceId().isBlank() && lead.getResourceId().isBlank()) {
+            lead.setResourceId(target.getResourceId());
         }
     }
 

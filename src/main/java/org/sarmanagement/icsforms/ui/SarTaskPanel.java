@@ -237,7 +237,11 @@ public class SarTaskPanel extends JPanel {
         board.add(buildBoardColumn("Returned (not debriefed)", new Color(144, 238, 144), returned));
         board.add(buildBoardColumn("Completed", new Color(200, 200, 200), completed));
 
-        boardScroll.setViewportView(board);
+        // Wrap in a BorderLayout.NORTH so the board stretches to the full viewport width
+        // without requiring each column to declare a fixed preferred width.
+        JPanel boardWrapper = new JPanel(new BorderLayout());
+        boardWrapper.add(board, BorderLayout.NORTH);
+        boardScroll.setViewportView(boardWrapper);
         boardScroll.revalidate();
         boardScroll.repaint();
     }
