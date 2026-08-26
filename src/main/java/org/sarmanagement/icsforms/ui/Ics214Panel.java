@@ -448,15 +448,13 @@ public class Ics214Panel extends JPanel {
      *       possible-duplicate checkbox.</li>
      *   <li>Management 214 (ICP / assignment-list): detecting resource is chosen from a
      *       picklist of task-linked 214 forms; possible-duplicate checkbox is shown.</li>
-     *   <li>CLUE_REPORTED: the follow-up field is hidden (follow-up belongs to the detecting
-     *       resource's own log, not the reporter's).</li>
      * </ul>
+     * <p>Follow-up is not captured in this dialog; it is entered directly in the clue log grid.</p>
      *
      * @param sourceEntry the activity log entry that triggered clue capture.
      * @param eventTypeId the event type identifier ({@code CLUE_DETECTED} or {@code CLUE_REPORTED}).
      */
     private void captureClue(ActivityLogEntry sourceEntry, String eventTypeId) {
-        boolean isClueReported = ActivityEventType.ID_CLUE_REPORTED.equals(eventTypeId);
         boolean isResourceLog = currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT;
 
         JPanel form = UiSupport.formPanel();
@@ -477,13 +475,11 @@ public class Ics214Panel extends JPanel {
             detectingResourceCombo = new JComboBox<>(items);
         }
 
-        // Follow-up: hidden for CLUE_REPORTED (belongs to the detecting resource's own log).
-        JTextArea followUpArea = isClueReported ? null : UiSupport.textArea(2);
-
         // Possible duplicate: shown only for management 214.
         JCheckBox possibleDuplicateCheck = null;
         if (!isResourceLog) {
             possibleDuplicateCheck = new JCheckBox("Possible duplicate (detecting resource may have already logged this clue)");
+            boolean isClueReported = ActivityEventType.ID_CLUE_REPORTED.equals(eventTypeId);
             possibleDuplicateCheck.setSelected(isClueReported);
         }
 
@@ -496,16 +492,13 @@ public class Ics214Panel extends JPanel {
         UiSupport.addRow(form, row++, "Location / position", locationField);
         UiSupport.addRow(form, row++, "Description", new JScrollPane(descriptionArea));
         UiSupport.addRow(form, row++, "Immediate action taken", new JScrollPane(immediateActionArea));
-        if (followUpArea != null) {
-            UiSupport.addRow(form, row++, "Follow-up required", new JScrollPane(followUpArea));
-        }
         if (possibleDuplicateCheck != null) {
             UiSupport.addRow(form, row++, "", possibleDuplicateCheck);
         }
 
         JScrollPane scrollPane = new JScrollPane(form);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        int dialogHeight = 340 + (followUpArea != null ? 60 : 0) + (possibleDuplicateCheck != null ? 30 : 0);
+        int dialogHeight = 310 + (possibleDuplicateCheck != null ? 30 : 0);
         if (!UiSupport.showResizableConfirmDialog(this, "Capture clue details", scrollPane, new Dimension(640, dialogHeight))) {
             return;
         }
@@ -534,7 +527,6 @@ public class Ics214Panel extends JPanel {
         clue.setLocation(locationField.getText().trim());
         clue.setDescription(descriptionArea.getText().trim());
         clue.setImmediateAction(immediateActionArea.getText().trim());
-        clue.setFollowUp(followUpArea != null ? followUpArea.getText().trim() : "");
         clue.setPossibleDuplicate(possibleDuplicateCheck != null && possibleDuplicateCheck.isSelected());
         String taskId = currentForm.getLinkedSarTaskAssignmentId();
         if (taskId != null && !taskId.isBlank()) {

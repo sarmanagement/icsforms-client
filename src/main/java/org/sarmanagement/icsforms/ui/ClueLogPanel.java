@@ -104,7 +104,6 @@ public class ClueLogPanel extends JPanel {
         JTextField locationField = UiSupport.textField();
         JTextArea descriptionArea = UiSupport.textArea(3);
         JTextArea immediateActionArea = UiSupport.textArea(2);
-        JTextArea followUpArea = UiSupport.textArea(2);
         JCheckBox possibleDuplicateCheck = new JCheckBox("Possible duplicate");
 
         int row = 0;
@@ -113,12 +112,11 @@ public class ClueLogPanel extends JPanel {
         UiSupport.addRow(form, row++, "Location / position", locationField);
         UiSupport.addRow(form, row++, "Description", new JScrollPane(descriptionArea));
         UiSupport.addRow(form, row++, "Immediate action taken", new JScrollPane(immediateActionArea));
-        UiSupport.addRow(form, row++, "Follow-up required", new JScrollPane(followUpArea));
         UiSupport.addRow(form, row, "", possibleDuplicateCheck);
 
         JScrollPane scrollPane = new JScrollPane(form);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, "Add Clue", scrollPane, new Dimension(640, 420))) {
+        if (!UiSupport.showResizableConfirmDialog(this, "Add Clue", scrollPane, new Dimension(640, 370))) {
             return;
         }
 
@@ -149,7 +147,6 @@ public class ClueLogPanel extends JPanel {
         clue.setLocation(locationField.getText().trim());
         clue.setDescription(descriptionArea.getText().trim());
         clue.setImmediateAction(immediateActionArea.getText().trim());
-        clue.setFollowUp(followUpArea.getText().trim());
         clue.setPossibleDuplicate(possibleDuplicateCheck.isSelected());
 
         tableModel.addRow(clue);
