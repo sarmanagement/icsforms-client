@@ -1,18 +1,26 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,13 +48,81 @@ public class ClueLogPanel extends JPanel {
         JButton findDuplicates = new JButton("Find Duplicates…");
         JButton syncToLogs = new JButton("Sync to Activity Logs");
         syncToLogs.setToolTipText("Propagate clues with an assigned task to their linked ICS 214 activity logs");
-        add.addActionListener(event -> tableModel.addRow());
+        add.addActionListener(event -> addClueDialog());
         findDuplicates.addActionListener(event -> findAndResolveDuplicates());
         syncToLogs.addActionListener(event -> syncClueLogToActivityLogs());
         buttons.add(add);
         buttons.add(findDuplicates);
         buttons.add(syncToLogs);
         add(buttons, BorderLayout.SOUTH);
+    }
+
+    /** Opens a dialog to enter clue details and adds the new entry to the log. */
+    private void addClueDialog() {
+        // Build a picklist of task names/numbers from all SAR task assignments.
+        List<String> taskNames = new ArrayList<>();
+        if (controller.getData().getSarTaskAssignments() != null) {
+            for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
+                String label = UiSupport.taskLabel(t);
+                if (!label.isBlank() && !taskNames.contains(label)) {
+                    taskNames.add(label);
+                }
+            }
+        }
+
+        JPanel form = UiSupport.formPanel();
+        String[] taskItems = taskNames.isEmpty() ? new String[]{""} : taskNames.toArray(new String[0]);
+        javax.swing.JComboBox<String> taskCombo = new javax.swing.JComboBox<>(taskItems);
+        taskCombo.setEditable(true);
+        JSpinner dateTimeSpinner = UiSupport.dateTimeSpinner();
+        JTextField locationField = UiSupport.textField();
+        JTextArea descriptionArea = UiSupport.textArea(3);
+        JTextArea immediateActionArea = UiSupport.textArea(2);
+        JTextArea followUpArea = UiSupport.textArea(2);
+        JCheckBox possibleDuplicateCheck = new JCheckBox("Possible duplicate");
+
+        int row = 0;
+        UiSupport.addRow(form, row++, "Detecting task", taskCombo);
+        UiSupport.addRow(form, row++, "Date/time collected", dateTimeSpinner);
+        UiSupport.addRow(form, row++, "Location / position", locationField);
+        UiSupport.addRow(form, row++, "Description", new JScrollPane(descriptionArea));
+        UiSupport.addRow(form, row++, "Immediate action taken", new JScrollPane(immediateActionArea));
+        UiSupport.addRow(form, row++, "Follow-up required", new JScrollPane(followUpArea));
+        UiSupport.addRow(form, row, "", possibleDuplicateCheck);
+
+        JScrollPane scrollPane = new JScrollPane(form);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        if (!UiSupport.showResizableConfirmDialog(this, "Add Clue", scrollPane, new Dimension(640, 420))) {
+            return;
+        }
+
+        ClueLogEntry clue = new ClueLogEntry();
+        Object spinnerValue = dateTimeSpinner.getValue();
+        if (spinnerValue instanceof Date) {
+            clue.setDateTimeCollected(((Date) spinnerValue).toInstant()
+                    .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
+        } else {
+            clue.setDateTimeCollected(LocalDateTime.now());
+        }
+        Object selectedTask = taskCombo.getSelectedItem();
+        clue.setDetectingTask(selectedTask != null ? selectedTask.toString().trim() : "");
+        // Link the assignmentId if we can match the label back to a known task.
+        if (controller.getData().getSarTaskAssignments() != null) {
+            for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
+                if (UiSupport.taskLabel(t).equals(clue.getDetectingTask())) {
+                    clue.setAssignmentId(t.getAssignmentId());
+                    break;
+                }
+            }
+        }
+        clue.setLocation(locationField.getText().trim());
+        clue.setDescription(descriptionArea.getText().trim());
+        clue.setImmediateAction(immediateActionArea.getText().trim());
+        clue.setFollowUp(followUpArea.getText().trim());
+        clue.setPossibleDuplicate(possibleDuplicateCheck.isSelected());
+
+        tableModel.addRow(clue);
+        controller.markDirty();
     }
 
     public void refreshFromModel() {
@@ -140,6 +216,11 @@ public class ClueLogPanel extends JPanel {
 
         List<ClueLogEntry> getRows() {
             return rows;
+        }
+
+        void addRow(ClueLogEntry entry) {
+            rows.add(entry);
+            fireTableRowsInserted(rows.size() - 1, rows.size() - 1);
         }
 
         void addRow() {

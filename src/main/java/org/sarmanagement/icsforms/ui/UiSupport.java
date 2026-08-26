@@ -34,6 +34,8 @@ import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
+
 /**
  * Shared Swing layout helpers for compact form editing panels.
  */
@@ -363,5 +365,21 @@ final class UiSupport {
         dialog.setLocationRelativeTo(nameField);
         filterField.requestFocusInWindow();
         dialog.setVisible(true);
+    }
+
+    /**
+     * Returns a human-readable label for a SAR task assignment, combining the team number and
+     * assignment name when both are available.  Used in picklists and dialogs.
+     *
+     * @param task the assignment to label.
+     * @return a non-null label string (may be empty if neither field is set).
+     */
+    static String taskLabel(SarTaskAssignment task) {
+        String number = task.getAssignmentTeamNumber() != null ? task.getAssignmentTeamNumber().trim() : "";
+        String name = task.getAssignment() != null ? task.getAssignment().trim() : "";
+        if (!number.isBlank() && !name.isBlank()) {
+            return number + " – " + name;
+        }
+        return !number.isBlank() ? number : name;
     }
 }

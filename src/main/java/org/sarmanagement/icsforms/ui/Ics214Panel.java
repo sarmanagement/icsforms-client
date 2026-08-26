@@ -10,6 +10,7 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -31,6 +32,8 @@ import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
@@ -329,27 +332,33 @@ public class Ics214Panel extends JPanel {
         saveToModel();
         String title = "ICS 214 – " + (currentForm.getName().isBlank() ? "Activity Log" : currentForm.getName());
         JFrame frame = new JFrame(title);
-        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         Ics214Panel popOut = new Ics214Panel(controller);
         popOut.loadFromModel(currentForm, currentData);
-        JButton saveBtn = new JButton("Save");
-        saveBtn.addActionListener(e -> {
+
+        // Single Close button — saves changes and closes the window.
+        JButton closeBtn = new JButton("Close");
+        closeBtn.addActionListener(e -> {
             popOut.saveToModel();
             controller.markDirty();
-            // Reload the embedded panel so edits from the pop-out are visible if the tab is
-            // still showing the same form.
-            loadFromModel(currentForm, currentData);
-        });
-        JButton saveCloseBtn = new JButton("Save & Close");
-        saveCloseBtn.addActionListener(e -> {
-            popOut.saveToModel();
-            controller.markDirty();
+            // Reload the embedded panel so edits from the pop-out are visible.
             loadFromModel(currentForm, currentData);
             frame.dispose();
         });
+
+        // Also save when the user dismisses with the OS window-close button.
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                popOut.saveToModel();
+                controller.markDirty();
+                loadFromModel(currentForm, currentData);
+                frame.dispose();
+            }
+        });
+
         JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        btnRow.add(saveBtn);
-        btnRow.add(saveCloseBtn);
+        btnRow.add(closeBtn);
         frame.getContentPane().setLayout(new BorderLayout());
         frame.getContentPane().add(popOut, BorderLayout.CENTER);
         frame.getContentPane().add(btnRow, BorderLayout.SOUTH);
@@ -364,11 +373,21 @@ public class Ics214Panel extends JPanel {
         }
         List<ActivityEventType> types = resolvedEventTypes();
 
-        // Build picklist: resources assigned to this 214 + all known personnel names.
+        // Build picklist: SAR task names/numbers first, then personnel resource names.
         // For ICP-scope logs the default selection is blank; for task-linked logs the
         // primary/first resource name is pre-selected.
         List<String> picklist = new ArrayList<>();
         String defaultResource = "";
+        // 1. Assigned tasks by team number / name.
+        if (currentData != null && currentData.getSarTaskAssignments() != null) {
+            for (SarTaskAssignment t : currentData.getSarTaskAssignments()) {
+                String label = UiSupport.taskLabel(t);
+                if (!label.isBlank() && !picklist.contains(label)) {
+                    picklist.add(label);
+                }
+            }
+        }
+        // 2. Resources assigned to this 214 form.
         if (currentForm.getResourcesAssigned() != null) {
             for (SarTaskResource r : currentForm.getResourcesAssigned()) {
                 String n = r.getName();
@@ -377,13 +396,20 @@ public class Ics214Panel extends JPanel {
                 }
             }
         }
+        // 3. TCard names — personnel first, then other resource types.
         if (currentData != null) {
+            List<String> otherCardNames = new ArrayList<>();
             for (org.sarmanagement.icsforms.model.TCard card : currentData.getTCards()) {
                 String n = card.getPersonName().isBlank() ? card.getResourceIdentifier() : card.getPersonName();
                 if (!n.isBlank() && !picklist.contains(n)) {
-                    picklist.add(n);
+                    if (card.getCardType() == TCardType.PERSONNEL) {
+                        picklist.add(n);
+                    } else {
+                        otherCardNames.add(n);
+                    }
                 }
             }
+            picklist.addAll(otherCardNames);
         }
         if (currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT && !picklist.isEmpty()) {
             defaultResource = picklist.get(0);
