@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.TCardType;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -20,6 +21,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.ScrollPaneConstants;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
@@ -33,6 +35,7 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -87,7 +90,9 @@ public class SarTaskPanel extends JPanel {
     private static final String VIEW_BOARD = "board";
     private final CardLayout viewCardLayout = new CardLayout();
     private final JPanel viewContainer = new JPanel(viewCardLayout);
-    private final JScrollPane boardScroll = new JScrollPane();
+    private final JScrollPane boardScroll = new JScrollPane(
+            ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+            ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
     private final JButton toggleBoardBtn = new JButton("Board View");
     private String currentSarView = VIEW_TABLE;
 
@@ -140,11 +145,13 @@ public class SarTaskPanel extends JPanel {
         JButton addBtn     = new JButton("Add Task");
         JButton editBtn    = new JButton("Edit Assignment…");
         JButton debriefBtn = new JButton("Debrief…");
+        JButton markDebriefCompleteBtn = new JButton("Complete Debrief");
         JButton open214Btn = new JButton("Open ICS 214…");
         JButton removeBtn  = new JButton("Remove Task");
 
         editBtn.setEnabled(false);
         debriefBtn.setEnabled(false);
+        markDebriefCompleteBtn.setEnabled(false);
         open214Btn.setEnabled(false);
         removeBtn.setEnabled(false);
 
@@ -152,6 +159,7 @@ public class SarTaskPanel extends JPanel {
             boolean selected = table.getSelectedRow() >= 0;
             editBtn.setEnabled(selected);
             debriefBtn.setEnabled(selected);
+            markDebriefCompleteBtn.setEnabled(selected);
             open214Btn.setEnabled(selected && on214Request != null);
             removeBtn.setEnabled(selected);
         });
@@ -159,6 +167,7 @@ public class SarTaskPanel extends JPanel {
         addBtn.addActionListener(e -> addNewTask());
         editBtn.addActionListener(e -> openSelectedRowEditor(EditorMode.ASSIGNMENT));
         debriefBtn.addActionListener(e -> openSelectedRowEditor(EditorMode.DEBRIEFING));
+        markDebriefCompleteBtn.addActionListener(e -> markSelectedDebriefComplete());
         open214Btn.addActionListener(e -> openIcs214ForSelected());
         removeBtn.addActionListener(e -> removeSelectedTask());
         toggleBoardBtn.addActionListener(e -> toggleBoardView());
@@ -167,6 +176,7 @@ public class SarTaskPanel extends JPanel {
         row.add(addBtn);
         row.add(editBtn);
         row.add(debriefBtn);
+        row.add(markDebriefCompleteBtn);
         row.add(open214Btn);
         row.add(removeBtn);
         row.add(toggleBoardBtn);
@@ -229,7 +239,21 @@ public class SarTaskPanel extends JPanel {
         board.add(buildBoardColumn("Returned (not debriefed)", new Color(144, 238, 144), returned));
         board.add(buildBoardColumn("Completed", new Color(200, 200, 200), completed));
 
-        boardScroll.setViewportView(board);
+        // Override getPreferredSize so the wrapper never exceeds the viewport width,
+        // allowing GridLayout to divide the available space into four equal columns.
+        JPanel boardWrapper = new JPanel(new BorderLayout()) {
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension d = super.getPreferredSize();
+                Container p = getParent();
+                if (p != null && p.getWidth() > 0) {
+                    return new Dimension(p.getWidth(), d.height);
+                }
+                return d;
+            }
+        };
+        boardWrapper.add(board, BorderLayout.NORTH);
+        boardScroll.setViewportView(boardWrapper);
         boardScroll.revalidate();
         boardScroll.repaint();
     }
@@ -243,6 +267,7 @@ public class SarTaskPanel extends JPanel {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(headerColor);
         header.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        header.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel titleLabel = new JLabel(title + " (" + tasks.size() + ")");
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
         header.add(titleLabel, BorderLayout.CENTER);
@@ -368,7 +393,8 @@ public class SarTaskPanel extends JPanel {
                 controller.getData().getClueLogEntries(), 1,
                 handlerName -> controller.findEquipmentForHandler(handlerName),
                 controller.getAvailableResourceNames(),
-                controller.getAvailableTCards());
+                controller.getAvailableTCards(),
+                controller.getOnTaskResourceIds());
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(this, "Add SAR Task", scrollPane,
@@ -465,6 +491,30 @@ public class SarTaskPanel extends JPanel {
         }
     }
 
+    /** Validates and marks the selected task's debriefing as complete (item 12). */
+    private void markSelectedDebriefComplete() {
+        int viewRow = table.getSelectedRow();
+        if (viewRow < 0) {
+            return;
+        }
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        if (modelRow < 0 || modelRow >= tableModel.getRows().size()) {
+            return;
+        }
+        SarTaskAssignment task = tableModel.getRows().get(modelRow);
+        List<String> errors = controller.markDebriefingComplete(task);
+        if (!errors.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    String.join("\n", errors),
+                    "Cannot Complete Debrief", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        tableModel.fireTableRowsUpdated(modelRow, modelRow);
+        JOptionPane.showMessageDialog(this,
+                "Debriefing marked as complete.",
+                "Debrief Complete", JOptionPane.INFORMATION_MESSAGE);
+    }
+
     static String formatDateTimeValue(LocalDateTime value) {
         return value == null ? "" : DATE_TIME_FORMATTER.format(value);
     }
@@ -540,11 +590,13 @@ public class SarTaskPanel extends JPanel {
             table.getCellEditor().stopCellEditing();
         }
         SarTaskAssignment row = tableModel.getRows().get(rowIndex);
+        String previousLifecycleStatus = row.getTaskLifecycleStatus();
         SarTaskEditor editor = new SarTaskEditor(row, mode, controller.getData().getClueLogEntries(),
                 defaultResourceEditorRowCount(row),
                 handlerName -> controller.findEquipmentForHandler(handlerName),
                 controller.getAvailableResourceNames(),
-                controller.getAvailableTCards());
+                controller.getAvailableTCards(),
+                controller.getOnTaskResourceIds());
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         String title = mode.dialogTitle(row.getAssignmentTeamNumber());
@@ -553,6 +605,11 @@ public class SarTaskPanel extends JPanel {
             return;
         }
         controller.getData().setClueLogEntries(editor.applyTo(row, controller.getData().getClueLogEntries()));
+        // Wire item 3: notify linked ICS 214 log when lifecycle status changes.
+        String newLifecycleStatus = row.getTaskLifecycleStatus();
+        if (!java.util.Objects.equals(previousLifecycleStatus, newLifecycleStatus)) {
+            controller.recordTaskLifecycleTransition(row, newLifecycleStatus);
+        }
         if (mode == EditorMode.ASSIGNMENT) {
             updateLinkedResourcePersonCount(row, editor.resourceCount());
         }
@@ -665,6 +722,7 @@ public class SarTaskPanel extends JPanel {
                                               int minimumRows, List<String> availableNames,
                                               List<String> canineNamesFirst,
                                               List<TCard> availableTCards,
+                                              Set<String> onTaskResourceIds,
                                               java.awt.Component parentComponent) {
         model.setRows(editableResources(row, canineNamesFirst), minimumRows);
         JTable table = new JTable(model);
@@ -701,8 +759,7 @@ public class SarTaskPanel extends JPanel {
             if (table.isEditing() && table.getCellEditor() != null) {
                 table.getCellEditor().stopCellEditing();
             }
-            List<SarTaskResource> picked = showResourcePickerDialog(parentComponent, availableTCards);
-            if (picked != null) {
+            List<SarTaskResource> picked = showResourcePickerDialog(parentComponent, availableTCards, onTaskResourceIds);            if (picked != null) {
                 for (SarTaskResource res : picked) {
                     model.addRow(res);
                 }
@@ -733,51 +790,74 @@ public class SarTaskPanel extends JPanel {
     /**
      * Opens a dialog to pick one or more T-card resources or manually enter a new one.
      *
-     * <p>Only resources whose location is {@code "Available"} are shown in the picker table so
-     * the user cannot inadvertently double-assign an already-assigned or out-of-service resource.
-     * Multiple rows may be selected using the standard Ctrl/Shift click conventions; all selected
-     * cards are added to the task in a single action.</p>
+     * <p>By default only resources that are not currently committed to an active ("On Task")
+     * assignment are shown.  A "Show all resources" checkbox reveals all T-cards so that a
+     * subsequent task can be planned for resources still on task.  Multiple rows may be selected
+     * using the standard Ctrl/Shift click conventions; all selected cards are added to the task
+     * in a single action.</p>
      *
-     * @param parent          parent component for the dialog.
-     * @param availableTCards full list of T-cards (filtered internally to "Available").
+     * @param parent             parent component for the dialog.
+     * @param availableTCards    full list of T-cards (filtered internally based on the checkbox).
+     * @param onTaskResourceIds  set of resource IDs currently committed to an active task;
+     *                           cards with these IDs are hidden in the default (non-show-all) view.
      * @return a non-empty list of populated {@link SarTaskResource} objects, or {@code null} if
      *         the user cancelled or made no valid selection.
      */
-    private static List<SarTaskResource> showResourcePickerDialog(java.awt.Component parent, List<TCard> availableTCards) {
-        // Filter to only "Available" resources so we don't double-assign.
-        List<TCard> cardList = (availableTCards == null ? List.<TCard>of() : availableTCards)
-                .stream()
-                .filter(c -> "Available".equalsIgnoreCase(c.getLocation()))
-                .collect(java.util.stream.Collectors.toList());
+    private static List<SarTaskResource> showResourcePickerDialog(java.awt.Component parent,
+                                                                  List<TCard> availableTCards,
+                                                                  Set<String> onTaskResourceIds) {
+        List<TCard> allCards = availableTCards == null ? List.<TCard>of() : availableTCards;
+        Set<String> busyIds = onTaskResourceIds == null ? Set.of() : onTaskResourceIds;
 
         // Build a table model for the T-card picker.
-        String[] cols = {"Type", "Name / Identifier", "Agency", "Status"};
+        String[] cols = {"Type", "Name / Identifier", "Agency", "Location", "Status"};
         javax.swing.table.DefaultTableModel pickerModel = new javax.swing.table.DefaultTableModel(cols, 0) {
             @Override
-            public boolean isCellEditable(int row, int col) { return false; }
+            public boolean isCellEditable(int r, int c) { return false; }
         };
-        for (TCard card : cardList) {
-            String effectiveName = card.getCardType() != TCardType.PERSONNEL
-                    ? card.getResourceIdentifier().trim()
-                    : card.getPersonName().trim();
-            pickerModel.addRow(new Object[]{
-                    card.getCardType() == null ? TCardType.PERSONNEL.getLabel() : card.getCardType().getLabel(),
-                    effectiveName,
-                    card.getHomeAgency() == null ? "" : card.getHomeAgency().trim(),
-                    card.getStatus() == null ? "" : card.getStatus().trim()
-            });
-        }
+
+        // currentCardList tracks which cards are currently shown so row indices stay valid.
+        java.util.concurrent.atomic.AtomicReference<List<TCard>> currentCardList =
+                new java.util.concurrent.atomic.AtomicReference<>(new ArrayList<>(allCards));
+
+        java.util.function.Consumer<Boolean> rebuildModel = (showAll) -> {
+            pickerModel.setRowCount(0);
+            List<TCard> filtered = showAll
+                    ? new ArrayList<>(allCards)
+                    : allCards.stream()
+                            .filter(c -> c.getResourceId().isBlank() || !busyIds.contains(c.getResourceId()))
+                            .collect(java.util.stream.Collectors.toList());
+            currentCardList.set(filtered);
+            for (TCard card : filtered) {
+                String effectiveName = card.getCardType() != TCardType.PERSONNEL
+                        ? card.getResourceIdentifier().trim()
+                        : card.getPersonName().trim();
+                pickerModel.addRow(new Object[]{
+                        card.getCardType() == null ? TCardType.PERSONNEL.getLabel() : card.getCardType().getLabel(),
+                        effectiveName,
+                        card.getHomeAgency() == null ? "" : card.getHomeAgency().trim(),
+                        card.getLocation() == null ? "" : card.getLocation().trim(),
+                        card.getStatus() == null ? "" : card.getStatus().trim()
+                });
+            }
+        };
+        rebuildModel.accept(false);
 
         JTable pickerTable = new JTable(pickerModel);
         pickerTable.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         pickerTable.getTableHeader().setReorderingAllowed(false);
         JScrollPane pickerScroll = new JScrollPane(pickerTable);
-        pickerScroll.setPreferredSize(new Dimension(480, 220));
+        pickerScroll.setPreferredSize(new Dimension(520, 220));
 
-        JLabel hint = new JLabel(cardList.isEmpty()
-                ? "No resources are currently in the \"Available\" column."
-                : "Select one or more resources (Ctrl/Shift+click for multiple):");
+        JLabel hint = new JLabel("Select one or more resources (Ctrl/Shift+click for multiple):");
         hint.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 2, 0));
+
+        JCheckBox showAllCheckBox = new JCheckBox("Show all resources (including those currently on task)");
+        showAllCheckBox.addActionListener(e -> rebuildModel.accept(showAllCheckBox.isSelected()));
+
+        JPanel topPanel = new JPanel(new BorderLayout(0, 2));
+        topPanel.add(hint, BorderLayout.NORTH);
+        topPanel.add(showAllCheckBox, BorderLayout.SOUTH);
 
         // Manual-entry fields shown below the table for creating a new resource.
         JTextField manualNameField = new JTextField(16);
@@ -797,7 +877,7 @@ public class SarTaskPanel extends JPanel {
         manualPanel.add(manualFunctionField);
 
         JPanel dialogPanel = new JPanel(new BorderLayout(0, 6));
-        dialogPanel.add(hint, BorderLayout.NORTH);
+        dialogPanel.add(topPanel, BorderLayout.NORTH);
         dialogPanel.add(pickerScroll, BorderLayout.CENTER);
         dialogPanel.add(manualPanel, BorderLayout.SOUTH);
 
@@ -806,6 +886,8 @@ public class SarTaskPanel extends JPanel {
         if (result != JOptionPane.OK_OPTION) {
             return null;
         }
+
+        List<TCard> cardList = currentCardList.get();
 
         // Build results from all selected table rows.
         int[] selectedRows = pickerTable.getSelectedRows();
@@ -1328,6 +1410,8 @@ public class SarTaskPanel extends JPanel {
         private final JScrollPane areasNotCoveredField;
         private final JScrollPane hazardsObservedField;
         private final List<TCard> availableTCards;
+        /** Resource IDs of cards currently committed to an active ("On Task") SAR task. */
+        private final Set<String> onTaskResourceIds;
         /** Pre-built name→TCard lookup used by {@link #resourceCount()}. */
         private final java.util.Map<String, TCard> tCardByDisplayName;
 
@@ -1335,9 +1419,11 @@ public class SarTaskPanel extends JPanel {
                               int resourceRowCount,
                               java.util.function.Function<String, java.util.List<String>> canineForHandler,
                               List<String> availableResourceNames,
-                              List<TCard> availableTCards) {
+                              List<TCard> availableTCards,
+                              Set<String> onTaskResourceIds) {
             this.mode = mode;
             this.availableTCards = availableTCards == null ? List.of() : availableTCards;
+            this.onTaskResourceIds = onTaskResourceIds == null ? Set.of() : onTaskResourceIds;
             java.util.Map<String, TCard> nameMap = new java.util.HashMap<>();
             for (TCard tc : this.availableTCards) {
                 String key = tc.getDisplayLabel().trim().toLowerCase(java.util.Locale.ROOT);
@@ -1421,7 +1507,7 @@ public class SarTaskPanel extends JPanel {
                     : List.of();
             resourcesAssignedField = resourceEditorPanel(row, resourceEntryTableModel, resourceRowCount,
                     availableResourceNames, leaderCanines == null ? List.of() : leaderCanines,
-                    availableTCards, panel);
+                    availableTCards, onTaskResourceIds, panel);
             assignmentField = textArea(row.getAssignment(), 3, true);
             transportationField = textArea(row.getTransportationInstructions(), 2, true);
             taskMapField = textField(row.getTaskMap(), true, 14);

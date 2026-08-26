@@ -28,9 +28,10 @@ class ClueLogPanelTest {
         ClueLogPanel panel = new ClueLogPanel(sampleController());
         JPanel buttons = (JPanel) panel.getComponent(1);
 
-        assertEquals(2, buttons.getComponentCount());
+        assertEquals(3, buttons.getComponentCount());
         assertEquals("Add", ((JButton) buttons.getComponent(0)).getText());
         assertEquals("Find Duplicates\u2026", ((JButton) buttons.getComponent(1)).getText());
+        assertEquals("Sync to Activity Logs", ((JButton) buttons.getComponent(2)).getText());
     }
 
     private static AppController sampleController() throws Exception {

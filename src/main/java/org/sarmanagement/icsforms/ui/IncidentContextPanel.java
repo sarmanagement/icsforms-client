@@ -2,12 +2,16 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
@@ -80,7 +84,16 @@ public class IncidentContextPanel extends JPanel {
         UiSupport.addRow(editForm, 1, "Operational period start", startField);
         UiSupport.addRow(editForm, 2, "Operational period end", endField);
         UiSupport.addRow(editForm, 3, "Task map / CalTopo id", taskMapField);
-        UiSupport.addRow(editForm, 4, "Preparer / current user", currentUserField);
+
+        // Preparer / current user — plain text entry with an optional person picker.
+        JPanel userRow = new JPanel(new BorderLayout(4, 0));
+        userRow.setOpaque(false);
+        userRow.add(currentUserField, BorderLayout.CENTER);
+        JButton pickUserButton = new JButton("Pick…");
+        pickUserButton.setToolTipText("Select from known personnel (T-cards)");
+        pickUserButton.addActionListener(e -> pickCurrentUser());
+        userRow.add(pickUserButton, BorderLayout.EAST);
+        UiSupport.addRow(editForm, 4, "Preparer / current user", userRow);
         UiSupport.addRow(editForm, 5, "Preparer position/title", currentUserPositionCombo);
 
         // --- Operational period history table ---
@@ -146,6 +159,71 @@ public class IncidentContextPanel extends JPanel {
                 formatDateTime(context.getOperationalPeriodEnd()),
                 currentIcs.isEmpty() ? "(current)" : String.join("; ", currentIcs) + " (current)"
         });
+    }
+
+    /**
+     * Shows a picker dialog listing all PERSONNEL T-cards so the operator can
+     * select the current user/preparer rather than typing the name manually.
+     * The text field remains editable so a name not in the list can still be entered.
+     */
+    private void pickCurrentUser() {
+        List<TCard> cards = controller.getData().getTCards();
+        if (cards == null || cards.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "No T-card resources found. Enter the name manually.",
+                    "Pick Person", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        List<TCard> personnel = cards.stream()
+                .filter(c -> c.getCardType() == TCardType.PERSONNEL && !c.getPersonName().isBlank())
+                .collect(java.util.stream.Collectors.toList());
+        if (personnel.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "No personnel T-cards found. Enter the name manually.",
+                    "Pick Person", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        TCard[] cardArray = personnel.toArray(new TCard[0]);
+        JComboBox<TCard> combo = new JComboBox<>(cardArray);
+        javax.swing.DefaultListCellRenderer renderer = new javax.swing.DefaultListCellRenderer() {
+            @Override
+            public java.awt.Component getListCellRendererComponent(
+                    javax.swing.JList<?> list, Object value, int index,
+                    boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                setText(value instanceof TCard tc ? personDisplayName(tc) : "");
+                return this;
+            }
+        };
+        combo.setRenderer(renderer);
+        // Pre-select the card whose name matches the current field value, if any.
+        String existing = currentUserField.getText().trim();
+        if (!existing.isBlank()) {
+            personnel.stream()
+                    .filter(c -> existing.equalsIgnoreCase(c.getPersonName()))
+                    .findFirst()
+                    .ifPresent(combo::setSelectedItem);
+        }
+        int result = JOptionPane.showConfirmDialog(this, combo,
+                "Select preparer / current user", JOptionPane.OK_CANCEL_OPTION);
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
+        TCard selected = (TCard) combo.getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+        currentUserField.setText(selected.getPersonName());
+        controller.markDirty();
+    }
+
+    private static String personDisplayName(TCard card) {
+        if (card == null) return "";
+        String agency = card.getHomeAgency();
+        if (agency != null && !agency.isBlank()) {
+            return card.getPersonName() + " (" + agency + ")";
+        }
+        return card.getPersonName();
     }
 
     /**

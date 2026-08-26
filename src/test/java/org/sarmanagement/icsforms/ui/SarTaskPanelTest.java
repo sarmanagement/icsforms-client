@@ -37,6 +37,7 @@ import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -287,9 +288,9 @@ class SarTaskPanelTest {
         Class<?> editorClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$SarTaskEditor");
         Class<?> modeClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$EditorMode");
         Object mode = enumConstant(modeClass, modeName);
-        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass, List.class, int.class, java.util.function.Function.class, List.class, List.class);
+        Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass, List.class, int.class, java.util.function.Function.class, List.class, List.class, Set.class);
         constructor.setAccessible(true);
-        return constructor.newInstance(task, mode, List.of(), resourceRows, null, List.of(), List.of());
+        return constructor.newInstance(task, mode, List.of(), resourceRows, null, List.of(), List.of(), Set.of());
     }
 
     private static Object enumConstant(Class<?> enumClass, String name) {

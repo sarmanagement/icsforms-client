@@ -19,6 +19,12 @@ import java.util.List;
 public class Ics214Form {
     private String linkedIcs204FormId = "";
     private String linkedSarTaskAssignmentId = "";
+    /**
+     * Stable UUID of the {@link org.sarmanagement.icsforms.model.TCard} linked to section 3
+     * (Name) of this form.  When set, {@link #homeAgency} and {@link #icsPosition} are
+     * resolved from the canonical resource on load so role and home agency stay in sync.
+     */
+    private String linkedResourceId = "";
     private String name = "";
     private String icsPosition = "";
     private String homeAgency = "";
@@ -113,6 +119,25 @@ public class Ics214Form {
      */
     public void setName(String name) {
         this.name = name == null ? "" : name;
+    }
+
+    /**
+     * Returns the stable UUID of the {@link org.sarmanagement.icsforms.model.TCard} linked to
+     * section 3 (Name) of this form, or blank when not linked.
+     *
+     * @return linked resource UUID, never {@code null}.
+     */
+    public String getLinkedResourceId() {
+        return linkedResourceId == null ? "" : linkedResourceId;
+    }
+
+    /**
+     * Sets the stable UUID of the resource linked to section 3 (Name).
+     *
+     * @param linkedResourceId resource UUID; {@code null} treated as blank.
+     */
+    public void setLinkedResourceId(String linkedResourceId) {
+        this.linkedResourceId = linkedResourceId == null ? "" : linkedResourceId;
     }
 
     /**

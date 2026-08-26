@@ -32,7 +32,6 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     private static final float HEADING_FONT_SIZE = 10f;
     private static final float LINE_HEIGHT = 12f;
     private static final float CELL_PADDING = 4f;
-    private static final int RESOURCE_ROW_COUNT = 4;
 
     /** {@inheritDoc} */
     @Override
@@ -62,14 +61,17 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             for (int pageIndex = 0; pageIndex < totalPages; pageIndex++) {
                 int startIndex = pageIndex * rowsPerPage;
                 int endIndex = Math.min(form.getActivityLog().size(), startIndex + rowsPerPage);
-                renderPage(document, context, form, eventTypes, form.getActivityLog().subList(startIndex, endIndex), pageIndex + 1, totalPages);
+                boolean isFirstPage = pageIndex == 0;
+                renderPage(document, context, form, eventTypes,
+                        form.getActivityLog().subList(startIndex, endIndex),
+                        pageIndex + 1, totalPages, isFirstPage);
             }
         }
     }
 
     private void renderPage(PDDocument document, IncidentContext context, Ics214Form form,
                             List<ActivityEventType> eventTypes, List<ActivityLogEntry> entries,
-                            int pageNumber, int totalPages) throws IOException {
+                            int pageNumber, int totalPages, boolean isFirstPage) throws IOException {
         PDPage page = new PDPage(PDRectangle.LETTER);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
@@ -82,12 +84,27 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
             float gridTop = layout.top();
             float pageWidth = layout.width();
-            float[] rows = expandRowToFill(layout.height(), 3, 60f, 62f, 92f, 320f, 84f);
+
+            // Resources section appears only on the first page and expands to fit all
+            // assigned resources.  Subsequent pages omit it and reallocate that height
+            // to the activity log section.
+            List<SarTaskResource> resources = isFirstPage ? form.getResourcesAssigned() : List.of();
+            int resourceRowCount = resources == null ? 0 : resources.size();
+            // Minimum height: section heading (18) + column header (24) + one blank row (18).
+            // Preferred row height is 18 (font size 10 + 2 × cell padding 4).
+            float minResourcesSectionHeight = 18f + 24f + Math.max(1, resourceRowCount) * 18f;
+            float resourcesSectionHeight = isFirstPage ? minResourcesSectionHeight : 0f;
+
+            // Let expandRowToFill handle the proportional distribution of the page height
+            // between the fixed sections.  When resources section is 0, the activity log
+            // section absorbs that space via expansion.
+            float[] rows = expandRowToFill(layout.height(), 3,
+                    60f, 62f, resourcesSectionHeight, 320f, 84f);
             float row1 = rows[0];
             float row2 = rows[1];
-            float row3 = rows[2];
-            float row4 = rows[3];
-            float row5 = rows[4];
+            float row3 = rows[2]; // resources section (0 on non-first pages)
+            float row4 = rows[3]; // activity log
+            float row5 = rows[4]; // prepared-by footer
 
             float y = gridTop;
             float halfWidth = pageWidth / 2f;
@@ -111,9 +128,11 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                     "5. Home Agency", List.of(safe(form.getHomeAgency())));
             y -= row2;
 
-            drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row3);
-            drawResourcesSection(stream, bold, regular, layout.x(), y - row3, pageWidth, row3, form.getResourcesAssigned());
-            y -= row3;
+            if (isFirstPage && row3 > 0) {
+                drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row3);
+                drawResourcesSection(stream, bold, regular, layout.x(), y - row3, pageWidth, row3, resources);
+                y -= row3;
+            }
 
             drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row4);
             drawActivityLogSection(stream, bold, regular, layout.x(), y - row4, pageWidth, row4, entries, eventTypes);
@@ -139,7 +158,10 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         float tableTop = y + height - 18f;
         float headerHeight = 24f;
         float headerBottom = tableTop - headerHeight;
-        float rowHeight = (headerBottom - y) / RESOURCE_ROW_COUNT;
+        int rowCount = resources == null ? 0 : resources.size();
+        // Minimum row height ensures text is always readable: BODY_FONT_SIZE + 2 × CELL_PADDING.
+        float rowHeight = Math.max(BODY_FONT_SIZE + CELL_PADDING * 2f,
+                rowCount > 0 ? (headerBottom - y) / rowCount : BODY_FONT_SIZE + CELL_PADDING * 2f);
         drawHorizontalLine(stream, x, x + width, tableTop);
         drawHorizontalLine(stream, x, x + width, headerBottom);
 
@@ -152,19 +174,17 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         writeWrappedCellText(stream, bold, starts[1], headerBottom, width * widths[1], headerHeight, List.of("ICS Position"));
         writeWrappedCellText(stream, bold, starts[2], headerBottom, width * widths[2], headerHeight, List.of("Home Agency"));
 
-        int visibleCount = Math.min(resources == null ? 0 : resources.size(), RESOURCE_ROW_COUNT);
-        for (int rowIndex = 0; rowIndex < RESOURCE_ROW_COUNT; rowIndex++) {
+        if (resources == null) {
+            return;
+        }
+        for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
             float rowTop = headerBottom - (rowIndex * rowHeight);
             float rowBottom = Math.max(y, rowTop - rowHeight);
             drawHorizontalLine(stream, x, x + width, rowBottom);
-            if (resources == null || rowIndex >= visibleCount) {
-                continue;
-            }
             SarTaskResource resource = resources.get(rowIndex);
             writeWrappedCellText(stream, regular, starts[0], rowBottom, width * widths[0], rowTop - rowBottom, wrap(safe(resource.getName()), 22));
             writeWrappedCellText(stream, regular, starts[1], rowBottom, width * widths[1], rowTop - rowBottom, wrap(safe(resource.getIcsPosition()), 18));
-            writeWrappedCellText(stream, regular, starts[2], rowBottom, width * widths[2], rowTop - rowBottom,
-                    wrap(rowIndex == RESOURCE_ROW_COUNT - 1 && resources.size() > RESOURCE_ROW_COUNT ? "See next page" : safe(resource.getHomeAgency()), 18));
+            writeWrappedCellText(stream, regular, starts[2], rowBottom, width * widths[2], rowTop - rowBottom, wrap(safe(resource.getHomeAgency()), 18));
         }
     }
 

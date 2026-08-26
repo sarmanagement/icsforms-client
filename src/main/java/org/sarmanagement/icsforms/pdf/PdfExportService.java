@@ -2,6 +2,7 @@ package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.multipdf.PDFMergerUtility;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
@@ -91,6 +92,10 @@ public class PdfExportService {
      */
     public Path exportIapBundle(AppData data, Path outputDirectory) throws IOException {
         Files.createDirectories(outputDirectory);
+        // Skip ICS 201 only when it was never filled in (incident started as a full
+        // operational period with no initial response briefing).  When the form contains
+        // content it is always included even if the incident has since moved to DURING_OP.
+        boolean skipIcs201 = !ics201HasContent(data.getForm201());
         CoverPageRenderer coverPageRenderer = new CoverPageRenderer();
         Path coverPath = Files.createTempFile(outputDirectory, "cover-page-", ".pdf");
         List<Path> tempFiles = new ArrayList<>();
@@ -98,7 +103,13 @@ public class PdfExportService {
             coverPageRenderer.render(data, coverPath);
             tempFiles.add(coverPath);
             assignIapPageNumbers(data);
-            Map<String, Path> parts = exportAll(data, outputDirectory);
+            Map<String, Path> parts = new LinkedHashMap<>();
+            for (String formKey : renderers.keySet()) {
+                if (skipIcs201 && "ICS 201".equals(formKey)) {
+                    continue;
+                }
+                parts.put(formKey, exportSelected(formKey, data, outputDirectory));
+            }
             tempFiles.addAll(parts.values());
             String bundleName = iapBundleFileName(data.getIncidentContext());
             Path bundlePath = outputDirectory.resolve(bundleName);
@@ -139,8 +150,13 @@ public class PdfExportService {
      */
     static void assignIapPageNumbers(AppData data) {
         int page = 1;
-        // ICS 201
-        data.getForm201().setIapPage(String.valueOf(page++));
+        // ICS 201 is included whenever it was actually completed during an initial response.
+        // It is omitted only when the incident was created directly as a full operational
+        // period and the form was never filled in (situation summary and preparer name both
+        // blank — the minimal signals of deliberate use).
+        if (ics201HasContent(data.getForm201())) {
+            data.getForm201().setIapPage(String.valueOf(page++));
+        }
         // ICS 202
         data.getForm202().setIapPage(String.valueOf(page++));
         // ICS 207
@@ -159,6 +175,19 @@ public class PdfExportService {
         for (org.sarmanagement.icsforms.model.Ics214Form log : data.getActivityLogs()) {
             log.setIapPage(String.valueOf(page++));
         }
+    }
+
+    /**
+     * Returns {@code true} when the ICS 201 form contains content indicating it was
+     * deliberately completed during an initial incident response.  A form with both
+     * {@code situationSummary} and {@code preparedByName} blank is treated as never
+     * filled in and is excluded from the IAP bundle.
+     */
+    static boolean ics201HasContent(Ics201Form form) {
+        if (form == null) {
+            return false;
+        }
+        return !form.getSituationSummary().isBlank() || !form.getPreparedByName().isBlank();
     }
 
     private String fileName(String formKey) {

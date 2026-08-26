@@ -10,11 +10,13 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -30,10 +32,14 @@ import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -55,6 +61,7 @@ public class Ics214Panel extends JPanel {
     private final JTextField preparedBySignatureField = UiSupport.textField();
     private final JSpinner preparedDateTimeField = UiSupport.dateTimeSpinner();
     private final JButton pickPreparerButton = new JButton("Pick preparer from task…");
+    private final JButton pickResourceButton = new JButton("Pick…");
     private final JButton syncResourcesBtn = new JButton("Sync resources…");
     private final ResourcesTableModel resourcesTableModel = new ResourcesTableModel();
     private final ActivityLogTableModel activityLogTableModel = new ActivityLogTableModel();
@@ -74,7 +81,12 @@ public class Ics214Panel extends JPanel {
 
         JPanel form = UiSupport.formPanel();
         form.setBorder(BorderFactory.createTitledBorder("ICS 214 Activity Log"));
-        UiSupport.addRow(form, 0, "Name", nameField);
+        JPanel nameRow = new JPanel(new BorderLayout(4, 0));
+        nameRow.add(nameField, BorderLayout.CENTER);
+        pickResourceButton.setToolTipText("Link section 3 to a known resource (T-card)");
+        pickResourceButton.addActionListener(e -> pickResourceForSection3());
+        nameRow.add(pickResourceButton, BorderLayout.EAST);
+        UiSupport.addRow(form, 0, "Name", nameRow);
         UiSupport.addRow(form, 1, "ICS position", icsPositionField);
         UiSupport.addRow(form, 2, "Home agency", homeAgencyField);
         UiSupport.addRow(form, 3, "Prepared by name", preparedByNameField);
@@ -122,6 +134,11 @@ public class Ics214Panel extends JPanel {
         JScrollPane formScrollPane = new JScrollPane(form);
         formScrollPane.setBorder(BorderFactory.createEmptyBorder());
         formScrollPane.setPreferredSize(new Dimension(0, 240));
+
+        JButton popOutBtn = new JButton("Open in New Window");
+        popOutBtn.setToolTipText("Open this ICS 214 form in a separate window so it can be used alongside other tabs");
+        popOutBtn.addActionListener(e -> popOutInNewWindow());
+        pickPanel.add(popOutBtn);
 
         northPanel.add(formScrollPane, BorderLayout.CENTER);
         northPanel.add(pickPanel, BorderLayout.SOUTH);
@@ -241,12 +258,166 @@ public class Ics214Panel extends JPanel {
         controller.markDirty();
     }
 
+    /**
+     * Shows a picker dialog populated with all known T-card resources and links the selection
+     * to ICS 214 section 3 (Name / ICS Position / Home Agency), resolving canonical identity
+     * from the resource record.
+     */
+    private void pickResourceForSection3() {
+        if (currentData == null) {
+            return;
+        }
+        List<TCard> cards = currentData.getTCards();
+        if (cards == null || cards.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No T-card resources found.", "Pick Resource", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        TCard[] cardArray = cards.toArray(new TCard[0]);
+        JComboBox<TCard> combo = new JComboBox<>(cardArray);
+        combo.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
+            String display = value == null ? "" : displayNameForCard(value);
+            JLabel label = new JLabel(display);
+            if (isSelected) {
+                label.setBackground(list.getSelectionBackground());
+                label.setForeground(list.getSelectionForeground());
+                label.setOpaque(true);
+            }
+            return label;
+        });
+        // Pre-select currently linked resource if any.
+        if (currentForm != null && currentForm.getLinkedResourceId() != null) {
+            cards.stream()
+                    .filter(c -> currentForm.getLinkedResourceId().equals(c.getResourceId()))
+                    .findFirst()
+                    .ifPresent(combo::setSelectedItem);
+        }
+        int result = JOptionPane.showConfirmDialog(this, combo, "Link section 3 to resource", JOptionPane.OK_CANCEL_OPTION);
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
+        TCard selected = (TCard) combo.getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+        if (currentForm != null) {
+            currentForm.setLinkedResourceId(selected.getResourceId());
+        }
+        nameField.setText(nullSafe(displayNameForCard(selected)));
+        icsPositionField.setText("");  // ICS position is role-specific; leave for operator to fill
+        homeAgencyField.setText(nullSafe(selected.getHomeAgency()));
+        controller.markDirty();
+    }
+
+    private static String displayNameForCard(TCard card) {
+        if (card == null) return "";
+        String name = card.getPersonName();
+        if (name == null || name.isBlank()) {
+            name = card.getResourceIdentifier();
+        }
+        String agency = card.getHomeAgency();
+        if (agency != null && !agency.isBlank()) {
+            return name + " (" + agency + ")";
+        }
+        return name == null ? "" : name;
+    }
+
+    /**
+     * Opens this ICS 214 form in a separate modeless window so the operator can log events
+     * while navigating other tabs.  The window shares the same {@link Ics214Form} model
+     * object; changes are pushed back via "Save" and will be reflected in the main tab on
+     * next load.
+     */
+    private void popOutInNewWindow() {
+        if (currentForm == null || currentData == null) {
+            return;
+        }
+        saveToModel();
+        String title = "ICS 214 – " + (currentForm.getName().isBlank() ? "Activity Log" : currentForm.getName());
+        JFrame frame = new JFrame(title);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        Ics214Panel popOut = new Ics214Panel(controller);
+        popOut.loadFromModel(currentForm, currentData);
+
+        // Single Close button — saves changes and closes the window.
+        JButton closeBtn = new JButton("Close");
+        closeBtn.addActionListener(e -> {
+            popOut.saveToModel();
+            controller.markDirty();
+            // Reload the embedded panel so edits from the pop-out are visible.
+            loadFromModel(currentForm, currentData);
+            frame.dispose();
+        });
+
+        // Also save when the user dismisses with the OS window-close button.
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                popOut.saveToModel();
+                controller.markDirty();
+                loadFromModel(currentForm, currentData);
+                frame.dispose();
+            }
+        });
+
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnRow.add(closeBtn);
+        frame.getContentPane().setLayout(new BorderLayout());
+        frame.getContentPane().add(popOut, BorderLayout.CENTER);
+        frame.getContentPane().add(btnRow, BorderLayout.SOUTH);
+        frame.setSize(900, 700);
+        frame.setLocationByPlatform(true);
+        frame.setVisible(true);
+    }
+
     private void addActivityEntry() {
         if (currentForm == null) {
             return;
         }
         List<ActivityEventType> types = resolvedEventTypes();
-        ActivityEntryEditor editor = new ActivityEntryEditor(types, currentForm.getName());
+
+        // Build picklist: SAR task names/numbers first, then personnel resource names.
+        // For ICP-scope logs the default selection is blank; for task-linked logs the
+        // primary/first resource name is pre-selected.
+        List<String> picklist = new ArrayList<>();
+        String defaultResource = "";
+        // 1. Assigned tasks by team number / name.
+        if (currentData != null && currentData.getSarTaskAssignments() != null) {
+            for (SarTaskAssignment t : currentData.getSarTaskAssignments()) {
+                String label = UiSupport.taskLabel(t);
+                if (!label.isBlank() && !picklist.contains(label)) {
+                    picklist.add(label);
+                }
+            }
+        }
+        // 2. Resources assigned to this 214 form.
+        if (currentForm.getResourcesAssigned() != null) {
+            for (SarTaskResource r : currentForm.getResourcesAssigned()) {
+                String n = r.getName();
+                if (n != null && !n.isBlank() && !picklist.contains(n)) {
+                    picklist.add(n);
+                }
+            }
+        }
+        // 3. TCard names — personnel first, then other resource types.
+        if (currentData != null) {
+            List<String> otherCardNames = new ArrayList<>();
+            for (org.sarmanagement.icsforms.model.TCard card : currentData.getTCards()) {
+                String n = card.getPersonName().isBlank() ? card.getResourceIdentifier() : card.getPersonName();
+                if (!n.isBlank() && !picklist.contains(n)) {
+                    if (card.getCardType() == TCardType.PERSONNEL) {
+                        picklist.add(n);
+                    } else {
+                        otherCardNames.add(n);
+                    }
+                }
+            }
+            picklist.addAll(otherCardNames);
+        }
+        if (currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT && !picklist.isEmpty()) {
+            defaultResource = picklist.get(0);
+        }
+
+        ActivityEntryEditor editor = new ActivityEntryEditor(types, defaultResource, picklist);
         JScrollPane scrollPane = new JScrollPane(editor.panel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(this, "Add activity entry", scrollPane, new Dimension(640, 320))) {
@@ -277,15 +448,13 @@ public class Ics214Panel extends JPanel {
      *       possible-duplicate checkbox.</li>
      *   <li>Management 214 (ICP / assignment-list): detecting resource is chosen from a
      *       picklist of task-linked 214 forms; possible-duplicate checkbox is shown.</li>
-     *   <li>CLUE_REPORTED: the follow-up field is hidden (follow-up belongs to the detecting
-     *       resource's own log, not the reporter's).</li>
      * </ul>
+     * <p>Follow-up is not captured in this dialog; it is entered directly in the clue log grid.</p>
      *
      * @param sourceEntry the activity log entry that triggered clue capture.
      * @param eventTypeId the event type identifier ({@code CLUE_DETECTED} or {@code CLUE_REPORTED}).
      */
     private void captureClue(ActivityLogEntry sourceEntry, String eventTypeId) {
-        boolean isClueReported = ActivityEventType.ID_CLUE_REPORTED.equals(eventTypeId);
         boolean isResourceLog = currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT;
 
         JPanel form = UiSupport.formPanel();
@@ -306,13 +475,11 @@ public class Ics214Panel extends JPanel {
             detectingResourceCombo = new JComboBox<>(items);
         }
 
-        // Follow-up: hidden for CLUE_REPORTED (belongs to the detecting resource's own log).
-        JTextArea followUpArea = isClueReported ? null : UiSupport.textArea(2);
-
         // Possible duplicate: shown only for management 214.
         JCheckBox possibleDuplicateCheck = null;
         if (!isResourceLog) {
             possibleDuplicateCheck = new JCheckBox("Possible duplicate (detecting resource may have already logged this clue)");
+            boolean isClueReported = ActivityEventType.ID_CLUE_REPORTED.equals(eventTypeId);
             possibleDuplicateCheck.setSelected(isClueReported);
         }
 
@@ -325,37 +492,37 @@ public class Ics214Panel extends JPanel {
         UiSupport.addRow(form, row++, "Location / position", locationField);
         UiSupport.addRow(form, row++, "Description", new JScrollPane(descriptionArea));
         UiSupport.addRow(form, row++, "Immediate action taken", new JScrollPane(immediateActionArea));
-        if (followUpArea != null) {
-            UiSupport.addRow(form, row++, "Follow-up required", new JScrollPane(followUpArea));
-        }
         if (possibleDuplicateCheck != null) {
             UiSupport.addRow(form, row++, "", possibleDuplicateCheck);
         }
 
         JScrollPane scrollPane = new JScrollPane(form);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        int dialogHeight = 340 + (followUpArea != null ? 60 : 0) + (possibleDuplicateCheck != null ? 30 : 0);
+        int dialogHeight = 310 + (possibleDuplicateCheck != null ? 30 : 0);
         if (!UiSupport.showResizableConfirmDialog(this, "Capture clue details", scrollPane, new Dimension(640, dialogHeight))) {
             return;
         }
 
-        // Resolve detecting task from dialog.
-        String detectingTask;
+        // Resolve detecting-task link and detected-by resource.
+        // The task relationship is stored as assignmentId (the hidden link); detectingTask is
+        // kept for backward compatibility with serialised data that predates this redesign.
+        // detectedBy captures the specific person or resource that found the clue.
+        String detectedBy;
         if (isResourceLog) {
-            detectingTask = nullSafe(currentForm.getName());
+            // The form's own name is the resource identifier.
+            detectedBy = currentForm.getName() != null ? currentForm.getName() : "";
         } else if (detectingResourceCombo != null && detectingResourceCombo.getSelectedItem() != null) {
-            detectingTask = detectingResourceCombo.getSelectedItem().toString();
+            detectedBy = detectingResourceCombo.getSelectedItem().toString();
         } else {
-            detectingTask = "";
+            detectedBy = "";
         }
 
         ClueLogEntry clue = new ClueLogEntry();
         clue.setDateTimeCollected(sourceEntry.getTimestamp());
-        clue.setDetectingTask(detectingTask);
+        clue.setDetectedBy(detectedBy);
         clue.setLocation(locationField.getText().trim());
         clue.setDescription(descriptionArea.getText().trim());
         clue.setImmediateAction(immediateActionArea.getText().trim());
-        clue.setFollowUp(followUpArea != null ? followUpArea.getText().trim() : "");
         clue.setPossibleDuplicate(possibleDuplicateCheck != null && possibleDuplicateCheck.isSelected());
         String taskId = currentForm.getLinkedSarTaskAssignmentId();
         if (taskId != null && !taskId.isBlank()) {
@@ -365,18 +532,29 @@ public class Ics214Panel extends JPanel {
     }
 
     /**
-     * Returns the names of all ICS 214 forms in the document that are linked to a SAR task
-     * assignment (i.e. resource-level 214 forms).  Used to populate the detecting-resource
-     * picklist in the management-214 clue capture dialog.
+     * Returns detecting-task labels for all ICS 214 forms in the document that are linked to a
+     * SAR task assignment (resource-level 214 forms).  Each label combines the task team number
+     * and the form's resource name so the management-214 clue-capture picklist shows both.
      */
     private List<String> taskLinkedFormNames() {
         if (currentData == null) {
             return List.of();
         }
+        // Build a map from assignmentId → team number for quick lookup.
+        Map<String, SarTaskAssignment> taskById = new HashMap<>();
+        if (currentData.getSarTaskAssignments() != null) {
+            for (SarTaskAssignment t : currentData.getSarTaskAssignments()) {
+                taskById.put(t.getAssignmentId(), t);
+            }
+        }
         return currentData.getActivityLogs().stream()
                 .filter(f -> f.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT)
-                .map(Ics214Form::getName)
-                .filter(name -> name != null && !name.isBlank())
+                .filter(f -> f.getName() != null && !f.getName().isBlank())
+                .map(f -> {
+                    SarTaskAssignment task = taskById.get(f.getLinkedSarTaskAssignmentId());
+                    return UiSupport.detectingTaskLabel(task, f.getName());
+                })
+                .filter(label -> !label.isBlank())
                 .distinct()
                 .collect(Collectors.toList());
     }
@@ -597,10 +775,11 @@ public class Ics214Panel extends JPanel {
         private final JPanel panel = UiSupport.formPanel();
         private final JSpinner timestampField = UiSupport.dateTimeSpinner();
         private final JComboBox<ActivityEventType> eventTypeField;
-        private final JTextField resourceIdentifierField = UiSupport.textField();
+        private final JComboBox<String> resourceIdentifierField;
         private final JTextArea notableActivityField = UiSupport.textArea(4);
 
-        private ActivityEntryEditor(List<ActivityEventType> eventTypes, String defaultResourceIdentifier) {
+        private ActivityEntryEditor(List<ActivityEventType> eventTypes, String defaultResourceIdentifier,
+                                    List<String> resourcePicklist) {
             ActivityEventType[] typeArray = eventTypes.toArray(new ActivityEventType[0]);
             eventTypeField = new JComboBox<>(typeArray);
             // Select the free-text / Note type by default.
@@ -610,8 +789,18 @@ public class Ics214Panel extends JPanel {
                     break;
                 }
             }
+            // Build an editable combobox for the resource identifier.  The picklist makes it
+            // easy to select a team member; free text is still allowed.
+            List<String> items = new ArrayList<>();
+            if (resourcePicklist != null) {
+                items.addAll(resourcePicklist);
+            }
+            resourceIdentifierField = new JComboBox<>(items.toArray(new String[0]));
+            resourceIdentifierField.setEditable(true);
             if (defaultResourceIdentifier != null && !defaultResourceIdentifier.isBlank()) {
-                resourceIdentifierField.setText(defaultResourceIdentifier);
+                resourceIdentifierField.setSelectedItem(defaultResourceIdentifier);
+            } else {
+                resourceIdentifierField.setSelectedItem("");
             }
             UiSupport.addRow(panel, 0, "Date/time", timestampField);
             UiSupport.addRow(panel, 1, "Event type", eventTypeField);
@@ -624,7 +813,8 @@ public class Ics214Panel extends JPanel {
             entry.setTimestamp(AppController.toLocalDateTime((Date) timestampField.getValue()));
             ActivityEventType selected = (ActivityEventType) eventTypeField.getSelectedItem();
             entry.setEventTypeId(selected != null ? selected.getId() : ActivityEventType.ID_FREE_TEXT);
-            entry.setResourceIdentifier(resourceIdentifierField.getText().trim());
+            Object resourceSelection = resourceIdentifierField.getSelectedItem();
+            entry.setResourceIdentifier(resourceSelection == null ? "" : resourceSelection.toString().trim());
             entry.setNotableActivity(notableActivityField.getText().trim());
             return entry;
         }
@@ -773,7 +963,7 @@ public class Ics214Panel extends JPanel {
     }
 
     private static class ActivityLogTableModel extends AbstractTableModel {
-        private final String[] columns = {"Date/Time", "Event Type", "Notable Activity"};
+        private final String[] columns = {"Date/Time", "Event Type", "Resource", "Notable Activity"};
         private List<ActivityLogEntry> rows = new ArrayList<>();
         private List<ActivityEventType> eventTypes = new ArrayList<>();
 
@@ -798,6 +988,7 @@ public class Ics214Panel extends JPanel {
             return switch (col) {
                 case 0 -> entry.getTimestamp() == null ? "" : DATE_TIME_FORMATTER.format(entry.getTimestamp());
                 case 1 -> resolveLabel(entry.getEventTypeId());
+                case 2 -> entry.getResourceIdentifier() == null ? "" : entry.getResourceIdentifier();
                 default -> entry.getNotableActivity();
             };
         }
