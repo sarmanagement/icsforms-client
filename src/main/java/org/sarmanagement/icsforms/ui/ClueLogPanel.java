@@ -114,6 +114,15 @@ public class ClueLogPanel extends JPanel {
         Object selectedTask = taskCombo.getSelectedItem();
         String taskLabel = selectedTask != null ? selectedTask.toString().trim() : "";
         String assignmentId = labelToAssignmentId.get(taskLabel);
+        // Fall back to a label scan for manually typed entries that match a real task.
+        if (assignmentId == null && !taskLabel.isBlank() && controller.getData().getSarTaskAssignments() != null) {
+            for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
+                if (UiSupport.taskLabel(t).equals(taskLabel)) {
+                    assignmentId = t.getAssignmentId();
+                    break;
+                }
+            }
+        }
         if (assignmentId != null) {
             clue.setAssignmentId(assignmentId);
         }
