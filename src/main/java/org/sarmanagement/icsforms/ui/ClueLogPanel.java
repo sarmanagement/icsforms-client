@@ -1,8 +1,6 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ClueLogEntry;
-import org.sarmanagement.icsforms.model.Ics214Form;
-import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import javax.swing.BorderFactory;
@@ -62,31 +60,11 @@ public class ClueLogPanel extends JPanel {
 
     /** Opens a dialog to enter clue details and adds the new entry to the log. */
     private void addClueDialog() {
-        // Build a picklist of detecting-task labels from all ICS 214 forms linked to a task
-        // assignment.  Each entry shows the task team number and the resource identifier
-        // (214 form name) so the user can see both which task and which resource detected
-        // the clue.  We also keep a label→assignmentId map for linking the stored entry.
+        // Build a picklist of task labels (team number + task name) for the task combo.
+        // The combo stores the task relationship via assignmentId; a separate "Detected by"
+        // field captures the specific person or resource that found the clue.
         Map<String, String> labelToAssignmentId = new LinkedHashMap<>();
-        Map<String, SarTaskAssignment> taskById = new HashMap<>();
         if (controller.getData().getSarTaskAssignments() != null) {
-            for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
-                taskById.put(t.getAssignmentId(), t);
-            }
-        }
-        if (controller.getData().getActivityLogs() != null) {
-            for (Ics214Form form : controller.getData().getActivityLogs()) {
-                if (form.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT
-                        && form.getName() != null && !form.getName().isBlank()) {
-                    SarTaskAssignment task = taskById.get(form.getLinkedSarTaskAssignmentId());
-                    String label = UiSupport.detectingTaskLabel(task, form.getName());
-                    if (!label.isBlank() && !labelToAssignmentId.containsKey(label)) {
-                        labelToAssignmentId.put(label, form.getLinkedSarTaskAssignmentId());
-                    }
-                }
-            }
-        }
-        // Fall back to plain task labels when no 214 forms are linked yet.
-        if (labelToAssignmentId.isEmpty() && controller.getData().getSarTaskAssignments() != null) {
             for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
                 String label = UiSupport.taskLabel(t);
                 if (!label.isBlank() && !labelToAssignmentId.containsKey(label)) {
@@ -100,6 +78,7 @@ public class ClueLogPanel extends JPanel {
         String[] taskItems = taskNames.isEmpty() ? new String[]{""} : taskNames.toArray(new String[0]);
         javax.swing.JComboBox<String> taskCombo = new javax.swing.JComboBox<>(taskItems);
         taskCombo.setEditable(true);
+        JTextField detectedByField = UiSupport.textField();
         JSpinner dateTimeSpinner = UiSupport.dateTimeSpinner();
         JTextField locationField = UiSupport.textField();
         JTextArea descriptionArea = UiSupport.textArea(3);
@@ -108,6 +87,7 @@ public class ClueLogPanel extends JPanel {
 
         int row = 0;
         UiSupport.addRow(form, row++, "Detecting task", taskCombo);
+        UiSupport.addRow(form, row++, "Detected by", detectedByField);
         UiSupport.addRow(form, row++, "Date/time collected", dateTimeSpinner);
         UiSupport.addRow(form, row++, "Location / position", locationField);
         UiSupport.addRow(form, row++, "Description", new JScrollPane(descriptionArea));
@@ -116,7 +96,7 @@ public class ClueLogPanel extends JPanel {
 
         JScrollPane scrollPane = new JScrollPane(form);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, "Add Clue", scrollPane, new Dimension(640, 370))) {
+        if (!UiSupport.showResizableConfirmDialog(this, "Add Clue", scrollPane, new Dimension(640, 400))) {
             return;
         }
 
@@ -128,22 +108,17 @@ public class ClueLogPanel extends JPanel {
         } else {
             clue.setDateTimeCollected(LocalDateTime.now());
         }
+        // Link the task via assignmentId; the detectingTask text label is no longer used for
+        // display (the table derives the label from assignmentId), but we store it for backward
+        // compatibility with serialised data that predates this redesign.
         Object selectedTask = taskCombo.getSelectedItem();
-        clue.setDetectingTask(selectedTask != null ? selectedTask.toString().trim() : "");
-        // Link the assignmentId via the label map; fall back to a task-label scan for
-        // manually typed entries.
-        String assignmentId = labelToAssignmentId.get(clue.getDetectingTask());
-        if (assignmentId == null && controller.getData().getSarTaskAssignments() != null) {
-            for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
-                if (UiSupport.taskLabel(t).equals(clue.getDetectingTask())) {
-                    assignmentId = t.getAssignmentId();
-                    break;
-                }
-            }
-        }
+        String taskLabel = selectedTask != null ? selectedTask.toString().trim() : "";
+        String assignmentId = labelToAssignmentId.get(taskLabel);
         if (assignmentId != null) {
             clue.setAssignmentId(assignmentId);
         }
+        clue.setDetectingTask(taskLabel);
+        clue.setDetectedBy(detectedByField.getText().trim());
         clue.setLocation(locationField.getText().trim());
         clue.setDescription(descriptionArea.getText().trim());
         clue.setImmediateAction(immediateActionArea.getText().trim());
@@ -153,8 +128,24 @@ public class ClueLogPanel extends JPanel {
         controller.markDirty();
     }
 
+    /**
+     * Builds a map from assignment ID to task label for display in the "Task" column.
+     * Uses {@link UiSupport#taskLabel} so the column shows the team number and task name.
+     */
+    private Map<String, String> buildTaskLabelMap() {
+        Map<String, String> map = new HashMap<>();
+        if (controller.getData().getSarTaskAssignments() != null) {
+            for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
+                if (t.getAssignmentId() != null && !t.getAssignmentId().isBlank()) {
+                    map.put(t.getAssignmentId(), UiSupport.taskLabel(t));
+                }
+            }
+        }
+        return map;
+    }
+
     public void refreshFromModel() {
-        tableModel.setRows(controller.getData().getClueLogEntries());
+        tableModel.setRows(controller.getData().getClueLogEntries(), buildTaskLabelMap());
     }
 
     public void pushToModel() {
@@ -234,12 +225,20 @@ public class ClueLogPanel extends JPanel {
     }
 
     private static class ClueLogTableModel extends AbstractTableModel {
-        private final String[] columns = {"Detecting Task", "Date/Time Collected", "Location", "Description", "Immediate Action", "Poss. Dup", "Follow Up"};
+        private final String[] columns = {"Task", "Detected By", "Date/Time Collected", "Location", "Description", "Immediate Action", "Poss. Dup", "Follow Up"};
         private List<ClueLogEntry> rows = new ArrayList<>();
+        /** Map from assignmentId → computed task label (e.g. "T3 – Dog X"), refreshed on setRows. */
+        private Map<String, String> taskLabelById = new HashMap<>();
 
-        void setRows(List<ClueLogEntry> rows) {
+        void setRows(List<ClueLogEntry> rows, Map<String, String> taskLabelById) {
             this.rows = rows == null ? new ArrayList<>() : rows;
+            this.taskLabelById = taskLabelById == null ? new HashMap<>() : taskLabelById;
             fireTableDataChanged();
+        }
+
+        /** @deprecated kept for callers that don't have task context. */
+        void setRows(List<ClueLogEntry> rows) {
+            setRows(rows, null);
         }
 
         List<ClueLogEntry> getRows() {
@@ -259,23 +258,36 @@ public class ClueLogPanel extends JPanel {
         @Override public int getRowCount() { return rows.size(); }
         @Override public int getColumnCount() { return columns.length; }
         @Override public String getColumnName(int column) { return columns[column]; }
-        @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return true; }
+
+        @Override
+        public boolean isCellEditable(int rowIndex, int columnIndex) {
+            // Col 0 (Task) is read-only — derived from assignmentId.
+            return columnIndex != 0;
+        }
 
         @Override
         public Class<?> getColumnClass(int columnIndex) {
-            return columnIndex == 5 ? Boolean.class : String.class;
+            return columnIndex == 6 ? Boolean.class : String.class;
         }
 
         @Override
         public Object getValueAt(int rowIndex, int columnIndex) {
             ClueLogEntry row = rows.get(rowIndex);
             return switch (columnIndex) {
-                case 0 -> row.getDetectingTask();
-                case 1 -> SarTaskPanel.formatDateTimeValue(row.getDateTimeCollected());
-                case 2 -> row.getLocation();
-                case 3 -> row.getDescription();
-                case 4 -> row.getImmediateAction();
-                case 5 -> row.isPossibleDuplicate();
+                case 0 -> {
+                    // Derive the task label from assignmentId; fall back to stored detectingTask.
+                    String id = row.getAssignmentId();
+                    if (id != null && !id.isBlank() && taskLabelById.containsKey(id)) {
+                        yield taskLabelById.get(id);
+                    }
+                    yield row.getDetectingTask();
+                }
+                case 1 -> row.getDetectedBy();
+                case 2 -> SarTaskPanel.formatDateTimeValue(row.getDateTimeCollected());
+                case 3 -> row.getLocation();
+                case 4 -> row.getDescription();
+                case 5 -> row.getImmediateAction();
+                case 6 -> row.isPossibleDuplicate();
                 default -> row.getFollowUp();
             };
         }
@@ -284,12 +296,13 @@ public class ClueLogPanel extends JPanel {
         public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
             ClueLogEntry row = rows.get(rowIndex);
             switch (columnIndex) {
-                case 0 -> row.setDetectingTask(aValue == null ? "" : aValue.toString());
-                case 1 -> row.setDateTimeCollected(SarTaskPanel.parseDateTimeValue(aValue == null ? "" : aValue.toString()));
-                case 2 -> row.setLocation(aValue == null ? "" : aValue.toString());
-                case 3 -> row.setDescription(aValue == null ? "" : aValue.toString());
-                case 4 -> row.setImmediateAction(aValue == null ? "" : aValue.toString());
-                case 5 -> row.setPossibleDuplicate(Boolean.TRUE.equals(aValue));
+                case 0 -> {} // read-only, derived from assignmentId
+                case 1 -> row.setDetectedBy(aValue == null ? "" : aValue.toString());
+                case 2 -> row.setDateTimeCollected(SarTaskPanel.parseDateTimeValue(aValue == null ? "" : aValue.toString()));
+                case 3 -> row.setLocation(aValue == null ? "" : aValue.toString());
+                case 4 -> row.setDescription(aValue == null ? "" : aValue.toString());
+                case 5 -> row.setImmediateAction(aValue == null ? "" : aValue.toString());
+                case 6 -> row.setPossibleDuplicate(Boolean.TRUE.equals(aValue));
                 default -> row.setFollowUp(aValue == null ? "" : aValue.toString());
             }
             fireTableCellUpdated(rowIndex, columnIndex);

@@ -19,6 +19,8 @@ import java.time.LocalDateTime;
 public class ClueLogEntry {
     private String assignmentId = "";
     private String detectingTask = "";
+    /** Free-text identifier of the specific person or resource that detected the clue. */
+    private String detectedBy = "";
     private LocalDateTime dateTimeCollected;
     private String location = "";
     private String description = "";
@@ -40,6 +42,16 @@ public class ClueLogEntry {
 
     public void setDetectingTask(String detectingTask) {
         this.detectingTask = detectingTask == null ? "" : detectingTask;
+    }
+
+    /** @return identifier of the specific person or resource that detected the clue. */
+    public String getDetectedBy() {
+        return detectedBy;
+    }
+
+    /** @param detectedBy identifier of the specific person or resource that detected the clue. */
+    public void setDetectedBy(String detectedBy) {
+        this.detectedBy = detectedBy == null ? "" : detectedBy;
     }
 
     public LocalDateTime getDateTimeCollected() {

@@ -503,27 +503,23 @@ public class Ics214Panel extends JPanel {
             return;
         }
 
-        // Resolve detecting task from dialog.
-        String detectingTask;
+        // Resolve detecting-task link and detected-by resource.
+        // The task relationship is stored as assignmentId (the hidden link); detectingTask is
+        // kept for backward compatibility with serialised data that predates this redesign.
+        // detectedBy captures the specific person or resource that found the clue.
+        String detectedBy;
         if (isResourceLog) {
-            // Combine the task team number with the resource (form) name so the clue log
-            // entry identifies both which task and which resource detected the clue.
-            String taskId = currentForm.getLinkedSarTaskAssignmentId();
-            SarTaskAssignment linkedTask = (currentData != null && taskId != null)
-                    ? currentData.getSarTaskAssignments().stream()
-                            .filter(t -> taskId.equals(t.getAssignmentId()))
-                            .findFirst().orElse(null)
-                    : null;
-            detectingTask = UiSupport.detectingTaskLabel(linkedTask, currentForm.getName());
+            // The form's own name is the resource identifier.
+            detectedBy = currentForm.getName() != null ? currentForm.getName() : "";
         } else if (detectingResourceCombo != null && detectingResourceCombo.getSelectedItem() != null) {
-            detectingTask = detectingResourceCombo.getSelectedItem().toString();
+            detectedBy = detectingResourceCombo.getSelectedItem().toString();
         } else {
-            detectingTask = "";
+            detectedBy = "";
         }
 
         ClueLogEntry clue = new ClueLogEntry();
         clue.setDateTimeCollected(sourceEntry.getTimestamp());
-        clue.setDetectingTask(detectingTask);
+        clue.setDetectedBy(detectedBy);
         clue.setLocation(locationField.getText().trim());
         clue.setDescription(descriptionArea.getText().trim());
         clue.setImmediateAction(immediateActionArea.getText().trim());
