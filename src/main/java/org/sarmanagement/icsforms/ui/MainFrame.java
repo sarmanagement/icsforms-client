@@ -34,6 +34,7 @@ import javax.swing.event.MenuListener;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.event.KeyEvent;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -153,14 +154,22 @@ public class MainFrame extends JFrame {
     private JMenuBar createMenuBar(Path defaultDirectory) {
         JMenuBar bar = new JMenuBar();
         JMenu fileMenu = new JMenu("File");
+        fileMenu.setMnemonic(KeyEvent.VK_F);
         JMenu viewMenu = new JMenu("View");
+        viewMenu.setMnemonic(KeyEvent.VK_V);
         JMenu importMenu = new JMenu("Import");
+        importMenu.setMnemonic(KeyEvent.VK_I);
         JMenu exportMenu = new JMenu("Export");
+        exportMenu.setMnemonic(KeyEvent.VK_X);
         JMenu logsMenu = new JMenu("Logs");
+        logsMenu.setMnemonic(KeyEvent.VK_L);
         JMenu configMenu = new JMenu("Configuration");
+        configMenu.setMnemonic(KeyEvent.VK_C);
         JMenu logsListMenu = new JMenu("Go to Log");
+        logsListMenu.setMnemonic(KeyEvent.VK_G);
 
         JMenuItem newItem = new JMenuItem("New…");
+        newItem.setMnemonic(KeyEvent.VK_N);
         newItem.addActionListener(event -> {
             StartupDialog startup = new StartupDialog(MainFrame.this, defaultDirectory, false);
             startup.setVisible(true);
@@ -192,6 +201,7 @@ public class MainFrame extends JFrame {
         });
 
         JMenuItem openItem = new JMenuItem("Open…");
+        openItem.setMnemonic(KeyEvent.VK_O);
         openItem.addActionListener(event -> {
             IncidentPickerDialog picker = new IncidentPickerDialog(MainFrame.this, defaultDirectory);
             picker.setVisible(true);
@@ -203,6 +213,7 @@ public class MainFrame extends JFrame {
         });
 
         JMenuItem saveItem = new JMenuItem("Save");
+        saveItem.setMnemonic(KeyEvent.VK_S);
         saveItem.addActionListener(event -> {
             AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
             pushToModel(source);
@@ -211,6 +222,7 @@ public class MainFrame extends JFrame {
         });
 
         JMenuItem saveAsItem = new JMenuItem("Save As…");
+        saveAsItem.setMnemonic(KeyEvent.VK_A);
         saveAsItem.addActionListener(event -> chooseFile(defaultDirectory, true, path -> {
             AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
             pushToModel(source);
@@ -219,6 +231,7 @@ public class MainFrame extends JFrame {
         }));
 
         JMenuItem exitItem = new JMenuItem("Exit");
+        exitItem.setMnemonic(KeyEvent.VK_E);
         exitItem.addActionListener(event -> {
             AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
             pushToModel(source);
@@ -242,27 +255,35 @@ public class MainFrame extends JFrame {
         }
 
         JMenuItem export201Item = new JMenuItem("Export ICS 201 PDF…");
+        export201Item.setMnemonic(KeyEvent.VK_1);
         export201Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 201"));
 
         JMenuItem export202Item = new JMenuItem("Export ICS 202 PDF…");
+        export202Item.setMnemonic(KeyEvent.VK_2);
         export202Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 202"));
 
         JMenuItem export207Item = new JMenuItem("Export ICS 207 PDF…");
+        export207Item.setMnemonic(KeyEvent.VK_7);
         export207Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 207"));
 
         JMenuItem export204Item = new JMenuItem("Export ICS 204 PDF…");
+        export204Item.setMnemonic(KeyEvent.VK_4);
         export204Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 204"));
 
         JMenuItem exportSarTaskItem = new JMenuItem("Export SAR Task Assignment PDF…");
+        exportSarTaskItem.setMnemonic(KeyEvent.VK_T);
         exportSarTaskItem.addActionListener(event -> exportOne(defaultDirectory, "SAR Task Assignment"));
 
         JMenuItem export214Item = new JMenuItem("Export ICS 214 PDF…");
+        export214Item.setMnemonic(KeyEvent.VK_F);
         export214Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 214"));
 
         JMenuItem exportClueLogItem = new JMenuItem("Export Clue Log PDF…");
+        exportClueLogItem.setMnemonic(KeyEvent.VK_U);
         exportClueLogItem.addActionListener(event -> exportOne(defaultDirectory, "Clue Log"));
 
         JMenuItem exportAllItem = new JMenuItem("Export All PDFs…");
+        exportAllItem.setMnemonic(KeyEvent.VK_L);
         exportAllItem.addActionListener(event -> {
             AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
             chooseDirectory(defaultDirectory, directory -> {
@@ -280,6 +301,7 @@ public class MainFrame extends JFrame {
         });
 
         JMenuItem exportIapBundleItem = new JMenuItem("Export IAP Bundle (all PDFs merged)…");
+        exportIapBundleItem.setMnemonic(KeyEvent.VK_B);
         exportIapBundleItem.addActionListener(event -> {
             AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
             chooseDirectory(defaultDirectory, directory -> {
@@ -297,15 +319,19 @@ public class MainFrame extends JFrame {
         });
 
         JMenuItem exportResourcesCsvItem = new JMenuItem("Export Resources as CSV…");
+        exportResourcesCsvItem.setMnemonic(KeyEvent.VK_R);
         exportResourcesCsvItem.addActionListener(event -> tCardPanel.exportToCsv());
 
         JMenuItem importResourcesCsvItem = new JMenuItem("Import Resources from CSV…");
+        importResourcesCsvItem.setMnemonic(KeyEvent.VK_R);
         importResourcesCsvItem.addActionListener(event -> tCardPanel.importFromCsv());
 
         JMenuItem addLogItem = new JMenuItem("Add Log");
+        addLogItem.setMnemonic(KeyEvent.VK_A);
         addLogItem.addActionListener(event -> addLog());
 
         JMenuItem removeCurrentLogItem = new JMenuItem("Remove Current Log");
+        removeCurrentLogItem.setMnemonic(KeyEvent.VK_R);
         removeCurrentLogItem.addActionListener(event -> removeCurrentLog());
 
         logsMenu.addMenuListener(new MenuListener() {
@@ -345,13 +371,17 @@ public class MainFrame extends JFrame {
         logsMenu.addSeparator();
         logsMenu.add(logsListMenu);
         JMenuItem manageEventTypesItem = new JMenuItem("Manage Event Types…");
+        manageEventTypesItem.setMnemonic(KeyEvent.VK_E);
         manageEventTypesItem.addActionListener(event -> manageEventTypes());
         configMenu.add(manageEventTypesItem);
 
         JMenu modeMenu = new JMenu("Incident Mode");
+        modeMenu.setMnemonic(KeyEvent.VK_M);
         ButtonGroup modeGroup = new ButtonGroup();
         JRadioButtonMenuItem sarModeItem = new JRadioButtonMenuItem("SAR Mode", controller.getIncidentMode() == IncidentMode.SAR);
+        sarModeItem.setMnemonic(KeyEvent.VK_S);
         JRadioButtonMenuItem genericModeItem = new JRadioButtonMenuItem("Generic Incident Mode", controller.getIncidentMode() == IncidentMode.GENERIC);
+        genericModeItem.setMnemonic(KeyEvent.VK_G);
         sarModeItem.addActionListener(e -> setIncidentMode(IncidentMode.SAR));
         genericModeItem.addActionListener(e -> setIncidentMode(IncidentMode.GENERIC));
         modeGroup.add(sarModeItem);
@@ -362,13 +392,17 @@ public class MainFrame extends JFrame {
         configMenu.add(modeMenu);
 
         JMenu iapPhaseMenu = new JMenu("IAP Phase");
+        iapPhaseMenu.setMnemonic(KeyEvent.VK_P);
         ButtonGroup phaseGroup = new ButtonGroup();
         JRadioButtonMenuItem preOpItem  = new JRadioButtonMenuItem("Pre-Operational (planning)",
                 controller.getIapPhase() == IapPhase.PRE_OP);
+        preOpItem.setMnemonic(KeyEvent.VK_P);
         JRadioButtonMenuItem initialResponseItem = new JRadioButtonMenuItem("Initial Incident Response",
                 controller.getIapPhase() == IapPhase.INITIAL_RESPONSE);
+        initialResponseItem.setMnemonic(KeyEvent.VK_I);
         JRadioButtonMenuItem duringOpItem = new JRadioButtonMenuItem("Subsequent Operational Period",
                 controller.getIapPhase() == IapPhase.DURING_OP);
+        duringOpItem.setMnemonic(KeyEvent.VK_S);
         preOpItem.addActionListener(e -> { controller.setIapPhase(IapPhase.PRE_OP); refreshFromModel(); });
         initialResponseItem.addActionListener(e -> { controller.setIapPhase(IapPhase.INITIAL_RESPONSE); refreshFromModel(); });
         duringOpItem.addActionListener(e -> { controller.setIapPhase(IapPhase.DURING_OP); refreshFromModel(); });
