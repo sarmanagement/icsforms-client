@@ -1381,7 +1381,7 @@ public class TCardPanel extends JPanel {
         card.setHomeAgency(agency == null ? "" : agency.trim());
         card.setHomeState(state == null ? "" : state.trim());
         card.setPhoneNumber(phone == null ? "" : phone.trim());
-        card.setLocation("Available");
+        card.setStatus("Available");
         if (handler != null && !handler.isBlank()) {
             card.setHandlerName(handler.trim());
         }
