@@ -1382,18 +1382,22 @@ public class TCardPanel extends JPanel {
         }
 
         // --- Initial status/location preset radio buttons ---
+        // Option 0: No change — leave status/location blank (default).
         // Option 1: Requested — resource ordered but not yet en route.
         // Option 2: Enroute   — resource is travelling to the incident.
         // Option 3: Available, Location=At Staging — resource has arrived at staging.
-        JRadioButton radioRequested = new JRadioButton("Requested (ordered, not yet en route)", true);
+        JRadioButton radioNoChange  = new JRadioButton("No change (leave blank)", true);
+        JRadioButton radioRequested = new JRadioButton("Requested (ordered, not yet en route)");
         JRadioButton radioEnroute   = new JRadioButton("Enroute");
         JRadioButton radioAvailable = new JRadioButton("Available (at Staging)");
         ButtonGroup presetGroup = new ButtonGroup();
+        presetGroup.add(radioNoChange);
         presetGroup.add(radioRequested);
         presetGroup.add(radioEnroute);
         presetGroup.add(radioAvailable);
         JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         statusPanel.setBorder(BorderFactory.createTitledBorder("Initial Status"));
+        statusPanel.add(radioNoChange);
         statusPanel.add(radioRequested);
         statusPanel.add(radioEnroute);
         statusPanel.add(radioAvailable);
@@ -1411,11 +1415,12 @@ public class TCardPanel extends JPanel {
             return;
         }
 
-        // Resolve the chosen preset.
-        String presetStatus   = radioEnroute.isSelected()   ? "Enroute"
+        // Resolve the chosen preset (null means "no change — leave blank").
+        String presetStatus   = radioRequested.isSelected() ? "Requested"
+                              : radioEnroute.isSelected()   ? "Enroute"
                               : radioAvailable.isSelected() ? "Available"
-                              : "Requested";
-        String presetLocation = radioAvailable.isSelected() ? "At Staging" : "";
+                              : null;
+        String presetLocation = radioAvailable.isSelected() ? "At Staging" : null;
 
         int imported = 0;
         for (int i = 0; i < dataRows; i++) {
@@ -1427,8 +1432,8 @@ public class TCardPanel extends JPanel {
                         (String) previewModel.getValueAt(i, 4),
                         (String) previewModel.getValueAt(i, 5),
                         (String) previewModel.getValueAt(i, 6));
-                card.setStatus(presetStatus);
-                card.setLocation(presetLocation);
+                if (presetStatus   != null) card.setStatus(presetStatus);
+                if (presetLocation != null) card.setLocation(presetLocation);
                 tableModel.addCard(card);
                 imported++;
             }
@@ -1460,7 +1465,6 @@ public class TCardPanel extends JPanel {
         card.setHomeAgency(agency == null ? "" : agency.trim());
         card.setHomeState(state == null ? "" : state.trim());
         card.setPhoneNumber(phone == null ? "" : phone.trim());
-        card.setStatus("Available");
         if (handler != null && !handler.isBlank()) {
             card.setHandlerName(handler.trim());
         }
