@@ -154,6 +154,7 @@ public class MainFrame extends JFrame {
         JMenuBar bar = new JMenuBar();
         JMenu fileMenu = new JMenu("File");
         JMenu viewMenu = new JMenu("View");
+        JMenu importMenu = new JMenu("Import");
         JMenu exportMenu = new JMenu("Export");
         JMenu logsMenu = new JMenu("Logs");
         JMenu configMenu = new JMenu("Configuration");
@@ -298,6 +299,9 @@ public class MainFrame extends JFrame {
         JMenuItem exportResourcesCsvItem = new JMenuItem("Export Resources as CSV…");
         exportResourcesCsvItem.addActionListener(event -> tCardPanel.exportToCsv());
 
+        JMenuItem importResourcesCsvItem = new JMenuItem("Import Resources from CSV…");
+        importResourcesCsvItem.addActionListener(event -> tCardPanel.importFromCsv());
+
         JMenuItem addLogItem = new JMenuItem("Add Log");
         addLogItem.addActionListener(event -> addLog());
 
@@ -377,8 +381,11 @@ public class MainFrame extends JFrame {
         configMenu.addSeparator();
         configMenu.add(iapPhaseMenu);
 
+        importMenu.add(importResourcesCsvItem);
+
         bar.add(fileMenu);
         bar.add(viewMenu);
+        bar.add(importMenu);
         bar.add(exportMenu);
         bar.add(logsMenu);
         bar.add(configMenu);

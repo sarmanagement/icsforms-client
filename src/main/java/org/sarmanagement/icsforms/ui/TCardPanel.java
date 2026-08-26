@@ -8,6 +8,7 @@ import org.sarmanagement.icsforms.model.TCardType;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -17,6 +18,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
@@ -67,7 +69,7 @@ import java.util.Map;
  */
 public class TCardPanel extends JPanel {
     private static final String[] STATUS_OPTIONS = {
-            "", "Enroute", "At Staging", "Assigned", "Out of Service"
+            "", "Requested", "Enroute", "At Staging", "Assigned", "Out of Service"
     };
     private static final String VIEW_TABLE = "table";
     private static final String VIEW_RACK  = "rack";
@@ -1277,7 +1279,7 @@ public class TCardPanel extends JPanel {
      * {@code "drone"}, {@code "crew"}, {@code "engine"}, {@code "helicopter"},
      * {@code "dozer"}.  Unrecognised values default to {@link TCardType#PERSONNEL}.</p>
      */
-    private void importFromCsv() {
+    public void importFromCsv() {
         JFileChooser chooser = new JFileChooser();
         chooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
         chooser.setDialogTitle("Select CSV resource file");
@@ -1331,14 +1333,89 @@ public class TCardPanel extends JPanel {
         previewTable.setRowHeight(22);
         previewTable.getColumnModel().getColumn(0).setMaxWidth(65);
         JScrollPane scroll = new JScrollPane(previewTable);
-        scroll.setPreferredSize(new Dimension(720, Math.min(400, dataRows * 25 + 60)));
+        scroll.setPreferredSize(new Dimension(720, Math.min(380, dataRows * 25 + 60)));
 
-        int choice = JOptionPane.showConfirmDialog(this, scroll,
+        // --- Selection buttons (Select All / Deselect All / by agency) ---
+        JButton selectAllBtn   = new JButton("Select All");
+        JButton deselectAllBtn = new JButton("Deselect All");
+        selectAllBtn.addActionListener(e -> {
+            for (int i = 0; i < dataRows; i++) previewModel.setValueAt(Boolean.TRUE,  i, 0);
+        });
+        deselectAllBtn.addActionListener(e -> {
+            for (int i = 0; i < dataRows; i++) previewModel.setValueAt(Boolean.FALSE, i, 0);
+        });
+
+        JPanel selPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        selPanel.add(selectAllBtn);
+        selPanel.add(deselectAllBtn);
+
+        // Collect distinct non-blank agencies for the per-agency filter.
+        java.util.LinkedHashSet<String> agencySet = new java.util.LinkedHashSet<>();
+        for (int i = 0; i < dataRows; i++) {
+            String ag = (String) previewModel.getValueAt(i, 2);
+            if (ag != null && !ag.isBlank()) agencySet.add(ag.trim());
+        }
+        if (!agencySet.isEmpty()) {
+            JComboBox<String> agencyCombo = new JComboBox<>(agencySet.toArray(new String[0]));
+            JButton selectAgBtn   = new JButton("Select Agency");
+            JButton deselectAgBtn = new JButton("Deselect Agency");
+            selectAgBtn.addActionListener(e -> {
+                String ag = (String) agencyCombo.getSelectedItem();
+                if (ag == null) return;
+                for (int i = 0; i < dataRows; i++) {
+                    if (ag.equalsIgnoreCase((String) previewModel.getValueAt(i, 2)))
+                        previewModel.setValueAt(Boolean.TRUE, i, 0);
+                }
+            });
+            deselectAgBtn.addActionListener(e -> {
+                String ag = (String) agencyCombo.getSelectedItem();
+                if (ag == null) return;
+                for (int i = 0; i < dataRows; i++) {
+                    if (ag.equalsIgnoreCase((String) previewModel.getValueAt(i, 2)))
+                        previewModel.setValueAt(Boolean.FALSE, i, 0);
+                }
+            });
+            selPanel.add(new JLabel("Agency:"));
+            selPanel.add(agencyCombo);
+            selPanel.add(selectAgBtn);
+            selPanel.add(deselectAgBtn);
+        }
+
+        // --- Initial status/location preset radio buttons ---
+        // Option 1: Requested — resource ordered but not yet en route.
+        // Option 2: Enroute   — resource is travelling to the incident.
+        // Option 3: Available, Location=At Staging — resource has arrived at staging.
+        JRadioButton radioRequested = new JRadioButton("Requested (ordered, not yet en route)", true);
+        JRadioButton radioEnroute   = new JRadioButton("Enroute");
+        JRadioButton radioAvailable = new JRadioButton("Available (at Staging)");
+        ButtonGroup presetGroup = new ButtonGroup();
+        presetGroup.add(radioRequested);
+        presetGroup.add(radioEnroute);
+        presetGroup.add(radioAvailable);
+        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
+        statusPanel.setBorder(BorderFactory.createTitledBorder("Initial Status"));
+        statusPanel.add(radioRequested);
+        statusPanel.add(radioEnroute);
+        statusPanel.add(radioAvailable);
+
+        // --- Assemble dialog content ---
+        JPanel content = new JPanel(new BorderLayout(4, 4));
+        content.add(selPanel,    BorderLayout.NORTH);
+        content.add(scroll,      BorderLayout.CENTER);
+        content.add(statusPanel, BorderLayout.SOUTH);
+
+        int choice = JOptionPane.showConfirmDialog(this, content,
                 "Select resources to import", JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.PLAIN_MESSAGE);
         if (choice != JOptionPane.OK_OPTION) {
             return;
         }
+
+        // Resolve the chosen preset.
+        String presetStatus   = radioEnroute.isSelected()   ? "Enroute"
+                              : radioAvailable.isSelected() ? "Available"
+                              : "Requested";
+        String presetLocation = radioAvailable.isSelected() ? "At Staging" : "";
 
         int imported = 0;
         for (int i = 0; i < dataRows; i++) {
@@ -1350,6 +1427,8 @@ public class TCardPanel extends JPanel {
                         (String) previewModel.getValueAt(i, 4),
                         (String) previewModel.getValueAt(i, 5),
                         (String) previewModel.getValueAt(i, 6));
+                card.setStatus(presetStatus);
+                card.setLocation(presetLocation);
                 tableModel.addCard(card);
                 imported++;
             }
