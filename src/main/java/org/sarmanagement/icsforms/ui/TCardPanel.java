@@ -397,43 +397,78 @@ public class TCardPanel extends JPanel {
             }
         }
 
-        // Group children by assignment ID (prefix of sourceRef "sar:<id>:...").
-        // Cards whose task has been "Returned" are placed in the unnamed group so they
-        // appear freely under their current status header without a task banner.
+        // For the Assigned column: build a lookup from resourceId → active ("On Task") assignment
+        // so that each TCard is grouped under the task where it is genuinely deployed, regardless
+        // of what the card's sourceRef says.  A card whose sourceRef points to a Planned task but
+        // whose resource is on an active task must appear under the active task, not the Planned one.
+        Map<String, String> activeTaskByResourceId = new java.util.HashMap<>();
+        if (isAssignedColumn) {
+            for (Map.Entry<String, SarTaskAssignment> e : sarTaskByAssignmentId.entrySet()) {
+                SarTaskAssignment t = e.getValue();
+                if (!"On Task".equals(t.getTaskLifecycleStatus())) continue;
+                List<SarTaskResource> res = t.getResourcesAssigned();
+                if (res == null) continue;
+                for (SarTaskResource r : res) {
+                    if (!r.getResourceId().isBlank()) {
+                        activeTaskByResourceId.put(r.getResourceId(), e.getKey());
+                    }
+                }
+            }
+        }
+
+        // Group children by assignment ID.
+        // • Returned tasks → ungrouped (resources flow freely under their status header).
+        // • Assigned column: group each card under the active "On Task" assignment that owns
+        //   its resource (via activeTaskByResourceId), falling back to sourceRef only when no
+        //   active assignment claims the resource.  Cards whose sourceRef references a Planned
+        //   (non-On-Task) assignment are placed ungrouped so the Planned task never appears in
+        //   the Assigned column.
+        // • Available column: use sourceRef as-is (Planned tasks render here).
         Map<String, List<TCard>> byTask = new LinkedHashMap<>();
         byTask.put("", new ArrayList<>()); // unnamed / non-task cards
         for (TCard card : children) {
-            String ref = card.getSourceRef();
             String taskKey = "";
-            if (ref.startsWith("sar:")) {
-                String[] parts = ref.split(":", 3);
-                if (parts.length >= 2 && !parts[1].isBlank()) {
-                    String candidate = parts[1];
-                    SarTaskAssignment candidateTask = sarTaskByAssignmentId.get(candidate);
-                    // Treat returned tasks as ungrouped so their resources flow freely.
-                    if (candidateTask == null || !"Returned".equals(candidateTask.getTaskLifecycleStatus())) {
-                        taskKey = candidate;
+
+            if (isAssignedColumn && !card.getResourceId().isBlank()) {
+                // Prefer the active-task lookup over sourceRef for the Assigned column.
+                String activeTask = activeTaskByResourceId.get(card.getResourceId());
+                if (activeTask != null) {
+                    taskKey = activeTask;
+                }
+                // If no active task claims this resource, leave taskKey="" (ungrouped).
+            } else {
+                // Available (and other) columns: derive group key from sourceRef.
+                String ref = card.getSourceRef();
+                if (ref.startsWith("sar:")) {
+                    String[] parts = ref.split(":", 3);
+                    if (parts.length >= 2 && !parts[1].isBlank()) {
+                        String candidate = parts[1];
+                        SarTaskAssignment candidateTask = sarTaskByAssignmentId.get(candidate);
+                        // Group only under known, non-Returned tasks; stale/unknown refs → ungrouped.
+                        if (candidateTask != null && !"Returned".equals(candidateTask.getTaskLifecycleStatus())) {
+                            taskKey = candidate;
+                        }
                     }
                 }
             }
             byTask.computeIfAbsent(taskKey, k -> new ArrayList<>()).add(card);
         }
 
-        // In the "Assigned" column only: add a phantom group for tasks that have at least one
-        // resource with "Assigned" status on a *different* group so busy-indicator cards can be
-        // rendered.  Only tasks whose resources are genuinely busy (Assigned status) qualify —
-        // planned tasks with resources still in Available must not appear here.
-        // Returned tasks are always excluded from phantom groups.
+        // In the "Assigned" column only: add a phantom group for active ("On Task") tasks that
+        // have resources "Assigned" on a *different* group so busy-indicator cards can be rendered.
+        // Only "On Task" tasks qualify — Planned and Returned tasks never appear in the Assigned
+        // column.
         if (isAssignedColumn) {
             for (Map.Entry<String, SarTaskAssignment> taskEntry : sarTaskByAssignmentId.entrySet()) {
                 String taskId = taskEntry.getKey();
-                if (byTask.containsKey(taskId)) continue; // already present (has cards in this column)
+                if (byTask.containsKey(taskId)) continue; // already present
                 SarTaskAssignment task = taskEntry.getValue();
                 if (task == null) continue;
-                if ("Returned".equals(task.getTaskLifecycleStatus())) continue; // never show returned tasks
+                // Only active assignments can produce phantom groups.
+                if (!"On Task".equals(task.getTaskLifecycleStatus())) continue;
                 List<SarTaskResource> res = task.getResourcesAssigned();
                 if (res == null || res.isEmpty()) continue;
-                // Only add phantom when at least one resource is "Assigned" (truly busy on another task).
+                // Add phantom only when at least one resource is "Assigned" (busy on another task).
                 boolean hasBusyCard = res.stream()
                         .anyMatch(r -> !r.getResourceId().isBlank()
                                        && tCardByResourceId.containsKey(r.getResourceId())
