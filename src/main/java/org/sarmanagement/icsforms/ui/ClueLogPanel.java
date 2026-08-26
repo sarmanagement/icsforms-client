@@ -1,13 +1,17 @@
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
@@ -18,6 +22,8 @@ import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
@@ -31,6 +37,8 @@ import java.util.stream.Collectors;
  * Shared clue log editor showing clues captured across SAR task debriefings.
  */
 public class ClueLogPanel extends JPanel {
+    /** Sentinel value used in the detecting-task picklist for clues not linked to a known task. */
+    private static final String DETECTING_TASK_OTHER = "Other";
     private final AppController controller;
     private final ClueLogTableModel tableModel = new ClueLogTableModel();
     private final JTable table = new JTable(tableModel);
@@ -43,6 +51,34 @@ public class ClueLogPanel extends JPanel {
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         setBorder(BorderFactory.createTitledBorder("Clue Log"));
         add(new JScrollPane(table), BorderLayout.CENTER);
+
+        // Right-click context menu — opened anywhere on a row.
+        JPopupMenu rowMenu = new JPopupMenu();
+        JMenuItem detailsItem = new JMenuItem("View Details…");
+        detailsItem.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row >= 0) showClueDetails(row);
+        });
+        rowMenu.add(detailsItem);
+        table.addMouseListener(new MouseAdapter() {
+            private void maybeShow(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    int row = table.rowAtPoint(e.getPoint());
+                    if (row >= 0) {
+                        table.setRowSelectionInterval(row, row);
+                        rowMenu.show(table, e.getX(), e.getY());
+                    }
+                }
+            }
+            @Override public void mousePressed(MouseEvent e) { maybeShow(e); }
+            @Override public void mouseReleased(MouseEvent e) { maybeShow(e); }
+            @Override public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && e.getButton() == MouseEvent.BUTTON1) {
+                    int row = table.rowAtPoint(e.getPoint());
+                    if (row >= 0) showClueDetails(row);
+                }
+            }
+        });
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton add = new JButton("Add");
@@ -60,25 +96,54 @@ public class ClueLogPanel extends JPanel {
 
     /** Opens a dialog to enter clue details and adds the new entry to the log. */
     private void addClueDialog() {
-        // Build a picklist of task labels (team number + task name) for the task combo.
-        // The combo stores the task relationship via assignmentId; a separate "Detected by"
-        // field captures the specific person or resource that found the clue.
+        // Build a picklist of task-and-resource labels from linked ICS 214 forms.
+        // Format: "<teamNumber> – <resourceName>" (e.g. "T3 – Dog X").
+        // Also keep a label→assignmentId map for linking the stored entry.
+        // An "Other" option is appended so users can record a detecting resource
+        // that doesn't yet have a linked 214 form.
         Map<String, String> labelToAssignmentId = new LinkedHashMap<>();
-        if (controller.getData().getSarTaskAssignments() != null) {
+        if (controller.getData().getSarTaskAssignments() != null
+                && controller.getData().getActivityLogs() != null) {
+            Map<String, SarTaskAssignment> taskById = new HashMap<>();
             for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
-                String label = UiSupport.taskLabel(t);
-                if (!label.isBlank() && !labelToAssignmentId.containsKey(label)) {
-                    labelToAssignmentId.put(label, t.getAssignmentId());
+                taskById.put(t.getAssignmentId(), t);
+            }
+            for (Ics214Form form : controller.getData().getActivityLogs()) {
+                if (form.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT
+                        && form.getName() != null && !form.getName().isBlank()) {
+                    SarTaskAssignment task = taskById.get(form.getLinkedSarTaskAssignmentId());
+                    String label = UiSupport.detectingTaskLabel(task, form.getName());
+                    if (!label.isBlank()) {
+                        labelToAssignmentId.putIfAbsent(label, form.getLinkedSarTaskAssignmentId());
+                    }
                 }
             }
         }
+        // Fall back to plain task labels when no linked 214 forms exist yet.
+        if (labelToAssignmentId.isEmpty() && controller.getData().getSarTaskAssignments() != null) {
+            for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
+                String label = UiSupport.taskLabel(t);
+                if (!label.isBlank()) {
+                    labelToAssignmentId.putIfAbsent(label, t.getAssignmentId());
+                }
+            }
+        }
+        final String OTHER = DETECTING_TASK_OTHER;
+        List<String> taskItems = new ArrayList<>(labelToAssignmentId.keySet());
+        taskItems.add(OTHER);
 
-        List<String> taskNames = new ArrayList<>(labelToAssignmentId.keySet());
         JPanel form = UiSupport.formPanel();
-        String[] taskItems = taskNames.isEmpty() ? new String[]{""} : taskNames.toArray(new String[0]);
-        javax.swing.JComboBox<String> taskCombo = new javax.swing.JComboBox<>(taskItems);
-        taskCombo.setEditable(true);
+        javax.swing.JComboBox<String> taskCombo = new javax.swing.JComboBox<>(taskItems.toArray(new String[0]));
+        taskCombo.setSelectedItem(null); // blank by default
+        taskCombo.setEditable(false);
         JTextField detectedByField = UiSupport.textField();
+        // "Detected by" is only relevant when "Other" is chosen; keep it enabled only then.
+        detectedByField.setEnabled(false);
+        taskCombo.addActionListener(e -> {
+            Object sel = taskCombo.getSelectedItem();
+            detectedByField.setEnabled(OTHER.equals(sel));
+        });
+
         JSpinner dateTimeSpinner = UiSupport.dateTimeSpinner();
         JTextField locationField = UiSupport.textField();
         JTextArea descriptionArea = UiSupport.textArea(3);
@@ -108,26 +173,30 @@ public class ClueLogPanel extends JPanel {
         } else {
             clue.setDateTimeCollected(LocalDateTime.now());
         }
-        // Link the task via assignmentId; the detectingTask text label is no longer used for
-        // display (the table derives the label from assignmentId), but we store it for backward
-        // compatibility with serialised data that predates this redesign.
+
         Object selectedTask = taskCombo.getSelectedItem();
         String taskLabel = selectedTask != null ? selectedTask.toString().trim() : "";
-        String assignmentId = labelToAssignmentId.get(taskLabel);
-        // Fall back to a label scan for manually typed entries that match a real task.
-        if (assignmentId == null && !taskLabel.isBlank() && controller.getData().getSarTaskAssignments() != null) {
-            for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
-                if (UiSupport.taskLabel(t).equals(taskLabel)) {
-                    assignmentId = t.getAssignmentId();
-                    break;
+        if (OTHER.equals(taskLabel)) {
+            // No task link; store free-text detected-by only.
+            clue.setDetectedBy(detectedByField.getText().trim());
+        } else {
+            // Resolve assignmentId from the picklist map.
+            // Explicit clear: detectedBy is not applicable when a specific task is chosen.
+            clue.setDetectedBy("");
+            String assignmentId = labelToAssignmentId.get(taskLabel);
+            if (assignmentId == null && !taskLabel.isBlank() && controller.getData().getSarTaskAssignments() != null) {
+                for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
+                    if (UiSupport.taskLabel(t).equals(taskLabel)) {
+                        assignmentId = t.getAssignmentId();
+                        break;
+                    }
                 }
             }
+            if (assignmentId != null) {
+                clue.setAssignmentId(assignmentId);
+            }
+            clue.setDetectingTask(taskLabel);
         }
-        if (assignmentId != null) {
-            clue.setAssignmentId(assignmentId);
-        }
-        clue.setDetectingTask(taskLabel);
-        clue.setDetectedBy(detectedByField.getText().trim());
         clue.setLocation(locationField.getText().trim());
         clue.setDescription(descriptionArea.getText().trim());
         clue.setImmediateAction(immediateActionArea.getText().trim());
@@ -138,15 +207,99 @@ public class ClueLogPanel extends JPanel {
     }
 
     /**
-     * Builds a map from assignment ID to task label for display in the "Task" column.
-     * Uses {@link UiSupport#taskLabel} so the column shows the team number and task name.
+     * Shows a read-only details dialog for the clue at the given table row.
+     * The Follow Up field is the only editable field — changes are applied immediately.
+     */
+    private void showClueDetails(int row) {
+        ClueLogEntry clue = tableModel.getRows().get(row);
+        String taskLabel = (String) tableModel.getValueAt(row, 0);
+
+        JPanel form = UiSupport.formPanel();
+
+        JTextField taskField = UiSupport.textField();
+        taskField.setText(taskLabel);
+        taskField.setEditable(false);
+
+        JTextField detectedByField = UiSupport.textField();
+        detectedByField.setText(clue.getDetectedBy());
+        detectedByField.setEditable(false);
+
+        JTextField dateField = UiSupport.textField();
+        dateField.setText(SarTaskPanel.formatDateTimeValue(clue.getDateTimeCollected()));
+        dateField.setEditable(false);
+
+        JTextField locationField = UiSupport.textField();
+        locationField.setText(clue.getLocation());
+        locationField.setEditable(false);
+
+        JTextArea descArea = UiSupport.textArea(3);
+        descArea.setText(clue.getDescription());
+        descArea.setEditable(false);
+
+        JTextArea actionArea = UiSupport.textArea(2);
+        actionArea.setText(clue.getImmediateAction());
+        actionArea.setEditable(false);
+
+        JCheckBox dupCheck = new JCheckBox("Possible duplicate", clue.isPossibleDuplicate());
+        dupCheck.setEnabled(false);
+
+        // Follow Up is the only editable field.
+        JTextArea followUpArea = UiSupport.textArea(2);
+        followUpArea.setText(clue.getFollowUp());
+
+        int r = 0;
+        UiSupport.addRow(form, r++, "Task", taskField);
+        UiSupport.addRow(form, r++, "Detected by", detectedByField);
+        UiSupport.addRow(form, r++, "Date/time collected", dateField);
+        UiSupport.addRow(form, r++, "Location / position", locationField);
+        UiSupport.addRow(form, r++, "Description", new JScrollPane(descArea));
+        UiSupport.addRow(form, r++, "Immediate action taken", new JScrollPane(actionArea));
+        UiSupport.addRow(form, r++, "", dupCheck);
+        UiSupport.addRow(form, r, "Follow up", new JScrollPane(followUpArea));
+
+        JScrollPane scrollPane = new JScrollPane(form);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        boolean ok = UiSupport.showResizableConfirmDialog(this, "Clue Details", scrollPane, new Dimension(640, 470));
+        if (ok) {
+            clue.setFollowUp(followUpArea.getText().trim());
+            tableModel.fireTableCellUpdated(row, tableModel.getColumnCount() - 1);
+            controller.markDirty();
+        }
+    }
+
+    /**
+     * Builds a map from assignment ID to a display label for the "Task" column.
+     * The label format is {@code "<teamNumber> – <resourceName>"} derived from the linked ICS 214
+     * form names (i.e. the resource identifier), not the assignment description text.
+     * Falls back to {@link UiSupport#taskLabel} when no linked 214 forms exist.
      */
     private Map<String, String> buildTaskLabelMap() {
         Map<String, String> map = new HashMap<>();
+        if (controller.getData().getSarTaskAssignments() != null
+                && controller.getData().getActivityLogs() != null) {
+            Map<String, SarTaskAssignment> taskById = new HashMap<>();
+            for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
+                taskById.put(t.getAssignmentId(), t);
+            }
+            for (Ics214Form form : controller.getData().getActivityLogs()) {
+                if (form.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT
+                        && form.getLinkedSarTaskAssignmentId() != null
+                        && !form.getLinkedSarTaskAssignmentId().isBlank()
+                        && form.getName() != null && !form.getName().isBlank()) {
+                    SarTaskAssignment task = taskById.get(form.getLinkedSarTaskAssignmentId());
+                    if (task != null) {
+                        // One entry per assignment (first 214 form wins; team# + resource name).
+                        map.putIfAbsent(form.getLinkedSarTaskAssignmentId(),
+                                UiSupport.detectingTaskLabel(task, form.getName()));
+                    }
+                }
+            }
+        }
+        // Fall back to task label (team# + assignment text) for assignments without a linked 214.
         if (controller.getData().getSarTaskAssignments() != null) {
             for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
                 if (t.getAssignmentId() != null && !t.getAssignmentId().isBlank()) {
-                    map.put(t.getAssignmentId(), UiSupport.taskLabel(t));
+                    map.putIfAbsent(t.getAssignmentId(), UiSupport.taskLabel(t));
                 }
             }
         }
