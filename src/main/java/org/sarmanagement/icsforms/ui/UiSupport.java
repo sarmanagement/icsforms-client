@@ -382,4 +382,25 @@ final class UiSupport {
         }
         return !number.isBlank() ? number : name;
     }
+
+    /**
+     * Returns a detecting-task label combining the task team number and the resource identifier
+     * (ICS 214 form name) of the resource reporting the clue.  Format: {@code "<teamNumber> – <resourceName>"}.
+     *
+     * <p>Used when recording and displaying the detecting task in the clue log so the entry
+     * shows both which task and which specific resource observed the clue.</p>
+     *
+     * @param task         the SAR task assignment (provides the team number).
+     * @param resourceName the ICS 214 form name / resource identifier for the detecting resource.
+     * @return a combined label; falls back to just the resource name if the team number is blank.
+     */
+    static String detectingTaskLabel(SarTaskAssignment task, String resourceName) {
+        String number = task != null && task.getAssignmentTeamNumber() != null
+                ? task.getAssignmentTeamNumber().trim() : "";
+        String name = resourceName != null ? resourceName.trim() : "";
+        if (!number.isBlank() && !name.isBlank()) {
+            return number + " – " + name;
+        }
+        return !number.isBlank() ? number : name;
+    }
 }

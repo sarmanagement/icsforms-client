@@ -1,6 +1,8 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import javax.swing.BorderFactory;
@@ -21,6 +23,7 @@ import java.awt.FlowLayout;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,17 +62,40 @@ public class ClueLogPanel extends JPanel {
 
     /** Opens a dialog to enter clue details and adds the new entry to the log. */
     private void addClueDialog() {
-        // Build a picklist of task names/numbers from all SAR task assignments.
-        List<String> taskNames = new ArrayList<>();
+        // Build a picklist of detecting-task labels from all ICS 214 forms linked to a task
+        // assignment.  Each entry shows the task team number and the resource identifier
+        // (214 form name) so the user can see both which task and which resource detected
+        // the clue.  We also keep a label→assignmentId map for linking the stored entry.
+        Map<String, String> labelToAssignmentId = new LinkedHashMap<>();
+        Map<String, SarTaskAssignment> taskById = new HashMap<>();
         if (controller.getData().getSarTaskAssignments() != null) {
             for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
+                taskById.put(t.getAssignmentId(), t);
+            }
+        }
+        if (controller.getData().getActivityLogs() != null) {
+            for (Ics214Form form : controller.getData().getActivityLogs()) {
+                if (form.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT
+                        && form.getName() != null && !form.getName().isBlank()) {
+                    SarTaskAssignment task = taskById.get(form.getLinkedSarTaskAssignmentId());
+                    String label = UiSupport.detectingTaskLabel(task, form.getName());
+                    if (!label.isBlank() && !labelToAssignmentId.containsKey(label)) {
+                        labelToAssignmentId.put(label, form.getLinkedSarTaskAssignmentId());
+                    }
+                }
+            }
+        }
+        // Fall back to plain task labels when no 214 forms are linked yet.
+        if (labelToAssignmentId.isEmpty() && controller.getData().getSarTaskAssignments() != null) {
+            for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
                 String label = UiSupport.taskLabel(t);
-                if (!label.isBlank() && !taskNames.contains(label)) {
-                    taskNames.add(label);
+                if (!label.isBlank() && !labelToAssignmentId.containsKey(label)) {
+                    labelToAssignmentId.put(label, t.getAssignmentId());
                 }
             }
         }
 
+        List<String> taskNames = new ArrayList<>(labelToAssignmentId.keySet());
         JPanel form = UiSupport.formPanel();
         String[] taskItems = taskNames.isEmpty() ? new String[]{""} : taskNames.toArray(new String[0]);
         javax.swing.JComboBox<String> taskCombo = new javax.swing.JComboBox<>(taskItems);
@@ -106,14 +132,19 @@ public class ClueLogPanel extends JPanel {
         }
         Object selectedTask = taskCombo.getSelectedItem();
         clue.setDetectingTask(selectedTask != null ? selectedTask.toString().trim() : "");
-        // Link the assignmentId if we can match the label back to a known task.
-        if (controller.getData().getSarTaskAssignments() != null) {
+        // Link the assignmentId via the label map; fall back to a task-label scan for
+        // manually typed entries.
+        String assignmentId = labelToAssignmentId.get(clue.getDetectingTask());
+        if (assignmentId == null && controller.getData().getSarTaskAssignments() != null) {
             for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
                 if (UiSupport.taskLabel(t).equals(clue.getDetectingTask())) {
-                    clue.setAssignmentId(t.getAssignmentId());
+                    assignmentId = t.getAssignmentId();
                     break;
                 }
             }
+        }
+        if (assignmentId != null) {
+            clue.setAssignmentId(assignmentId);
         }
         clue.setLocation(locationField.getText().trim());
         clue.setDescription(descriptionArea.getText().trim());

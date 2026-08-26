@@ -37,7 +37,9 @@ import java.awt.event.WindowEvent;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -511,7 +513,15 @@ public class Ics214Panel extends JPanel {
         // Resolve detecting task from dialog.
         String detectingTask;
         if (isResourceLog) {
-            detectingTask = nullSafe(currentForm.getName());
+            // Combine the task team number with the resource (form) name so the clue log
+            // entry identifies both which task and which resource detected the clue.
+            String taskId = currentForm.getLinkedSarTaskAssignmentId();
+            SarTaskAssignment linkedTask = (currentData != null && taskId != null)
+                    ? currentData.getSarTaskAssignments().stream()
+                            .filter(t -> taskId.equals(t.getAssignmentId()))
+                            .findFirst().orElse(null)
+                    : null;
+            detectingTask = UiSupport.detectingTaskLabel(linkedTask, currentForm.getName());
         } else if (detectingResourceCombo != null && detectingResourceCombo.getSelectedItem() != null) {
             detectingTask = detectingResourceCombo.getSelectedItem().toString();
         } else {
@@ -534,18 +544,29 @@ public class Ics214Panel extends JPanel {
     }
 
     /**
-     * Returns the names of all ICS 214 forms in the document that are linked to a SAR task
-     * assignment (i.e. resource-level 214 forms).  Used to populate the detecting-resource
-     * picklist in the management-214 clue capture dialog.
+     * Returns detecting-task labels for all ICS 214 forms in the document that are linked to a
+     * SAR task assignment (resource-level 214 forms).  Each label combines the task team number
+     * and the form's resource name so the management-214 clue-capture picklist shows both.
      */
     private List<String> taskLinkedFormNames() {
         if (currentData == null) {
             return List.of();
         }
+        // Build a map from assignmentId → team number for quick lookup.
+        Map<String, SarTaskAssignment> taskById = new HashMap<>();
+        if (currentData.getSarTaskAssignments() != null) {
+            for (SarTaskAssignment t : currentData.getSarTaskAssignments()) {
+                taskById.put(t.getAssignmentId(), t);
+            }
+        }
         return currentData.getActivityLogs().stream()
                 .filter(f -> f.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT)
-                .map(Ics214Form::getName)
-                .filter(name -> name != null && !name.isBlank())
+                .filter(f -> f.getName() != null && !f.getName().isBlank())
+                .map(f -> {
+                    SarTaskAssignment task = taskById.get(f.getLinkedSarTaskAssignmentId());
+                    return UiSupport.detectingTaskLabel(task, f.getName());
+                })
+                .filter(label -> !label.isBlank())
                 .distinct()
                 .collect(Collectors.toList());
     }
