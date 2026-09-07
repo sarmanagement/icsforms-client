@@ -4,11 +4,13 @@ import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
@@ -26,6 +28,7 @@ import java.nio.file.Path;
 import java.time.ZoneId;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -346,6 +349,31 @@ public class AppController {
         return exportService.exportIapBundle(data, outputDirectory);
     }
 
+    public List<String> exportableFormKeys() {
+        return exportService.formKeys();
+    }
+
+    public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory, LinkSource source) throws IOException {
+        synchronizeLinkedFields(source);
+        syncSarTasks();
+        java.util.Map<String, Path> exported = new LinkedHashMap<>();
+        if (formKeys == null) {
+            return exported;
+        }
+        for (String formKey : formKeys) {
+            if (exportService.supports(formKey)) {
+                exported.put(formKey, exportService.exportSelected(formKey, data, outputDirectory));
+            }
+        }
+        return exported;
+    }
+
+    public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source) throws IOException {
+        synchronizeLinkedFields(source);
+        syncSarTasks();
+        return exportService.exportIapBundle(data, outputDirectory, formKeys);
+    }
+
     /**
      * Synchronizes shared org-chart-linked fields across the shared tab, org chart, ICS 202, and ICS 204.
      *
@@ -634,6 +662,17 @@ public class AppController {
                         card.setPersonName(name);
                         String icRadio = safe(chart.getIncidentCommanderRadio());
                         String icPhone = safe(chart.getIncidentCommanderPhone());
+                        if (chart.getIncidentCommanderEntries() != null && i < chart.getIncidentCommanderEntries().size()) {
+                            OrgChartEntry icEntry = chart.getIncidentCommanderEntries().get(i);
+                            if (icEntry != null) {
+                                if (!safe(icEntry.getRadio()).isBlank()) {
+                                    icRadio = safe(icEntry.getRadio());
+                                }
+                                if (!safe(icEntry.getPhone()).isBlank()) {
+                                    icPhone = safe(icEntry.getPhone());
+                                }
+                            }
+                        }
                         if (!icRadio.isBlank()) card.setRadioChannel(icRadio);
                         if (!icPhone.isBlank()) card.setPhoneNumber(icPhone);
                         card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
@@ -941,14 +980,18 @@ public class AppController {
     /**
      * Converts a task lifecycle status string to the equivalent T-card status.
      *
-     * @param lifecycle "Planned", "On Task", or "Returned".
+     * @param lifecycle lifecycle value from SAR task editor.
      * @return T-card status string ("Assigned", blank, or {@code null} for Returned).
      */
     static String lifecycleToCardStatus(String lifecycle) {
         if (lifecycle == null) return "";
-        return switch (lifecycle) {
-            case "On Task"  -> "Assigned";
-            case "Returned" -> null;  // Returned tasks do not drive resource status —
+        String normalized = lifecycle.trim().toLowerCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "assigned - enroute to assignment",
+                 "assigned - on task",
+                 "assigned - returning from assignment",
+                 "on task" -> "Assigned";
+            case "returned" -> null;  // Returned tasks do not drive resource status —
                                       // operators manage the card manually after return.
             default         -> "";    // Planned/Planning or unknown → blank (available)
         };
@@ -1162,7 +1205,10 @@ public class AppController {
         List<SarTaskAssignment> tasks = data.getSarTaskAssignments();
         if (tasks == null) return Collections.unmodifiableSet(ids);
         for (SarTaskAssignment task : tasks) {
-            if (!"On Task".equals(task.getTaskLifecycleStatus())) continue;
+            String lifecycle = task.getTaskLifecycleStatus() == null
+                    ? ""
+                    : task.getTaskLifecycleStatus().trim().toLowerCase(java.util.Locale.ROOT);
+            if (!(lifecycle.startsWith("assigned -") || "on task".equals(lifecycle))) continue;
             List<SarTaskResource> resources = task.getResourcesAssigned();
             if (resources == null) continue;
             for (SarTaskResource res : resources) {
@@ -1173,6 +1219,31 @@ public class AppController {
             }
         }
         return Collections.unmodifiableSet(ids);
+    }
+
+    public void applyReturnedResourceStatuses(SarTaskAssignment task, Map<String, String> statusesByResourceId) {
+        if (task == null || statusesByResourceId == null || statusesByResourceId.isEmpty()) {
+            return;
+        }
+        Map<String, TCard> cardsById = new HashMap<>();
+        for (TCard card : data.getTCards()) {
+            if (card.getResourceId() != null && !card.getResourceId().isBlank()) {
+                cardsById.put(card.getResourceId(), card);
+            }
+        }
+        for (SarTaskResource resource : task.getResourcesAssigned()) {
+            if (resource.getResourceId() == null || resource.getResourceId().isBlank()) {
+                continue;
+            }
+            String status = statusesByResourceId.get(resource.getResourceId());
+            if (status == null) {
+                continue;
+            }
+            TCard card = cardsById.get(resource.getResourceId());
+            if (card != null) {
+                card.setStatus(status);
+            }
+        }
     }
 
     /**
@@ -1196,20 +1267,26 @@ public class AppController {
         if (task == null || newStatus == null) {
             return;
         }
-        String eventTypeId;
-        String description;
-        switch (newStatus) {
-            case "On Task" -> {
-                eventTypeId = ActivityEventType.ID_RESOURCE_ON_TASK;
-                description = "Task status changed to On Task";
-            }
-            case "Returned" -> {
-                eventTypeId = ActivityEventType.ID_TASK_COMPLETED;
-                description = "Task status changed to Returned";
-            }
-            default -> {
-                return; // "Planned" or unknown — no log entry
-            }
+        String normalized = newStatus.trim().toLowerCase(java.util.Locale.ROOT);
+        String eventTypeId = switch (normalized) {
+            case "assigned - enroute to assignment",
+                 "assigned - on task",
+                 "assigned - returning from assignment" -> ActivityEventType.ID_RESOURCE_ON_TASK;
+            case "returned" -> ActivityEventType.ID_TASK_COMPLETED;
+            default -> ActivityEventType.ID_FREE_TEXT;
+        };
+        String description = "Task status changed to " + normalized;
+
+        // Also append to ICP communications log.
+        CommunicationEntry comm = new CommunicationEntry();
+        comm.setName(safe(task.getAssignmentTeamNumber()).isBlank()
+                ? safe(task.getResourceIdentifier()) : safe(task.getAssignmentTeamNumber()));
+        comm.setFunction("Task status update");
+        comm.setPrimaryContact(LocalDateTime.now().withSecond(0).withNano(0) + " — " + normalized);
+        data.getForm204().getCommunications().add(comm);
+
+        if (ActivityEventType.ID_FREE_TEXT.equals(eventTypeId)) {
+            return;
         }
         // Find the linked ICS 214 form for this task.
         String assignmentId = task.getAssignmentId();
@@ -1249,8 +1326,8 @@ public class AppController {
             errors.add("No task provided.");
             return errors;
         }
-        if (!"Returned".equals(task.getTaskLifecycleStatus())) {
-            errors.add("Task must be in 'Returned' status before debriefing can be completed.");
+        if (!"returned".equalsIgnoreCase(task.getTaskLifecycleStatus())) {
+            errors.add("Task must be in 'returned' status before debriefing can be completed.");
         }
         if (safe(task.getDebriefingSupervisor()).isBlank()) {
             errors.add("Debriefing supervisor name is required.");

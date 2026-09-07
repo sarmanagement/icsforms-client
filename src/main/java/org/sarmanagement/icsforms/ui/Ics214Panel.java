@@ -563,9 +563,27 @@ public class Ics214Panel extends JPanel {
         if (currentForm == null || row < 0 || row >= currentForm.getActivityLog().size()) {
             return;
         }
+        ActivityLogEntry entry = currentForm.getActivityLog().get(row);
+        String label = (entry.getTimestamp() == null ? "" : SarTaskPanel.formatDateTimeValue(entry.getTimestamp()) + " ")
+                + resolvedEventTypeLabel(entry.getEventTypeId());
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Remove activity entry '" + label.trim() + "'?",
+                "Remove Activity Entry", JOptionPane.YES_NO_OPTION);
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
         currentForm.getActivityLog().remove(row);
         activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
         controller.markDirty();
+    }
+
+    private String resolvedEventTypeLabel(String eventTypeId) {
+        for (ActivityEventType type : resolvedEventTypes()) {
+            if (type.getId().equals(eventTypeId)) {
+                return type.getLabel();
+            }
+        }
+        return eventTypeId == null ? "" : eventTypeId;
     }
 
     private JPanel activityButtonsPanel() {
@@ -782,6 +800,23 @@ public class Ics214Panel extends JPanel {
                                     List<String> resourcePicklist) {
             ActivityEventType[] typeArray = eventTypes.toArray(new ActivityEventType[0]);
             eventTypeField = new JComboBox<>(typeArray);
+            eventTypeField.setRenderer(new javax.swing.DefaultListCellRenderer() {
+                @Override
+                public java.awt.Component getListCellRendererComponent(javax.swing.JList<?> list, Object value,
+                                                                       int index, boolean isSelected, boolean cellHasFocus) {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if (value instanceof ActivityEventType t) {
+                        if (ActivityEventType.ID_CLUE_DETECTED.equals(t.getId())) {
+                            setText("Clue detected by my assignment");
+                        } else if (ActivityEventType.ID_CLUE_REPORTED.equals(t.getId())) {
+                            setText("Clue reported by another assignment");
+                        } else {
+                            setText(t.getLabel());
+                        }
+                    }
+                    return this;
+                }
+            });
             // Select the free-text / Note type by default.
             for (ActivityEventType t : typeArray) {
                 if (ActivityEventType.ID_FREE_TEXT.equals(t.getId())) {
@@ -879,7 +914,13 @@ public class Ics214Panel extends JPanel {
         private void removeSelected() {
             int row = table.getSelectedRow();
             if (row >= 0) {
-                tableModel.removeRow(row);
+                ActivityEventType type = tableModel.getTypes().get(row);
+                int confirm = JOptionPane.showConfirmDialog(panel,
+                        "Remove event type '" + type.getLabel() + "' (" + type.getId() + ")?",
+                        "Remove Event Type", JOptionPane.YES_NO_OPTION);
+                if (confirm == JOptionPane.YES_OPTION) {
+                    tableModel.removeRow(row);
+                }
             }
         }
 

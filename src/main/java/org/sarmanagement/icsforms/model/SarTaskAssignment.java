@@ -58,11 +58,12 @@ public class SarTaskAssignment {
     /**
      * Lifecycle status of this task assignment.
      *
-     * <p>Values: {@code "Planned"} (default), {@code "On Task"} (resources Assigned),
-     * {@code "Returned"} (resources Out of Service or Available depending on incident
+     * <p>Values: {@code "planned"} (default), {@code "assigned - enroute to assignment"},
+     * {@code "assigned - on task"}, {@code "assigned - returning from assignment"},
+     * {@code "returned"} (resources Out of Service or Available depending on incident
      * configuration).</p>
      */
-    private String taskLifecycleStatus = "Planned";
+    private String taskLifecycleStatus = "planned";
     /**
      * Whether the debriefing for this task assignment has been formally completed.
      *
@@ -344,16 +345,32 @@ public class SarTaskAssignment {
     /**
      * Returns the task lifecycle status.
      *
-     * @return "Planned", "On Task", or "Returned"; never {@code null}.
+     * @return lifecycle status; never {@code null}.
      */
-    public String getTaskLifecycleStatus() { return taskLifecycleStatus == null ? "Planned" : taskLifecycleStatus; }
+    public String getTaskLifecycleStatus() { return normalizeLifecycle(taskLifecycleStatus); }
     /**
      * Sets the task lifecycle status.
      *
-     * @param taskLifecycleStatus "Planned", "On Task", or "Returned"; null treated as "Planned".
+     * @param taskLifecycleStatus lifecycle status; null treated as "planned".
      */
     public void setTaskLifecycleStatus(String taskLifecycleStatus) {
-        this.taskLifecycleStatus = taskLifecycleStatus == null ? "Planned" : taskLifecycleStatus;
+        this.taskLifecycleStatus = normalizeLifecycle(taskLifecycleStatus);
+    }
+
+    private static String normalizeLifecycle(String value) {
+        if (value == null || value.isBlank()) {
+            return "planned";
+        }
+        String normalized = value.trim().toLowerCase();
+        return switch (normalized) {
+            case "planned", "planning" -> "planned";
+            case "on task" -> "assigned - on task";
+            case "returned" -> "returned";
+            case "assigned - enroute to assignment",
+                 "assigned - on task",
+                 "assigned - returning from assignment" -> normalized;
+            default -> normalized;
+        };
     }
 
     /**

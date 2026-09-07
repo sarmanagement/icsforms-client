@@ -9,6 +9,7 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultCellEditor;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -16,13 +17,13 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
-import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -39,9 +40,9 @@ import java.util.List;
  */
 public class OrganizationalChartPanel extends JPanel {
     private final AppController controller;
-    private final JTextArea incidentCommanderArea = UiSupport.textArea(4);
-    private final JTextField incidentCommanderRadioField = UiSupport.textField();
-    private final JTextField incidentCommanderPhoneField = UiSupport.textField();
+    private final JPanel incidentCommanderRowsPanel = new JPanel(new GridBagLayout());
+    private final JButton addIncidentCommanderButton = new JButton("Add");
+    private final List<IncidentCommanderRow> incidentCommanderRows = new ArrayList<>();
 
     // Command Staff
     private final JTextField safetyOfficerNameField = UiSupport.textField();
@@ -163,9 +164,20 @@ public class OrganizationalChartPanel extends JPanel {
 
         JPanel icSection = UiSupport.formPanel();
         icSection.setBorder(BorderFactory.createTitledBorder("Incident Command"));
-        UiSupport.addRow(icSection, 0, "Incident commander / unified command (one per line)", new JScrollPane(incidentCommanderArea));
-        UiSupport.addRow(icSection, 1, "Incident Commander / UC radio", incidentCommanderRadioField);
-        UiSupport.addRow(icSection, 2, "Incident Commander / UC phone", incidentCommanderPhoneField);
+        incidentCommanderRowsPanel.setOpaque(false);
+        addIncidentCommanderButton.addActionListener(e -> {
+            addIncidentCommanderRow("", "", "", false);
+            pickIncidentCommanderResource(incidentCommanderRows.get(incidentCommanderRows.size() - 1));
+            rebuildIncidentCommanderRowsUi();
+        });
+        JPanel icRowsWrap = new JPanel(new BorderLayout(0, 4));
+        icRowsWrap.setOpaque(false);
+        icRowsWrap.add(incidentCommanderRowsPanel, BorderLayout.CENTER);
+        JPanel icActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        icActions.setOpaque(false);
+        icActions.add(addIncidentCommanderButton);
+        icRowsWrap.add(icActions, BorderLayout.SOUTH);
+        UiSupport.addRow(icSection, 0, "Incident commander / unified command", icRowsWrap);
 
         JPanel commandSection = buildSection("Command Staff",
                 new String[]{"Safety Officer", "PIO / Public Information Officer", "Liaison Officer"},
@@ -246,6 +258,8 @@ public class OrganizationalChartPanel extends JPanel {
         installPersonAutocomplete(procurementUnitLeaderNameField,  procurementUnitLeaderRadioField, procurementUnitLeaderPhoneField);
         installPersonAutocomplete(compClaimsUnitLeaderNameField,   compClaimsUnitLeaderRadioField,  compClaimsUnitLeaderPhoneField);
         installPersonAutocomplete(costUnitLeaderNameField,         costUnitLeaderRadioField,        costUnitLeaderPhoneField);
+        addIncidentCommanderRow("", "", "", false);
+        rebuildIncidentCommanderRowsUi();
 
         // Custom / additional positions section
         JPanel customSection = buildCustomPositionsPanel();
@@ -303,7 +317,17 @@ public class OrganizationalChartPanel extends JPanel {
         JButton removeBtn = new JButton("Remove");
         removeBtn.addActionListener(e -> {
             int row = customPositionsTable.getSelectedRow();
-            if (row >= 0) customPositionsModel.removeRow(row);
+            if (row >= 0) {
+                String title = safe((String) customPositionsModel.getValueAt(row, 1));
+                String name = safe((String) customPositionsModel.getValueAt(row, 2));
+                String label = title.isBlank() ? name : title + (name.isBlank() ? "" : " (" + name + ")");
+                int confirm = JOptionPane.showConfirmDialog(this,
+                        "Remove custom position " + (label.isBlank() ? "at row " + (row + 1) : "'" + label + "'") + "?",
+                        "Remove Custom Position", JOptionPane.YES_NO_OPTION);
+                if (confirm == JOptionPane.YES_OPTION) {
+                    customPositionsModel.removeRow(row);
+                }
+            }
         });
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
@@ -395,9 +419,24 @@ public class OrganizationalChartPanel extends JPanel {
      */
     public void refreshFromModel() {
         OrganizationalChart chart = controller.getData().getOrganizationalChart();
-        incidentCommanderArea.setText(String.join("\n", chart.getIncidentCommanders()));
-        incidentCommanderRadioField.setText(safe(chart.getIncidentCommanderRadio()));
-        incidentCommanderPhoneField.setText(safe(chart.getIncidentCommanderPhone()));
+        incidentCommanderRows.clear();
+        if (chart.getIncidentCommanderEntries() != null && !chart.getIncidentCommanderEntries().isEmpty()) {
+            for (OrgChartEntry entry : chart.getIncidentCommanderEntries()) {
+                addIncidentCommanderRow(safe(entry.getName()), safe(entry.getRadio()),
+                        safe(entry.getPhone()), chart.isPropagateIncidentCommanderContacts());
+            }
+        } else if (chart.getIncidentCommanders() != null && !chart.getIncidentCommanders().isEmpty()) {
+            List<String> names = chart.getIncidentCommanders();
+            for (int i = 0; i < names.size(); i++) {
+                addIncidentCommanderRow(safe(names.get(i)),
+                        i == 0 ? safe(chart.getIncidentCommanderRadio()) : "",
+                        i == 0 ? safe(chart.getIncidentCommanderPhone()) : "",
+                        chart.isPropagateIncidentCommanderContacts());
+            }
+        } else {
+            addIncidentCommanderRow("", "", "", false);
+        }
+        rebuildIncidentCommanderRowsUi();
 
         safetyOfficerNameField.setText(safe(chart.getSafetyOfficerName()));
         safetyOfficerRadioField.setText(safe(chart.getSafetyOfficerRadio()));
@@ -511,9 +550,44 @@ public class OrganizationalChartPanel extends JPanel {
      */
     public void pushToModel() {
         OrganizationalChart chart = controller.getData().getOrganizationalChart();
-        chart.setIncidentCommanders(lines(incidentCommanderArea.getText()));
-        chart.setIncidentCommanderRadio(incidentCommanderRadioField.getText().trim());
-        chart.setIncidentCommanderPhone(incidentCommanderPhoneField.getText().trim());
+        List<String> icNames = new ArrayList<>();
+        List<OrgChartEntry> icEntries = new ArrayList<>();
+        boolean propagate = false;
+        String propagatedRadio = "";
+        String propagatedPhone = "";
+        for (IncidentCommanderRow row : incidentCommanderRows) {
+            String name = row.nameField().getText().trim();
+            String radio = row.radioField().getText().trim();
+            String phone = row.phoneField().getText().trim();
+            if (name.isBlank() && radio.isBlank() && phone.isBlank()) {
+                continue;
+            }
+            if (!name.isBlank()) {
+                icNames.add(name);
+            }
+            OrgChartEntry entry = new OrgChartEntry();
+            entry.setSection(OrgChartEntry.Section.COMMAND_STAFF);
+            entry.setTitle("Incident Commander");
+            entry.setName(name);
+            entry.setRadio(radio);
+            entry.setPhone(phone);
+            icEntries.add(entry);
+            boolean rowPropagate = row.propagateCheckbox().isSelected();
+            propagate |= rowPropagate;
+            if (rowPropagate) {
+                if (propagatedRadio.isBlank()) {
+                    propagatedRadio = radio;
+                }
+                if (propagatedPhone.isBlank()) {
+                    propagatedPhone = phone;
+                }
+            }
+        }
+        chart.setIncidentCommanders(icNames);
+        chart.setIncidentCommanderEntries(icEntries);
+        chart.setPropagateIncidentCommanderContacts(propagate);
+        chart.setIncidentCommanderRadio(propagatedRadio);
+        chart.setIncidentCommanderPhone(propagatedPhone);
 
         chart.setSafetyOfficerName(safetyOfficerNameField.getText().trim());
         chart.setSafetyOfficerRadio(safetyOfficerRadioField.getText().trim());
@@ -624,6 +698,109 @@ public class OrganizationalChartPanel extends JPanel {
         form207.setPreparedDateTime(AppController.toLocalDateTime((java.util.Date) ics207PreparedDateTimeSpinner.getValue()));
     }
 
+    private void addIncidentCommanderRow(String name, String radio, String phone, boolean propagate) {
+        JTextField nameField = UiSupport.textField();
+        JTextField radioField = UiSupport.textField();
+        JTextField phoneField = UiSupport.textField();
+        JCheckBox propagateCheckbox = new JCheckBox("Propagate contact to other forms");
+        propagateCheckbox.setOpaque(false);
+        nameField.setText(name);
+        radioField.setText(radio);
+        phoneField.setText(phone);
+        propagateCheckbox.setSelected(propagate);
+        installPersonAutocomplete(nameField, radioField, phoneField);
+        incidentCommanderRows.add(new IncidentCommanderRow(nameField, radioField, phoneField, propagateCheckbox));
+    }
+
+    private void rebuildIncidentCommanderRowsUi() {
+        incidentCommanderRowsPanel.removeAll();
+        if (incidentCommanderRows.isEmpty()) {
+            addIncidentCommanderRow("", "", "", false);
+        }
+        boolean unifiedCommand = incidentCommanderRows.size() > 1;
+        for (int i = 0; i < incidentCommanderRows.size(); i++) {
+            IncidentCommanderRow row = incidentCommanderRows.get(i);
+            GridBagConstraints c = new GridBagConstraints();
+            c.gridy = i;
+            c.insets = new Insets(2, 0, 2, 4);
+            c.anchor = GridBagConstraints.WEST;
+            c.fill = GridBagConstraints.HORIZONTAL;
+            c.weightx = 0.28;
+            c.gridx = 0;
+            incidentCommanderRowsPanel.add(row.nameField(), c);
+            c.weightx = 0.18;
+            c.gridx = 1;
+            incidentCommanderRowsPanel.add(row.radioField(), c);
+            c.gridx = 2;
+            incidentCommanderRowsPanel.add(row.phoneField(), c);
+            c.weightx = 0;
+            c.gridx = 3;
+            JButton pickButton = new JButton("Pick…");
+            pickButton.addActionListener(e -> pickIncidentCommanderResource(row));
+            incidentCommanderRowsPanel.add(pickButton, c);
+            c.gridx = 4;
+            JButton removeButton = new JButton("Remove");
+            removeButton.setEnabled(incidentCommanderRows.size() > 1);
+            removeButton.addActionListener(e -> {
+                String who = row.nameField().getText().trim();
+                int confirm = JOptionPane.showConfirmDialog(this,
+                        "Remove incident commander " + (who.isBlank() ? "entry?" : "'" + who + "'?"),
+                        "Remove Incident Commander", JOptionPane.YES_NO_OPTION);
+                if (confirm == JOptionPane.YES_OPTION) {
+                    incidentCommanderRows.remove(row);
+                    rebuildIncidentCommanderRowsUi();
+                }
+            });
+            incidentCommanderRowsPanel.add(removeButton, c);
+            c.gridx = 5;
+            row.propagateCheckbox().setVisible(unifiedCommand);
+            incidentCommanderRowsPanel.add(row.propagateCheckbox(), c);
+        }
+        incidentCommanderRowsPanel.revalidate();
+        incidentCommanderRowsPanel.repaint();
+    }
+
+    private void pickIncidentCommanderResource(IncidentCommanderRow row) {
+        List<String> names = new ArrayList<>(controller.getPersonnelNames());
+        names.add("<Add new resource…>");
+        JComboBox<String> combo = new JComboBox<>(names.toArray(new String[0]));
+        int choice = JOptionPane.showConfirmDialog(this, combo,
+                "Select Incident Commander", JOptionPane.OK_CANCEL_OPTION);
+        if (choice != JOptionPane.OK_OPTION || combo.getSelectedItem() == null) {
+            return;
+        }
+        String selected = combo.getSelectedItem().toString();
+        if ("<Add new resource…>".equals(selected)) {
+            JTextField nameField = UiSupport.textField();
+            JTextField radioField = UiSupport.textField();
+            JTextField phoneField = UiSupport.textField();
+            JPanel form = UiSupport.formPanel();
+            UiSupport.addRequiredRow(form, 0, "Name", nameField);
+            UiSupport.addRow(form, 1, "Radio", radioField);
+            UiSupport.addRow(form, 2, "Phone", phoneField);
+            JScrollPane pane = new JScrollPane(form);
+            pane.setBorder(BorderFactory.createEmptyBorder());
+            if (!UiSupport.showResizableConfirmDialog(this, "Add Incident Commander Resource",
+                    pane, new Dimension(540, 240))) {
+                return;
+            }
+            row.nameField().setText(nameField.getText().trim());
+            row.radioField().setText(radioField.getText().trim());
+            row.phoneField().setText(phoneField.getText().trim());
+            return;
+        }
+        row.nameField().setText(selected);
+        var card = controller.findPersonCard(selected);
+        if (card != null) {
+            if (row.radioField().getText().isBlank()) {
+                row.radioField().setText(safe(card.getRadioChannel()));
+            }
+            if (row.phoneField().getText().isBlank()) {
+                row.phoneField().setText(safe(card.getPhoneNumber()));
+            }
+        }
+    }
+
     /**
      * Builds a section panel with Name / Radio / Phone columns per staff position.
      * Radio and Phone cells are initially hidden when the corresponding Name is blank.
@@ -689,5 +866,9 @@ public class OrganizationalChartPanel extends JPanel {
             case "Finance/Admin" -> OrgChartEntry.Section.FINANCE_ADMIN;
             default              -> OrgChartEntry.Section.OPERATIONS;
         };
+    }
+
+    private record IncidentCommanderRow(JTextField nameField, JTextField radioField,
+                                        JTextField phoneField, JCheckBox propagateCheckbox) {
     }
 }

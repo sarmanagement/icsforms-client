@@ -96,40 +96,28 @@ public class ClueLogPanel extends JPanel {
 
     /** Opens a dialog to enter clue details and adds the new entry to the log. */
     private void addClueDialog() {
-        // Build a picklist of task-and-resource labels from linked ICS 214 forms.
-        // Format: "<teamNumber> – <resourceName>" (e.g. "T3 – Dog X").
-        // Also keep a label→assignmentId map for linking the stored entry.
-        // An "Other" option is appended so users can record a detecting resource
-        // that doesn't yet have a linked 214 form.
+        // Build a picklist: assignment labels first, then individual resource names.
         Map<String, String> labelToAssignmentId = new LinkedHashMap<>();
-        if (controller.getData().getSarTaskAssignments() != null
-                && controller.getData().getActivityLogs() != null) {
-            Map<String, SarTaskAssignment> taskById = new HashMap<>();
-            for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
-                taskById.put(t.getAssignmentId(), t);
-            }
-            for (Ics214Form form : controller.getData().getActivityLogs()) {
-                if (form.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT
-                        && form.getName() != null && !form.getName().isBlank()) {
-                    SarTaskAssignment task = taskById.get(form.getLinkedSarTaskAssignmentId());
-                    String label = UiSupport.detectingTaskLabel(task, form.getName());
-                    if (!label.isBlank()) {
-                        labelToAssignmentId.putIfAbsent(label, form.getLinkedSarTaskAssignmentId());
-                    }
-                }
-            }
-        }
-        // Fall back to plain task labels when no linked 214 forms exist yet.
-        if (labelToAssignmentId.isEmpty() && controller.getData().getSarTaskAssignments() != null) {
+        List<String> individualResources = new ArrayList<>();
+        if (controller.getData().getSarTaskAssignments() != null) {
             for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
                 String label = UiSupport.taskLabel(t);
                 if (!label.isBlank()) {
                     labelToAssignmentId.putIfAbsent(label, t.getAssignmentId());
                 }
+                if (t.getResourcesAssigned() != null) {
+                    for (var res : t.getResourcesAssigned()) {
+                        String name = res.getName() == null ? "" : res.getName().trim();
+                        if (!name.isBlank() && !individualResources.contains(name)) {
+                            individualResources.add(name);
+                        }
+                    }
+                }
             }
         }
         final String OTHER = DETECTING_TASK_OTHER;
         List<String> taskItems = new ArrayList<>(labelToAssignmentId.keySet());
+        taskItems.addAll(individualResources);
         taskItems.add(OTHER);
 
         JPanel form = UiSupport.formPanel();
@@ -204,15 +192,15 @@ public class ClueLogPanel extends JPanel {
 
         tableModel.addRow(clue);
         controller.markDirty();
+        showClueDetails(tableModel.getRowCount() - 1);
     }
 
     /**
-     * Shows a read-only details dialog for the clue at the given table row.
-     * The Follow Up field is the only editable field — changes are applied immediately.
+     * Shows an editable details dialog for the clue at the given table row.
      */
     private void showClueDetails(int row) {
-        ClueLogEntry clue = tableModel.getRows().get(row);
-        String taskLabel = (String) tableModel.getValueAt(row, 0);
+    ClueLogEntry clue = tableModel.getRows().get(row);
+    String taskLabel = (String) tableModel.getValueAt(row, 0);
 
         JPanel form = UiSupport.formPanel();
 
@@ -222,28 +210,20 @@ public class ClueLogPanel extends JPanel {
 
         JTextField detectedByField = UiSupport.textField();
         detectedByField.setText(clue.getDetectedBy());
-        detectedByField.setEditable(false);
-
-        JTextField dateField = UiSupport.textField();
-        dateField.setText(SarTaskPanel.formatDateTimeValue(clue.getDateTimeCollected()));
-        dateField.setEditable(false);
+        JSpinner dateField = UiSupport.dateTimeSpinner();
+        dateField.setValue(clue.getDateTimeCollected() == null ? new Date()
+                : Date.from(clue.getDateTimeCollected().atZone(java.time.ZoneId.systemDefault()).toInstant()));
 
         JTextField locationField = UiSupport.textField();
         locationField.setText(clue.getLocation());
-        locationField.setEditable(false);
 
         JTextArea descArea = UiSupport.textArea(3);
         descArea.setText(clue.getDescription());
-        descArea.setEditable(false);
 
         JTextArea actionArea = UiSupport.textArea(2);
         actionArea.setText(clue.getImmediateAction());
-        actionArea.setEditable(false);
 
         JCheckBox dupCheck = new JCheckBox("Possible duplicate", clue.isPossibleDuplicate());
-        dupCheck.setEnabled(false);
-
-        // Follow Up is the only editable field.
         JTextArea followUpArea = UiSupport.textArea(2);
         followUpArea.setText(clue.getFollowUp());
 
@@ -261,8 +241,14 @@ public class ClueLogPanel extends JPanel {
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         boolean ok = UiSupport.showResizableConfirmDialog(this, "Clue Details", scrollPane, new Dimension(640, 470));
         if (ok) {
+            clue.setDateTimeCollected(AppController.toLocalDateTime((Date) dateField.getValue()));
+            clue.setDetectedBy(detectedByField.getText().trim());
+            clue.setLocation(locationField.getText().trim());
+            clue.setDescription(descArea.getText().trim());
+            clue.setImmediateAction(actionArea.getText().trim());
+            clue.setPossibleDuplicate(dupCheck.isSelected());
             clue.setFollowUp(followUpArea.getText().trim());
-            tableModel.fireTableCellUpdated(row, tableModel.getColumnCount() - 1);
+            tableModel.fireTableRowsUpdated(row, row);
             controller.markDirty();
         }
     }
@@ -471,4 +457,3 @@ public class ClueLogPanel extends JPanel {
         }
     }
 }
-

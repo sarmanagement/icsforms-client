@@ -375,12 +375,30 @@ final class UiSupport {
      * @return a non-null label string (may be empty if neither field is set).
      */
     static String taskLabel(SarTaskAssignment task) {
-        String number = task.getAssignmentTeamNumber() != null ? task.getAssignmentTeamNumber().trim() : "";
-        String name = task.getAssignment() != null ? task.getAssignment().trim() : "";
-        if (!number.isBlank() && !name.isBlank()) {
-            return number + " – " + name;
+        if (task == null) {
+            return "";
         }
-        return !number.isBlank() ? number : name;
+        String number = task.getAssignmentTeamNumber() != null ? task.getAssignmentTeamNumber().trim() : "";
+        String resource = task.getResourceIdentifier() != null ? task.getResourceIdentifier().trim() : "";
+        String leader = task.getLeader() != null ? task.getLeader().trim() : "";
+        String assignmentPreview = firstWords(task.getAssignment(), 6);
+        StringBuilder label = new StringBuilder();
+        if (!number.isBlank()) {
+            label.append(number);
+        }
+        if (!resource.isBlank()) {
+            if (!label.isEmpty()) label.append(" · ");
+            label.append(resource);
+        }
+        if (!leader.isBlank()) {
+            if (!label.isEmpty()) label.append(" · ");
+            label.append("Lead: ").append(leader);
+        }
+        if (!assignmentPreview.isBlank()) {
+            if (!label.isEmpty()) label.append(" · ");
+            label.append(assignmentPreview);
+        }
+        return label.toString();
     }
 
     /**
@@ -398,9 +416,23 @@ final class UiSupport {
         String number = task != null && task.getAssignmentTeamNumber() != null
                 ? task.getAssignmentTeamNumber().trim() : "";
         String name = resourceName != null ? resourceName.trim() : "";
+        String base = taskLabel(task);
+        if (!base.isBlank() && !name.isBlank()) {
+            return base + " · " + name;
+        }
         if (!number.isBlank() && !name.isBlank()) {
-            return number + " – " + name;
+            return number + " · " + name;
         }
         return !number.isBlank() ? number : name;
+    }
+
+    private static String firstWords(String value, int maxWords) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String[] words = value.trim().split("\\s+");
+        int limit = Math.min(maxWords, words.length);
+        String joined = String.join(" ", java.util.Arrays.copyOf(words, limit));
+        return words.length > limit ? joined + "…" : joined;
     }
 }

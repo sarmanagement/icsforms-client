@@ -78,6 +78,10 @@ public class PdfExportService {
         return renderers.containsKey(formKey);
     }
 
+    public List<String> formKeys() {
+        return new ArrayList<>(renderers.keySet());
+    }
+
     /**
      * Exports all supported forms and merges them into a single IAP bundle PDF.
      *
@@ -91,11 +95,27 @@ public class PdfExportService {
      * @throws IOException when export or merge fails.
      */
     public Path exportIapBundle(AppData data, Path outputDirectory) throws IOException {
+        return exportIapBundle(data, outputDirectory, null);
+    }
+
+    /**
+     * Exports the selected supported forms and merges them into a single IAP bundle PDF.
+     *
+     * @param data incident document.
+     * @param outputDirectory destination directory.
+     * @param selectedFormKeys selected form keys; when null/empty, all supported forms are used.
+     * @return path of the merged IAP bundle PDF.
+     * @throws IOException when export or merge fails.
+     */
+    public Path exportIapBundle(AppData data, Path outputDirectory, List<String> selectedFormKeys) throws IOException {
         Files.createDirectories(outputDirectory);
         // Skip ICS 201 only when it was never filled in (incident started as a full
         // operational period with no initial response briefing).  When the form contains
         // content it is always included even if the incident has since moved to DURING_OP.
         boolean skipIcs201 = !ics201HasContent(data.getForm201());
+        List<String> includedFormKeys = (selectedFormKeys == null || selectedFormKeys.isEmpty())
+                ? new ArrayList<>(renderers.keySet())
+                : new ArrayList<>(selectedFormKeys);
         CoverPageRenderer coverPageRenderer = new CoverPageRenderer();
         Path coverPath = Files.createTempFile(outputDirectory, "cover-page-", ".pdf");
         List<Path> tempFiles = new ArrayList<>();
@@ -104,7 +124,10 @@ public class PdfExportService {
             tempFiles.add(coverPath);
             assignIapPageNumbers(data);
             Map<String, Path> parts = new LinkedHashMap<>();
-            for (String formKey : renderers.keySet()) {
+            for (String formKey : includedFormKeys) {
+                if (!renderers.containsKey(formKey)) {
+                    continue;
+                }
                 if (skipIcs201 && "ICS 201".equals(formKey)) {
                     continue;
                 }
