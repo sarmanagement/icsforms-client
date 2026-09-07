@@ -39,6 +39,8 @@ import java.awt.FlowLayout;
 import java.awt.event.KeyEvent;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.DateTimeException;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -100,6 +102,7 @@ public class MainFrame extends JFrame {
         this.tCardPanel = new TCardPanel(controller);
         ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
         ics204Panel.setOnEditSarTaskRequest(this::openSarTaskEditorForAssignment);
+        ics204Panel.setOnChangeSarTaskStatusRequest(sarTaskPanel::openTaskStatusDialogByAssignmentId);
         sarTaskPanel.setOn214Request(this::openIcs214ForSarTask);
         sarTaskPanel.setOnNewAssignmentRequest(ics204Panel::openNewAssignmentEditor);
         sarTaskPanel.setOnEditIcs204AssignmentRequest(this::openIcs204EditorForAssignment);
@@ -351,6 +354,50 @@ public class MainFrame extends JFrame {
         configMenu.addSeparator();
         configMenu.add(iapPhaseMenu);
 
+        JMenu timeZoneMenu = new JMenu("Date/Time Zone");
+        ButtonGroup timeZoneGroup = new ButtonGroup();
+        JRadioButtonMenuItem systemTimeZoneItem = new JRadioButtonMenuItem("Use system local time zone",
+                controller.getData().isUseSystemTimeZone());
+        JRadioButtonMenuItem specifiedTimeZoneItem = new JRadioButtonMenuItem("Use specified time zone…",
+                !controller.getData().isUseSystemTimeZone());
+        systemTimeZoneItem.addActionListener(e -> {
+            controller.getData().setUseSystemTimeZone(true);
+            applyConfiguredTimeZone();
+            refreshFromModel();
+            controller.markDirty();
+        });
+        specifiedTimeZoneItem.addActionListener(e -> {
+            String current = controller.getData().getConfiguredTimeZoneId();
+            String chosen = JOptionPane.showInputDialog(this,
+                    "Enter time zone ID (e.g., UTC, America/Denver):",
+                    current == null || current.isBlank() ? "UTC" : current);
+            if (chosen == null) {
+                systemTimeZoneItem.setSelected(controller.getData().isUseSystemTimeZone());
+                specifiedTimeZoneItem.setSelected(!controller.getData().isUseSystemTimeZone());
+                return;
+            }
+            try {
+                ZoneId.of(chosen.trim());
+            } catch (DateTimeException ex) {
+                JOptionPane.showMessageDialog(this, "Invalid time zone: " + chosen,
+                        "Date/Time Zone", JOptionPane.WARNING_MESSAGE);
+                systemTimeZoneItem.setSelected(controller.getData().isUseSystemTimeZone());
+                specifiedTimeZoneItem.setSelected(!controller.getData().isUseSystemTimeZone());
+                return;
+            }
+            controller.getData().setUseSystemTimeZone(false);
+            controller.getData().setConfiguredTimeZoneId(chosen.trim());
+            applyConfiguredTimeZone();
+            refreshFromModel();
+            controller.markDirty();
+        });
+        timeZoneGroup.add(systemTimeZoneItem);
+        timeZoneGroup.add(specifiedTimeZoneItem);
+        timeZoneMenu.add(systemTimeZoneItem);
+        timeZoneMenu.add(specifiedTimeZoneItem);
+        configMenu.addSeparator();
+        configMenu.add(timeZoneMenu);
+
         importMenu.add(importResourcesCsvItem);
 
         bar.add(fileMenu);
@@ -521,6 +568,7 @@ public class MainFrame extends JFrame {
 
     /** Reloads panel state from the active incident document. */
     private void refreshFromModel() {
+        applyConfiguredTimeZone();
         Component selectedComponent = tabs.getSelectedComponent();
         int selectedLogIndex = selectedLogIndex(selectedComponent);
         incidentContextPanel.refreshFromModel();
@@ -544,7 +592,21 @@ public class MainFrame extends JFrame {
             lastKnownPhase = currentPhase;
         }
         rebuildVisibleTabs(selectedComponent, selectedLogIndex);
+        UiSupport.applyDateTimeDisplayZone(this);
         refreshStatus();
+    }
+
+    private void applyConfiguredTimeZone() {
+        AppData data = controller.getData();
+        if (data.isUseSystemTimeZone()) {
+            UiSupport.setDateTimeDisplayZone(ZoneId.systemDefault());
+            return;
+        }
+        try {
+            UiSupport.setDateTimeDisplayZone(ZoneId.of(data.getConfiguredTimeZoneId()));
+        } catch (DateTimeException ex) {
+            UiSupport.setDateTimeDisplayZone(ZoneId.systemDefault());
+        }
     }
 
     private void rebuildVisibleTabs() {

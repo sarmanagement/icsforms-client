@@ -354,11 +354,18 @@ public class OrganizationalChartPanel extends JPanel {
         JComboBox<String> sectionBox = new JComboBox<>(new String[]{
                 "Command Staff", "Operations", "Planning", "Logistics", "Finance/Admin"
         });
+        installPersonAutocomplete(nameField, radioField, phoneField);
 
         JPanel form = UiSupport.formPanel();
+        JButton pickButton = new JButton("Pick…");
+        pickButton.addActionListener(e -> pickPersonIntoFields("Select Position Resource", nameField, radioField, phoneField));
+        JPanel nameRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        nameRow.setOpaque(false);
+        nameRow.add(nameField);
+        nameRow.add(pickButton);
         UiSupport.addRow(form, 0, "Section",        sectionBox);
         UiSupport.addRow(form, 1, "Position Title", titleField);
-        UiSupport.addRow(form, 2, "Name",            nameField);
+        UiSupport.addRow(form, 2, "Name",           nameRow);
         UiSupport.addRow(form, 3, "Radio",           radioField);
         UiSupport.addRow(form, 4, "Phone",           phoneField);
 
@@ -764,42 +771,46 @@ public class OrganizationalChartPanel extends JPanel {
     }
 
     private void pickIncidentCommanderResource(IncidentCommanderRow row) {
+        pickPersonIntoFields("Select Incident Commander", row.nameField(), row.radioField(), row.phoneField());
+    }
+
+    private void pickPersonIntoFields(String dialogTitle, JTextField nameField, JTextField radioField, JTextField phoneField) {
         List<String> names = new ArrayList<>(controller.getPersonnelNames());
         names.add("<Add new resource…>");
         JComboBox<String> combo = new JComboBox<>(names.toArray(new String[0]));
         int choice = JOptionPane.showConfirmDialog(this, combo,
-                "Select Incident Commander", JOptionPane.OK_CANCEL_OPTION);
+                dialogTitle, JOptionPane.OK_CANCEL_OPTION);
         if (choice != JOptionPane.OK_OPTION || combo.getSelectedItem() == null) {
             return;
         }
         String selected = combo.getSelectedItem().toString();
         if ("<Add new resource…>".equals(selected)) {
-            JTextField nameField = UiSupport.textField();
-            JTextField radioField = UiSupport.textField();
-            JTextField phoneField = UiSupport.textField();
+            JTextField addNameField = UiSupport.textField();
+            JTextField addRadioField = UiSupport.textField();
+            JTextField addPhoneField = UiSupport.textField();
             JPanel form = UiSupport.formPanel();
-            UiSupport.addRequiredRow(form, 0, "Name", nameField);
-            UiSupport.addRow(form, 1, "Radio", radioField);
-            UiSupport.addRow(form, 2, "Phone", phoneField);
+            UiSupport.addRequiredRow(form, 0, "Name", addNameField);
+            UiSupport.addRow(form, 1, "Radio", addRadioField);
+            UiSupport.addRow(form, 2, "Phone", addPhoneField);
             JScrollPane pane = new JScrollPane(form);
             pane.setBorder(BorderFactory.createEmptyBorder());
-            if (!UiSupport.showResizableConfirmDialog(this, "Add Incident Commander Resource",
+            if (!UiSupport.showResizableConfirmDialog(this, "Add Resource",
                     pane, new Dimension(540, 240))) {
                 return;
             }
-            row.nameField().setText(nameField.getText().trim());
-            row.radioField().setText(radioField.getText().trim());
-            row.phoneField().setText(phoneField.getText().trim());
+            nameField.setText(addNameField.getText().trim());
+            radioField.setText(addRadioField.getText().trim());
+            phoneField.setText(addPhoneField.getText().trim());
             return;
         }
-        row.nameField().setText(selected);
+        nameField.setText(selected);
         var card = controller.findPersonCard(selected);
         if (card != null) {
-            if (row.radioField().getText().isBlank()) {
-                row.radioField().setText(safe(card.getRadioChannel()));
+            if (radioField.getText().isBlank()) {
+                radioField.setText(safe(card.getRadioChannel()));
             }
-            if (row.phoneField().getText().isBlank()) {
-                row.phoneField().setText(safe(card.getPhoneNumber()));
+            if (phoneField.getText().isBlank()) {
+                phoneField.setText(safe(card.getPhoneNumber()));
             }
         }
     }

@@ -43,6 +43,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.GridLayout;
+import java.awt.Window;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.ParseException;
@@ -339,14 +340,19 @@ public class SarTaskPanel extends JPanel {
         JPopupMenu cardMenu = new JPopupMenu();
         JMenuItem editItem    = new JMenuItem("Edit assignment…");
         JMenuItem debriefItem = new JMenuItem("Debrief…");
+        JMenuItem changeStatusItem = new JMenuItem("Change task status…");
         JMenuItem open214Item = new JMenuItem("Open ICS 214 for Task…");
         editItem.addActionListener(e -> openBoardTaskEditor(task, EditorMode.ASSIGNMENT));
         debriefItem.addActionListener(e -> openBoardTaskEditor(task, EditorMode.DEBRIEFING));
+        changeStatusItem.addActionListener(e -> openQuickStatusDialog(task));
         open214Item.addActionListener(e -> {
             if (on214Request != null) on214Request.accept(task);
         });
         cardMenu.add(editItem);
         cardMenu.add(debriefItem);
+        if (isPlannedOrAssigned(task.getTaskLifecycleStatus())) {
+            cardMenu.add(changeStatusItem);
+        }
         cardMenu.add(open214Item);
         p.setComponentPopupMenu(cardMenu);
 
@@ -354,6 +360,15 @@ public class SarTaskPanel extends JPanel {
         p.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    int modelRow = tableModel.getRows().indexOf(task);
+                    if (modelRow >= 0) {
+                        int viewRow = table.convertRowIndexToView(modelRow);
+                        if (viewRow >= 0) {
+                            table.setRowSelectionInterval(viewRow, viewRow);
+                        }
+                    }
+                }
                 if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
                     openBoardTaskEditor(task, EditorMode.ASSIGNMENT);
                 }
@@ -413,7 +428,7 @@ public class SarTaskPanel extends JPanel {
                 controller.getAvailableResourceNames(),
                 controller.getAvailableTCards(),
                 controller.getOnTaskResourceIds());
-        JPanel content = sarTaskEditorDialogContent(task, editor.panel);
+        JPanel content = sarTaskEditorDialogContent(task, EditorMode.ASSIGNMENT, editor.panel);
         if (!UiSupport.showResizableConfirmDialog(this, "Add SAR Task", content,
                 new Dimension(1040, 680))) {
             return;
@@ -600,6 +615,14 @@ public class SarTaskPanel extends JPanel {
         return lifecycle != null && lifecycle.trim().toLowerCase(java.util.Locale.ROOT).startsWith("assigned -");
     }
 
+    private static boolean isPlannedOrAssigned(String lifecycle) {
+        if (lifecycle == null) {
+            return false;
+        }
+        String normalized = lifecycle.trim().toLowerCase(java.util.Locale.ROOT);
+        return "planned".equals(normalized) || normalized.startsWith("assigned -");
+    }
+
     private void promptResourceDispositionOnReturn(SarTaskAssignment task) {
         if (task == null || task.getResourcesAssigned() == null || task.getResourcesAssigned().isEmpty()) {
             return;
@@ -642,9 +665,25 @@ public class SarTaskPanel extends JPanel {
         JMenuItem editDebriefingItem = new JMenuItem("Debrief…");
         editDebriefingItem.addActionListener(event -> openSelectedRowEditor(EditorMode.DEBRIEFING));
         menu.add(editDebriefingItem);
+        JMenuItem changeStatusItem = new JMenuItem("Change task status…");
+        changeStatusItem.addActionListener(event -> openQuickStatusForSelectedRow());
+        menu.add(changeStatusItem);
         JMenuItem open214Item = new JMenuItem("Open ICS 214 for Task…");
         open214Item.addActionListener(event -> openIcs214ForSelected());
         menu.add(open214Item);
+        menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+                SarTaskAssignment selected = selectedTaskFromTable();
+                changeStatusItem.setEnabled(selected != null && isPlannedOrAssigned(selected.getTaskLifecycleStatus()));
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) { }
+
+            @Override
+            public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) { }
+        });
         menu.addSeparator();
         JMenuItem removeItem = new JMenuItem("Remove Task");
         removeItem.addActionListener(event -> removeSelectedTask());
@@ -686,6 +725,99 @@ public class SarTaskPanel extends JPanel {
         editRow(table.convertRowIndexToModel(viewRow), mode);
     }
 
+    private void openQuickStatusForSelectedRow() {
+        SarTaskAssignment task = selectedTaskFromTable();
+        if (task == null) {
+            return;
+        }
+        openQuickStatusDialog(task);
+    }
+
+    public void openTaskStatusDialogByAssignmentId(String assignmentId) {
+        if (assignmentId == null || assignmentId.isBlank()) {
+            return;
+        }
+        for (SarTaskAssignment task : tableModel.getRows()) {
+            if (assignmentId.equals(task.getAssignmentId())) {
+                openQuickStatusDialog(task);
+                return;
+            }
+        }
+    }
+
+    private void openTaskDebriefDialog(String assignmentId, String assignmentTeamNumber) {
+        List<SarTaskAssignment> tasks = tableModel.getRows();
+        for (int i = 0; i < tasks.size(); i++) {
+            SarTaskAssignment task = tasks.get(i);
+            if (assignmentId != null && !assignmentId.isBlank() && assignmentId.equals(task.getAssignmentId())) {
+                editRow(i, EditorMode.DEBRIEFING);
+                return;
+            }
+            if ((assignmentId == null || assignmentId.isBlank())
+                    && assignmentTeamNumber != null
+                    && assignmentTeamNumber.equals(task.getAssignmentTeamNumber())) {
+                editRow(i, EditorMode.DEBRIEFING);
+                return;
+            }
+        }
+    }
+
+    private void openQuickStatusDialog(SarTaskAssignment task) {
+        if (task == null || !isPlannedOrAssigned(task.getTaskLifecycleStatus())) {
+            return;
+        }
+        JComboBox<String> statusField = new JComboBox<>(SarTaskEditor.LIFECYCLE_OPTIONS);
+        statusField.setSelectedItem(task.getTaskLifecycleStatus());
+        statusField.setEditable(false);
+        JPanel panel = UiSupport.formPanel();
+        int row = 0;
+        UiSupport.addRow(panel, row++, "Assignment/Team #", new JLabel(safeValue(task.getAssignmentTeamNumber())));
+        UiSupport.addRow(panel, row++, "Resource", new JLabel(safeValue(task.getResourceIdentifier())));
+        UiSupport.addRow(panel, row++, "Leader", new JLabel(safeValue(task.getLeader())));
+        UiSupport.addRow(panel, row++, "Work assignment", new JLabel(shortAssignmentSummary(task.getAssignment())));
+        UiSupport.addRow(panel, row, "Task status", statusField);
+        if (!UiSupport.showResizableConfirmDialog(this, "Change Task Status", panel, new Dimension(700, 320))) {
+            return;
+        }
+        String previous = task.getTaskLifecycleStatus();
+        String updated = String.valueOf(statusField.getSelectedItem());
+        if (java.util.Objects.equals(previous, updated)) {
+            return;
+        }
+        task.setTaskLifecycleStatus(updated);
+        if (isAssignedState(previous) && "returned".equalsIgnoreCase(updated.trim())) {
+            promptResourceDispositionOnReturn(task);
+        }
+        controller.recordTaskLifecycleTransition(task, updated);
+        controller.syncIcs204ResourcesFromSarTasks();
+        tableModel.setRows(tableModel.getRows(),
+                controller.getData().getClueLogEntries(),
+                controller.getData().getForm204().getResourcesAssigned());
+        controller.getData().setSarTaskAssignments(tableModel.getRows());
+        controller.markDirty();
+        rebuildBoardView();
+    }
+
+    private static String shortAssignmentSummary(String assignment) {
+        String text = safeValue(assignment).replace('\n', ' ').trim();
+        if (text.length() <= 90) {
+            return text;
+        }
+        return text.substring(0, 87) + "...";
+    }
+
+    private SarTaskAssignment selectedTaskFromTable() {
+        int viewRow = table.getSelectedRow();
+        if (viewRow < 0) {
+            return null;
+        }
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        if (modelRow < 0 || modelRow >= tableModel.getRows().size()) {
+            return null;
+        }
+        return tableModel.getRows().get(modelRow);
+    }
+
     private void editRow(int rowIndex, EditorMode mode) {
         if (rowIndex < 0 || rowIndex >= tableModel.getRowCount()) {
             return;
@@ -701,10 +833,13 @@ public class SarTaskPanel extends JPanel {
                 controller.getAvailableResourceNames(),
                 controller.getAvailableTCards(),
                 controller.getOnTaskResourceIds());
-        JPanel content = sarTaskEditorDialogContent(row, editor.panel);
+        JPanel content = sarTaskEditorDialogContent(row, mode, editor.panel);
         String title = mode.dialogTitle(row.getAssignmentTeamNumber());
         if (!UiSupport.showResizableConfirmDialog(this, title, content,
                 mode == EditorMode.ASSIGNMENT ? new Dimension(1040, 680) : new Dimension(980, 620))) {
+            if (Boolean.TRUE.equals(content.getClientProperty("openDebriefDialog"))) {
+                openTaskDebriefDialog(row.getAssignmentId(), row.getAssignmentTeamNumber());
+            }
             return;
         }
         controller.getData().setClueLogEntries(editor.applyTo(row, controller.getData().getClueLogEntries()));
@@ -731,11 +866,27 @@ public class SarTaskPanel extends JPanel {
         }
     }
 
-    private JPanel sarTaskEditorDialogContent(SarTaskAssignment assignment, JPanel editorPanel) {
+    private JPanel sarTaskEditorDialogContent(SarTaskAssignment assignment, EditorMode mode, JPanel editorPanel) {
         JScrollPane scrollPane = new JScrollPane(editorPanel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         JPanel content = new JPanel(new BorderLayout(0, 6));
         content.setOpaque(false);
+        content.add(scrollPane, BorderLayout.CENTER);
+        JPanel bottomButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        bottomButtons.setOpaque(false);
+        if (mode == EditorMode.ASSIGNMENT
+                && "returned".equalsIgnoreCase(safeValue(assignment.getTaskLifecycleStatus()).trim())
+                && safeValue(assignment.getDebriefingSupervisor()).isBlank()) {
+            JButton debriefButton = new JButton("Debrief…");
+            debriefButton.addActionListener(e -> {
+                content.putClientProperty("openDebriefDialog", Boolean.TRUE);
+                Window window = SwingUtilities.getWindowAncestor(content);
+                if (window != null) {
+                    window.dispose();
+                }
+            });
+            bottomButtons.add(debriefButton);
+        }
         if (onEditIcs204AssignmentRequest != null) {
             JButton openAssignmentButton = new JButton("Open linked ICS 204 assignment…");
             openAssignmentButton.setEnabled(assignment.getAssignmentId() != null && !assignment.getAssignmentId().isBlank());
@@ -744,12 +895,11 @@ public class SarTaskPanel extends JPanel {
                     onEditIcs204AssignmentRequest.accept(assignment.getAssignmentId());
                 }
             });
-            JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-            top.setOpaque(false);
-            top.add(openAssignmentButton);
-            content.add(top, BorderLayout.NORTH);
+            bottomButtons.add(openAssignmentButton);
         }
-        content.add(scrollPane, BorderLayout.CENTER);
+        if (bottomButtons.getComponentCount() > 0) {
+            content.add(bottomButtons, BorderLayout.SOUTH);
+        }
         return content;
     }
 
@@ -985,6 +1135,19 @@ public class SarTaskPanel extends JPanel {
         JTable pickerTable = new JTable(pickerModel);
         pickerTable.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         pickerTable.getTableHeader().setReorderingAllowed(false);
+        java.util.concurrent.atomic.AtomicBoolean addViaDoubleClick = new java.util.concurrent.atomic.AtomicBoolean(false);
+        pickerTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
+                    addViaDoubleClick.set(true);
+                    Window window = SwingUtilities.getWindowAncestor(pickerTable);
+                    if (window != null) {
+                        window.dispose();
+                    }
+                }
+            }
+        });
         JScrollPane pickerScroll = new JScrollPane(pickerTable);
         pickerScroll.setPreferredSize(new Dimension(520, 220));
 
@@ -1020,48 +1183,56 @@ public class SarTaskPanel extends JPanel {
         dialogPanel.add(pickerScroll, BorderLayout.CENTER);
         dialogPanel.add(manualPanel, BorderLayout.SOUTH);
 
-        int result = JOptionPane.showConfirmDialog(parent, dialogPanel,
-                "Add Resource", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (result != JOptionPane.OK_OPTION) {
-            return null;
-        }
+        while (true) {
+            int result = JOptionPane.showOptionDialog(parent, dialogPanel,
+                    "Add Resource", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE,
+                    null, new Object[]{"Add Selected", "Close"}, "Add Selected");
+            if (result != 0 && !addViaDoubleClick.get()) {
+                return null;
+            }
+            List<TCard> cardList = currentCardList.get();
 
-        List<TCard> cardList = currentCardList.get();
-
-        // Build results from all selected table rows.
-        int[] selectedRows = pickerTable.getSelectedRows();
-        if (selectedRows.length > 0) {
-            List<SarTaskResource> results = new ArrayList<>();
-            for (int selectedRow : selectedRows) {
-                if (selectedRow < 0 || selectedRow >= cardList.size()) {
-                    continue;
+            // Build results from all selected table rows.
+            int[] selectedRows = pickerTable.getSelectedRows();
+            if (selectedRows.length > 0) {
+                List<SarTaskResource> results = new ArrayList<>();
+                for (int selectedRow : selectedRows) {
+                    if (selectedRow < 0 || selectedRow >= cardList.size()) {
+                        continue;
+                    }
+                    TCard card = cardList.get(selectedRow);
+                    SarTaskResource res = new SarTaskResource();
+                    res.setCardType(card.getCardType());
+                    res.setResourceId(card.getResourceId());
+                    boolean isNonPersonnel = card.getCardType() != TCardType.PERSONNEL;
+                    String resourceName = card.getResourceIdentifier().trim();
+                    res.setName(isNonPersonnel ? resourceName : card.getPersonName().trim());
+                    res.setHomeAgency(card.getHomeAgency() == null ? "" : card.getHomeAgency().trim());
+                    results.add(res);
                 }
-                TCard card = cardList.get(selectedRow);
+                if (!results.isEmpty()) {
+                    return results;
+                }
+            }
+
+            // Otherwise use the manual entry fields.
+            String manualName = manualNameField.getText().trim();
+            if (!manualName.isBlank()) {
                 SarTaskResource res = new SarTaskResource();
-                res.setCardType(card.getCardType());
-                res.setResourceId(card.getResourceId());
-                boolean isNonPersonnel = card.getCardType() != TCardType.PERSONNEL;
-                String resourceName = card.getResourceIdentifier().trim();
-                res.setName(isNonPersonnel ? resourceName : card.getPersonName().trim());
-                res.setHomeAgency(card.getHomeAgency() == null ? "" : card.getHomeAgency().trim());
-                results.add(res);
+                res.setName(manualName);
+                res.setFunction(manualFunctionField.getText().trim());
+                res.setCardType((TCardType) manualTypeField.getSelectedItem());
+                return List.of(res);
             }
-            if (!results.isEmpty()) {
-                return results;
+
+            if (addViaDoubleClick.get()) {
+                return null;
             }
+            JOptionPane.showMessageDialog(parent,
+                    "Select one or more resources, or enter a manual name.",
+                    "Add Resource",
+                    JOptionPane.WARNING_MESSAGE);
         }
-
-        // Otherwise use the manual entry fields.
-        String manualName = manualNameField.getText().trim();
-        if (!manualName.isBlank()) {
-            SarTaskResource res = new SarTaskResource();
-            res.setName(manualName);
-            res.setFunction(manualFunctionField.getText().trim());
-            res.setCardType((TCardType) manualTypeField.getSelectedItem());
-            return List.of(res);
-        }
-
-        return null;
     }
 
     private static JPanel compactFieldRowPanel(LabeledComponent... fields) {

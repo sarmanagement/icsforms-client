@@ -28,6 +28,7 @@ import java.awt.Color;
 import java.awt.Window;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -42,8 +43,34 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 final class UiSupport {
     static final Color REQUIRED_FIELD_BACKGROUND = new Color(255, 248, 225);
     private static final String FORM_SPACER_PROPERTY = "uiSupport.formSpacer";
+    private static ZoneId dateTimeDisplayZone = ZoneId.systemDefault();
 
     private UiSupport() {
+    }
+
+    static ZoneId getDateTimeDisplayZone() {
+        return dateTimeDisplayZone;
+    }
+
+    static void setDateTimeDisplayZone(ZoneId zoneId) {
+        dateTimeDisplayZone = zoneId == null ? ZoneId.systemDefault() : zoneId;
+    }
+
+    static void applyDateTimeDisplayZone(Component root) {
+        if (root == null) {
+            return;
+        }
+        if (root instanceof JSpinner spinner) {
+            if (spinner.getEditor() instanceof JSpinner.DateEditor editor) {
+                editor.getFormat().setTimeZone(java.util.TimeZone.getTimeZone(dateTimeDisplayZone));
+            }
+            spinner.setToolTipText("Displayed in " + dateTimeDisplayZone + "; stored in UTC");
+        }
+        if (root instanceof java.awt.Container container) {
+            for (Component child : container.getComponents()) {
+                applyDateTimeDisplayZone(child);
+            }
+        }
     }
 
     /**
@@ -208,6 +235,10 @@ final class UiSupport {
     static JSpinner dateTimeSpinner() {
         JSpinner spinner = new JSpinner(new SpinnerDateModel());
         spinner.setEditor(new JSpinner.DateEditor(spinner, "yyyy-MM-dd HH:mm"));
+        if (spinner.getEditor() instanceof JSpinner.DateEditor editor) {
+            editor.getFormat().setTimeZone(java.util.TimeZone.getTimeZone(dateTimeDisplayZone));
+        }
+        spinner.setToolTipText("Displayed in " + dateTimeDisplayZone + "; stored in UTC");
         spinner.setValue(new Date());
         spinner.setPreferredSize(new Dimension(180, spinner.getPreferredSize().height));
         return spinner;

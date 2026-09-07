@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AppControllerLifecycleLoggingTest {
 
     @Test
-    void taskStatusTransitionAddsIcpCommunicationsLogEntry() throws Exception {
+    void taskStatusTransitionAddsOnlyIcpActivityLogEntry() throws Exception {
         Path tempFile = Files.createTempDirectory("icsforms-lifecycle").resolve("incident.json");
         AppController controller = new AppController(
                 new AppData(),
@@ -33,7 +33,7 @@ class AppControllerLifecycleLoggingTest {
 
         controller.recordTaskLifecycleTransition(task, "assigned - enroute to assignment");
 
-        assertEquals(1, controller.getData().getForm204().getCommunications().size());
+        assertEquals(0, controller.getData().getForm204().getCommunications().size());
         Ics214Form icpLog = controller.getData().getActivityLogs().stream()
                 .filter(log -> log.getLogScope() == ActivityLogScope.ICP)
                 .findFirst()
@@ -42,4 +42,3 @@ class AppControllerLifecycleLoggingTest {
         assertTrue(icpLog.getActivityLog().get(0).getNotableActivity().contains("assigned - enroute to assignment"));
     }
 }
-

@@ -46,6 +46,8 @@ public class AppData {
     }
 
     private int schemaVersion = CURRENT_SCHEMA_VERSION;
+    private boolean useSystemTimeZone = true;
+    private String configuredTimeZoneId = "UTC";
     private IncidentMode incidentMode = IncidentMode.SAR;
     private IapPhase iapPhase = IapPhase.PRE_OP;
     private List<OperationalPeriodRecord> operationalPeriodHistory = new ArrayList<>();
@@ -134,6 +136,24 @@ public class AppData {
      */
     public void setSchemaVersion(int schemaVersion) {
         this.schemaVersion = schemaVersion;
+    }
+
+    public boolean isUseSystemTimeZone() {
+        return useSystemTimeZone;
+    }
+
+    public void setUseSystemTimeZone(boolean useSystemTimeZone) {
+        this.useSystemTimeZone = useSystemTimeZone;
+    }
+
+    public String getConfiguredTimeZoneId() {
+        return configuredTimeZoneId;
+    }
+
+    public void setConfiguredTimeZoneId(String configuredTimeZoneId) {
+        this.configuredTimeZoneId = configuredTimeZoneId == null || configuredTimeZoneId.isBlank()
+                ? "UTC"
+                : configuredTimeZoneId.trim();
     }
 
     /**

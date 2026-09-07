@@ -4,7 +4,6 @@ import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
-import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
@@ -26,7 +25,7 @@ import org.sarmanagement.icsforms.validation.ValidationMessage;
 import javax.swing.Timer;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -449,23 +448,23 @@ public class AppController {
     }
 
     /**
-     * Converts a date to local date/time in the system zone.
+     * Converts an instant to UTC local date/time for storage.
      *
      * @param value source date.
      * @return converted local date/time.
      */
     public static LocalDateTime toLocalDateTime(Date value) {
-        return value == null ? null : LocalDateTime.ofInstant(value.toInstant(), ZoneId.systemDefault());
+        return value == null ? null : LocalDateTime.ofInstant(value.toInstant(), ZoneOffset.UTC);
     }
 
     /**
-     * Converts a local date/time to a date in the system zone.
+     * Converts a UTC local date/time to an instant date for UI display.
      *
      * @param value source local date/time.
      * @return converted date.
      */
     public static Date toDate(LocalDateTime value) {
-        return value == null ? new Date() : Date.from(value.atZone(ZoneId.systemDefault()).toInstant());
+        return value == null ? new Date() : Date.from(value.atOffset(ZoneOffset.UTC).toInstant());
     }
 
     /**
@@ -1278,15 +1277,7 @@ public class AppController {
         };
         String description = "Task status changed to " + normalized;
 
-        // Also append to ICP communications log.
-        CommunicationEntry comm = new CommunicationEntry();
-        comm.setName(safe(task.getAssignmentTeamNumber()).isBlank()
-                ? safe(task.getResourceIdentifier()) : safe(task.getAssignmentTeamNumber()));
-        comm.setFunction("Task status update");
-        comm.setPrimaryContact(LocalDateTime.now().withSecond(0).withNano(0) + " — " + normalized);
-        data.getForm204().getCommunications().add(comm);
-
-        // Append the same transition into the ICP-level ICS 214 communications/activity log.
+        // Append transition into the ICP-level ICS 214 communications/activity log.
         Ics214Form icpLog = data.getActivityLogs().stream()
                 .filter(log -> log.getLogScope() == ActivityLogScope.ICP)
                 .findFirst()
