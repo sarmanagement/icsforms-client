@@ -193,9 +193,8 @@ public class Ics204Panel extends JPanel {
     public ResourceAssignment openNewAssignmentEditor() {
         ResourceAssignment row = new ResourceAssignment();
         ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
-        JScrollPane scrollPane = new JScrollPane(editor.panel);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, "Create ICS 204 Assignment", scrollPane,
+        JPanel content = resourceAssignmentEditorDialogContent(row, editor);
+        if (!UiSupport.showResizableConfirmDialog(this, "Create ICS 204 Assignment", content,
                 new Dimension(920, 560))) {
             return null;
         }
@@ -562,13 +561,34 @@ public class Ics204Panel extends JPanel {
         int modelRow = resourceTable.convertRowIndexToModel(viewRow);
         ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
         ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
-        JScrollPane scrollPane = new JScrollPane(editor.panel);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, editor.dialogTitle(), scrollPane, new Dimension(920, 560))) {
+        JPanel content = resourceAssignmentEditorDialogContent(row, editor);
+        if (!UiSupport.showResizableConfirmDialog(this, editor.dialogTitle(), content, new Dimension(920, 560))) {
             return;
         }
         editor.applyTo(row);
         resourceTableModel.fireTableRowsUpdated(modelRow, modelRow);
+    }
+
+    private JPanel resourceAssignmentEditorDialogContent(ResourceAssignment assignment, ResourceAssignmentEditor editor) {
+        JScrollPane scrollPane = new JScrollPane(editor.panel);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        JPanel content = new JPanel(new BorderLayout(0, 6));
+        content.setOpaque(false);
+        if (onEditSarTaskRequest != null) {
+            JButton openSarTaskButton = new JButton("Open linked SAR task…");
+            openSarTaskButton.setEnabled(assignment.getAssignmentId() != null && !assignment.getAssignmentId().isBlank());
+            openSarTaskButton.addActionListener(e -> {
+                if (assignment.getAssignmentId() != null && !assignment.getAssignmentId().isBlank()) {
+                    onEditSarTaskRequest.accept(assignment.getAssignmentId());
+                }
+            });
+            JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+            top.setOpaque(false);
+            top.add(openSarTaskButton);
+            content.add(top, BorderLayout.NORTH);
+        }
+        content.add(scrollPane, BorderLayout.CENTER);
+        return content;
     }
 
     private void open214ForSelectedResource() {

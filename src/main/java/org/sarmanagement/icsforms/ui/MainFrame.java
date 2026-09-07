@@ -374,7 +374,7 @@ public class MainFrame extends JFrame {
         JPanel checksPanel = new JPanel();
         checksPanel.setLayout(new javax.swing.BoxLayout(checksPanel, javax.swing.BoxLayout.Y_AXIS));
         for (String key : formKeys) {
-            javax.swing.JCheckBox check = new javax.swing.JCheckBox(key, true);
+            javax.swing.JCheckBox check = new javax.swing.JCheckBox(exportFormDisplayLabel(key), true);
             check.setOpaque(false);
             selectors.put(key, check);
             checksPanel.add(check);
@@ -405,6 +405,7 @@ public class MainFrame extends JFrame {
                 pane, new Dimension(560, 440))) {
             return;
         }
+
         List<String> selected = selectors.entrySet().stream()
                 .filter(en -> en.getValue().isSelected())
                 .map(Map.Entry::getKey)
@@ -434,6 +435,19 @@ public class MainFrame extends JFrame {
                 showError("Failed to export PDFs", exception);
             }
         });
+    }
+
+    static String exportFormDisplayLabel(String formKey) {
+        return switch (formKey) {
+            case "ICS 201" -> "ICS 201 – Incident Briefing";
+            case "ICS 202" -> "ICS 202 – Incident Objectives";
+            case "ICS 204" -> "ICS 204 – Assignment List";
+            case "ICS 207" -> "ICS 207 – Incident Organization Chart";
+            case "ICS 214" -> "ICS 214 – Activity Log";
+            case "SAR Task Assignment" -> "SAR Task Assignment Forms";
+            case "Clue Log" -> "Clue Log";
+            default -> formKey;
+        };
     }
 
     /**

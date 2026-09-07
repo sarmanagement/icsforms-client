@@ -42,6 +42,7 @@ public class OrganizationalChartPanel extends JPanel {
     private final AppController controller;
     private final JPanel incidentCommanderRowsPanel = new JPanel(new GridBagLayout());
     private final JButton addIncidentCommanderButton = new JButton("Add");
+    private final JLabel incidentCommanderModeLabel = new JLabel("Incident Commander");
     private final List<IncidentCommanderRow> incidentCommanderRows = new ArrayList<>();
 
     // Command Staff
@@ -172,12 +173,13 @@ public class OrganizationalChartPanel extends JPanel {
         });
         JPanel icRowsWrap = new JPanel(new BorderLayout(0, 4));
         icRowsWrap.setOpaque(false);
+        icRowsWrap.add(incidentCommanderModeLabel, BorderLayout.NORTH);
         icRowsWrap.add(incidentCommanderRowsPanel, BorderLayout.CENTER);
         JPanel icActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         icActions.setOpaque(false);
         icActions.add(addIncidentCommanderButton);
         icRowsWrap.add(icActions, BorderLayout.SOUTH);
-        UiSupport.addRow(icSection, 0, "Incident commander / unified command", icRowsWrap);
+        UiSupport.addRow(icSection, 0, "Command", icRowsWrap);
 
         JPanel commandSection = buildSection("Command Staff",
                 new String[]{"Safety Officer", "PIO / Public Information Officer", "Liaison Officer"},
@@ -718,6 +720,7 @@ public class OrganizationalChartPanel extends JPanel {
             addIncidentCommanderRow("", "", "", false);
         }
         boolean unifiedCommand = incidentCommanderRows.size() > 1;
+        incidentCommanderModeLabel.setText(unifiedCommand ? "Unified Command" : "Incident Commander");
         for (int i = 0; i < incidentCommanderRows.size(); i++) {
             IncidentCommanderRow row = incidentCommanderRows.get(i);
             GridBagConstraints c = new GridBagConstraints();

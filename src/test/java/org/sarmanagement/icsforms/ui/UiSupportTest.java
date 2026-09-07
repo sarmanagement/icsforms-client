@@ -120,6 +120,13 @@ class UiSupportTest {
         assertEquals(null, AppController.lifecycleToCardStatus("returned"));
     }
 
+    @Test
+    void exportFormDialogLabelsIncludeFormNamesAndPluralSarTaskForms() {
+        assertEquals("ICS 201 – Incident Briefing", MainFrame.exportFormDisplayLabel("ICS 201"));
+        assertEquals("ICS 214 – Activity Log", MainFrame.exportFormDisplayLabel("ICS 214"));
+        assertEquals("SAR Task Assignment Forms", MainFrame.exportFormDisplayLabel("SAR Task Assignment"));
+    }
+
     private static JLabel findLabel(Component component, String text) {
         if (component instanceof JLabel label && text.equals(label.getText())) {
             return label;

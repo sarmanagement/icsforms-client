@@ -11,6 +11,7 @@ import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
+import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
@@ -1284,6 +1285,24 @@ public class AppController {
         comm.setFunction("Task status update");
         comm.setPrimaryContact(LocalDateTime.now().withSecond(0).withNano(0) + " — " + normalized);
         data.getForm204().getCommunications().add(comm);
+
+        // Append the same transition into the ICP-level ICS 214 communications/activity log.
+        Ics214Form icpLog = data.getActivityLogs().stream()
+                .filter(log -> log.getLogScope() == ActivityLogScope.ICP)
+                .findFirst()
+                .orElseGet(() -> {
+                    Ics214Form created = new Ics214Form();
+                    created.setName("ICP Communications Log");
+                    data.getActivityLogs().add(created);
+                    return created;
+                });
+        ActivityLogEntry icpEntry = new ActivityLogEntry();
+        icpEntry.setTimestamp(LocalDateTime.now().withSecond(0).withNano(0));
+        icpEntry.setEventTypeId(ActivityEventType.ID_FREE_TEXT);
+        icpEntry.setResourceIdentifier(safe(task.getAssignmentTeamNumber()).isBlank()
+                ? safe(task.getResourceIdentifier()) : safe(task.getAssignmentTeamNumber()));
+        icpEntry.setNotableActivity(description);
+        icpLog.getActivityLog().add(icpEntry);
 
         if (ActivityEventType.ID_FREE_TEXT.equals(eventTypeId)) {
             return;

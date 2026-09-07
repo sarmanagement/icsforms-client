@@ -406,19 +406,22 @@ public class SarTaskPanel extends JPanel {
         if (task.getAssignmentId() == null || task.getAssignmentId().isBlank()) {
             task.setAssignmentId(UUID.randomUUID().toString());
         }
+        String previousLifecycleStatus = task.getTaskLifecycleStatus();
         SarTaskEditor editor = new SarTaskEditor(task, EditorMode.ASSIGNMENT,
                 controller.getData().getClueLogEntries(), 1,
                 handlerName -> controller.findEquipmentForHandler(handlerName),
                 controller.getAvailableResourceNames(),
                 controller.getAvailableTCards(),
                 controller.getOnTaskResourceIds());
-        JScrollPane scrollPane = new JScrollPane(editor.panel);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, "Add SAR Task", scrollPane,
+        JPanel content = sarTaskEditorDialogContent(task, editor.panel);
+        if (!UiSupport.showResizableConfirmDialog(this, "Add SAR Task", content,
                 new Dimension(1040, 680))) {
             return;
         }
         controller.getData().setClueLogEntries(editor.applyTo(task, controller.getData().getClueLogEntries()));
+        if (!java.util.Objects.equals(previousLifecycleStatus, task.getTaskLifecycleStatus())) {
+            controller.recordTaskLifecycleTransition(task, task.getTaskLifecycleStatus());
+        }
         List<SarTaskAssignment> rows = new ArrayList<>(tableModel.getRows());
         rows.add(task);
         controller.getData().setSarTaskAssignments(rows);
@@ -698,10 +701,9 @@ public class SarTaskPanel extends JPanel {
                 controller.getAvailableResourceNames(),
                 controller.getAvailableTCards(),
                 controller.getOnTaskResourceIds());
-        JScrollPane scrollPane = new JScrollPane(editor.panel);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        JPanel content = sarTaskEditorDialogContent(row, editor.panel);
         String title = mode.dialogTitle(row.getAssignmentTeamNumber());
-        if (!UiSupport.showResizableConfirmDialog(this, title, scrollPane,
+        if (!UiSupport.showResizableConfirmDialog(this, title, content,
                 mode == EditorMode.ASSIGNMENT ? new Dimension(1040, 680) : new Dimension(980, 620))) {
             return;
         }
@@ -727,6 +729,28 @@ public class SarTaskPanel extends JPanel {
         if (viewRow >= 0 && viewRow < table.getRowCount()) {
             table.setRowSelectionInterval(viewRow, viewRow);
         }
+    }
+
+    private JPanel sarTaskEditorDialogContent(SarTaskAssignment assignment, JPanel editorPanel) {
+        JScrollPane scrollPane = new JScrollPane(editorPanel);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        JPanel content = new JPanel(new BorderLayout(0, 6));
+        content.setOpaque(false);
+        if (onEditIcs204AssignmentRequest != null) {
+            JButton openAssignmentButton = new JButton("Open linked ICS 204 assignment…");
+            openAssignmentButton.setEnabled(assignment.getAssignmentId() != null && !assignment.getAssignmentId().isBlank());
+            openAssignmentButton.addActionListener(e -> {
+                if (assignment.getAssignmentId() != null && !assignment.getAssignmentId().isBlank()) {
+                    onEditIcs204AssignmentRequest.accept(assignment.getAssignmentId());
+                }
+            });
+            JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+            top.setOpaque(false);
+            top.add(openAssignmentButton);
+            content.add(top, BorderLayout.NORTH);
+        }
+        content.add(scrollPane, BorderLayout.CENTER);
+        return content;
     }
 
     private void updateLinkedResourcePersonCount(SarTaskAssignment row, int resourceCount) {
