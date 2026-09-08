@@ -183,14 +183,14 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         float icTop   = TOP - 4f;
         float icBot   = icTop - icBoxH;
 
-        // --- Command staff (always shown), left of vertical stem ---
+        // --- Command staff (always shown), right of vertical stem ---
         List<String[]> cmdStaff = buildCmdStaff(chart);
 
         float sBoxH = 18f, sGap = 3f;
-        // Staff boxes sit to the left of the IC box; right edge abuts IC box left minus a small gap
-        float sRight = icLeft - 4f;
-        float sBoxW  = Math.max(36f, Math.min(140f, sRight - LEFT - 4f));
-        float sLeft  = sRight - sBoxW;
+        // Staff boxes sit to the right of the IC box.
+        float sLeft = icLeft + icBoxW + 4f;
+        float sBoxW = Math.max(36f, Math.min(140f, (LEFT + CWIDTH) - sLeft - 4f));
+        float sRight = sLeft + sBoxW;
 
         float cmdBot = icBot;
         for (int i = 0; i < cmdStaff.size(); i++) {
@@ -198,9 +198,9 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             float sBotY = sTop - sBoxH;
             cmdBot = Math.min(cmdBot, sBotY);
             float midY = sTop - sBoxH / 2f;
-            // Horizontal connector from vertical stem (icCX) leftward to staff box right edge
+            // Horizontal connector from vertical stem (icCX) rightward to staff box left edge.
             stream.moveTo(icCX, midY);
-            stream.lineTo(sRight, midY);
+            stream.lineTo(sLeft, midY);
             stream.stroke();
             // Staff box
             stream.addRect(sLeft, sBotY, sBoxW, sBoxH);

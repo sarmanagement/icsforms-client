@@ -3,6 +3,7 @@ package org.sarmanagement.icsforms.ui;
 import org.sarmanagement.icsforms.model.Ics207Form;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
+import org.sarmanagement.icsforms.model.TCard;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -408,7 +409,8 @@ public class OrganizationalChartPanel extends JPanel {
                             phoneField.setText(card.getPhoneNumber());
                         }
                     }
-                });
+                },
+                proposedName -> createPersonnelFromPicker(proposedName, radioField, phoneField));
     }
 
     /** Shows contact (radio/phone) fields only when the name field is non-blank. */
@@ -798,7 +800,11 @@ public class OrganizationalChartPanel extends JPanel {
                     pane, new Dimension(540, 240))) {
                 return;
             }
-            nameField.setText(addNameField.getText().trim());
+            String created = createPersonnelFromPicker(addNameField.getText().trim(), addRadioField, addPhoneField);
+            if (created.isBlank()) {
+                return;
+            }
+            nameField.setText(created);
             radioField.setText(addRadioField.getText().trim());
             phoneField.setText(addPhoneField.getText().trim());
             return;
@@ -813,6 +819,38 @@ public class OrganizationalChartPanel extends JPanel {
                 phoneField.setText(safe(card.getPhoneNumber()));
             }
         }
+    }
+
+    private String createPersonnelFromPicker(String proposedName, JTextField radioField, JTextField phoneField) {
+        JTextField nameEntry = UiSupport.textField();
+        nameEntry.setText(safe(proposedName));
+        JTextField radioEntry = UiSupport.textField();
+        radioEntry.setText(radioField == null ? "" : safe(radioField.getText()));
+        JTextField phoneEntry = UiSupport.textField();
+        phoneEntry.setText(phoneField == null ? "" : safe(phoneField.getText()));
+        JPanel form = UiSupport.formPanel();
+        UiSupport.addRequiredRow(form, 0, "Name", nameEntry);
+        UiSupport.addRow(form, 1, "Radio", radioEntry);
+        UiSupport.addRow(form, 2, "Phone", phoneEntry);
+        JScrollPane pane = new JScrollPane(form);
+        pane.setBorder(BorderFactory.createEmptyBorder());
+        if (!UiSupport.showResizableConfirmDialog(this, "Create Resource", pane, new Dimension(560, 250))) {
+            return "";
+        }
+        TCard created = controller.ensurePersonnelCard(nameEntry.getText().trim(),
+                radioEntry.getText().trim(),
+                phoneEntry.getText().trim());
+        if (created == null) {
+            return "";
+        }
+        if (radioField != null && radioField.getText().isBlank()) {
+            radioField.setText(safe(created.getRadioChannel()));
+        }
+        if (phoneField != null && phoneField.getText().isBlank()) {
+            phoneField.setText(safe(created.getPhoneNumber()));
+        }
+        controller.markDirty();
+        return safe(created.getPersonName());
     }
 
     /**

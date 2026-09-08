@@ -106,7 +106,7 @@ public class MainFrame extends JFrame {
         sarTaskPanel.setOn214Request(this::openIcs214ForSarTask);
         sarTaskPanel.setOnNewAssignmentRequest(ics204Panel::openNewAssignmentEditor);
         sarTaskPanel.setOnEditIcs204AssignmentRequest(this::openIcs204EditorForAssignment);
-        tCardPanel.setOnEditSarAssignmentRequest(this::openSarTaskEditorForAssignment);
+        tCardPanel.setOnEditSarAssignmentRequest(assignmentId -> openSarTaskEditorForAssignment(assignmentId, false));
         groupVisible.put(CORE_GROUP, true);
         groupVisible.put(ACTIVITY_LOGS_GROUP, true);
         groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
@@ -861,16 +861,31 @@ public class MainFrame extends JFrame {
     }
 
     private void openSarTaskEditorForAssignment(String assignmentId) {
+        openSarTaskEditorForAssignment(assignmentId, true);
+    }
+
+    private void openSarTaskEditorForAssignment(String assignmentId, boolean switchToSarTab) {
         if (assignmentId == null || assignmentId.isBlank()) {
             return;
         }
+        Component previousTab = tabs.getSelectedComponent();
+        int previousLogIndex = selectedLogIndex(previousTab);
         groupVisible.put(SAR_ONLY_GROUP, true);
-        rebuildVisibleTabs(sarTaskPanel, -1);
-        tabs.setSelectedComponent(sarTaskPanel);
+        rebuildVisibleTabs(switchToSarTab ? sarTaskPanel : previousTab, switchToSarTab ? -1 : previousLogIndex);
+        if (switchToSarTab) {
+            tabs.setSelectedComponent(sarTaskPanel);
+        }
         if (!sarTaskPanel.openAssignmentEditorById(assignmentId)) {
             JOptionPane.showMessageDialog(this,
                     "No SAR task found for assignment ID " + assignmentId,
                     "Open SAR Task", JOptionPane.INFORMATION_MESSAGE);
+            if (!switchToSarTab && previousTab != null && tabs.indexOfComponent(previousTab) >= 0) {
+                tabs.setSelectedComponent(previousTab);
+            }
+            return;
+        }
+        if (!switchToSarTab && previousTab != null && tabs.indexOfComponent(previousTab) >= 0) {
+            tabs.setSelectedComponent(previousTab);
         }
     }
 

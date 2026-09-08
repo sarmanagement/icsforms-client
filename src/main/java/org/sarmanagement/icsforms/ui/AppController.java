@@ -152,6 +152,38 @@ public class AppController {
     }
 
     /**
+     * Finds or creates a PERSONNEL T-card and applies provided contact details when present.
+     *
+     * @param personName person name (required).
+     * @param radioChannel optional radio channel.
+     * @param phoneNumber optional phone number.
+     * @return existing or created PERSONNEL card, or {@code null} when name is blank.
+     */
+    public TCard ensurePersonnelCard(String personName, String radioChannel, String phoneNumber) {
+        String name = personName == null ? "" : personName.trim();
+        if (name.isBlank()) {
+            return null;
+        }
+        TCard card = findPersonCard(name);
+        if (card == null) {
+            card = newPersonnelCard(name);
+            data.getTCards().add(card);
+        }
+        String radio = radioChannel == null ? "" : radioChannel.trim();
+        String phone = phoneNumber == null ? "" : phoneNumber.trim();
+        if (!radio.isBlank()) {
+            card.setRadioChannel(radio);
+        }
+        if (!phone.isBlank()) {
+            card.setPhoneNumber(phone);
+        }
+        if (safe(card.getLocation()).isBlank()) {
+            card.setLocation("ICP");
+        }
+        return card;
+    }
+
+    /**
      * Replaces the active document and synchronizes linked defaults.
      *
      * @param data new active document.
@@ -1757,6 +1789,7 @@ public class AppController {
                 if (alreadyPresent) {
                     return false;
                 }
+
                 ActivityLogEntry entry = new ActivityLogEntry();
                 entry.setTimestamp(ts);
                 entry.setEventTypeId(ActivityEventType.ID_CLUE_DETECTED);
@@ -1771,6 +1804,47 @@ public class AppController {
             }
         }
         return false;
+    }
+
+    /**
+     * Appends an incident-level (ICP) ICS 214 activity entry when a clue is logged.
+     *
+     * @param clue the logged clue.
+     */
+    public void recordClueInIcpActivityLog(ClueLogEntry clue) {
+        if (clue == null) {
+            return;
+        }
+        Ics214Form icpLog = data.getActivityLogs().stream()
+                .filter(log -> log.getLogScope() == ActivityLogScope.ICP)
+                .findFirst()
+                .orElseGet(() -> {
+                    Ics214Form created = new Ics214Form();
+                    created.setName("ICP Communications Log");
+                    data.getActivityLogs().add(created);
+                    return created;
+                });
+        LocalDateTime ts = clue.getDateTimeCollected() != null
+                ? clue.getDateTimeCollected()
+                : LocalDateTime.now().withSecond(0).withNano(0);
+        String location = safe(clue.getLocation());
+        String description = safe(clue.getDescription());
+        String activity = location.isBlank()
+                ? ("Clue logged" + (description.isBlank() ? "" : ": " + description))
+                : ("Clue logged at " + location + (description.isBlank() ? "" : ": " + description));
+        boolean alreadyPresent = icpLog.getActivityLog().stream().anyMatch(e ->
+                ActivityEventType.ID_CLUE_DETECTED.equals(e.getEventTypeId())
+                        && ts.equals(e.getTimestamp())
+                        && activity.equals(safe(e.getNotableActivity())));
+        if (alreadyPresent) {
+            return;
+        }
+        ActivityLogEntry entry = new ActivityLogEntry();
+        entry.setTimestamp(ts);
+        entry.setEventTypeId(ActivityEventType.ID_CLUE_DETECTED);
+        entry.setResourceIdentifier(safe(clue.getDetectingTask()));
+        entry.setNotableActivity(activity);
+        icpLog.getActivityLog().add(entry);
     }
 
     private List<String> withAddedUnique(List<String> values, String value) {

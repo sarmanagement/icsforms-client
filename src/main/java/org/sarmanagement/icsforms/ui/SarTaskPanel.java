@@ -155,23 +155,21 @@ public class SarTaskPanel extends JPanel {
         JButton addBtn     = new JButton("Add Task");
         JButton editBtn    = new JButton("Edit Assignment…");
         JButton debriefBtn = new JButton("Debrief…");
-        JButton markDebriefCompleteBtn = new JButton("Complete Debrief");
         JButton open214Btn = new JButton("Open ICS 214…");
         JButton open204Btn = new JButton("Edit ICS 204 Assignment…");
         JButton removeBtn  = new JButton("Remove Task");
 
         editBtn.setEnabled(false);
         debriefBtn.setEnabled(false);
-        markDebriefCompleteBtn.setEnabled(false);
         open214Btn.setEnabled(false);
         open204Btn.setEnabled(false);
         removeBtn.setEnabled(false);
 
         table.getSelectionModel().addListSelectionListener(event -> {
-            boolean selected = table.getSelectedRow() >= 0;
+            SarTaskAssignment selectedTask = selectedTaskFromTable();
+            boolean selected = selectedTask != null;
             editBtn.setEnabled(selected);
-            debriefBtn.setEnabled(selected);
-            markDebriefCompleteBtn.setEnabled(selected);
+            debriefBtn.setEnabled(selected && isReadyForDebrief(selectedTask));
             open214Btn.setEnabled(selected && on214Request != null);
             open204Btn.setEnabled(selected && onEditIcs204AssignmentRequest != null);
             removeBtn.setEnabled(selected);
@@ -180,7 +178,6 @@ public class SarTaskPanel extends JPanel {
         addBtn.addActionListener(e -> addNewTask());
         editBtn.addActionListener(e -> openSelectedRowEditor(EditorMode.ASSIGNMENT));
         debriefBtn.addActionListener(e -> openSelectedRowEditor(EditorMode.DEBRIEFING));
-        markDebriefCompleteBtn.addActionListener(e -> markSelectedDebriefComplete());
         open214Btn.addActionListener(e -> openIcs214ForSelected());
         open204Btn.addActionListener(e -> openIcs204ForSelected());
         removeBtn.addActionListener(e -> removeSelectedTask());
@@ -190,7 +187,6 @@ public class SarTaskPanel extends JPanel {
         row.add(addBtn);
         row.add(editBtn);
         row.add(debriefBtn);
-        row.add(markDebriefCompleteBtn);
         row.add(open214Btn);
         row.add(open204Btn);
         row.add(removeBtn);
@@ -428,9 +424,9 @@ public class SarTaskPanel extends JPanel {
                 controller.getAvailableResourceNames(),
                 controller.getAvailableTCards(),
                 controller.getOnTaskResourceIds());
-        JPanel content = sarTaskEditorDialogContent(task, EditorMode.ASSIGNMENT, editor.panel);
+        JPanel content = sarTaskEditorDialogContent(editor.panel);
         if (!UiSupport.showResizableConfirmDialog(this, "Add SAR Task", content,
-                new Dimension(1040, 680))) {
+                new Dimension(920, 680))) {
             return;
         }
         controller.getData().setClueLogEntries(editor.applyTo(task, controller.getData().getClueLogEntries()));
@@ -559,28 +555,12 @@ public class SarTaskPanel extends JPanel {
         }
     }
 
-    /** Validates and marks the selected task's debriefing as complete (item 12). */
-    private void markSelectedDebriefComplete() {
-        int viewRow = table.getSelectedRow();
-        if (viewRow < 0) {
-            return;
+    private static boolean isReadyForDebrief(SarTaskAssignment task) {
+        if (task == null) {
+            return false;
         }
-        int modelRow = table.convertRowIndexToModel(viewRow);
-        if (modelRow < 0 || modelRow >= tableModel.getRows().size()) {
-            return;
-        }
-        SarTaskAssignment task = tableModel.getRows().get(modelRow);
-        List<String> errors = controller.markDebriefingComplete(task);
-        if (!errors.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                    String.join("\n", errors),
-                    "Cannot Complete Debrief", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        tableModel.fireTableRowsUpdated(modelRow, modelRow);
-        JOptionPane.showMessageDialog(this,
-                "Debriefing marked as complete.",
-                "Debrief Complete", JOptionPane.INFORMATION_MESSAGE);
+        String lifecycle = safeValue(task.getTaskLifecycleStatus()).trim().toLowerCase(java.util.Locale.ROOT);
+        return "returned".equals(lifecycle) && safeValue(task.getDebriefingSupervisor()).isBlank();
     }
 
     static String formatDateTimeValue(LocalDateTime value) {
@@ -833,14 +813,44 @@ public class SarTaskPanel extends JPanel {
                 controller.getAvailableResourceNames(),
                 controller.getAvailableTCards(),
                 controller.getOnTaskResourceIds());
-        JPanel content = sarTaskEditorDialogContent(row, mode, editor.panel);
+        JPanel content = sarTaskEditorDialogContent(editor.panel);
         String title = mode.dialogTitle(row.getAssignmentTeamNumber());
-        if (!UiSupport.showResizableConfirmDialog(this, title, content,
-                mode == EditorMode.ASSIGNMENT ? new Dimension(1040, 680) : new Dimension(980, 620))) {
-            if (Boolean.TRUE.equals(content.getClientProperty("openDebriefDialog"))) {
-                openTaskDebriefDialog(row.getAssignmentId(), row.getAssignmentTeamNumber());
+        Dimension size = mode == EditorMode.ASSIGNMENT ? new Dimension(920, 680) : new Dimension(900, 620);
+        while (true) {
+            java.util.List<Object> options = new ArrayList<>();
+            if (mode == EditorMode.ASSIGNMENT
+                    && isReadyForDebrief(row)) {
+                options.add("Debrief…");
             }
-            return;
+            if (onEditIcs204AssignmentRequest != null
+                    && row.getAssignmentId() != null
+                    && !row.getAssignmentId().isBlank()) {
+                options.add("Open linked ICS 204 assignment…");
+            }
+            int okIndex = options.size();
+            options.add("OK");
+            int cancelIndex = options.size();
+            options.add("Cancel");
+            int choice = UiSupport.showResizableOptionDialog(this, title, content, size,
+                    options.toArray(), "OK");
+            if (choice == okIndex) {
+                break;
+            }
+            if (choice < 0 || choice == cancelIndex) {
+                return;
+            }
+            Object selected = options.get(choice);
+            if ("Debrief…".equals(selected)) {
+                openTaskDebriefDialog(row.getAssignmentId(), row.getAssignmentTeamNumber());
+                return;
+            }
+            if ("Open linked ICS 204 assignment…".equals(selected)
+                    && onEditIcs204AssignmentRequest != null
+                    && row.getAssignmentId() != null
+                    && !row.getAssignmentId().isBlank()) {
+                onEditIcs204AssignmentRequest.accept(row.getAssignmentId());
+                return;
+            }
         }
         controller.getData().setClueLogEntries(editor.applyTo(row, controller.getData().getClueLogEntries()));
         // Wire item 3: notify linked ICS 214 log when lifecycle status changes.
@@ -866,40 +876,12 @@ public class SarTaskPanel extends JPanel {
         }
     }
 
-    private JPanel sarTaskEditorDialogContent(SarTaskAssignment assignment, EditorMode mode, JPanel editorPanel) {
+    private JPanel sarTaskEditorDialogContent(JPanel editorPanel) {
         JScrollPane scrollPane = new JScrollPane(editorPanel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         JPanel content = new JPanel(new BorderLayout(0, 6));
         content.setOpaque(false);
         content.add(scrollPane, BorderLayout.CENTER);
-        JPanel bottomButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        bottomButtons.setOpaque(false);
-        if (mode == EditorMode.ASSIGNMENT
-                && "returned".equalsIgnoreCase(safeValue(assignment.getTaskLifecycleStatus()).trim())
-                && safeValue(assignment.getDebriefingSupervisor()).isBlank()) {
-            JButton debriefButton = new JButton("Debrief…");
-            debriefButton.addActionListener(e -> {
-                content.putClientProperty("openDebriefDialog", Boolean.TRUE);
-                Window window = SwingUtilities.getWindowAncestor(content);
-                if (window != null) {
-                    window.dispose();
-                }
-            });
-            bottomButtons.add(debriefButton);
-        }
-        if (onEditIcs204AssignmentRequest != null) {
-            JButton openAssignmentButton = new JButton("Open linked ICS 204 assignment…");
-            openAssignmentButton.setEnabled(assignment.getAssignmentId() != null && !assignment.getAssignmentId().isBlank());
-            openAssignmentButton.addActionListener(e -> {
-                if (assignment.getAssignmentId() != null && !assignment.getAssignmentId().isBlank()) {
-                    onEditIcs204AssignmentRequest.accept(assignment.getAssignmentId());
-                }
-            });
-            bottomButtons.add(openAssignmentButton);
-        }
-        if (bottomButtons.getComponentCount() > 0) {
-            content.add(bottomButtons, BorderLayout.SOUTH);
-        }
         return content;
     }
 

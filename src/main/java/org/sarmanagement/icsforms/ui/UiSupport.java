@@ -273,6 +273,41 @@ final class UiSupport {
     }
 
     /**
+     * Shows a resizable option dialog with a custom shared button row.
+     *
+     * @return selected option index, or -1 when dismissed.
+     */
+    static int showResizableOptionDialog(Component parent, String title, JComponent component,
+                                         Dimension preferredSize, Object[] options, Object initialValue) {
+        if (preferredSize != null) {
+            component.setPreferredSize(preferredSize);
+        }
+        JOptionPane optionPane = new JOptionPane(component, JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION);
+        optionPane.setOptions(options);
+        optionPane.setInitialValue(initialValue);
+        JDialog dialog = optionPane.createDialog(parent, title);
+        dialog.setResizable(true);
+        dialog.pack();
+        if (preferredSize != null) {
+            dialog.setSize(new Dimension(
+                    Math.max(dialog.getWidth(), preferredSize.width),
+                    Math.max(dialog.getHeight(), preferredSize.height)));
+        }
+        dialog.setVisible(true);
+        Object value = optionPane.getValue();
+        dialog.dispose();
+        if (value == null || options == null) {
+            return -1;
+        }
+        for (int i = 0; i < options.length; i++) {
+            if (value.equals(options[i])) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
      * Installs a name picker on a text field.
      *
      * <p>The field remains fully editable for free-form input.  Clicking the field when the
@@ -289,12 +324,18 @@ final class UiSupport {
     static void installNameAutocomplete(JTextField nameField,
                                         Supplier<List<String>> suggestions,
                                         Consumer<String> onSelected) {
+        installNameAutocomplete(nameField, suggestions, onSelected, null);
+    }
+
+    static void installNameAutocomplete(JTextField nameField,
+                                        Supplier<List<String>> suggestions,
+                                        Consumer<String> onSelected,
+                                        java.util.function.Function<String, String> onCreate) {
         nameField.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 if (e.getButton() != MouseEvent.BUTTON1) return;
                 List<String> all = suggestions.get();
-                if (all.isEmpty()) return;
-                openPickerDialog(nameField, all, onSelected);
+                openPickerDialog(nameField, all, onSelected, onCreate);
             }
         });
     }
@@ -308,7 +349,8 @@ final class UiSupport {
      */
     private static void openPickerDialog(JTextField nameField,
                                          List<String> allNames,
-                                         Consumer<String> onSelected) {
+                                         Consumer<String> onSelected,
+                                         java.util.function.Function<String, String> onCreate) {
         Window owner = nameField.isShowing()
                 ? (Window) javax.swing.SwingUtilities.getWindowAncestor(nameField) : null;
         JDialog dialog = new JDialog(owner, "Select person", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
@@ -323,6 +365,9 @@ final class UiSupport {
         list.setVisibleRowCount(10);
 
         // Populate list according to current filter text
+        JButton createButton = new JButton("Create");
+        createButton.setVisible(onCreate != null);
+
         Runnable applyFilter = () -> {
             String filter = filterField.getText().trim().toLowerCase(Locale.ROOT);
             listModel.clear();
@@ -332,6 +377,7 @@ final class UiSupport {
             if (!listModel.isEmpty()) {
                 list.setSelectedIndex(0);
             }
+            createButton.setEnabled(onCreate != null && listModel.isEmpty() && !filterField.getText().trim().isBlank());
         };
         applyFilter.run();
 
@@ -371,11 +417,25 @@ final class UiSupport {
         // Buttons
         JButton okButton = new JButton("Select");
         okButton.addActionListener(ev -> accept.run());
+        createButton.addActionListener(ev -> {
+            if (onCreate == null) {
+                return;
+            }
+            String createdName = onCreate.apply(filterField.getText().trim());
+            if (createdName != null && !createdName.isBlank()) {
+                nameField.setText(createdName.trim());
+                dialog.dispose();
+                if (onSelected != null) {
+                    onSelected.accept(createdName.trim());
+                }
+            }
+        });
         JButton cancelButton = new JButton("Cancel");
         cancelButton.addActionListener(ev -> dialog.dispose());
 
         JPanel buttonPanel = new JPanel();
         buttonPanel.add(okButton);
+        buttonPanel.add(createButton);
         buttonPanel.add(cancelButton);
 
         JPanel top = new JPanel(new BorderLayout(4, 4));

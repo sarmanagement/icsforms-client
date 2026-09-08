@@ -156,10 +156,9 @@ public class ClueLogPanel extends JPanel {
         ClueLogEntry clue = new ClueLogEntry();
         Object spinnerValue = dateTimeSpinner.getValue();
         if (spinnerValue instanceof Date) {
-            clue.setDateTimeCollected(((Date) spinnerValue).toInstant()
-                    .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
+            clue.setDateTimeCollected(AppController.toLocalDateTime((Date) spinnerValue));
         } else {
-            clue.setDateTimeCollected(LocalDateTime.now());
+            clue.setDateTimeCollected(LocalDateTime.now().withSecond(0).withNano(0));
         }
 
         Object selectedTask = taskCombo.getSelectedItem();
@@ -191,6 +190,8 @@ public class ClueLogPanel extends JPanel {
         clue.setPossibleDuplicate(possibleDuplicateCheck.isSelected());
 
         tableModel.addRow(clue);
+        controller.recordClueInIcpActivityLog(clue);
+        controller.propagateClueToActivityLog(clue);
         controller.markDirty();
         showClueDetails(tableModel.getRowCount() - 1);
     }
@@ -212,7 +213,7 @@ public class ClueLogPanel extends JPanel {
         detectedByField.setText(clue.getDetectedBy());
         JSpinner dateField = UiSupport.dateTimeSpinner();
         dateField.setValue(clue.getDateTimeCollected() == null ? new Date()
-                : Date.from(clue.getDateTimeCollected().atZone(java.time.ZoneId.systemDefault()).toInstant()));
+                : AppController.toDate(clue.getDateTimeCollected()));
 
         JTextField locationField = UiSupport.textField();
         locationField.setText(clue.getLocation());

@@ -199,7 +199,7 @@ public class Ics204Panel extends JPanel {
         ResourceAssignment row = new ResourceAssignment();
         ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
         JPanel content = resourceAssignmentEditorDialogContent(row, editor);
-        if (!UiSupport.showResizableConfirmDialog(this, "Create ICS 204 Assignment", content,
+        if (!confirmResourceAssignmentDialog("Create ICS 204 Assignment", row, content,
                 new Dimension(920, 560))) {
             return null;
         }
@@ -572,7 +572,7 @@ public class Ics204Panel extends JPanel {
         ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
         ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
         JPanel content = resourceAssignmentEditorDialogContent(row, editor);
-        if (!UiSupport.showResizableConfirmDialog(this, editor.dialogTitle(), content, new Dimension(920, 560))) {
+        if (!confirmResourceAssignmentDialog(editor.dialogTitle(), row, content, new Dimension(920, 560))) {
             return;
         }
         editor.applyTo(row);
@@ -585,20 +585,38 @@ public class Ics204Panel extends JPanel {
         JPanel content = new JPanel(new BorderLayout(0, 6));
         content.setOpaque(false);
         content.add(scrollPane, BorderLayout.CENTER);
-        if (onEditSarTaskRequest != null) {
-            JButton openSarTaskButton = new JButton("Open linked SAR task…");
-            openSarTaskButton.setEnabled(assignment.getAssignmentId() != null && !assignment.getAssignmentId().isBlank());
-            openSarTaskButton.addActionListener(e -> {
-                if (assignment.getAssignmentId() != null && !assignment.getAssignmentId().isBlank()) {
-                    onEditSarTaskRequest.accept(assignment.getAssignmentId());
-                }
-            });
-            JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-            bottom.setOpaque(false);
-            bottom.add(openSarTaskButton);
-            content.add(bottom, BorderLayout.SOUTH);
-        }
         return content;
+    }
+
+    private boolean confirmResourceAssignmentDialog(String title, ResourceAssignment assignment,
+                                                    JPanel content, Dimension preferredSize) {
+        while (true) {
+            java.util.List<Object> options = new ArrayList<>();
+            if (onEditSarTaskRequest != null
+                    && assignment.getAssignmentId() != null
+                    && !assignment.getAssignmentId().isBlank()) {
+                options.add("Open linked SAR task…");
+            }
+            int okIndex = options.size();
+            options.add("OK");
+            int cancelIndex = options.size();
+            options.add("Cancel");
+            int choice = UiSupport.showResizableOptionDialog(this, title, content, preferredSize,
+                    options.toArray(), "OK");
+            if (choice == okIndex) {
+                return true;
+            }
+            if (choice < 0 || choice == cancelIndex) {
+                return false;
+            }
+            if ("Open linked SAR task…".equals(options.get(choice))
+                    && onEditSarTaskRequest != null
+                    && assignment.getAssignmentId() != null
+                    && !assignment.getAssignmentId().isBlank()) {
+                onEditSarTaskRequest.accept(assignment.getAssignmentId());
+                return false;
+            }
+        }
     }
 
     private void open214ForSelectedResource() {
@@ -845,6 +863,34 @@ public class Ics204Panel extends JPanel {
                                 contactField.setText(contact);
                             }
                         }
+                    },
+                    proposedName -> {
+                        JTextField nameField = UiSupport.textField();
+                        nameField.setText(proposedName == null ? "" : proposedName.trim());
+                        JTextField radioField = UiSupport.textField();
+                        JTextField phoneField = UiSupport.textField();
+                        JPanel form = UiSupport.formPanel();
+                        UiSupport.addRequiredRow(form, 0, "Name", nameField);
+                        UiSupport.addRow(form, 1, "Radio", radioField);
+                        UiSupport.addRow(form, 2, "Phone", phoneField);
+                        JScrollPane pane = new JScrollPane(form);
+                        pane.setBorder(BorderFactory.createEmptyBorder());
+                        if (!UiSupport.showResizableConfirmDialog(panel, "Create Resource", pane, new Dimension(560, 250))) {
+                            return "";
+                        }
+                        var card = controller.ensurePersonnelCard(nameField.getText().trim(),
+                                radioField.getText().trim(), phoneField.getText().trim());
+                        if (card == null) {
+                            return "";
+                        }
+                        if (contactField.getText().isBlank()) {
+                            String contact = card.getRadioChannel().isBlank() ? card.getPhoneNumber() : card.getRadioChannel();
+                            if (!contact.isBlank()) {
+                                contactField.setText(contact);
+                            }
+                        }
+                        controller.markDirty();
+                        return card.getPersonName();
                     });
 
             int rowIndex = 0;
