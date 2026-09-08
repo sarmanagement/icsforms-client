@@ -65,7 +65,7 @@ public class SarTaskPanel extends JPanel {
     private static final int MAX_RESOURCE_ROWS = 18;
     /** Read-only columns in the summary table view: Status (0), Resource (4), Leader (5), People (6). */
     private static final Set<Integer> READ_ONLY_COLUMNS = Set.of(0, 4, 5, 6);
-    private static final int RESOURCE_EDITOR_WIDTH = 420;
+    private static final int RESOURCE_EDITOR_WIDTH = 360;
     private static final int RESOURCE_EDITOR_VISIBLE_ROWS = 9;
     private static final int RESOURCE_EDITOR_PADDING = 8;
     private static final int CLUE_EDITOR_WIDTH = 720;
@@ -426,7 +426,7 @@ public class SarTaskPanel extends JPanel {
                 controller.getOnTaskResourceIds());
         JPanel content = sarTaskEditorDialogContent(editor.panel);
         if (!UiSupport.showResizableConfirmDialog(this, "Add SAR Task", content,
-                new Dimension(920, 680))) {
+                new Dimension(980, 680))) {
             return;
         }
         controller.getData().setClueLogEntries(editor.applyTo(task, controller.getData().getClueLogEntries()));
@@ -815,7 +815,7 @@ public class SarTaskPanel extends JPanel {
                 controller.getOnTaskResourceIds());
         JPanel content = sarTaskEditorDialogContent(editor.panel);
         String title = mode.dialogTitle(row.getAssignmentTeamNumber());
-        Dimension size = mode == EditorMode.ASSIGNMENT ? new Dimension(920, 680) : new Dimension(900, 620);
+        Dimension size = mode == EditorMode.ASSIGNMENT ? new Dimension(980, 680) : new Dimension(920, 620);
         while (true) {
             java.util.List<Object> options = new ArrayList<>();
             if (mode == EditorMode.ASSIGNMENT
@@ -1731,15 +1731,18 @@ public class SarTaskPanel extends JPanel {
             }
             this.tCardByDisplayName = java.util.Collections.unmodifiableMap(nameMap);
             boolean isCanineTask = SarTaskSupport.usesCanineFactors(row.getResourceType());
-            assignmentTeamNumberField = textField(row.getAssignmentTeamNumber(), true);
+            assignmentTeamNumberField = textField(row.getAssignmentTeamNumber(), true, 10);
             resourceTypeField = new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new));
             resourceTypeField.setEditable(true);
             resourceTypeField.setSelectedItem(row.getResourceType());
+            resourceTypeField.setPreferredSize(new Dimension(150, resourceTypeField.getPreferredSize().height));
             taskTypeField = new JComboBox<>(SarTaskSupport.taskTypes().toArray(String[]::new));
             taskTypeField.setEditable(true);
             taskTypeField.setSelectedItem(row.getTaskType());
+            taskTypeField.setPreferredSize(new Dimension(150, taskTypeField.getPreferredSize().height));
             taskLifecycleField = new JComboBox<>(LIFECYCLE_OPTIONS);
             taskLifecycleField.setSelectedItem(row.getTaskLifecycleStatus());
+            taskLifecycleField.setPreferredSize(new Dimension(250, taskLifecycleField.getPreferredSize().height));
             incidentNameField = textField(row.getIncidentName(), false);
             resourceIdentifierField = textField(row.getResourceIdentifier(), false);
             leaderRoleField = textField(row.getLeaderRole(), false);

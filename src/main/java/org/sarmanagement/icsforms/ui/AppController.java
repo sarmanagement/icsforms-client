@@ -146,6 +146,7 @@ public class AppController {
         }
         String key = name.trim().toLowerCase();
         return data.getTCards().stream()
+                .filter(c -> c.getCardType() == null || c.getCardType() == TCardType.PERSONNEL)
                 .filter(c -> key.equals(c.getPersonName().trim().toLowerCase()))
                 .findFirst()
                 .orElse(null);

@@ -6,6 +6,8 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -69,5 +71,26 @@ class AppControllerLifecycleLoggingTest {
         assertFalse(icpLog.getActivityLog().isEmpty());
         assertEquals("T-1", icpLog.getActivityLog().get(0).getResourceIdentifier());
         assertTrue(icpLog.getActivityLog().get(0).getNotableActivity().contains("Clue logged"));
+    }
+
+    @Test
+    void ensurePersonnelCardCreatesPersonnelCard() throws Exception {
+        Path tempFile = Files.createTempDirectory("icsforms-personnel").resolve("incident.json");
+        AppController controller = new AppController(
+                new AppData(),
+                new LocalRepository(tempFile),
+                new PdfExportService(),
+                new IncidentValidator());
+
+        TCard created = controller.ensurePersonnelCard("Alex Searcher", "SAR-3", "555-1000");
+
+        assertTrue(created != null);
+        assertEquals(TCardType.PERSONNEL, created.getCardType());
+        assertEquals("Alex Searcher", created.getPersonName());
+        assertEquals("SAR-3", created.getRadioChannel());
+        assertEquals("555-1000", created.getPhoneNumber());
+        assertTrue(controller.getData().getTCards().stream()
+                .anyMatch(card -> "Alex Searcher".equals(card.getPersonName())
+                        && card.getCardType() == TCardType.PERSONNEL));
     }
 }
