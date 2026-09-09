@@ -2,8 +2,6 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentContext;
-import org.sarmanagement.icsforms.model.TCard;
-import org.sarmanagement.icsforms.model.TCardType;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -19,6 +17,7 @@ import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
@@ -91,10 +90,14 @@ public class IncidentContextPanel extends JPanel {
         userRow.add(currentUserField, BorderLayout.CENTER);
         JButton pickUserButton = new JButton("Pick…");
         pickUserButton.setToolTipText("Select from known personnel (T-cards)");
-        pickUserButton.addActionListener(e -> pickCurrentUser());
+        pickUserButton.addActionListener(e -> UiSupport.openInstalledNamePicker(currentUserField));
         userRow.add(pickUserButton, BorderLayout.EAST);
         UiSupport.addRow(editForm, 4, "Preparer / current user", userRow);
         UiSupport.addRow(editForm, 5, "Preparer position/title", currentUserPositionCombo);
+        UiSupport.installNameAutocomplete(currentUserField,
+                controller::getPersonnelNames,
+                selectedName -> controller.markDirty(),
+                this::createCurrentUserPersonnelCard);
 
         // --- Operational period history table ---
         JPanel historyPanel = new JPanel(new BorderLayout());
@@ -161,68 +164,32 @@ public class IncidentContextPanel extends JPanel {
         });
     }
 
-    /**
-     * Shows a picker dialog listing all PERSONNEL T-cards so the operator can
-     * select the current user/preparer rather than typing the name manually.
-     * The text field remains editable so a name not in the list can still be entered.
-     */
-    private void pickCurrentUser() {
-        List<TCard> cards = controller.getData().getTCards();
-        if (cards == null || cards.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                    "No T-card resources found. Enter the name manually.",
-                    "Pick Person", JOptionPane.INFORMATION_MESSAGE);
-            return;
+    private String createCurrentUserPersonnelCard(String proposedName) {
+        JTextField nameField = UiSupport.textField();
+        nameField.setText(proposedName == null ? "" : proposedName.trim());
+        JTextField agencyField = UiSupport.textField();
+        JTextField radioField = UiSupport.textField();
+        JTextField phoneField = UiSupport.textField();
+        JPanel form = UiSupport.formPanel();
+        UiSupport.addRequiredRow(form, 0, "Name", nameField);
+        UiSupport.addRow(form, 1, "Home agency", agencyField);
+        UiSupport.addRow(form, 2, "Radio", radioField);
+        UiSupport.addRow(form, 3, "Phone", phoneField);
+        JScrollPane pane = new JScrollPane(form);
+        pane.setBorder(BorderFactory.createEmptyBorder());
+        if (!UiSupport.showResizableConfirmDialog(this, "Create Resource", pane, new Dimension(560, 270))) {
+            return "";
         }
-        List<TCard> personnel = cards.stream()
-                .filter(c -> c.getCardType() == TCardType.PERSONNEL && !c.getPersonName().isBlank())
-                .collect(java.util.stream.Collectors.toList());
-        if (personnel.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                    "No personnel T-cards found. Enter the name manually.",
-                    "Pick Person", JOptionPane.INFORMATION_MESSAGE);
-            return;
+        var card = controller.ensurePersonnelCard(nameField.getText().trim(),
+                radioField.getText().trim(),
+                phoneField.getText().trim());
+        if (card == null) {
+            return "";
         }
-        TCard[] cardArray = personnel.toArray(new TCard[0]);
-        JComboBox<TCard> combo = new JComboBox<>(cardArray);
-        javax.swing.DefaultListCellRenderer renderer = new javax.swing.DefaultListCellRenderer() {
-            @Override
-            public java.awt.Component getListCellRendererComponent(
-                    javax.swing.JList<?> list, Object value, int index,
-                    boolean isSelected, boolean cellHasFocus) {
-                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                setText(value instanceof TCard tc ? personDisplayName(tc) : "");
-                return this;
-            }
-        };
-        combo.setRenderer(renderer);
-        // Pre-select the card whose name matches the current field value, if any.
-        String existing = currentUserField.getText().trim();
-        if (!existing.isBlank()) {
-            personnel.stream()
-                    .filter(c -> existing.equalsIgnoreCase(c.getPersonName()))
-                    .findFirst()
-                    .ifPresent(combo::setSelectedItem);
+        if (!agencyField.getText().trim().isBlank()) {
+            card.setHomeAgency(agencyField.getText().trim());
         }
-        int result = JOptionPane.showConfirmDialog(this, combo,
-                "Select preparer / current user", JOptionPane.OK_CANCEL_OPTION);
-        if (result != JOptionPane.OK_OPTION) {
-            return;
-        }
-        TCard selected = (TCard) combo.getSelectedItem();
-        if (selected == null) {
-            return;
-        }
-        currentUserField.setText(selected.getPersonName());
         controller.markDirty();
-    }
-
-    private static String personDisplayName(TCard card) {
-        if (card == null) return "";
-        String agency = card.getHomeAgency();
-        if (agency != null && !agency.isBlank()) {
-            return card.getPersonName() + " (" + agency + ")";
-        }
         return card.getPersonName();
     }
 

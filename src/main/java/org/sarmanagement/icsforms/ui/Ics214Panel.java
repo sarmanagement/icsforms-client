@@ -94,9 +94,7 @@ public class Ics214Panel extends JPanel {
         preparedByRow.setOpaque(false);
         preparedByRow.add(preparedByNameField, BorderLayout.CENTER);
         JButton pickPreparedByButton = new JButton("Pick…");
-        pickPreparedByButton.addActionListener(e -> preparedByNameField.dispatchEvent(
-                new MouseEvent(preparedByNameField, MouseEvent.MOUSE_CLICKED,
-                        System.currentTimeMillis(), 0, 2, 2, 1, false, MouseEvent.BUTTON1)));
+        pickPreparedByButton.addActionListener(e -> UiSupport.openInstalledNamePicker(preparedByNameField));
         preparedByRow.add(pickPreparedByButton, BorderLayout.EAST);
         UiSupport.addRow(form, 3, "Prepared by name", preparedByRow);
         UiSupport.addRow(form, 4, "Prepared by position/title", preparedByPositionField);

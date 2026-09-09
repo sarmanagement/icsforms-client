@@ -28,6 +28,8 @@ import java.awt.Color;
 import java.awt.Window;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
@@ -331,13 +333,51 @@ final class UiSupport {
                                         Supplier<List<String>> suggestions,
                                         Consumer<String> onSelected,
                                         java.util.function.Function<String, String> onCreate) {
+        java.util.function.Consumer<String> openPicker = initialFilter -> openNamePicker(
+                nameField, suggestions, onSelected, onCreate, initialFilter);
+        nameField.putClientProperty("uiSupport.namePicker.open", openPicker);
         nameField.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 if (e.getButton() != MouseEvent.BUTTON1) return;
-                List<String> all = suggestions.get();
-                openPickerDialog(nameField, all, onSelected, onCreate);
+                openPicker.accept(nameField.getText().trim());
             }
         });
+        nameField.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyTyped(KeyEvent e) {
+                char ch = e.getKeyChar();
+                if (Character.isISOControl(ch) || e.isAltDown() || e.isControlDown() || e.isMetaDown()) {
+                    return;
+                }
+                openPicker.accept(String.valueOf(ch));
+                e.consume();
+            }
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    static void openInstalledNamePicker(JTextField nameField) {
+        Object opener = nameField.getClientProperty("uiSupport.namePicker.open");
+        if (opener instanceof java.util.function.Consumer<?> consumer) {
+            ((java.util.function.Consumer<String>) consumer).accept(nameField.getText().trim());
+        }
+    }
+
+    static void openNamePicker(JTextField nameField,
+                               Supplier<List<String>> suggestions,
+                               Consumer<String> onSelected,
+                               java.util.function.Function<String, String> onCreate,
+                               String initialFilter) {
+        if (Boolean.TRUE.equals(nameField.getClientProperty("uiSupport.namePicker.opening"))) {
+            return;
+        }
+        nameField.putClientProperty("uiSupport.namePicker.opening", Boolean.TRUE);
+        try {
+            List<String> all = suggestions.get();
+            openPickerDialog(nameField, all, onSelected, onCreate, initialFilter);
+        } finally {
+            nameField.putClientProperty("uiSupport.namePicker.opening", Boolean.FALSE);
+        }
     }
 
     /**
@@ -350,13 +390,14 @@ final class UiSupport {
     private static void openPickerDialog(JTextField nameField,
                                          List<String> allNames,
                                          Consumer<String> onSelected,
-                                         java.util.function.Function<String, String> onCreate) {
+                                         java.util.function.Function<String, String> onCreate,
+                                         String initialFilter) {
         Window owner = nameField.isShowing()
                 ? (Window) javax.swing.SwingUtilities.getWindowAncestor(nameField) : null;
         JDialog dialog = new JDialog(owner, "Select person", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
 
         // Filter field
-        JTextField filterField = new JTextField(nameField.getText().trim(), 20);
+        JTextField filterField = new JTextField(initialFilter == null ? "" : initialFilter.trim(), 20);
 
         // List model + list
         DefaultListModel<String> listModel = new DefaultListModel<>();
@@ -440,7 +481,7 @@ final class UiSupport {
 
         JPanel top = new JPanel(new BorderLayout(4, 4));
         top.setBorder(BorderFactory.createEmptyBorder(4, 4, 0, 4));
-        top.add(new JLabel("Filter:"), BorderLayout.WEST);
+        top.add(new JLabel("Name / filter (or new name):"), BorderLayout.WEST);
         top.add(filterField, BorderLayout.CENTER);
 
         JPanel center = new JPanel(new BorderLayout());
