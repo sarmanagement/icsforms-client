@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.sarmanagement</groupId>
     <artifactId>icsforms-client</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <name>icsforms-client</name>
 
     <licenses>
@@ -37,7 +37,7 @@
         <connection>scm:git:https://github.com/sarmanagement/icsforms-client.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/sarmanagement/icsforms-client.git</developerConnection>
         <url>https://github.com/sarmanagement/icsforms-client</url>
-        <tag>HEAD</tag>
+        <tag>v0.1.0</tag>
     </scm>
 
     <properties>

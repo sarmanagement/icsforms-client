@@ -2,6 +2,10 @@
 
 `icsforms-client` is a Java Swing desktop application for authoring Incident Command System (ICS) incident forms with local JSON persistence and PDF export. Development is ongoing and the application is still evolving as additional forms and functionality are added.
 
+This project is intended to support the **SAR** (Search and Rescue) community, but it is also useful for generic ICS incident planning and documentation. The application currently supports ICS 201, ICS 202, ICS 204, and ICS 214 forms, along with SAR task assignment forms, a clue log, T-cards, and an organizational chart.  I got tired of copying the same header information from one form to another by hand, and having to subject people to my handwriting in SAR Task Assignment Form Debriefing sections, so this tool is intended to make it easier to author ICS forms and share them with others in a clean, legible format.
+
+Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. The incident workspace is persisted locally in JSON format at `~/.icsforms/incident.json`, with a rolling backup at `~/.icsforms/incident.json.bak`. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF.  Intent is to develop a multi-user application backed by a networked persistence layer in the future.
+
 ## Current UI workflow
 
 1. At launch a startup dialog appears asking you to select an action:
