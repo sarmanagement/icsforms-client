@@ -10,6 +10,7 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -36,6 +37,8 @@ import java.util.List;
 public class Ics204Panel extends JPanel {
     private final AppController controller;
     private java.util.function.Consumer<ResourceAssignment> on214Request;
+    private java.util.function.Consumer<String> onEditSarTaskRequest;
+    private java.util.function.Consumer<String> onChangeSarTaskStatusRequest;
     private final JComboBox<String> managementContextSelector = new JComboBox<>(new String[]{"Incident", "Branch", "Division", "Group"});
     private final JLabel selectedContextLabel = new JLabel("Staging area name");
     private final JTextField selectedContextValueField = UiSupport.textField();
@@ -138,17 +141,7 @@ public class Ics204Panel extends JPanel {
         JPanel resourcesPanel = new JPanel(new BorderLayout());
         resourcesPanel.setBorder(BorderFactory.createTitledBorder("Resources Assigned"));
         resourcesPanel.add(new JScrollPane(resourceTable), BorderLayout.CENTER);
-        resourcesPanel.add(buttonsPanel(
-                () -> {
-                    resourceTableModel.addRow();
-                    int last = resourceTableModel.getRowCount() - 1;
-                    resourceTable.setRowSelectionInterval(last, last);
-                    resourceTable.scrollRectToVisible(resourceTable.getCellRect(last, 0, true));
-                    openSelectedResourceEditor();
-                    controller.markDirty();
-                },
-                () -> { resourceTableModel.removeRow(resourceTable.getSelectedRow()); controller.markDirty(); }
-        ), BorderLayout.SOUTH);
+        resourcesPanel.add(resourcesButtonsPanel(), BorderLayout.SOUTH);
 
         JPanel communicationsPanel = new JPanel(new BorderLayout());
         communicationsPanel.setBorder(BorderFactory.createTitledBorder("Communications"));
@@ -159,7 +152,7 @@ public class Ics204Panel extends JPanel {
         JButton removeCommBtn = new JButton("Remove");
         addCommRowBtn.addActionListener(e -> communicationsTableModel.addRow());
         addStaffBtn.addActionListener(e -> addStaffToComms());
-        removeCommBtn.addActionListener(e -> communicationsTableModel.removeRow(communicationsTable.getSelectedRow()));
+        removeCommBtn.addActionListener(e -> removeSelectedCommunicationRow(communicationsTable));
         commButtons.add(addCommRowBtn);
         commButtons.add(addStaffBtn);
         commButtons.add(removeCommBtn);
@@ -185,6 +178,14 @@ public class Ics204Panel extends JPanel {
         this.on214Request = handler;
     }
 
+    public void setOnEditSarTaskRequest(java.util.function.Consumer<String> handler) {
+        this.onEditSarTaskRequest = handler;
+    }
+
+    public void setOnChangeSarTaskStatusRequest(java.util.function.Consumer<String> handler) {
+        this.onChangeSarTaskStatusRequest = handler;
+    }
+
     /**
      * Opens the "Create assignment" dialog (same editor used for editing existing assignments),
      * adds the new record to the ICS 204 form if the user confirms, and returns it.
@@ -197,9 +198,8 @@ public class Ics204Panel extends JPanel {
     public ResourceAssignment openNewAssignmentEditor() {
         ResourceAssignment row = new ResourceAssignment();
         ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
-        JScrollPane scrollPane = new JScrollPane(editor.panel);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, "Create ICS 204 Assignment", scrollPane,
+        JPanel content = resourceAssignmentEditorDialogContent(row, editor);
+        if (!confirmResourceAssignmentDialog("Create ICS 204 Assignment", row, content,
                 new Dimension(920, 560))) {
             return null;
         }
@@ -382,21 +382,38 @@ public class Ics204Panel extends JPanel {
         activeManagementContext = managementContext;
     }
 
-    /**
-     * Creates shared add/remove buttons.
-     *
-     * @param onAdd add handler.
-     * @param onRemove remove handler.
-     * @return button panel.
-     */
-    private JPanel buttonsPanel(Runnable onAdd, Runnable onRemove) {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    private JPanel resourcesButtonsPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         JButton add = new JButton("Add");
+        JButton edit = new JButton("Edit…");
         JButton remove = new JButton("Remove");
-        add.addActionListener(event -> onAdd.run());
-        remove.addActionListener(event -> onRemove.run());
+        JButton editSarTask = new JButton("Edit linked SAR task…");
+        edit.setEnabled(false);
+        remove.setEnabled(false);
+        editSarTask.setEnabled(false);
+        resourceTable.getSelectionModel().addListSelectionListener(e -> {
+            boolean selected = resourceTable.getSelectedRow() >= 0;
+            edit.setEnabled(selected);
+            remove.setEnabled(selected);
+            editSarTask.setEnabled(selected && onEditSarTaskRequest != null);
+        });
+        add.addActionListener(event -> {
+            resourceTableModel.addRow();
+            int last = resourceTableModel.getRowCount() - 1;
+            if (last >= 0) {
+                resourceTable.setRowSelectionInterval(last, last);
+                resourceTable.scrollRectToVisible(resourceTable.getCellRect(last, 0, true));
+                openSelectedResourceEditor();
+            }
+            controller.markDirty();
+        });
+        edit.addActionListener(event -> openSelectedResourceEditor());
+        remove.addActionListener(event -> removeSelectedResourceRow());
+        editSarTask.addActionListener(event -> openLinkedSarTaskForSelection());
         panel.add(add);
+        panel.add(edit);
         panel.add(remove);
+        panel.add(editSarTask);
         return panel;
     }
 
@@ -478,20 +495,20 @@ public class Ics204Panel extends JPanel {
         JMenuItem addItem    = new JMenuItem("Add assignment…");
         JMenuItem editItem   = new JMenuItem("Edit assignment…");
         JMenuItem removeItem = new JMenuItem("Remove assignment");
+        JMenuItem editSarTaskItem = new JMenuItem("Edit linked SAR task…");
+        JMenuItem changeStatusItem = new JMenuItem("Change linked task status…");
         JMenuItem log214Item = new JMenuItem("Add ICS 214 Log…");
         addItem.addActionListener(event -> { resourceTableModel.addRow(); controller.markDirty(); });
         editItem.addActionListener(event -> openSelectedResourceEditor());
-        removeItem.addActionListener(event -> {
-            int viewRow = resourceTable.getSelectedRow();
-            if (viewRow >= 0) {
-                resourceTableModel.removeRow(resourceTable.convertRowIndexToModel(viewRow));
-                controller.markDirty();
-            }
-        });
+        removeItem.addActionListener(event -> removeSelectedResourceRow());
+        editSarTaskItem.addActionListener(event -> openLinkedSarTaskForSelection());
+        changeStatusItem.addActionListener(event -> openStatusDialogForSelectedLinkedTask());
         log214Item.addActionListener(event -> open214ForSelectedResource());
         menu.add(addItem);
         menu.add(editItem);
         menu.add(removeItem);
+        menu.add(editSarTaskItem);
+        menu.add(changeStatusItem);
         menu.addSeparator();
         menu.add(log214Item);
         menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
@@ -505,7 +522,10 @@ public class Ics204Panel extends JPanel {
                             .anyMatch(f -> ra.getAssignmentId().equals(f.getLinkedSarTaskAssignmentId()));
                     log214Item.setText(exists ? "Open ICS 214 Log" : "Add ICS 214 Log…");
                 }
+                editSarTaskItem.setVisible(onEditSarTaskRequest != null);
+                changeStatusItem.setVisible(onChangeSarTaskStatusRequest != null);
                 log214Item.setVisible(on214Request != null);
+                changeStatusItem.setEnabled(canChangeSelectedLinkedTaskStatus());
             }
             @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {}
             @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {}
@@ -551,13 +571,52 @@ public class Ics204Panel extends JPanel {
         int modelRow = resourceTable.convertRowIndexToModel(viewRow);
         ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
         ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
-        JScrollPane scrollPane = new JScrollPane(editor.panel);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, editor.dialogTitle(), scrollPane, new Dimension(920, 560))) {
+        JPanel content = resourceAssignmentEditorDialogContent(row, editor);
+        if (!confirmResourceAssignmentDialog(editor.dialogTitle(), row, content, new Dimension(920, 560))) {
             return;
         }
         editor.applyTo(row);
         resourceTableModel.fireTableRowsUpdated(modelRow, modelRow);
+    }
+
+    private JPanel resourceAssignmentEditorDialogContent(ResourceAssignment assignment, ResourceAssignmentEditor editor) {
+        JScrollPane scrollPane = new JScrollPane(editor.panel);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        JPanel content = new JPanel(new BorderLayout(0, 6));
+        content.setOpaque(false);
+        content.add(scrollPane, BorderLayout.CENTER);
+        return content;
+    }
+
+    private boolean confirmResourceAssignmentDialog(String title, ResourceAssignment assignment,
+                                                    JPanel content, Dimension preferredSize) {
+        while (true) {
+            java.util.List<Object> options = new ArrayList<>();
+            if (onEditSarTaskRequest != null
+                    && assignment.getAssignmentId() != null
+                    && !assignment.getAssignmentId().isBlank()) {
+                options.add("Open linked SAR task…");
+            }
+            int okIndex = options.size();
+            options.add("OK");
+            int cancelIndex = options.size();
+            options.add("Cancel");
+            int choice = UiSupport.showResizableOptionDialog(this, title, content, preferredSize,
+                    options.toArray(), "OK");
+            if (choice == okIndex) {
+                return true;
+            }
+            if (choice < 0 || choice == cancelIndex) {
+                return false;
+            }
+            if ("Open linked SAR task…".equals(options.get(choice))
+                    && onEditSarTaskRequest != null
+                    && assignment.getAssignmentId() != null
+                    && !assignment.getAssignmentId().isBlank()) {
+                onEditSarTaskRequest.accept(assignment.getAssignmentId());
+                return false;
+            }
+        }
     }
 
     private void open214ForSelectedResource() {
@@ -571,6 +630,130 @@ public class Ics204Panel extends JPanel {
         int modelRow = resourceTable.convertRowIndexToModel(viewRow);
         ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
         on214Request.accept(row);
+    }
+
+    public boolean openEditorForAssignmentId(String assignmentId) {
+        if (assignmentId == null || assignmentId.isBlank()) {
+            return false;
+        }
+        for (int i = 0; i < resourceTableModel.getRows().size(); i++) {
+            ResourceAssignment row = resourceTableModel.getRows().get(i);
+            if (assignmentId.equals(row.getAssignmentId())) {
+                int viewRow = resourceTable.convertRowIndexToView(i);
+                if (viewRow >= 0) {
+                    resourceTable.setRowSelectionInterval(viewRow, viewRow);
+                }
+                openSelectedResourceEditor();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void openLinkedSarTaskForSelection() {
+        if (onEditSarTaskRequest == null) {
+            return;
+        }
+        int viewRow = resourceTable.getSelectedRow();
+        if (viewRow < 0) {
+            return;
+        }
+        int modelRow = resourceTable.convertRowIndexToModel(viewRow);
+        ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
+        if (row.getAssignmentId() == null || row.getAssignmentId().isBlank()) {
+            JOptionPane.showMessageDialog(this,
+                    "Selected assignment has no assignment ID to link to a SAR task.",
+                    "Open SAR Task", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        onEditSarTaskRequest.accept(row.getAssignmentId());
+    }
+
+    private void openStatusDialogForSelectedLinkedTask() {
+        if (onChangeSarTaskStatusRequest == null) {
+            return;
+        }
+        int viewRow = resourceTable.getSelectedRow();
+        if (viewRow < 0) {
+            return;
+        }
+        int modelRow = resourceTable.convertRowIndexToModel(viewRow);
+        ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
+        if (row.getAssignmentId() == null || row.getAssignmentId().isBlank()) {
+            return;
+        }
+        String linkedStatus = linkedTaskLifecycleStatus(row.getAssignmentId());
+        if (!isPlannedOrAssigned(linkedStatus)) {
+            return;
+        }
+        onChangeSarTaskStatusRequest.accept(row.getAssignmentId());
+    }
+
+    private boolean canChangeSelectedLinkedTaskStatus() {
+        int viewRow = resourceTable.getSelectedRow();
+        if (viewRow < 0) {
+            return false;
+        }
+        ResourceAssignment row = resourceTableModel.getRows().get(resourceTable.convertRowIndexToModel(viewRow));
+        if (row.getAssignmentId() == null || row.getAssignmentId().isBlank()) {
+            return false;
+        }
+        return isPlannedOrAssigned(linkedTaskLifecycleStatus(row.getAssignmentId()));
+    }
+
+    private String linkedTaskLifecycleStatus(String assignmentId) {
+        if (assignmentId == null || assignmentId.isBlank()) {
+            return "";
+        }
+        return controller.getData().getSarTaskAssignments().stream()
+                .filter(task -> assignmentId.equals(task.getAssignmentId()))
+                .map(task -> task.getTaskLifecycleStatus() == null ? "" : task.getTaskLifecycleStatus())
+                .findFirst()
+                .orElse("");
+    }
+
+    private static boolean isPlannedOrAssigned(String lifecycle) {
+        if (lifecycle == null) {
+            return false;
+        }
+        String value = lifecycle.trim().toLowerCase(java.util.Locale.ROOT);
+        return "planned".equals(value) || value.startsWith("assigned -");
+    }
+
+    private void removeSelectedResourceRow() {
+        int viewRow = resourceTable.getSelectedRow();
+        if (viewRow < 0) {
+            return;
+        }
+        int modelRow = resourceTable.convertRowIndexToModel(viewRow);
+        ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
+        String label = row.getAssignmentTeamNumber().isBlank() ? row.getResourceIdentifier() : row.getAssignmentTeamNumber();
+        String detail = row.getLeader().isBlank() ? "" : " (Leader: " + row.getLeader() + ")";
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Remove assignment '" + (label.isBlank() ? ("row " + (viewRow + 1)) : label) + "'" + detail + "?",
+                "Remove Assignment", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            resourceTableModel.removeRow(modelRow);
+            controller.markDirty();
+        }
+    }
+
+    private void removeSelectedCommunicationRow(JTable communicationsTable) {
+        int row = communicationsTable.getSelectedRow();
+        if (row < 0) {
+            return;
+        }
+        CommunicationEntry entry = communicationsTableModel.getRows().get(row);
+        String who = entry.getName().isBlank() ? entry.getFunction() : entry.getName();
+        String contact = entry.getPrimaryContact() == null ? "" : entry.getPrimaryContact().trim();
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Remove communication entry for '" + (who.isBlank() ? ("row " + (row + 1)) : who)
+                        + "'" + (contact.isBlank() ? "" : " (" + contact + ")") + "?",
+                "Remove Communication Entry", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            communicationsTableModel.removeRow(row);
+            controller.markDirty();
+        }
     }
 
     private static JPanel inlineFieldPanel(LabeledComponent... components) {
@@ -680,6 +863,19 @@ public class Ics204Panel extends JPanel {
                                 contactField.setText(contact);
                             }
                         }
+                    },
+                    proposedName -> {
+                        var card = controller.createPersonnelCardViaDialog(proposedName, "", "");
+                        if (card == null) {
+                            return "";
+                        }
+                        if (contactField.getText().isBlank()) {
+                            String contact = card.getRadioChannel().isBlank() ? card.getPhoneNumber() : card.getRadioChannel();
+                            if (!contact.isBlank()) {
+                                contactField.setText(contact);
+                            }
+                        }
+                        return card.getPersonName();
                     });
 
             int rowIndex = 0;

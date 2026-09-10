@@ -98,10 +98,15 @@ public class TCardPanel extends JPanel {
      * appears in multiple task assignments and render busy-indicator cards.
      */
     private final Map<String, SarTaskAssignment> sarTaskByAssignmentId = new LinkedHashMap<>();
+    private java.util.function.Consumer<String> onEditSarAssignmentRequest;
 
     /** Returns {@code true} when the incident is running in SAR mode. */
     private boolean isSarMode() {
         return controller.getIncidentMode() == org.sarmanagement.icsforms.model.IncidentMode.SAR;
+    }
+
+    public void setOnEditSarAssignmentRequest(java.util.function.Consumer<String> handler) {
+        this.onEditSarAssignmentRequest = handler;
     }
 
     /**
@@ -407,7 +412,10 @@ public class TCardPanel extends JPanel {
         if (isAssignedColumn) {
             for (Map.Entry<String, SarTaskAssignment> e : sarTaskByAssignmentId.entrySet()) {
                 SarTaskAssignment t = e.getValue();
-                if (!"On Task".equals(t.getTaskLifecycleStatus())) continue;
+                String lifecycle = t.getTaskLifecycleStatus() == null
+                        ? ""
+                        : t.getTaskLifecycleStatus().trim().toLowerCase(java.util.Locale.ROOT);
+                if (!(lifecycle.startsWith("assigned -") || "on task".equals(lifecycle))) continue;
                 List<SarTaskResource> res = t.getResourcesAssigned();
                 if (res == null) continue;
                 for (SarTaskResource r : res) {
@@ -447,7 +455,9 @@ public class TCardPanel extends JPanel {
                         String candidate = parts[1];
                         SarTaskAssignment candidateTask = sarTaskByAssignmentId.get(candidate);
                         // Group only under known, non-Returned tasks; stale/unknown refs → ungrouped.
-                        if (candidateTask != null && !"Returned".equals(candidateTask.getTaskLifecycleStatus())) {
+                        String lifecycle = candidateTask == null ? ""
+                                : candidateTask.getTaskLifecycleStatus().trim().toLowerCase(java.util.Locale.ROOT);
+                        if (candidateTask != null && !"returned".equals(lifecycle)) {
                             taskKey = candidate;
                         }
                     }
@@ -467,7 +477,10 @@ public class TCardPanel extends JPanel {
                 SarTaskAssignment task = taskEntry.getValue();
                 if (task == null) continue;
                 // Only active assignments can produce phantom groups.
-                if (!"On Task".equals(task.getTaskLifecycleStatus())) continue;
+                String lifecycle = task.getTaskLifecycleStatus() == null
+                        ? ""
+                        : task.getTaskLifecycleStatus().trim().toLowerCase(java.util.Locale.ROOT);
+                if (!(lifecycle.startsWith("assigned -") || "on task".equals(lifecycle))) continue;
                 List<SarTaskResource> res = task.getResourcesAssigned();
                 if (res == null || res.isEmpty()) continue;
                 // Add phantom only when at least one resource is "Assigned" (busy on another task).
@@ -652,6 +665,14 @@ public class TCardPanel extends JPanel {
         lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, 10.5f));
         lbl.setForeground(new Color(30, 60, 130));
         p.add(lbl, BorderLayout.CENTER);
+        if (isSarMode() && onEditSarAssignmentRequest != null && !taskKey.isBlank()) {
+            JButton editTaskBtn = new JButton("✎");
+            editTaskBtn.setMargin(new Insets(1, 4, 1, 4));
+            editTaskBtn.setFont(editTaskBtn.getFont().deriveFont(10f));
+            editTaskBtn.setToolTipText("Edit SAR assignment");
+            editTaskBtn.addActionListener(e -> onEditSarAssignmentRequest.accept(taskKey));
+            p.add(editTaskBtn, BorderLayout.EAST);
+        }
 
         p.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
         p.addMouseListener(new MouseAdapter() {
@@ -895,6 +916,45 @@ public class TCardPanel extends JPanel {
         }
     }
 
+    public TCard createPersonnelCardFromPicker(String proposedName, String radioChannel, String phoneNumber) {
+        String name = proposedName == null ? "" : proposedName.trim();
+        if (name.isBlank()) {
+            return null;
+        }
+        TCard existing = controller.findPersonCard(name);
+        if (existing != null) {
+            if (existing.getRadioChannel().isBlank() && radioChannel != null && !radioChannel.trim().isBlank()) {
+                existing.setRadioChannel(radioChannel.trim());
+            }
+            if (existing.getPhoneNumber().isBlank() && phoneNumber != null && !phoneNumber.trim().isBlank()) {
+                existing.setPhoneNumber(phoneNumber.trim());
+            }
+            controller.markDirty();
+            return existing;
+        }
+        TCard card = new TCard();
+        card.setCardType(TCardType.PERSONNEL);
+        card.setPersonName(name);
+        card.setResourceIdentifier(name);
+        card.setLocation("ICP");
+        card.setStatus("ordered");
+        if (radioChannel != null && !radioChannel.trim().isBlank()) {
+            card.setRadioChannel(radioChannel.trim());
+        }
+        if (phoneNumber != null && !phoneNumber.trim().isBlank()) {
+            card.setPhoneNumber(phoneNumber.trim());
+        }
+        if (!openEditDialog(card)) {
+            return null;
+        }
+        tableModel.addCard(card);
+        if (currentView.equals(VIEW_RACK)) {
+            rebuildRackView();
+        }
+        controller.markDirty();
+        return card;
+    }
+
     private void addHeaderCard() {
         TCard card = new TCard();
         card.setCardType(TCardType.HEADER);
@@ -944,8 +1004,15 @@ public class TCardPanel extends JPanel {
         if (row < 0) {
             return;
         }
-        tableModel.removeCard(row);
-        controller.markDirty();
+        TCard card = tableModel.getCard(row);
+        String label = effectiveName(card);
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Remove resource '" + (label.isBlank() ? ("row " + (row + 1)) : label) + "'?",
+                "Remove Resource", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            tableModel.removeCard(row);
+            controller.markDirty();
+        }
     }
 
     // -------------------------------------------------------------------------

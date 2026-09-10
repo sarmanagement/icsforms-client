@@ -16,6 +16,7 @@ import org.sarmanagement.icsforms.validation.ValidationMessage;
 
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
+import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -34,9 +35,12 @@ import javax.swing.event.MenuListener;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.event.KeyEvent;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.DateTimeException;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -96,9 +100,14 @@ public class MainFrame extends JFrame {
         this.sarTaskPanel = new SarTaskPanel(controller);
         this.clueLogPanel = new ClueLogPanel(controller);
         this.tCardPanel = new TCardPanel(controller);
+        controller.setPersonnelCardCreator(tCardPanel::createPersonnelCardFromPicker);
         ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
+        ics204Panel.setOnEditSarTaskRequest(this::openSarTaskEditorForAssignment);
+        ics204Panel.setOnChangeSarTaskStatusRequest(sarTaskPanel::openTaskStatusDialogByAssignmentId);
         sarTaskPanel.setOn214Request(this::openIcs214ForSarTask);
         sarTaskPanel.setOnNewAssignmentRequest(ics204Panel::openNewAssignmentEditor);
+        sarTaskPanel.setOnEditIcs204AssignmentRequest(this::openIcs204EditorForAssignment);
+        tCardPanel.setOnEditSarAssignmentRequest(assignmentId -> openSarTaskEditorForAssignment(assignmentId, false));
         groupVisible.put(CORE_GROUP, true);
         groupVisible.put(ACTIVITY_LOGS_GROUP, true);
         groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
@@ -254,71 +263,11 @@ public class MainFrame extends JFrame {
             viewMenu.add(item);
         }
 
-        JMenuItem export201Item = new JMenuItem("Export ICS 201 PDF…");
-        export201Item.setMnemonic(KeyEvent.VK_1);
-        export201Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 201"));
+        JMenuItem exportFormsPdfItem = new JMenuItem("Export forms as PDF…");
+        exportFormsPdfItem.setMnemonic(KeyEvent.VK_P);
+        exportFormsPdfItem.addActionListener(event -> openFormsExportDialog(defaultDirectory));
 
-        JMenuItem export202Item = new JMenuItem("Export ICS 202 PDF…");
-        export202Item.setMnemonic(KeyEvent.VK_2);
-        export202Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 202"));
-
-        JMenuItem export207Item = new JMenuItem("Export ICS 207 PDF…");
-        export207Item.setMnemonic(KeyEvent.VK_7);
-        export207Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 207"));
-
-        JMenuItem export204Item = new JMenuItem("Export ICS 204 PDF…");
-        export204Item.setMnemonic(KeyEvent.VK_4);
-        export204Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 204"));
-
-        JMenuItem exportSarTaskItem = new JMenuItem("Export SAR Task Assignment PDF…");
-        exportSarTaskItem.setMnemonic(KeyEvent.VK_T);
-        exportSarTaskItem.addActionListener(event -> exportOne(defaultDirectory, "SAR Task Assignment"));
-
-        JMenuItem export214Item = new JMenuItem("Export ICS 214 PDF…");
-        export214Item.setMnemonic(KeyEvent.VK_F);
-        export214Item.addActionListener(event -> exportOne(defaultDirectory, "ICS 214"));
-
-        JMenuItem exportClueLogItem = new JMenuItem("Export Clue Log PDF…");
-        exportClueLogItem.setMnemonic(KeyEvent.VK_U);
-        exportClueLogItem.addActionListener(event -> exportOne(defaultDirectory, "Clue Log"));
-
-        JMenuItem exportAllItem = new JMenuItem("Export All PDFs…");
-        exportAllItem.setMnemonic(KeyEvent.VK_L);
-        exportAllItem.addActionListener(event -> {
-            AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-            chooseDirectory(defaultDirectory, directory -> {
-                if (!handleValidationBeforeExport()) {
-                    return;
-                }
-                pushToModel(source);
-                try {
-                    controller.exportAll(directory, source);
-                    JOptionPane.showMessageDialog(this, "Exported available PDFs to\n" + directory, "Export complete", JOptionPane.INFORMATION_MESSAGE);
-                } catch (IOException exception) {
-                    showError("Failed to export PDFs", exception);
-                }
-            });
-        });
-
-        JMenuItem exportIapBundleItem = new JMenuItem("Export IAP Bundle (all PDFs merged)…");
-        exportIapBundleItem.setMnemonic(KeyEvent.VK_B);
-        exportIapBundleItem.addActionListener(event -> {
-            AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-            chooseDirectory(defaultDirectory, directory -> {
-                if (!handleValidationBeforeExport()) {
-                    return;
-                }
-                pushToModel(source);
-                try {
-                    Path bundlePath = controller.exportIapBundle(directory, source);
-                    JOptionPane.showMessageDialog(this, "Exported IAP bundle to\n" + bundlePath, "Export complete", JOptionPane.INFORMATION_MESSAGE);
-                } catch (IOException exception) {
-                    showError("Failed to export IAP bundle", exception);
-                }
-            });
-        });
-
-        JMenuItem exportResourcesCsvItem = new JMenuItem("Export Resources as CSV…");
+        JMenuItem exportResourcesCsvItem = new JMenuItem("Export resources as CSV…");
         exportResourcesCsvItem.setMnemonic(KeyEvent.VK_R);
         exportResourcesCsvItem.addActionListener(event -> tCardPanel.exportToCsv());
 
@@ -355,17 +304,8 @@ public class MainFrame extends JFrame {
         fileMenu.add(saveAsItem);
         fileMenu.addSeparator();
         fileMenu.add(exitItem);
-        exportMenu.add(export201Item);
-        exportMenu.add(export202Item);
-        exportMenu.add(export207Item);
-        exportMenu.add(export204Item);
-        exportMenu.add(export214Item);
-        exportMenu.add(exportSarTaskItem);
-        exportMenu.add(exportClueLogItem);
+        exportMenu.add(exportFormsPdfItem);
         exportMenu.add(exportResourcesCsvItem);
-        exportMenu.add(exportAllItem);
-        exportMenu.addSeparator();
-        exportMenu.add(exportIapBundleItem);
         logsMenu.add(addLogItem);
         logsMenu.add(removeCurrentLogItem);
         logsMenu.addSeparator();
@@ -415,6 +355,50 @@ public class MainFrame extends JFrame {
         configMenu.addSeparator();
         configMenu.add(iapPhaseMenu);
 
+        JMenu timeZoneMenu = new JMenu("Date/Time Zone");
+        ButtonGroup timeZoneGroup = new ButtonGroup();
+        JRadioButtonMenuItem systemTimeZoneItem = new JRadioButtonMenuItem("Use system local time zone",
+                controller.getData().isUseSystemTimeZone());
+        JRadioButtonMenuItem specifiedTimeZoneItem = new JRadioButtonMenuItem("Use specified time zone…",
+                !controller.getData().isUseSystemTimeZone());
+        systemTimeZoneItem.addActionListener(e -> {
+            controller.getData().setUseSystemTimeZone(true);
+            applyConfiguredTimeZone();
+            refreshFromModel();
+            controller.markDirty();
+        });
+        specifiedTimeZoneItem.addActionListener(e -> {
+            String current = controller.getData().getConfiguredTimeZoneId();
+            String chosen = JOptionPane.showInputDialog(this,
+                    "Enter time zone ID (e.g., UTC, America/Denver):",
+                    current == null || current.isBlank() ? "UTC" : current);
+            if (chosen == null) {
+                systemTimeZoneItem.setSelected(controller.getData().isUseSystemTimeZone());
+                specifiedTimeZoneItem.setSelected(!controller.getData().isUseSystemTimeZone());
+                return;
+            }
+            try {
+                ZoneId.of(chosen.trim());
+            } catch (DateTimeException ex) {
+                JOptionPane.showMessageDialog(this, "Invalid time zone: " + chosen,
+                        "Date/Time Zone", JOptionPane.WARNING_MESSAGE);
+                systemTimeZoneItem.setSelected(controller.getData().isUseSystemTimeZone());
+                specifiedTimeZoneItem.setSelected(!controller.getData().isUseSystemTimeZone());
+                return;
+            }
+            controller.getData().setUseSystemTimeZone(false);
+            controller.getData().setConfiguredTimeZoneId(chosen.trim());
+            applyConfiguredTimeZone();
+            refreshFromModel();
+            controller.markDirty();
+        });
+        timeZoneGroup.add(systemTimeZoneItem);
+        timeZoneGroup.add(specifiedTimeZoneItem);
+        timeZoneMenu.add(systemTimeZoneItem);
+        timeZoneMenu.add(specifiedTimeZoneItem);
+        configMenu.addSeparator();
+        configMenu.add(timeZoneMenu);
+
         importMenu.add(importResourcesCsvItem);
 
         bar.add(fileMenu);
@@ -424,6 +408,94 @@ public class MainFrame extends JFrame {
         bar.add(logsMenu);
         bar.add(configMenu);
         return bar;
+    }
+
+    private void openFormsExportDialog(Path defaultDirectory) {
+        List<String> formKeys = controller.exportableFormKeys();
+        if (formKeys.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No PDF forms are available to export.",
+                    "Export forms as PDF", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JPanel form = UiSupport.formPanel();
+        java.util.LinkedHashMap<String, javax.swing.JCheckBox> selectors = new java.util.LinkedHashMap<>();
+        JPanel checksPanel = new JPanel();
+        checksPanel.setLayout(new javax.swing.BoxLayout(checksPanel, javax.swing.BoxLayout.Y_AXIS));
+        for (String key : formKeys) {
+            javax.swing.JCheckBox check = new javax.swing.JCheckBox(exportFormDisplayLabel(key), true);
+            check.setOpaque(false);
+            selectors.put(key, check);
+            checksPanel.add(check);
+        }
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        JButton selectAll = new JButton("Select All");
+        JButton selectNone = new JButton("Select None");
+        selectAll.addActionListener(e -> selectors.values().forEach(c -> c.setSelected(true)));
+        selectNone.addActionListener(e -> selectors.values().forEach(c -> c.setSelected(false)));
+        controls.add(selectAll);
+        controls.add(selectNone);
+        javax.swing.JRadioButton individual = new javax.swing.JRadioButton("Export selected forms as individual PDFs", true);
+        javax.swing.JRadioButton combined = new javax.swing.JRadioButton("Export selected forms as combined IAP PDF");
+        javax.swing.ButtonGroup modeGroup = new javax.swing.ButtonGroup();
+        modeGroup.add(individual);
+        modeGroup.add(combined);
+        JPanel modePanel = new JPanel();
+        modePanel.setOpaque(false);
+        modePanel.setLayout(new javax.swing.BoxLayout(modePanel, javax.swing.BoxLayout.Y_AXIS));
+        modePanel.add(individual);
+        modePanel.add(combined);
+        UiSupport.addRow(form, 0, "Forms", new JScrollPane(checksPanel));
+        UiSupport.addRow(form, 1, "", controls);
+        UiSupport.addRow(form, 2, "Output", modePanel);
+        JScrollPane pane = new JScrollPane(form);
+        pane.setBorder(BorderFactory.createEmptyBorder());
+        if (!UiSupport.showResizableConfirmDialog(this, "Export forms as PDF",
+                pane, new Dimension(560, 440))) {
+            return;
+        }
+
+        List<String> selected = selectors.entrySet().stream()
+                .filter(en -> en.getValue().isSelected())
+                .map(Map.Entry::getKey)
+                .toList();
+        if (selected.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Select at least one form to export.",
+                    "Export forms as PDF", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
+        chooseDirectory(defaultDirectory, directory -> {
+            if (!handleValidationBeforeExport()) {
+                return;
+            }
+            pushToModel(source);
+            try {
+                if (combined.isSelected()) {
+                    Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source);
+                    JOptionPane.showMessageDialog(this, "Exported IAP bundle to\n" + bundlePath,
+                            "Export complete", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    controller.exportSelectedForms(selected, directory, source);
+                    JOptionPane.showMessageDialog(this, "Exported selected PDFs to\n" + directory,
+                            "Export complete", JOptionPane.INFORMATION_MESSAGE);
+                }
+            } catch (IOException exception) {
+                showError("Failed to export PDFs", exception);
+            }
+        });
+    }
+
+    static String exportFormDisplayLabel(String formKey) {
+        return switch (formKey) {
+            case "ICS 201" -> "ICS 201 – Incident Briefing";
+            case "ICS 202" -> "ICS 202 – Incident Objectives";
+            case "ICS 204" -> "ICS 204 – Assignment List";
+            case "ICS 207" -> "ICS 207 – Incident Organization Chart";
+            case "ICS 214" -> "ICS 214 – Activity Log";
+            case "SAR Task Assignment" -> "SAR Task Assignment Forms";
+            case "Clue Log" -> "Clue Log";
+            default -> formKey;
+        };
     }
 
     /**
@@ -497,6 +569,7 @@ public class MainFrame extends JFrame {
 
     /** Reloads panel state from the active incident document. */
     private void refreshFromModel() {
+        applyConfiguredTimeZone();
         Component selectedComponent = tabs.getSelectedComponent();
         int selectedLogIndex = selectedLogIndex(selectedComponent);
         incidentContextPanel.refreshFromModel();
@@ -520,7 +593,21 @@ public class MainFrame extends JFrame {
             lastKnownPhase = currentPhase;
         }
         rebuildVisibleTabs(selectedComponent, selectedLogIndex);
+        UiSupport.applyDateTimeDisplayZone(this);
         refreshStatus();
+    }
+
+    private void applyConfiguredTimeZone() {
+        AppData data = controller.getData();
+        if (data.isUseSystemTimeZone()) {
+            UiSupport.setDateTimeDisplayZone(ZoneId.systemDefault());
+            return;
+        }
+        try {
+            UiSupport.setDateTimeDisplayZone(ZoneId.of(data.getConfiguredTimeZoneId()));
+        } catch (DateTimeException ex) {
+            UiSupport.setDateTimeDisplayZone(ZoneId.systemDefault());
+        }
     }
 
     private void rebuildVisibleTabs() {
@@ -774,6 +861,47 @@ public class MainFrame extends JFrame {
         refreshStatus();
     }
 
+    private void openSarTaskEditorForAssignment(String assignmentId) {
+        openSarTaskEditorForAssignment(assignmentId, true);
+    }
+
+    private void openSarTaskEditorForAssignment(String assignmentId, boolean switchToSarTab) {
+        if (assignmentId == null || assignmentId.isBlank()) {
+            return;
+        }
+        Component previousTab = tabs.getSelectedComponent();
+        int previousLogIndex = selectedLogIndex(previousTab);
+        groupVisible.put(SAR_ONLY_GROUP, true);
+        rebuildVisibleTabs(switchToSarTab ? sarTaskPanel : previousTab, switchToSarTab ? -1 : previousLogIndex);
+        if (switchToSarTab) {
+            tabs.setSelectedComponent(sarTaskPanel);
+        }
+        if (!sarTaskPanel.openAssignmentEditorById(assignmentId)) {
+            JOptionPane.showMessageDialog(this,
+                    "No SAR task found for assignment ID " + assignmentId,
+                    "Open SAR Task", JOptionPane.INFORMATION_MESSAGE);
+            if (!switchToSarTab && previousTab != null && tabs.indexOfComponent(previousTab) >= 0) {
+                tabs.setSelectedComponent(previousTab);
+            }
+            return;
+        }
+        if (!switchToSarTab && previousTab != null && tabs.indexOfComponent(previousTab) >= 0) {
+            tabs.setSelectedComponent(previousTab);
+        }
+    }
+
+    private void openIcs204EditorForAssignment(String assignmentId) {
+        if (assignmentId == null || assignmentId.isBlank()) {
+            return;
+        }
+        tabs.setSelectedComponent(ics204Panel);
+        if (!ics204Panel.openEditorForAssignmentId(assignmentId)) {
+            JOptionPane.showMessageDialog(this,
+                    "No ICS 204 assignment found for assignment ID " + assignmentId,
+                    "Open Assignment", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
     private void addLog() {
         pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
         AppData data = controller.getData();
@@ -842,7 +970,7 @@ public class MainFrame extends JFrame {
             return;
         }
         int confirm = JOptionPane.showConfirmDialog(this,
-                "Remove the currently selected activity log?",
+                "Remove activity log '" + logMenuLabel(active) + "'?",
                 "Remove Log",
                 JOptionPane.YES_NO_OPTION);
         if (confirm != JOptionPane.YES_OPTION) {

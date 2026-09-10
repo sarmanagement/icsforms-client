@@ -38,8 +38,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -58,7 +60,6 @@ public class Ics214Panel extends JPanel {
     private final JTextField homeAgencyField = UiSupport.textField();
     private final JTextField preparedByNameField = UiSupport.textField();
     private final JTextField preparedByPositionField = UiSupport.textField();
-    private final JTextField preparedBySignatureField = UiSupport.textField();
     private final JSpinner preparedDateTimeField = UiSupport.dateTimeSpinner();
     private final JButton pickPreparerButton = new JButton("Pick preparer from task…");
     private final JButton pickResourceButton = new JButton("Pick…");
@@ -83,16 +84,26 @@ public class Ics214Panel extends JPanel {
         form.setBorder(BorderFactory.createTitledBorder("ICS 214 Activity Log"));
         JPanel nameRow = new JPanel(new BorderLayout(4, 0));
         nameRow.add(nameField, BorderLayout.CENTER);
-        pickResourceButton.setToolTipText("Link section 3 to a known resource (T-card)");
+        pickResourceButton.setToolTipText("Link section 3 to a known resource or location");
         pickResourceButton.addActionListener(e -> pickResourceForSection3());
         nameRow.add(pickResourceButton, BorderLayout.EAST);
         UiSupport.addRow(form, 0, "Name", nameRow);
         UiSupport.addRow(form, 1, "ICS position", icsPositionField);
         UiSupport.addRow(form, 2, "Home agency", homeAgencyField);
-        UiSupport.addRow(form, 3, "Prepared by name", preparedByNameField);
+        JPanel preparedByRow = new JPanel(new BorderLayout(4, 0));
+        preparedByRow.setOpaque(false);
+        preparedByRow.add(preparedByNameField, BorderLayout.CENTER);
+        JButton pickPreparedByButton = new JButton("Pick…");
+        pickPreparedByButton.addActionListener(e -> UiSupport.openInstalledNamePicker(preparedByNameField));
+        preparedByRow.add(pickPreparedByButton, BorderLayout.EAST);
+        UiSupport.addRow(form, 3, "Prepared by name", preparedByRow);
         UiSupport.addRow(form, 4, "Prepared by position/title", preparedByPositionField);
-        UiSupport.addRow(form, 5, "Prepared by signature", preparedBySignatureField);
-        UiSupport.addRow(form, 6, "Prepared date/time", preparedDateTimeField);
+        UiSupport.addRow(form, 5, "Prepared date/time", preparedDateTimeField);
+
+        UiSupport.installNameAutocomplete(preparedByNameField,
+                controller::getPersonnelNames,
+                selectedName -> populatePreparedByFromPersonCard(selectedName, true),
+                proposedName -> createPersonnelFromPicker(proposedName, preparedByPositionField, homeAgencyField));
 
         pickPreparerButton.setEnabled(false);
         pickPreparerButton.addActionListener(event -> pickPreparerFromTask());
@@ -166,7 +177,6 @@ public class Ics214Panel extends JPanel {
         homeAgencyField.setText(nullSafe(currentForm.getHomeAgency()));
         preparedByNameField.setText(nullSafe(currentForm.getPreparedByName()));
         preparedByPositionField.setText(nullSafe(currentForm.getPreparedByPositionTitle()));
-        preparedBySignatureField.setText(nullSafe(currentForm.getPreparedBySignature()));
         preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
         resourcesTableModel.setRows(currentForm.getResourcesAssigned());
         activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
@@ -191,7 +201,6 @@ public class Ics214Panel extends JPanel {
         currentForm.setHomeAgency(homeAgencyField.getText().trim());
         currentForm.setPreparedByName(preparedByNameField.getText().trim());
         currentForm.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
-        currentForm.setPreparedBySignature(preparedBySignatureField.getText().trim());
         currentForm.setPreparedDateTime(AppController.toLocalDateTime((Date) preparedDateTimeField.getValue()));
         currentForm.setResourcesAssigned(resourcesTableModel.getRows());
         currentForm.setActivityLog(activityLogTableModel.getRows());
@@ -267,15 +276,14 @@ public class Ics214Panel extends JPanel {
         if (currentData == null) {
             return;
         }
-        List<TCard> cards = currentData.getTCards();
-        if (cards == null || cards.isEmpty()) {
+        List<Section3Choice> choices = section3Choices();
+        if (choices.isEmpty()) {
             JOptionPane.showMessageDialog(this, "No T-card resources found.", "Pick Resource", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        TCard[] cardArray = cards.toArray(new TCard[0]);
-        JComboBox<TCard> combo = new JComboBox<>(cardArray);
+        JComboBox<Section3Choice> combo = new JComboBox<>(choices.toArray(new Section3Choice[0]));
         combo.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
-            String display = value == null ? "" : displayNameForCard(value);
+            String display = value == null ? "" : value.displayLabel();
             JLabel label = new JLabel(display);
             if (isSelected) {
                 label.setBackground(list.getSelectionBackground());
@@ -286,25 +294,25 @@ public class Ics214Panel extends JPanel {
         });
         // Pre-select currently linked resource if any.
         if (currentForm != null && currentForm.getLinkedResourceId() != null) {
-            cards.stream()
-                    .filter(c -> currentForm.getLinkedResourceId().equals(c.getResourceId()))
+            choices.stream()
+                    .filter(c -> currentForm.getLinkedResourceId().equals(c.linkedResourceId()))
                     .findFirst()
                     .ifPresent(combo::setSelectedItem);
         }
-        int result = JOptionPane.showConfirmDialog(this, combo, "Link section 3 to resource", JOptionPane.OK_CANCEL_OPTION);
+        int result = JOptionPane.showConfirmDialog(this, combo, "Link section 3 to resource/location", JOptionPane.OK_CANCEL_OPTION);
         if (result != JOptionPane.OK_OPTION) {
             return;
         }
-        TCard selected = (TCard) combo.getSelectedItem();
+        Section3Choice selected = (Section3Choice) combo.getSelectedItem();
         if (selected == null) {
             return;
         }
         if (currentForm != null) {
-            currentForm.setLinkedResourceId(selected.getResourceId());
+            currentForm.setLinkedResourceId(nullSafe(selected.linkedResourceId()));
         }
-        nameField.setText(nullSafe(displayNameForCard(selected)));
-        icsPositionField.setText("");  // ICS position is role-specific; leave for operator to fill
-        homeAgencyField.setText(nullSafe(selected.getHomeAgency()));
+        nameField.setText(nullSafe(selected.name()));
+        icsPositionField.setText(nullSafe(selected.icsPosition()));
+        homeAgencyField.setText(nullSafe(selected.homeAgency()));
         controller.markDirty();
     }
 
@@ -563,9 +571,27 @@ public class Ics214Panel extends JPanel {
         if (currentForm == null || row < 0 || row >= currentForm.getActivityLog().size()) {
             return;
         }
+        ActivityLogEntry entry = currentForm.getActivityLog().get(row);
+        String label = (entry.getTimestamp() == null ? "" : SarTaskPanel.formatDateTimeValue(entry.getTimestamp()) + " ")
+                + resolvedEventTypeLabel(entry.getEventTypeId());
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Remove activity entry '" + label.trim() + "'?",
+                "Remove Activity Entry", JOptionPane.YES_NO_OPTION);
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
         currentForm.getActivityLog().remove(row);
         activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
         controller.markDirty();
+    }
+
+    private String resolvedEventTypeLabel(String eventTypeId) {
+        for (ActivityEventType type : resolvedEventTypes()) {
+            if (type.getId().equals(eventTypeId)) {
+                return type.getLabel();
+            }
+        }
+        return eventTypeId == null ? "" : eventTypeId;
     }
 
     private JPanel activityButtonsPanel() {
@@ -751,13 +777,101 @@ public class Ics214Panel extends JPanel {
         controller.markDirty();
     }
 
+    private List<Section3Choice> section3Choices() {
+        if (currentData == null || currentData.getTCards() == null) {
+            return List.of();
+        }
+        List<Section3Choice> choices = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (TCard card : currentData.getTCards()) {
+            if (card == null || card.getCardType() == TCardType.HEADER) {
+                continue;
+            }
+            String name = resourceNameForCard(card);
+            if (name.isBlank()) {
+                continue;
+            }
+            String key = "resource:" + nullSafe(card.getResourceId());
+            if (seen.add(key)) {
+                choices.add(new Section3Choice(displayNameForCard(card), name, nullSafe(card.getNotes()),
+                        nullSafe(card.getHomeAgency()), nullSafe(card.getResourceId())));
+            }
+        }
+        for (String location : locationChoices()) {
+            if (location.isBlank()) {
+                continue;
+            }
+            String key = "location:" + location.toLowerCase();
+            if (seen.add(key)) {
+                choices.add(new Section3Choice(location + " (Location)", location, "", "", ""));
+            }
+        }
+        return choices;
+    }
+
+    private List<String> locationChoices() {
+        if (currentData == null || currentData.getTCards() == null) {
+            return List.of();
+        }
+        Set<String> locations = new LinkedHashSet<>();
+        for (TCard card : currentData.getTCards()) {
+            if (card == null) {
+                continue;
+            }
+            if (card.getLocation() != null && !card.getLocation().isBlank()) {
+                locations.add(card.getLocation().trim());
+            }
+            if (card.getCardType() == TCardType.HEADER) {
+                String headerLabel = displayNameForCard(card).trim();
+                String normalized = headerLabel.toLowerCase();
+                if (!headerLabel.isBlank()
+                        && !normalized.equals("ordered")
+                        && !normalized.equals("available")
+                        && !normalized.equals("assigned")
+                        && !normalized.equals("out of service")) {
+                    locations.add(headerLabel);
+                }
+            }
+        }
+        return new ArrayList<>(locations);
+    }
+
+    private void populatePreparedByFromPersonCard(String selectedName, boolean markDirty) {
+        var card = controller.findPersonCard(selectedName);
+        if (card == null) {
+            return;
+        }
+        if (preparedByPositionField.getText().isBlank() && card.getNotes() != null && !card.getNotes().isBlank()) {
+            preparedByPositionField.setText(card.getNotes().trim());
+        }
+        if (homeAgencyField.getText().isBlank()) {
+            homeAgencyField.setText(nullSafe(card.getHomeAgency()));
+        }
+        if (markDirty) {
+            controller.markDirty();
+        }
+    }
+
+    private String createPersonnelFromPicker(String proposedName, JTextField positionField, JTextField agencyField) {
+        TCard created = controller.createPersonnelCardViaDialog(proposedName, "", "");
+        if (created == null) {
+            return "";
+        }
+        if (agencyField.getText().isBlank()) {
+            agencyField.setText(nullSafe(created.getHomeAgency()));
+        }
+        if (positionField.getText().isBlank() && created.getNotes() != null && !created.getNotes().isBlank()) {
+            positionField.setText(created.getNotes().trim());
+        }
+        return nullSafe(created.getPersonName());
+    }
+
     private void clearFields() {
         nameField.setText("");
         icsPositionField.setText("");
         homeAgencyField.setText("");
         preparedByNameField.setText("");
         preparedByPositionField.setText("");
-        preparedBySignatureField.setText("");
         preparedDateTimeField.setValue(AppController.toDate(null));
         resourcesTableModel.setRows(List.of());
         activityLogTableModel.setRows(List.of(), List.of());
@@ -766,6 +880,20 @@ public class Ics214Panel extends JPanel {
     private String nullSafe(String value) {
         return value == null ? "" : value;
     }
+
+    private static String resourceNameForCard(TCard card) {
+        if (card == null) {
+            return "";
+        }
+        String name = card.getPersonName();
+        if (name == null || name.isBlank()) {
+            name = card.getResourceIdentifier();
+        }
+        return name == null ? "" : name.trim();
+    }
+
+    private record Section3Choice(String displayLabel, String name, String icsPosition,
+                                  String homeAgency, String linkedResourceId) { }
 
     // -------------------------------------------------------------------------
     // Activity entry editor dialog
@@ -782,6 +910,23 @@ public class Ics214Panel extends JPanel {
                                     List<String> resourcePicklist) {
             ActivityEventType[] typeArray = eventTypes.toArray(new ActivityEventType[0]);
             eventTypeField = new JComboBox<>(typeArray);
+            eventTypeField.setRenderer(new javax.swing.DefaultListCellRenderer() {
+                @Override
+                public java.awt.Component getListCellRendererComponent(javax.swing.JList<?> list, Object value,
+                                                                       int index, boolean isSelected, boolean cellHasFocus) {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if (value instanceof ActivityEventType t) {
+                        if (ActivityEventType.ID_CLUE_DETECTED.equals(t.getId())) {
+                            setText("Clue detected by my assignment");
+                        } else if (ActivityEventType.ID_CLUE_REPORTED.equals(t.getId())) {
+                            setText("Clue reported by another assignment");
+                        } else {
+                            setText(t.getLabel());
+                        }
+                    }
+                    return this;
+                }
+            });
             // Select the free-text / Note type by default.
             for (ActivityEventType t : typeArray) {
                 if (ActivityEventType.ID_FREE_TEXT.equals(t.getId())) {
@@ -879,7 +1024,13 @@ public class Ics214Panel extends JPanel {
         private void removeSelected() {
             int row = table.getSelectedRow();
             if (row >= 0) {
-                tableModel.removeRow(row);
+                ActivityEventType type = tableModel.getTypes().get(row);
+                int confirm = JOptionPane.showConfirmDialog(panel,
+                        "Remove event type '" + type.getLabel() + "' (" + type.getId() + ")?",
+                        "Remove Event Type", JOptionPane.YES_NO_OPTION);
+                if (confirm == JOptionPane.YES_OPTION) {
+                    tableModel.removeRow(row);
+                }
             }
         }
 

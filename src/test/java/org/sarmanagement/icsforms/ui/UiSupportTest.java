@@ -1,12 +1,14 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import java.awt.Component;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -80,6 +82,49 @@ class UiSupportTest {
     @Test
     void sixDigitStringTooShortRejected() {
         assertFalse(AppController.looksLikePhoneNumber("123456"));
+    }
+
+    @Test
+    void taskLabelIncludesAssignmentNumberResourceLeaderAndAssignmentPreview() {
+        SarTaskAssignment task = new SarTaskAssignment();
+        task.setAssignmentTeamNumber("A-12");
+        task.setResourceIdentifier("K9-3");
+        task.setLeader("Sam Lee");
+        task.setAssignment("Search creek drainage from bridge to bend");
+
+        String label = UiSupport.taskLabel(task);
+
+        assertTrue(label.contains("A-12"));
+        assertTrue(label.contains("K9-3"));
+        assertTrue(label.contains("Sam Lee"));
+        assertTrue(label.contains("Search creek drainage"));
+    }
+
+    @Test
+    void detectingTaskLabelAppendsSpecificResourceName() {
+        SarTaskAssignment task = new SarTaskAssignment();
+        task.setAssignmentTeamNumber("T2");
+        task.setResourceIdentifier("Ground-1");
+        task.setLeader("Alex");
+        task.setAssignment("Sweep north flank");
+
+        assertTrue(UiSupport.detectingTaskLabel(task, "Ranger Kim").contains("Ranger Kim"));
+    }
+
+    @Test
+    void lifecycleToCardStatusTreatsAllAssignedStatesAsAssigned() {
+        assertEquals("Assigned", AppController.lifecycleToCardStatus("assigned - enroute to assignment"));
+        assertEquals("Assigned", AppController.lifecycleToCardStatus("assigned - on task"));
+        assertEquals("Assigned", AppController.lifecycleToCardStatus("assigned - returning from assignment"));
+        assertEquals("", AppController.lifecycleToCardStatus("planned"));
+        assertEquals(null, AppController.lifecycleToCardStatus("returned"));
+    }
+
+    @Test
+    void exportFormDialogLabelsIncludeFormNamesAndPluralSarTaskForms() {
+        assertEquals("ICS 201 – Incident Briefing", MainFrame.exportFormDisplayLabel("ICS 201"));
+        assertEquals("ICS 214 – Activity Log", MainFrame.exportFormDisplayLabel("ICS 214"));
+        assertEquals("SAR Task Assignment Forms", MainFrame.exportFormDisplayLabel("SAR Task Assignment"));
     }
 
     private static JLabel findLabel(Component component, String text) {

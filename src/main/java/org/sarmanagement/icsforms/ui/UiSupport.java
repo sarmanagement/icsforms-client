@@ -28,6 +28,9 @@ import java.awt.Color;
 import java.awt.Window;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -42,8 +45,34 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 final class UiSupport {
     static final Color REQUIRED_FIELD_BACKGROUND = new Color(255, 248, 225);
     private static final String FORM_SPACER_PROPERTY = "uiSupport.formSpacer";
+    private static ZoneId dateTimeDisplayZone = ZoneId.systemDefault();
 
     private UiSupport() {
+    }
+
+    static ZoneId getDateTimeDisplayZone() {
+        return dateTimeDisplayZone;
+    }
+
+    static void setDateTimeDisplayZone(ZoneId zoneId) {
+        dateTimeDisplayZone = zoneId == null ? ZoneId.systemDefault() : zoneId;
+    }
+
+    static void applyDateTimeDisplayZone(Component root) {
+        if (root == null) {
+            return;
+        }
+        if (root instanceof JSpinner spinner) {
+            if (spinner.getEditor() instanceof JSpinner.DateEditor editor) {
+                editor.getFormat().setTimeZone(java.util.TimeZone.getTimeZone(dateTimeDisplayZone));
+            }
+            spinner.setToolTipText("Displayed in " + dateTimeDisplayZone + "; stored in UTC");
+        }
+        if (root instanceof java.awt.Container container) {
+            for (Component child : container.getComponents()) {
+                applyDateTimeDisplayZone(child);
+            }
+        }
     }
 
     /**
@@ -208,6 +237,10 @@ final class UiSupport {
     static JSpinner dateTimeSpinner() {
         JSpinner spinner = new JSpinner(new SpinnerDateModel());
         spinner.setEditor(new JSpinner.DateEditor(spinner, "yyyy-MM-dd HH:mm"));
+        if (spinner.getEditor() instanceof JSpinner.DateEditor editor) {
+            editor.getFormat().setTimeZone(java.util.TimeZone.getTimeZone(dateTimeDisplayZone));
+        }
+        spinner.setToolTipText("Displayed in " + dateTimeDisplayZone + "; stored in UTC");
         spinner.setValue(new Date());
         spinner.setPreferredSize(new Dimension(180, spinner.getPreferredSize().height));
         return spinner;
@@ -242,6 +275,41 @@ final class UiSupport {
     }
 
     /**
+     * Shows a resizable option dialog with a custom shared button row.
+     *
+     * @return selected option index, or -1 when dismissed.
+     */
+    static int showResizableOptionDialog(Component parent, String title, JComponent component,
+                                         Dimension preferredSize, Object[] options, Object initialValue) {
+        if (preferredSize != null) {
+            component.setPreferredSize(preferredSize);
+        }
+        JOptionPane optionPane = new JOptionPane(component, JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION);
+        optionPane.setOptions(options);
+        optionPane.setInitialValue(initialValue);
+        JDialog dialog = optionPane.createDialog(parent, title);
+        dialog.setResizable(true);
+        dialog.pack();
+        if (preferredSize != null) {
+            dialog.setSize(new Dimension(
+                    Math.max(dialog.getWidth(), preferredSize.width),
+                    Math.max(dialog.getHeight(), preferredSize.height)));
+        }
+        dialog.setVisible(true);
+        Object value = optionPane.getValue();
+        dialog.dispose();
+        if (value == null || options == null) {
+            return -1;
+        }
+        for (int i = 0; i < options.length; i++) {
+            if (value.equals(options[i])) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
      * Installs a name picker on a text field.
      *
      * <p>The field remains fully editable for free-form input.  Clicking the field when the
@@ -258,14 +326,58 @@ final class UiSupport {
     static void installNameAutocomplete(JTextField nameField,
                                         Supplier<List<String>> suggestions,
                                         Consumer<String> onSelected) {
+        installNameAutocomplete(nameField, suggestions, onSelected, null);
+    }
+
+    static void installNameAutocomplete(JTextField nameField,
+                                        Supplier<List<String>> suggestions,
+                                        Consumer<String> onSelected,
+                                        java.util.function.Function<String, String> onCreate) {
+        java.util.function.Consumer<String> openPicker = initialFilter -> openNamePicker(
+                nameField, suggestions, onSelected, onCreate, initialFilter);
+        nameField.putClientProperty("uiSupport.namePicker.open", openPicker);
         nameField.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 if (e.getButton() != MouseEvent.BUTTON1) return;
-                List<String> all = suggestions.get();
-                if (all.isEmpty()) return;
-                openPickerDialog(nameField, all, onSelected);
+                openPicker.accept(nameField.getText().trim());
             }
         });
+        nameField.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyTyped(KeyEvent e) {
+                char ch = e.getKeyChar();
+                if (Character.isISOControl(ch) || e.isAltDown() || e.isControlDown() || e.isMetaDown()) {
+                    return;
+                }
+                openPicker.accept(String.valueOf(ch));
+                e.consume();
+            }
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    static void openInstalledNamePicker(JTextField nameField) {
+        Object opener = nameField.getClientProperty("uiSupport.namePicker.open");
+        if (opener instanceof java.util.function.Consumer<?> consumer) {
+            ((java.util.function.Consumer<String>) consumer).accept(nameField.getText().trim());
+        }
+    }
+
+    static void openNamePicker(JTextField nameField,
+                               Supplier<List<String>> suggestions,
+                               Consumer<String> onSelected,
+                               java.util.function.Function<String, String> onCreate,
+                               String initialFilter) {
+        if (Boolean.TRUE.equals(nameField.getClientProperty("uiSupport.namePicker.opening"))) {
+            return;
+        }
+        nameField.putClientProperty("uiSupport.namePicker.opening", Boolean.TRUE);
+        try {
+            List<String> all = suggestions.get();
+            openPickerDialog(nameField, all, onSelected, onCreate, initialFilter);
+        } finally {
+            nameField.putClientProperty("uiSupport.namePicker.opening", Boolean.FALSE);
+        }
     }
 
     /**
@@ -277,13 +389,15 @@ final class UiSupport {
      */
     private static void openPickerDialog(JTextField nameField,
                                          List<String> allNames,
-                                         Consumer<String> onSelected) {
+                                         Consumer<String> onSelected,
+                                         java.util.function.Function<String, String> onCreate,
+                                         String initialFilter) {
         Window owner = nameField.isShowing()
                 ? (Window) javax.swing.SwingUtilities.getWindowAncestor(nameField) : null;
         JDialog dialog = new JDialog(owner, "Select person", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
 
         // Filter field
-        JTextField filterField = new JTextField(nameField.getText().trim(), 20);
+        JTextField filterField = new JTextField(initialFilter == null ? "" : initialFilter.trim(), 20);
 
         // List model + list
         DefaultListModel<String> listModel = new DefaultListModel<>();
@@ -292,6 +406,9 @@ final class UiSupport {
         list.setVisibleRowCount(10);
 
         // Populate list according to current filter text
+        JButton createButton = new JButton("Create");
+        createButton.setVisible(onCreate != null);
+
         Runnable applyFilter = () -> {
             String filter = filterField.getText().trim().toLowerCase(Locale.ROOT);
             listModel.clear();
@@ -301,6 +418,7 @@ final class UiSupport {
             if (!listModel.isEmpty()) {
                 list.setSelectedIndex(0);
             }
+            createButton.setEnabled(onCreate != null && listModel.isEmpty() && !filterField.getText().trim().isBlank());
         };
         applyFilter.run();
 
@@ -340,16 +458,30 @@ final class UiSupport {
         // Buttons
         JButton okButton = new JButton("Select");
         okButton.addActionListener(ev -> accept.run());
+        createButton.addActionListener(ev -> {
+            if (onCreate == null) {
+                return;
+            }
+            String createdName = onCreate.apply(filterField.getText().trim());
+            if (createdName != null && !createdName.isBlank()) {
+                nameField.setText(createdName.trim());
+                dialog.dispose();
+                if (onSelected != null) {
+                    onSelected.accept(createdName.trim());
+                }
+            }
+        });
         JButton cancelButton = new JButton("Cancel");
         cancelButton.addActionListener(ev -> dialog.dispose());
 
         JPanel buttonPanel = new JPanel();
         buttonPanel.add(okButton);
+        buttonPanel.add(createButton);
         buttonPanel.add(cancelButton);
 
         JPanel top = new JPanel(new BorderLayout(4, 4));
         top.setBorder(BorderFactory.createEmptyBorder(4, 4, 0, 4));
-        top.add(new JLabel("Filter:"), BorderLayout.WEST);
+        top.add(new JLabel("Name / filter (or new name):"), BorderLayout.WEST);
         top.add(filterField, BorderLayout.CENTER);
 
         JPanel center = new JPanel(new BorderLayout());
@@ -375,12 +507,30 @@ final class UiSupport {
      * @return a non-null label string (may be empty if neither field is set).
      */
     static String taskLabel(SarTaskAssignment task) {
-        String number = task.getAssignmentTeamNumber() != null ? task.getAssignmentTeamNumber().trim() : "";
-        String name = task.getAssignment() != null ? task.getAssignment().trim() : "";
-        if (!number.isBlank() && !name.isBlank()) {
-            return number + " – " + name;
+        if (task == null) {
+            return "";
         }
-        return !number.isBlank() ? number : name;
+        String number = task.getAssignmentTeamNumber() != null ? task.getAssignmentTeamNumber().trim() : "";
+        String resource = task.getResourceIdentifier() != null ? task.getResourceIdentifier().trim() : "";
+        String leader = task.getLeader() != null ? task.getLeader().trim() : "";
+        String assignmentPreview = firstWords(task.getAssignment(), 6);
+        StringBuilder label = new StringBuilder();
+        if (!number.isBlank()) {
+            label.append(number);
+        }
+        if (!resource.isBlank()) {
+            if (!label.isEmpty()) label.append(" · ");
+            label.append(resource);
+        }
+        if (!leader.isBlank()) {
+            if (!label.isEmpty()) label.append(" · ");
+            label.append("Lead: ").append(leader);
+        }
+        if (!assignmentPreview.isBlank()) {
+            if (!label.isEmpty()) label.append(" · ");
+            label.append(assignmentPreview);
+        }
+        return label.toString();
     }
 
     /**
@@ -398,9 +548,23 @@ final class UiSupport {
         String number = task != null && task.getAssignmentTeamNumber() != null
                 ? task.getAssignmentTeamNumber().trim() : "";
         String name = resourceName != null ? resourceName.trim() : "";
+        String base = taskLabel(task);
+        if (!base.isBlank() && !name.isBlank()) {
+            return base + " · " + name;
+        }
         if (!number.isBlank() && !name.isBlank()) {
-            return number + " – " + name;
+            return number + " · " + name;
         }
         return !number.isBlank() ? number : name;
+    }
+
+    private static String firstWords(String value, int maxWords) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String[] words = value.trim().split("\\s+");
+        int limit = Math.min(maxWords, words.length);
+        String joined = String.join(" ", java.util.Arrays.copyOf(words, limit));
+        return words.length > limit ? joined + "…" : joined;
     }
 }

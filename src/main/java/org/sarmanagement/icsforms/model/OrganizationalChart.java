@@ -20,6 +20,8 @@ public class OrganizationalChart {
     private List<String> incidentCommanders = new ArrayList<>();
     private String incidentCommanderRadio = "";
     private String incidentCommanderPhone = "";
+    private List<OrgChartEntry> incidentCommanderEntries = new ArrayList<>();
+    private boolean propagateIncidentCommanderContacts = false;
 
     // Command Staff (optional positions)
     private String safetyOfficerName = "";
@@ -135,6 +137,16 @@ public class OrganizationalChart {
     public void setIncidentCommanderRadio(String v) { incidentCommanderRadio = v == null ? "" : v; }
     public String getIncidentCommanderPhone() { return incidentCommanderPhone; }
     public void setIncidentCommanderPhone(String v) { incidentCommanderPhone = v == null ? "" : v; }
+    public List<OrgChartEntry> getIncidentCommanderEntries() {
+        return incidentCommanderEntries;
+    }
+    public void setIncidentCommanderEntries(List<OrgChartEntry> entries) {
+        incidentCommanderEntries = entries == null ? new ArrayList<>() : new ArrayList<>(entries);
+    }
+    public boolean isPropagateIncidentCommanderContacts() { return propagateIncidentCommanderContacts; }
+    public void setPropagateIncidentCommanderContacts(boolean propagateIncidentCommanderContacts) {
+        this.propagateIncidentCommanderContacts = propagateIncidentCommanderContacts;
+    }
 
     // --- Safety Officer ---
     public String getSafetyOfficerName()  { return safetyOfficerName; }

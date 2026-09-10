@@ -9,6 +9,8 @@ import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
+import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
@@ -23,9 +25,10 @@ import org.sarmanagement.icsforms.validation.ValidationMessage;
 import javax.swing.Timer;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -48,6 +51,12 @@ public class AppController {
     private AppData data;
     private boolean dirty;
     private LinkSource activeLinkSource = LinkSource.NONE;
+    private PersonnelCardCreator personnelCardCreator;
+
+    @FunctionalInterface
+    public interface PersonnelCardCreator {
+        TCard create(String proposedName, String radioChannel, String phoneNumber);
+    }
 
     /**
      * Identifies which tab last edited a shared linked role field.
@@ -143,9 +152,53 @@ public class AppController {
         }
         String key = name.trim().toLowerCase();
         return data.getTCards().stream()
+                .filter(c -> c.getCardType() == null || c.getCardType() == TCardType.PERSONNEL)
                 .filter(c -> key.equals(c.getPersonName().trim().toLowerCase()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * Finds or creates a PERSONNEL T-card and applies provided contact details when present.
+     *
+     * @param personName person name (required).
+     * @param radioChannel optional radio channel.
+     * @param phoneNumber optional phone number.
+     * @return existing or created PERSONNEL card, or {@code null} when name is blank.
+     */
+    public TCard ensurePersonnelCard(String personName, String radioChannel, String phoneNumber) {
+        String name = personName == null ? "" : personName.trim();
+        if (name.isBlank()) {
+            return null;
+        }
+        TCard card = findPersonCard(name);
+        if (card == null) {
+            card = newPersonnelCard(name);
+            data.getTCards().add(card);
+        }
+        String radio = radioChannel == null ? "" : radioChannel.trim();
+        String phone = phoneNumber == null ? "" : phoneNumber.trim();
+        if (!radio.isBlank()) {
+            card.setRadioChannel(radio);
+        }
+        if (!phone.isBlank()) {
+            card.setPhoneNumber(phone);
+        }
+        if (safe(card.getLocation()).isBlank()) {
+            card.setLocation("ICP");
+        }
+        return card;
+    }
+
+    public void setPersonnelCardCreator(PersonnelCardCreator personnelCardCreator) {
+        this.personnelCardCreator = personnelCardCreator;
+    }
+
+    public TCard createPersonnelCardViaDialog(String proposedName, String radioChannel, String phoneNumber) {
+        if (personnelCardCreator == null) {
+            return ensurePersonnelCard(proposedName, radioChannel, phoneNumber);
+        }
+        return personnelCardCreator.create(proposedName, radioChannel, phoneNumber);
     }
 
     /**
@@ -346,6 +399,31 @@ public class AppController {
         return exportService.exportIapBundle(data, outputDirectory);
     }
 
+    public List<String> exportableFormKeys() {
+        return exportService.formKeys();
+    }
+
+    public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory, LinkSource source) throws IOException {
+        synchronizeLinkedFields(source);
+        syncSarTasks();
+        java.util.Map<String, Path> exported = new LinkedHashMap<>();
+        if (formKeys == null) {
+            return exported;
+        }
+        for (String formKey : formKeys) {
+            if (exportService.supports(formKey)) {
+                exported.put(formKey, exportService.exportSelected(formKey, data, outputDirectory));
+            }
+        }
+        return exported;
+    }
+
+    public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source) throws IOException {
+        synchronizeLinkedFields(source);
+        syncSarTasks();
+        return exportService.exportIapBundle(data, outputDirectory, formKeys);
+    }
+
     /**
      * Synchronizes shared org-chart-linked fields across the shared tab, org chart, ICS 202, and ICS 204.
      *
@@ -420,23 +498,23 @@ public class AppController {
     }
 
     /**
-     * Converts a date to local date/time in the system zone.
+     * Converts an instant to UTC local date/time for storage.
      *
      * @param value source date.
      * @return converted local date/time.
      */
     public static LocalDateTime toLocalDateTime(Date value) {
-        return value == null ? null : LocalDateTime.ofInstant(value.toInstant(), ZoneId.systemDefault());
+        return value == null ? null : LocalDateTime.ofInstant(value.toInstant(), ZoneOffset.UTC);
     }
 
     /**
-     * Converts a local date/time to a date in the system zone.
+     * Converts a UTC local date/time to an instant date for UI display.
      *
      * @param value source local date/time.
      * @return converted date.
      */
     public static Date toDate(LocalDateTime value) {
-        return value == null ? new Date() : Date.from(value.atZone(ZoneId.systemDefault()).toInstant());
+        return value == null ? new Date() : Date.from(value.atOffset(ZoneOffset.UTC).toInstant());
     }
 
     /**
@@ -634,6 +712,17 @@ public class AppController {
                         card.setPersonName(name);
                         String icRadio = safe(chart.getIncidentCommanderRadio());
                         String icPhone = safe(chart.getIncidentCommanderPhone());
+                        if (chart.getIncidentCommanderEntries() != null && i < chart.getIncidentCommanderEntries().size()) {
+                            OrgChartEntry icEntry = chart.getIncidentCommanderEntries().get(i);
+                            if (icEntry != null) {
+                                if (!safe(icEntry.getRadio()).isBlank()) {
+                                    icRadio = safe(icEntry.getRadio());
+                                }
+                                if (!safe(icEntry.getPhone()).isBlank()) {
+                                    icPhone = safe(icEntry.getPhone());
+                                }
+                            }
+                        }
                         if (!icRadio.isBlank()) card.setRadioChannel(icRadio);
                         if (!icPhone.isBlank()) card.setPhoneNumber(icPhone);
                         card.setSourceRef(card.getSourceRef().isBlank() ? ref : card.getSourceRef());
@@ -941,14 +1030,18 @@ public class AppController {
     /**
      * Converts a task lifecycle status string to the equivalent T-card status.
      *
-     * @param lifecycle "Planned", "On Task", or "Returned".
+     * @param lifecycle lifecycle value from SAR task editor.
      * @return T-card status string ("Assigned", blank, or {@code null} for Returned).
      */
     static String lifecycleToCardStatus(String lifecycle) {
         if (lifecycle == null) return "";
-        return switch (lifecycle) {
-            case "On Task"  -> "Assigned";
-            case "Returned" -> null;  // Returned tasks do not drive resource status —
+        String normalized = lifecycle.trim().toLowerCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "assigned - enroute to assignment",
+                 "assigned - on task",
+                 "assigned - returning from assignment",
+                 "on task" -> "Assigned";
+            case "returned" -> null;  // Returned tasks do not drive resource status —
                                       // operators manage the card manually after return.
             default         -> "";    // Planned/Planning or unknown → blank (available)
         };
@@ -1162,7 +1255,10 @@ public class AppController {
         List<SarTaskAssignment> tasks = data.getSarTaskAssignments();
         if (tasks == null) return Collections.unmodifiableSet(ids);
         for (SarTaskAssignment task : tasks) {
-            if (!"On Task".equals(task.getTaskLifecycleStatus())) continue;
+            String lifecycle = task.getTaskLifecycleStatus() == null
+                    ? ""
+                    : task.getTaskLifecycleStatus().trim().toLowerCase(java.util.Locale.ROOT);
+            if (!(lifecycle.startsWith("assigned -") || "on task".equals(lifecycle))) continue;
             List<SarTaskResource> resources = task.getResourcesAssigned();
             if (resources == null) continue;
             for (SarTaskResource res : resources) {
@@ -1173,6 +1269,31 @@ public class AppController {
             }
         }
         return Collections.unmodifiableSet(ids);
+    }
+
+    public void applyReturnedResourceStatuses(SarTaskAssignment task, Map<String, String> statusesByResourceId) {
+        if (task == null || statusesByResourceId == null || statusesByResourceId.isEmpty()) {
+            return;
+        }
+        Map<String, TCard> cardsById = new HashMap<>();
+        for (TCard card : data.getTCards()) {
+            if (card.getResourceId() != null && !card.getResourceId().isBlank()) {
+                cardsById.put(card.getResourceId(), card);
+            }
+        }
+        for (SarTaskResource resource : task.getResourcesAssigned()) {
+            if (resource.getResourceId() == null || resource.getResourceId().isBlank()) {
+                continue;
+            }
+            String status = statusesByResourceId.get(resource.getResourceId());
+            if (status == null) {
+                continue;
+            }
+            TCard card = cardsById.get(resource.getResourceId());
+            if (card != null) {
+                card.setStatus(status);
+            }
+        }
     }
 
     /**
@@ -1196,20 +1317,36 @@ public class AppController {
         if (task == null || newStatus == null) {
             return;
         }
-        String eventTypeId;
-        String description;
-        switch (newStatus) {
-            case "On Task" -> {
-                eventTypeId = ActivityEventType.ID_RESOURCE_ON_TASK;
-                description = "Task status changed to On Task";
-            }
-            case "Returned" -> {
-                eventTypeId = ActivityEventType.ID_TASK_COMPLETED;
-                description = "Task status changed to Returned";
-            }
-            default -> {
-                return; // "Planned" or unknown — no log entry
-            }
+        String normalized = newStatus.trim().toLowerCase(java.util.Locale.ROOT);
+        String eventTypeId = switch (normalized) {
+            case "assigned - enroute to assignment",
+                 "assigned - on task",
+                 "assigned - returning from assignment" -> ActivityEventType.ID_RESOURCE_ON_TASK;
+            case "returned" -> ActivityEventType.ID_TASK_COMPLETED;
+            default -> ActivityEventType.ID_FREE_TEXT;
+        };
+        String description = "Task status changed to " + normalized;
+
+        // Append transition into the ICP-level ICS 214 communications/activity log.
+        Ics214Form icpLog = data.getActivityLogs().stream()
+                .filter(log -> log.getLogScope() == ActivityLogScope.ICP)
+                .findFirst()
+                .orElseGet(() -> {
+                    Ics214Form created = new Ics214Form();
+                    created.setName("ICP Communications Log");
+                    data.getActivityLogs().add(created);
+                    return created;
+                });
+        ActivityLogEntry icpEntry = new ActivityLogEntry();
+        icpEntry.setTimestamp(LocalDateTime.now().withSecond(0).withNano(0));
+        icpEntry.setEventTypeId(ActivityEventType.ID_FREE_TEXT);
+        icpEntry.setResourceIdentifier(safe(task.getAssignmentTeamNumber()).isBlank()
+                ? safe(task.getResourceIdentifier()) : safe(task.getAssignmentTeamNumber()));
+        icpEntry.setNotableActivity(description);
+        icpLog.getActivityLog().add(icpEntry);
+
+        if (ActivityEventType.ID_FREE_TEXT.equals(eventTypeId)) {
+            return;
         }
         // Find the linked ICS 214 form for this task.
         String assignmentId = task.getAssignmentId();
@@ -1249,8 +1386,8 @@ public class AppController {
             errors.add("No task provided.");
             return errors;
         }
-        if (!"Returned".equals(task.getTaskLifecycleStatus())) {
-            errors.add("Task must be in 'Returned' status before debriefing can be completed.");
+        if (!"returned".equalsIgnoreCase(task.getTaskLifecycleStatus())) {
+            errors.add("Task must be in 'returned' status before debriefing can be completed.");
         }
         if (safe(task.getDebriefingSupervisor()).isBlank()) {
             errors.add("Debriefing supervisor name is required.");
@@ -1670,6 +1807,7 @@ public class AppController {
                 if (alreadyPresent) {
                     return false;
                 }
+
                 ActivityLogEntry entry = new ActivityLogEntry();
                 entry.setTimestamp(ts);
                 entry.setEventTypeId(ActivityEventType.ID_CLUE_DETECTED);
@@ -1684,6 +1822,47 @@ public class AppController {
             }
         }
         return false;
+    }
+
+    /**
+     * Appends an incident-level (ICP) ICS 214 activity entry when a clue is logged.
+     *
+     * @param clue the logged clue.
+     */
+    public void recordClueInIcpActivityLog(ClueLogEntry clue) {
+        if (clue == null) {
+            return;
+        }
+        Ics214Form icpLog = data.getActivityLogs().stream()
+                .filter(log -> log.getLogScope() == ActivityLogScope.ICP)
+                .findFirst()
+                .orElseGet(() -> {
+                    Ics214Form created = new Ics214Form();
+                    created.setName("ICP Communications Log");
+                    data.getActivityLogs().add(created);
+                    return created;
+                });
+        LocalDateTime ts = clue.getDateTimeCollected() != null
+                ? clue.getDateTimeCollected()
+                : LocalDateTime.now().withSecond(0).withNano(0);
+        String location = safe(clue.getLocation());
+        String description = safe(clue.getDescription());
+        String activity = location.isBlank()
+                ? ("Clue logged" + (description.isBlank() ? "" : ": " + description))
+                : ("Clue logged at " + location + (description.isBlank() ? "" : ": " + description));
+        boolean alreadyPresent = icpLog.getActivityLog().stream().anyMatch(e ->
+                ActivityEventType.ID_CLUE_DETECTED.equals(e.getEventTypeId())
+                        && ts.equals(e.getTimestamp())
+                        && activity.equals(safe(e.getNotableActivity())));
+        if (alreadyPresent) {
+            return;
+        }
+        ActivityLogEntry entry = new ActivityLogEntry();
+        entry.setTimestamp(ts);
+        entry.setEventTypeId(ActivityEventType.ID_CLUE_DETECTED);
+        entry.setResourceIdentifier(safe(clue.getDetectingTask()));
+        entry.setNotableActivity(activity);
+        icpLog.getActivityLog().add(entry);
     }
 
     private List<String> withAddedUnique(List<String> values, String value) {

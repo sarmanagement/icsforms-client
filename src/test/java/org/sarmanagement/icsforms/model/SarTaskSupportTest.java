@@ -26,4 +26,15 @@ class SarTaskSupportTest {
         assertEquals(7, migrated.getScore());
         assertEquals("Legacy value", migrated.getDescription());
     }
+
+    @Test
+    void taskLifecycleNormalizesLegacyStatesToNewAssignedVocabulary() {
+        SarTaskAssignment task = new SarTaskAssignment();
+        task.setTaskLifecycleStatus("On Task");
+        assertEquals("assigned - on task", task.getTaskLifecycleStatus());
+        task.setTaskLifecycleStatus("Planning");
+        assertEquals("planned", task.getTaskLifecycleStatus());
+        task.setTaskLifecycleStatus("Returned");
+        assertEquals("returned", task.getTaskLifecycleStatus());
+    }
 }

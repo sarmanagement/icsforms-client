@@ -197,7 +197,21 @@ public class Ics201Panel extends JPanel {
         resourcesPanel.add(new JScrollPane(resourceSummaryTable), BorderLayout.CENTER);
         resourcesPanel.add(buttonsPanel(
                 () -> { resourceSummaryTableModel.addRow(); controller.markDirty(); },
-                () -> { resourceSummaryTableModel.removeRow(resourceSummaryTable.getSelectedRow()); controller.markDirty(); }
+                () -> {
+                    int row = resourceSummaryTable.getSelectedRow();
+                    if (row < 0) {
+                        return;
+                    }
+                    Object kind = resourceSummaryTableModel.getValueAt(row, 0);
+                    Object identifier = resourceSummaryTableModel.getValueAt(row, 1);
+                    int confirm = javax.swing.JOptionPane.showConfirmDialog(this,
+                            "Remove resource summary row '" + kind + " / " + identifier + "'?",
+                            "Remove Resource Summary", javax.swing.JOptionPane.YES_NO_OPTION);
+                    if (confirm == javax.swing.JOptionPane.YES_OPTION) {
+                        resourceSummaryTableModel.removeRow(row);
+                        controller.markDirty();
+                    }
+                }
         ), BorderLayout.SOUTH);
 
         page.add(resourcesPanel, BorderLayout.CENTER);

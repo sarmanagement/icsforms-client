@@ -310,7 +310,8 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         List<CommunicationEntry> comms = form.getCommunications();
         float dataH = dataTop - y;
         int commsCount = comms == null ? 0 : comms.size();
-        int visibleRows = Math.max(3, commsCount);
+        int maxVisibleRows = Math.max(3, (int) Math.floor(dataH / 18f));
+        int visibleRows = Math.max(3, Math.min(maxVisibleRows, commsCount <= 0 ? 3 : commsCount));
         float rowH = dataH / visibleRows;
 
         for (int i = 0; i < visibleRows; i++) {
@@ -318,6 +319,11 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             float rowBot = Math.max(y, rowTop - rowH);
             drawHorizontalLine(stream, x, x + width, rowBot);
             if (comms != null && i < commsCount) {
+                if (i == visibleRows - 1 && commsCount > visibleRows) {
+                    writeWrappedCellTextFont(stream, regular, BODY_FONT_SIZE, x, rowBot, halfW, rowH,
+                            List.of("Additional entries not shown on this page"));
+                    continue;
+                }
                 CommunicationEntry entry = comms.get(i);
                 String nameFunc = safe(entry.getName());
                 if (!safe(entry.getFunction()).isBlank()) {
