@@ -89,7 +89,7 @@ mvn package
 ## Run
 
 ```bash
-java -jar target/icsforms-client-0.1.0-SNAPSHOT.jar
+java -jar target/icsforms-client-0.1.1-SNAPSHOT.jar
 ```
 
 ## Notes
