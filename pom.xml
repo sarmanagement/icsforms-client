@@ -6,6 +6,40 @@
     <version>0.1.0-SNAPSHOT</version>
     <name>icsforms-client</name>
 
+    <licenses>
+        <license>
+            <name>GNU General Public License v3.0</name>
+            <url>https://www.gnu.org/licenses/gpl-3.0.en.html</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>chicoreus</id>
+            <name>Paul J. Morris</name>
+            <email>president@mark9.us</email>
+            <organization>Massachusetts Rescue and Recovery Canine Unit</organization>
+            <organizationUrl>https://mark9.us/</organizationUrl>
+        </developer>
+        <developer>
+            <id>github-copilot</id>
+            <name>GitHub Copilot</name>
+            <organization>GitHub</organization>
+            <organizationUrl>https://github.com/features/copilot</organizationUrl>
+            <roles>
+                <role>Assistant</role>
+            </roles>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/sarmanagement/icsforms-client.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/sarmanagement/icsforms-client.git</developerConnection>
+        <url>https://github.com/sarmanagement/icsforms-client</url>
+        <tag>HEAD</tag>
+    </scm>
+
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
