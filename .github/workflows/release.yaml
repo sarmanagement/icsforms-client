@@ -21,7 +21,7 @@ jobs:
           cache: maven
 
       - name: Build
-        run: mvn -B clean package -DskipTests
+        run: mvn -B clean verify
 
       - name: Locate shaded jar
         id: jar
