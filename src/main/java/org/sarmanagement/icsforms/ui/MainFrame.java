@@ -100,6 +100,7 @@ public class MainFrame extends JFrame {
         this.sarTaskPanel = new SarTaskPanel(controller);
         this.clueLogPanel = new ClueLogPanel(controller);
         this.tCardPanel = new TCardPanel(controller);
+        controller.setPersonnelCardCreator(tCardPanel::createPersonnelCardFromPicker);
         ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
         ics204Panel.setOnEditSarTaskRequest(this::openSarTaskEditorForAssignment);
         ics204Panel.setOnChangeSarTaskStatusRequest(sarTaskPanel::openTaskStatusDialogByAssignmentId);

@@ -822,24 +822,10 @@ public class OrganizationalChartPanel extends JPanel {
     }
 
     private String createPersonnelFromPicker(String proposedName, JTextField radioField, JTextField phoneField) {
-        JTextField nameEntry = UiSupport.textField();
-        nameEntry.setText(safe(proposedName));
-        JTextField radioEntry = UiSupport.textField();
-        radioEntry.setText(radioField == null ? "" : safe(radioField.getText()));
-        JTextField phoneEntry = UiSupport.textField();
-        phoneEntry.setText(phoneField == null ? "" : safe(phoneField.getText()));
-        JPanel form = UiSupport.formPanel();
-        UiSupport.addRequiredRow(form, 0, "Name", nameEntry);
-        UiSupport.addRow(form, 1, "Radio", radioEntry);
-        UiSupport.addRow(form, 2, "Phone", phoneEntry);
-        JScrollPane pane = new JScrollPane(form);
-        pane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, "Create Resource", pane, new Dimension(560, 250))) {
-            return "";
-        }
-        TCard created = controller.ensurePersonnelCard(nameEntry.getText().trim(),
-                radioEntry.getText().trim(),
-                phoneEntry.getText().trim());
+        TCard created = controller.createPersonnelCardViaDialog(
+                proposedName,
+                radioField == null ? "" : safe(radioField.getText()),
+                phoneField == null ? "" : safe(phoneField.getText()));
         if (created == null) {
             return "";
         }
@@ -849,7 +835,6 @@ public class OrganizationalChartPanel extends JPanel {
         if (phoneField != null && phoneField.getText().isBlank()) {
             phoneField.setText(safe(created.getPhoneNumber()));
         }
-        controller.markDirty();
         return safe(created.getPersonName());
     }
 

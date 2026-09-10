@@ -51,6 +51,12 @@ public class AppController {
     private AppData data;
     private boolean dirty;
     private LinkSource activeLinkSource = LinkSource.NONE;
+    private PersonnelCardCreator personnelCardCreator;
+
+    @FunctionalInterface
+    public interface PersonnelCardCreator {
+        TCard create(String proposedName, String radioChannel, String phoneNumber);
+    }
 
     /**
      * Identifies which tab last edited a shared linked role field.
@@ -182,6 +188,17 @@ public class AppController {
             card.setLocation("ICP");
         }
         return card;
+    }
+
+    public void setPersonnelCardCreator(PersonnelCardCreator personnelCardCreator) {
+        this.personnelCardCreator = personnelCardCreator;
+    }
+
+    public TCard createPersonnelCardViaDialog(String proposedName, String radioChannel, String phoneNumber) {
+        if (personnelCardCreator == null) {
+            return ensurePersonnelCard(proposedName, radioChannel, phoneNumber);
+        }
+        return personnelCardCreator.create(proposedName, radioChannel, phoneNumber);
     }
 
     /**

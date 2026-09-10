@@ -865,21 +865,7 @@ public class Ics204Panel extends JPanel {
                         }
                     },
                     proposedName -> {
-                        JTextField nameField = UiSupport.textField();
-                        nameField.setText(proposedName == null ? "" : proposedName.trim());
-                        JTextField radioField = UiSupport.textField();
-                        JTextField phoneField = UiSupport.textField();
-                        JPanel form = UiSupport.formPanel();
-                        UiSupport.addRequiredRow(form, 0, "Name", nameField);
-                        UiSupport.addRow(form, 1, "Radio", radioField);
-                        UiSupport.addRow(form, 2, "Phone", phoneField);
-                        JScrollPane pane = new JScrollPane(form);
-                        pane.setBorder(BorderFactory.createEmptyBorder());
-                        if (!UiSupport.showResizableConfirmDialog(panel, "Create Resource", pane, new Dimension(560, 250))) {
-                            return "";
-                        }
-                        var card = controller.ensurePersonnelCard(nameField.getText().trim(),
-                                radioField.getText().trim(), phoneField.getText().trim());
+                        var card = controller.createPersonnelCardViaDialog(proposedName, "", "");
                         if (card == null) {
                             return "";
                         }
@@ -889,7 +875,6 @@ public class Ics204Panel extends JPanel {
                                 contactField.setText(contact);
                             }
                         }
-                        controller.markDirty();
                         return card.getPersonName();
                     });
 

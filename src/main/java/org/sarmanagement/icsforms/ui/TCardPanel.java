@@ -916,6 +916,45 @@ public class TCardPanel extends JPanel {
         }
     }
 
+    public TCard createPersonnelCardFromPicker(String proposedName, String radioChannel, String phoneNumber) {
+        String name = proposedName == null ? "" : proposedName.trim();
+        if (name.isBlank()) {
+            return null;
+        }
+        TCard existing = controller.findPersonCard(name);
+        if (existing != null) {
+            if (existing.getRadioChannel().isBlank() && radioChannel != null && !radioChannel.trim().isBlank()) {
+                existing.setRadioChannel(radioChannel.trim());
+            }
+            if (existing.getPhoneNumber().isBlank() && phoneNumber != null && !phoneNumber.trim().isBlank()) {
+                existing.setPhoneNumber(phoneNumber.trim());
+            }
+            controller.markDirty();
+            return existing;
+        }
+        TCard card = new TCard();
+        card.setCardType(TCardType.PERSONNEL);
+        card.setPersonName(name);
+        card.setResourceIdentifier(name);
+        card.setLocation("ICP");
+        card.setStatus("ordered");
+        if (radioChannel != null && !radioChannel.trim().isBlank()) {
+            card.setRadioChannel(radioChannel.trim());
+        }
+        if (phoneNumber != null && !phoneNumber.trim().isBlank()) {
+            card.setPhoneNumber(phoneNumber.trim());
+        }
+        if (!openEditDialog(card)) {
+            return null;
+        }
+        tableModel.addCard(card);
+        if (currentView.equals(VIEW_RACK)) {
+            rebuildRackView();
+        }
+        controller.markDirty();
+        return card;
+    }
+
     private void addHeaderCard() {
         TCard card = new TCard();
         card.setCardType(TCardType.HEADER);

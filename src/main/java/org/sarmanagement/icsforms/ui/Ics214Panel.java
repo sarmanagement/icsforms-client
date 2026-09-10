@@ -853,29 +853,9 @@ public class Ics214Panel extends JPanel {
     }
 
     private String createPersonnelFromPicker(String proposedName, JTextField positionField, JTextField agencyField) {
-        JTextField nameEntry = UiSupport.textField();
-        nameEntry.setText(nullSafe(proposedName));
-        JTextField agencyEntry = UiSupport.textField();
-        agencyEntry.setText(nullSafe(agencyField.getText()));
-        JTextField radioEntry = UiSupport.textField();
-        JTextField phoneEntry = UiSupport.textField();
-        JPanel form = UiSupport.formPanel();
-        UiSupport.addRequiredRow(form, 0, "Name", nameEntry);
-        UiSupport.addRow(form, 1, "Home agency", agencyEntry);
-        UiSupport.addRow(form, 2, "Radio", radioEntry);
-        UiSupport.addRow(form, 3, "Phone", phoneEntry);
-        JScrollPane pane = new JScrollPane(form);
-        pane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, "Create Resource", pane, new Dimension(560, 270))) {
-            return "";
-        }
-        TCard created = controller.ensurePersonnelCard(nameEntry.getText().trim(),
-                radioEntry.getText().trim(), phoneEntry.getText().trim());
+        TCard created = controller.createPersonnelCardViaDialog(proposedName, "", "");
         if (created == null) {
             return "";
-        }
-        if (!agencyEntry.getText().trim().isBlank()) {
-            created.setHomeAgency(agencyEntry.getText().trim());
         }
         if (agencyField.getText().isBlank()) {
             agencyField.setText(nullSafe(created.getHomeAgency()));
@@ -883,7 +863,6 @@ public class Ics214Panel extends JPanel {
         if (positionField.getText().isBlank() && created.getNotes() != null && !created.getNotes().isBlank()) {
             positionField.setText(created.getNotes().trim());
         }
-        controller.markDirty();
         return nullSafe(created.getPersonName());
     }
 

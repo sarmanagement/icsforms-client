@@ -165,31 +165,10 @@ public class IncidentContextPanel extends JPanel {
     }
 
     private String createCurrentUserPersonnelCard(String proposedName) {
-        JTextField nameField = UiSupport.textField();
-        nameField.setText(proposedName == null ? "" : proposedName.trim());
-        JTextField agencyField = UiSupport.textField();
-        JTextField radioField = UiSupport.textField();
-        JTextField phoneField = UiSupport.textField();
-        JPanel form = UiSupport.formPanel();
-        UiSupport.addRequiredRow(form, 0, "Name", nameField);
-        UiSupport.addRow(form, 1, "Home agency", agencyField);
-        UiSupport.addRow(form, 2, "Radio", radioField);
-        UiSupport.addRow(form, 3, "Phone", phoneField);
-        JScrollPane pane = new JScrollPane(form);
-        pane.setBorder(BorderFactory.createEmptyBorder());
-        if (!UiSupport.showResizableConfirmDialog(this, "Create Resource", pane, new Dimension(560, 270))) {
-            return "";
-        }
-        var card = controller.ensurePersonnelCard(nameField.getText().trim(),
-                radioField.getText().trim(),
-                phoneField.getText().trim());
+        var card = controller.createPersonnelCardViaDialog(proposedName, "", "");
         if (card == null) {
             return "";
         }
-        if (!agencyField.getText().trim().isBlank()) {
-            card.setHomeAgency(agencyField.getText().trim());
-        }
-        controller.markDirty();
         return card.getPersonName();
     }
 
