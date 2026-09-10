@@ -54,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.EventObject;
 import java.util.Set;
 import java.util.UUID;
 
@@ -423,7 +424,8 @@ public class SarTaskPanel extends JPanel {
                 handlerName -> controller.findEquipmentForHandler(handlerName),
                 controller.getAvailableResourceNames(),
                 controller.getAvailableTCards(),
-                controller.getOnTaskResourceIds());
+                controller.getOnTaskResourceIds(),
+                controller);
         JPanel content = sarTaskEditorDialogContent(editor.panel);
         if (!UiSupport.showResizableConfirmDialog(this, "Add SAR Task", content,
                 new Dimension(1100, 680))) {
@@ -812,7 +814,8 @@ public class SarTaskPanel extends JPanel {
                 handlerName -> controller.findEquipmentForHandler(handlerName),
                 controller.getAvailableResourceNames(),
                 controller.getAvailableTCards(),
-                controller.getOnTaskResourceIds());
+                controller.getOnTaskResourceIds(),
+                controller);
         JPanel content = sarTaskEditorDialogContent(editor.panel);
         String title = mode.dialogTitle(row.getAssignmentTeamNumber());
         Dimension size = mode == EditorMode.ASSIGNMENT ? new Dimension(1100, 680) : new Dimension(1100, 620);
@@ -983,7 +986,8 @@ public class SarTaskPanel extends JPanel {
                                               List<String> canineNamesFirst,
                                               List<TCard> availableTCards,
                                               Set<String> onTaskResourceIds,
-                                              java.awt.Component parentComponent) {
+                                              java.awt.Component parentComponent,
+                                              AppController controller) {
         model.setRows(editableResources(row, canineNamesFirst), minimumRows);
         JTable table = new JTable(model);
         table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
@@ -993,16 +997,46 @@ public class SarTaskPanel extends JPanel {
         table.getColumnModel().getColumn(0).setPreferredWidth(90);
         table.getColumnModel().getColumn(0).setMaxWidth(120);
 
-        // Install an editable combo-box cell editor on the Name column (index 2).
+        // Install picker-based cell editor on the Name column (index 2).
         if (availableNames != null && !availableNames.isEmpty()) {
-            JComboBox<String> namePickList = new JComboBox<>(availableNames.toArray(String[]::new));
-            namePickList.setEditable(true);
-            namePickList.setSelectedItem(null);
-            javax.swing.DefaultCellEditor nameEditor = new javax.swing.DefaultCellEditor(namePickList) {
+            JTextField nameEditorField = UiSupport.textField();
+            UiSupport.installNameAutocomplete(nameEditorField,
+                    () -> availableNames,
+                    nameEditorField::setText,
+                    proposedName -> {
+                        if (controller == null) {
+                            return "";
+                        }
+                        TCard created = controller.createPersonnelCardViaDialog(proposedName, "", "");
+                        return created == null ? "" : created.getPersonName();
+                    });
+            javax.swing.DefaultCellEditor nameEditor = new javax.swing.DefaultCellEditor(nameEditorField) {
+                private transient EventObject triggerEvent;
+
+                {
+                    setClickCountToStart(1);
+                }
+
+                @Override
+                public boolean isCellEditable(EventObject event) {
+                    triggerEvent = event;
+                    return super.isCellEditable(event);
+                }
+
+                @Override
+                public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
+                    Component editorComponent = super.getTableCellEditorComponent(table, value, isSelected, row, column);
+                    if (editorComponent instanceof JTextField field
+                            && (triggerEvent instanceof MouseEvent || triggerEvent instanceof java.awt.event.KeyEvent)) {
+                        SwingUtilities.invokeLater(() -> UiSupport.openInstalledNamePicker(field));
+                    }
+                    return editorComponent;
+                }
+
                 @Override
                 public Object getCellEditorValue() {
-                    Object selected = namePickList.getEditor().getItem();
-                    return selected == null ? "" : selected.toString();
+                    Object selected = nameEditorField.getText();
+                    return selected == null ? "" : selected.toString().trim();
                 }
             };
             table.getColumnModel().getColumn(2).setCellEditor(nameEditor);
@@ -1708,6 +1742,7 @@ public class SarTaskPanel extends JPanel {
         private final JScrollPane areasNotCoveredField;
         private final JScrollPane hazardsObservedField;
         private final List<TCard> availableTCards;
+        private final AppController controller;
         /** Resource IDs of cards currently committed to an active ("On Task") SAR task. */
         private final Set<String> onTaskResourceIds;
         /** Pre-built name→TCard lookup used by {@link #resourceCount()}. */
@@ -1719,7 +1754,19 @@ public class SarTaskPanel extends JPanel {
                               List<String> availableResourceNames,
                               List<TCard> availableTCards,
                               Set<String> onTaskResourceIds) {
+            this(row, mode, clueLogEntries, resourceRowCount, canineForHandler, availableResourceNames,
+                    availableTCards, onTaskResourceIds, null);
+        }
+
+        private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries,
+                              int resourceRowCount,
+                              java.util.function.Function<String, java.util.List<String>> canineForHandler,
+                              List<String> availableResourceNames,
+                              List<TCard> availableTCards,
+                              Set<String> onTaskResourceIds,
+                              AppController controller) {
             this.mode = mode;
+            this.controller = controller;
             this.availableTCards = availableTCards == null ? List.of() : availableTCards;
             this.onTaskResourceIds = onTaskResourceIds == null ? Set.of() : onTaskResourceIds;
             java.util.Map<String, TCard> nameMap = new java.util.HashMap<>();
@@ -1808,7 +1855,7 @@ public class SarTaskPanel extends JPanel {
                     : List.of();
             resourcesAssignedField = resourceEditorPanel(row, resourceEntryTableModel, resourceRowCount,
                     availableResourceNames, leaderCanines == null ? List.of() : leaderCanines,
-                    availableTCards, onTaskResourceIds, panel);
+                    availableTCards, onTaskResourceIds, panel, this.controller);
             assignmentField = textArea(row.getAssignment(), 3, true);
             transportationField = textArea(row.getTransportationInstructions(), 2, true);
             taskMapField = textField(row.getTaskMap(), true, 14);
