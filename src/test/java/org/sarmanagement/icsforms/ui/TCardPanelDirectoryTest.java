@@ -12,6 +12,7 @@ import javax.swing.JComboBox;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.JButton;
 import javax.swing.table.TableColumnModel;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -129,6 +130,47 @@ class TCardPanelDirectoryTest {
             assertEquals(1, directoryTable.getRowCount());
             directoryTable.setRowSelectionInterval(0, 0);
             assertSame(safety, selectedCard(panel));
+        });
+    }
+
+    @Test
+    void clearFiltersButtonResetsDirectoryFiltersAndShowsFullList() throws Exception {
+        TCard safety = personnelCard("Sam Safety", "OR");
+        safety.setSourceRef("org:safetyOfficer");
+        safety.setHomeAgency("Planning");
+
+        TCard pio = personnelCard("Pat Public", "WA");
+        pio.setSourceRef("org:pio");
+        pio.setHomeAgency("Command");
+
+        AppData data = new AppData();
+        data.setTCards(List.of(safety, pio));
+
+        TCardPanel panel = new TCardPanel(createController(data));
+        SwingUtilities.invokeAndWait(() -> {
+            panel.refreshFromModel();
+            combo(panel, "viewSelector").setSelectedItem("Directory View");
+
+            JTextField nameFilter = field(panel, "directoryNameFilterField", JTextField.class);
+            JComboBox<String> positionFilter = combo(panel, "directoryPositionFilter");
+            JComboBox<String> stateFilter = combo(panel, "directoryStateFilter");
+            JComboBox<String> unitFilter = combo(panel, "directoryUnitFilter");
+            JTable directoryTable = field(panel, "directoryTable", JTable.class);
+            JButton clearButton = field(panel, "clearDirectoryFiltersBtn", JButton.class);
+
+            nameFilter.setText("sam");
+            positionFilter.setSelectedItem("Safety Officer");
+            stateFilter.setSelectedItem("OR");
+            unitFilter.setSelectedItem("Planning");
+            assertEquals(1, directoryTable.getRowCount());
+
+            clearButton.doClick();
+
+            assertEquals("", nameFilter.getText());
+            assertEquals("All", positionFilter.getSelectedItem());
+            assertEquals("All", stateFilter.getSelectedItem());
+            assertEquals("All", unitFilter.getSelectedItem());
+            assertEquals(2, directoryTable.getRowCount());
         });
     }
 

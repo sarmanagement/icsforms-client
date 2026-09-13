@@ -98,6 +98,7 @@ public class TCardPanel extends JPanel {
     private final JComboBox<String> directoryStateFilter = new JComboBox<>(new String[]{"All"});
     private final JComboBox<String> directoryUnitFilter = new JComboBox<>(new String[]{"All"});
     private final JComboBox<String> directoryAssignmentFilter = new JComboBox<>(new String[]{"All"});
+    private final JButton clearDirectoryFiltersBtn = new JButton("Clear Filters");
     private final Font directoryBaseFont;
     private String currentView = VIEW_TABLE;
     /** Currently selected card in rack view; {@code null} when nothing is selected. */
@@ -245,6 +246,8 @@ public class TCardPanel extends JPanel {
         filters.add(directoryUnitFilter);
         filters.add(new JLabel("Assignment:"));
         filters.add(directoryAssignmentFilter);
+        clearDirectoryFiltersBtn.addActionListener(e -> clearDirectoryFilters());
+        filters.add(clearDirectoryFiltersBtn);
         return filters;
     }
 
@@ -446,6 +449,15 @@ public class TCardPanel extends JPanel {
                 ? DIRECTORY_LARGE_FONT_SIZE : DIRECTORY_DEFAULT_FONT_SIZE));
         directoryTable.setRowHeight(large ? 30 : 24);
         updateDirectoryColumnSizing();
+    }
+
+    private void clearDirectoryFilters() {
+        directoryNameFilterField.setText("");
+        directoryPositionFilter.setSelectedIndex(0);
+        directoryStateFilter.setSelectedIndex(0);
+        directoryUnitFilter.setSelectedIndex(0);
+        directoryAssignmentFilter.setSelectedIndex(0);
+        applyDirectoryFilters();
     }
 
     private void updateDirectoryColumnSizing() {
