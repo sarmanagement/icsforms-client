@@ -234,20 +234,28 @@ public class TCardPanel extends JPanel {
     }
 
     private JPanel buildDirectoryFilters() {
-        JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+        JPanel filters = new JPanel();
+        filters.setLayout(new BoxLayout(filters, BoxLayout.Y_AXIS));
+        filters.setOpaque(false);
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        row1.setOpaque(false);
+        row2.setOpaque(false);
         directoryNameFilterField.setColumns(14);
-        filters.add(new JLabel("Name:"));
-        filters.add(directoryNameFilterField);
-        filters.add(new JLabel("Assigned position:"));
-        filters.add(directoryPositionFilter);
-        filters.add(new JLabel("State:"));
-        filters.add(directoryStateFilter);
-        filters.add(new JLabel("Unit:"));
-        filters.add(directoryUnitFilter);
-        filters.add(new JLabel("Assignment:"));
-        filters.add(directoryAssignmentFilter);
+        row1.add(new JLabel("Name:"));
+        row1.add(directoryNameFilterField);
+        row1.add(new JLabel("Assigned position:"));
+        row1.add(directoryPositionFilter);
+        row1.add(new JLabel("State:"));
+        row1.add(directoryStateFilter);
+        row2.add(new JLabel("Unit:"));
+        row2.add(directoryUnitFilter);
+        row2.add(new JLabel("Assignment:"));
+        row2.add(directoryAssignmentFilter);
         clearDirectoryFiltersBtn.addActionListener(e -> clearDirectoryFilters());
-        filters.add(clearDirectoryFiltersBtn);
+        row2.add(clearDirectoryFiltersBtn);
+        filters.add(row1);
+        filters.add(row2);
         return filters;
     }
 

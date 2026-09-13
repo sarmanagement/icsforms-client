@@ -5,6 +5,8 @@ import org.apache.pdfbox.contentstream.operator.Operator;
 import org.apache.pdfbox.cos.COSNumber;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.lang.reflect.Method;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -93,6 +96,19 @@ class Ics205aPdfRendererTest {
         }
     }
 
+    @Test
+    void fitTextConstrainsPreparedByValuesToAvailableColumnWidth() throws Exception {
+        Ics205aPdfRenderer renderer = new Ics205aPdfRenderer();
+        PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+        String original = "Communications Unit Leader Assigned To Unified Command Operations";
+        String fitted = (String) invoke(renderer, "fitText",
+                new Class<?>[]{PDType1Font.class, String.class, float.class},
+                regular, original, 110f);
+
+        assertTrue(fitted.length() < original.length());
+        assertTrue(regular.getStringWidth(fitted) / 1000f * 10f <= 110f);
+    }
+
     private int countRectangles(PDPage page, float x, float y, float width, float height) throws Exception {
         int count = 0;
         try (InputStream inputStream = page.getContents()) {
@@ -120,5 +136,15 @@ class Ics205aPdfRendererTest {
 
     private boolean closeTo(float actual, float expected) {
         return Math.abs(actual - expected) < 0.1f;
+    }
+
+    private Object invoke(Object target, String methodName, Class<?>[] parameterTypes, Object... args) {
+        try {
+            Method method = target.getClass().getDeclaredMethod(methodName, parameterTypes);
+            method.setAccessible(true);
+            return method.invoke(target, args);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
     }
 }

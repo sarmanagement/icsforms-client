@@ -9,6 +9,7 @@ import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
+import javax.swing.JPanel;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
@@ -171,6 +172,26 @@ class TCardPanelDirectoryTest {
             assertEquals("All", stateFilter.getSelectedItem());
             assertEquals("All", unitFilter.getSelectedItem());
             assertEquals(2, directoryTable.getRowCount());
+        });
+    }
+
+    @Test
+    void directoryFiltersUseTwoVisibleRows() throws Exception {
+        AppData data = new AppData();
+        data.setTCards(List.of(personnelCard("Sam Safety", "OR")));
+
+        TCardPanel panel = new TCardPanel(createController(data));
+        SwingUtilities.invokeAndWait(() -> {
+            panel.refreshFromModel();
+            combo(panel, "viewSelector").setSelectedItem("Directory View");
+
+            JTextField nameFilter = field(panel, "directoryNameFilterField", JTextField.class);
+            JPanel firstRow = (JPanel) nameFilter.getParent();
+            JPanel filters = (JPanel) firstRow.getParent();
+
+            assertEquals(2, filters.getComponentCount());
+            assertTrue(filters.getComponent(0).isVisible());
+            assertTrue(filters.getComponent(1).isVisible());
         });
     }
 

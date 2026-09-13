@@ -182,15 +182,20 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 
         float footerTop = y + FOOTER_BAND_HEIGHT;
         float footerCellWidth = width / 8f;
+        float topRowY = footerTop + 14f;
+        float nameWidth = width * 0.20f;
+        float positionWidth = width * 0.38f;
+        float signatureWidth = width - nameWidth - positionWidth - (CELL_PADDING * 2f);
         float nameX = x + CELL_PADDING;
-        float positionX = x + (width * 0.34f);
-        float signatureX = x + (width * 0.58f);
-        float topRowY = y + height - CELL_PADDING - HEADING_FONT_SIZE - LINE_HEIGHT;
+        float positionX = nameX + nameWidth;
+        float signatureX = positionX + positionWidth;
 
-        drawInlinePair(stream, bold, regular, nameX, topRowY, "Name", safe(context.getCurrentUser()));
-        drawInlinePair(stream, bold, regular, positionX, topRowY, "Position/Title",
-                safe(context.getCurrentUserPositionTitle()));
-        drawInlinePair(stream, bold, regular, signatureX, topRowY, "Signature", "____________________");
+        writeInlineHeadingValueWithinWidth(stream, bold, regular, nameX, topRowY, nameWidth,
+                "Name:", safe(context.getCurrentUser()));
+        writeInlineHeadingValueWithinWidth(stream, bold, regular, positionX, topRowY, positionWidth,
+                "Position/Title:", safe(context.getCurrentUserPositionTitle()));
+        writeInlineHeadingValueWithinWidth(stream, bold, regular, signatureX, topRowY, signatureWidth,
+                "Signature:", "____________________");
 
         drawCell(stream, x, y, footerCellWidth, FOOTER_BAND_HEIGHT);
         drawCell(stream, x + footerCellWidth, y, footerCellWidth, FOOTER_BAND_HEIGHT);
@@ -233,6 +238,20 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
         stream.setFont(regular, BODY_FONT_SIZE);
         stream.newLineAtOffset(labelWidth + 4f, 0);
         stream.showText(safe(value));
+        stream.endText();
+    }
+
+    private void writeInlineHeadingValueWithinWidth(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+                                                    float x, float y, float width,
+                                                    String label, String value) throws IOException {
+        stream.beginText();
+        stream.setFont(bold, BODY_FONT_SIZE);
+        stream.newLineAtOffset(x, y);
+        stream.showText(label);
+        float labelWidth = bold.getStringWidth(label) / 1000f * BODY_FONT_SIZE;
+        stream.setFont(regular, BODY_FONT_SIZE);
+        stream.newLineAtOffset(labelWidth + 4f, 0);
+        stream.showText(fitText(regular, safe(value), Math.max(0f, width - labelWidth - 4f)));
         stream.endText();
     }
 
@@ -307,6 +326,28 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 
     private String formatDateTime(LocalDateTime value) {
         return value == null ? "" : value.format(DATE_TIME_FORMATTER);
+    }
+
+    private String fitText(PDType1Font font, String value, float maxWidth) throws IOException {
+        String normalized = safe(value);
+        if (normalized.isBlank() || maxWidth <= 0f) {
+            return "";
+        }
+        if (font.getStringWidth(normalized) / 1000f * BODY_FONT_SIZE <= maxWidth) {
+            return normalized;
+        }
+        String ellipsis = "...";
+        float ellipsisWidth = font.getStringWidth(ellipsis) / 1000f * BODY_FONT_SIZE;
+        if (ellipsisWidth >= maxWidth) {
+            return "";
+        }
+        for (int end = normalized.length() - 1; end > 0; end--) {
+            String candidate = normalized.substring(0, end).trim() + ellipsis;
+            if (font.getStringWidth(candidate) / 1000f * BODY_FONT_SIZE <= maxWidth) {
+                return candidate;
+            }
+        }
+        return "";
     }
 
     private String addPageOffset(String startPage, int offset) {
