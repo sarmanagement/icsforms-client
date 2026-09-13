@@ -62,22 +62,22 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                 int startIndex = pageIndex * rowsPerPage;
                 int endIndex = Math.min(form.getActivityLog().size(), startIndex + rowsPerPage);
                 boolean isFirstPage = pageIndex == 0;
-                renderPage(document, context, form, eventTypes,
+                renderPage(document, data, context, form, eventTypes,
                         form.getActivityLog().subList(startIndex, endIndex),
                         pageIndex + 1, totalPages, isFirstPage);
             }
         }
     }
 
-    private void renderPage(PDDocument document, IncidentContext context, Ics214Form form,
+    private void renderPage(PDDocument document, AppData data, IncidentContext context, Ics214Form form,
                             List<ActivityEventType> eventTypes, List<ActivityLogEntry> entries,
                             int pageNumber, int totalPages, boolean isFirstPage) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
 
             drawFormHeader(stream, bold, layout, "ICS 214", "ACTIVITY LOG");
             drawFormFrame(stream, layout);

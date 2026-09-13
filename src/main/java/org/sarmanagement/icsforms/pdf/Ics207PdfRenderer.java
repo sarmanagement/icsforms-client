@@ -65,12 +65,12 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         List<SarTaskAssignment> tasks = data.getSarTaskAssignments() == null
                 ? List.of() : data.getSarTaskAssignments();
 
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold    = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout   = formLayout(page);
+            FormLayout layout   = formLayout(page, data);
 
             drawFormHeader(stream, bold, layout, "ICS 207", "INCIDENT ORGANIZATION CHART");
             drawFormFrame(stream, layout);

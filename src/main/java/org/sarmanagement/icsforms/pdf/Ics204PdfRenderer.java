@@ -67,12 +67,12 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             }
         }
 
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
 
             drawFormHeader(stream, bold, layout, "ICS 204", "ASSIGNMENT LIST");
             drawFormFrame(stream, layout);
@@ -130,17 +130,17 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         }
 
         for (OverflowSection overflow : overflowSections) {
-            renderOverflowPage(document, overflow);
+            renderOverflowPage(document, data, overflow);
         }
     }
 
-    private void renderOverflowPage(PDDocument document, OverflowSection overflow) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+    private void renderOverflowPage(PDDocument document, AppData data, OverflowSection overflow) throws IOException {
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             drawFormHeader(stream, bold, layout, "ICS 204", overflow.heading);
             drawFormFrame(stream, layout);
             drawTextBlock(stream, bold, regular, layout.x(), layout.y(), layout.width(), layout.height(), overflow.heading, overflow.lines);

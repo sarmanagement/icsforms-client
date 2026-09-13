@@ -6,6 +6,8 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 
@@ -36,7 +38,12 @@ abstract class AbstractPdfRenderer {
      * @throws IOException when PDF output fails.
      */
     protected void writeDocument(PDDocument document, String formNumber, String title, List<List<String>> blocks) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        writeDocument(document, null, formNumber, title, blocks);
+    }
+
+    protected void writeDocument(PDDocument document, AppData data, String formNumber, String title,
+                                 List<List<String>> blocks) throws IOException {
+        PDPage page = newPage(data);
         document.addPage(page);
         PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
         PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
@@ -60,7 +67,7 @@ abstract class AbstractPdfRenderer {
             float blockHeight = Math.max(LEADING + (BLOCK_PADDING * 2), wrapped.size() * LEADING + (BLOCK_PADDING * 2));
             if (y - blockHeight < MARGIN) {
                 stream.close();
-                page = new PDPage(PDRectangle.LETTER);
+                page = newPage(data);
                 document.addPage(page);
                 stream = new PDPageContentStream(document, page);
                 y = page.getMediaBox().getHeight() - MARGIN;
@@ -158,10 +165,29 @@ abstract class AbstractPdfRenderer {
      * @param page PDF page.
      * @return shared form layout bounds.
      */
+    protected PDPage newPage(AppData data) {
+        return new PDPage(pageSize(data));
+    }
+
+    protected PDRectangle pageSize(AppData data) {
+        PdfLayoutSettings.PaperSize paperSize = pdfLayoutSettings(data).getPaperSize();
+        return paperSize == PdfLayoutSettings.PaperSize.A4 ? PDRectangle.A4 : PDRectangle.LETTER;
+    }
+
+    protected float pageMargin(AppData data) {
+        return pdfLayoutSettings(data).getPageMarginPoints();
+    }
+
     protected FormLayout formLayout(PDPage page) {
-        float width = page.getMediaBox().getWidth() - (FORM_MARGIN * 2f);
-        float top = page.getMediaBox().getHeight() - FORM_MARGIN - FORM_HEADER_HEIGHT;
-        return new FormLayout(FORM_MARGIN, FORM_MARGIN, width, top - FORM_MARGIN, top + FORM_HEADER_HEIGHT);
+        return formLayout(page, null);
+    }
+
+    protected FormLayout formLayout(PDPage page, AppData data) {
+        float formMargin = Math.max(FORM_MARGIN, pageMargin(data));
+        float width = page.getMediaBox().getWidth() - (formMargin * 2f);
+        float top = page.getMediaBox().getHeight() - formMargin - FORM_HEADER_HEIGHT;
+        return new FormLayout(formMargin, formMargin, width, top - formMargin, top + FORM_HEADER_HEIGHT,
+                page.getMediaBox().getWidth(), page.getMediaBox().getHeight(), pageMargin(data));
     }
 
     /**
@@ -180,7 +206,7 @@ abstract class AbstractPdfRenderer {
         float headerWidth = bold.getStringWidth(header) / 1000f * HEADER_FONT_SIZE;
         stream.beginText();
         stream.setFont(bold, HEADER_FONT_SIZE);
-        stream.newLineAtOffset((PDRectangle.LETTER.getWidth() - headerWidth) / 2f, layout.headerBaseline());
+        stream.newLineAtOffset((layout.pageWidth() - headerWidth) / 2f, layout.headerBaseline());
         stream.showText(header);
         stream.endText();
     }
@@ -386,6 +412,10 @@ abstract class AbstractPdfRenderer {
         return totalPages > 1 ? formNumber + ", Page " + pageNumber + " of " + totalPages : formNumber;
     }
 
+    private PdfLayoutSettings pdfLayoutSettings(AppData data) {
+        return data == null ? new PdfLayoutSettings() : data.getPdfLayoutSettings();
+    }
+
     private void drawMetadataHeading(PDPageContentStream stream,
                                      PDType1Font bold,
                                      float headingFontSize,
@@ -511,7 +541,8 @@ abstract class AbstractPdfRenderer {
      * @param height form height.
      * @param headerBaseline baseline for the centered header text.
      */
-    protected record FormLayout(float x, float y, float width, float height, float headerBaseline) {
+    protected record FormLayout(float x, float y, float width, float height, float headerBaseline,
+                                float pageWidth, float pageHeight, float pageMargin) {
         float top() {
             return y + height;
         }

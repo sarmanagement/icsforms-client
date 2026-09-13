@@ -47,20 +47,20 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             List<SarTaskAssignment> tasks = data.getSarTaskAssignments().isEmpty()
                     ? List.of(new SarTaskAssignment()) : data.getSarTaskAssignments();
             for (SarTaskAssignment task : tasks) {
-                renderAssignmentPage(document, data.getIncidentContext(), task);
-                renderDebriefPage(document, task, data.getClueLogEntries());
+                renderAssignmentPage(document, data, data.getIncidentContext(), task);
+                renderDebriefPage(document, data, task, data.getClueLogEntries());
             }
             document.save(outputFile.toFile());
         }
     }
 
-    private void renderAssignmentPage(PDDocument document, IncidentContext context, SarTaskAssignment task) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+    private void renderAssignmentPage(PDDocument document, AppData data, IncidentContext context, SarTaskAssignment task) throws IOException {
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             float pageWidth = layout.width();
             float formHeight = layout.height();
 
@@ -135,13 +135,13 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         }
     }
 
-    private void renderDebriefPage(PDDocument document, SarTaskAssignment task, List<ClueLogEntry> clueLogEntries) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+    private void renderDebriefPage(PDDocument document, AppData data, SarTaskAssignment task, List<ClueLogEntry> clueLogEntries) throws IOException {
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             float pageWidth = layout.width();
             float formHeight = layout.height();
 

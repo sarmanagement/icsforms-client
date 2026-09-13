@@ -56,12 +56,12 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private void renderPageOne(PDDocument document, AppData data, Ics201Form form) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             drawFormHeader(stream, bold, layout, "ICS 201", "INCIDENT BRIEFING");
             drawFormFrame(stream, layout);
 
@@ -84,12 +84,12 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private void renderPageTwo(PDDocument document, AppData data, Ics201Form form) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             drawFormHeader(stream, bold, layout, "ICS 201", "INCIDENT BRIEFING");
             drawFormFrame(stream, layout);
 
@@ -111,12 +111,12 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private void renderPageThree(PDDocument document, AppData data, Ics201Form form) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             drawFormHeader(stream, bold, layout, "ICS 201", "INCIDENT BRIEFING");
             drawFormFrame(stream, layout);
 
@@ -135,12 +135,12 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private void renderPageFour(PDDocument document, AppData data, Ics201Form form) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             drawFormHeader(stream, bold, layout, "ICS 201", "INCIDENT BRIEFING");
             drawFormFrame(stream, layout);
 

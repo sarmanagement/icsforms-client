@@ -6,6 +6,7 @@ import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import java.io.IOException;
@@ -315,6 +316,10 @@ public class PdfExportService {
         copy.setSarTaskAssignments(data.getSarTaskAssignments());
         copy.setClueLogEntries(data.getClueLogEntries());
         copy.setTCards(data.getTCards());
+        PdfLayoutSettings settings = new PdfLayoutSettings();
+        settings.setPaperSize(data.getPdfLayoutSettings().getPaperSize());
+        settings.setPageMarginPoints(data.getPdfLayoutSettings().getPageMarginPoints());
+        copy.setPdfLayoutSettings(settings);
         return copy;
     }
 
