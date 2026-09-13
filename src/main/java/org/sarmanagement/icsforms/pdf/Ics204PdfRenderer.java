@@ -235,20 +235,16 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                        float x, float y, float width, float height, float footerHeight, Ics204Form form) throws IOException {
-        drawCell(stream, x, y, width, height);
-        float footerCellWidth = width / 8f;
-        float footerContentY = y + footerHeight - CELL_PADDING - BODY_FONT_SIZE;
-        float topRowY = y + height - CELL_PADDING - HEADING_FONT_SIZE - LINE_HEIGHT;
-        float rightX = x + (width * 0.45f);
-
-        drawHeading(stream, bold, x, y + height, "9. Prepared By");
-        drawCell(stream, x, y, footerCellWidth, footerHeight);
-        drawCell(stream, x + footerCellWidth, y, footerCellWidth, footerHeight);
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, topRowY, "Name", safe(form.getPreparedByName()));
-        drawInlinePair(stream, bold, regular, rightX, topRowY, "Position/Title", safe(form.getPreparedByPositionTitle()));
-        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerContentY, "ICS 204", "");
-        writeInlineHeadingValue(stream, bold, regular, x + footerCellWidth + CELL_PADDING, footerContentY, "IAP Page", safe(form.getIapPage()));
-        drawInlinePair(stream, bold, regular, rightX, footerContentY, "Date/Time", formatDateTime(form.getPreparedDateTime()));
+        drawPreparedByMetadataSection(stream, bold, regular,
+                BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING,
+                x, y, width, height, footerHeight,
+                "9. Prepared By",
+                safe(form.getPreparedByName()),
+                safe(form.getPreparedByPositionTitle()),
+                safe(form.getPreparedBySignature()),
+                "ICS 204",
+                safe(form.getIapPage()),
+                formatDateTime(form.getPreparedDateTime()));
     }
 
     private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,

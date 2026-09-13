@@ -1,5 +1,7 @@
 package org.sarmanagement.icsforms.pdf;
 
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
@@ -12,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -64,5 +67,44 @@ class Ics214PdfRendererTest {
 
         assertTrue(Files.exists(outputFile));
         assertTrue(Files.size(outputFile) > 0L);
+    }
+
+    @Test
+    void multipageFormOffsetsIapPagePerRenderedPage() throws Exception {
+        Path outputDir = Path.of("target", "test-output", "ics214");
+        Files.createDirectories(outputDir);
+        Path outputFile = outputDir.resolve("multipage-ics-214-" + System.nanoTime() + ".pdf");
+
+        AppData data = new AppData();
+        Ics214Form form = new Ics214Form();
+        form.setPreparedByName("Planner");
+        form.setPreparedByPositionTitle("Planning");
+        form.setPreparedBySignature("Planner");
+        form.setPreparedDateTime(LocalDateTime.parse("2026-01-01T08:00:00"));
+        form.setIapPage("7");
+        for (int i = 0; i < 20; i++) {
+            ActivityLogEntry entry = new ActivityLogEntry();
+            entry.setTimestamp(LocalDateTime.parse("2026-01-01T08:00:00").plusMinutes(i));
+            entry.setNotableActivity("Activity " + i);
+            form.getActivityLog().add(entry);
+        }
+        data.getActivityLogs().add(form);
+
+        new Ics214PdfRenderer().render(data, outputFile);
+
+        try (org.apache.pdfbox.pdmodel.PDDocument pdf = Loader.loadPDF(outputFile.toFile())) {
+            assertEquals(2, pdf.getNumberOfPages());
+            PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setStartPage(1);
+            stripper.setEndPage(1);
+            String firstPageText = stripper.getText(pdf).replaceAll("\\s+", " ");
+            stripper.setStartPage(2);
+            stripper.setEndPage(2);
+            String secondPageText = stripper.getText(pdf).replaceAll("\\s+", " ");
+            assertTrue(firstPageText.contains("ICS 214, Page 1 of 2"));
+            assertTrue(firstPageText.contains("IAP Page 7") || firstPageText.contains("IAP Page: 7"));
+            assertTrue(secondPageText.contains("ICS 214, Page 2 of 2"));
+            assertTrue(secondPageText.contains("IAP Page 8") || secondPageText.contains("IAP Page: 8"));
+        }
     }
 }

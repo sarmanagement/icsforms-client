@@ -1,5 +1,7 @@
 package org.sarmanagement.icsforms.pdf;
 
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics201Form;
@@ -56,8 +58,18 @@ class Ics201PdfRendererTest {
 
         assertTrue(Files.exists(outputFile));
         assertTrue(Files.size(outputFile) > 0L);
-        try (org.apache.pdfbox.pdmodel.PDDocument pdf = org.apache.pdfbox.Loader.loadPDF(outputFile.toFile())) {
+        try (org.apache.pdfbox.pdmodel.PDDocument pdf = Loader.loadPDF(outputFile.toFile())) {
             assertEquals(4, pdf.getNumberOfPages());
+            PDFTextStripper stripper = new PDFTextStripper();
+            for (int page = 1; page <= 4; page++) {
+                stripper.setStartPage(page);
+                stripper.setEndPage(page);
+                String pageText = stripper.getText(pdf).replaceAll("\\s+", " ");
+                assertTrue(pageText.contains("ICS 201, Page " + page + " of 4"));
+                assertTrue(pageText.contains("IAP Page  " + page)
+                        || pageText.contains("IAP Page: " + page)
+                        || pageText.contains("IAP Page " + page));
+            }
         }
     }
 }

@@ -127,28 +127,16 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     private void drawFooter(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                              float x, float y, float width, float height,
                              Ics207Form form) throws IOException {
-        float footerH = 18f;
-        float footerCellW = width / 4f;
-
-        drawCell(stream, x, y, width, height);
-        drawHeading(stream, bold, x, y + height, "4. Prepared by");
-        float lineY1 = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
-        float lineY2 = lineY1 - 16f;
-        float col2X  = x + width * 0.4f;
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, lineY1,
-                "Name", safe(form.getPreparedByName()));
-        drawInlinePair(stream, bold, regular, col2X, lineY1,
-                "Position/Title", safe(form.getPreparedByPositionTitle()));
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, lineY2,
-                "Date/Time", formatDateTime(form.getPreparedDateTime()));
-        drawInlinePair(stream, bold, regular, col2X, lineY2, "Signature", "");
-
-        // Footer band boxes: ICS 207 identifier | IAP page — matching ICS 202 section 8 style
-        drawCell(stream, x, y, footerCellW, footerH);
-        drawCell(stream, x + footerCellW, y, footerCellW, footerH);
-        float footerTextY = y + footerH - CELL_PADDING - BODY_FONT_SIZE;
-        writeCellText(stream, bold, x + CELL_PADDING, footerTextY, "ICS 207");
-        writeCellText(stream, bold, x + footerCellW + CELL_PADDING, footerTextY, "IAP Page: " + safe(form.getIapPage()));
+        drawPreparedByMetadataSection(stream, bold, regular,
+                BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING,
+                x, y, width, height, 18f,
+                "4. Prepared By",
+                safe(form.getPreparedByName()),
+                safe(form.getPreparedByPositionTitle()),
+                "____________________",
+                "ICS 207",
+                safe(form.getIapPage()),
+                formatDateTime(form.getPreparedDateTime()));
     }
 
     // -----------------------------------------------------------------------

@@ -221,6 +221,155 @@ abstract class AbstractPdfRenderer {
         return resolved;
     }
 
+    protected void drawPreparedByMetadataSection(PDPageContentStream stream,
+                                                 PDType1Font bold,
+                                                 PDType1Font regular,
+                                                 float bodyFontSize,
+                                                 float headingFontSize,
+                                                 float cellPadding,
+                                                 float x,
+                                                 float y,
+                                                 float width,
+                                                 float height,
+                                                 float footerBandHeight,
+                                                 String heading,
+                                                 String name,
+                                                 String positionTitle,
+                                                 String signature,
+                                                 String formLabel,
+                                                 String iapPage,
+                                                 String dateTime) throws IOException {
+        stream.addRect(x, y, width, height);
+        stream.stroke();
+        drawMetadataHeading(stream, bold, headingFontSize, cellPadding, x, y + height, safeText(heading));
+
+        float footerTop = y + footerBandHeight;
+        float footerCellWidth = width / 8f;
+        float footerContentY = footerTop - cellPadding - bodyFontSize;
+        float topRowY = footerTop + 14f;
+
+        float nameStart = x + cellPadding;
+        float nameEnd = x + (width * 0.20f);
+        float positionStart = nameEnd + cellPadding;
+        float positionEnd = x + (width * 0.58f);
+        float signatureStart = positionEnd + cellPadding;
+        float signatureEnd = x + width - cellPadding;
+
+        writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize,
+                nameStart, topRowY, Math.max(0f, nameEnd - nameStart), "Name:", name);
+        writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize,
+                positionStart, topRowY, Math.max(0f, positionEnd - positionStart), "Position/Title:", positionTitle);
+        writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize,
+                signatureStart, topRowY, Math.max(0f, signatureEnd - signatureStart), "Signature:", signature);
+
+        stream.addRect(x, y, footerCellWidth, footerBandHeight);
+        stream.stroke();
+        stream.addRect(x + footerCellWidth, y, footerCellWidth, footerBandHeight);
+        stream.stroke();
+
+        writeInlineHeadingValue(stream, bold, regular, bodyFontSize, x + cellPadding, footerContentY, formLabel, "");
+        writeInlineHeadingValue(stream, bold, regular, bodyFontSize,
+                x + footerCellWidth + cellPadding, footerContentY, "IAP Page", iapPage);
+        writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize,
+                signatureStart, footerContentY, Math.max(0f, signatureEnd - signatureStart), "Date/Time:", dateTime);
+    }
+
+    protected String addPageOffset(String startPage, int offset) {
+        String normalized = safeText(startPage).trim();
+        if (normalized.isBlank()) {
+            return "";
+        }
+        try {
+            return String.valueOf(Integer.parseInt(normalized) + Math.max(0, offset));
+        } catch (NumberFormatException e) {
+            return normalized;
+        }
+    }
+
+    private void drawMetadataHeading(PDPageContentStream stream,
+                                     PDType1Font bold,
+                                     float headingFontSize,
+                                     float cellPadding,
+                                     float x,
+                                     float topY,
+                                     String heading) throws IOException {
+        stream.beginText();
+        stream.setFont(bold, headingFontSize);
+        stream.newLineAtOffset(x + cellPadding, topY - cellPadding - headingFontSize);
+        stream.showText(heading);
+        stream.endText();
+    }
+
+    private void writeInlineHeadingValue(PDPageContentStream stream,
+                                         PDType1Font bold,
+                                         PDType1Font regular,
+                                         float bodyFontSize,
+                                         float x,
+                                         float y,
+                                         String label,
+                                         String value) throws IOException {
+        String safeLabel = safeText(label);
+        String safeValue = safeText(value);
+        stream.beginText();
+        stream.setFont(bold, bodyFontSize);
+        stream.newLineAtOffset(x, y);
+        stream.showText(safeLabel);
+        float labelWidth = bold.getStringWidth(safeLabel) / 1000f * bodyFontSize;
+        stream.setFont(regular, bodyFontSize);
+        stream.newLineAtOffset(labelWidth + 4f, 0);
+        if (!safeValue.isBlank()) {
+            stream.showText(safeValue);
+        }
+        stream.endText();
+    }
+
+    private void writeInlineHeadingValueWithinWidth(PDPageContentStream stream,
+                                                    PDType1Font bold,
+                                                    PDType1Font regular,
+                                                    float bodyFontSize,
+                                                    float x,
+                                                    float y,
+                                                    float width,
+                                                    String label,
+                                                    String value) throws IOException {
+        String safeLabel = safeText(label);
+        stream.beginText();
+        stream.setFont(bold, bodyFontSize);
+        stream.newLineAtOffset(x, y);
+        stream.showText(safeLabel);
+        float labelWidth = bold.getStringWidth(safeLabel) / 1000f * bodyFontSize;
+        stream.setFont(regular, bodyFontSize);
+        stream.newLineAtOffset(labelWidth + 4f, 0);
+        stream.showText(fitText(regular, safeText(value), bodyFontSize, Math.max(0f, width - labelWidth - 4f)));
+        stream.endText();
+    }
+
+    private String fitText(PDType1Font font, String value, float fontSize, float maxWidth) throws IOException {
+        String normalized = safeText(value).trim();
+        if (normalized.isBlank() || maxWidth <= 0f) {
+            return "";
+        }
+        if (font.getStringWidth(normalized) / 1000f * fontSize <= maxWidth) {
+            return normalized;
+        }
+        String ellipsis = "...";
+        float ellipsisWidth = font.getStringWidth(ellipsis) / 1000f * fontSize;
+        if (ellipsisWidth >= maxWidth) {
+            return "";
+        }
+        for (int end = normalized.length() - 1; end > 0; end--) {
+            String candidate = normalized.substring(0, end).trim() + ellipsis;
+            if (font.getStringWidth(candidate) / 1000f * fontSize <= maxWidth) {
+                return candidate;
+            }
+        }
+        return "";
+    }
+
+    private String safeText(String value) {
+        return value == null ? "" : value;
+    }
+
     /**
      * Shared outer form bounds beneath the centered page heading.
      *

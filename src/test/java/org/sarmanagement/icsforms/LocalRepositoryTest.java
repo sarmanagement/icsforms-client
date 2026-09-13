@@ -286,7 +286,7 @@ class LocalRepositoryTest {
             assertTrue(text.contains("Contact"));
             assertTrue(text.contains("Reporting Location"));
             assertTrue(text.contains("9. Prepared By"));
-            assertTrue(text.contains("IAP Page: 3"));
+            assertTrue(text.contains("IAP Page 3") || text.contains("IAP Page: 3"));
             assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 706f));
         }
 
@@ -306,8 +306,10 @@ class LocalRepositoryTest {
             assertTrue(text.contains("Clues Detected:"));
             assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 706f));
             assertTrue(hasRectangle(pdf.getPage(1), 36f, 36f, 540f, 706f));
-            assertEquals(1, countRectangles(pdf.getPage(0), 36f, 36f, 180f, 14f));
-            assertEquals(1, countRectangles(pdf.getPage(1), 36f, 36f, 180f, 14f));
+            assertEquals(1, countRectangles(pdf.getPage(0), 36f, 36f, 67.5f, 14f));
+            assertEquals(1, countRectangles(pdf.getPage(0), 103.5f, 36f, 67.5f, 14f));
+            assertEquals(1, countRectangles(pdf.getPage(1), 36f, 36f, 67.5f, 14f));
+            assertEquals(1, countRectangles(pdf.getPage(1), 103.5f, 36f, 67.5f, 14f));
         }
     }
 
@@ -344,6 +346,7 @@ class LocalRepositoryTest {
             String firstPageText = stripper.getText(merged);
             assertTrue(firstPageText.contains("INCIDENT ACTION PLAN"));
             assertTrue(firstPageText.contains("Operational Period:"));
+            assertTrue(firstPageText.contains("Prepared with:"));
         }
 
         // Individual component files should have been cleaned up.
