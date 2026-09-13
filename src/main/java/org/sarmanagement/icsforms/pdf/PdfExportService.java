@@ -21,6 +21,16 @@ import java.util.Map;
  * Coordinates exporting selected or all supported ICS forms to PDF files.
  */
 public class PdfExportService {
+    private static final List<String> IAP_BUNDLE_FORM_ORDER = List.of(
+            "ICS 201",
+            "ICS 202",
+            "ICS 205A",
+            "ICS 207",
+            "ICS 204",
+            "SAR Task Assignment",
+            "ICS 214"
+    );
+
     private final Map<String, PdfFormRenderer> renderers = new LinkedHashMap<>();
 
     /**
@@ -121,6 +131,7 @@ public class PdfExportService {
         List<String> includedFormKeys = (selectedFormKeys == null || selectedFormKeys.isEmpty())
                 ? new ArrayList<>(renderers.keySet())
                 : new ArrayList<>(selectedFormKeys);
+        includedFormKeys = orderForIapBundle(includedFormKeys);
         CoverPageRenderer coverPageRenderer = new CoverPageRenderer();
         Path coverPath = Files.createTempFile(outputDirectory, "cover-page-", ".pdf");
         List<Path> tempFiles = new ArrayList<>();
@@ -246,6 +257,21 @@ public class PdfExportService {
             }
         }
         return new BlankExportPages(blankSarTaskPage, blankIcs214Page);
+    }
+
+    static List<String> orderForIapBundle(List<String> formKeys) {
+        List<String> ordered = new ArrayList<>();
+        for (String formKey : IAP_BUNDLE_FORM_ORDER) {
+            if (formKeys.contains(formKey)) {
+                ordered.add(formKey);
+            }
+        }
+        for (String formKey : formKeys) {
+            if (!ordered.contains(formKey)) {
+                ordered.add(formKey);
+            }
+        }
+        return ordered;
     }
 
     private AppData exportData(String formKey, AppData data, BlankExportPages blankExportPages) {

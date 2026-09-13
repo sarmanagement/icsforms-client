@@ -168,4 +168,13 @@ class PdfExportServiceTest {
         assertTrue(data.getSarTaskAssignments().isEmpty());
         assertTrue(data.getActivityLogs().isEmpty());
     }
+
+    @Test
+    void orderForIapBundlePlacesSarTaskAssignmentBeforeIcs214() {
+        List<String> ordered = PdfExportService.orderForIapBundle(
+                List.of("ICS 201", "ICS 202", "ICS 205A", "ICS 207", "ICS 204", "ICS 214", "SAR Task Assignment"));
+
+        assertEquals(List.of("ICS 201", "ICS 202", "ICS 205A", "ICS 207", "ICS 204", "SAR Task Assignment", "ICS 214"),
+                ordered);
+    }
 }
