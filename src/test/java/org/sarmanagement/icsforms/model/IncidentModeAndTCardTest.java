@@ -281,5 +281,14 @@ class IncidentModeAndTCardTest {
         AppData data = new AppData();
         assertEquals(org.sarmanagement.icsforms.model.IapPhase.PRE_OP, data.getIapPhase());
     }
-}
 
+    @Test
+    void advanceToNewOperationalPeriodClears205aIapPage() {
+        AppData data = new AppData();
+        data.setForm205aIapPage("3");
+
+        data.advanceToNewOperationalPeriod();
+
+        assertEquals("", data.getForm205aIapPage());
+    }
+}

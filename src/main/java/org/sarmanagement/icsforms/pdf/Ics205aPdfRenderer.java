@@ -31,6 +31,7 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
     private static final float LINE_HEIGHT = 12f;
     private static final float TOP_SECTION_HEIGHT = 62f;
     private static final float FOOTER_HEIGHT = 74f;
+    private static final float FOOTER_BAND_HEIGHT = 24f;
     private static final float SECTION_HEADING_HEIGHT = 18f;
     private static final float TABLE_HEADER_HEIGHT = 28f;
 
@@ -51,8 +52,8 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
                 .toList();
         LocalDateTime preparedAt = LocalDateTime.now();
         try (PDDocument document = new PDDocument()) {
-            int rowsPerPage = rowsPerPage();
-            int totalPages = Math.max(1, (int) Math.ceil(Math.max(1, entries.size()) / (double) rowsPerPage));
+            int rowsPerPage = defaultRowsPerPage();
+            int totalPages = pageCount(entries.size(), rowsPerPage);
             for (int pageIndex = 0; pageIndex < totalPages; pageIndex++) {
                 int start = pageIndex * rowsPerPage;
                 int end = Math.min(entries.size(), start + rowsPerPage);
@@ -93,13 +94,28 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
                     layout.width(), tableSectionHeight, entries, rowsPerPage);
             y -= tableSectionHeight;
 
+            String pageIapNumber = addPageOffset(data.getForm205aIapPage(), pageNumber - 1);
             drawPreparedBySection(stream, bold, regular, layout.x(), y - FOOTER_HEIGHT, layout.width(),
-                    FOOTER_HEIGHT, context, preparedAt, pageNumber, totalPages);
+                    FOOTER_HEIGHT, context, preparedAt, pageIapNumber);
         }
     }
 
+    static int pageCount(AppData data) {
+        AppData safeData = data == null ? new AppData() : data;
+        int entryCount = ResourceDirectorySource.build(safeData).size();
+        return pageCount(entryCount, defaultRowsPerPage());
+    }
+
     private int rowsPerPage() {
-        float tableSectionHeight = expandRowToFill(706f, 1, TOP_SECTION_HEIGHT, 420f, FOOTER_HEIGHT)[1];
+        return defaultRowsPerPage();
+    }
+
+    private static int pageCount(int entryCount, int rowsPerPage) {
+        return Math.max(1, (int) Math.ceil(Math.max(1, entryCount) / (double) rowsPerPage));
+    }
+
+    private static int defaultRowsPerPage() {
+        float tableSectionHeight = 706f - TOP_SECTION_HEIGHT - FOOTER_HEIGHT;
         float dataHeight = tableSectionHeight - SECTION_HEADING_HEIGHT - TABLE_HEADER_HEIGHT;
         return Math.max(1, (int) (dataHeight / 24f));
     }
@@ -160,30 +176,29 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
     private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                        float x, float y, float width, float height,
                                        IncidentContext context, LocalDateTime preparedAt,
-                                       int pageNumber, int totalPages) throws IOException {
+                                       String iapPage) throws IOException {
         drawCell(stream, x, y, width, height);
         drawHeading(stream, bold, x, y + height, "4. Prepared By");
 
-        float[] widths = {0.28f, 0.28f, 0.18f, 0.26f};
-        float[] starts = columnStarts(x, width, widths);
-        drawVerticalLine(stream, starts[1], y, y + height);
-        drawVerticalLine(stream, starts[2], y, y + height);
-        drawVerticalLine(stream, starts[3], y, y + height);
+        float footerTop = y + FOOTER_BAND_HEIGHT;
+        float footerCellWidth = width / 8f;
+        float nameX = x + CELL_PADDING;
+        float positionX = x + (width * 0.34f);
+        float signatureX = x + (width * 0.58f);
+        float topRowY = y + height - CELL_PADDING - HEADING_FONT_SIZE - LINE_HEIGHT;
 
-        float lineY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
-        drawInlinePair(stream, bold, regular, starts[0] + CELL_PADDING, lineY, "Name", safe(context.getCurrentUser()));
-        drawInlinePair(stream, bold, regular, starts[1] + CELL_PADDING, lineY, "Position/Title",
+        drawInlinePair(stream, bold, regular, nameX, topRowY, "Name", safe(context.getCurrentUser()));
+        drawInlinePair(stream, bold, regular, positionX, topRowY, "Position/Title",
                 safe(context.getCurrentUserPositionTitle()));
-        drawInlinePair(stream, bold, regular, starts[2] + CELL_PADDING, lineY, "Signature", "");
-        drawInlinePair(stream, bold, regular, starts[3] + CELL_PADDING, lineY, "Date/Time", formatDateTime(preparedAt));
+        drawInlinePair(stream, bold, regular, signatureX, topRowY, "Signature", "____________________");
 
-        if (totalPages > 1) {
-            stream.beginText();
-            stream.setFont(regular, 9f);
-            stream.newLineAtOffset(x + width - 70f, y + CELL_PADDING + 2f);
-            stream.showText("Page " + pageNumber + " of " + totalPages);
-            stream.endText();
-        }
+        drawCell(stream, x, y, footerCellWidth, FOOTER_BAND_HEIGHT);
+        drawCell(stream, x + footerCellWidth, y, footerCellWidth, FOOTER_BAND_HEIGHT);
+        float footerContentY = footerTop - CELL_PADDING - BODY_FONT_SIZE;
+        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerContentY, "ICS 205A", "");
+        writeInlineHeadingValue(stream, bold, regular, x + footerCellWidth + CELL_PADDING, footerContentY,
+                "IAP Page", safe(iapPage));
+        drawInlinePair(stream, bold, regular, signatureX, footerContentY, "Date/Time", formatDateTime(preparedAt));
     }
 
     private void drawSimpleSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -292,5 +307,17 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 
     private String formatDateTime(LocalDateTime value) {
         return value == null ? "" : value.format(DATE_TIME_FORMATTER);
+    }
+
+    private String addPageOffset(String startPage, int offset) {
+        String normalized = safe(startPage);
+        if (normalized.isBlank()) {
+            return "";
+        }
+        try {
+            return String.valueOf(Integer.parseInt(normalized) + Math.max(0, offset));
+        } catch (NumberFormatException e) {
+            return normalized;
+        }
     }
 }

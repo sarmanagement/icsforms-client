@@ -4,6 +4,11 @@ import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.IapPhase;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -80,6 +85,8 @@ class PdfExportServiceTest {
                 "Completed ICS 201 must be assigned page 1 even in DURING_OP phase");
         assertEquals("2", data.getForm202().getIapPage(),
                 "ICS 202 should follow immediately after ICS 201");
+        assertEquals("3", data.getForm205aIapPage(),
+                "ICS 205A should follow immediately after ICS 202");
     }
 
     @Test
@@ -89,5 +96,35 @@ class PdfExportServiceTest {
         data.getForm201().setPreparedByName("IC Name");
         PdfExportService.assignIapPageNumbers(data);
         assertEquals("1", data.getForm201().getIapPage());
+    }
+
+    @Test
+    void assignIapPageNumbers_offsetsLaterFormsWhen205aSpansMultiplePages() {
+        AppData data = new AppData();
+        data.getForm201().setPreparedByName("IC Name");
+        List<TCard> cards = new ArrayList<>();
+        for (int i = 0; i < 22; i++) {
+            TCard card = new TCard();
+            card.setCardType(TCardType.PERSONNEL);
+            card.setPersonName("Person " + i);
+            cards.add(card);
+        }
+        data.setTCards(cards);
+
+        PdfExportService.assignIapPageNumbers(data);
+
+        assertEquals("3", data.getForm205aIapPage());
+        assertEquals("5", data.getForm207().getIapPage());
+    }
+
+    @Test
+    void assignIapPageNumbers_skips205aWhenNotIncludedInSelectedBundle() {
+        AppData data = new AppData();
+
+        PdfExportService.assignIapPageNumbers(data, List.of("ICS 202", "ICS 207"), true);
+
+        assertEquals("", data.getForm205aIapPage());
+        assertEquals("1", data.getForm202().getIapPage());
+        assertEquals("2", data.getForm207().getIapPage());
     }
 }

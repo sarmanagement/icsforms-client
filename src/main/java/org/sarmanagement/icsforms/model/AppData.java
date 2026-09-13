@@ -55,6 +55,7 @@ public class AppData {
     private OrganizationalChart organizationalChart = new OrganizationalChart();
     private Ics201Form form201 = new Ics201Form();
     private Ics202Form form202 = new Ics202Form();
+    private String form205aIapPage = "";
     private Ics207Form form207 = new Ics207Form();
     private Ics204Form form204 = new Ics204Form();
     private List<Ics204Form> additionalForms204 = new ArrayList<>();
@@ -112,6 +113,7 @@ public class AppData {
 
         this.iapPhase = IapPhase.DURING_OP;
         this.form202 = new Ics202Form();
+        this.form205aIapPage = "";
         this.form204 = new Ics204Form();
         this.additionalForms204 = new ArrayList<>();
         this.sarTaskAssignments = new ArrayList<>();
@@ -247,6 +249,24 @@ public class AppData {
      */
     public void setForm202(Ics202Form form202) {
         this.form202 = form202 == null ? new Ics202Form() : form202;
+    }
+
+    /**
+     * Returns the ICS 205A IAP page number assigned during bundle export.
+     *
+     * @return ICS 205A IAP page number, or blank when not assigned.
+     */
+    public String getForm205aIapPage() {
+        return form205aIapPage == null ? "" : form205aIapPage;
+    }
+
+    /**
+     * Sets the ICS 205A IAP page number assigned during bundle export.
+     *
+     * @param form205aIapPage ICS 205A IAP page number.
+     */
+    public void setForm205aIapPage(String form205aIapPage) {
+        this.form205aIapPage = form205aIapPage == null ? "" : form205aIapPage;
     }
 
     /**
