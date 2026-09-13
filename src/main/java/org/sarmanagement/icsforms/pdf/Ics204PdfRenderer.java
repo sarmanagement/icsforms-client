@@ -81,7 +81,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             float gridHeight = layout.height();
             float pageWidth = layout.width();
 
-            float[] rows = expandRowToFill(gridHeight, 3, 60f, 64f, 282f, 108f, 60f, 84f, 72f);
+            float[] rows = expandRowToFill(gridHeight, 3, 60f, 64f, 282f, 84f, 60f, 84f, 72f);
             float row1 = rows[0];
             float row2 = rows[1];
             float row5 = rows[2];
