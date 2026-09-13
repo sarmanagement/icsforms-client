@@ -123,8 +123,17 @@ class UiSupportTest {
     @Test
     void exportFormDialogLabelsIncludeFormNamesAndPluralSarTaskForms() {
         assertEquals("ICS 201 – Incident Briefing", MainFrame.exportFormDisplayLabel("ICS 201"));
+        assertEquals("ICS 205A Communications List", MainFrame.exportFormDisplayLabel("ICS 205A"));
         assertEquals("ICS 214 – Activity Log", MainFrame.exportFormDisplayLabel("ICS 214"));
         assertEquals("SAR Task Assignment Forms", MainFrame.exportFormDisplayLabel("SAR Task Assignment"));
+    }
+
+    @Test
+    void directoryViewUsesLargerFontForSmallFilteredResultSets() {
+        assertTrue(TCardPanel.useLargeDirectoryFont(1));
+        assertTrue(TCardPanel.useLargeDirectoryFont(8));
+        assertFalse(TCardPanel.useLargeDirectoryFont(9));
+        assertFalse(TCardPanel.useLargeDirectoryFont(0));
     }
 
     private static JLabel findLabel(Component component, String text) {

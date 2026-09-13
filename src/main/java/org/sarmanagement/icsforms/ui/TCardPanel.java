@@ -2,7 +2,8 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
-
+import org.sarmanagement.icsforms.model.ResourceDirectoryEntry;
+import org.sarmanagement.icsforms.model.ResourceDirectorySource;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 
@@ -19,6 +20,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JRadioButton;
+import javax.swing.RowFilter;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
@@ -29,6 +31,7 @@ import javax.swing.SwingConstants;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
@@ -62,10 +65,10 @@ import java.util.Map;
 /**
  * Panel displaying and editing ICS 219 T-Card (Resource Status Card) records.
  *
- * <p>Cards may be displayed in a sortable table or in a colour-coded rack view that
- * mimics a physical T-card rack.  Personnel cards linked from the org chart or SAR tasks
- * are created automatically by {@link AppController#syncTCards()}; manual add and CSV
- * import are also available.</p>
+ * <p>Cards may be displayed in a sortable table, a colour-coded rack view that mimics a
+ * physical T-card rack, or a personnel directory view. Personnel cards linked from the org
+ * chart or SAR tasks are created automatically by {@link AppController#syncTCards()};
+ * manual add and CSV import are also available.</p>
  */
 public class TCardPanel extends JPanel {
     private static final String[] STATUS_OPTIONS = {
@@ -73,14 +76,28 @@ public class TCardPanel extends JPanel {
     };
     private static final String VIEW_TABLE = "table";
     private static final String VIEW_RACK  = "rack";
+    private static final String VIEW_DIRECTORY = "directory";
+    private static final int DIRECTORY_LARGE_FONT_THRESHOLD = 8;
+    private static final float DIRECTORY_DEFAULT_FONT_SIZE = 12f;
+    private static final float DIRECTORY_LARGE_FONT_SIZE = 15f;
 
     private final AppController controller;
     private final TCardTableModel tableModel;
     private final JTable table;
+    private final DirectoryTableModel directoryTableModel;
+    private final JTable directoryTable;
+    private final TableRowSorter<DirectoryTableModel> directorySorter;
     private final CardLayout viewLayout = new CardLayout();
     private final JPanel viewContainer = new JPanel(viewLayout);
     private final JScrollPane rackScroll = new JScrollPane();
-    private final JButton toggleViewBtn = new JButton("Rack View");
+    private final JComboBox<String> viewSelector = new JComboBox<>(new String[]{
+            "Table View", "Rack View", "Directory View"
+    });
+    private final JTextField directoryNameFilterField = UiSupport.textField();
+    private final JComboBox<String> directoryStateFilter = new JComboBox<>(new String[]{"All"});
+    private final JComboBox<String> directoryUnitFilter = new JComboBox<>(new String[]{"All"});
+    private final JComboBox<String> directoryAssignmentFilter = new JComboBox<>(new String[]{"All"});
+    private final Font directoryBaseFont;
     private String currentView = VIEW_TABLE;
     /** Currently selected card in rack view; {@code null} when nothing is selected. */
     private TCard selectedRackCard = null;
@@ -138,6 +155,10 @@ public class TCardPanel extends JPanel {
         this.controller = controller;
         this.tableModel = new TCardTableModel(this::isSarMode);
         this.table = new JTable(tableModel);
+        this.directoryTableModel = new DirectoryTableModel();
+        this.directoryTable = new JTable(directoryTableModel);
+        this.directorySorter = new TableRowSorter<>(directoryTableModel);
+        this.directoryBaseFont = directoryTable.getFont();
         setBorder(BorderFactory.createTitledBorder("T-Cards (ICS 219 Resource Status)"));
 
         table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
@@ -145,9 +166,11 @@ public class TCardPanel extends JPanel {
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setRowHeight(22);
         table.setDefaultRenderer(Object.class, new TCardCellRenderer());
+        configureDirectoryTable();
 
         viewContainer.add(new JScrollPane(table), VIEW_TABLE);
         viewContainer.add(rackScroll, VIEW_RACK);
+        viewContainer.add(buildDirectoryPanel(), VIEW_DIRECTORY);
 
         JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
         JButton addCardBtn       = new JButton("Add Card…");
@@ -161,19 +184,77 @@ public class TCardPanel extends JPanel {
         removeBtn.addActionListener(e -> removeSelectedCard());
         mergeDupBtn.addActionListener(e -> mergeDuplicates());
         importCsvBtn.addActionListener(e -> importFromCsv());
-        toggleViewBtn.addActionListener(e -> toggleView());
+        viewSelector.addActionListener(e -> switchView(selectedViewKey()));
 
+        buttonRow.add(new JLabel("View:"));
+        buttonRow.add(viewSelector);
         buttonRow.add(addCardBtn);
         buttonRow.add(editBtn);
         buttonRow.add(removeBtn);
         buttonRow.add(mergeDupBtn);
         buttonRow.add(importCsvBtn);
-        buttonRow.add(toggleViewBtn);
 
         installTablePopupMenu();
 
         add(viewContainer, BorderLayout.CENTER);
         add(buttonRow, BorderLayout.SOUTH);
+    }
+
+    private void configureDirectoryTable() {
+        directoryTable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+        directoryTable.setFillsViewportHeight(true);
+        directoryTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        directoryTable.setRowHeight(24);
+        directoryTable.setRowSorter(directorySorter);
+        directorySorter.setComparator(0, ResourceDirectorySource.displayNameComparator());
+        directorySorter.setSortsOnUpdates(true);
+        directorySorter.setSortKeys(List.of(new javax.swing.RowSorter.SortKey(0, javax.swing.SortOrder.ASCENDING)));
+        directoryTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int row = directoryTable.rowAtPoint(e.getPoint());
+                if (row >= 0) {
+                    directoryTable.setRowSelectionInterval(row, row);
+                }
+                if (e.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    editSelectedCard();
+                }
+            }
+        });
+    }
+
+    private JPanel buildDirectoryPanel() {
+        JPanel panel = new JPanel(new BorderLayout(0, 6));
+        panel.add(buildDirectoryFilters(), BorderLayout.NORTH);
+        panel.add(new JScrollPane(directoryTable), BorderLayout.CENTER);
+        installDirectoryFilterListeners();
+        return panel;
+    }
+
+    private JPanel buildDirectoryFilters() {
+        JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+        directoryNameFilterField.setColumns(14);
+        filters.add(new JLabel("Name:"));
+        filters.add(directoryNameFilterField);
+        filters.add(new JLabel("State:"));
+        filters.add(directoryStateFilter);
+        filters.add(new JLabel("Unit:"));
+        filters.add(directoryUnitFilter);
+        filters.add(new JLabel("Assignment:"));
+        filters.add(directoryAssignmentFilter);
+        return filters;
+    }
+
+    private void installDirectoryFilterListeners() {
+        javax.swing.event.DocumentListener docListener = new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { applyDirectoryFilters(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { applyDirectoryFilters(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyDirectoryFilters(); }
+        };
+        directoryNameFilterField.getDocument().addDocumentListener(docListener);
+        directoryStateFilter.addActionListener(e -> applyDirectoryFilters());
+        directoryUnitFilter.addActionListener(e -> applyDirectoryFilters());
+        directoryAssignmentFilter.addActionListener(e -> applyDirectoryFilters());
     }
 
     /** Installs a right-click context menu on the T-card table mirroring the bottom buttons. */
@@ -222,9 +303,7 @@ public class TCardPanel extends JPanel {
         }
         tableModel.setAssignmentTeamByRef(new LinkedHashMap<>(assignmentTeamByRef));
         tableModel.setCards(new ArrayList<>(controller.getData().getTCards()));
-        if (currentView.equals(VIEW_RACK)) {
-            rebuildRackView();
-        }
+        refreshDerivedViewsFromTableModel();
     }
 
     /**
@@ -235,22 +314,103 @@ public class TCardPanel extends JPanel {
     }
 
     // -------------------------------------------------------------------------
-    // View toggle
+    // View switching
     // -------------------------------------------------------------------------
 
-    private void toggleView() {
-        if (currentView.equals(VIEW_TABLE)) {
-            currentView = VIEW_RACK;
-            toggleViewBtn.setText("Table View");
-            selectedRackCard = null;
+    private void switchView(String viewKey) {
+        currentView = viewKey;
+        selectedRackCard = null;
+        if (VIEW_RACK.equals(currentView)) {
             rebuildRackView();
-            viewLayout.show(viewContainer, VIEW_RACK);
-        } else {
-            currentView = VIEW_TABLE;
-            toggleViewBtn.setText("Rack View");
-            selectedRackCard = null;
-            viewLayout.show(viewContainer, VIEW_TABLE);
         }
+        viewLayout.show(viewContainer, currentView);
+    }
+
+    private String selectedViewKey() {
+        Object selection = viewSelector.getSelectedItem();
+        if ("Rack View".equals(selection)) {
+            return VIEW_RACK;
+        }
+        if ("Directory View".equals(selection)) {
+            return VIEW_DIRECTORY;
+        }
+        return VIEW_TABLE;
+    }
+
+    private void refreshDerivedViewsFromTableModel() {
+        directoryTableModel.setEntries(ResourceDirectorySource.build(controller.getData(), tableModel.getCards()));
+        refreshDirectoryFilterChoices();
+        applyDirectoryFilters();
+        if (VIEW_RACK.equals(currentView)) {
+            rebuildRackView();
+        }
+    }
+
+    private void refreshDirectoryFilterChoices() {
+        refreshFilterCombo(directoryStateFilter, directoryTableModel.distinctStates());
+        refreshFilterCombo(directoryUnitFilter, directoryTableModel.distinctUnits());
+        refreshFilterCombo(directoryAssignmentFilter, directoryTableModel.distinctAssignments());
+    }
+
+    private void refreshFilterCombo(JComboBox<String> combo, List<String> values) {
+        Object previous = combo.getSelectedItem();
+        combo.removeAllItems();
+        combo.addItem("All");
+        for (String value : values) {
+            combo.addItem(value);
+        }
+        if (previous != null) {
+            combo.setSelectedItem(previous);
+        }
+        if (combo.getSelectedIndex() < 0) {
+            combo.setSelectedIndex(0);
+        }
+    }
+
+    private void applyDirectoryFilters() {
+        List<RowFilter<DirectoryTableModel, Integer>> filters = new ArrayList<>();
+        String nameFilter = directoryNameFilterField.getText() == null
+                ? "" : directoryNameFilterField.getText().trim().toLowerCase(Locale.ROOT);
+        if (!nameFilter.isBlank()) {
+            filters.add(new RowFilter<>() {
+                @Override
+                public boolean include(Entry<? extends DirectoryTableModel, ? extends Integer> entry) {
+                    ResourceDirectoryEntry row = directoryTableModel.getEntry(entry.getIdentifier());
+                    return row.name().toLowerCase(Locale.ROOT).contains(nameFilter);
+                }
+            });
+        }
+        addExactFilter(filters, directoryStateFilter, ResourceDirectoryEntry::state);
+        addExactFilter(filters, directoryUnitFilter, ResourceDirectoryEntry::unit);
+        addExactFilter(filters, directoryAssignmentFilter, ResourceDirectoryEntry::assignment);
+        directorySorter.setRowFilter(filters.isEmpty() ? null : RowFilter.andFilter(filters));
+        updateDirectoryReadability(directoryTable.getRowCount());
+    }
+
+    private void addExactFilter(List<RowFilter<DirectoryTableModel, Integer>> filters,
+                                JComboBox<String> combo,
+                                java.util.function.Function<ResourceDirectoryEntry, String> extractor) {
+        Object selected = combo.getSelectedItem();
+        if (!(selected instanceof String text) || text.isBlank() || "All".equals(text)) {
+            return;
+        }
+        filters.add(new RowFilter<>() {
+            @Override
+            public boolean include(Entry<? extends DirectoryTableModel, ? extends Integer> entry) {
+                return text.equalsIgnoreCase(extractor.apply(directoryTableModel.getEntry(entry.getIdentifier())));
+            }
+        });
+    }
+
+    private void updateDirectoryReadability(int resultCount) {
+        boolean large = useLargeDirectoryFont(resultCount);
+        directoryTable.setFont(directoryBaseFont.deriveFont(large
+                ? DIRECTORY_LARGE_FONT_SIZE : DIRECTORY_DEFAULT_FONT_SIZE));
+        directoryTable.setRowHeight(large ? 30 : 24);
+    }
+
+    static boolean useLargeDirectoryFont(int resultCount) {
+        return resultCount > 0 && resultCount <= DIRECTORY_LARGE_FONT_THRESHOLD;
     }
 
     /**
@@ -815,17 +975,8 @@ public class TCardPanel extends JPanel {
             editSelectedCard();
         });
         rackRemoveItem.addActionListener(e -> {
-            List<TCard> cards = tableModel.getCards();
-            for (int i = 0; i < cards.size(); i++) {
-                if (cards.get(i) == card) {
-                    tableModel.removeCard(i);
-                    break;
-                }
-            }
-            if (selectedRackCard == card) {
-                selectedRackCard = null;
-            }
-            controller.markDirty();
+            selectedRackCard = card;
+            removeSelectedCard();
         });
         rackPopup.add(rackEditItem);
         rackPopup.add(rackRemoveItem);
@@ -897,9 +1048,7 @@ public class TCardPanel extends JPanel {
         card.setCardType((TCardType) typeChooser.getSelectedItem());
         if (openEditDialog(card)) {
             tableModel.addCard(card);
-            if (currentView.equals(VIEW_RACK)) {
-                rebuildRackView();
-            }
+            refreshDerivedViewsFromTableModel();
             controller.markDirty();
         }
     }
@@ -909,9 +1058,7 @@ public class TCardPanel extends JPanel {
         card.setCardType(TCardType.PERSONNEL);
         if (openEditDialog(card)) {
             tableModel.addCard(card);
-            if (currentView.equals(VIEW_RACK)) {
-                rebuildRackView();
-            }
+            refreshDerivedViewsFromTableModel();
             controller.markDirty();
         }
     }
@@ -948,9 +1095,7 @@ public class TCardPanel extends JPanel {
             return null;
         }
         tableModel.addCard(card);
-        if (currentView.equals(VIEW_RACK)) {
-            rebuildRackView();
-        }
+        refreshDerivedViewsFromTableModel();
         controller.markDirty();
         return card;
     }
@@ -960,59 +1105,69 @@ public class TCardPanel extends JPanel {
         card.setCardType(TCardType.HEADER);
         if (openEditDialog(card)) {
             tableModel.addCard(card);
-            if (currentView.equals(VIEW_RACK)) {
-                rebuildRackView();
-            }
+            refreshDerivedViewsFromTableModel();
             controller.markDirty();
         }
     }
 
     private void editSelectedCard() {
-        if (currentView.equals(VIEW_RACK)) {
-            if (selectedRackCard == null) {
-                return;
-            }
-            TCard copy = copyCard(selectedRackCard);
-            if (openEditDialog(copy)) {
-                List<TCard> cards = tableModel.getCards();
-                for (int i = 0; i < cards.size(); i++) {
-                    if (cards.get(i) == selectedRackCard) {
-                        tableModel.replaceCard(i, copy);
-                        break;
-                    }
-                }
-                selectedRackCard = copy;
-                controller.markDirty();
-                rebuildRackView();
-            }
+        TCard selected = selectedCard();
+        if (selected == null) {
             return;
         }
-        int row = table.getSelectedRow();
+        TCard copy = copyCard(selected);
+        if (!openEditDialog(copy)) {
+            return;
+        }
+        int row = tableModel.indexOfIdentity(selected);
         if (row < 0) {
             return;
         }
-        TCard card = tableModel.getCard(row);
-        TCard copy = copyCard(card);
-        if (openEditDialog(copy)) {
-            tableModel.replaceCard(row, copy);
-            controller.markDirty();
+        tableModel.replaceCard(row, copy);
+        if (selectedRackCard == selected) {
+            selectedRackCard = copy;
         }
+        refreshDerivedViewsFromTableModel();
+        controller.markDirty();
     }
 
     private void removeSelectedCard() {
-        int row = table.getSelectedRow();
+        TCard selected = selectedCard();
+        if (selected == null) {
+            return;
+        }
+        int row = tableModel.indexOfIdentity(selected);
         if (row < 0) {
             return;
         }
-        TCard card = tableModel.getCard(row);
-        String label = effectiveName(card);
+        String label = effectiveName(selected);
         int confirm = JOptionPane.showConfirmDialog(this,
                 "Remove resource '" + (label.isBlank() ? ("row " + (row + 1)) : label) + "'?",
                 "Remove Resource", JOptionPane.YES_NO_OPTION);
         if (confirm == JOptionPane.YES_OPTION) {
             tableModel.removeCard(row);
+            if (selectedRackCard == selected) {
+                selectedRackCard = null;
+            }
+            refreshDerivedViewsFromTableModel();
             controller.markDirty();
         }
+    }
+
+    private TCard selectedCard() {
+        if (VIEW_RACK.equals(currentView)) {
+            return selectedRackCard;
+        }
+        if (VIEW_DIRECTORY.equals(currentView)) {
+            int viewRow = directoryTable.getSelectedRow();
+            if (viewRow < 0) {
+                return null;
+            }
+            int modelRow = directoryTable.convertRowIndexToModel(viewRow);
+            return directoryTableModel.getEntry(modelRow).card();
+        }
+        int row = table.getSelectedRow();
+        return row < 0 ? null : tableModel.getCard(row);
     }
 
     // -------------------------------------------------------------------------
@@ -2100,6 +2255,7 @@ public class TCardPanel extends JPanel {
                     TCard copy = copyCard(tableModel.getCard(currentIdx));
                     if (openEditDialog(copy)) {
                         tableModel.replaceCard(currentIdx, copy);
+                        refreshDerivedViewsFromTableModel();
                         controller.markDirty();
                     }
                 }
@@ -2148,6 +2304,15 @@ public class TCardPanel extends JPanel {
             return cards.get(row);
         }
 
+        int indexOfIdentity(TCard card) {
+            for (int i = 0; i < cards.size(); i++) {
+                if (cards.get(i) == card) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
         void addCard(TCard card) {
             cards.add(card);
             fireTableRowsInserted(cards.size() - 1, cards.size() - 1);
@@ -2192,6 +2357,67 @@ public class TCardPanel extends JPanel {
                     }
                     yield "";
                 }
+                default -> "";
+            };
+        }
+    }
+
+    private static final class DirectoryTableModel extends AbstractTableModel {
+        private static final String[] COLUMNS = {
+                "Name", "Assigned Position", "Unit", "State", "Assignment", "Status", "Contact"
+        };
+
+        private final List<ResourceDirectoryEntry> entries = new ArrayList<>();
+
+        void setEntries(List<ResourceDirectoryEntry> newEntries) {
+            entries.clear();
+            if (newEntries != null) {
+                entries.addAll(newEntries);
+            }
+            fireTableDataChanged();
+        }
+
+        ResourceDirectoryEntry getEntry(int row) {
+            return entries.get(row);
+        }
+
+        List<String> distinctStates() {
+            return distinct(ResourceDirectoryEntry::state);
+        }
+
+        List<String> distinctUnits() {
+            return distinct(ResourceDirectoryEntry::unit);
+        }
+
+        List<String> distinctAssignments() {
+            return distinct(ResourceDirectoryEntry::assignment);
+        }
+
+        private List<String> distinct(java.util.function.Function<ResourceDirectoryEntry, String> extractor) {
+            return entries.stream()
+                    .map(extractor)
+                    .filter(value -> value != null && !value.isBlank())
+                    .distinct()
+                    .sorted(String.CASE_INSENSITIVE_ORDER)
+                    .toList();
+        }
+
+        @Override public int getRowCount() { return entries.size(); }
+        @Override public int getColumnCount() { return COLUMNS.length; }
+        @Override public String getColumnName(int column) { return COLUMNS[column]; }
+        @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return false; }
+
+        @Override
+        public Object getValueAt(int rowIndex, int columnIndex) {
+            ResourceDirectoryEntry entry = entries.get(rowIndex);
+            return switch (columnIndex) {
+                case 0 -> entry.name();
+                case 1 -> entry.assignedPosition();
+                case 2 -> entry.unit();
+                case 3 -> entry.state();
+                case 4 -> entry.assignment();
+                case 5 -> entry.status();
+                case 6 -> entry.contactMethods();
                 default -> "";
             };
         }
