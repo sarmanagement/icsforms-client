@@ -237,7 +237,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                                        float x, float y, float width, float height, float footerHeight, Ics204Form form) throws IOException {
         drawPreparedByMetadataSection(stream, bold, regular,
                 BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING,
-                x, y, width, height, footerHeight, 14f, 0.28f, 0.70f,
+                x, y, width, height, footerHeight, 14f, 0.28f, 0.70f, 0.58f,
                 "9. Prepared By",
                 safe(form.getPreparedByName()),
                 safe(form.getPreparedByPositionTitle()),
