@@ -25,6 +25,7 @@ import java.util.List;
 import java.lang.reflect.Method;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class Ics205aPdfRendererTest {
@@ -85,6 +86,7 @@ class Ics205aPdfRendererTest {
             assertTrue(text.contains("Communications Unit Leader"));
             assertTrue(text.contains("Signature"));
             assertTrue(text.contains("ICS 205A"));
+            assertFalse(normalizedText.contains("ICS 205A, Page 1 of 1"));
             assertTrue(normalizedText.matches(".*IAP Page[: ]+7.*"));
             assertTrue(text.contains("Amy Alpha"));
             assertTrue(text.contains("Zoey Zulu"));

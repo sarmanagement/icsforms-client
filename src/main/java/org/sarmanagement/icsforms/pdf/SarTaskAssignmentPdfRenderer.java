@@ -128,8 +128,10 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             y -= row7;
 
             drawPreparedBySection(stream, bold, regular, layout.x(), y - row8, pageWidth, row8,
-                    "11. Prepared By", task.getPreparedByName(), task.getPreparedByPositionTitle(), "____________________",
-                    task.getPreparedDateTime(), "SAR Task Assignment, Page 1 of 2", task.getIapPage());
+                    "11. Prepared by", task.getPreparedByName(), task.getPreparedByPositionTitle(),
+                    task.getPreparedDateTime(),
+                    "SAR Task Assignment Form - Page 1 of 2"
+                            + (task.getIapPage().isBlank() ? "" : " | IAP Page " + task.getIapPage()));
         }
     }
 
@@ -183,9 +185,9 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             y -= row4;
 
             drawPreparedBySection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5,
-                    "18. Prepared By", task.getDebriefPreparedByName(), task.getDebriefPreparedByPositionTitle(),
-                    "____________________", task.getDebriefPreparedDateTime(),
-                    "SAR Task Assignment, Page 2 of 2", addPageOffset(task.getIapPage(), 1));
+                    "18. Prepared by", task.getDebriefPreparedByName(), task.getDebriefPreparedByPositionTitle(),
+                    task.getDebriefPreparedDateTime(),
+                    "SAR Task Assignment Form - Page 2 of 2");
         }
     }
 
@@ -329,18 +331,32 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
     private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                        float x, float y, float width, float height, String heading,
-                                       String name, String title, String signature, LocalDateTime dateTime,
-                                       String formLabel, String iapPage) throws IOException {
-        drawPreparedByMetadataSection(stream, bold, regular,
-                BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING,
-                x, y, width, height, 14f,
-                heading,
-                safe(name),
-                safe(title),
-                safe(signature),
-                formLabel,
-                safe(iapPage),
-                formatDateTime(dateTime));
+                                       String name, String title, LocalDateTime dateTime, String footerLabel) throws IOException {
+        drawCell(stream, x, y, width, height);
+        drawHeading(stream, bold, x, y + height, heading);
+        float footerBandHeight = 14f;
+        float footerCellWidth = width / 3f;
+        drawCell(stream, x, y, footerCellWidth, footerBandHeight);
+        float contentY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
+        drawInlinePair(stream, bold, regular, x + CELL_PADDING, contentY, "Name", safe(name));
+        drawInlinePair(stream, bold, regular, x + (width * 0.42f), contentY, "Position/Title", safe(title));
+        drawInlinePair(stream, bold, regular, x + (width * 0.74f), contentY, "Date/Time", formatDateTime(dateTime));
+        int sepIdx = footerLabel.indexOf(" | ");
+        String leftLabel = sepIdx >= 0 ? footerLabel.substring(0, sepIdx) : footerLabel;
+        String rightLabel = sepIdx >= 0 ? footerLabel.substring(sepIdx + 3) : "";
+        stream.beginText();
+        stream.setFont(regular, 8f);
+        stream.newLineAtOffset(x + CELL_PADDING, y + 3f);
+        stream.showText(leftLabel);
+        stream.endText();
+        if (!rightLabel.isBlank()) {
+            float rightWidth = regular.getStringWidth(rightLabel) / 1000f * 8f;
+            stream.beginText();
+            stream.setFont(regular, 8f);
+            stream.newLineAtOffset(x + width - CELL_PADDING - rightWidth, y + 3f);
+            stream.showText(rightLabel);
+            stream.endText();
+        }
     }
 
     private void drawDebriefingSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,

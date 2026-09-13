@@ -239,14 +239,37 @@ abstract class AbstractPdfRenderer {
                                                  String formLabel,
                                                  String iapPage,
                                                  String dateTime) throws IOException {
+        drawPreparedByMetadataSection(stream, bold, regular, bodyFontSize, headingFontSize, cellPadding,
+                x, y, width, height, footerBandHeight, 14f,
+                heading, name, positionTitle, signature, formLabel, iapPage, dateTime);
+    }
+
+    protected void drawPreparedByMetadataSection(PDPageContentStream stream,
+                                                 PDType1Font bold,
+                                                 PDType1Font regular,
+                                                 float bodyFontSize,
+                                                 float headingFontSize,
+                                                 float cellPadding,
+                                                 float x,
+                                                 float y,
+                                                 float width,
+                                                 float height,
+                                                 float footerBandHeight,
+                                                 float topRowOffset,
+                                                 String heading,
+                                                 String name,
+                                                 String positionTitle,
+                                                 String signature,
+                                                 String formLabel,
+                                                 String iapPage,
+                                                 String dateTime) throws IOException {
         stream.addRect(x, y, width, height);
         stream.stroke();
         drawMetadataHeading(stream, bold, headingFontSize, cellPadding, x, y + height, safeText(heading));
 
         float footerTop = y + footerBandHeight;
-        float footerCellWidth = width / 8f;
         float footerContentY = footerTop - cellPadding - bodyFontSize;
-        float topRowY = footerTop + 14f;
+        float topRowY = footerTop + topRowOffset;
 
         float nameStart = x + cellPadding;
         float nameEnd = x + (width * 0.20f);
@@ -254,6 +277,24 @@ abstract class AbstractPdfRenderer {
         float positionEnd = x + (width * 0.58f);
         float signatureStart = positionEnd + cellPadding;
         float signatureEnd = x + width - cellPadding;
+        float minFooterCellWidth = width / 8f;
+        float footerBandAvailableWidth = Math.max(minFooterCellWidth * 2f, signatureStart - x - cellPadding);
+        float formBoxWidth = Math.max(minFooterCellWidth, fittedTextWidth(bold, bodyFontSize, safeText(formLabel)) + (cellPadding * 2f));
+        float iapBoxWidth = Math.max(minFooterCellWidth,
+                inlineTextWidth(bold, regular, bodyFontSize, "IAP Page", iapPage) + (cellPadding * 2f));
+        float combinedFooterWidth = formBoxWidth + iapBoxWidth;
+        if (combinedFooterWidth > footerBandAvailableWidth) {
+            float overflow = combinedFooterWidth - footerBandAvailableWidth;
+            float formFlex = Math.max(0f, formBoxWidth - minFooterCellWidth);
+            float iapFlex = Math.max(0f, iapBoxWidth - minFooterCellWidth);
+            float totalFlex = formFlex + iapFlex;
+            if (totalFlex > 0f) {
+                formBoxWidth -= overflow * (formFlex / totalFlex);
+                iapBoxWidth -= overflow * (iapFlex / totalFlex);
+            }
+            formBoxWidth = Math.max(minFooterCellWidth, formBoxWidth);
+            iapBoxWidth = Math.max(minFooterCellWidth, iapBoxWidth);
+        }
 
         writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize,
                 nameStart, topRowY, Math.max(0f, nameEnd - nameStart), "Name:", name);
@@ -262,14 +303,15 @@ abstract class AbstractPdfRenderer {
         writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize,
                 signatureStart, topRowY, Math.max(0f, signatureEnd - signatureStart), "Signature:", signature);
 
-        stream.addRect(x, y, footerCellWidth, footerBandHeight);
+        stream.addRect(x, y, formBoxWidth, footerBandHeight);
         stream.stroke();
-        stream.addRect(x + footerCellWidth, y, footerCellWidth, footerBandHeight);
+        stream.addRect(x + formBoxWidth, y, iapBoxWidth, footerBandHeight);
         stream.stroke();
 
-        writeInlineHeadingValue(stream, bold, regular, bodyFontSize, x + cellPadding, footerContentY, formLabel, "");
+        writeFittedText(stream, bold, bodyFontSize, x + cellPadding, footerContentY,
+                Math.max(0f, formBoxWidth - (cellPadding * 2f)), formLabel);
         writeInlineHeadingValue(stream, bold, regular, bodyFontSize,
-                x + footerCellWidth + cellPadding, footerContentY, "IAP Page", iapPage);
+                x + formBoxWidth + cellPadding, footerContentY, "IAP Page", iapPage);
         writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize,
                 signatureStart, footerContentY, Math.max(0f, signatureEnd - signatureStart), "Date/Time:", dateTime);
     }
@@ -284,6 +326,10 @@ abstract class AbstractPdfRenderer {
         } catch (NumberFormatException e) {
             return normalized;
         }
+    }
+
+    protected String formPageLabel(String formNumber, int pageNumber, int totalPages) {
+        return totalPages > 1 ? formNumber + ", Page " + pageNumber + " of " + totalPages : formNumber;
     }
 
     private void drawMetadataHeading(PDPageContentStream stream,
@@ -342,6 +388,38 @@ abstract class AbstractPdfRenderer {
         stream.newLineAtOffset(labelWidth + 4f, 0);
         stream.showText(fitText(regular, safeText(value), bodyFontSize, Math.max(0f, width - labelWidth - 4f)));
         stream.endText();
+    }
+
+    private void writeFittedText(PDPageContentStream stream,
+                                 PDType1Font font,
+                                 float fontSize,
+                                 float x,
+                                 float y,
+                                 float maxWidth,
+                                 String value) throws IOException {
+        stream.beginText();
+        stream.setFont(font, fontSize);
+        stream.newLineAtOffset(x, y);
+        stream.showText(fitText(font, safeText(value), fontSize, maxWidth));
+        stream.endText();
+    }
+
+    private float inlineTextWidth(PDType1Font bold,
+                                  PDType1Font regular,
+                                  float bodyFontSize,
+                                  String label,
+                                  String value) throws IOException {
+        String safeLabel = safeText(label);
+        String safeValue = safeText(value);
+        float width = fittedTextWidth(bold, bodyFontSize, safeLabel);
+        if (!safeValue.isBlank()) {
+            width += 4f + fittedTextWidth(regular, bodyFontSize, safeValue);
+        }
+        return width;
+    }
+
+    private float fittedTextWidth(PDType1Font font, float fontSize, String value) throws IOException {
+        return font.getStringWidth(safeText(value)) / 1000f * fontSize;
     }
 
     private String fitText(PDType1Font font, String value, float fontSize, float maxWidth) throws IOException {

@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -67,6 +68,11 @@ class Ics214PdfRendererTest {
 
         assertTrue(Files.exists(outputFile));
         assertTrue(Files.size(outputFile) > 0L);
+        try (org.apache.pdfbox.pdmodel.PDDocument pdf = Loader.loadPDF(outputFile.toFile())) {
+            String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
+            assertTrue(text.contains("ICS 214"));
+            assertFalse(text.contains("ICS 214, Page 1 of 1"));
+        }
     }
 
     @Test

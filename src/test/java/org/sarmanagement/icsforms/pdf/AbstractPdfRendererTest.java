@@ -23,6 +23,16 @@ class AbstractPdfRendererTest {
         assertEquals("Appendix A", new TestRenderer().addPageOffset("Appendix A", 3));
     }
 
+    @Test
+    void formPageLabelOmitsPageCountForSinglePageForms() {
+        assertEquals("ICS 205A", new TestRenderer().formPageLabel("ICS 205A", 1, 1));
+    }
+
+    @Test
+    void formPageLabelIncludesPageCountForMultipageForms() {
+        assertEquals("ICS 205A, Page 2 of 3", new TestRenderer().formPageLabel("ICS 205A", 2, 3));
+    }
+
     private static final class TestRenderer extends AbstractPdfRenderer {
     }
 }

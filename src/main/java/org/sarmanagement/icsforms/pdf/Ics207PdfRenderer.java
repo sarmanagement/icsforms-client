@@ -129,7 +129,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                              Ics207Form form) throws IOException {
         drawPreparedByMetadataSection(stream, bold, regular,
                 BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING,
-                x, y, width, height, 18f,
+                x, y, width, height, 18f, 8f,
                 "4. Prepared By",
                 safe(form.getPreparedByName()),
                 safe(form.getPreparedByPositionTitle()),

@@ -230,7 +230,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                 safe(form.getPreparedByName()),
                 safe(form.getPreparedByPositionTitle()),
                 safe(form.getPreparedBySignature()),
-                "ICS 214, Page " + pageNumber + " of " + totalPages,
+                formPageLabel("ICS 214", pageNumber, totalPages),
                 addPageOffset(form.getIapPage(), pageNumber - 1),
                 formatDateTime(form.getPreparedDateTime()));
     }

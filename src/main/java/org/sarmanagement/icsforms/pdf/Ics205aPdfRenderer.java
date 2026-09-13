@@ -185,7 +185,7 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
                 safe(context.getCurrentUser()),
                 safe(context.getCurrentUserPositionTitle()),
                 "____________________",
-                "ICS 205A, Page " + pageNumber + " of " + totalPages,
+                formPageLabel("ICS 205A", pageNumber, totalPages),
                 safe(iapPage),
                 formatDateTime(preparedAt));
     }
