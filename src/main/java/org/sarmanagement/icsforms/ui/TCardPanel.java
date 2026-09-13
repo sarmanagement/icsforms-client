@@ -303,7 +303,7 @@ public class TCardPanel extends JPanel {
         }
         tableModel.setAssignmentTeamByRef(new LinkedHashMap<>(assignmentTeamByRef));
         tableModel.setCards(new ArrayList<>(controller.getData().getTCards()));
-        refreshDerivedViewsFromTableModel();
+        refreshDerivedViewsFromTableModel(null);
     }
 
     /**
@@ -338,12 +338,35 @@ public class TCardPanel extends JPanel {
     }
 
     private void refreshDerivedViewsFromTableModel() {
+        refreshDerivedViewsFromTableModel(null);
+    }
+
+    private void refreshDerivedViewsFromTableModel(TCard preferredDirectorySelection) {
+        TCard directorySelection = VIEW_DIRECTORY.equals(currentView)
+                ? (preferredDirectorySelection != null ? preferredDirectorySelection : selectedCard())
+                : null;
         directoryTableModel.setEntries(ResourceDirectorySource.build(controller.getData(), tableModel.getCards()));
         refreshDirectoryFilterChoices();
         applyDirectoryFilters();
+        restoreDirectorySelection(directorySelection);
         if (VIEW_RACK.equals(currentView)) {
             rebuildRackView();
         }
+    }
+
+    private void restoreDirectorySelection(TCard selectedCard) {
+        if (!VIEW_DIRECTORY.equals(currentView) || selectedCard == null) {
+            directoryTable.clearSelection();
+            return;
+        }
+        for (int viewRow = 0; viewRow < directoryTable.getRowCount(); viewRow++) {
+            int modelRow = directoryTable.convertRowIndexToModel(viewRow);
+            if (directoryTableModel.getEntry(modelRow).card() == selectedCard) {
+                directoryTable.setRowSelectionInterval(viewRow, viewRow);
+                return;
+            }
+        }
+        directoryTable.clearSelection();
     }
 
     private void refreshDirectoryFilterChoices() {
@@ -1135,7 +1158,7 @@ public class TCardPanel extends JPanel {
         if (selectedRackCard == selected) {
             selectedRackCard = copy;
         }
-        refreshDerivedViewsFromTableModel();
+        refreshDerivedViewsFromTableModel(copy);
         controller.markDirty();
     }
 

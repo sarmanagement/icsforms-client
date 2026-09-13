@@ -70,6 +70,29 @@ class TCardPanelDirectoryTest {
         });
     }
 
+    @Test
+    void directoryRefreshRestoresSelectionForEditedCardReplacement() throws Exception {
+        TCard original = personnelCard("Zoey Zulu", "OR");
+        AppData data = new AppData();
+        data.setTCards(List.of(original));
+
+        TCardPanel panel = new TCardPanel(createController(data));
+        SwingUtilities.invokeAndWait(() -> {
+            panel.refreshFromModel();
+            combo(panel, "viewSelector").setSelectedItem("Directory View");
+            JTable directoryTable = field(panel, "directoryTable", JTable.class);
+            directoryTable.setRowSelectionInterval(0, 0);
+            assertSame(original, selectedCard(panel));
+
+            Object tableModel = field(panel, "tableModel", Object.class);
+            TCard replacement = personnelCard("Zoey Zulu", "OR");
+            invoke(tableModel, "replaceCard", new Class<?>[]{int.class, TCard.class}, 0, replacement);
+            invoke(panel, "refreshDerivedViewsFromTableModel", new Class<?>[]{TCard.class}, replacement);
+
+            assertSame(replacement, selectedCard(panel));
+        });
+    }
+
     private static TCard personnelCard(String name, String state) {
         TCard card = new TCard();
         card.setCardType(TCardType.PERSONNEL);
@@ -102,10 +125,14 @@ class TCardPanelDirectoryTest {
     }
 
     private static TCard selectedCard(TCardPanel panel) {
+        return (TCard) invoke(panel, "selectedCard", new Class<?>[0]);
+    }
+
+    private static Object invoke(Object target, String methodName, Class<?>[] parameterTypes, Object... args) {
         try {
-            Method method = TCardPanel.class.getDeclaredMethod("selectedCard");
+            Method method = target.getClass().getDeclaredMethod(methodName, parameterTypes);
             method.setAccessible(true);
-            return (TCard) method.invoke(panel);
+            return method.invoke(target, args);
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(e);
         }
