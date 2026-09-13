@@ -1,6 +1,8 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
+import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import javax.swing.JLabel;
@@ -126,6 +128,26 @@ class UiSupportTest {
         assertEquals("ICS 205A Communications List", MainFrame.exportFormDisplayLabel("ICS 205A"));
         assertEquals("ICS 214 – Activity Log", MainFrame.exportFormDisplayLabel("ICS 214"));
         assertEquals("SAR Task Assignment Forms", MainFrame.exportFormDisplayLabel("SAR Task Assignment"));
+    }
+
+    @Test
+    void exportFormDialogDefaultsToCombinedIapOutput() {
+        MainFrame.ExportModeControls controls = MainFrame.createExportModeControls();
+
+        assertTrue(controls.combined().isSelected());
+        assertFalse(controls.individual().isSelected());
+        assertEquals(2, controls.panel().getComponentCount());
+    }
+
+    @Test
+    void pdfLayoutSettingsApplyMarginInchesAndPaperSize() {
+        AppData data = new AppData();
+
+        MainFrame.applyPdfLayoutSettings(data, PdfLayoutSettings.PaperSize.A4, 0.5d);
+
+        assertEquals(PdfLayoutSettings.PaperSize.A4, data.getPdfLayoutSettings().getPaperSize());
+        assertEquals(36f, data.getPdfLayoutSettings().getPageMarginPoints(), 0.01f);
+        assertEquals(0.5d, MainFrame.pointsToInches(data.getPdfLayoutSettings().getPageMarginPoints()));
     }
 
     @Test

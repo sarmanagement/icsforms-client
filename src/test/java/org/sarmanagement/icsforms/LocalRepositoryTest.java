@@ -11,6 +11,7 @@ import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
+import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.PodFactorRating;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
@@ -116,6 +117,22 @@ class LocalRepositoryTest {
 
         assertEquals(1, loaded.getSarTaskAssignments().size());
         assertEquals("ATV / Medical kit", loaded.getSarTaskAssignments().get(0).getSpecialEquipment());
+    }
+
+    @Test
+    void roundTripPersistsPdfLayoutSettings() throws Exception {
+        Path tempDir = Files.createTempDirectory("icsforms");
+        Path tempFile = tempDir.resolve("incident.json");
+        LocalRepository repository = new LocalRepository(tempFile);
+        AppData input = sampleData();
+        input.getPdfLayoutSettings().setPaperSize(PdfLayoutSettings.PaperSize.A4);
+        input.getPdfLayoutSettings().setPageMarginPoints(27f);
+
+        repository.save(input);
+        AppData loaded = repository.loadOrDefault();
+
+        assertEquals(PdfLayoutSettings.PaperSize.A4, loaded.getPdfLayoutSettings().getPaperSize());
+        assertEquals(27f, loaded.getPdfLayoutSettings().getPageMarginPoints(), 0.01f);
     }
 
     /**
