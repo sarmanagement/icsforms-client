@@ -6,6 +6,8 @@ This project is intended to support the **SAR** (Search and Rescue) community, b
 
 Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. The incident workspace is persisted locally in JSON format at `~/.icsforms/incident.json`, with a rolling backup at `~/.icsforms/incident.json.bak`. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF.  Intent is to develop a multi-user application backed by a networked persistence layer in the future.
 
+This project is open source under the Apache 2.0 license. Contributions are welcome.
+
 ## Current UI workflow
 
 1. At launch a startup dialog appears asking you to select an action:
@@ -15,6 +17,8 @@ Currently, this is a desktop application with a Swing UI. It is not a web applic
    - **Open existing incident:** continue working on a previously saved incident.
    - **Open existing incident and add a new operational period:** load an existing workspace and advance it to the next operational period, preserving the org chart and ICS 201 history while clearing the operational-period forms.
 2. Select the incident mode: **SAR** (default) or **Generic**.
+   - SAR mode enables SAR Task Assignment forms that provide further detail for each Assignment listed on a ICS 204 and a clue log.
+   - SAR Task Assignment forms support debriefing, including structured capture of POD factors for SAR operations.
 3. Enter shared incident context values on the **Shared** tab:
    - incident name
    - operational period
@@ -45,7 +49,7 @@ Currently, this is a desktop application with a Swing UI. It is not a web applic
 - Backup-assisted recovery from `~/.icsforms/incident.json.bak`.
 - PDF export for each supported form.
 - **Export All PDFs** for individual per-form PDF files.
-- **Export IAP Bundle** for a single merged PDF bundle with a cover page.
+- **Export IAP Bundle** for a single merged PDF bundle of selected forms with a cover page.
 - Validation that blocks export when required fields are missing.
 
 ## Incident phases
@@ -97,3 +101,8 @@ java -jar target/icsforms-client-0.1.1-SNAPSHOT.jar
 - PDF output is structured for field use and printing, not a pixel-perfect facsimile of government forms.
 - Date/time entry currently uses validated text or spinner inputs in `yyyy-MM-dd`, `HH:mm`, or `yyyy-MM-dd HH:mm` formats depending on the form.
 - Development is ongoing; workflows, form coverage, and export behavior will continue to expand.
+
+## Generative AI
+
+This codebase has been developed with the assistance of generative AI tools, particularly GitHub Copilot. 
+
