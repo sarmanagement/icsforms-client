@@ -240,7 +240,7 @@ abstract class AbstractPdfRenderer {
                                                  String iapPage,
                                                  String dateTime) throws IOException {
         drawPreparedByMetadataSection(stream, bold, regular, bodyFontSize, headingFontSize, cellPadding,
-                x, y, width, height, footerBandHeight, 14f,
+                x, y, width, height, footerBandHeight, 14f, 0.20f, 0.58f,
                 heading, name, positionTitle, signature, formLabel, iapPage, dateTime);
     }
 
@@ -263,6 +263,32 @@ abstract class AbstractPdfRenderer {
                                                  String formLabel,
                                                  String iapPage,
                                                  String dateTime) throws IOException {
+        drawPreparedByMetadataSection(stream, bold, regular, bodyFontSize, headingFontSize, cellPadding,
+                x, y, width, height, footerBandHeight, topRowOffset, 0.20f, 0.58f,
+                heading, name, positionTitle, signature, formLabel, iapPage, dateTime);
+    }
+
+    protected void drawPreparedByMetadataSection(PDPageContentStream stream,
+                                                 PDType1Font bold,
+                                                 PDType1Font regular,
+                                                 float bodyFontSize,
+                                                 float headingFontSize,
+                                                 float cellPadding,
+                                                 float x,
+                                                 float y,
+                                                 float width,
+                                                 float height,
+                                                 float footerBandHeight,
+                                                 float topRowOffset,
+                                                 float nameEndRatio,
+                                                 float positionEndRatio,
+                                                 String heading,
+                                                 String name,
+                                                 String positionTitle,
+                                                 String signature,
+                                                 String formLabel,
+                                                 String iapPage,
+                                                 String dateTime) throws IOException {
         stream.addRect(x, y, width, height);
         stream.stroke();
         drawMetadataHeading(stream, bold, headingFontSize, cellPadding, x, y + height, safeText(heading));
@@ -272,9 +298,9 @@ abstract class AbstractPdfRenderer {
         float topRowY = footerTop + topRowOffset;
 
         float nameStart = x + cellPadding;
-        float nameEnd = x + (width * 0.20f);
+        float nameEnd = x + (width * nameEndRatio);
         float positionStart = nameEnd + cellPadding;
-        float positionEnd = x + (width * 0.58f);
+        float positionEnd = x + (width * positionEndRatio);
         float signatureStart = positionEnd + cellPadding;
         float signatureEnd = x + width - cellPadding;
         float minFooterCellWidth = width / 8f;

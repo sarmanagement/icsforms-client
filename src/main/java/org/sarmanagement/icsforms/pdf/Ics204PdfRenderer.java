@@ -235,29 +235,16 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                        float x, float y, float width, float height, float footerHeight, Ics204Form form) throws IOException {
-        drawCell(stream, x, y, width, height);
-        drawHeading(stream, bold, x, y + height, "9. Prepared By");
-
-        float footerBandHeight = Math.min(footerHeight, 20f);
-        float footerTop = y + footerBandHeight;
-        float footerCellWidth = width / 8f;
-        float topRowY = y + height - CELL_PADDING - HEADING_FONT_SIZE - LINE_HEIGHT;
-        float secondRowY = footerTop + 8f;
-        float nameX = x + CELL_PADDING;
-        float positionX = x + (width * 0.28f);
-        float signatureX = x + (width * 0.60f);
-
-        drawInlinePair(stream, bold, regular, nameX, topRowY, "Name", safe(form.getPreparedByName()));
-        drawInlinePair(stream, bold, regular, positionX, topRowY, "Position/Title", safe(form.getPreparedByPositionTitle()));
-        drawInlinePair(stream, bold, regular, signatureX, topRowY, "Signature", safe(form.getPreparedBySignature()));
-
-        drawCell(stream, x, y, footerCellWidth, footerBandHeight);
-        drawCell(stream, x + footerCellWidth, y, footerCellWidth, footerBandHeight);
-        float footerContentY = footerTop - CELL_PADDING - BODY_FONT_SIZE;
-        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerContentY, "ICS 204", "");
-        writeInlineHeadingValue(stream, bold, regular, x + footerCellWidth + CELL_PADDING, footerContentY,
-                "IAP Page", safe(form.getIapPage()));
-        drawInlinePair(stream, bold, regular, signatureX, secondRowY, "Date/Time", formatDateTime(form.getPreparedDateTime()));
+        drawPreparedByMetadataSection(stream, bold, regular,
+                BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING,
+                x, y, width, height, footerHeight, 14f, 0.28f, 0.70f,
+                "9. Prepared By",
+                safe(form.getPreparedByName()),
+                safe(form.getPreparedByPositionTitle()),
+                safe(form.getPreparedBySignature()),
+                "ICS 204",
+                safe(form.getIapPage()),
+                formatDateTime(form.getPreparedDateTime()));
     }
 
     private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
