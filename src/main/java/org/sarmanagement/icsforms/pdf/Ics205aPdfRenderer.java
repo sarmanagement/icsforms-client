@@ -68,12 +68,12 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
                             int pageNumber, int totalPages, LocalDateTime preparedAt,
                             int rowsPerPage) throws IOException {
         IncidentContext context = data.getIncidentContext() == null ? new IncidentContext() : data.getIncidentContext();
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
 
             drawFormHeader(stream, bold, layout, "ICS 205A", "COMMUNICATIONS LIST");
             drawFormFrame(stream, layout);
@@ -96,7 +96,7 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 
             String pageIapNumber = addPageOffset(data.getForm205aIapPage(), pageNumber - 1);
             drawPreparedBySection(stream, bold, regular, layout.x(), y - FOOTER_HEIGHT, layout.width(),
-                    FOOTER_HEIGHT, context, preparedAt, pageIapNumber);
+                    FOOTER_HEIGHT, context, preparedAt, pageNumber, totalPages, pageIapNumber);
         }
     }
 
@@ -176,34 +176,18 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
     private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                        float x, float y, float width, float height,
                                        IncidentContext context, LocalDateTime preparedAt,
+                                       int pageNumber, int totalPages,
                                        String iapPage) throws IOException {
-        drawCell(stream, x, y, width, height);
-        drawHeading(stream, bold, x, y + height, "4. Prepared By");
-
-        float footerTop = y + FOOTER_BAND_HEIGHT;
-        float footerCellWidth = width / 8f;
-        float topRowY = footerTop + 14f;
-        float nameWidth = width * 0.20f;
-        float positionWidth = width * 0.38f;
-        float signatureWidth = width - nameWidth - positionWidth - (CELL_PADDING * 2f);
-        float nameX = x + CELL_PADDING;
-        float positionX = nameX + nameWidth;
-        float signatureX = positionX + positionWidth;
-
-        writeInlineHeadingValueWithinWidth(stream, bold, regular, nameX, topRowY, nameWidth,
-                "Name:", safe(context.getCurrentUser()));
-        writeInlineHeadingValueWithinWidth(stream, bold, regular, positionX, topRowY, positionWidth,
-                "Position/Title:", safe(context.getCurrentUserPositionTitle()));
-        writeInlineHeadingValueWithinWidth(stream, bold, regular, signatureX, topRowY, signatureWidth,
-                "Signature:", "____________________");
-
-        drawCell(stream, x, y, footerCellWidth, FOOTER_BAND_HEIGHT);
-        drawCell(stream, x + footerCellWidth, y, footerCellWidth, FOOTER_BAND_HEIGHT);
-        float footerContentY = footerTop - CELL_PADDING - BODY_FONT_SIZE;
-        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerContentY, "ICS 205A", "");
-        writeInlineHeadingValue(stream, bold, regular, x + footerCellWidth + CELL_PADDING, footerContentY,
-                "IAP Page", safe(iapPage));
-        drawInlinePair(stream, bold, regular, signatureX, footerContentY, "Date/Time", formatDateTime(preparedAt));
+        drawPreparedByMetadataSection(stream, bold, regular,
+                BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING,
+                x, y, width, height, FOOTER_BAND_HEIGHT,
+                "4. Prepared By",
+                safe(context.getCurrentUser()),
+                safe(context.getCurrentUserPositionTitle()),
+                "____________________",
+                formPageLabel("ICS 205A", pageNumber, totalPages),
+                safe(iapPage),
+                formatDateTime(preparedAt));
     }
 
     private void drawSimpleSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -350,7 +334,7 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
         return "";
     }
 
-    private String addPageOffset(String startPage, int offset) {
+    protected String addPageOffset(String startPage, int offset) {
         String normalized = safe(startPage);
         if (normalized.isBlank()) {
             return "";

@@ -4,7 +4,9 @@ import org.apache.pdfbox.multipdf.PDFMergerUtility;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import java.io.IOException;
@@ -20,6 +22,16 @@ import java.util.Map;
  * Coordinates exporting selected or all supported ICS forms to PDF files.
  */
 public class PdfExportService {
+    private static final List<String> IAP_BUNDLE_FORM_ORDER = List.of(
+            "ICS 201",
+            "ICS 202",
+            "ICS 205A",
+            "ICS 207",
+            "ICS 204",
+            "SAR Task Assignment",
+            "ICS 214"
+    );
+
     private final Map<String, PdfFormRenderer> renderers = new LinkedHashMap<>();
 
     /**
@@ -43,12 +55,16 @@ public class PdfExportService {
      * @throws IOException when export fails.
      */
     public Path exportSelected(String formKey, AppData data, Path outputDirectory) throws IOException {
+        return exportSelected(formKey, data, outputDirectory, BlankExportPages.NONE);
+    }
+
+    private Path exportSelected(String formKey, AppData data, Path outputDirectory, BlankExportPages blankExportPages) throws IOException {
         PdfFormRenderer renderer = renderers.get(formKey);
         if (renderer == null) {
             throw new IllegalArgumentException("Unsupported form export: " + formKey);
         }
         Path output = outputDirectory.resolve(fileName(formKey));
-        renderer.render(data, output);
+        renderer.render(exportData(formKey, data, blankExportPages), output);
         return output;
     }
 
@@ -116,13 +132,14 @@ public class PdfExportService {
         List<String> includedFormKeys = (selectedFormKeys == null || selectedFormKeys.isEmpty())
                 ? new ArrayList<>(renderers.keySet())
                 : new ArrayList<>(selectedFormKeys);
+        includedFormKeys = orderForIapBundle(includedFormKeys);
         CoverPageRenderer coverPageRenderer = new CoverPageRenderer();
         Path coverPath = Files.createTempFile(outputDirectory, "cover-page-", ".pdf");
         List<Path> tempFiles = new ArrayList<>();
         try {
             coverPageRenderer.render(data, coverPath);
             tempFiles.add(coverPath);
-            assignIapPageNumbers(data, includedFormKeys, skipIcs201);
+            BlankExportPages blankExportPages = assignIapPageNumbers(data, includedFormKeys, skipIcs201);
             Map<String, Path> parts = new LinkedHashMap<>();
             for (String formKey : includedFormKeys) {
                 if (!renderers.containsKey(formKey)) {
@@ -131,7 +148,7 @@ public class PdfExportService {
                 if (skipIcs201 && "ICS 201".equals(formKey)) {
                     continue;
                 }
-                parts.put(formKey, exportSelected(formKey, data, outputDirectory));
+                parts.put(formKey, exportSelected(formKey, data, outputDirectory, blankExportPages));
             }
             tempFiles.addAll(parts.values());
             String bundleName = iapBundleFileName(data.getIncidentContext());
@@ -175,8 +192,10 @@ public class PdfExportService {
         assignIapPageNumbers(data, null, !ics201HasContent(data.getForm201()));
     }
 
-    static void assignIapPageNumbers(AppData data, List<String> includedFormKeys, boolean skipIcs201) {
+    static BlankExportPages assignIapPageNumbers(AppData data, List<String> includedFormKeys, boolean skipIcs201) {
         int page = 1;
+        String blankSarTaskPage = "";
+        String blankIcs214Page = "";
         java.util.Set<String> included = includedFormKeys == null || includedFormKeys.isEmpty()
                 ? null
                 : new java.util.LinkedHashSet<>(includedFormKeys);
@@ -186,7 +205,8 @@ public class PdfExportService {
         // period and the form was never filled in (situation summary and preparer name both
         // blank — the minimal signals of deliberate use).
         if (!skipIcs201 && includedOrAll(included, "ICS 201")) {
-            data.getForm201().setIapPage(String.valueOf(page++));
+            data.getForm201().setIapPage(String.valueOf(page));
+            page += Ics201PdfRenderer.PAGE_COUNT;
         }
         // ICS 202
         if (includedOrAll(included, "ICS 202")) {
@@ -213,20 +233,102 @@ public class PdfExportService {
         }
         // SAR Task Assignment forms (TAFs)
         if (includedOrAll(included, "SAR Task Assignment")) {
-            for (SarTaskAssignment task : data.getSarTaskAssignments()) {
-                task.setIapPage(String.valueOf(page++));
+            List<SarTaskAssignment> tasks = data.getSarTaskAssignments();
+            if (tasks.isEmpty()) {
+                blankSarTaskPage = String.valueOf(page);
+                page += 2;
+            } else {
+                for (SarTaskAssignment task : tasks) {
+                    task.setIapPage(String.valueOf(page));
+                    page += 2;
+                }
             }
         }
         // ICS 214 activity logs
         if (includedOrAll(included, "ICS 214")) {
-            for (org.sarmanagement.icsforms.model.Ics214Form log : data.getActivityLogs()) {
-                log.setIapPage(String.valueOf(page++));
+            List<Ics214Form> logs = data.getActivityLogs();
+            if (logs.isEmpty()) {
+                blankIcs214Page = String.valueOf(page);
+                page += 1;
+            } else {
+                for (Ics214Form log : logs) {
+                    log.setIapPage(String.valueOf(page));
+                    page += Ics214PdfRenderer.pageCount(log);
+                }
             }
         }
+        return new BlankExportPages(blankSarTaskPage, blankIcs214Page);
+    }
+
+    static List<String> orderForIapBundle(List<String> formKeys) {
+        List<String> ordered = new ArrayList<>();
+        for (String formKey : IAP_BUNDLE_FORM_ORDER) {
+            if (formKeys.contains(formKey)) {
+                ordered.add(formKey);
+            }
+        }
+        for (String formKey : formKeys) {
+            if (!ordered.contains(formKey)) {
+                ordered.add(formKey);
+            }
+        }
+        return ordered;
+    }
+
+    private AppData exportData(String formKey, AppData data, BlankExportPages blankExportPages) {
+        if ("SAR Task Assignment".equals(formKey) && data.getSarTaskAssignments().isEmpty()
+                && !blankExportPages.sarTaskAssignmentStartPage().isBlank()) {
+            AppData exportData = copyAppData(data);
+            SarTaskAssignment blankTask = new SarTaskAssignment();
+            blankTask.setIapPage(blankExportPages.sarTaskAssignmentStartPage());
+            exportData.setSarTaskAssignments(List.of(blankTask));
+            return exportData;
+        }
+        if ("ICS 214".equals(formKey) && data.getActivityLogs().isEmpty()
+                && !blankExportPages.ics214StartPage().isBlank()) {
+            AppData exportData = copyAppData(data);
+            Ics214Form blankLog = new Ics214Form();
+            blankLog.setIapPage(blankExportPages.ics214StartPage());
+            exportData.setActivityLogs(List.of(blankLog));
+            return exportData;
+        }
+        return data;
+    }
+
+    private AppData copyAppData(AppData data) {
+        AppData copy = new AppData();
+        copy.setSchemaVersion(data.getSchemaVersion());
+        copy.setUseSystemTimeZone(data.isUseSystemTimeZone());
+        copy.setConfiguredTimeZoneId(data.getConfiguredTimeZoneId());
+        copy.setIncidentMode(data.getIncidentMode());
+        copy.setIapPhase(data.getIapPhase());
+        copy.setOperationalPeriodHistory(data.getOperationalPeriodHistory());
+        copy.setIncidentContext(data.getIncidentContext());
+        copy.setOrganizationalChart(data.getOrganizationalChart());
+        copy.setForm201(data.getForm201());
+        copy.setForm202(data.getForm202());
+        copy.setForm205aIapPage(data.getForm205aIapPage());
+        copy.setForm207(data.getForm207());
+        copy.setForm204(data.getForm204());
+        copy.setAdditionalForms204(data.getAdditionalForms204());
+        copy.setActivityLogs(data.getActivityLogs());
+        copy.setActivityEventTypes(data.getActivityEventTypes());
+        copy.setSarTaskAssignments(data.getSarTaskAssignments());
+        copy.setClueLogEntries(data.getClueLogEntries());
+        copy.setTCards(data.getTCards());
+        PdfLayoutSettings settings = new PdfLayoutSettings();
+        settings.setPaperSize(data.getPdfLayoutSettings().getPaperSize());
+        settings.setPageMarginPoints(data.getPdfLayoutSettings().getPageMarginPoints());
+        copy.setPdfLayoutSettings(settings);
+        return copy;
     }
 
     private static boolean includedOrAll(java.util.Set<String> included, String formKey) {
         return included == null || included.contains(formKey);
+    }
+
+    private record BlankExportPages(String sarTaskAssignmentStartPage, String ics214StartPage) {
+        private static final BlankExportPages NONE = new BlankExportPages("", "");
     }
 
     /**

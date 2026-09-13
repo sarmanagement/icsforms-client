@@ -62,22 +62,22 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
                 int startIndex = pageIndex * rowsPerPage;
                 int endIndex = Math.min(form.getActivityLog().size(), startIndex + rowsPerPage);
                 boolean isFirstPage = pageIndex == 0;
-                renderPage(document, context, form, eventTypes,
+                renderPage(document, data, context, form, eventTypes,
                         form.getActivityLog().subList(startIndex, endIndex),
                         pageIndex + 1, totalPages, isFirstPage);
             }
         }
     }
 
-    private void renderPage(PDDocument document, IncidentContext context, Ics214Form form,
+    private void renderPage(PDDocument document, AppData data, IncidentContext context, Ics214Form form,
                             List<ActivityEventType> eventTypes, List<ActivityLogEntry> entries,
                             int pageNumber, int totalPages, boolean isFirstPage) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
 
             drawFormHeader(stream, bold, layout, "ICS 214", "ACTIVITY LOG");
             drawFormFrame(stream, layout);
@@ -223,23 +223,16 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                        float x, float y, float width, float height, float footerHeight, Ics214Form form,
                                        int pageNumber, int totalPages) throws IOException {
-        drawCell(stream, x, y, width, height);
-        float footerCellWidth = width / 8f;
-        float topRowY = y + height - CELL_PADDING - HEADING_FONT_SIZE - LINE_HEIGHT;
-        float middleX = x + (width * 0.34f);
-        float rightX = x + (width * 0.68f);
-        float footerContentY = y + footerHeight - CELL_PADDING - BODY_FONT_SIZE;
-
-        drawHeading(stream, bold, x, y + height, "8. Prepared By");
-        drawCell(stream, x, y, footerCellWidth, footerHeight);
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, topRowY, "Name", safe(form.getPreparedByName()));
-        drawInlinePair(stream, bold, regular, middleX, topRowY, "Position/Title", safe(form.getPreparedByPositionTitle()));
-        drawInlinePair(stream, bold, regular, rightX, topRowY, "Signature", safe(form.getPreparedBySignature()));
-        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerContentY, "ICS 214", "");
-        drawInlinePair(stream, bold, regular, x + footerCellWidth + CELL_PADDING, footerContentY, "Date/Time", formatDateTime(form.getPreparedDateTime()));
-        String iapPageLabel = form.getIapPage().isBlank() ? "" : "IAP p." + form.getIapPage() + "  ";
-        writeInlineHeadingValue(stream, bold, regular, x + width - 118f - 60f, footerContentY, iapPageLabel, "");
-        writeInlineHeadingValue(stream, bold, regular, x + width - 118f, footerContentY, "Page", pageNumber + " of " + totalPages);
+        drawPreparedByMetadataSection(stream, bold, regular,
+                BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING,
+                x, y, width, height, footerHeight,
+                "8. Prepared By",
+                safe(form.getPreparedByName()),
+                safe(form.getPreparedByPositionTitle()),
+                safe(form.getPreparedBySignature()),
+                formPageLabel("ICS 214", pageNumber, totalPages),
+                addPageOffset(form.getIapPage(), pageNumber - 1),
+                formatDateTime(form.getPreparedDateTime()));
     }
 
     private void drawSimpleSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -253,6 +246,12 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         float sectionHeight = expandRowToFill(706f, 3, 60f, 62f, 92f, 320f, 84f)[3];
         float tableHeight = sectionHeight - 18f - 24f;
         return Math.max(1, (int) (tableHeight / 36f));
+    }
+
+    static int pageCount(Ics214Form form) {
+        int rowsPerPage = new Ics214PdfRenderer().activityRowsPerPage();
+        int entryCount = form == null ? 0 : form.getActivityLog().size();
+        return Math.max(1, (int) Math.ceil(Math.max(1, entryCount) / (double) rowsPerPage));
     }
 
     private String activityText(ActivityLogEntry entry, List<ActivityEventType> eventTypes) {

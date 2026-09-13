@@ -67,12 +67,12 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             }
         }
 
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
 
             drawFormHeader(stream, bold, layout, "ICS 204", "ASSIGNMENT LIST");
             drawFormFrame(stream, layout);
@@ -81,7 +81,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
             float gridHeight = layout.height();
             float pageWidth = layout.width();
 
-            float[] rows = expandRowToFill(gridHeight, 3, 60f, 64f, 282f, 108f, 60f, 84f, 72f);
+            float[] rows = expandRowToFill(gridHeight, 3, 60f, 64f, 282f, 84f, 60f, 84f, 72f);
             float row1 = rows[0];
             float row2 = rows[1];
             float row5 = rows[2];
@@ -130,17 +130,17 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
         }
 
         for (OverflowSection overflow : overflowSections) {
-            renderOverflowPage(document, overflow);
+            renderOverflowPage(document, data, overflow);
         }
     }
 
-    private void renderOverflowPage(PDDocument document, OverflowSection overflow) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+    private void renderOverflowPage(PDDocument document, AppData data, OverflowSection overflow) throws IOException {
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             drawFormHeader(stream, bold, layout, "ICS 204", overflow.heading);
             drawFormFrame(stream, layout);
             drawTextBlock(stream, bold, regular, layout.x(), layout.y(), layout.width(), layout.height(), overflow.heading, overflow.lines);
@@ -235,20 +235,16 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
     private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                        float x, float y, float width, float height, float footerHeight, Ics204Form form) throws IOException {
-        drawCell(stream, x, y, width, height);
-        float footerCellWidth = width / 8f;
-        float footerContentY = y + footerHeight - CELL_PADDING - BODY_FONT_SIZE;
-        float topRowY = y + height - CELL_PADDING - HEADING_FONT_SIZE - LINE_HEIGHT;
-        float rightX = x + (width * 0.45f);
-
-        drawHeading(stream, bold, x, y + height, "9. Prepared By");
-        drawCell(stream, x, y, footerCellWidth, footerHeight);
-        drawCell(stream, x + footerCellWidth, y, footerCellWidth, footerHeight);
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, topRowY, "Name", safe(form.getPreparedByName()));
-        drawInlinePair(stream, bold, regular, rightX, topRowY, "Position/Title", safe(form.getPreparedByPositionTitle()));
-        writeInlineHeadingValue(stream, bold, regular, x + CELL_PADDING, footerContentY, "ICS 204", "");
-        writeInlineHeadingValue(stream, bold, regular, x + footerCellWidth + CELL_PADDING, footerContentY, "IAP Page", safe(form.getIapPage()));
-        drawInlinePair(stream, bold, regular, rightX, footerContentY, "Date/Time", formatDateTime(form.getPreparedDateTime()));
+        drawPreparedByMetadataSection(stream, bold, regular,
+                BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING,
+                x, y, width, height, footerHeight, 14f, 0.28f, 0.70f, 0.58f,
+                "9. Prepared By",
+                safe(form.getPreparedByName()),
+                safe(form.getPreparedByPositionTitle()),
+                safe(form.getPreparedBySignature()),
+                "ICS 204",
+                safe(form.getIapPage()),
+                formatDateTime(form.getPreparedDateTime()));
     }
 
     private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,

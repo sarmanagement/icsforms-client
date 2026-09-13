@@ -7,6 +7,7 @@ import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IapPhase;
 import org.sarmanagement.icsforms.model.IncidentMode;
+import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
@@ -26,9 +27,14 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JRadioButton;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
+import javax.swing.JComboBox;
+import javax.swing.JFormattedTextField;
+import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
@@ -314,6 +320,10 @@ public class MainFrame extends JFrame {
         manageEventTypesItem.setMnemonic(KeyEvent.VK_E);
         manageEventTypesItem.addActionListener(event -> manageEventTypes());
         configMenu.add(manageEventTypesItem);
+        JMenuItem pdfExportSettingsItem = new JMenuItem("PDF Export…");
+        pdfExportSettingsItem.setMnemonic(KeyEvent.VK_P);
+        pdfExportSettingsItem.addActionListener(event -> openPdfExportSettingsDialog());
+        configMenu.add(pdfExportSettingsItem);
 
         JMenu modeMenu = new JMenu("Incident Mode");
         modeMenu.setMnemonic(KeyEvent.VK_M);
@@ -434,19 +444,10 @@ public class MainFrame extends JFrame {
         selectNone.addActionListener(e -> selectors.values().forEach(c -> c.setSelected(false)));
         controls.add(selectAll);
         controls.add(selectNone);
-        javax.swing.JRadioButton individual = new javax.swing.JRadioButton("Export selected forms as individual PDFs", true);
-        javax.swing.JRadioButton combined = new javax.swing.JRadioButton("Export selected forms as combined IAP PDF");
-        javax.swing.ButtonGroup modeGroup = new javax.swing.ButtonGroup();
-        modeGroup.add(individual);
-        modeGroup.add(combined);
-        JPanel modePanel = new JPanel();
-        modePanel.setOpaque(false);
-        modePanel.setLayout(new javax.swing.BoxLayout(modePanel, javax.swing.BoxLayout.Y_AXIS));
-        modePanel.add(individual);
-        modePanel.add(combined);
+        ExportModeControls exportModeControls = createExportModeControls();
         UiSupport.addRow(form, 0, "Forms", new JScrollPane(checksPanel));
         UiSupport.addRow(form, 1, "", controls);
-        UiSupport.addRow(form, 2, "Output", modePanel);
+        UiSupport.addRow(form, 2, "Output", exportModeControls.panel());
         JScrollPane pane = new JScrollPane(form);
         pane.setBorder(BorderFactory.createEmptyBorder());
         if (!UiSupport.showResizableConfirmDialog(this, "Export forms as PDF",
@@ -470,7 +471,7 @@ public class MainFrame extends JFrame {
             }
             pushToModel(source);
             try {
-                if (combined.isSelected()) {
+                if (exportModeControls.combined().isSelected()) {
                     Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source);
                     JOptionPane.showMessageDialog(this, "Exported IAP bundle to\n" + bundlePath,
                             "Export complete", JOptionPane.INFORMATION_MESSAGE);
@@ -485,6 +486,28 @@ public class MainFrame extends JFrame {
         });
     }
 
+    private void openPdfExportSettingsDialog() {
+        AppData data = controller.getData();
+        PdfLayoutSettings settings = data.getPdfLayoutSettings();
+        JPanel form = UiSupport.formPanel();
+        JComboBox<PdfLayoutSettings.PaperSize> paperSize = new JComboBox<>(PdfLayoutSettings.PaperSize.values());
+        paperSize.setSelectedItem(settings.getPaperSize());
+        JSpinner marginInches = new JSpinner(new SpinnerNumberModel(pointsToInches(settings.getPageMarginPoints()),
+                0.0d, 5.0d, 0.25d));
+        JFormattedTextField marginField = ((JSpinner.NumberEditor) marginInches.getEditor()).getTextField();
+        marginField.setColumns(4);
+        UiSupport.addRow(form, 0, "Paper size", paperSize);
+        UiSupport.addRow(form, 1, "Page margin (in.)", marginInches);
+        if (!UiSupport.showResizableConfirmDialog(this, "PDF Export", form, new Dimension(380, 180))) {
+            return;
+        }
+        applyPdfLayoutSettings(data,
+                (PdfLayoutSettings.PaperSize) paperSize.getSelectedItem(),
+                ((Number) marginInches.getValue()).doubleValue());
+        controller.markDirty();
+        refreshStatus();
+    }
+
     static String exportFormDisplayLabel(String formKey) {
         return switch (formKey) {
             case "ICS 201" -> "ICS 201 – Incident Briefing";
@@ -497,6 +520,33 @@ public class MainFrame extends JFrame {
             case "Clue Log" -> "Clue Log";
             default -> formKey;
         };
+    }
+
+    static ExportModeControls createExportModeControls() {
+        JRadioButton individual = new JRadioButton("Export selected forms as individual PDFs");
+        JRadioButton combined = new JRadioButton("Export selected forms as combined IAP PDF", true);
+        ButtonGroup modeGroup = new ButtonGroup();
+        modeGroup.add(individual);
+        modeGroup.add(combined);
+        JPanel modePanel = new JPanel();
+        modePanel.setOpaque(false);
+        modePanel.setLayout(new javax.swing.BoxLayout(modePanel, javax.swing.BoxLayout.Y_AXIS));
+        modePanel.add(combined);
+        modePanel.add(individual);
+        return new ExportModeControls(individual, combined, modePanel);
+    }
+
+    static void applyPdfLayoutSettings(AppData data, PdfLayoutSettings.PaperSize paperSize, double marginInches) {
+        PdfLayoutSettings settings = data.getPdfLayoutSettings();
+        settings.setPaperSize(paperSize);
+        settings.setPageMarginPoints((float) (Math.max(0d, marginInches) * 72d));
+    }
+
+    static double pointsToInches(float points) {
+        return Math.round((Math.max(0f, points) / 72d) * 100d) / 100d;
+    }
+
+    record ExportModeControls(JRadioButton individual, JRadioButton combined, JPanel panel) {
     }
 
     /**

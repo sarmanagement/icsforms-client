@@ -1,9 +1,12 @@
 package org.sarmanagement.icsforms.pdf;
 
 import org.junit.jupiter.api.Test;
+import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics201Form;
+import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IapPhase;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 
@@ -83,9 +86,9 @@ class PdfExportServiceTest {
         PdfExportService.assignIapPageNumbers(data);
         assertEquals("1", data.getForm201().getIapPage(),
                 "Completed ICS 201 must be assigned page 1 even in DURING_OP phase");
-        assertEquals("2", data.getForm202().getIapPage(),
+        assertEquals("5", data.getForm202().getIapPage(),
                 "ICS 202 should follow immediately after ICS 201");
-        assertEquals("3", data.getForm205aIapPage(),
+        assertEquals("6", data.getForm205aIapPage(),
                 "ICS 205A should follow immediately after ICS 202");
     }
 
@@ -96,6 +99,7 @@ class PdfExportServiceTest {
         data.getForm201().setPreparedByName("IC Name");
         PdfExportService.assignIapPageNumbers(data);
         assertEquals("1", data.getForm201().getIapPage());
+        assertEquals("5", data.getForm202().getIapPage());
     }
 
     @Test
@@ -113,8 +117,8 @@ class PdfExportServiceTest {
 
         PdfExportService.assignIapPageNumbers(data);
 
-        assertEquals("3", data.getForm205aIapPage());
-        assertEquals("5", data.getForm207().getIapPage());
+        assertEquals("6", data.getForm205aIapPage());
+        assertEquals("8", data.getForm207().getIapPage());
     }
 
     @Test
@@ -126,5 +130,51 @@ class PdfExportServiceTest {
         assertEquals("", data.getForm205aIapPage());
         assertEquals("1", data.getForm202().getIapPage());
         assertEquals("2", data.getForm207().getIapPage());
+    }
+
+    @Test
+    void assignIapPageNumbers_offsetsForMultipageTaskAndActivityForms() {
+        AppData data = new AppData();
+        data.getForm201().setPreparedByName("IC Name");
+
+        SarTaskAssignment task = new SarTaskAssignment();
+        task.setAssignmentId("TASK-1");
+        data.getSarTaskAssignments().add(task);
+
+        Ics214Form firstLog = new Ics214Form();
+        for (int i = 0; i < 20; i++) {
+            ActivityLogEntry entry = new ActivityLogEntry();
+            entry.setNotableActivity("Entry " + i);
+            firstLog.getActivityLog().add(entry);
+        }
+        Ics214Form secondLog = new Ics214Form();
+        data.getActivityLogs().add(firstLog);
+        data.getActivityLogs().add(secondLog);
+
+        PdfExportService.assignIapPageNumbers(data, List.of("ICS 201", "SAR Task Assignment", "ICS 214"), false);
+
+        assertEquals("1", data.getForm201().getIapPage());
+        assertEquals("5", task.getIapPage());
+        assertEquals("7", firstLog.getIapPage());
+        assertEquals("9", secondLog.getIapPage());
+    }
+
+    @Test
+    void assignIapPageNumbersCountsBlankTaskAndActivityFormsWithoutMutatingData() {
+        AppData data = new AppData();
+
+        PdfExportService.assignIapPageNumbers(data, List.of("SAR Task Assignment", "ICS 214"), true);
+
+        assertTrue(data.getSarTaskAssignments().isEmpty());
+        assertTrue(data.getActivityLogs().isEmpty());
+    }
+
+    @Test
+    void orderForIapBundlePlacesSarTaskAssignmentBeforeIcs214() {
+        List<String> ordered = PdfExportService.orderForIapBundle(
+                List.of("ICS 201", "ICS 202", "ICS 205A", "ICS 207", "ICS 204", "ICS 214", "SAR Task Assignment"));
+
+        assertEquals(List.of("ICS 201", "ICS 202", "ICS 205A", "ICS 207", "ICS 204", "SAR Task Assignment", "ICS 214"),
+                ordered);
     }
 }

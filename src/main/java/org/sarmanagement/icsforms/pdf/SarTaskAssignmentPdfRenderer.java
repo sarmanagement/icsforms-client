@@ -47,20 +47,20 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             List<SarTaskAssignment> tasks = data.getSarTaskAssignments().isEmpty()
                     ? List.of(new SarTaskAssignment()) : data.getSarTaskAssignments();
             for (SarTaskAssignment task : tasks) {
-                renderAssignmentPage(document, data.getIncidentContext(), task);
-                renderDebriefPage(document, task, data.getClueLogEntries());
+                renderAssignmentPage(document, data, data.getIncidentContext(), task);
+                renderDebriefPage(document, data, task, data.getClueLogEntries());
             }
             document.save(outputFile.toFile());
         }
     }
 
-    private void renderAssignmentPage(PDDocument document, IncidentContext context, SarTaskAssignment task) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+    private void renderAssignmentPage(PDDocument document, AppData data, IncidentContext context, SarTaskAssignment task) throws IOException {
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             float pageWidth = layout.width();
             float formHeight = layout.height();
 
@@ -128,19 +128,20 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
             y -= row7;
 
             drawPreparedBySection(stream, bold, regular, layout.x(), y - row8, pageWidth, row8,
-                    "11. Prepared by", task.getPreparedByName(), task.getPreparedByPositionTitle(), task.getPreparedDateTime(),
+                    "11. Prepared by", task.getPreparedByName(), task.getPreparedByPositionTitle(),
+                    task.getPreparedDateTime(),
                     "SAR Task Assignment Form - Page 1 of 2"
-                    + (task.getIapPage().isBlank() ? "" : " | IAP Page " + task.getIapPage()));
+                            + (task.getIapPage().isBlank() ? "" : " | IAP Page " + task.getIapPage()));
         }
     }
 
-    private void renderDebriefPage(PDDocument document, SarTaskAssignment task, List<ClueLogEntry> clueLogEntries) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+    private void renderDebriefPage(PDDocument document, AppData data, SarTaskAssignment task, List<ClueLogEntry> clueLogEntries) throws IOException {
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             float pageWidth = layout.width();
             float formHeight = layout.height();
 
@@ -185,7 +186,8 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
             drawPreparedBySection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5,
                     "18. Prepared by", task.getDebriefPreparedByName(), task.getDebriefPreparedByPositionTitle(),
-                    task.getDebriefPreparedDateTime(), "SAR Task Assignment Form - Page 2 of 2");
+                    task.getDebriefPreparedDateTime(),
+                    "SAR Task Assignment Form - Page 2 of 2");
         }
     }
 
@@ -339,10 +341,9 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
         drawInlinePair(stream, bold, regular, x + CELL_PADDING, contentY, "Name", safe(name));
         drawInlinePair(stream, bold, regular, x + (width * 0.42f), contentY, "Position/Title", safe(title));
         drawInlinePair(stream, bold, regular, x + (width * 0.74f), contentY, "Date/Time", formatDateTime(dateTime));
-        // Split footerLabel on " | " to allow an IAP-page portion on the right side.
         int sepIdx = footerLabel.indexOf(" | ");
-        String leftLabel  = sepIdx >= 0 ? footerLabel.substring(0, sepIdx)   : footerLabel;
-        String rightLabel = sepIdx >= 0 ? footerLabel.substring(sepIdx + 3)  : "";
+        String leftLabel = sepIdx >= 0 ? footerLabel.substring(0, sepIdx) : footerLabel;
+        String rightLabel = sepIdx >= 0 ? footerLabel.substring(sepIdx + 3) : "";
         stream.beginText();
         stream.setFont(regular, 8f);
         stream.newLineAtOffset(x + CELL_PADDING, y + 3f);

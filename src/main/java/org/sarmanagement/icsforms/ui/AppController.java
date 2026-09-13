@@ -1703,6 +1703,7 @@ public class AppController {
         if (data.getTCards() == null) {
             data.setTCards(new ArrayList<>());
         }
+        data.getPdfLayoutSettings();
         if (data.getIncidentMode() == null) {
             data.setIncidentMode(org.sarmanagement.icsforms.model.IncidentMode.SAR);
         }

@@ -38,7 +38,7 @@ public class ClueLogPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
         try (PDDocument document = new PDDocument()) {
             AppData safe = data == null ? new AppData() : data;
             List<List<String>> blocks = buildBlocks(safe);
-            writeDocument(document, "SAR", "CLUE LOG", blocks);
+            writeDocument(document, safe, "SAR", "CLUE LOG", blocks);
             document.save(outputFile.toFile());
         }
     }

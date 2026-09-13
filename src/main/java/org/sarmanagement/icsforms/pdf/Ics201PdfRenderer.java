@@ -26,6 +26,7 @@ import java.util.List;
  * Structured PDF renderer for the Incident Briefing (ICS 201) form.
  */
 public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRenderer {
+    static final int PAGE_COUNT = 4;
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -55,12 +56,12 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private void renderPageOne(PDDocument document, AppData data, Ics201Form form) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             drawFormHeader(stream, bold, layout, "ICS 201", "INCIDENT BRIEFING");
             drawFormFrame(stream, layout);
 
@@ -83,12 +84,12 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private void renderPageTwo(PDDocument document, AppData data, Ics201Form form) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             drawFormHeader(stream, bold, layout, "ICS 201", "INCIDENT BRIEFING");
             drawFormFrame(stream, layout);
 
@@ -110,12 +111,12 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private void renderPageThree(PDDocument document, AppData data, Ics201Form form) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             drawFormHeader(stream, bold, layout, "ICS 201", "INCIDENT BRIEFING");
             drawFormFrame(stream, layout);
 
@@ -134,12 +135,12 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     }
 
     private void renderPageFour(PDDocument document, AppData data, Ics201Form form) throws IOException {
-        PDPage page = new PDPage(PDRectangle.LETTER);
+        PDPage page = newPage(data);
         document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
             PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-            FormLayout layout = formLayout(page);
+            FormLayout layout = formLayout(page, data);
             drawFormHeader(stream, bold, layout, "ICS 201", "INCIDENT BRIEFING");
             drawFormFrame(stream, layout);
 
@@ -279,23 +280,16 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
     private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                        float x, float y, float width, float height,
                                        Ics201Form form, int pageNumber) throws IOException {
-        float footerH = 18f;
-        float footerCellW = width / 4f;
-
-        drawCell(stream, x, y, width, height);
-        drawHeading(stream, bold, x, y + height, "6. Prepared by");
-        float firstLineY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 16f;
-        float secondLineY = firstLineY - 18f;
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, firstLineY, "Name", safe(form.getPreparedByName()));
-        drawInlinePair(stream, bold, regular, x + (width * 0.45f), firstLineY, "Position/Title", safe(form.getPreparedByPositionTitle()));
-        drawInlinePair(stream, bold, regular, x + CELL_PADDING, secondLineY, "Date/Time", formatDateTime(form.getPreparedDateTime()));
-        drawInlinePair(stream, bold, regular, x + (width * 0.45f), secondLineY, "Signature", safe(form.getPreparedBySignature()));
-        // Footer band boxes: ICS 201 page indicator | IAP page — matching ICS 202 section 8 style
-        drawCell(stream, x, y, footerCellW, footerH);
-        drawCell(stream, x + footerCellW, y, footerCellW, footerH);
-        float footerTextY = y + footerH - CELL_PADDING - BODY_FONT_SIZE;
-        writeCellText(stream, bold, x + CELL_PADDING, footerTextY, "ICS 201, Page " + pageNumber + " of 4");
-        writeCellText(stream, bold, x + footerCellW + CELL_PADDING, footerTextY, "IAP Page: " + safe(form.getIapPage()));
+        drawPreparedByMetadataSection(stream, bold, regular,
+                BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING,
+                x, y, width, height, 24f,
+                "6. Prepared By",
+                safe(form.getPreparedByName()),
+                safe(form.getPreparedByPositionTitle()),
+                safe(form.getPreparedBySignature()),
+                formPageLabel("ICS 201", pageNumber, PAGE_COUNT),
+                addPageOffset(form.getIapPage(), pageNumber - 1),
+                formatDateTime(form.getPreparedDateTime()));
     }
 
     private void drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,

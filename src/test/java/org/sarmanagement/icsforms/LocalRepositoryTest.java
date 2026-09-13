@@ -2,13 +2,16 @@ package org.sarmanagement.icsforms;
 
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
+import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.PodFactorRating;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
@@ -17,6 +20,9 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics201PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics205aPdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics207PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics214PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
 import org.sarmanagement.icsforms.ui.AppController;
@@ -111,6 +117,22 @@ class LocalRepositoryTest {
 
         assertEquals(1, loaded.getSarTaskAssignments().size());
         assertEquals("ATV / Medical kit", loaded.getSarTaskAssignments().get(0).getSpecialEquipment());
+    }
+
+    @Test
+    void roundTripPersistsPdfLayoutSettings() throws Exception {
+        Path tempDir = Files.createTempDirectory("icsforms");
+        Path tempFile = tempDir.resolve("incident.json");
+        LocalRepository repository = new LocalRepository(tempFile);
+        AppData input = sampleData();
+        input.getPdfLayoutSettings().setPaperSize(PdfLayoutSettings.PaperSize.A4);
+        input.getPdfLayoutSettings().setPageMarginPoints(27f);
+
+        repository.save(input);
+        AppData loaded = repository.loadOrDefault();
+
+        assertEquals(PdfLayoutSettings.PaperSize.A4, loaded.getPdfLayoutSettings().getPaperSize());
+        assertEquals(27f, loaded.getPdfLayoutSettings().getPageMarginPoints(), 0.01f);
     }
 
     /**
@@ -286,7 +308,7 @@ class LocalRepositoryTest {
             assertTrue(text.contains("Contact"));
             assertTrue(text.contains("Reporting Location"));
             assertTrue(text.contains("9. Prepared By"));
-            assertTrue(text.contains("IAP Page: 3"));
+            assertTrue(text.contains("IAP Page 3") || text.contains("IAP Page: 3"));
             assertTrue(hasRectangle(pdf.getPage(0), 36f, 36f, 540f, 706f));
         }
 
@@ -344,12 +366,53 @@ class LocalRepositoryTest {
             String firstPageText = stripper.getText(merged);
             assertTrue(firstPageText.contains("INCIDENT ACTION PLAN"));
             assertTrue(firstPageText.contains("Operational Period:"));
+            assertTrue(firstPageText.contains("Prepared with:"));
         }
 
         // Individual component files should have been cleaned up.
         assertFalse(Files.exists(outputDir.resolve("ics-201.pdf")), "Component PDF should be removed after bundle");
         assertFalse(Files.exists(outputDir.resolve("ics-202.pdf")), "Component PDF should be removed after bundle");
         assertFalse(Files.exists(outputDir.resolve("ics-204.pdf")), "Component PDF should be removed after bundle");
+    }
+
+    @Test
+    void iapBundleExportKeepsActivityLogAfterSarTaskAssignmentPages() throws Exception {
+        AppData data = sampleData();
+        Ics214Form activityLog = new Ics214Form();
+        activityLog.setPreparedByName("Planner");
+        activityLog.setPreparedByPositionTitle("Planning Section Chief");
+        activityLog.setPreparedBySignature("Planner");
+        activityLog.setPreparedDateTime(LocalDateTime.parse("2026-01-01T04:00:00"));
+        ActivityLogEntry entry = new ActivityLogEntry();
+        entry.setTimestamp(LocalDateTime.parse("2026-01-01T04:05:00"));
+        entry.setNotableActivity("Activity log entry");
+        activityLog.getActivityLog().add(entry);
+        data.getActivityLogs().add(activityLog);
+        PdfExportService exportService = new PdfExportService(
+                new Ics201PdfRenderer(),
+                new Ics202PdfRenderer(),
+                new Ics205aPdfRenderer(),
+                new Ics207PdfRenderer(),
+                new Ics204PdfRenderer(),
+                new Ics214PdfRenderer(),
+                new SarTaskAssignmentPdfRenderer());
+        Path outputDir = Files.createTempDirectory("icsforms-iap-order");
+
+        Path bundlePath = exportService.exportIapBundle(data, outputDir);
+
+        try (PDDocument merged = Loader.loadPDF(bundlePath.toFile())) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setStartPage(10);
+            stripper.setEndPage(10);
+            String sarPageText = stripper.getText(merged).replaceAll("\\s+", " ");
+            stripper.setStartPage(12);
+            stripper.setEndPage(12);
+            String ics214Text = stripper.getText(merged).replaceAll("\\s+", " ");
+
+            assertTrue(sarPageText.contains("SAR TASK ASSIGNMENT FORM"));
+            assertTrue(ics214Text.contains("ICS 214 ACTIVITY LOG"));
+            assertTrue(ics214Text.contains("IAP Page 11") || ics214Text.contains("IAP Page: 11"));
+        }
     }
 
 

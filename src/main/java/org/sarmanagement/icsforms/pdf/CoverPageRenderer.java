@@ -26,6 +26,15 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
     private static final float LABEL_FONT_SIZE = 12f;
     private static final float VALUE_FONT_SIZE = 12f;
     private static final float LINE_SPACING = 28f;
+    private final ApplicationMetadata applicationMetadata;
+
+    public CoverPageRenderer() {
+        this(ApplicationMetadata.detect());
+    }
+
+    CoverPageRenderer(ApplicationMetadata applicationMetadata) {
+        this.applicationMetadata = applicationMetadata;
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -38,7 +47,7 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
     public void render(AppData data, Path outputFile) throws IOException {
         Files.createDirectories(outputFile.getParent());
         try (PDDocument document = new PDDocument()) {
-            PDPage page = new PDPage(PDRectangle.LETTER);
+            PDPage page = newPage(data);
             document.addPage(page);
             try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
                 PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
@@ -48,6 +57,7 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
                 String incidentName = context == null ? "" : safe(context.getIncidentName());
                 String operationalPeriod = formatOperationalPeriod(context);
                 String datePrepared = DATE_FORMATTER.format(LocalDate.now());
+                String preparedWith = applicationMetadata.preparedWithValue();
 
                 float pageWidth = page.getMediaBox().getWidth();
                 float pageHeight = page.getMediaBox().getHeight();
@@ -55,10 +65,11 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
                 float[] lineWidths = new float[]{
                         pairWidth(bold, regular, "Incident Name:", incidentName),
                         pairWidth(bold, regular, "Operational Period:", operationalPeriod),
-                        pairWidth(bold, regular, "Date Prepared:", datePrepared)
+                        pairWidth(bold, regular, "Date Prepared:", datePrepared),
+                        pairWidth(bold, regular, "Prepared with:", preparedWith)
                 };
-                float maxLineWidth = Math.max(lineWidths[0], Math.max(lineWidths[1], lineWidths[2]));
-                float blockHeight = TITLE_FONT_SIZE + 20f + (LINE_SPACING * 3f);
+                float maxLineWidth = Math.max(Math.max(lineWidths[0], lineWidths[1]), Math.max(lineWidths[2], lineWidths[3]));
+                float blockHeight = TITLE_FONT_SIZE + 20f + (LINE_SPACING * 4f);
                 float centerX = pageWidth / 2f;
                 float startY = (pageHeight + blockHeight) / 2f;
                 float lineStartX = centerX - (maxLineWidth / 2f);
@@ -67,6 +78,7 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
                 drawInlinePair(stream, bold, regular, lineStartX, startY - 40f, "Incident Name:", incidentName);
                 drawInlinePair(stream, bold, regular, lineStartX, startY - 40f - LINE_SPACING, "Operational Period:", operationalPeriod);
                 drawInlinePair(stream, bold, regular, lineStartX, startY - 40f - (LINE_SPACING * 2f), "Date Prepared:", datePrepared);
+                drawInlinePair(stream, bold, regular, lineStartX, startY - 40f - (LINE_SPACING * 3f), "Prepared with:", preparedWith);
             }
             document.save(outputFile.toFile());
         }

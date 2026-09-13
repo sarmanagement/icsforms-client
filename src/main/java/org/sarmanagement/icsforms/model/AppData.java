@@ -64,6 +64,7 @@ public class AppData {
     private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
     private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
     private List<TCard> tCards = new ArrayList<>();
+    private PdfLayoutSettings pdfLayoutSettings = new PdfLayoutSettings();
 
     /**
      * Creates an empty incident document.
@@ -456,5 +457,16 @@ public class AppData {
      */
     public void setTCards(List<TCard> tCards) {
         this.tCards = tCards == null ? new ArrayList<>() : tCards;
+    }
+
+    public PdfLayoutSettings getPdfLayoutSettings() {
+        if (pdfLayoutSettings == null) {
+            pdfLayoutSettings = new PdfLayoutSettings();
+        }
+        return pdfLayoutSettings;
+    }
+
+    public void setPdfLayoutSettings(PdfLayoutSettings pdfLayoutSettings) {
+        this.pdfLayoutSettings = pdfLayoutSettings == null ? new PdfLayoutSettings() : pdfLayoutSettings;
     }
 }
