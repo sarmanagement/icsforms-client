@@ -6,6 +6,7 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.ClueLogPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics201PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics205aPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics207PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics214PdfRenderer;
@@ -78,6 +79,7 @@ public final class App {
             PdfExportService exportService = new PdfExportService(
                     new Ics201PdfRenderer(),
                     new Ics202PdfRenderer(),
+                    new Ics205aPdfRenderer(),
                     new Ics207PdfRenderer(),
                     new Ics204PdfRenderer(),
                     new Ics214PdfRenderer(),
