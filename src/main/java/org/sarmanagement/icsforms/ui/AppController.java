@@ -382,6 +382,7 @@ public class AppController {
     public java.util.Map<String, Path> exportAll(Path outputDirectory, LinkSource source) throws IOException {
         synchronizeLinkedFields(source);
         syncSarTasks();
+        syncTCards();
         return exportService.exportAll(data, outputDirectory);
     }
 
@@ -396,6 +397,7 @@ public class AppController {
     public Path exportIapBundle(Path outputDirectory, LinkSource source) throws IOException {
         synchronizeLinkedFields(source);
         syncSarTasks();
+        syncTCards();
         return exportService.exportIapBundle(data, outputDirectory);
     }
 
@@ -406,6 +408,7 @@ public class AppController {
     public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory, LinkSource source) throws IOException {
         synchronizeLinkedFields(source);
         syncSarTasks();
+        syncTCards();
         java.util.Map<String, Path> exported = new LinkedHashMap<>();
         if (formKeys == null) {
             return exported;
@@ -421,6 +424,7 @@ public class AppController {
     public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source) throws IOException {
         synchronizeLinkedFields(source);
         syncSarTasks();
+        syncTCards();
         return exportService.exportIapBundle(data, outputDirectory, formKeys);
     }
 

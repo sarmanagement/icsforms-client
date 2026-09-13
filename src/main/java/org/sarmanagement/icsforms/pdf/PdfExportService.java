@@ -122,7 +122,7 @@ public class PdfExportService {
         try {
             coverPageRenderer.render(data, coverPath);
             tempFiles.add(coverPath);
-            assignIapPageNumbers(data);
+            assignIapPageNumbers(data, includedFormKeys, skipIcs201);
             Map<String, Path> parts = new LinkedHashMap<>();
             for (String formKey : includedFormKeys) {
                 if (!renderers.containsKey(formKey)) {
@@ -172,32 +172,61 @@ public class PdfExportService {
      * @param data incident document.
      */
     static void assignIapPageNumbers(AppData data) {
+        assignIapPageNumbers(data, null, !ics201HasContent(data.getForm201()));
+    }
+
+    static void assignIapPageNumbers(AppData data, List<String> includedFormKeys, boolean skipIcs201) {
         int page = 1;
+        java.util.Set<String> included = includedFormKeys == null || includedFormKeys.isEmpty()
+                ? null
+                : new java.util.LinkedHashSet<>(includedFormKeys);
+        data.setForm205aIapPage("");
         // ICS 201 is included whenever it was actually completed during an initial response.
         // It is omitted only when the incident was created directly as a full operational
         // period and the form was never filled in (situation summary and preparer name both
         // blank — the minimal signals of deliberate use).
-        if (ics201HasContent(data.getForm201())) {
+        if (!skipIcs201 && includedOrAll(included, "ICS 201")) {
             data.getForm201().setIapPage(String.valueOf(page++));
         }
         // ICS 202
-        data.getForm202().setIapPage(String.valueOf(page++));
+        if (includedOrAll(included, "ICS 202")) {
+            data.getForm202().setIapPage(String.valueOf(page++));
+        }
+        // ICS 205A
+        if (includedOrAll(included, "ICS 205A")) {
+            data.setForm205aIapPage(String.valueOf(page));
+            page += Ics205aPdfRenderer.pageCount(data);
+        }
         // ICS 207
-        data.getForm207().setIapPage(String.valueOf(page++));
+        if (includedOrAll(included, "ICS 207")) {
+            data.getForm207().setIapPage(String.valueOf(page++));
+        }
         // ICS 204 — primary form
-        data.getForm204().setIapPage(String.valueOf(page++));
+        if (includedOrAll(included, "ICS 204")) {
+            data.getForm204().setIapPage(String.valueOf(page++));
+        }
         // ICS 204 — additional forms
-        for (Ics204Form form : data.getAdditionalForms204()) {
-            form.setIapPage(String.valueOf(page++));
+        if (includedOrAll(included, "ICS 204")) {
+            for (Ics204Form form : data.getAdditionalForms204()) {
+                form.setIapPage(String.valueOf(page++));
+            }
         }
         // SAR Task Assignment forms (TAFs)
-        for (SarTaskAssignment task : data.getSarTaskAssignments()) {
-            task.setIapPage(String.valueOf(page++));
+        if (includedOrAll(included, "SAR Task Assignment")) {
+            for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+                task.setIapPage(String.valueOf(page++));
+            }
         }
         // ICS 214 activity logs
-        for (org.sarmanagement.icsforms.model.Ics214Form log : data.getActivityLogs()) {
-            log.setIapPage(String.valueOf(page++));
+        if (includedOrAll(included, "ICS 214")) {
+            for (org.sarmanagement.icsforms.model.Ics214Form log : data.getActivityLogs()) {
+                log.setIapPage(String.valueOf(page++));
+            }
         }
+    }
+
+    private static boolean includedOrAll(java.util.Set<String> included, String formKey) {
+        return included == null || included.contains(formKey);
     }
 
     /**
