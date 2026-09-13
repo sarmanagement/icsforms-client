@@ -82,7 +82,7 @@ public final class ResourceDirectorySource {
      */
     public static Comparator<ResourceDirectoryEntry> byLastName() {
         return Comparator.comparing((ResourceDirectoryEntry row) -> lastNameSortKey(row.name()))
-                .thenComparing(row -> safe(row.name()).toLowerCase(Locale.ROOT))
+                .thenComparing(row -> normalizedDisplayName(row.name()))
                 .thenComparing(row -> safe(row.assignment()).toLowerCase(Locale.ROOT));
     }
 
@@ -91,7 +91,7 @@ public final class ResourceDirectorySource {
      */
     public static Comparator<String> displayNameComparator() {
         return Comparator.comparing(ResourceDirectorySource::lastNameSortKey)
-                .thenComparing(value -> safe(value).toLowerCase(Locale.ROOT));
+                .thenComparing(ResourceDirectorySource::normalizedDisplayName);
     }
 
     private static String assignedPosition(TCard card, AppData data, Map<String, SarTaskAssignment> tasksById) {
@@ -223,7 +223,7 @@ public final class ResourceDirectorySource {
             String[] parts = normalized.split(",", 2);
             String last = safe(parts[0]).toLowerCase(Locale.ROOT);
             String rest = parts.length > 1 ? safe(parts[1]).toLowerCase(Locale.ROOT) : "";
-            return last + "|" + rest;
+            return last + "|" + rest + "|" + normalizedDisplayName(normalized);
         }
         String[] parts = normalized.split("\\s+");
         int lastIndex = parts.length - 1;
@@ -234,7 +234,11 @@ public final class ResourceDirectorySource {
         String firsts = lastIndex > 0
                 ? String.join(" ", java.util.Arrays.copyOf(parts, lastIndex)).toLowerCase(Locale.ROOT)
                 : "";
-        return last + "|" + firsts;
+        return last + "|" + firsts + "|" + normalizedDisplayName(normalized);
+    }
+
+    private static String normalizedDisplayName(String name) {
+        return safe(name).toLowerCase(Locale.ROOT);
     }
 
     private static String coalesce(String preferred, String fallback) {

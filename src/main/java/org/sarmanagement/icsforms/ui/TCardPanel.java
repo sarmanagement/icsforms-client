@@ -359,12 +359,20 @@ public class TCardPanel extends JPanel {
         for (String value : values) {
             combo.addItem(value);
         }
-        if (previous != null) {
+        if (previous != null && hasComboValue(combo, previous.toString())) {
             combo.setSelectedItem(previous);
-        }
-        if (combo.getSelectedIndex() < 0) {
+        } else {
             combo.setSelectedIndex(0);
         }
+    }
+
+    private boolean hasComboValue(JComboBox<String> combo, String value) {
+        for (int i = 0; i < combo.getItemCount(); i++) {
+            if (value.equals(combo.getItemAt(i))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void applyDirectoryFilters() {

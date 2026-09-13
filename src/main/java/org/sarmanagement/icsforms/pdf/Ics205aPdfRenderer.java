@@ -41,7 +41,10 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 
     @Override
     public void render(AppData data, Path outputFile) throws IOException {
-        Files.createDirectories(outputFile.getParent());
+        Path parent = outputFile.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
         AppData safeData = data == null ? new AppData() : data;
         List<ResourceDirectoryEntry> entries = ResourceDirectorySource.build(safeData).stream()
                 .sorted(ResourceDirectorySource.byLastName())
@@ -115,6 +118,9 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
     private void drawCommunicationsSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
                                            float x, float y, float width, float height,
                                            List<ResourceDirectoryEntry> entries, int rowsPerPage) throws IOException {
+        // The shared directory model carries extra directory-only fields such as unit, state,
+        // current assignment, and status. ICS 205A section 3 intentionally renders only the
+        // assigned position, person name, and contact methods required by the form itself.
         drawHeading(stream, bold, x, y + height, "3. Basic Local Communications Information");
         float tableTop = y + height - SECTION_HEADING_HEIGHT;
         float headerBottom = tableTop - TABLE_HEADER_HEIGHT;
