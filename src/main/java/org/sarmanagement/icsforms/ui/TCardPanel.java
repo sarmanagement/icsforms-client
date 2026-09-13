@@ -94,6 +94,7 @@ public class TCardPanel extends JPanel {
             "Table View", "Rack View", "Directory View"
     });
     private final JTextField directoryNameFilterField = UiSupport.textField();
+    private final JComboBox<String> directoryPositionFilter = new JComboBox<>(new String[]{"All"});
     private final JComboBox<String> directoryStateFilter = new JComboBox<>(new String[]{"All"});
     private final JComboBox<String> directoryUnitFilter = new JComboBox<>(new String[]{"All"});
     private final JComboBox<String> directoryAssignmentFilter = new JComboBox<>(new String[]{"All"});
@@ -201,7 +202,7 @@ public class TCardPanel extends JPanel {
     }
 
     private void configureDirectoryTable() {
-        directoryTable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+        directoryTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         directoryTable.setFillsViewportHeight(true);
         directoryTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         directoryTable.setRowHeight(24);
@@ -236,6 +237,8 @@ public class TCardPanel extends JPanel {
         directoryNameFilterField.setColumns(14);
         filters.add(new JLabel("Name:"));
         filters.add(directoryNameFilterField);
+        filters.add(new JLabel("Assigned position:"));
+        filters.add(directoryPositionFilter);
         filters.add(new JLabel("State:"));
         filters.add(directoryStateFilter);
         filters.add(new JLabel("Unit:"));
@@ -252,6 +255,7 @@ public class TCardPanel extends JPanel {
             @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyDirectoryFilters(); }
         };
         directoryNameFilterField.getDocument().addDocumentListener(docListener);
+        directoryPositionFilter.addActionListener(e -> applyDirectoryFilters());
         directoryStateFilter.addActionListener(e -> applyDirectoryFilters());
         directoryUnitFilter.addActionListener(e -> applyDirectoryFilters());
         directoryAssignmentFilter.addActionListener(e -> applyDirectoryFilters());
@@ -347,6 +351,7 @@ public class TCardPanel extends JPanel {
                 : null;
         directoryTableModel.setEntries(ResourceDirectorySource.build(controller.getData(), tableModel.getCards()));
         refreshDirectoryFilterChoices();
+        updateDirectoryColumnSizing();
         applyDirectoryFilters();
         restoreDirectorySelection(directorySelection);
         if (VIEW_RACK.equals(currentView)) {
@@ -370,6 +375,7 @@ public class TCardPanel extends JPanel {
     }
 
     private void refreshDirectoryFilterChoices() {
+        refreshFilterCombo(directoryPositionFilter, directoryTableModel.distinctAssignedPositions());
         refreshFilterCombo(directoryStateFilter, directoryTableModel.distinctStates());
         refreshFilterCombo(directoryUnitFilter, directoryTableModel.distinctUnits());
         refreshFilterCombo(directoryAssignmentFilter, directoryTableModel.distinctAssignments());
@@ -412,6 +418,7 @@ public class TCardPanel extends JPanel {
             });
         }
         addExactFilter(filters, directoryStateFilter, ResourceDirectoryEntry::state);
+        addExactFilter(filters, directoryPositionFilter, ResourceDirectoryEntry::assignedPosition);
         addExactFilter(filters, directoryUnitFilter, ResourceDirectoryEntry::unit);
         addExactFilter(filters, directoryAssignmentFilter, ResourceDirectoryEntry::assignment);
         directorySorter.setRowFilter(filters.isEmpty() ? null : RowFilter.andFilter(filters));
@@ -438,6 +445,25 @@ public class TCardPanel extends JPanel {
         directoryTable.setFont(directoryBaseFont.deriveFont(large
                 ? DIRECTORY_LARGE_FONT_SIZE : DIRECTORY_DEFAULT_FONT_SIZE));
         directoryTable.setRowHeight(large ? 30 : 24);
+        updateDirectoryColumnSizing();
+    }
+
+    private void updateDirectoryColumnSizing() {
+        if (directoryTable.getColumnModel().getColumnCount() != directoryTableModel.getColumnCount()) {
+            return;
+        }
+        java.awt.FontMetrics metrics = directoryTable.getFontMetrics(directoryTable.getFont());
+        for (int columnIndex = 0; columnIndex < directoryTableModel.getColumnCount(); columnIndex++) {
+            int width = metrics.stringWidth(directoryTableModel.getColumnName(columnIndex)) + 24;
+            for (int rowIndex = 0; rowIndex < directoryTableModel.getRowCount(); rowIndex++) {
+                Object value = directoryTableModel.getValueAt(rowIndex, columnIndex);
+                width = Math.max(width, metrics.stringWidth(value == null ? "" : value.toString()) + 24);
+            }
+            if (columnIndex == 1) {
+                width = Math.max(width, 220);
+            }
+            directoryTable.getColumnModel().getColumn(columnIndex).setPreferredWidth(width);
+        }
     }
 
     static boolean useLargeDirectoryFont(int resultCount) {
@@ -2395,7 +2421,7 @@ public class TCardPanel extends JPanel {
 
     private static final class DirectoryTableModel extends AbstractTableModel {
         private static final String[] COLUMNS = {
-                "Name", "Assigned Position", "Unit", "State", "Assignment", "Status", "Contact"
+                "Name", "Contact", "Assigned Position", "Unit", "State", "Assignment", "Status"
         };
 
         private final List<ResourceDirectoryEntry> entries = new ArrayList<>();
@@ -2414,6 +2440,10 @@ public class TCardPanel extends JPanel {
 
         List<String> distinctStates() {
             return distinct(ResourceDirectoryEntry::state);
+        }
+
+        List<String> distinctAssignedPositions() {
+            return distinct(ResourceDirectoryEntry::assignedPosition);
         }
 
         List<String> distinctUnits() {
@@ -2443,12 +2473,12 @@ public class TCardPanel extends JPanel {
             ResourceDirectoryEntry entry = entries.get(rowIndex);
             return switch (columnIndex) {
                 case 0 -> entry.name();
-                case 1 -> entry.assignedPosition();
-                case 2 -> entry.unit();
-                case 3 -> entry.state();
-                case 4 -> entry.assignment();
-                case 5 -> entry.status();
-                case 6 -> entry.contactMethods();
+                case 1 -> entry.contactMethods();
+                case 2 -> entry.assignedPosition();
+                case 3 -> entry.unit();
+                case 4 -> entry.state();
+                case 5 -> entry.assignment();
+                case 6 -> entry.status();
                 default -> "";
             };
         }

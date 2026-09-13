@@ -12,12 +12,14 @@ import javax.swing.JComboBox;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.table.TableColumnModel;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 class TCardPanelDirectoryTest {
@@ -90,6 +92,43 @@ class TCardPanelDirectoryTest {
             invoke(panel, "refreshDerivedViewsFromTableModel", new Class<?>[]{TCard.class}, replacement);
 
             assertSame(replacement, selectedCard(panel));
+        });
+    }
+
+    @Test
+    void directoryViewPlacesContactSecondAndSupportsAssignedPositionFilter() throws Exception {
+        TCard safety = personnelCard("Sam Safety", "OR");
+        safety.setSourceRef("org:safetyOfficer");
+        safety.setRadioChannel("Tac 1");
+        safety.setPhoneNumber("555-0100");
+
+        TCard pio = personnelCard("Pat Public", "WA");
+        pio.setSourceRef("org:pio");
+        pio.setPhoneNumber("555-0200");
+
+        AppData data = new AppData();
+        data.setTCards(List.of(safety, pio));
+
+        TCardPanel panel = new TCardPanel(createController(data));
+        SwingUtilities.invokeAndWait(() -> {
+            panel.refreshFromModel();
+            combo(panel, "viewSelector").setSelectedItem("Directory View");
+            JTable directoryTable = field(panel, "directoryTable", JTable.class);
+            TableColumnModel columns = directoryTable.getColumnModel();
+
+            assertEquals("Name", columns.getColumn(0).getHeaderValue());
+            assertEquals("Contact", columns.getColumn(1).getHeaderValue());
+            assertEquals("Assigned Position", columns.getColumn(2).getHeaderValue());
+
+            int expectedWidth = directoryTable.getFontMetrics(directoryTable.getFont())
+                    .stringWidth("Radio: Tac 1; Phone: 555-0100") + 24;
+            assertTrue(columns.getColumn(1).getPreferredWidth() >= expectedWidth);
+
+            JComboBox<String> positionFilter = combo(panel, "directoryPositionFilter");
+            positionFilter.setSelectedItem("Safety Officer");
+            assertEquals(1, directoryTable.getRowCount());
+            directoryTable.setRowSelectionInterval(0, 0);
+            assertSame(safety, selectedCard(panel));
         });
     }
 
