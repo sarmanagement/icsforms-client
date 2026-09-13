@@ -1167,7 +1167,7 @@ public class TCardPanel extends JPanel {
             return directoryTableModel.getEntry(modelRow).card();
         }
         int row = table.getSelectedRow();
-        return row < 0 ? null : tableModel.getCard(row);
+        return row < 0 ? null : tableModel.getCard(table.convertRowIndexToModel(row));
     }
 
     // -------------------------------------------------------------------------

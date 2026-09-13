@@ -14,6 +14,9 @@ import java.util.Objects;
  */
 public final class ResourceDirectorySource {
     private static final Map<String, String> ORG_POSITION_BY_REF = createOrgPositionMap();
+    private static final java.util.Set<String> NAME_SUFFIXES = java.util.Set.of(
+            "jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"
+    );
 
     private ResourceDirectorySource() {
     }
@@ -223,9 +226,13 @@ public final class ResourceDirectorySource {
             return last + "|" + rest;
         }
         String[] parts = normalized.split("\\s+");
-        String last = parts[parts.length - 1].toLowerCase(Locale.ROOT);
-        String firsts = parts.length > 1
-                ? String.join(" ", java.util.Arrays.copyOf(parts, parts.length - 1)).toLowerCase(Locale.ROOT)
+        int lastIndex = parts.length - 1;
+        while (lastIndex > 0 && NAME_SUFFIXES.contains(parts[lastIndex].toLowerCase(Locale.ROOT))) {
+            lastIndex--;
+        }
+        String last = parts[lastIndex].toLowerCase(Locale.ROOT);
+        String firsts = lastIndex > 0
+                ? String.join(" ", java.util.Arrays.copyOf(parts, lastIndex)).toLowerCase(Locale.ROOT)
                 : "";
         return last + "|" + firsts;
     }

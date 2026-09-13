@@ -108,4 +108,29 @@ class ResourceDirectorySourceTest {
 
         assertEquals(List.of("Zoe Alpha", "Amy Bravo", "Chris Charlie"), names);
     }
+
+    @Test
+    void byLastNameIgnoresCommonSuffixes() {
+        TCard doe = new TCard();
+        doe.setCardType(TCardType.PERSONNEL);
+        doe.setPersonName("Pat Doe III");
+
+        TCard smith = new TCard();
+        smith.setCardType(TCardType.PERSONNEL);
+        smith.setPersonName("Jane Smith Jr.");
+
+        TCard adams = new TCard();
+        adams.setCardType(TCardType.PERSONNEL);
+        adams.setPersonName("Alex Adams");
+
+        AppData data = new AppData();
+        data.setTCards(List.of(smith, doe, adams));
+
+        List<String> names = ResourceDirectorySource.build(data).stream()
+                .sorted(ResourceDirectorySource.byLastName())
+                .map(ResourceDirectoryEntry::name)
+                .toList();
+
+        assertEquals(List.of("Alex Adams", "Pat Doe III", "Jane Smith Jr."), names);
+    }
 }
