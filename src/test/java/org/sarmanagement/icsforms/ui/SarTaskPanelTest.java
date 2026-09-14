@@ -81,21 +81,37 @@ class SarTaskPanelTest {
 	void debriefEditorShowsDebriefFieldsWithoutAssignmentOnlyFields() throws Exception {
 		Object editor = createEditor(sampleTask(), "DEBRIEFING", 1);
 		Field panelField = editor.getClass().getDeclaredField("panel");
+		Field assignmentSummaryField = editor.getClass().getDeclaredField("assignmentSummaryField");
 		panelField.setAccessible(true);
+		assignmentSummaryField.setAccessible(true);
 
 		JLabel[] debriefLabel = new JLabel[1];
 		JLabel[] reportedPodLabel = new JLabel[1];
 		JLabel[] resourcesLabel = new JLabel[1];
+		JLabel[] inheritedLabel = new JLabel[1];
+		JLabel[] taskSetupLabel = new JLabel[1];
+		JLabel[] taskSummaryLabel = new JLabel[1];
+		JPanel[] summaryPanel = new JPanel[1];
 		SwingUtilities.invokeAndWait(() -> {
 			Component panel = (Component) getFieldValue(panelField, editor);
 			debriefLabel[0] = findLabel(panel, "Debriefing");
 			reportedPodLabel[0] = findLabel(panel, "Reported POD (%)");
 			resourcesLabel[0] = findLabel(panel, "Resources assigned");
+			inheritedLabel[0] = findLabel(panel, "Inherited task data");
+			taskSetupLabel[0] = findLabel(panel, "Task setup");
+			taskSummaryLabel[0] = findLabel(panel, "Task summary");
+			summaryPanel[0] = (JPanel) getFieldValue(assignmentSummaryField, editor);
 		});
 
 		assertNotNull(debriefLabel[0]);
 		assertNotNull(reportedPodLabel[0]);
 		assertNull(resourcesLabel[0]);
+		assertNotNull(inheritedLabel[0]);
+		assertEquals(1, gridY(inheritedLabel[0]));
+		assertEquals(2, gridY(taskSetupLabel[0]));
+		assertNull(taskSummaryLabel[0]);
+		assertEquals("Resource: Team 1", ((JLabel) summaryPanel[0].getComponent(0)).getText());
+		assertNull(findLabel(summaryPanel[0], "Incident: Test Incident"));
 	}
 
 	@Test

@@ -1792,7 +1792,6 @@ public class SarTaskPanel extends JPanel {
 		private final JTextField leaderField;
 		private final JTextField contactField;
 		private final JPanel assignmentSummaryField;
-		private final JPanel debriefSummaryField;
 		private final JScrollPane operationsField;
 		private final JScrollPane contextField;
 		private final JPanel resourcesAssignedField;
@@ -1913,8 +1912,6 @@ public class SarTaskPanel extends JPanel {
 			assignmentSummaryField = inlineSummaryPanel(2, "Resource: " + safeValue(row.getResourceIdentifier()),
 					leaderLabel + safeValue(row.getLeader()), "Leader Role: " + safeValue(row.getLeaderRole()),
 					"Leader Contact: " + safeValue(row.getContact()));
-			debriefSummaryField = inlineSummaryPanel(2, "Incident: " + safeValue(row.getIncidentName()),
-					"Resource: " + safeValue(row.getResourceIdentifier()));
 			operationsField = textArea(SarTaskTableModel.joinOperations(row), 2, false);
 			contextField = textArea(SarTaskTableModel.joinContext(row), 2, false);
 			List<String> leaderCanines = isCanineTask && canineForHandler != null
@@ -1970,7 +1967,6 @@ public class SarTaskPanel extends JPanel {
 				UiSupport.addRow(panel, rowIndex++, "Special equipment", specialEquipmentField);
 				return;
 			}
-			UiSupport.addRow(panel, rowIndex++, "Task summary", debriefSummaryField);
 			UiSupport.addRow(panel, rowIndex++, "Debrief details",
 					inlineFieldPanel(new LabeledComponent("Debrief supervisor", debriefingSupervisorPickerField()),
 							new LabeledComponent("Reported POD (%)", reportedPodField),
