@@ -28,6 +28,7 @@ import java.awt.Insets;
 import java.awt.Dimension;
 import java.awt.Color;
 import java.awt.Window;
+import java.awt.event.InputEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.KeyAdapter;
@@ -298,8 +299,10 @@ final class UiSupport {
 		Dimension preferredSize = comboBox.getPreferredSize();
 		comboBox.setPreferredSize(new Dimension(Math.max(preferredSize.width, minimumWidth), preferredSize.height));
 		installPopupOpenOnClick(comboBox, comboBox);
+		installPopupOpenOnKeys(comboBox, comboBox);
 		if (comboBox.getEditor() != null && comboBox.getEditor().getEditorComponent() instanceof JTextComponent editor) {
 			installPopupOpenOnClick(comboBox, editor);
+			installPopupOpenOnKeys(comboBox, editor);
 		}
 	}
 
@@ -744,6 +747,38 @@ final class UiSupport {
 				}
 			}
 		});
+	}
+
+	/**
+	 * Installs keyboard shortcuts that open a combo box popup from the focused
+	 * field or editor.
+	 *
+	 * @param comboBox
+	 *            combo box to open.
+	 * @param target
+	 *            focused component that should respond to the shortcut.
+	 */
+	private static void installPopupOpenOnKeys(JComboBox<?> comboBox, Component target) {
+		if (!(target instanceof JComponent component)) {
+			return;
+		}
+		component.registerKeyboardAction(event -> showPopup(comboBox),
+				javax.swing.KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK),
+				JComponent.WHEN_FOCUSED);
+		component.registerKeyboardAction(event -> showPopup(comboBox), javax.swing.KeyStroke.getKeyStroke(KeyEvent.VK_F4, 0),
+				JComponent.WHEN_FOCUSED);
+	}
+
+	/**
+	 * Opens a combo box popup when the control is enabled.
+	 *
+	 * @param comboBox
+	 *            combo box to open.
+	 */
+	private static void showPopup(JComboBox<?> comboBox) {
+		if (comboBox != null && comboBox.isEnabled()) {
+			javax.swing.SwingUtilities.invokeLater(comboBox::showPopup);
+		}
 	}
 
 	/**

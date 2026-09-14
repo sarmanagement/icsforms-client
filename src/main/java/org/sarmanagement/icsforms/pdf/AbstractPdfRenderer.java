@@ -10,14 +10,15 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.ui.AppController;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -297,7 +298,8 @@ abstract class AbstractPdfRenderer {
 		if (value == null) {
 			return null;
 		}
-		return value.atOffset(ZoneOffset.UTC).atZoneSameInstant(pdfZoneId(data));
+		Date instant = AppController.toDate(value);
+		return instant.toInstant().atZone(pdfZoneId(data));
 	}
 
 	/**

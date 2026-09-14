@@ -1463,14 +1463,21 @@ public class AppController {
 		if (task == null || newStatus == null) {
 			return new TaskLifecycleChangeResult(false, "");
 		}
+		String previous = normalizeLifecycleStatus(previousStatus);
 		String normalized = normalizeLifecycleStatus(newStatus);
+		if (java.util.Objects.equals(previous, normalized)) {
+			task.setTaskLifecycleStatus(normalized);
+			return new TaskLifecycleChangeResult(false, "");
+		}
+		boolean inSequence = isExpectedLifecycleTransition(previous, normalized);
 		task.setTaskLifecycleStatus(normalized);
-		applyDebriefLifecycleTimes(task, previousStatus, normalized, effectiveTime);
-		TransitionRecord transition = transitionRecordForStatus(task, normalized, effectiveTime);
-		appendIcpLifecycleEntry(transition);
-		appendTaskLifecycleEntry(task, transition);
-		return new TaskLifecycleChangeResult(!java.util.Objects.equals(previousStatus, normalized),
-				lifecycleTransitionWarning(previousStatus, normalized));
+		applyDebriefLifecycleTimes(task, previous, normalized, effectiveTime);
+		if (inSequence) {
+			TransitionRecord transition = transitionRecordForStatus(task, normalized, effectiveTime);
+			appendIcpLifecycleEntry(transition);
+			appendTaskLifecycleEntry(task, transition);
+		}
+		return new TaskLifecycleChangeResult(true, lifecycleTransitionWarning(previous, normalized));
 	}
 
 	/**
@@ -1620,7 +1627,7 @@ public class AppController {
 			return "";
 		}
 		return "Requested SAR task status transition from '" + previous + "' to '" + updated
-				+ "' is out of sequence. The task was updated to match the requested transition.";
+				+ "' is out of sequence. Review the task history to confirm the requested status.";
 	}
 
 	/**

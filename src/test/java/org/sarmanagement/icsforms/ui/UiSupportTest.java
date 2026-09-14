@@ -8,8 +8,11 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTable;
+import javax.swing.JComboBox;
 import java.awt.Component;
 import java.awt.Rectangle;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -188,6 +191,19 @@ class UiSupportTest {
 		assertTrue(label.startsWith("America/Denver (UTC-"));
 		assertTrue(label.endsWith(")"));
 		assertTrue(label.contains("MST") || label.contains("MDT"));
+	}
+
+	@Test
+	void configureDialogComboBoxAddsKeyboardPopupShortcuts() {
+		JComboBox<String> comboBox = new JComboBox<>(new String[] {"One", "Two"});
+		comboBox.setEditable(true);
+
+		UiSupport.configureDialogComboBox(comboBox, 220);
+
+		assertNotNull(comboBox.getActionForKeyStroke(
+				javax.swing.KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK)));
+		assertNotNull(((javax.swing.JComponent) comboBox.getEditor().getEditorComponent()).getActionForKeyStroke(
+				javax.swing.KeyStroke.getKeyStroke(KeyEvent.VK_F4, 0)));
 	}
 
 	private static JLabel findLabel(Component component, String text) {

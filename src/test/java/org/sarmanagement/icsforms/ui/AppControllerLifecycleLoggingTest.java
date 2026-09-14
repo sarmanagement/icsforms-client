@@ -92,6 +92,25 @@ class AppControllerLifecycleLoggingTest {
 	}
 
 	@Test
+	void outOfSequenceTaskStatusChangeWarnsWithoutAddingMirroredLifecycleRows() throws Exception {
+		AppController controller = sampleControllerWithTaskLog();
+		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(0);
+		task.setTaskLifecycleStatus("returned");
+
+		AppController.TaskLifecycleChangeResult result = controller.recordTaskLifecycleTransition(task, "returned",
+				"assigned - on task", LocalDateTime.parse("2026-01-01T20:00:00"));
+
+		assertTrue(result.hasWarning());
+		assertEquals("assigned - on task", task.getTaskLifecycleStatus());
+		assertEquals(0, controller.getData().getActivityLogs().stream()
+				.filter(log -> log.getLogScope() == ActivityLogScope.ICP)
+				.mapToInt(log -> log.getActivityLog() == null ? 0 : log.getActivityLog().size()).sum());
+		Ics214Form taskLog = controller.getData().getActivityLogs().stream()
+				.filter(log -> "a-1".equals(log.getLinkedSarTaskAssignmentId())).findFirst().orElseThrow();
+		assertEquals(0, taskLog.getActivityLog().size());
+	}
+
+	@Test
 	void clueLoggingAddsIcpActivityEntry() throws Exception {
 		Path tempFile = Files.createTempDirectory("icsforms-clue").resolve("incident.json");
 		AppController controller = new AppController(new AppData(), new LocalRepository(tempFile),
