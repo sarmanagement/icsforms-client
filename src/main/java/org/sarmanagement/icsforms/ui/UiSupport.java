@@ -22,11 +22,13 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
-import java.awt.Dimension;
-import java.awt.Color;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.Window;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseAdapter;
@@ -274,7 +276,14 @@ final class UiSupport {
 			return;
 		}
 		int lastRow = table.getRowCount() - 1;
-		javax.swing.SwingUtilities.invokeLater(() -> table.scrollRectToVisible(table.getCellRect(lastRow, 0, true)));
+		javax.swing.SwingUtilities.invokeLater(() -> {
+			Rectangle cellRect = table.getCellRect(lastRow, 0, true);
+			table.scrollRectToVisible(cellRect);
+			if (table.getParent() instanceof JViewport viewport) {
+				int targetY = Math.max(0, cellRect.y + cellRect.height - viewport.getExtentSize().height);
+				viewport.setViewPosition(new Point(0, targetY));
+			}
+		});
 	}
 
 	/**

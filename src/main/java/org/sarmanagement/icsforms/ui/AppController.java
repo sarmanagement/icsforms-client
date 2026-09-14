@@ -1690,10 +1690,8 @@ public class AppController {
 			case "returned" -> ActivityEventType.ID_RESOURCE_RETURNED_STAGING;
 			default -> ActivityEventType.ID_FREE_TEXT;
 		};
-		String taskReference = safe(task.getAssignmentTeamNumber()).isBlank() ? safe(task.getResourceIdentifier())
-				: safe(task.getAssignmentTeamNumber());
-		String taskLogReference = safe(task.getResourceIdentifier()).isBlank() ? safe(task.getLeader())
-				: safe(task.getResourceIdentifier());
+		String taskReference = SarTaskSupport.taskResourceDisplayLabel(task);
+		String taskLogReference = taskReference.isBlank() ? safe(task.getLeader()) : taskReference;
 		return new TransitionRecord(effectiveTime == null ? LocalDateTime.now().withSecond(0).withNano(0) : effectiveTime,
 				eventTypeId, "Task status changed to " + normalizedStatus, taskReference, taskLogReference);
 	}

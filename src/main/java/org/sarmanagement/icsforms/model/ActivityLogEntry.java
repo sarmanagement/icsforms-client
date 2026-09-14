@@ -17,6 +17,7 @@ public class ActivityLogEntry {
 	private String eventTypeId = ActivityEventType.ID_FREE_TEXT;
 	private String resourceIdentifier = "";
 	private String notableActivity = "";
+	private boolean struckOut;
 
 	/**
 	 * Returns the recorded date/time.
@@ -93,5 +94,24 @@ public class ActivityLogEntry {
 	 */
 	public void setNotableActivity(String notableActivity) {
 		this.notableActivity = notableActivity == null ? "" : notableActivity;
+	}
+
+	/**
+	 * Returns whether the entry has been struck out instead of removed.
+	 *
+	 * @return {@code true} when the entry should render struck through.
+	 */
+	public boolean isStruckOut() {
+		return struckOut;
+	}
+
+	/**
+	 * Sets whether the entry has been struck out instead of removed.
+	 *
+	 * @param struckOut
+	 *            {@code true} to render the entry struck through.
+	 */
+	public void setStruckOut(boolean struckOut) {
+		this.struckOut = struckOut;
 	}
 }

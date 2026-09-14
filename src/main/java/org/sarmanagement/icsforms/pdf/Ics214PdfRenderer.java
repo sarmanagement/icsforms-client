@@ -10,7 +10,9 @@ import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.SarTaskSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -136,7 +138,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 			drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row4);
 			drawActivityLogSection(stream, bold, regular, layout.x(), y - row4, pageWidth, row4, entries, eventTypes,
-					data);
+					form, data);
 			y -= row4;
 
 			drawPreparedBySection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5, 24f, form, pageNumber,
@@ -202,7 +204,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 	private void drawActivityLogSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, float width, float height, List<ActivityLogEntry> entries, List<ActivityEventType> eventTypes,
-			AppData data) throws IOException {
+			Ics214Form form, AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "7. Activity Log");
 		float tableTop = y + height - 18f;
 		float headerHeight = 24f;
@@ -227,9 +229,9 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			}
 			ActivityLogEntry entry = entries.get(rowIndex);
 			writeWrappedCellText(stream, regular, x, rowBottom, dateTimeWidth, rowTop - rowBottom,
-					wrap(formatDateTime(data, entry.getTimestamp()), 14));
+					wrap(formatDateTime(data, entry.getTimestamp()), 14), entry.isStruckOut());
 			writeWrappedCellText(stream, regular, x + dateTimeWidth, rowBottom, activityWidth, rowTop - rowBottom,
-					wrap(activityText(entry, eventTypes), 48));
+					wrap(activityText(form, entry, eventTypes, data), 48), entry.isStruckOut());
 		}
 	}
 
@@ -262,7 +264,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return Math.max(1, (int) Math.ceil(Math.max(1, entryCount) / (double) rowsPerPage));
 	}
 
-	private String activityText(ActivityLogEntry entry, List<ActivityEventType> eventTypes) {
+	private String activityText(Ics214Form form, ActivityLogEntry entry, List<ActivityEventType> eventTypes, AppData data) {
 		List<String> parts = new ArrayList<>();
 		String typeId = entry.getEventTypeId() == null ? ActivityEventType.ID_FREE_TEXT : entry.getEventTypeId();
 		if (!ActivityEventType.ID_FREE_TEXT.equals(typeId)) {
@@ -270,8 +272,9 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 					.findFirst().orElse(typeId);
 			parts.add(label);
 		}
-		if (!safe(entry.getResourceIdentifier()).isBlank()) {
-			parts.add("Resource: " + safe(entry.getResourceIdentifier()));
+		String resourceLabel = displayedResourceIdentifier(form, entry, data);
+		if (!safe(resourceLabel).isBlank()) {
+			parts.add("Resource: " + safe(resourceLabel));
 		}
 		if (!safe(entry.getNotableActivity()).isBlank()) {
 			parts.add(safe(entry.getNotableActivity()));
@@ -319,18 +322,80 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 	private void writeWrappedCellText(PDPageContentStream stream, PDType1Font font, float x, float bottomY, float width,
 			float height, List<String> lines) throws IOException {
+		writeWrappedCellText(stream, font, x, bottomY, width, height, lines, false);
+	}
+
+	private void writeWrappedCellText(PDPageContentStream stream, PDType1Font font, float x, float bottomY, float width,
+			float height, List<String> lines, boolean struckOut) throws IOException {
 		int maxLines = Math.max(1, (int) ((height - (CELL_PADDING * 2)) / LINE_HEIGHT));
 		List<String> visible = lines == null || lines.isEmpty()
 				? List.of("")
 				: lines.subList(0, Math.min(maxLines, lines.size()));
+		List<Float> strikeYs = new ArrayList<>();
 		stream.beginText();
 		stream.setFont(font, BODY_FONT_SIZE);
 		stream.newLineAtOffset(x + CELL_PADDING, bottomY + height - CELL_PADDING - BODY_FONT_SIZE);
 		for (String line : visible) {
 			stream.showText(safe(line));
+			strikeYs.add(bottomY + height - CELL_PADDING - BODY_FONT_SIZE + (strikeYs.size() * -LINE_HEIGHT)
+					+ (BODY_FONT_SIZE * 0.35f));
 			stream.newLineAtOffset(0, -LINE_HEIGHT);
 		}
 		stream.endText();
+		if (struckOut) {
+			for (int i = 0; i < visible.size(); i++) {
+				String line = safe(visible.get(i));
+				if (line.isBlank()) {
+					continue;
+				}
+				float lineWidth = font.getStringWidth(line) / 1000f * BODY_FONT_SIZE;
+				stream.moveTo(x + CELL_PADDING, strikeYs.get(i));
+				stream.lineTo(Math.min(x + width - CELL_PADDING, x + CELL_PADDING + lineWidth), strikeYs.get(i));
+				stream.stroke();
+			}
+		}
+	}
+
+	private String displayedResourceIdentifier(Ics214Form form, ActivityLogEntry entry, AppData data) {
+		if (entry == null) {
+			return "";
+		}
+		SarTaskAssignment linkedTask = linkedTask(form, data);
+		if (linkedTask != null) {
+			String label = SarTaskSupport.taskResourceDisplayLabel(linkedTask);
+			if (!label.isBlank()) {
+				return label;
+			}
+		}
+		String raw = safe(entry.getResourceIdentifier()).trim();
+		if (raw.isBlank() || data == null) {
+			return raw;
+		}
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			String label = SarTaskSupport.taskResourceDisplayLabel(task);
+			if (raw.equalsIgnoreCase(safe(task.getAssignmentTeamNumber()).trim())
+					|| raw.equalsIgnoreCase(safe(task.getResourceIdentifier()).trim())
+					|| raw.equalsIgnoreCase(label)) {
+				return label;
+			}
+		}
+		return raw;
+	}
+
+	private SarTaskAssignment linkedTask(Ics214Form form, AppData data) {
+		if (form == null || data == null) {
+			return null;
+		}
+		String assignmentId = safe(form.getLinkedSarTaskAssignmentId()).trim();
+		if (assignmentId.isBlank()) {
+			return null;
+		}
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			if (assignmentId.equals(task.getAssignmentId())) {
+				return task;
+			}
+		}
+		return null;
 	}
 
 	private void writeLines(PDPageContentStream stream, PDType1Font regular, float x, float startY, List<String> lines)

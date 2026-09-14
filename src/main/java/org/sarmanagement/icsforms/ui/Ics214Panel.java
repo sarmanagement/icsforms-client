@@ -9,6 +9,7 @@ import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 
@@ -26,6 +27,7 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -115,6 +117,17 @@ public class Ics214Panel extends JPanel {
 
 		resourcesTable.setFillsViewportHeight(true);
 		activityLogTable.setFillsViewportHeight(true);
+		activityLogTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+			@Override
+			public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+					boolean hasFocus, int row, int column) {
+				super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+				int modelRow = table.convertRowIndexToModel(row);
+				ActivityLogEntry entry = activityLogTableModel.entryAt(modelRow);
+				setText(entry != null && entry.isStruckOut() ? strikeHtml(value) : value == null ? "" : value.toString());
+				return this;
+			}
+		});
 
 		// Item 6: Double-click on a resource row shows its linked T-card (read-only).
 		resourcesTable.addMouseListener(new MouseAdapter() {
@@ -185,6 +198,7 @@ public class Ics214Panel extends JPanel {
 		preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
 		resourcesTableModel.setRows(currentForm.getResourcesAssigned());
 		activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
+		scrollActivityLogToLatestEntry();
 		boolean isTask = currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT;
 		pickPreparerButton.setEnabled(isTask && !linkedTaskResources().isEmpty());
 		if (isTask) {
@@ -397,7 +411,7 @@ public class Ics214Panel extends JPanel {
 		// 1. Assigned tasks by team number / name.
 		if (currentData != null && currentData.getSarTaskAssignments() != null) {
 			for (SarTaskAssignment t : currentData.getSarTaskAssignments()) {
-				String label = UiSupport.taskLabel(t);
+				String label = SarTaskSupport.taskResourceDisplayLabel(t);
 				if (!label.isBlank() && !picklist.contains(label)) {
 					picklist.add(label);
 				}
@@ -427,8 +441,8 @@ public class Ics214Panel extends JPanel {
 			}
 			picklist.addAll(otherCardNames);
 		}
-		if (currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT && !picklist.isEmpty()) {
-			defaultResource = picklist.get(0);
+		if (currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT) {
+			defaultResource = SarTaskSupport.taskResourceDisplayLabel(linkedTask());
 		}
 
 		ActivityEntryEditor editor = new ActivityEntryEditor(types, defaultResource, picklist);
@@ -438,9 +452,10 @@ public class Ics214Panel extends JPanel {
 			return;
 		}
 		ActivityLogEntry entry = editor.toEntry();
+		normalizeEntryResourceIdentifier(entry);
 		currentForm.getActivityLog().add(entry);
 		activityLogTableModel.setRows(currentForm.getActivityLog(), types);
-		UiSupport.scrollTableToLastRow(activityLogTable);
+		scrollActivityLogToLatestEntry();
 		AppController.TaskLifecycleChangeResult lifecycleResult = controller.applyTaskLifecycleFromLogEntry(currentForm,
 				entry);
 		if (lifecycleResult.hasWarning()) {
@@ -601,8 +616,22 @@ public class Ics214Panel extends JPanel {
 		if (confirm != JOptionPane.YES_OPTION) {
 			return;
 		}
-		currentForm.getActivityLog().remove(row);
+		strikeOutActivityEntry(row);
+	}
+
+	/**
+	 * Marks an activity log entry as struck out while retaining it in the log.
+	 *
+	 * @param row
+	 *            selected row index in model coordinates.
+	 */
+	private void strikeOutActivityEntry(int row) {
+		if (currentForm == null || row < 0 || row >= currentForm.getActivityLog().size()) {
+			return;
+		}
+		currentForm.getActivityLog().get(row).setStruckOut(true);
 		activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
+		scrollActivityLogToLatestEntry();
 		controller.markDirty();
 	}
 
@@ -618,7 +647,7 @@ public class Ics214Panel extends JPanel {
 	private JPanel activityButtonsPanel() {
 		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		JButton add = new JButton("Add Entry");
-		JButton remove = new JButton("Remove Entry");
+		JButton remove = new JButton("Strike Out Entry");
 		add.addActionListener(event -> addActivityEntry());
 		remove.addActionListener(event -> removeSelectedActivityEntry(activityLogTable.getSelectedRow()));
 		panel.add(add);
@@ -891,6 +920,96 @@ public class Ics214Panel extends JPanel {
 		return value == null ? "" : value;
 	}
 
+	/**
+	 * Scrolls the section 7 activity log to its newest entry.
+	 */
+	private void scrollActivityLogToLatestEntry() {
+		UiSupport.scrollTableToLastRow(activityLogTable);
+	}
+
+	/**
+	 * Returns the linked SAR task assignment, or {@code null} when this form is not
+	 * task-linked.
+	 *
+	 * @return linked task assignment.
+	 */
+	private SarTaskAssignment linkedTask() {
+		if (currentForm == null || currentData == null) {
+			return null;
+		}
+		String taskId = currentForm.getLinkedSarTaskAssignmentId();
+		if (taskId == null || taskId.isBlank()) {
+			return null;
+		}
+		return currentData.getSarTaskAssignments().stream().filter(task -> taskId.equals(task.getAssignmentId())).findFirst()
+				.orElse(null);
+	}
+
+	/**
+	 * Normalizes the entry resource label so task-linked logs consistently show the
+	 * assignment/team number plus resource identifier.
+	 *
+	 * @param entry
+	 *            entry to normalize.
+	 */
+	private void normalizeEntryResourceIdentifier(ActivityLogEntry entry) {
+		if (entry == null || currentForm == null) {
+			return;
+		}
+		if (currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT) {
+			String label = SarTaskSupport.taskResourceDisplayLabel(linkedTask());
+			if (!label.isBlank()) {
+				entry.setResourceIdentifier(label);
+			}
+		}
+	}
+
+	/**
+	 * Returns the resource label to show for an activity log entry.
+	 *
+	 * @param entry
+	 *            entry being shown.
+	 * @return resource label for the table.
+	 */
+	private String displayedResourceIdentifier(ActivityLogEntry entry) {
+		if (entry == null) {
+			return "";
+		}
+		SarTaskAssignment task = linkedTask();
+		if (task != null) {
+			String label = SarTaskSupport.taskResourceDisplayLabel(task);
+			if (!label.isBlank()) {
+				return label;
+			}
+		}
+		String raw = nullSafe(entry.getResourceIdentifier()).trim();
+		if (raw.isBlank() || currentData == null) {
+			return raw;
+		}
+		for (SarTaskAssignment candidate : currentData.getSarTaskAssignments()) {
+			String label = SarTaskSupport.taskResourceDisplayLabel(candidate);
+			if (raw.equalsIgnoreCase(nullSafe(candidate.getAssignmentTeamNumber()).trim())
+					|| raw.equalsIgnoreCase(nullSafe(candidate.getResourceIdentifier()).trim())
+					|| raw.equalsIgnoreCase(label)) {
+				return label;
+			}
+		}
+		return raw;
+	}
+
+	/**
+	 * Wraps a table cell value in simple strike-through HTML.
+	 *
+	 * @param value
+	 *            cell value.
+	 * @return HTML strike-through rendering text.
+	 */
+	private static String strikeHtml(Object value) {
+		String text = value == null ? "" : value.toString();
+		String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+		return "<html><strike>" + escaped + "</strike></html>";
+	}
+
 	private static String resourceNameForCard(TCard card) {
 		if (card == null) {
 			return "";
@@ -1150,7 +1269,7 @@ public class Ics214Panel extends JPanel {
 		}
 	}
 
-	private static class ActivityLogTableModel extends AbstractTableModel {
+	private class ActivityLogTableModel extends AbstractTableModel {
 		private final String[] columns = {"Date/Time", "Event Type", "Resource", "Notable Activity"};
 		private List<ActivityLogEntry> rows = new ArrayList<>();
 		private List<ActivityEventType> eventTypes = new ArrayList<>();
@@ -1163,6 +1282,10 @@ public class Ics214Panel extends JPanel {
 
 		List<ActivityLogEntry> getRows() {
 			return rows;
+		}
+
+		ActivityLogEntry entryAt(int row) {
+			return row < 0 || row >= rows.size() ? null : rows.get(row);
 		}
 
 		@Override
@@ -1188,7 +1311,7 @@ public class Ics214Panel extends JPanel {
 			return switch (col) {
 				case 0 -> entry.getTimestamp() == null ? "" : DATE_TIME_FORMATTER.format(entry.getTimestamp());
 				case 1 -> resolveLabel(entry.getEventTypeId());
-				case 2 -> entry.getResourceIdentifier() == null ? "" : entry.getResourceIdentifier();
+				case 2 -> displayedResourceIdentifier(entry);
 				default -> entry.getNotableActivity();
 			};
 		}
