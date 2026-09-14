@@ -104,5 +104,4 @@ java -jar target/icsforms-client-0.1.1-SNAPSHOT.jar
 
 ## Generative AI
 
-This codebase has been developed with the assistance of generative AI tools, particularly GitHub Copilot. 
-
+This codebase has been developed with the assistance of generative AI tools, particularly GitHub Copilot.

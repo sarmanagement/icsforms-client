@@ -48,6 +48,9 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.10.2</junit.version>
         <pdfbox.version>3.0.3</pdfbox.version>
+		<spotless.maven.plugin.version>2.43.0</spotless.maven.plugin.version>
+  		<maven.checkstyle.plugin.version>3.3.1</maven.checkstyle.plugin.version>
+  		<checkstyle.version>10.17.0</checkstyle.version>
     </properties>
 
     <dependencies>
@@ -108,6 +111,76 @@
                     </execution>
                 </executions>
             </plugin>
+    <plugin>
+      <groupId>com.diffplug.spotless</groupId>
+      <artifactId>spotless-maven-plugin</artifactId>
+      <version>${spotless.maven.plugin.version}</version>
+      <configuration>
+        <lineEndings>UNIX</lineEndings>
+        <encoding>UTF-8</encoding>
+
+        <formats>
+          <format>
+            <includes>
+              <include>*.md</include>
+              <include>.gitignore</include>
+              <include>.gitattributes</include>
+              <include>.editorconfig</include>
+            </includes>
+            <trimTrailingWhitespace/>
+            <endWithNewline/>
+          </format>
+        </formats>
+
+        <java>
+          <!-- Tabs + K&R via Eclipse formatter profile -->
+          <eclipse>
+            <file>config/formatter/eclipse-java-formatter.xml</file>
+          </eclipse>
+          <removeUnusedImports/>
+          <trimTrailingWhitespace/>
+          <endWithNewline/>
+        </java>
+      </configuration>
+      <executions>
+        <execution>
+          <id>spotless-check</id>
+          <phase>verify</phase>
+          <goals>
+            <goal>check</goal>
+          </goals>
+        </execution>
+      </executions>
+    </plugin>
+
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-checkstyle-plugin</artifactId>
+      <version>${maven.checkstyle.plugin.version}</version>
+      <dependencies>
+        <dependency>
+          <groupId>com.puppycrawl.tools</groupId>
+          <artifactId>checkstyle</artifactId>
+          <version>${checkstyle.version}</version>
+        </dependency>
+      </dependencies>
+      <configuration>
+        <configLocation>config/checkstyle/checkstyle.xml</configLocation>
+        <includeTestSourceDirectory>true</includeTestSourceDirectory>
+        <consoleOutput>true</consoleOutput>
+        <failsOnError>true</failsOnError>
+        <violationSeverity>warning</violationSeverity>
+      </configuration>
+      <executions>
+        <execution>
+          <id>checkstyle-verify</id>
+          <phase>verify</phase>
+          <goals>
+            <goal>check</goal>
+          </goals>
+        </execution>
+      </executions>
+    </plugin>
         </plugins>
     </build>
 </project>

@@ -26,217 +26,215 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 class TCardPanelDirectoryTest {
 
-    @Test
-    void directorySelectionMapsBackToUnderlyingCardAfterFilterAndSort() throws Exception {
-        TCard zulu = personnelCard("Zoey Zulu", "OR");
-        TCard alpha = personnelCard("Amy Alpha", "WA");
-        AppData data = new AppData();
-        data.setTCards(List.of(zulu, alpha));
+	@Test
+	void directorySelectionMapsBackToUnderlyingCardAfterFilterAndSort() throws Exception {
+		TCard zulu = personnelCard("Zoey Zulu", "OR");
+		TCard alpha = personnelCard("Amy Alpha", "WA");
+		AppData data = new AppData();
+		data.setTCards(List.of(zulu, alpha));
 
-        TCardPanel panel = new TCardPanel(createController(data));
-        SwingUtilities.invokeAndWait(() -> {
-            panel.refreshFromModel();
-            combo(panel, "viewSelector").setSelectedItem("Directory View");
+		TCardPanel panel = new TCardPanel(createController(data));
+		SwingUtilities.invokeAndWait(() -> {
+			panel.refreshFromModel();
+			combo(panel, "viewSelector").setSelectedItem("Directory View");
 
-            JTextField nameFilter = field(panel, "directoryNameFilterField", JTextField.class);
-            JTable directoryTable = field(panel, "directoryTable", JTable.class);
-            nameFilter.setText("zoey");
-            assertEquals(1, directoryTable.getRowCount());
-            directoryTable.setRowSelectionInterval(0, 0);
-            assertSame(zulu, selectedCard(panel));
+			JTextField nameFilter = field(panel, "directoryNameFilterField", JTextField.class);
+			JTable directoryTable = field(panel, "directoryTable", JTable.class);
+			nameFilter.setText("zoey");
+			assertEquals(1, directoryTable.getRowCount());
+			directoryTable.setRowSelectionInterval(0, 0);
+			assertSame(zulu, selectedCard(panel));
 
-            nameFilter.setText("");
-            directoryTable.getRowSorter().toggleSortOrder(0); // descending from default ascending
-            directoryTable.setRowSelectionInterval(0, 0);
-            assertSame(zulu, selectedCard(panel));
-        });
-    }
+			nameFilter.setText("");
+			directoryTable.getRowSorter().toggleSortOrder(0); // descending from default ascending
+			directoryTable.setRowSelectionInterval(0, 0);
+			assertSame(zulu, selectedCard(panel));
+		});
+	}
 
-    @Test
-    void directoryRefreshClearsRemovedFilterChoice() throws Exception {
-        AppData data = new AppData();
-        data.setTCards(List.of(personnelCard("Zoey Zulu", "OR")));
+	@Test
+	void directoryRefreshClearsRemovedFilterChoice() throws Exception {
+		AppData data = new AppData();
+		data.setTCards(List.of(personnelCard("Zoey Zulu", "OR")));
 
-        TCardPanel panel = new TCardPanel(createController(data));
-        SwingUtilities.invokeAndWait(() -> {
-            panel.refreshFromModel();
-            combo(panel, "viewSelector").setSelectedItem("Directory View");
-            JComboBox<String> stateFilter = combo(panel, "directoryStateFilter");
-            stateFilter.setSelectedItem("OR");
-            assertEquals("OR", stateFilter.getSelectedItem());
+		TCardPanel panel = new TCardPanel(createController(data));
+		SwingUtilities.invokeAndWait(() -> {
+			panel.refreshFromModel();
+			combo(panel, "viewSelector").setSelectedItem("Directory View");
+			JComboBox<String> stateFilter = combo(panel, "directoryStateFilter");
+			stateFilter.setSelectedItem("OR");
+			assertEquals("OR", stateFilter.getSelectedItem());
 
-            data.setTCards(List.of(personnelCard("Amy Alpha", "WA")));
-            panel.refreshFromModel();
+			data.setTCards(List.of(personnelCard("Amy Alpha", "WA")));
+			panel.refreshFromModel();
 
-            assertEquals("All", stateFilter.getSelectedItem());
-            JTable directoryTable = field(panel, "directoryTable", JTable.class);
-            assertEquals(1, directoryTable.getRowCount());
-        });
-    }
+			assertEquals("All", stateFilter.getSelectedItem());
+			JTable directoryTable = field(panel, "directoryTable", JTable.class);
+			assertEquals(1, directoryTable.getRowCount());
+		});
+	}
 
-    @Test
-    void directoryRefreshRestoresSelectionForEditedCardReplacement() throws Exception {
-        TCard original = personnelCard("Zoey Zulu", "OR");
-        AppData data = new AppData();
-        data.setTCards(List.of(original));
+	@Test
+	void directoryRefreshRestoresSelectionForEditedCardReplacement() throws Exception {
+		TCard original = personnelCard("Zoey Zulu", "OR");
+		AppData data = new AppData();
+		data.setTCards(List.of(original));
 
-        TCardPanel panel = new TCardPanel(createController(data));
-        SwingUtilities.invokeAndWait(() -> {
-            panel.refreshFromModel();
-            combo(panel, "viewSelector").setSelectedItem("Directory View");
-            JTable directoryTable = field(panel, "directoryTable", JTable.class);
-            directoryTable.setRowSelectionInterval(0, 0);
-            assertSame(original, selectedCard(panel));
+		TCardPanel panel = new TCardPanel(createController(data));
+		SwingUtilities.invokeAndWait(() -> {
+			panel.refreshFromModel();
+			combo(panel, "viewSelector").setSelectedItem("Directory View");
+			JTable directoryTable = field(panel, "directoryTable", JTable.class);
+			directoryTable.setRowSelectionInterval(0, 0);
+			assertSame(original, selectedCard(panel));
 
-            Object tableModel = field(panel, "tableModel", Object.class);
-            TCard replacement = personnelCard("Zoey Zulu", "OR");
-            invoke(tableModel, "replaceCard", new Class<?>[]{int.class, TCard.class}, 0, replacement);
-            invoke(panel, "refreshDerivedViewsFromTableModel", new Class<?>[]{TCard.class}, replacement);
+			Object tableModel = field(panel, "tableModel", Object.class);
+			TCard replacement = personnelCard("Zoey Zulu", "OR");
+			invoke(tableModel, "replaceCard", new Class<?>[]{int.class, TCard.class}, 0, replacement);
+			invoke(panel, "refreshDerivedViewsFromTableModel", new Class<?>[]{TCard.class}, replacement);
 
-            assertSame(replacement, selectedCard(panel));
-        });
-    }
+			assertSame(replacement, selectedCard(panel));
+		});
+	}
 
-    @Test
-    void directoryViewPlacesContactSecondAndSupportsAssignedPositionFilter() throws Exception {
-        TCard safety = personnelCard("Sam Safety", "OR");
-        safety.setSourceRef("org:safetyOfficer");
-        safety.setRadioChannel("Tac 1");
-        safety.setPhoneNumber("555-0100");
+	@Test
+	void directoryViewPlacesContactSecondAndSupportsAssignedPositionFilter() throws Exception {
+		TCard safety = personnelCard("Sam Safety", "OR");
+		safety.setSourceRef("org:safetyOfficer");
+		safety.setRadioChannel("Tac 1");
+		safety.setPhoneNumber("555-0100");
 
-        TCard pio = personnelCard("Pat Public", "WA");
-        pio.setSourceRef("org:pio");
-        pio.setPhoneNumber("555-0200");
+		TCard pio = personnelCard("Pat Public", "WA");
+		pio.setSourceRef("org:pio");
+		pio.setPhoneNumber("555-0200");
 
-        AppData data = new AppData();
-        data.setTCards(List.of(safety, pio));
+		AppData data = new AppData();
+		data.setTCards(List.of(safety, pio));
 
-        TCardPanel panel = new TCardPanel(createController(data));
-        SwingUtilities.invokeAndWait(() -> {
-            panel.refreshFromModel();
-            combo(panel, "viewSelector").setSelectedItem("Directory View");
-            JTable directoryTable = field(panel, "directoryTable", JTable.class);
-            TableColumnModel columns = directoryTable.getColumnModel();
+		TCardPanel panel = new TCardPanel(createController(data));
+		SwingUtilities.invokeAndWait(() -> {
+			panel.refreshFromModel();
+			combo(panel, "viewSelector").setSelectedItem("Directory View");
+			JTable directoryTable = field(panel, "directoryTable", JTable.class);
+			TableColumnModel columns = directoryTable.getColumnModel();
 
-            assertEquals("Name", columns.getColumn(0).getHeaderValue());
-            assertEquals("Contact", columns.getColumn(1).getHeaderValue());
-            assertEquals("Assigned Position", columns.getColumn(2).getHeaderValue());
+			assertEquals("Name", columns.getColumn(0).getHeaderValue());
+			assertEquals("Contact", columns.getColumn(1).getHeaderValue());
+			assertEquals("Assigned Position", columns.getColumn(2).getHeaderValue());
 
-            int expectedWidth = directoryTable.getFontMetrics(directoryTable.getFont())
-                    .stringWidth("Radio: Tac 1; Phone: 555-0100") + 24;
-            assertTrue(columns.getColumn(1).getPreferredWidth() >= expectedWidth);
+			int expectedWidth = directoryTable.getFontMetrics(directoryTable.getFont())
+					.stringWidth("Radio: Tac 1; Phone: 555-0100") + 24;
+			assertTrue(columns.getColumn(1).getPreferredWidth() >= expectedWidth);
 
-            JComboBox<String> positionFilter = combo(panel, "directoryPositionFilter");
-            positionFilter.setSelectedItem("Safety Officer");
-            assertEquals(1, directoryTable.getRowCount());
-            directoryTable.setRowSelectionInterval(0, 0);
-            assertSame(safety, selectedCard(panel));
-        });
-    }
+			JComboBox<String> positionFilter = combo(panel, "directoryPositionFilter");
+			positionFilter.setSelectedItem("Safety Officer");
+			assertEquals(1, directoryTable.getRowCount());
+			directoryTable.setRowSelectionInterval(0, 0);
+			assertSame(safety, selectedCard(panel));
+		});
+	}
 
-    @Test
-    void clearFiltersButtonResetsDirectoryFiltersAndShowsFullList() throws Exception {
-        TCard safety = personnelCard("Sam Safety", "OR");
-        safety.setSourceRef("org:safetyOfficer");
-        safety.setHomeAgency("Planning");
+	@Test
+	void clearFiltersButtonResetsDirectoryFiltersAndShowsFullList() throws Exception {
+		TCard safety = personnelCard("Sam Safety", "OR");
+		safety.setSourceRef("org:safetyOfficer");
+		safety.setHomeAgency("Planning");
 
-        TCard pio = personnelCard("Pat Public", "WA");
-        pio.setSourceRef("org:pio");
-        pio.setHomeAgency("Command");
+		TCard pio = personnelCard("Pat Public", "WA");
+		pio.setSourceRef("org:pio");
+		pio.setHomeAgency("Command");
 
-        AppData data = new AppData();
-        data.setTCards(List.of(safety, pio));
+		AppData data = new AppData();
+		data.setTCards(List.of(safety, pio));
 
-        TCardPanel panel = new TCardPanel(createController(data));
-        SwingUtilities.invokeAndWait(() -> {
-            panel.refreshFromModel();
-            combo(panel, "viewSelector").setSelectedItem("Directory View");
+		TCardPanel panel = new TCardPanel(createController(data));
+		SwingUtilities.invokeAndWait(() -> {
+			panel.refreshFromModel();
+			combo(panel, "viewSelector").setSelectedItem("Directory View");
 
-            JTextField nameFilter = field(panel, "directoryNameFilterField", JTextField.class);
-            JComboBox<String> positionFilter = combo(panel, "directoryPositionFilter");
-            JComboBox<String> stateFilter = combo(panel, "directoryStateFilter");
-            JComboBox<String> unitFilter = combo(panel, "directoryUnitFilter");
-            JTable directoryTable = field(panel, "directoryTable", JTable.class);
-            JButton clearButton = field(panel, "clearDirectoryFiltersBtn", JButton.class);
+			JTextField nameFilter = field(panel, "directoryNameFilterField", JTextField.class);
+			JComboBox<String> positionFilter = combo(panel, "directoryPositionFilter");
+			JComboBox<String> stateFilter = combo(panel, "directoryStateFilter");
+			JComboBox<String> unitFilter = combo(panel, "directoryUnitFilter");
+			JTable directoryTable = field(panel, "directoryTable", JTable.class);
+			JButton clearButton = field(panel, "clearDirectoryFiltersBtn", JButton.class);
 
-            nameFilter.setText("sam");
-            positionFilter.setSelectedItem("Safety Officer");
-            stateFilter.setSelectedItem("OR");
-            unitFilter.setSelectedItem("Planning");
-            assertEquals(1, directoryTable.getRowCount());
+			nameFilter.setText("sam");
+			positionFilter.setSelectedItem("Safety Officer");
+			stateFilter.setSelectedItem("OR");
+			unitFilter.setSelectedItem("Planning");
+			assertEquals(1, directoryTable.getRowCount());
 
-            clearButton.doClick();
+			clearButton.doClick();
 
-            assertEquals("", nameFilter.getText());
-            assertEquals("All", positionFilter.getSelectedItem());
-            assertEquals("All", stateFilter.getSelectedItem());
-            assertEquals("All", unitFilter.getSelectedItem());
-            assertEquals(2, directoryTable.getRowCount());
-        });
-    }
+			assertEquals("", nameFilter.getText());
+			assertEquals("All", positionFilter.getSelectedItem());
+			assertEquals("All", stateFilter.getSelectedItem());
+			assertEquals("All", unitFilter.getSelectedItem());
+			assertEquals(2, directoryTable.getRowCount());
+		});
+	}
 
-    @Test
-    void directoryFiltersUseTwoVisibleRows() throws Exception {
-        AppData data = new AppData();
-        data.setTCards(List.of(personnelCard("Sam Safety", "OR")));
+	@Test
+	void directoryFiltersUseTwoVisibleRows() throws Exception {
+		AppData data = new AppData();
+		data.setTCards(List.of(personnelCard("Sam Safety", "OR")));
 
-        TCardPanel panel = new TCardPanel(createController(data));
-        SwingUtilities.invokeAndWait(() -> {
-            panel.refreshFromModel();
-            combo(panel, "viewSelector").setSelectedItem("Directory View");
+		TCardPanel panel = new TCardPanel(createController(data));
+		SwingUtilities.invokeAndWait(() -> {
+			panel.refreshFromModel();
+			combo(panel, "viewSelector").setSelectedItem("Directory View");
 
-            JTextField nameFilter = field(panel, "directoryNameFilterField", JTextField.class);
-            JPanel firstRow = (JPanel) nameFilter.getParent();
-            JPanel filters = (JPanel) firstRow.getParent();
+			JTextField nameFilter = field(panel, "directoryNameFilterField", JTextField.class);
+			JPanel firstRow = (JPanel) nameFilter.getParent();
+			JPanel filters = (JPanel) firstRow.getParent();
 
-            assertEquals(2, filters.getComponentCount());
-            assertTrue(filters.getComponent(0).isVisible());
-            assertTrue(filters.getComponent(1).isVisible());
-        });
-    }
+			assertEquals(2, filters.getComponentCount());
+			assertTrue(filters.getComponent(0).isVisible());
+			assertTrue(filters.getComponent(1).isVisible());
+		});
+	}
 
-    private static TCard personnelCard(String name, String state) {
-        TCard card = new TCard();
-        card.setCardType(TCardType.PERSONNEL);
-        card.setPersonName(name);
-        card.setHomeState(state);
-        return card;
-    }
+	private static TCard personnelCard(String name, String state) {
+		TCard card = new TCard();
+		card.setCardType(TCardType.PERSONNEL);
+		card.setPersonName(name);
+		card.setHomeState(state);
+		return card;
+	}
 
-    private static AppController createController(AppData data) {
-        return new AppController(
-                data,
-                new LocalRepository(Path.of(System.getProperty("java.io.tmpdir"), "tcard-directory-test.json")),
-                new PdfExportService(),
-                new IncidentValidator());
-    }
+	private static AppController createController(AppData data) {
+		return new AppController(data,
+				new LocalRepository(Path.of(System.getProperty("java.io.tmpdir"), "tcard-directory-test.json")),
+				new PdfExportService(), new IncidentValidator());
+	}
 
-    @SuppressWarnings("unchecked")
-    private static JComboBox<String> combo(TCardPanel panel, String fieldName) {
-        return field(panel, fieldName, JComboBox.class);
-    }
+	@SuppressWarnings("unchecked")
+	private static JComboBox<String> combo(TCardPanel panel, String fieldName) {
+		return field(panel, fieldName, JComboBox.class);
+	}
 
-    private static <T> T field(TCardPanel panel, String fieldName, Class<T> type) {
-        try {
-            Field field = TCardPanel.class.getDeclaredField(fieldName);
-            field.setAccessible(true);
-            return type.cast(field.get(panel));
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError(e);
-        }
-    }
+	private static <T> T field(TCardPanel panel, String fieldName, Class<T> type) {
+		try {
+			Field field = TCardPanel.class.getDeclaredField(fieldName);
+			field.setAccessible(true);
+			return type.cast(field.get(panel));
+		} catch (ReflectiveOperationException e) {
+			throw new AssertionError(e);
+		}
+	}
 
-    private static TCard selectedCard(TCardPanel panel) {
-        return (TCard) invoke(panel, "selectedCard", new Class<?>[0]);
-    }
+	private static TCard selectedCard(TCardPanel panel) {
+		return (TCard) invoke(panel, "selectedCard", new Class<?>[0]);
+	}
 
-    private static Object invoke(Object target, String methodName, Class<?>[] parameterTypes, Object... args) {
-        try {
-            Method method = target.getClass().getDeclaredMethod(methodName, parameterTypes);
-            method.setAccessible(true);
-            return method.invoke(target, args);
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError(e);
-        }
-    }
+	private static Object invoke(Object target, String methodName, Class<?>[] parameterTypes, Object... args) {
+		try {
+			Method method = target.getClass().getDeclaredMethod(methodName, parameterTypes);
+			method.setAccessible(true);
+			return method.invoke(target, args);
+		} catch (ReflectiveOperationException e) {
+			throw new AssertionError(e);
+		}
+	}
 }

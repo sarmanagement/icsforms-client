@@ -7,466 +7,510 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Canonical root document for the local first-cut ICS workspace.
- * Shared incident context, form content, and linked SAR task scaffolding are persisted together.
+ * Canonical root document for the local first-cut ICS workspace. Shared
+ * incident context, form content, and linked SAR task scaffolding are persisted
+ * together.
  */
 public class AppData {
-    /** Current persistence schema version for JSON storage. */
-    public static final int CURRENT_SCHEMA_VERSION = 5;
+	/** Current persistence schema version for JSON storage. */
+	public static final int CURRENT_SCHEMA_VERSION = 5;
 
-    /**
-     * A lightweight snapshot of the shared context at the end of one operational period,
-     * captured when the incident advances to the next period.
-     */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class OperationalPeriodRecord {
-        private LocalDateTime periodStart;
-        private LocalDateTime periodEnd;
-        private List<String> incidentCommanders = new ArrayList<>();
+	/**
+	 * A lightweight snapshot of the shared context at the end of one operational
+	 * period, captured when the incident advances to the next period.
+	 */
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static class OperationalPeriodRecord {
+		private LocalDateTime periodStart;
+		private LocalDateTime periodEnd;
+		private List<String> incidentCommanders = new ArrayList<>();
 
-        /** Creates an empty record. */
-        public OperationalPeriodRecord() {}
+		/** Creates an empty record. */
+		public OperationalPeriodRecord() {
+		}
 
-        /** Returns the operational period start date/time. */
-        public LocalDateTime getPeriodStart() { return periodStart; }
-        /** Sets the operational period start date/time. */
-        public void setPeriodStart(LocalDateTime periodStart) { this.periodStart = periodStart; }
+		/** Returns the operational period start date/time. */
+		public LocalDateTime getPeriodStart() {
+			return periodStart;
+		}
+		/** Sets the operational period start date/time. */
+		public void setPeriodStart(LocalDateTime periodStart) {
+			this.periodStart = periodStart;
+		}
 
-        /** Returns the operational period end date/time. */
-        public LocalDateTime getPeriodEnd() { return periodEnd; }
-        /** Sets the operational period end date/time. */
-        public void setPeriodEnd(LocalDateTime periodEnd) { this.periodEnd = periodEnd; }
+		/** Returns the operational period end date/time. */
+		public LocalDateTime getPeriodEnd() {
+			return periodEnd;
+		}
+		/** Sets the operational period end date/time. */
+		public void setPeriodEnd(LocalDateTime periodEnd) {
+			this.periodEnd = periodEnd;
+		}
 
-        /** Returns the incident commander / unified-command names for this period. */
-        public List<String> getIncidentCommanders() { return incidentCommanders; }
-        /** Sets the incident commander / unified-command names for this period. */
-        public void setIncidentCommanders(List<String> incidentCommanders) {
-            this.incidentCommanders = incidentCommanders == null ? new ArrayList<>() : incidentCommanders;
-        }
-    }
+		/** Returns the incident commander / unified-command names for this period. */
+		public List<String> getIncidentCommanders() {
+			return incidentCommanders;
+		}
+		/** Sets the incident commander / unified-command names for this period. */
+		public void setIncidentCommanders(List<String> incidentCommanders) {
+			this.incidentCommanders = incidentCommanders == null ? new ArrayList<>() : incidentCommanders;
+		}
+	}
 
-    private int schemaVersion = CURRENT_SCHEMA_VERSION;
-    private boolean useSystemTimeZone = true;
-    private String configuredTimeZoneId = "UTC";
-    private IncidentMode incidentMode = IncidentMode.SAR;
-    private IapPhase iapPhase = IapPhase.PRE_OP;
-    private List<OperationalPeriodRecord> operationalPeriodHistory = new ArrayList<>();
-    private IncidentContext incidentContext = new IncidentContext();
-    private OrganizationalChart organizationalChart = new OrganizationalChart();
-    private Ics201Form form201 = new Ics201Form();
-    private Ics202Form form202 = new Ics202Form();
-    private String form205aIapPage = "";
-    private Ics207Form form207 = new Ics207Form();
-    private Ics204Form form204 = new Ics204Form();
-    private List<Ics204Form> additionalForms204 = new ArrayList<>();
-    private List<Ics214Form> activityLogs = new ArrayList<>();
-    private List<ActivityEventType> activityEventTypes = new ArrayList<>();
-    private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
-    private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
-    private List<TCard> tCards = new ArrayList<>();
-    private PdfLayoutSettings pdfLayoutSettings = new PdfLayoutSettings();
+	private int schemaVersion = CURRENT_SCHEMA_VERSION;
+	private boolean useSystemTimeZone = true;
+	private String configuredTimeZoneId = "UTC";
+	private IncidentMode incidentMode = IncidentMode.SAR;
+	private IapPhase iapPhase = IapPhase.PRE_OP;
+	private List<OperationalPeriodRecord> operationalPeriodHistory = new ArrayList<>();
+	private IncidentContext incidentContext = new IncidentContext();
+	private OrganizationalChart organizationalChart = new OrganizationalChart();
+	private Ics201Form form201 = new Ics201Form();
+	private Ics202Form form202 = new Ics202Form();
+	private String form205aIapPage = "";
+	private Ics207Form form207 = new Ics207Form();
+	private Ics204Form form204 = new Ics204Form();
+	private List<Ics204Form> additionalForms204 = new ArrayList<>();
+	private List<Ics214Form> activityLogs = new ArrayList<>();
+	private List<ActivityEventType> activityEventTypes = new ArrayList<>();
+	private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
+	private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
+	private List<TCard> tCards = new ArrayList<>();
+	private PdfLayoutSettings pdfLayoutSettings = new PdfLayoutSettings();
 
-    /**
-     * Creates an empty incident document.
-     */
-    public AppData() {
-    }
+	/**
+	 * Creates an empty incident document.
+	 */
+	public AppData() {
+	}
 
-    /**
-     * Creates a populated incident document.
-     *
-     * @param incidentContext shared incident metadata.
-     * @param form202 incident objectives form content.
-     * @param form204 assignment list form content.
-     * @param sarTaskAssignments SAR task scaffold records linked to assignments.
-     */
-    public AppData(IncidentContext incidentContext, Ics202Form form202, Ics204Form form204, List<SarTaskAssignment> sarTaskAssignments) {
-        this.incidentContext = incidentContext == null ? new IncidentContext() : incidentContext;
-        this.organizationalChart = new OrganizationalChart();
-        this.form201 = new Ics201Form();
-        this.form202 = form202 == null ? new Ics202Form() : form202;
-        this.form204 = form204 == null ? new Ics204Form() : form204;
-        if (sarTaskAssignments != null) {
-            this.sarTaskAssignments = sarTaskAssignments;
-        }
-    }
+	/**
+	 * Creates a populated incident document.
+	 *
+	 * @param incidentContext
+	 *            shared incident metadata.
+	 * @param form202
+	 *            incident objectives form content.
+	 * @param form204
+	 *            assignment list form content.
+	 * @param sarTaskAssignments
+	 *            SAR task scaffold records linked to assignments.
+	 */
+	public AppData(IncidentContext incidentContext, Ics202Form form202, Ics204Form form204,
+			List<SarTaskAssignment> sarTaskAssignments) {
+		this.incidentContext = incidentContext == null ? new IncidentContext() : incidentContext;
+		this.organizationalChart = new OrganizationalChart();
+		this.form201 = new Ics201Form();
+		this.form202 = form202 == null ? new Ics202Form() : form202;
+		this.form204 = form204 == null ? new Ics204Form() : form204;
+		if (sarTaskAssignments != null) {
+			this.sarTaskAssignments = sarTaskAssignments;
+		}
+	}
 
-    /**
-     * Advances this document to a new subsequent operational period in place.
-     *
-     * <p>The organizational chart and ICS 201 initial-response record are preserved as
-     * historical context. ICS 202, ICS 204, SAR tasks, clue log, T-cards, and activity logs
-     * are cleared so that the new period starts fresh. The IAP phase is set to
-     * {@link IapPhase#DURING_OP}. The incident context, incident mode, and activity event
-     * types are retained.</p>
-     */
-    public void advanceToNewOperationalPeriod() {
-        // Capture the current operational period context before clearing.
-        OperationalPeriodRecord record = new OperationalPeriodRecord();
-        if (incidentContext != null) {
-            record.setPeriodStart(incidentContext.getOperationalPeriodStart());
-            record.setPeriodEnd(incidentContext.getOperationalPeriodEnd());
-        }
-        if (organizationalChart != null) {
-            record.setIncidentCommanders(new ArrayList<>(organizationalChart.getIncidentCommanders()));
-        }
-        operationalPeriodHistory.add(record);
+	/**
+	 * Advances this document to a new subsequent operational period in place.
+	 *
+	 * <p>
+	 * The organizational chart and ICS 201 initial-response record are preserved as
+	 * historical context. ICS 202, ICS 204, SAR tasks, clue log, T-cards, and
+	 * activity logs are cleared so that the new period starts fresh. The IAP phase
+	 * is set to {@link IapPhase#DURING_OP}. The incident context, incident mode,
+	 * and activity event types are retained.
+	 * </p>
+	 */
+	public void advanceToNewOperationalPeriod() {
+		// Capture the current operational period context before clearing.
+		OperationalPeriodRecord record = new OperationalPeriodRecord();
+		if (incidentContext != null) {
+			record.setPeriodStart(incidentContext.getOperationalPeriodStart());
+			record.setPeriodEnd(incidentContext.getOperationalPeriodEnd());
+		}
+		if (organizationalChart != null) {
+			record.setIncidentCommanders(new ArrayList<>(organizationalChart.getIncidentCommanders()));
+		}
+		operationalPeriodHistory.add(record);
 
-        this.iapPhase = IapPhase.DURING_OP;
-        this.form202 = new Ics202Form();
-        this.form205aIapPage = "";
-        this.form204 = new Ics204Form();
-        this.additionalForms204 = new ArrayList<>();
-        this.sarTaskAssignments = new ArrayList<>();
-        this.clueLogEntries = new ArrayList<>();
-        this.tCards = new ArrayList<>();
-        this.activityLogs = new ArrayList<>();
-    }
+		this.iapPhase = IapPhase.DURING_OP;
+		this.form202 = new Ics202Form();
+		this.form205aIapPage = "";
+		this.form204 = new Ics204Form();
+		this.additionalForms204 = new ArrayList<>();
+		this.sarTaskAssignments = new ArrayList<>();
+		this.clueLogEntries = new ArrayList<>();
+		this.tCards = new ArrayList<>();
+		this.activityLogs = new ArrayList<>();
+	}
 
-    /**
-     * Returns the JSON schema version.
-     *
-     * @return persisted schema version.
-     */
-    public int getSchemaVersion() {
-        return schemaVersion;
-    }
+	/**
+	 * Returns the JSON schema version.
+	 *
+	 * @return persisted schema version.
+	 */
+	public int getSchemaVersion() {
+		return schemaVersion;
+	}
 
-    /**
-     * Sets the JSON schema version.
-     *
-     * @param schemaVersion schema version value.
-     */
-    public void setSchemaVersion(int schemaVersion) {
-        this.schemaVersion = schemaVersion;
-    }
+	/**
+	 * Sets the JSON schema version.
+	 *
+	 * @param schemaVersion
+	 *            schema version value.
+	 */
+	public void setSchemaVersion(int schemaVersion) {
+		this.schemaVersion = schemaVersion;
+	}
 
-    public boolean isUseSystemTimeZone() {
-        return useSystemTimeZone;
-    }
+	public boolean isUseSystemTimeZone() {
+		return useSystemTimeZone;
+	}
 
-    public void setUseSystemTimeZone(boolean useSystemTimeZone) {
-        this.useSystemTimeZone = useSystemTimeZone;
-    }
+	public void setUseSystemTimeZone(boolean useSystemTimeZone) {
+		this.useSystemTimeZone = useSystemTimeZone;
+	}
 
-    public String getConfiguredTimeZoneId() {
-        return configuredTimeZoneId;
-    }
+	public String getConfiguredTimeZoneId() {
+		return configuredTimeZoneId;
+	}
 
-    public void setConfiguredTimeZoneId(String configuredTimeZoneId) {
-        this.configuredTimeZoneId = configuredTimeZoneId == null || configuredTimeZoneId.isBlank()
-                ? "UTC"
-                : configuredTimeZoneId.trim();
-    }
+	public void setConfiguredTimeZoneId(String configuredTimeZoneId) {
+		this.configuredTimeZoneId = configuredTimeZoneId == null || configuredTimeZoneId.isBlank()
+				? "UTC"
+				: configuredTimeZoneId.trim();
+	}
 
-    /**
-     * Returns the operational period history — one record per completed period, in chronological
-     * order.  The current (in-progress) period is NOT included; it appears only after
-     * {@link #advanceToNewOperationalPeriod()} is called.
-     *
-     * @return operational period history (never {@code null}).
-     */
-    public List<OperationalPeriodRecord> getOperationalPeriodHistory() {
-        return operationalPeriodHistory;
-    }
+	/**
+	 * Returns the operational period history — one record per completed period, in
+	 * chronological order. The current (in-progress) period is NOT included; it
+	 * appears only after {@link #advanceToNewOperationalPeriod()} is called.
+	 *
+	 * @return operational period history (never {@code null}).
+	 */
+	public List<OperationalPeriodRecord> getOperationalPeriodHistory() {
+		return operationalPeriodHistory;
+	}
 
-    /**
-     * Sets the operational period history.
-     *
-     * @param operationalPeriodHistory period history; {@code null} is treated as empty.
-     */
-    public void setOperationalPeriodHistory(List<OperationalPeriodRecord> operationalPeriodHistory) {
-        this.operationalPeriodHistory = operationalPeriodHistory == null ? new ArrayList<>() : operationalPeriodHistory;
-    }
+	/**
+	 * Sets the operational period history.
+	 *
+	 * @param operationalPeriodHistory
+	 *            period history; {@code null} is treated as empty.
+	 */
+	public void setOperationalPeriodHistory(List<OperationalPeriodRecord> operationalPeriodHistory) {
+		this.operationalPeriodHistory = operationalPeriodHistory == null ? new ArrayList<>() : operationalPeriodHistory;
+	}
 
-    /**
-     * Returns the shared incident metadata.
-     *
-     * @return shared incident context.
-     */
-    public IncidentContext getIncidentContext() {
-        return incidentContext;
-    }
+	/**
+	 * Returns the shared incident metadata.
+	 *
+	 * @return shared incident context.
+	 */
+	public IncidentContext getIncidentContext() {
+		return incidentContext;
+	}
 
-    /**
-     * Sets the shared incident metadata.
-     *
-     * @param incidentContext shared incident context.
-     */
-    public void setIncidentContext(IncidentContext incidentContext) {
-        this.incidentContext = incidentContext == null ? new IncidentContext() : incidentContext;
-    }
+	/**
+	 * Sets the shared incident metadata.
+	 *
+	 * @param incidentContext
+	 *            shared incident context.
+	 */
+	public void setIncidentContext(IncidentContext incidentContext) {
+		this.incidentContext = incidentContext == null ? new IncidentContext() : incidentContext;
+	}
 
-    /**
-     * Returns the organizational chart data shared across forms.
-     *
-     * @return organizational chart data.
-     */
-    public OrganizationalChart getOrganizationalChart() {
-        return organizationalChart;
-    }
+	/**
+	 * Returns the organizational chart data shared across forms.
+	 *
+	 * @return organizational chart data.
+	 */
+	public OrganizationalChart getOrganizationalChart() {
+		return organizationalChart;
+	}
 
-    /**
-     * Sets the organizational chart data shared across forms.
-     *
-     * @param organizationalChart organizational chart data.
-     */
-    public void setOrganizationalChart(OrganizationalChart organizationalChart) {
-        this.organizationalChart = organizationalChart == null ? new OrganizationalChart() : organizationalChart;
-    }
+	/**
+	 * Sets the organizational chart data shared across forms.
+	 *
+	 * @param organizationalChart
+	 *            organizational chart data.
+	 */
+	public void setOrganizationalChart(OrganizationalChart organizationalChart) {
+		this.organizationalChart = organizationalChart == null ? new OrganizationalChart() : organizationalChart;
+	}
 
+	/**
+	 * Returns ICS 201 content.
+	 *
+	 * @return incident briefing form.
+	 */
+	public Ics201Form getForm201() {
+		return form201;
+	}
 
-    /**
-     * Returns ICS 201 content.
-     *
-     * @return incident briefing form.
-     */
-    public Ics201Form getForm201() {
-        return form201;
-    }
+	/**
+	 * Sets ICS 201 content.
+	 *
+	 * @param form201
+	 *            incident briefing form.
+	 */
+	public void setForm201(Ics201Form form201) {
+		this.form201 = form201 == null ? new Ics201Form() : form201;
+	}
 
-    /**
-     * Sets ICS 201 content.
-     *
-     * @param form201 incident briefing form.
-     */
-    public void setForm201(Ics201Form form201) {
-        this.form201 = form201 == null ? new Ics201Form() : form201;
-    }
+	/**
+	 * Returns ICS 202 content.
+	 *
+	 * @return incident objectives form.
+	 */
+	public Ics202Form getForm202() {
+		return form202;
+	}
 
-    /**
-     * Returns ICS 202 content.
-     *
-     * @return incident objectives form.
-     */
-    public Ics202Form getForm202() {
-        return form202;
-    }
+	/**
+	 * Sets ICS 202 content.
+	 *
+	 * @param form202
+	 *            incident objectives form.
+	 */
+	public void setForm202(Ics202Form form202) {
+		this.form202 = form202 == null ? new Ics202Form() : form202;
+	}
 
-    /**
-     * Sets ICS 202 content.
-     *
-     * @param form202 incident objectives form.
-     */
-    public void setForm202(Ics202Form form202) {
-        this.form202 = form202 == null ? new Ics202Form() : form202;
-    }
+	/**
+	 * Returns the ICS 205A IAP page number assigned during bundle export.
+	 *
+	 * @return ICS 205A IAP page number, or blank when not assigned.
+	 */
+	public String getForm205aIapPage() {
+		return form205aIapPage == null ? "" : form205aIapPage;
+	}
 
-    /**
-     * Returns the ICS 205A IAP page number assigned during bundle export.
-     *
-     * @return ICS 205A IAP page number, or blank when not assigned.
-     */
-    public String getForm205aIapPage() {
-        return form205aIapPage == null ? "" : form205aIapPage;
-    }
+	/**
+	 * Sets the ICS 205A IAP page number assigned during bundle export.
+	 *
+	 * @param form205aIapPage
+	 *            ICS 205A IAP page number.
+	 */
+	public void setForm205aIapPage(String form205aIapPage) {
+		this.form205aIapPage = form205aIapPage == null ? "" : form205aIapPage;
+	}
 
-    /**
-     * Sets the ICS 205A IAP page number assigned during bundle export.
-     *
-     * @param form205aIapPage ICS 205A IAP page number.
-     */
-    public void setForm205aIapPage(String form205aIapPage) {
-        this.form205aIapPage = form205aIapPage == null ? "" : form205aIapPage;
-    }
+	/**
+	 * Returns ICS 207 content.
+	 *
+	 * @return organization chart form.
+	 */
+	public Ics207Form getForm207() {
+		return form207;
+	}
 
-    /**
-     * Returns ICS 207 content.
-     *
-     * @return organization chart form.
-     */
-    public Ics207Form getForm207() {
-        return form207;
-    }
+	/**
+	 * Sets ICS 207 content.
+	 *
+	 * @param form207
+	 *            organization chart form.
+	 */
+	public void setForm207(Ics207Form form207) {
+		this.form207 = form207 == null ? new Ics207Form() : form207;
+	}
 
-    /**
-     * Sets ICS 207 content.
-     *
-     * @param form207 organization chart form.
-     */
-    public void setForm207(Ics207Form form207) {
-        this.form207 = form207 == null ? new Ics207Form() : form207;
-    }
+	/**
+	 * Returns ICS 204 content.
+	 *
+	 * @return assignment list form.
+	 */
+	public Ics204Form getForm204() {
+		return form204;
+	}
 
-    /**
-     * Returns ICS 204 content.
-     *
-     * @return assignment list form.
-     */
-    public Ics204Form getForm204() {
-        return form204;
-    }
+	/**
+	 * Sets ICS 204 content.
+	 *
+	 * @param form204
+	 *            assignment list form.
+	 */
+	public void setForm204(Ics204Form form204) {
+		this.form204 = form204 == null ? new Ics204Form() : form204;
+	}
 
-    /**
-     * Sets ICS 204 content.
-     *
-     * @param form204 assignment list form.
-     */
-    public void setForm204(Ics204Form form204) {
-        this.form204 = form204 == null ? new Ics204Form() : form204;
-    }
+	/**
+	 * Returns additional ICS 204 forms beyond the primary assignment list.
+	 *
+	 * @return additional ICS 204 forms.
+	 */
+	public List<Ics204Form> getAdditionalForms204() {
+		return additionalForms204;
+	}
 
-    /**
-     * Returns additional ICS 204 forms beyond the primary assignment list.
-     *
-     * @return additional ICS 204 forms.
-     */
-    public List<Ics204Form> getAdditionalForms204() {
-        return additionalForms204;
-    }
+	/**
+	 * Sets additional ICS 204 forms beyond the primary assignment list.
+	 *
+	 * @param additionalForms204
+	 *            additional ICS 204 forms.
+	 */
+	public void setAdditionalForms204(List<Ics204Form> additionalForms204) {
+		this.additionalForms204 = additionalForms204 == null ? new ArrayList<>() : additionalForms204;
+	}
 
-    /**
-     * Sets additional ICS 204 forms beyond the primary assignment list.
-     *
-     * @param additionalForms204 additional ICS 204 forms.
-     */
-    public void setAdditionalForms204(List<Ics204Form> additionalForms204) {
-        this.additionalForms204 = additionalForms204 == null ? new ArrayList<>() : additionalForms204;
-    }
+	/**
+	 * Returns ICS 214 activity logs.
+	 *
+	 * @return ICS 214 activity logs.
+	 */
+	public List<Ics214Form> getActivityLogs() {
+		return activityLogs;
+	}
 
-    /**
-     * Returns ICS 214 activity logs.
-     *
-     * @return ICS 214 activity logs.
-     */
-    public List<Ics214Form> getActivityLogs() {
-        return activityLogs;
-    }
+	/**
+	 * Sets ICS 214 activity logs.
+	 *
+	 * @param activityLogs
+	 *            ICS 214 activity logs.
+	 */
+	public void setActivityLogs(List<Ics214Form> activityLogs) {
+		this.activityLogs = activityLogs == null ? new ArrayList<>() : activityLogs;
+	}
 
-    /**
-     * Sets ICS 214 activity logs.
-     *
-     * @param activityLogs ICS 214 activity logs.
-     */
-    public void setActivityLogs(List<Ics214Form> activityLogs) {
-        this.activityLogs = activityLogs == null ? new ArrayList<>() : activityLogs;
-    }
+	/**
+	 * Returns the configured activity event types used across all ICS 214 logs.
+	 *
+	 * <p>
+	 * When this list is empty the application populates it with
+	 * {@link ActivityEventType#defaultTypes()} on startup. Operators may add custom
+	 * types to extend the built-in set.
+	 * </p>
+	 *
+	 * @return configured activity event types.
+	 */
+	public List<ActivityEventType> getActivityEventTypes() {
+		return activityEventTypes;
+	}
 
-    /**
-     * Returns the configured activity event types used across all ICS 214 logs.
-     *
-     * <p>When this list is empty the application populates it with
-     * {@link ActivityEventType#defaultTypes()} on startup.  Operators may add
-     * custom types to extend the built-in set.</p>
-     *
-     * @return configured activity event types.
-     */
-    public List<ActivityEventType> getActivityEventTypes() {
-        return activityEventTypes;
-    }
+	/**
+	 * Sets the configured activity event types.
+	 *
+	 * @param activityEventTypes
+	 *            configured activity event types.
+	 */
+	public void setActivityEventTypes(List<ActivityEventType> activityEventTypes) {
+		this.activityEventTypes = activityEventTypes == null ? new ArrayList<>() : activityEventTypes;
+	}
 
-    /**
-     * Sets the configured activity event types.
-     *
-     * @param activityEventTypes configured activity event types.
-     */
-    public void setActivityEventTypes(List<ActivityEventType> activityEventTypes) {
-        this.activityEventTypes = activityEventTypes == null ? new ArrayList<>() : activityEventTypes;
-    }
+	/**
+	 * Returns linked SAR task records.
+	 *
+	 * @return SAR task scaffold list.
+	 */
+	public List<SarTaskAssignment> getSarTaskAssignments() {
+		return sarTaskAssignments;
+	}
 
-    /**
-     * Returns linked SAR task records.
-     *
-     * @return SAR task scaffold list.
-     */
-    public List<SarTaskAssignment> getSarTaskAssignments() {
-        return sarTaskAssignments;
-    }
+	/**
+	 * Sets linked SAR task records.
+	 *
+	 * @param sarTaskAssignments
+	 *            SAR task scaffold list.
+	 */
+	public void setSarTaskAssignments(List<SarTaskAssignment> sarTaskAssignments) {
+		this.sarTaskAssignments = sarTaskAssignments == null ? new ArrayList<>() : sarTaskAssignments;
+	}
 
-    /**
-     * Sets linked SAR task records.
-     *
-     * @param sarTaskAssignments SAR task scaffold list.
-     */
-    public void setSarTaskAssignments(List<SarTaskAssignment> sarTaskAssignments) {
-        this.sarTaskAssignments = sarTaskAssignments == null ? new ArrayList<>() : sarTaskAssignments;
-    }
+	/**
+	 * Returns shared clue log entries collected from task debriefings.
+	 *
+	 * @return clue log entries.
+	 */
+	public List<ClueLogEntry> getClueLogEntries() {
+		return clueLogEntries;
+	}
 
-    /**
-     * Returns shared clue log entries collected from task debriefings.
-     *
-     * @return clue log entries.
-     */
-    public List<ClueLogEntry> getClueLogEntries() {
-        return clueLogEntries;
-    }
+	/**
+	 * Sets shared clue log entries collected from task debriefings.
+	 *
+	 * @param clueLogEntries
+	 *            clue log entries.
+	 */
+	public void setClueLogEntries(List<ClueLogEntry> clueLogEntries) {
+		this.clueLogEntries = clueLogEntries == null ? new ArrayList<>() : clueLogEntries;
+	}
 
-    /**
-     * Sets shared clue log entries collected from task debriefings.
-     *
-     * @param clueLogEntries clue log entries.
-     */
-    public void setClueLogEntries(List<ClueLogEntry> clueLogEntries) {
-        this.clueLogEntries = clueLogEntries == null ? new ArrayList<>() : clueLogEntries;
-    }
+	/**
+	 * Returns the IAP preparation phase (pre-operational or during operational
+	 * period).
+	 *
+	 * <p>
+	 * Defaults to {@link IapPhase#PRE_OP} for backward compatibility.
+	 * </p>
+	 *
+	 * @return IAP phase.
+	 */
+	public IapPhase getIapPhase() {
+		return iapPhase == null ? IapPhase.PRE_OP : iapPhase;
+	}
 
-    /**
-     * Returns the IAP preparation phase (pre-operational or during operational period).
-     *
-     * <p>Defaults to {@link IapPhase#PRE_OP} for backward compatibility.</p>
-     *
-     * @return IAP phase.
-     */
-    public IapPhase getIapPhase() {
-        return iapPhase == null ? IapPhase.PRE_OP : iapPhase;
-    }
+	/**
+	 * Sets the IAP preparation phase.
+	 *
+	 * @param iapPhase
+	 *            IAP phase; {@code null} is treated as {@link IapPhase#PRE_OP}.
+	 */
+	public void setIapPhase(IapPhase iapPhase) {
+		this.iapPhase = iapPhase == null ? IapPhase.PRE_OP : iapPhase;
+	}
 
-    /**
-     * Sets the IAP preparation phase.
-     *
-     * @param iapPhase IAP phase; {@code null} is treated as {@link IapPhase#PRE_OP}.
-     */
-    public void setIapPhase(IapPhase iapPhase) {
-        this.iapPhase = iapPhase == null ? IapPhase.PRE_OP : iapPhase;
-    }
+	/**
+	 * Returns the incident operational mode (SAR or Generic).
+	 *
+	 * <p>
+	 * Defaults to {@link IncidentMode#SAR} for backward compatibility with existing
+	 * files that do not carry an explicit mode field.
+	 * </p>
+	 *
+	 * @return incident mode.
+	 */
+	public IncidentMode getIncidentMode() {
+		return incidentMode == null ? IncidentMode.SAR : incidentMode;
+	}
 
-    /**
-     * Returns the incident operational mode (SAR or Generic).
-     *
-     * <p>Defaults to {@link IncidentMode#SAR} for backward compatibility with existing files
-     * that do not carry an explicit mode field.</p>
-     *
-     * @return incident mode.
-     */
-    public IncidentMode getIncidentMode() {
-        return incidentMode == null ? IncidentMode.SAR : incidentMode;
-    }
+	/**
+	 * Sets the incident operational mode.
+	 *
+	 * @param incidentMode
+	 *            incident mode; {@code null} is treated as
+	 *            {@link IncidentMode#SAR}.
+	 */
+	public void setIncidentMode(IncidentMode incidentMode) {
+		this.incidentMode = incidentMode == null ? IncidentMode.SAR : incidentMode;
+	}
 
-    /**
-     * Sets the incident operational mode.
-     *
-     * @param incidentMode incident mode; {@code null} is treated as {@link IncidentMode#SAR}.
-     */
-    public void setIncidentMode(IncidentMode incidentMode) {
-        this.incidentMode = incidentMode == null ? IncidentMode.SAR : incidentMode;
-    }
+	/**
+	 * Returns the list of T-Card (ICS 219) resource status records for this
+	 * incident.
+	 *
+	 * @return T-card list.
+	 */
+	public List<TCard> getTCards() {
+		return tCards;
+	}
 
-    /**
-     * Returns the list of T-Card (ICS 219) resource status records for this incident.
-     *
-     * @return T-card list.
-     */
-    public List<TCard> getTCards() {
-        return tCards;
-    }
+	/**
+	 * Sets the list of T-Card records.
+	 *
+	 * @param tCards
+	 *            T-card list.
+	 */
+	public void setTCards(List<TCard> tCards) {
+		this.tCards = tCards == null ? new ArrayList<>() : tCards;
+	}
 
-    /**
-     * Sets the list of T-Card records.
-     *
-     * @param tCards T-card list.
-     */
-    public void setTCards(List<TCard> tCards) {
-        this.tCards = tCards == null ? new ArrayList<>() : tCards;
-    }
+	public PdfLayoutSettings getPdfLayoutSettings() {
+		if (pdfLayoutSettings == null) {
+			pdfLayoutSettings = new PdfLayoutSettings();
+		}
+		return pdfLayoutSettings;
+	}
 
-    public PdfLayoutSettings getPdfLayoutSettings() {
-        if (pdfLayoutSettings == null) {
-            pdfLayoutSettings = new PdfLayoutSettings();
-        }
-        return pdfLayoutSettings;
-    }
-
-    public void setPdfLayoutSettings(PdfLayoutSettings pdfLayoutSettings) {
-        this.pdfLayoutSettings = pdfLayoutSettings == null ? new PdfLayoutSettings() : pdfLayoutSettings;
-    }
+	public void setPdfLayoutSettings(PdfLayoutSettings pdfLayoutSettings) {
+		this.pdfLayoutSettings = pdfLayoutSettings == null ? new PdfLayoutSettings() : pdfLayoutSettings;
+	}
 }

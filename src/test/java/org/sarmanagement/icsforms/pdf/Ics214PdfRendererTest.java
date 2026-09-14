@@ -23,94 +23,94 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class Ics214PdfRendererTest {
 
-    @Test
-    void blankFormRendersToNonEmptyPdf() throws Exception {
-        Path outputDir = Path.of("target", "test-output", "ics214");
-        Files.createDirectories(outputDir);
-        Path outputFile = outputDir.resolve("blank-ics-214-" + System.nanoTime() + ".pdf");
+	@Test
+	void blankFormRendersToNonEmptyPdf() throws Exception {
+		Path outputDir = Path.of("target", "test-output", "ics214");
+		Files.createDirectories(outputDir);
+		Path outputFile = outputDir.resolve("blank-ics-214-" + System.nanoTime() + ".pdf");
 
-        new Ics214PdfRenderer().render(new AppData(), outputFile);
+		new Ics214PdfRenderer().render(new AppData(), outputFile);
 
-        assertTrue(Files.exists(outputFile));
-        assertTrue(Files.size(outputFile) > 0L);
-    }
+		assertTrue(Files.exists(outputFile));
+		assertTrue(Files.size(outputFile) > 0L);
+	}
 
-    @Test
-    void formWithCustomEventTypeRendersToNonEmptyPdf() throws Exception {
-        Path outputDir = Path.of("target", "test-output", "ics214");
-        Files.createDirectories(outputDir);
-        Path outputFile = outputDir.resolve("custom-event-ics-214-" + System.nanoTime() + ".pdf");
+	@Test
+	void formWithCustomEventTypeRendersToNonEmptyPdf() throws Exception {
+		Path outputDir = Path.of("target", "test-output", "ics214");
+		Files.createDirectories(outputDir);
+		Path outputFile = outputDir.resolve("custom-event-ics-214-" + System.nanoTime() + ".pdf");
 
-        AppData data = new AppData();
-        // Seed a custom event type alongside the built-in defaults.
-        List<ActivityEventType> types = new ArrayList<>(ActivityEventType.defaultTypes());
-        ActivityEventType custom = new ActivityEventType("AERIAL_SEARCH", "Aerial Search Completed", false);
-        types.add(custom);
-        data.setActivityEventTypes(types);
+		AppData data = new AppData();
+		// Seed a custom event type alongside the built-in defaults.
+		List<ActivityEventType> types = new ArrayList<>(ActivityEventType.defaultTypes());
+		ActivityEventType custom = new ActivityEventType("AERIAL_SEARCH", "Aerial Search Completed", false);
+		types.add(custom);
+		data.setActivityEventTypes(types);
 
-        // Add one log entry using the custom type and one using the built-in clue type.
-        Ics214Form form = new Ics214Form();
-        ActivityLogEntry entry1 = new ActivityLogEntry();
-        entry1.setTimestamp(LocalDateTime.now());
-        entry1.setEventTypeId("AERIAL_SEARCH");
-        entry1.setNotableActivity("Grid 42 completed with no find.");
-        form.getActivityLog().add(entry1);
+		// Add one log entry using the custom type and one using the built-in clue type.
+		Ics214Form form = new Ics214Form();
+		ActivityLogEntry entry1 = new ActivityLogEntry();
+		entry1.setTimestamp(LocalDateTime.now());
+		entry1.setEventTypeId("AERIAL_SEARCH");
+		entry1.setNotableActivity("Grid 42 completed with no find.");
+		form.getActivityLog().add(entry1);
 
-        ActivityLogEntry entry2 = new ActivityLogEntry();
-        entry2.setTimestamp(LocalDateTime.now().minusHours(1));
-        entry2.setEventTypeId(ActivityEventType.ID_CLUE_DETECTED);
-        entry2.setNotableActivity("Boot print near creek.");
-        form.getActivityLog().add(entry2);
+		ActivityLogEntry entry2 = new ActivityLogEntry();
+		entry2.setTimestamp(LocalDateTime.now().minusHours(1));
+		entry2.setEventTypeId(ActivityEventType.ID_CLUE_DETECTED);
+		entry2.setNotableActivity("Boot print near creek.");
+		form.getActivityLog().add(entry2);
 
-        data.getActivityLogs().add(form);
+		data.getActivityLogs().add(form);
 
-        new Ics214PdfRenderer().render(data, outputFile);
+		new Ics214PdfRenderer().render(data, outputFile);
 
-        assertTrue(Files.exists(outputFile));
-        assertTrue(Files.size(outputFile) > 0L);
-        try (org.apache.pdfbox.pdmodel.PDDocument pdf = Loader.loadPDF(outputFile.toFile())) {
-            String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
-            assertTrue(text.contains("ICS 214"));
-            assertFalse(text.contains("ICS 214, Page 1 of 1"));
-        }
-    }
+		assertTrue(Files.exists(outputFile));
+		assertTrue(Files.size(outputFile) > 0L);
+		try (org.apache.pdfbox.pdmodel.PDDocument pdf = Loader.loadPDF(outputFile.toFile())) {
+			String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
+			assertTrue(text.contains("ICS 214"));
+			assertFalse(text.contains("ICS 214, Page 1 of 1"));
+		}
+	}
 
-    @Test
-    void multipageFormOffsetsIapPagePerRenderedPage() throws Exception {
-        Path outputDir = Path.of("target", "test-output", "ics214");
-        Files.createDirectories(outputDir);
-        Path outputFile = outputDir.resolve("multipage-ics-214-" + System.nanoTime() + ".pdf");
+	@Test
+	void multipageFormOffsetsIapPagePerRenderedPage() throws Exception {
+		Path outputDir = Path.of("target", "test-output", "ics214");
+		Files.createDirectories(outputDir);
+		Path outputFile = outputDir.resolve("multipage-ics-214-" + System.nanoTime() + ".pdf");
 
-        AppData data = new AppData();
-        Ics214Form form = new Ics214Form();
-        form.setPreparedByName("Planner");
-        form.setPreparedByPositionTitle("Planning");
-        form.setPreparedBySignature("Planner");
-        form.setPreparedDateTime(LocalDateTime.parse("2026-01-01T08:00:00"));
-        form.setIapPage("7");
-        for (int i = 0; i < 20; i++) {
-            ActivityLogEntry entry = new ActivityLogEntry();
-            entry.setTimestamp(LocalDateTime.parse("2026-01-01T08:00:00").plusMinutes(i));
-            entry.setNotableActivity("Activity " + i);
-            form.getActivityLog().add(entry);
-        }
-        data.getActivityLogs().add(form);
+		AppData data = new AppData();
+		Ics214Form form = new Ics214Form();
+		form.setPreparedByName("Planner");
+		form.setPreparedByPositionTitle("Planning");
+		form.setPreparedBySignature("Planner");
+		form.setPreparedDateTime(LocalDateTime.parse("2026-01-01T08:00:00"));
+		form.setIapPage("7");
+		for (int i = 0; i < 20; i++) {
+			ActivityLogEntry entry = new ActivityLogEntry();
+			entry.setTimestamp(LocalDateTime.parse("2026-01-01T08:00:00").plusMinutes(i));
+			entry.setNotableActivity("Activity " + i);
+			form.getActivityLog().add(entry);
+		}
+		data.getActivityLogs().add(form);
 
-        new Ics214PdfRenderer().render(data, outputFile);
+		new Ics214PdfRenderer().render(data, outputFile);
 
-        try (org.apache.pdfbox.pdmodel.PDDocument pdf = Loader.loadPDF(outputFile.toFile())) {
-            assertEquals(2, pdf.getNumberOfPages());
-            PDFTextStripper stripper = new PDFTextStripper();
-            stripper.setStartPage(1);
-            stripper.setEndPage(1);
-            String firstPageText = stripper.getText(pdf).replaceAll("\\s+", " ");
-            stripper.setStartPage(2);
-            stripper.setEndPage(2);
-            String secondPageText = stripper.getText(pdf).replaceAll("\\s+", " ");
-            assertTrue(firstPageText.contains("ICS 214, Page 1 of 2"));
-            assertTrue(firstPageText.contains("IAP Page 7") || firstPageText.contains("IAP Page: 7"));
-            assertTrue(secondPageText.contains("ICS 214, Page 2 of 2"));
-            assertTrue(secondPageText.contains("IAP Page 8") || secondPageText.contains("IAP Page: 8"));
-        }
-    }
+		try (org.apache.pdfbox.pdmodel.PDDocument pdf = Loader.loadPDF(outputFile.toFile())) {
+			assertEquals(2, pdf.getNumberOfPages());
+			PDFTextStripper stripper = new PDFTextStripper();
+			stripper.setStartPage(1);
+			stripper.setEndPage(1);
+			String firstPageText = stripper.getText(pdf).replaceAll("\\s+", " ");
+			stripper.setStartPage(2);
+			stripper.setEndPage(2);
+			String secondPageText = stripper.getText(pdf).replaceAll("\\s+", " ");
+			assertTrue(firstPageText.contains("ICS 214, Page 1 of 2"));
+			assertTrue(firstPageText.contains("IAP Page 7") || firstPageText.contains("IAP Page: 7"));
+			assertTrue(secondPageText.contains("ICS 214, Page 2 of 2"));
+			assertTrue(secondPageText.contains("IAP Page 8") || secondPageText.contains("IAP Page: 8"));
+		}
+	}
 }

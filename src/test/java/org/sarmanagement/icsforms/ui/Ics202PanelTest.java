@@ -24,48 +24,47 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class Ics202PanelTest {
 
-    @Test
-    void sarTaskAssignmentIncludedFormRoundTripsThroughPanel() throws Exception {
-        AppController controller = sampleController();
-        controller.getData().getForm202().setIncidentActionPlanAttachments(List.of("SAR Task Assignment"));
-        Ics202Panel panel = new Ics202Panel(controller);
+	@Test
+	void sarTaskAssignmentIncludedFormRoundTripsThroughPanel() throws Exception {
+		AppController controller = sampleController();
+		controller.getData().getForm202().setIncidentActionPlanAttachments(List.of("SAR Task Assignment"));
+		Ics202Panel panel = new Ics202Panel(controller);
 
-        JCheckBox[] checkbox = new JCheckBox[1];
-        SwingUtilities.invokeAndWait(() -> {
-            panel.refreshFromModel();
-            checkbox[0] = (JCheckBox) fieldValue(panel, "includeSarTaskAssignment");
-        });
+		JCheckBox[] checkbox = new JCheckBox[1];
+		SwingUtilities.invokeAndWait(() -> {
+			panel.refreshFromModel();
+			checkbox[0] = (JCheckBox) fieldValue(panel, "includeSarTaskAssignment");
+		});
 
-        assertTrue(checkbox[0].isSelected());
+		assertTrue(checkbox[0].isSelected());
 
-        SwingUtilities.invokeAndWait(() -> {
-            checkbox[0].setSelected(false);
-            panel.pushToModel();
-        });
+		SwingUtilities.invokeAndWait(() -> {
+			checkbox[0].setSelected(false);
+			panel.pushToModel();
+		});
 
-        assertFalse(controller.getData().getForm202().getIncidentActionPlanAttachments().contains("SAR Task Assignment"));
-    }
+		assertFalse(
+				controller.getData().getForm202().getIncidentActionPlanAttachments().contains("SAR Task Assignment"));
+	}
 
-    private static Object fieldValue(Object instance, String fieldName) {
-        try {
-            Field field = instance.getClass().getDeclaredField(fieldName);
-            field.setAccessible(true);
-            return field.get(instance);
-        } catch (ReflectiveOperationException exception) {
-            throw new IllegalStateException(exception);
-        }
-    }
+	private static Object fieldValue(Object instance, String fieldName) {
+		try {
+			Field field = instance.getClass().getDeclaredField(fieldName);
+			field.setAccessible(true);
+			return field.get(instance);
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
+		}
+	}
 
-    private static AppController sampleController() throws Exception {
-        IncidentContext context = new IncidentContext("Test Incident",
-                LocalDateTime.parse("2026-01-01T00:00:00"),
-                LocalDateTime.parse("2026-01-01T12:00:00"),
-                "Planner", "Planning Section Chief");
-        AppData data = new AppData(context, new Ics202Form(), new Ics204Form(), List.of());
-        return new AppController(
-                data,
-                new LocalRepository(Files.createTempDirectory("icsforms-ui").resolve("incident.json")),
-                new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer()),
-                new IncidentValidator());
-    }
+	private static AppController sampleController() throws Exception {
+		IncidentContext context = new IncidentContext("Test Incident", LocalDateTime.parse("2026-01-01T00:00:00"),
+				LocalDateTime.parse("2026-01-01T12:00:00"), "Planner", "Planning Section Chief");
+		AppData data = new AppData(context, new Ics202Form(), new Ics204Form(), List.of());
+		return new AppController(data,
+				new LocalRepository(Files.createTempDirectory("icsforms-ui").resolve("incident.json")),
+				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
+						new SarTaskAssignmentPdfRenderer()),
+				new IncidentValidator());
+	}
 }
