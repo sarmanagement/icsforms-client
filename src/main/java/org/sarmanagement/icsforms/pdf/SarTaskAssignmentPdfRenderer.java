@@ -42,13 +42,14 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
 		Files.createDirectories(outputFile.getParent());
+		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
-			List<SarTaskAssignment> tasks = data.getSarTaskAssignments().isEmpty()
+			List<SarTaskAssignment> tasks = safeData.getSarTaskAssignments().isEmpty()
 					? List.of(new SarTaskAssignment())
-					: data.getSarTaskAssignments();
+					: safeData.getSarTaskAssignments();
 			for (SarTaskAssignment task : tasks) {
-				renderAssignmentPage(document, data, data.getIncidentContext(), task);
-				renderDebriefPage(document, data, task, data.getClueLogEntries());
+				renderAssignmentPage(document, safeData, safeData.getIncidentContext(), task);
+				renderDebriefPage(document, safeData, task, safeData.getClueLogEntries());
 			}
 			document.save(outputFile.toFile());
 		}
@@ -89,7 +90,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 			drawSection(stream, bold, regular, layout.x(), y - row1, leftWidth, row1, "1. Incident Name",
 					wrap(taskOrContextIncident(task, context), 20));
 			drawOperationalPeriodSection(stream, bold, regular, layout.x() + leftWidth, y - row1, middleWidth, row1,
-					context);
+					context, data);
 			drawAssignmentNumberSection(stream, bold, regular, layout.x() + leftWidth + middleWidth, y - row1,
 					rightWidth, row1, task.getAssignmentTeamNumber());
 			y -= row1;
@@ -103,7 +104,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 			y -= row2;
 
 			drawCell(stream, layout.x(), y - row3, pageWidth, row3);
-			drawResourcesSection(stream, bold, regular, layout.x(), y - row3, pageWidth, row3, task);
+			drawResourcesSection(stream, bold, regular, layout.x(), y - row3, pageWidth, row3, task, data);
 			y -= row3;
 
 			drawCell(stream, layout.x(), y - row4, pageWidth, row4);
@@ -133,7 +134,8 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 			drawPreparedBySection(stream, bold, regular, layout.x(), y - row8, pageWidth, row8, "11. Prepared by",
 					task.getPreparedByName(), task.getPreparedByPositionTitle(), task.getPreparedDateTime(),
 					"SAR Task Assignment Form - Page 1 of 2"
-							+ (task.getIapPage().isBlank() ? "" : " | IAP Page " + task.getIapPage()));
+							+ (task.getIapPage().isBlank() ? "" : " | IAP Page " + task.getIapPage()),
+					data);
 		}
 	}
 
@@ -169,14 +171,14 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 			drawSection(stream, bold, regular, layout.x(), y - row1, leftWidth, row1, "12. Debriefing Supervisor",
 					wrap(task.getDebriefingSupervisor(), 24));
 			drawTimeOnAssignmentSection(stream, bold, regular, layout.x() + leftWidth, y - row1, middleWidth, row1,
-					task);
+					task, data);
 			drawDebriefHeaderRight(stream, bold, regular, layout.x() + leftWidth + middleWidth, y - row1, rightWidth,
 					row1, task);
 			y -= row1;
 
 			drawCell(stream, layout.x(), y - row2, pageWidth, row2);
 			drawDebriefingSection(stream, bold, regular, layout.x(), y - row2, pageWidth, row2, task,
-					cluesForTask(task, clueLogEntries));
+					cluesForTask(task, clueLogEntries), data);
 			y -= row2;
 
 			drawCell(stream, layout.x(), y - row3, pageWidth, row3);
@@ -191,12 +193,12 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
 			drawPreparedBySection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5, "18. Prepared by",
 					task.getDebriefPreparedByName(), task.getDebriefPreparedByPositionTitle(),
-					task.getDebriefPreparedDateTime(), "SAR Task Assignment Form - Page 2 of 2");
+					task.getDebriefPreparedDateTime(), "SAR Task Assignment Form - Page 2 of 2", data);
 		}
 	}
 
 	private void drawResourcesSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, SarTaskAssignment task) throws IOException {
+			float y, float width, float height, SarTaskAssignment task, AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "5. Resources Assigned");
 		drawRightAlignedHeadingValue(stream, regular, x, y + height, width, task.getResourceIdentifier());
 		float detailLineY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 16f;
@@ -307,17 +309,17 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 	}
 
 	private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
-			float x, float y, float width, float height, IncidentContext context) throws IOException {
+			float x, float y, float width, float height, IncidentContext context, AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "2. Operational Period");
 		float labelY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY, "Date From",
-				formatDate(context == null ? null : context.getOperationalPeriodStart()));
+				formatDate(data, context == null ? null : context.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY, "Date To",
-				formatDate(context == null ? null : context.getOperationalPeriodEnd()));
+				formatDate(data, context == null ? null : context.getOperationalPeriodEnd()));
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY - 16f, "Time From",
-				formatTime(context == null ? null : context.getOperationalPeriodStart()));
+				formatTime(data, context == null ? null : context.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY - 16f, "Time To",
-				formatTime(context == null ? null : context.getOperationalPeriodEnd()));
+				formatTime(data, context == null ? null : context.getOperationalPeriodEnd()));
 	}
 
 	private void drawAssignmentNumberSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
@@ -331,16 +333,17 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 	}
 
 	private void drawTimeOnAssignmentSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, SarTaskAssignment task) throws IOException {
+			float y, float width, float height, SarTaskAssignment task, AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "13. Time On Assignment");
 		float labelY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY, "Date From",
-				formatDate(task.getAssignmentStart()));
-		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY, "Date To", formatDate(task.getAssignmentEnd()));
+				formatDate(data, task.getAssignmentStart()));
+		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY, "Date To",
+				formatDate(data, task.getAssignmentEnd()));
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY - 16f, "Time From",
-				formatTime(task.getAssignmentStart()));
+				formatTime(data, task.getAssignmentStart()));
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY - 16f, "Time To",
-				formatTime(task.getAssignmentEnd()));
+				formatTime(data, task.getAssignmentEnd()));
 	}
 
 	private void drawDebriefHeaderRight(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
@@ -356,7 +359,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
 	private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, float width, float height, String heading, String name, String title, LocalDateTime dateTime,
-			String footerLabel) throws IOException {
+			String footerLabel, AppData data) throws IOException {
 		drawCell(stream, x, y, width, height);
 		drawHeading(stream, bold, x, y + height, heading);
 		float footerBandHeight = 14f;
@@ -365,7 +368,8 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 		float contentY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, contentY, "Name", safe(name));
 		drawInlinePair(stream, bold, regular, x + (width * 0.42f), contentY, "Position/Title", safe(title));
-		drawInlinePair(stream, bold, regular, x + (width * 0.74f), contentY, "Date/Time", formatDateTime(dateTime));
+		drawInlinePair(stream, bold, regular, x + (width * 0.74f), contentY, "Date/Time",
+				formatDateTime(data, dateTime));
 		int sepIdx = footerLabel.indexOf(" | ");
 		String leftLabel = sepIdx >= 0 ? footerLabel.substring(0, sepIdx) : footerLabel;
 		String rightLabel = sepIdx >= 0 ? footerLabel.substring(sepIdx + 3) : "";
@@ -385,7 +389,8 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 	}
 
 	private void drawDebriefingSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, SarTaskAssignment task, List<ClueLogEntry> clues) throws IOException {
+			float y, float width, float height, SarTaskAssignment task, List<ClueLogEntry> clues, AppData data)
+			throws IOException {
 		drawHeading(stream, bold, x, y + height, "15. Debriefing");
 		if (!safe(task.getReportedPod()).isBlank()) {
 			String podLabel = "REPORTED POD: " + safe(task.getReportedPod()) + "%";
@@ -396,7 +401,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 			stream.showText(podLabel);
 			stream.endText();
 		}
-		writeWrappedCellText(stream, regular, x, y, width, height - 20f, debriefSectionLines(task, clues));
+		writeWrappedCellText(stream, regular, x, y, width, height - 20f, debriefSectionLines(task, clues, data));
 	}
 
 	private void drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
@@ -538,7 +543,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 		return matches;
 	}
 
-	private List<String> debriefSectionLines(SarTaskAssignment task, List<ClueLogEntry> clues) {
+	private List<String> debriefSectionLines(SarTaskAssignment task, List<ClueLogEntry> clues, AppData data) {
 		List<String> lines = new ArrayList<>();
 		addWrappedBlock(lines, safe(task.getDebriefNotes()), 96);
 		if (!clues.isEmpty()) {
@@ -546,7 +551,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 			lines.add("Clues Detected:");
 			for (ClueLogEntry clue : clues) {
 				String dupFlag = clue.isPossibleDuplicate() ? " [POSSIBLE DUPLICATE]" : "";
-				String clueSummary = joinNonBlank(formatDateTime(clue.getDateTimeCollected()), safe(clue.getLocation()),
+				String clueSummary = joinNonBlank(formatDateTime(data, clue.getDateTimeCollected()), safe(clue.getLocation()),
 						safe(clue.getDescription()));
 				addWrappedBlock(lines, "- " + clueSummary + dupFlag, 92);
 				if (!safe(clue.getImmediateAction()).isBlank()) {
@@ -626,16 +631,16 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 		return new LabeledValue("Context", "");
 	}
 
-	private String formatDate(LocalDateTime value) {
-		return value == null ? "" : DATE_FORMATTER.format(value);
+	private String formatDate(AppData data, LocalDateTime value) {
+		return formatPdfDate(data, value);
 	}
 
-	private String formatTime(LocalDateTime value) {
-		return value == null ? "" : TIME_FORMATTER.format(value);
+	private String formatTime(AppData data, LocalDateTime value) {
+		return formatPdfTime(data, value);
 	}
 
-	private String formatDateTime(LocalDateTime value) {
-		return value == null ? "" : formatDate(value) + " " + formatTime(value);
+	private String formatDateTime(AppData data, LocalDateTime value) {
+		return formatPdfDateTime(data, value);
 	}
 
 	private String joinNonBlank(String... values) {

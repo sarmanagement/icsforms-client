@@ -85,6 +85,43 @@ public final class SarTaskSupport {
 		return normalized;
 	}
 
+	/**
+	 * Returns the concise task/resource label used where logs and PDFs need a
+	 * stable assignment reference.
+	 *
+	 * @param task
+	 *            task whose assignment identifier should be formatted.
+	 * @return label in the form {@code team: resource} when both are present.
+	 */
+	public static String taskResourceDisplayLabel(SarTaskAssignment task) {
+		if (task == null) {
+			return "";
+		}
+		return taskResourceDisplayLabel(task.getAssignmentTeamNumber(), task.getResourceIdentifier());
+	}
+
+	/**
+	 * Returns the concise task/resource label used where logs and PDFs need a
+	 * stable assignment reference.
+	 *
+	 * @param assignmentTeamNumber
+	 *            assignment/team number.
+	 * @param resourceIdentifier
+	 *            task resource identifier.
+	 * @return label in the form {@code team: resource} when both are present.
+	 */
+	public static String taskResourceDisplayLabel(String assignmentTeamNumber, String resourceIdentifier) {
+		String team = safe(assignmentTeamNumber);
+		String resource = safe(resourceIdentifier);
+		if (team.isBlank()) {
+			return resource;
+		}
+		if (resource.isBlank()) {
+			return team;
+		}
+		return team + ": " + resource;
+	}
+
 	public static String podProfileLabel(String resourceType) {
 		return switch (normalizedResourceType(resourceType)) {
 			case RESOURCE_TYPE_CANINE -> "Canine Resources";

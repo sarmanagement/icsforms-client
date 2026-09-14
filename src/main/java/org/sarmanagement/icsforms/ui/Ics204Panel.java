@@ -856,6 +856,8 @@ public class Ics204Panel extends JPanel {
 		private ResourceAssignmentEditor(ResourceAssignment row, AppController controller) {
 			resourceTypeField.setEditable(true);
 			taskTypeField.setEditable(true);
+			UiSupport.configureDialogComboBox(resourceTypeField, 170);
+			UiSupport.configureDialogComboBox(taskTypeField, 170);
 			assignmentTeamNumberField.setText(row.getAssignmentTeamNumber());
 			resourceTypeField.setSelectedItem(row.getResourceType());
 			taskTypeField.setSelectedItem(row.getTaskType());

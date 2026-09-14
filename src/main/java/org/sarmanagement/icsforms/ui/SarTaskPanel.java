@@ -225,9 +225,9 @@ public class SarTaskPanel extends JPanel {
 	 * <li><b>Planned</b> — taskLifecycleStatus is "Planned"</li>
 	 * <li><b>On Task</b> — taskLifecycleStatus is "On Task"</li>
 	 * <li><b>Returned</b> — taskLifecycleStatus is "Returned" but no debriefing
-	 * supervisor set</li>
-	 * <li><b>Completed</b> — taskLifecycleStatus is "Returned" and a debriefing
-	 * supervisor is set</li>
+	 * supervisor set yet</li>
+	 * <li><b>Completed</b> — taskLifecycleStatus is "Returned" and debriefing data
+	 * has already been entered, though the debrief remains editable</li>
 	 * </ol>
 	 * Clicking a task card opens the assignment editor for that task.
 	 * </p>
@@ -354,6 +354,7 @@ public class SarTaskPanel extends JPanel {
 		JMenuItem open214Item = new JMenuItem("Open ICS 214 for Task…");
 		editItem.addActionListener(e -> openBoardTaskEditor(task, EditorMode.ASSIGNMENT));
 		debriefItem.addActionListener(e -> openBoardTaskEditor(task, EditorMode.DEBRIEFING));
+		debriefItem.setEnabled(isReadyForDebrief(task));
 		changeStatusItem.addActionListener(e -> openQuickStatusDialog(task));
 		open214Item.addActionListener(e -> {
 			if (on214Request != null)
@@ -447,7 +448,8 @@ public class SarTaskPanel extends JPanel {
 		}
 		controller.getData().setClueLogEntries(editor.applyTo(task, controller.getData().getClueLogEntries()));
 		if (!java.util.Objects.equals(previousLifecycleStatus, task.getTaskLifecycleStatus())) {
-			controller.recordTaskLifecycleTransition(task, task.getTaskLifecycleStatus());
+			showLifecycleWarning(controller.recordTaskLifecycleTransition(task, previousLifecycleStatus,
+					task.getTaskLifecycleStatus(), LocalDateTime.now().withSecond(0).withNano(0)));
 		}
 		List<SarTaskAssignment> rows = new ArrayList<>(tableModel.getRows());
 		rows.add(task);
@@ -580,7 +582,7 @@ public class SarTaskPanel extends JPanel {
 			return false;
 		}
 		String lifecycle = safeValue(task.getTaskLifecycleStatus()).trim().toLowerCase(java.util.Locale.ROOT);
-		return "returned".equals(lifecycle) && safeValue(task.getDebriefingSupervisor()).isBlank();
+		return "returned".equals(lifecycle);
 	}
 
 	static String formatDateTimeValue(LocalDateTime value) {
@@ -675,6 +677,7 @@ public class SarTaskPanel extends JPanel {
 			@Override
 			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
 				SarTaskAssignment selected = selectedTaskFromTable();
+				editDebriefingItem.setEnabled(selected != null && isReadyForDebrief(selected));
 				changeStatusItem.setEnabled(selected != null && isPlannedOrAssigned(selected.getTaskLifecycleStatus()));
 			}
 
@@ -785,11 +788,12 @@ public class SarTaskPanel extends JPanel {
 		if (java.util.Objects.equals(previous, updated)) {
 			return;
 		}
-		task.setTaskLifecycleStatus(updated);
 		if (isAssignedState(previous) && "returned".equalsIgnoreCase(updated.trim())) {
 			promptResourceDispositionOnReturn(task);
 		}
-		controller.recordTaskLifecycleTransition(task, updated);
+		AppController.TaskLifecycleChangeResult result = controller.recordTaskLifecycleTransition(task, previous, updated,
+				LocalDateTime.now().withSecond(0).withNano(0));
+		showLifecycleWarning(result);
 		controller.syncIcs204ResourcesFromSarTasks();
 		tableModel.setRows(tableModel.getRows(), controller.getData().getClueLogEntries(),
 				controller.getData().getForm204().getResourcesAssigned());
@@ -856,6 +860,12 @@ public class SarTaskPanel extends JPanel {
 			}
 			Object selected = options.get(choice);
 			if ("Debrief…".equals(selected)) {
+				List<String> validationErrors = assignmentEditorValidationErrors(editor);
+				if (!validationErrors.isEmpty()) {
+					showValidationErrors(validationErrors);
+					continue;
+				}
+				applyEditorChanges(rowIndex, row, editor, mode, previousLifecycleStatus);
 				openTaskDebriefDialog(row.getAssignmentId(), row.getAssignmentTeamNumber());
 				return;
 			}
@@ -865,14 +875,34 @@ public class SarTaskPanel extends JPanel {
 				return;
 			}
 		}
+		applyEditorChanges(rowIndex, row, editor, mode, previousLifecycleStatus);
+	}
+
+	/**
+	 * Applies editor changes back to the selected task row and refreshes dependent
+	 * UI/model state.
+	 *
+	 * @param rowIndex
+	 *            edited model row index.
+	 * @param row
+	 *            task assignment being edited.
+	 * @param editor
+	 *            editor supplying current field values.
+	 * @param mode
+	 *            editor mode.
+	 * @param previousLifecycleStatus
+	 *            lifecycle value before edits started.
+	 */
+	private void applyEditorChanges(int rowIndex, SarTaskAssignment row, SarTaskEditor editor, EditorMode mode,
+			String previousLifecycleStatus) {
 		controller.getData().setClueLogEntries(editor.applyTo(row, controller.getData().getClueLogEntries()));
-		// Wire item 3: notify linked ICS 214 log when lifecycle status changes.
 		String newLifecycleStatus = row.getTaskLifecycleStatus();
 		if (!java.util.Objects.equals(previousLifecycleStatus, newLifecycleStatus)) {
 			if (isAssignedState(previousLifecycleStatus) && "returned".equalsIgnoreCase(newLifecycleStatus.trim())) {
 				promptResourceDispositionOnReturn(row);
 			}
-			controller.recordTaskLifecycleTransition(row, newLifecycleStatus);
+			showLifecycleWarning(controller.recordTaskLifecycleTransition(row, previousLifecycleStatus, newLifecycleStatus,
+					LocalDateTime.now().withSecond(0).withNano(0)));
 		}
 		if (mode == EditorMode.ASSIGNMENT) {
 			updateLinkedResourcePersonCount(row, editor.resourceCount());
@@ -886,6 +916,51 @@ public class SarTaskPanel extends JPanel {
 		if (viewRow >= 0 && viewRow < table.getRowCount()) {
 			table.setRowSelectionInterval(viewRow, viewRow);
 		}
+	}
+
+	/**
+	 * Returns assignment-editor validation errors that should block the debrief
+	 * handoff.
+	 *
+	 * @param editor
+	 *            assignment editor to validate.
+	 * @return ordered validation errors.
+	 */
+	private List<String> assignmentEditorValidationErrors(SarTaskEditor editor) {
+		if (editor == null) {
+			return List.of("Unable to validate the SAR task editor.");
+		}
+		return editor.assignmentValidationErrors();
+	}
+
+	/**
+	 * Shows task-editor validation errors.
+	 *
+	 * @param errors
+	 *            validation errors to display.
+	 */
+	private void showValidationErrors(List<String> errors) {
+		if (errors == null || errors.isEmpty()) {
+			return;
+		}
+		StringBuilder builder = new StringBuilder("Please resolve the following before opening debrief:\n\n");
+		for (String error : errors) {
+			builder.append("- ").append(error).append('\n');
+		}
+		JOptionPane.showMessageDialog(this, builder.toString(), "Validation required", JOptionPane.WARNING_MESSAGE);
+	}
+
+	/**
+	 * Shows a lifecycle warning returned by the controller.
+	 *
+	 * @param result
+	 *            lifecycle change result to inspect.
+	 */
+	private void showLifecycleWarning(AppController.TaskLifecycleChangeResult result) {
+		if (result == null || !result.hasWarning()) {
+			return;
+		}
+		JOptionPane.showMessageDialog(this, result.warningMessage(), "SAR Task Status", JOptionPane.WARNING_MESSAGE);
 	}
 
 	private JPanel sarTaskEditorDialogContent(JPanel editorPanel) {
@@ -1717,7 +1792,6 @@ public class SarTaskPanel extends JPanel {
 		private final JTextField leaderField;
 		private final JTextField contactField;
 		private final JPanel assignmentSummaryField;
-		private final JPanel debriefSummaryField;
 		private final JScrollPane operationsField;
 		private final JScrollPane contextField;
 		private final JPanel resourcesAssignedField;
@@ -1727,6 +1801,7 @@ public class SarTaskPanel extends JPanel {
 		private final JTextField taskMapField;
 		private final JScrollPane specialEquipmentField;
 		private final JTextField debriefingSupervisorField;
+		private final JButton pickDebriefingSupervisorButton = new JButton("Pick…");
 		private final JSpinner assignmentStartField;
 		private final JSpinner assignmentEndField;
 		private final JTextField vehicleMilesField;
@@ -1746,6 +1821,7 @@ public class SarTaskPanel extends JPanel {
 		private final JScrollPane hazardsObservedField;
 		private final List<TCard> availableTCards;
 		private final AppController controller;
+		private String debriefingSupervisorResourceId = "";
 		/**
 		 * Resource IDs of cards currently committed to an active ("On Task") SAR task.
 		 */
@@ -1781,14 +1857,14 @@ public class SarTaskPanel extends JPanel {
 			resourceTypeField = new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new));
 			resourceTypeField.setEditable(true);
 			resourceTypeField.setSelectedItem(row.getResourceType());
-			resourceTypeField.setPreferredSize(new Dimension(50, resourceTypeField.getPreferredSize().height));
+			UiSupport.configureDialogComboBox(resourceTypeField, 170);
 			taskTypeField = new JComboBox<>(SarTaskSupport.taskTypes().toArray(String[]::new));
 			taskTypeField.setEditable(true);
 			taskTypeField.setSelectedItem(row.getTaskType());
-			taskTypeField.setPreferredSize(new Dimension(50, taskTypeField.getPreferredSize().height));
+			UiSupport.configureDialogComboBox(taskTypeField, 170);
 			taskLifecycleField = new JComboBox<>(LIFECYCLE_OPTIONS);
 			taskLifecycleField.setSelectedItem(row.getTaskLifecycleStatus());
-			taskLifecycleField.setPreferredSize(new Dimension(150, taskLifecycleField.getPreferredSize().height));
+			UiSupport.configureDialogComboBox(taskLifecycleField, 220);
 			incidentNameField = textField(row.getIncidentName(), false);
 			resourceIdentifierField = textField(row.getResourceIdentifier(), false);
 			leaderRoleField = textField(row.getLeaderRole(), false);
@@ -1833,11 +1909,9 @@ public class SarTaskPanel extends JPanel {
 			}
 
 			String leaderLabel = isCanineTask ? "Leader/Handler: " : "Leader: ";
-			assignmentSummaryField = inlineSummaryPanel(2, "Incident: " + safeValue(row.getIncidentName()),
-					"Resource: " + safeValue(row.getResourceIdentifier()), leaderLabel + safeValue(row.getLeader()),
-					"Leader Role: " + safeValue(row.getLeaderRole()), "Leader Contact: " + safeValue(row.getContact()));
-			debriefSummaryField = inlineSummaryPanel(2, "Incident: " + safeValue(row.getIncidentName()),
-					"Resource: " + safeValue(row.getResourceIdentifier()));
+			assignmentSummaryField = inlineSummaryPanel(2, "Resource: " + safeValue(row.getResourceIdentifier()),
+					leaderLabel + safeValue(row.getLeader()), "Leader Role: " + safeValue(row.getLeaderRole()),
+					"Leader Contact: " + safeValue(row.getContact()));
 			operationsField = textArea(SarTaskTableModel.joinOperations(row), 2, false);
 			contextField = textArea(SarTaskTableModel.joinContext(row), 2, false);
 			List<String> leaderCanines = isCanineTask && canineForHandler != null
@@ -1850,7 +1924,9 @@ public class SarTaskPanel extends JPanel {
 			transportationField = textArea(row.getTransportationInstructions(), 2, true);
 			taskMapField = textField(row.getTaskMap(), true, 14);
 			specialEquipmentField = textArea(row.getSpecialEquipment(), 2, true);
-			debriefingSupervisorField = textField(row.getDebriefingSupervisor(), true, 12);
+			debriefingSupervisorResourceId = initialDebriefingSupervisorResourceId(row);
+			debriefingSupervisorField = textField(initialDebriefingSupervisorName(row), true, 12);
+			configureDebriefingSupervisorField();
 			assignmentStartField = dateTimeSpinner(row.getAssignmentStart(), 132);
 			assignmentEndField = dateTimeSpinner(row.getAssignmentEnd(), 132);
 			vehicleMilesField = textField(row.getVehicleMiles(), true, 6);
@@ -1859,8 +1935,8 @@ public class SarTaskPanel extends JPanel {
 			clueEntriesField = clueEditorPanel(clueEntryTableModel, cluesForTask(row, clueLogEntries));
 			canineSearchTypeField = comboBox(CANINE_SEARCH_TYPE_OPTIONS, row.getCanineSearchType());
 			canineImprintField = comboBox(CANINE_IMPRINT_OPTIONS, row.getCanineImprint());
-			canineSearchTypeField.setPreferredSize(new Dimension(140, canineSearchTypeField.getPreferredSize().height));
-			canineImprintField.setPreferredSize(new Dimension(150, canineImprintField.getPreferredSize().height));
+			UiSupport.configureDialogComboBox(canineSearchTypeField, 170);
+			UiSupport.configureDialogComboBox(canineImprintField, 170);
 			canineSunAngleField = textField(row.getCanineSunAngle(), true, 8);
 			canineDayNightField = textField(row.getCanineDayNight(), true, 8);
 			canineCloudCoverField = textField(row.getCanineCloudCover(), true, 8);
@@ -1875,12 +1951,12 @@ public class SarTaskPanel extends JPanel {
 
 			int rowIndex = 0;
 			UiSupport.addRequiredRow(panel, rowIndex++, "Assignment/Team #", assignmentTeamNumberField);
+			UiSupport.addRow(panel, rowIndex++, "Inherited task data", assignmentSummaryField);
 			UiSupport.addRow(panel, rowIndex++, "Task setup",
 					inlineFieldPanel(new LabeledComponent("Resource type", resourceTypeField),
 							new LabeledComponent("Task Geometry", taskTypeField)));
 			if (mode == EditorMode.ASSIGNMENT) {
 				UiSupport.addRow(panel, rowIndex++, "Task status", taskLifecycleField);
-				UiSupport.addRow(panel, rowIndex++, "Inherited task data", assignmentSummaryField);
 				UiSupport.addRow(panel, rowIndex++, "Operations personnel", operationsField);
 				UiSupport.addRow(panel, rowIndex++, "Context", contextField);
 				UiSupport.addRow(panel, rowIndex++, "Resources assigned", resourcesAssignedField);
@@ -1891,9 +1967,8 @@ public class SarTaskPanel extends JPanel {
 				UiSupport.addRow(panel, rowIndex++, "Special equipment", specialEquipmentField);
 				return;
 			}
-			UiSupport.addRow(panel, rowIndex++, "Task summary", debriefSummaryField);
 			UiSupport.addRow(panel, rowIndex++, "Debrief details",
-					inlineFieldPanel(new LabeledComponent("Debrief supervisor", debriefingSupervisorField),
+					inlineFieldPanel(new LabeledComponent("Debrief supervisor", debriefingSupervisorPickerField()),
 							new LabeledComponent("Reported POD (%)", reportedPodField),
 							new LabeledComponent("Vehicle miles", vehicleMilesField)));
 			UiSupport.addRow(panel, rowIndex++, "Time on assignment",
@@ -2010,7 +2085,9 @@ public class SarTaskPanel extends JPanel {
 				row.setSpecialEquipment(textAreaFrom(specialEquipmentField).getText().trim());
 				return clueLogEntries == null ? new ArrayList<>() : new ArrayList<>(clueLogEntries);
 			}
-			row.setDebriefingSupervisor(debriefingSupervisorField.getText().trim());
+			String supervisorName = debriefingSupervisorField.getText().trim();
+			row.setDebriefingSupervisor(supervisorName);
+			row.setDebriefingSupervisorResourceId(resolveDebriefingSupervisorResourceId(supervisorName));
 			row.setAssignmentStart(spinnerDateTimeValue(assignmentStartField));
 			row.setAssignmentEnd(spinnerDateTimeValue(assignmentEndField));
 			row.setVehicleMiles(vehicleMilesField.getText().trim());
@@ -2046,6 +2123,192 @@ public class SarTaskPanel extends JPanel {
 			}
 			updatedClues.addAll(clueValuesFrom(clueEntryTableModel.getRows(), row, row.getAssignmentTeamNumber()));
 			return updatedClues;
+		}
+
+		/**
+		 * Installs picker-backed personnel selection behavior for the debriefing
+		 * supervisor field.
+		 */
+		private void configureDebriefingSupervisorField() {
+			UiSupport.installNameAutocomplete(debriefingSupervisorField, this::availablePersonnelSupervisorNames,
+					this::syncDebriefingSupervisorSelection, proposedName -> {
+						if (controller == null) {
+							return "";
+						}
+						TCard created = controller.createPersonnelCardViaDialog(proposedName, "", "");
+						if (created != null) {
+							debriefingSupervisorResourceId = created.getResourceId();
+							return created.getPersonName();
+						}
+						return "";
+					});
+			pickDebriefingSupervisorButton.setToolTipText("Select from known personnel (T-cards)");
+			pickDebriefingSupervisorButton.addActionListener(
+					event -> SwingUtilities.invokeLater(() -> UiSupport.openInstalledNamePicker(debriefingSupervisorField)));
+			pickDebriefingSupervisorButton
+					.setEnabled(!availablePersonnelSupervisorNames().isEmpty() || controller != null);
+		}
+
+		/**
+		 * Builds the debriefing supervisor editor control with a dedicated picker
+		 * button.
+		 *
+		 * @return composite field component.
+		 */
+		private JPanel debriefingSupervisorPickerField() {
+			JPanel panel = new JPanel(new BorderLayout(4, 0));
+			panel.setOpaque(false);
+			panel.add(debriefingSupervisorField, BorderLayout.CENTER);
+			panel.add(pickDebriefingSupervisorButton, BorderLayout.EAST);
+			return panel;
+		}
+
+		/**
+		 * Returns available personnel-card names that can be chosen as debriefing
+		 * supervisors.
+		 *
+		 * @return sorted supervisor name list.
+		 */
+		private List<String> availablePersonnelSupervisorNames() {
+			List<String> names = new ArrayList<>();
+			for (TCard card : availableTCards) {
+				if (card == null || card.getCardType() != TCardType.PERSONNEL) {
+					continue;
+				}
+				String displayName = card.getDisplayLabel().trim();
+				if (!displayName.isBlank() && !names.contains(displayName)) {
+					names.add(displayName);
+				}
+			}
+			names.sort(String.CASE_INSENSITIVE_ORDER);
+			return names;
+		}
+
+		/**
+		 * Resolves the supervisor name to display when the editor opens.
+		 *
+		 * @param row
+		 *            task being edited.
+		 * @return canonical personnel display name, or the stored fallback text.
+		 */
+		private String initialDebriefingSupervisorName(SarTaskAssignment row) {
+			TCard linkedCard = findPersonnelCardByResourceId(row.getDebriefingSupervisorResourceId());
+			if (linkedCard != null) {
+				return linkedCard.getDisplayLabel();
+			}
+			return row.getDebriefingSupervisor();
+		}
+
+		/**
+		 * Resolves the initial linked personnel identifier for the supervisor field.
+		 *
+		 * @param row
+		 *            task being edited.
+		 * @return linked personnel resource identifier, or blank when unresolved.
+		 */
+		private String initialDebriefingSupervisorResourceId(SarTaskAssignment row) {
+			String linkedResourceId = row.getDebriefingSupervisorResourceId();
+			if (!linkedResourceId.isBlank()) {
+				return linkedResourceId;
+			}
+			TCard matchedCard = findPersonnelCardByDisplayName(row.getDebriefingSupervisor());
+			return matchedCard == null ? "" : matchedCard.getResourceId();
+		}
+
+		/**
+		 * Updates the stored linked personnel identifier after picker selection.
+		 *
+		 * @param selectedName
+		 *            selected supervisor display name.
+		 */
+		private void syncDebriefingSupervisorSelection(String selectedName) {
+			TCard selectedCard = findPersonnelCardByDisplayName(selectedName);
+			debriefingSupervisorResourceId = selectedCard == null ? "" : selectedCard.getResourceId();
+		}
+
+		/**
+		 * Resolves the linked personnel identifier that should be saved with the
+		 * supervisor field.
+		 *
+		 * @param supervisorName
+		 *            supervisor display name entered or picked by the operator.
+		 * @return linked personnel resource identifier, or blank for free-form text.
+		 */
+		private String resolveDebriefingSupervisorResourceId(String supervisorName) {
+			String normalizedName = supervisorName == null ? "" : supervisorName.trim();
+			if (normalizedName.isBlank()) {
+				debriefingSupervisorResourceId = "";
+				return "";
+			}
+			TCard linkedCard = findPersonnelCardByResourceId(debriefingSupervisorResourceId);
+			if (linkedCard != null && normalizedName.equalsIgnoreCase(linkedCard.getDisplayLabel().trim())) {
+				return linkedCard.getResourceId();
+			}
+			if (linkedCard == null && !debriefingSupervisorResourceId.isBlank()) {
+				return debriefingSupervisorResourceId;
+			}
+			TCard matchedCard = findPersonnelCardByDisplayName(normalizedName);
+			debriefingSupervisorResourceId = matchedCard == null ? "" : matchedCard.getResourceId();
+			return debriefingSupervisorResourceId;
+		}
+
+		/**
+		 * Finds a personnel T-card by stable resource identifier.
+		 *
+		 * @param resourceId
+		 *            personnel resource identifier.
+		 * @return matching personnel T-card, or {@code null}.
+		 */
+		private TCard findPersonnelCardByResourceId(String resourceId) {
+			String normalizedId = resourceId == null ? "" : resourceId.trim();
+			if (normalizedId.isBlank()) {
+				return null;
+			}
+			for (TCard card : availableTCards) {
+				if (card != null && card.getCardType() == TCardType.PERSONNEL
+						&& normalizedId.equals(card.getResourceId())) {
+					return card;
+				}
+			}
+			return null;
+		}
+
+		/**
+		 * Finds a personnel T-card by display name.
+		 *
+		 * @param displayName
+		 *            personnel display name.
+		 * @return matching personnel T-card, or {@code null}.
+		 */
+		private TCard findPersonnelCardByDisplayName(String displayName) {
+			String normalizedName = displayName == null ? "" : displayName.trim();
+			if (normalizedName.isBlank()) {
+				return null;
+			}
+			for (TCard card : availableTCards) {
+				if (card != null && card.getCardType() == TCardType.PERSONNEL
+						&& normalizedName.equalsIgnoreCase(card.getDisplayLabel().trim())) {
+					return card;
+				}
+			}
+			return null;
+		}
+
+		/**
+		 * Returns assignment-editor validation errors that should block save/open
+		 * actions.
+		 *
+		 * @return ordered validation errors.
+		 */
+		private List<String> assignmentValidationErrors() {
+			List<String> errors = new ArrayList<>();
+			if (mode != EditorMode.ASSIGNMENT) {
+				return errors;
+			}
+			if (assignmentTeamNumberField.getText().trim().isBlank()) {
+				errors.add("Assignment/Team # is required.");
+			}
+			return errors;
 		}
 
 		private int resourceCount() {

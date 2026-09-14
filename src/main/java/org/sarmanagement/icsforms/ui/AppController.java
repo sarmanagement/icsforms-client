@@ -67,6 +67,27 @@ public class AppController {
 	}
 
 	/**
+	 * Outcome of applying a SAR task lifecycle change.
+	 *
+	 * @param changed
+	 *            {@code true} when the lifecycle value actually changed.
+	 * @param warningMessage
+	 *            non-blank warning to surface to the operator when the transition
+	 *            was unusual or could not be fully applied.
+	 */
+	public record TaskLifecycleChangeResult(boolean changed, String warningMessage) {
+		/**
+		 * Returns whether the result contains a warning that should be shown to the
+		 * operator.
+		 *
+		 * @return {@code true} when {@link #warningMessage()} is non-blank.
+		 */
+		public boolean hasWarning() {
+			return warningMessage != null && !warningMessage.isBlank();
+		}
+	}
+
+	/**
 	 * Creates a controller for the desktop application.
 	 *
 	 * @param data
@@ -1386,42 +1407,303 @@ public class AppController {
 	}
 
 	/**
-	 * Records a task lifecycle status change as an activity log entry in the linked
-	 * ICS 214 form.
+	 * Records a task lifecycle status change and mirrors it into the activity logs.
 	 *
 	 * <p>
-	 * When a SAR task transitions between Planned → On Task → Returned, this method
-	 * appends a timestamped entry to the task's linked 214 (if any) so that the
-	 * activity log and T-card rack status stay synchronized. The event type used
-	 * is:
-	 * <ul>
-	 * <li>{@link ActivityEventType#ID_RESOURCE_ON_TASK} when the new status is
-	 * {@code "On Task"}.</li>
-	 * <li>{@link ActivityEventType#ID_TASK_COMPLETED} when the new status is
-	 * {@code "Returned"}.</li>
-	 * </ul>
-	 * Transitions to {@code "Planned"} do not generate an entry.
+	 * Task-originated changes update the task model, keep copied on-task/off-task
+	 * debrief timestamps in sync, and append canonical ICS 214 entries so the edit
+	 * dialog and the log remain aligned.
 	 * </p>
 	 *
 	 * @param task
 	 *            the task whose lifecycle status changed.
 	 * @param newStatus
 	 *            the new lifecycle status value.
+	 * @return lifecycle change outcome, including any operator warning.
 	 */
-	public void recordTaskLifecycleTransition(SarTaskAssignment task, String newStatus) {
+	public TaskLifecycleChangeResult recordTaskLifecycleTransition(SarTaskAssignment task, String newStatus) {
+		return recordTaskLifecycleTransition(task, task == null ? "" : task.getTaskLifecycleStatus(), newStatus,
+				LocalDateTime.now().withSecond(0).withNano(0));
+	}
+
+	/**
+	 * Records a task lifecycle status change at a specific effective time and
+	 * mirrors it into the activity logs.
+	 *
+	 * @param task
+	 *            the task whose lifecycle status changed.
+	 * @param newStatus
+	 *            the new lifecycle status value.
+	 * @param effectiveTime
+	 *            authoritative effective time for the transition.
+	 * @return lifecycle change outcome, including any operator warning.
+	 */
+	public TaskLifecycleChangeResult recordTaskLifecycleTransition(SarTaskAssignment task, String newStatus,
+			LocalDateTime effectiveTime) {
+		return recordTaskLifecycleTransition(task, task == null ? "" : task.getTaskLifecycleStatus(), newStatus,
+				effectiveTime);
+	}
+
+	/**
+	 * Records a task lifecycle status change using an explicit previous value and
+	 * mirrors it into the activity logs.
+	 *
+	 * @param task
+	 *            the task whose lifecycle status changed.
+	 * @param previousStatus
+	 *            lifecycle status before the change.
+	 * @param newStatus
+	 *            the new lifecycle status value.
+	 * @param effectiveTime
+	 *            authoritative effective time for the transition.
+	 * @return lifecycle change outcome, including any operator warning.
+	 */
+	public TaskLifecycleChangeResult recordTaskLifecycleTransition(SarTaskAssignment task, String previousStatus,
+			String newStatus, LocalDateTime effectiveTime) {
 		if (task == null || newStatus == null) {
+			return new TaskLifecycleChangeResult(false, "");
+		}
+		String previous = normalizeLifecycleStatus(previousStatus);
+		String normalized = normalizeLifecycleStatus(newStatus);
+		if (java.util.Objects.equals(previous, normalized)) {
+			task.setTaskLifecycleStatus(normalized);
+			return new TaskLifecycleChangeResult(false, "");
+		}
+		boolean inSequence = isExpectedLifecycleTransition(previous, normalized);
+		if (inSequence) {
+			task.setTaskLifecycleStatus(normalized);
+			applyDebriefLifecycleTimes(task, previous, normalized, effectiveTime);
+			TransitionRecord transition = transitionRecordForStatus(task, normalized, effectiveTime);
+			appendIcpLifecycleEntry(transition);
+			appendTaskLifecycleEntry(task, transition);
+			return new TaskLifecycleChangeResult(true, "");
+		}
+		return new TaskLifecycleChangeResult(false, lifecycleTransitionWarning(previous, normalized));
+	}
+
+	/**
+	 * Applies a status-change ICS 214 activity entry back into the linked SAR task.
+	 *
+	 * <p>
+	 * The log entry timestamp is treated as the authoritative effective time. No
+	 * additional log rows are generated; the operator-entered ICS 214 entry is the
+	 * canonical record for the transition.
+	 * </p>
+	 *
+	 * @param log
+	 *            log receiving the entry.
+	 * @param entry
+	 *            entry that may describe a lifecycle transition.
+	 * @return lifecycle change outcome, including any operator warning.
+	 */
+	public TaskLifecycleChangeResult applyTaskLifecycleFromLogEntry(Ics214Form log, ActivityLogEntry entry) {
+		String requestedStatus = lifecycleStatusFromLogEntry(entry);
+		if (requestedStatus.isBlank()) {
+			return new TaskLifecycleChangeResult(false, "");
+		}
+		SarTaskAssignment task = resolveTaskForLogEntry(log, entry);
+		if (task == null) {
+			return new TaskLifecycleChangeResult(false,
+					"Could not determine which SAR task to update from that status-change log entry.");
+		}
+		String previousStatus = task.getTaskLifecycleStatus();
+		String normalized = normalizeLifecycleStatus(requestedStatus);
+		if (!isExpectedLifecycleTransition(normalizeLifecycleStatus(previousStatus), normalized)
+				&& !java.util.Objects.equals(normalizeLifecycleStatus(previousStatus), normalized)) {
+			return new TaskLifecycleChangeResult(false, lifecycleTransitionWarning(previousStatus, normalized));
+		}
+		task.setTaskLifecycleStatus(normalized);
+		applyDebriefLifecycleTimes(task, previousStatus, normalized, entry == null ? null : entry.getTimestamp());
+		return new TaskLifecycleChangeResult(!java.util.Objects.equals(previousStatus, normalized), "");
+	}
+
+	/**
+	 * Returns the lifecycle status implied by a status-change activity entry.
+	 *
+	 * @param entry
+	 *            activity entry to inspect.
+	 * @return normalized lifecycle status, or blank when the entry is not a status
+	 *         change.
+	 */
+	private String lifecycleStatusFromLogEntry(ActivityLogEntry entry) {
+		if (entry == null) {
+			return "";
+		}
+		String eventTypeId = safe(entry.getEventTypeId()).trim();
+		if (ActivityEventType.ID_RESOURCE_DEPARTED_STAGING.equals(eventTypeId)) {
+			return "assigned - enroute to assignment";
+		}
+		if (ActivityEventType.ID_RESOURCE_ON_TASK.equals(eventTypeId)) {
+			return "assigned - on task";
+		}
+		if (ActivityEventType.ID_TASK_COMPLETED.equals(eventTypeId)) {
+			return "assigned - returning from assignment";
+		}
+		if (ActivityEventType.ID_RESOURCE_RETURNED_STAGING.equals(eventTypeId)) {
+			return "returned";
+		}
+		String notableActivity = safe(entry.getNotableActivity()).trim();
+		String prefix = "task status changed to ";
+		if (notableActivity.toLowerCase(java.util.Locale.ROOT).startsWith(prefix)) {
+			return normalizeLifecycleStatus(notableActivity.substring(prefix.length()));
+		}
+		return "";
+	}
+
+	/**
+	 * Resolves the SAR task referenced by an ICS 214 activity entry.
+	 *
+	 * @param log
+	 *            log receiving the entry.
+	 * @param entry
+	 *            entry to resolve.
+	 * @return matching task, or {@code null} when none can be found.
+	 */
+	private SarTaskAssignment resolveTaskForLogEntry(Ics214Form log, ActivityLogEntry entry) {
+		if (log != null && !safe(log.getLinkedSarTaskAssignmentId()).isBlank()) {
+			String linkedAssignmentId = log.getLinkedSarTaskAssignmentId().trim();
+			for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+				if (linkedAssignmentId.equals(task.getAssignmentId())) {
+					return task;
+				}
+			}
+		}
+		String identifier = safe(entry == null ? "" : entry.getResourceIdentifier()).trim();
+		if (identifier.isBlank()) {
+			return null;
+		}
+		String matchKey = identifier.toLowerCase(java.util.Locale.ROOT);
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			if (matchKey.equals(safe(task.getAssignmentId()).trim().toLowerCase(java.util.Locale.ROOT))
+					|| matchKey.equals(safe(task.getAssignmentTeamNumber()).trim().toLowerCase(java.util.Locale.ROOT))
+					|| matchKey.equals(safe(task.getResourceIdentifier()).trim().toLowerCase(java.util.Locale.ROOT))
+					|| matchKey.equals(SarTaskSupport.taskResourceDisplayLabel(task).trim().toLowerCase(java.util.Locale.ROOT))
+					|| matchKey.equals(UiSupport.taskLabel(task).trim().toLowerCase(java.util.Locale.ROOT))) {
+				return task;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Copies authoritative on-task/off-task times into the debrief fields without
+	 * mutating existing ICS 214 log entries.
+	 *
+	 * @param task
+	 *            task being updated.
+	 * @param previousStatus
+	 *            lifecycle value before the change.
+	 * @param newStatus
+	 *            lifecycle value after the change.
+	 * @param effectiveTime
+	 *            authoritative transition time.
+	 */
+	private void applyDebriefLifecycleTimes(SarTaskAssignment task, String previousStatus, String newStatus,
+			LocalDateTime effectiveTime) {
+		if (task == null || effectiveTime == null || java.util.Objects.equals(previousStatus, newStatus)) {
 			return;
 		}
-		String normalized = newStatus.trim().toLowerCase(java.util.Locale.ROOT);
-		String eventTypeId = switch (normalized) {
-			case "assigned - enroute to assignment", "assigned - on task", "assigned - returning from assignment" ->
-				ActivityEventType.ID_RESOURCE_ON_TASK;
-			case "returned" -> ActivityEventType.ID_TASK_COMPLETED;
+		if ("assigned - on task".equals(newStatus)) {
+			task.setAssignmentStart(effectiveTime);
+			return;
+		}
+		if ("assigned - returning from assignment".equals(newStatus)) {
+			task.setAssignmentEnd(effectiveTime);
+			return;
+		}
+		if ("returned".equals(newStatus) && task.getAssignmentEnd() == null) {
+			task.setAssignmentEnd(effectiveTime);
+		}
+	}
+
+	/**
+	 * Returns a warning for an out-of-sequence lifecycle transition.
+	 *
+	 * @param previousStatus
+	 *            status before the change.
+	 * @param newStatus
+	 *            requested status after the change.
+	 * @return warning text, or blank when the transition is in sequence.
+	 */
+	private String lifecycleTransitionWarning(String previousStatus, String newStatus) {
+		String previous = normalizeLifecycleStatus(previousStatus);
+		String updated = normalizeLifecycleStatus(newStatus);
+		if (previous.equals(updated) || isExpectedLifecycleTransition(previous, updated)) {
+			return "";
+		}
+		return "Requested SAR task status transition from '" + previous + "' to '" + updated
+				+ "' is out of sequence. Review the task history to confirm the requested status.";
+	}
+
+	/**
+	 * Returns whether the requested lifecycle change follows the normal task flow.
+	 *
+	 * @param previousStatus
+	 *            status before the change.
+	 * @param newStatus
+	 *            status after the change.
+	 * @return {@code true} when the transition is expected.
+	 */
+	private boolean isExpectedLifecycleTransition(String previousStatus, String newStatus) {
+		return switch (previousStatus) {
+			case "planned" -> "assigned - enroute to assignment".equals(newStatus)
+					|| "assigned - on task".equals(newStatus);
+			case "assigned - enroute to assignment" -> "assigned - on task".equals(newStatus)
+					|| "returned".equals(newStatus) || "planned".equals(newStatus);
+			case "assigned - on task" -> "assigned - returning from assignment".equals(newStatus)
+					|| "returned".equals(newStatus);
+			case "assigned - returning from assignment" -> "returned".equals(newStatus);
+			case "returned" -> "returned".equals(newStatus);
+			default -> true;
+		};
+	}
+
+	/**
+	 * Normalizes lifecycle input using the model's canonical value set.
+	 *
+	 * @param status
+	 *            lifecycle input.
+	 * @return normalized lifecycle value.
+	 */
+	private String normalizeLifecycleStatus(String status) {
+		SarTaskAssignment probe = new SarTaskAssignment();
+		probe.setTaskLifecycleStatus(status);
+		return probe.getTaskLifecycleStatus();
+	}
+
+	/**
+	 * Builds the canonical lifecycle log record for a task status change.
+	 *
+	 * @param task
+	 *            task being updated.
+	 * @param normalizedStatus
+	 *            normalized lifecycle status.
+	 * @param effectiveTime
+	 *            authoritative transition time.
+	 * @return canonical lifecycle record.
+	 */
+	private TransitionRecord transitionRecordForStatus(SarTaskAssignment task, String normalizedStatus,
+			LocalDateTime effectiveTime) {
+		String eventTypeId = switch (normalizedStatus) {
+			case "assigned - enroute to assignment" -> ActivityEventType.ID_RESOURCE_DEPARTED_STAGING;
+			case "assigned - on task" -> ActivityEventType.ID_RESOURCE_ON_TASK;
+			case "assigned - returning from assignment" -> ActivityEventType.ID_TASK_COMPLETED;
+			case "returned" -> ActivityEventType.ID_RESOURCE_RETURNED_STAGING;
 			default -> ActivityEventType.ID_FREE_TEXT;
 		};
-		String description = "Task status changed to " + normalized;
+		String taskReference = SarTaskSupport.taskResourceDisplayLabel(task);
+		String taskLogReference = taskReference.isBlank() ? safe(task.getLeader()) : taskReference;
+		return new TransitionRecord(effectiveTime == null ? LocalDateTime.now().withSecond(0).withNano(0) : effectiveTime,
+				eventTypeId, "Task status changed to " + normalizedStatus, taskReference, taskLogReference);
+	}
 
-		// Append transition into the ICP-level ICS 214 communications/activity log.
+	/**
+	 * Appends the ICP-level lifecycle note for a task status change.
+	 *
+	 * @param transition
+	 *            canonical transition record.
+	 */
+	private void appendIcpLifecycleEntry(TransitionRecord transition) {
 		Ics214Form icpLog = data.getActivityLogs().stream().filter(log -> log.getLogScope() == ActivityLogScope.ICP)
 				.findFirst().orElseGet(() -> {
 					Ics214Form created = new Ics214Form();
@@ -1430,32 +1712,56 @@ public class AppController {
 					return created;
 				});
 		ActivityLogEntry icpEntry = new ActivityLogEntry();
-		icpEntry.setTimestamp(LocalDateTime.now().withSecond(0).withNano(0));
+		icpEntry.setTimestamp(transition.timestamp());
 		icpEntry.setEventTypeId(ActivityEventType.ID_FREE_TEXT);
-		icpEntry.setResourceIdentifier(safe(task.getAssignmentTeamNumber()).isBlank()
-				? safe(task.getResourceIdentifier())
-				: safe(task.getAssignmentTeamNumber()));
-		icpEntry.setNotableActivity(description);
+		icpEntry.setResourceIdentifier(transition.icpResourceIdentifier());
+		icpEntry.setNotableActivity(transition.description());
 		icpLog.getActivityLog().add(icpEntry);
+	}
 
-		if (ActivityEventType.ID_FREE_TEXT.equals(eventTypeId)) {
+	/**
+	 * Appends the task-linked lifecycle entry for a task status change when the task
+	 * has a linked ICS 214 log.
+	 *
+	 * @param task
+	 *            task being updated.
+	 * @param transition
+	 *            canonical transition record.
+	 */
+	private void appendTaskLifecycleEntry(SarTaskAssignment task, TransitionRecord transition) {
+		if (task == null || ActivityEventType.ID_FREE_TEXT.equals(transition.eventTypeId())) {
 			return;
 		}
-		// Find the linked ICS 214 form for this task.
 		String assignmentId = task.getAssignmentId();
 		for (Ics214Form log : data.getActivityLogs()) {
 			if (assignmentId.equals(log.getLinkedSarTaskAssignmentId())) {
 				ActivityLogEntry entry = new ActivityLogEntry();
-				entry.setTimestamp(LocalDateTime.now().withSecond(0).withNano(0));
-				entry.setEventTypeId(eventTypeId);
-				entry.setResourceIdentifier(safe(task.getResourceIdentifier()).isBlank()
-						? safe(task.getLeader())
-						: safe(task.getResourceIdentifier()));
-				entry.setNotableActivity(description);
+				entry.setTimestamp(transition.timestamp());
+				entry.setEventTypeId(transition.eventTypeId());
+				entry.setResourceIdentifier(transition.taskResourceIdentifier());
+				entry.setNotableActivity(transition.description());
 				log.getActivityLog().add(entry);
-				break;
+				return;
 			}
 		}
+	}
+
+	/**
+	 * Canonical details of a lifecycle transition record.
+	 *
+	 * @param timestamp
+	 *            authoritative transition time.
+	 * @param eventTypeId
+	 *            event type stored in the task-linked ICS 214 log.
+	 * @param description
+	 *            human-readable transition note.
+	 * @param icpResourceIdentifier
+	 *            resource identifier used for the ICP note.
+	 * @param taskResourceIdentifier
+	 *            resource identifier used for the task-linked note.
+	 */
+	private record TransitionRecord(LocalDateTime timestamp, String eventTypeId, String description,
+			String icpResourceIdentifier, String taskResourceIdentifier) {
 	}
 
 	/**

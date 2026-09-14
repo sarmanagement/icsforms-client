@@ -142,4 +142,15 @@ class Ics214FormTest {
 
 		assertEquals(ActivityEventType.ID_FREE_TEXT, entry.getEventTypeId());
 	}
+
+	@Test
+	void activityLogEntryCanBeStruckOutWithoutBeingRemoved() {
+		ActivityLogEntry entry = new ActivityLogEntry();
+
+		assertFalse(entry.isStruckOut());
+
+		entry.setStruckOut(true);
+
+		assertTrue(entry.isStruckOut());
+	}
 }

@@ -27,7 +27,6 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	private static final float HEADING_FONT_SIZE = 10f;
 	private static final float LINE_HEIGHT = 12f;
 	private static final float CELL_PADDING = 4f;
-
 	/** {@inheritDoc} */
 	@Override
 	public String getFormKey() {
@@ -38,8 +37,9 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
 		Files.createDirectories(outputFile.getParent());
+		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
-			renderDocument(document, data);
+			renderDocument(document, safeData);
 			document.save(outputFile.toFile());
 		}
 	}
@@ -82,7 +82,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			overflowSections.addAll(drawSection(stream, bold, regular, layout.x(), y - row1, halfWidth, row1,
 					"1. Incident Name", List.of(safe(context.getIncidentName())), "1. Incident Name"));
 			drawOperationalPeriodSection(stream, bold, regular, layout.x() + halfWidth, y - row1, halfWidth, row1,
-					context);
+					context, data);
 			y -= row1;
 
 			drawCell(stream, layout.x(), y - row2, pageWidth, row2);
@@ -136,7 +136,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			drawCell(stream, layout.x(), approvalBottom, footerCellWidth, row9); // ICS 202
 			drawCell(stream, layout.x() + footerCellWidth, approvalBottom, footerCellWidth, row9); // IAP Page
 
-			drawApprovalSection(stream, bold, regular, layout.x(), approvalBottom, pageWidth, row8, row9, form);
+			drawApprovalSection(stream, bold, regular, layout.x(), approvalBottom, pageWidth, row8, row9, form, data);
 
 			y -= row8; // move up for next row
 		}
@@ -161,21 +161,21 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
-			float x, float y, float width, float height, IncidentContext context) throws IOException {
+			float x, float y, float width, float height, IncidentContext context, AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "2. Operational Period");
 		float labelY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY, "Date From",
-				formatDate(context.getOperationalPeriodStart()));
+				formatDate(data, context.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY, "Date To",
-				formatDate(context.getOperationalPeriodEnd()));
+				formatDate(data, context.getOperationalPeriodEnd()));
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY - 18f, "Time From",
-				formatTime(context.getOperationalPeriodStart()));
+				formatTime(data, context.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY - 18f, "Time To",
-				formatTime(context.getOperationalPeriodEnd()));
+				formatTime(data, context.getOperationalPeriodEnd()));
 	}
 
 	private void drawApprovalSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, float footerHeight, Ics202Form form) throws IOException {
+			float y, float width, float height, float footerHeight, Ics202Form form, AppData data) throws IOException {
 
 		// y is the BOTTOM of the big cell
 		float cellBottom = y;
@@ -208,7 +208,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		writeInlineHeadingValue(stream, bold, regular, x + footerCellWidth + CELL_PADDING, footerContentY, "IAP Page",
 				safe(form.getIapPage()));
 		drawInlinePair(stream, bold, regular, signatureX, footerContentY, "Date/Time",
-				formatDateTime(form.getApprovedDateTime()));
+				formatDateTime(data, form.getApprovedDateTime()));
 
 	}
 
@@ -390,16 +390,16 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return safe(name) + " / " + safe(title);
 	}
 
-	private String formatDate(LocalDateTime value) {
-		return value == null ? "" : DATE_FORMATTER.format(value);
+	private String formatDate(AppData data, LocalDateTime value) {
+		return formatPdfDate(data, value);
 	}
 
-	private String formatTime(LocalDateTime value) {
-		return value == null ? "" : TIME_FORMATTER.format(value);
+	private String formatTime(AppData data, LocalDateTime value) {
+		return formatPdfTime(data, value);
 	}
 
-	private String formatDateTime(LocalDateTime value) {
-		return value == null ? "" : formatDate(value) + " " + formatTime(value);
+	private String formatDateTime(AppData data, LocalDateTime value) {
+		return formatPdfDateTime(data, value);
 	}
 
 	private String safe(String value) {

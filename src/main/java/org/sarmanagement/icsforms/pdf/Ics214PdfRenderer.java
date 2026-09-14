@@ -10,7 +10,9 @@ import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.SarTaskSupport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,7 +33,6 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	private static final float HEADING_FONT_SIZE = 10f;
 	private static final float LINE_HEIGHT = 12f;
 	private static final float CELL_PADDING = 4f;
-
 	/** {@inheritDoc} */
 	@Override
 	public String getFormKey() {
@@ -42,8 +43,9 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
 		Files.createDirectories(outputFile.getParent());
+		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
-			renderDocument(document, data == null ? new AppData() : data);
+			renderDocument(document, safeData);
 			document.save(outputFile.toFile());
 		}
 	}
@@ -114,7 +116,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			drawSimpleSection(stream, bold, regular, layout.x(), y - row1, halfWidth, row1, "1. Incident Name",
 					List.of(safe(context.getIncidentName())));
 			drawOperationalPeriodSection(stream, bold, regular, layout.x() + halfWidth, y - row1, halfWidth, row1,
-					context);
+					context, data);
 			y -= row1;
 
 			drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row2);
@@ -135,26 +137,27 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			}
 
 			drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row4);
-			drawActivityLogSection(stream, bold, regular, layout.x(), y - row4, pageWidth, row4, entries, eventTypes);
+			drawActivityLogSection(stream, bold, regular, layout.x(), y - row4, pageWidth, row4, entries, eventTypes,
+					form, data);
 			y -= row4;
 
 			drawPreparedBySection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5, 24f, form, pageNumber,
-					totalPages);
+					totalPages, data);
 		}
 	}
 
 	private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
-			float x, float y, float width, float height, IncidentContext context) throws IOException {
+			float x, float y, float width, float height, IncidentContext context, AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "2. Operational Period");
 		float labelY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY, "Date From",
-				formatDate(context.getOperationalPeriodStart()));
+				formatDate(data, context.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY, "Date To",
-				formatDate(context.getOperationalPeriodEnd()));
+				formatDate(data, context.getOperationalPeriodEnd()));
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY - 18f, "Time From",
-				formatTime(context.getOperationalPeriodStart()));
+				formatTime(data, context.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY - 18f, "Time To",
-				formatTime(context.getOperationalPeriodEnd()));
+				formatTime(data, context.getOperationalPeriodEnd()));
 	}
 
 	private void drawResourcesSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
@@ -200,8 +203,8 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	private void drawActivityLogSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, List<ActivityLogEntry> entries, List<ActivityEventType> eventTypes)
-			throws IOException {
+			float y, float width, float height, List<ActivityLogEntry> entries, List<ActivityEventType> eventTypes,
+			Ics214Form form, AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "7. Activity Log");
 		float tableTop = y + height - 18f;
 		float headerHeight = 24f;
@@ -226,20 +229,20 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			}
 			ActivityLogEntry entry = entries.get(rowIndex);
 			writeWrappedCellText(stream, regular, x, rowBottom, dateTimeWidth, rowTop - rowBottom,
-					wrap(formatDateTime(entry.getTimestamp()), 14));
+					wrap(formatDateTime(data, entry.getTimestamp()), 14), entry.isStruckOut());
 			writeWrappedCellText(stream, regular, x + dateTimeWidth, rowBottom, activityWidth, rowTop - rowBottom,
-					wrap(activityText(entry, eventTypes), 48));
+					wrap(activityText(form, entry, eventTypes, data), 48), entry.isStruckOut());
 		}
 	}
 
 	private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, float footerHeight, Ics214Form form, int pageNumber, int totalPages)
-			throws IOException {
+			float y, float width, float height, float footerHeight, Ics214Form form, int pageNumber, int totalPages,
+			AppData data) throws IOException {
 		drawPreparedByMetadataSection(stream, bold, regular, BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING, x, y,
 				width, height, footerHeight, "8. Prepared By", safe(form.getPreparedByName()),
 				safe(form.getPreparedByPositionTitle()), safe(form.getPreparedBySignature()),
 				formPageLabel("ICS 214", pageNumber, totalPages), addPageOffset(form.getIapPage(), pageNumber - 1),
-				formatDateTime(form.getPreparedDateTime()));
+				formatDateTime(data, form.getPreparedDateTime()));
 	}
 
 	private void drawSimpleSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
@@ -261,7 +264,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return Math.max(1, (int) Math.ceil(Math.max(1, entryCount) / (double) rowsPerPage));
 	}
 
-	private String activityText(ActivityLogEntry entry, List<ActivityEventType> eventTypes) {
+	private String activityText(Ics214Form form, ActivityLogEntry entry, List<ActivityEventType> eventTypes, AppData data) {
 		List<String> parts = new ArrayList<>();
 		String typeId = entry.getEventTypeId() == null ? ActivityEventType.ID_FREE_TEXT : entry.getEventTypeId();
 		if (!ActivityEventType.ID_FREE_TEXT.equals(typeId)) {
@@ -269,8 +272,9 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 					.findFirst().orElse(typeId);
 			parts.add(label);
 		}
-		if (!safe(entry.getResourceIdentifier()).isBlank()) {
-			parts.add("Resource: " + safe(entry.getResourceIdentifier()));
+		String resourceLabel = displayedResourceIdentifier(form, entry, data);
+		if (!safe(resourceLabel).isBlank()) {
+			parts.add("Resource: " + safe(resourceLabel));
 		}
 		if (!safe(entry.getNotableActivity()).isBlank()) {
 			parts.add(safe(entry.getNotableActivity()));
@@ -318,18 +322,80 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 	private void writeWrappedCellText(PDPageContentStream stream, PDType1Font font, float x, float bottomY, float width,
 			float height, List<String> lines) throws IOException {
+		writeWrappedCellText(stream, font, x, bottomY, width, height, lines, false);
+	}
+
+	private void writeWrappedCellText(PDPageContentStream stream, PDType1Font font, float x, float bottomY, float width,
+			float height, List<String> lines, boolean struckOut) throws IOException {
 		int maxLines = Math.max(1, (int) ((height - (CELL_PADDING * 2)) / LINE_HEIGHT));
 		List<String> visible = lines == null || lines.isEmpty()
 				? List.of("")
 				: lines.subList(0, Math.min(maxLines, lines.size()));
+		List<Float> strikeYs = new ArrayList<>();
 		stream.beginText();
 		stream.setFont(font, BODY_FONT_SIZE);
 		stream.newLineAtOffset(x + CELL_PADDING, bottomY + height - CELL_PADDING - BODY_FONT_SIZE);
 		for (String line : visible) {
 			stream.showText(safe(line));
+			strikeYs.add(bottomY + height - CELL_PADDING - BODY_FONT_SIZE + (strikeYs.size() * -LINE_HEIGHT)
+					+ (BODY_FONT_SIZE * 0.35f));
 			stream.newLineAtOffset(0, -LINE_HEIGHT);
 		}
 		stream.endText();
+		if (struckOut) {
+			for (int i = 0; i < visible.size(); i++) {
+				String line = safe(visible.get(i));
+				if (line.isBlank()) {
+					continue;
+				}
+				float lineWidth = font.getStringWidth(line) / 1000f * BODY_FONT_SIZE;
+				stream.moveTo(x + CELL_PADDING, strikeYs.get(i));
+				stream.lineTo(Math.min(x + width - CELL_PADDING, x + CELL_PADDING + lineWidth), strikeYs.get(i));
+				stream.stroke();
+			}
+		}
+	}
+
+	private String displayedResourceIdentifier(Ics214Form form, ActivityLogEntry entry, AppData data) {
+		if (entry == null) {
+			return "";
+		}
+		SarTaskAssignment linkedTask = linkedTask(form, data);
+		if (linkedTask != null) {
+			String label = SarTaskSupport.taskResourceDisplayLabel(linkedTask);
+			if (!label.isBlank()) {
+				return label;
+			}
+		}
+		String raw = safe(entry.getResourceIdentifier()).trim();
+		if (raw.isBlank() || data == null) {
+			return raw;
+		}
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			String label = SarTaskSupport.taskResourceDisplayLabel(task);
+			if (raw.equalsIgnoreCase(safe(task.getAssignmentTeamNumber()).trim())
+					|| raw.equalsIgnoreCase(safe(task.getResourceIdentifier()).trim())
+					|| raw.equalsIgnoreCase(label)) {
+				return label;
+			}
+		}
+		return raw;
+	}
+
+	private SarTaskAssignment linkedTask(Ics214Form form, AppData data) {
+		if (form == null || data == null) {
+			return null;
+		}
+		String assignmentId = safe(form.getLinkedSarTaskAssignmentId()).trim();
+		if (assignmentId.isBlank()) {
+			return null;
+		}
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			if (assignmentId.equals(task.getAssignmentId())) {
+				return task;
+			}
+		}
+		return null;
 	}
 
 	private void writeLines(PDPageContentStream stream, PDType1Font regular, float x, float startY, List<String> lines)
@@ -371,16 +437,16 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return starts;
 	}
 
-	private String formatDate(LocalDateTime value) {
-		return value == null ? "" : DATE_FORMATTER.format(value);
+	private String formatDate(AppData data, LocalDateTime value) {
+		return formatPdfDate(data, value);
 	}
 
-	private String formatTime(LocalDateTime value) {
-		return value == null ? "" : TIME_FORMATTER.format(value);
+	private String formatTime(AppData data, LocalDateTime value) {
+		return formatPdfTime(data, value);
 	}
 
-	private String formatDateTime(LocalDateTime value) {
-		return value == null ? "" : DATE_TIME_FORMATTER.format(value);
+	private String formatDateTime(AppData data, LocalDateTime value) {
+		return formatPdfDateTime(data, value);
 	}
 
 	private String safe(String value) {

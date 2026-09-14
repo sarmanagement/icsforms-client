@@ -53,8 +53,9 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
 		Files.createDirectories(outputFile.getParent());
+		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
-			renderPage(document, data);
+			renderPage(document, safeData);
 			document.save(outputFile.toFile());
 		}
 	}
@@ -88,7 +89,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			drawHeading(stream, bold, x, y, "1. Incident Name");
 			writeCellText(stream, regular, x + CELL_PADDING, y - CELL_PADDING - HEADING_FONT_SIZE - 16f,
 					safe(context == null ? "" : context.getIncidentName()));
-			drawOpPeriod(stream, bold, regular, x + halfW, y - row1H, halfW, row1H, context);
+			drawOpPeriod(stream, bold, regular, x + halfW, y - row1H, halfW, row1H, context, data);
 			y -= row1H;
 
 			// Footer row: Prepared By
@@ -100,7 +101,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			drawOrgChart(stream, bold, regular, x, footerY + footerH, fullW, chartH, chart, tasks);
 
 			// Footer: Prepared by
-			drawFooter(stream, bold, regular, x, footerY, fullW, footerH, form);
+			drawFooter(stream, bold, regular, x, footerY, fullW, footerH, form, data);
 		}
 	}
 
@@ -109,26 +110,26 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	// -----------------------------------------------------------------------
 
 	private void drawOpPeriod(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
-			float width, float height, IncidentContext ctx) throws IOException {
+			float width, float height, IncidentContext ctx, AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "2. Operational Period");
 		float labelY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
 		float halfW = width / 2f;
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY, "Date From",
-				formatDate(ctx == null ? null : ctx.getOperationalPeriodStart()));
+				formatDate(data, ctx == null ? null : ctx.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING + halfW, labelY, "Date To",
-				formatDate(ctx == null ? null : ctx.getOperationalPeriodEnd()));
+				formatDate(data, ctx == null ? null : ctx.getOperationalPeriodEnd()));
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY - 16f, "Time From",
-				formatTime(ctx == null ? null : ctx.getOperationalPeriodStart()));
+				formatTime(data, ctx == null ? null : ctx.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING + halfW, labelY - 16f, "Time To",
-				formatTime(ctx == null ? null : ctx.getOperationalPeriodEnd()));
+				formatTime(data, ctx == null ? null : ctx.getOperationalPeriodEnd()));
 	}
 
 	private void drawFooter(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
-			float width, float height, Ics207Form form) throws IOException {
+			float width, float height, Ics207Form form, AppData data) throws IOException {
 		drawPreparedByMetadataSection(stream, bold, regular, BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING, x, y,
 				width, height, 18f, 8f, "4. Prepared By", safe(form.getPreparedByName()),
 				safe(form.getPreparedByPositionTitle()), "____________________", "ICS 207", safe(form.getIapPage()),
-				formatDateTime(form.getPreparedDateTime()));
+				formatDateTime(data, form.getPreparedDateTime()));
 	}
 
 	// -----------------------------------------------------------------------
@@ -468,15 +469,15 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return s.length() <= max ? s : s.substring(0, Math.max(0, max - 1)) + "…";
 	}
 
-	private static String formatDate(LocalDateTime dt) {
-		return dt == null ? "" : dt.format(DATE_FMT);
+	private String formatDate(AppData data, LocalDateTime dt) {
+		return formatPdfDate(data, dt);
 	}
 
-	private static String formatTime(LocalDateTime dt) {
-		return dt == null ? "" : dt.format(TIME_FMT);
+	private String formatTime(AppData data, LocalDateTime dt) {
+		return formatPdfTime(data, dt);
 	}
 
-	private static String formatDateTime(java.time.LocalDateTime dt) {
-		return dt == null ? "" : dt.format(DATE_TIME_FMT);
+	private String formatDateTime(AppData data, java.time.LocalDateTime dt) {
+		return formatPdfDateTime(data, dt);
 	}
 }

@@ -44,12 +44,13 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
 		Files.createDirectories(outputFile.getParent());
+		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
-			Ics201Form form = data.getForm201();
-			renderPageOne(document, data, form);
-			renderPageTwo(document, data, form);
-			renderPageThree(document, data, form);
-			renderPageFour(document, data, form);
+			Ics201Form form = safeData.getForm201();
+			renderPageOne(document, safeData, form);
+			renderPageTwo(document, safeData, form);
+			renderPageThree(document, safeData, form);
+			renderPageFour(document, safeData, form);
 			document.save(outputFile.toFile());
 		}
 	}
@@ -80,7 +81,7 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 					"5. Situation Summary and Health and Safety Briefing", wrap(safe(form.getSituationSummary()), 92));
 			y -= summaryHeight;
 			drawPreparedBySection(stream, bold, regular, layout.x(), y - footerHeight, layout.width(), footerHeight,
-					form, 1);
+					form, 1, data);
 		}
 	}
 
@@ -110,7 +111,7 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 					form.getCurrentActions());
 			y -= actionsHeight;
 			drawPreparedBySection(stream, bold, regular, layout.x(), y - footerHeight, layout.width(), footerHeight,
-					form, 2);
+					form, 2, data);
 		}
 	}
 
@@ -136,7 +137,7 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 					data.getOrganizationalChart(), data.getSarTaskAssignments());
 			y -= orgHeight;
 			drawPreparedBySection(stream, bold, regular, layout.x(), y - footerHeight, layout.width(), footerHeight,
-					form, 3);
+					form, 3, data);
 		}
 	}
 
@@ -159,10 +160,10 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 					headerHeight);
 			y -= headerHeight;
 			drawResourcesSection(stream, bold, regular, layout.x(), y - tableHeight, layout.width(), tableHeight,
-					form.getResources());
+					form.getResources(), data);
 			y -= tableHeight;
 			drawPreparedBySection(stream, bold, regular, layout.x(), y - footerHeight, layout.width(), footerHeight,
-					form, 4);
+					form, 4, data);
 		}
 	}
 
@@ -236,7 +237,8 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	private void drawResourcesSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, List<Ics201Form.ResourceSummaryEntry> resources) throws IOException {
+			float y, float width, float height, List<Ics201Form.ResourceSummaryEntry> resources, AppData data)
+			throws IOException {
 		drawCell(stream, x, y, width, height);
 		drawHeading(stream, bold, x, y + height, "10. Resource Summary");
 		float tableTop = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
@@ -274,9 +276,9 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				writeCellText(stream, regular, x + widths[0] + CELL_PADDING, textY,
 						truncate(entry.getResourceIdentifier(), 18));
 				writeCellText(stream, regular, x + widths[0] + widths[1] + CELL_PADDING, textY,
-						truncate(formatDateTime(entry.getDateTimeOrdered()), 18));
+						truncate(formatDateTime(data, entry.getDateTimeOrdered()), 18));
 				writeCellText(stream, regular, x + widths[0] + widths[1] + widths[2] + CELL_PADDING, textY,
-						truncate(formatDateTime(entry.getEta()), 18));
+						truncate(formatDateTime(data, entry.getEta()), 18));
 				writeCellText(stream, regular, x + widths[0] + widths[1] + widths[2] + widths[3] + CELL_PADDING, textY,
 						entry.isArrived() ? "Yes" : "No");
 				writeCellText(stream, regular,
@@ -291,12 +293,12 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, Ics201Form form, int pageNumber) throws IOException {
+			float y, float width, float height, Ics201Form form, int pageNumber, AppData data) throws IOException {
 		drawPreparedByMetadataSection(stream, bold, regular, BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING, x, y,
 				width, height, 24f, "6. Prepared By", safe(form.getPreparedByName()),
 				safe(form.getPreparedByPositionTitle()), safe(form.getPreparedBySignature()),
 				formPageLabel("ICS 201", pageNumber, PAGE_COUNT), addPageOffset(form.getIapPage(), pageNumber - 1),
-				formatDateTime(form.getPreparedDateTime()));
+				formatDateTime(data, form.getPreparedDateTime()));
 	}
 
 	private void drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
@@ -640,8 +642,8 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return value == null ? "" : TIME_FORMATTER.format(value);
 	}
 
-	private String formatDateTime(LocalDateTime value) {
-		return value == null ? "" : DATE_TIME_FORMATTER.format(value);
+	private String formatDateTime(AppData data, LocalDateTime value) {
+		return formatPdfDateTime(data, value);
 	}
 
 	private String truncate(String value, int maxLength) {

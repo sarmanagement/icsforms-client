@@ -12,6 +12,8 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
@@ -19,6 +21,7 @@ import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JComboBox;
@@ -78,21 +81,37 @@ class SarTaskPanelTest {
 	void debriefEditorShowsDebriefFieldsWithoutAssignmentOnlyFields() throws Exception {
 		Object editor = createEditor(sampleTask(), "DEBRIEFING", 1);
 		Field panelField = editor.getClass().getDeclaredField("panel");
+		Field assignmentSummaryField = editor.getClass().getDeclaredField("assignmentSummaryField");
 		panelField.setAccessible(true);
+		assignmentSummaryField.setAccessible(true);
 
 		JLabel[] debriefLabel = new JLabel[1];
 		JLabel[] reportedPodLabel = new JLabel[1];
 		JLabel[] resourcesLabel = new JLabel[1];
+		JLabel[] inheritedLabel = new JLabel[1];
+		JLabel[] taskSetupLabel = new JLabel[1];
+		JLabel[] taskSummaryLabel = new JLabel[1];
+		JPanel[] summaryPanel = new JPanel[1];
 		SwingUtilities.invokeAndWait(() -> {
 			Component panel = (Component) getFieldValue(panelField, editor);
 			debriefLabel[0] = findLabel(panel, "Debriefing");
 			reportedPodLabel[0] = findLabel(panel, "Reported POD (%)");
 			resourcesLabel[0] = findLabel(panel, "Resources assigned");
+			inheritedLabel[0] = findLabel(panel, "Inherited task data");
+			taskSetupLabel[0] = findLabel(panel, "Task setup");
+			taskSummaryLabel[0] = findLabel(panel, "Task summary");
+			summaryPanel[0] = (JPanel) getFieldValue(assignmentSummaryField, editor);
 		});
 
 		assertNotNull(debriefLabel[0]);
 		assertNotNull(reportedPodLabel[0]);
 		assertNull(resourcesLabel[0]);
+		assertNotNull(inheritedLabel[0]);
+		assertEquals(1, gridY(inheritedLabel[0]));
+		assertEquals(2, gridY(taskSetupLabel[0]));
+		assertNull(taskSummaryLabel[0]);
+		assertEquals("Resource: Team 1", ((JLabel) summaryPanel[0].getComponent(0)).getText());
+		assertNull(findLabel(summaryPanel[0], "Incident: Test Incident"));
 	}
 
 	@Test
@@ -136,6 +155,50 @@ class SarTaskPanelTest {
 	}
 
 	@Test
+	void returnedTaskWithExistingDebriefRemainsEligibleForDebriefEditing() throws Exception {
+		SarTaskAssignment task = sampleTask();
+		task.setTaskLifecycleStatus("returned");
+		task.setDebriefingSupervisor("Debrief Lead");
+		Method method = SarTaskPanel.class.getDeclaredMethod("isReadyForDebrief", SarTaskAssignment.class);
+		method.setAccessible(true);
+
+		assertTrue((Boolean) method.invoke(null, task));
+	}
+
+	@Test
+	void debriefEditorProvidesSupervisorPickerAndPersistsLinkedPersonnelId() throws Exception {
+		SarTaskAssignment task = sampleTask();
+		task.setDebriefingSupervisor("Legacy Name");
+		TCard supervisor = new TCard();
+		supervisor.setCardType(TCardType.PERSONNEL);
+		supervisor.setPersonName("Debrief Lead");
+		task.setDebriefingSupervisorResourceId(supervisor.getResourceId());
+		Object editor = createEditor(task, "DEBRIEFING", 1, List.of(supervisor), sampleControllerWithCards(supervisor), List.of());
+		Field supervisorField = editor.getClass().getDeclaredField("debriefingSupervisorField");
+		supervisorField.setAccessible(true);
+		Field pickButtonField = editor.getClass().getDeclaredField("pickDebriefingSupervisorButton");
+		pickButtonField.setAccessible(true);
+		Method applyTo = editor.getClass().getDeclaredMethod("applyTo", SarTaskAssignment.class, List.class);
+		applyTo.setAccessible(true);
+
+		JTextField[] fieldHolder = new JTextField[1];
+		JButton[] buttonHolder = new JButton[1];
+		SwingUtilities.invokeAndWait(() -> {
+			fieldHolder[0] = (JTextField) getFieldValue(supervisorField, editor);
+			buttonHolder[0] = (JButton) getFieldValue(pickButtonField, editor);
+		});
+
+		assertEquals("Debrief Lead", fieldHolder[0].getText());
+		assertEquals("Pick…", buttonHolder[0].getText());
+		SwingUtilities.invokeAndWait(() -> fieldHolder[0].setText("Debrief Lead"));
+
+		applyTo.invoke(editor, task, List.of());
+
+		assertEquals("Debrief Lead", task.getDebriefingSupervisor());
+		assertEquals(supervisor.getResourceId(), task.getDebriefingSupervisorResourceId());
+	}
+
+	@Test
 	void assignmentEditorUsesCompactResourceListWithoutPrimaryTaskResource() throws Exception {
 		SarTaskAssignment task = sampleTask();
 		List<SarTaskResource> resources = new ArrayList<>(task.getResourcesAssigned());
@@ -170,6 +233,31 @@ class SarTaskPanelTest {
 		for (int rowIndex = 0; rowIndex < resourceModel.getRowCount(); rowIndex++) {
 			assertNotEquals("Team 1", resourceModel.getValueAt(rowIndex, 2));
 		}
+	}
+
+	@Test
+	void assignmentEditorPlacesInheritedTaskDataBelowAssignmentAndShowsResourceFirst() throws Exception {
+		Object editor = createEditor(sampleTask(), "ASSIGNMENT", 1);
+		Field panelField = editor.getClass().getDeclaredField("panel");
+		panelField.setAccessible(true);
+		Field assignmentSummaryField = editor.getClass().getDeclaredField("assignmentSummaryField");
+		assignmentSummaryField.setAccessible(true);
+
+		JLabel[] inheritedLabel = new JLabel[1];
+		JLabel[] taskSetupLabel = new JLabel[1];
+		JPanel[] summaryPanel = new JPanel[1];
+		SwingUtilities.invokeAndWait(() -> {
+			Component panel = (Component) getFieldValue(panelField, editor);
+			inheritedLabel[0] = findLabel(panel, "Inherited task data");
+			taskSetupLabel[0] = findLabel(panel, "Task setup");
+			summaryPanel[0] = (JPanel) getFieldValue(assignmentSummaryField, editor);
+		});
+
+		assertEquals(1, gridY(inheritedLabel[0]));
+		assertEquals(2, gridY(taskSetupLabel[0]));
+		assertNotNull(findLabel(summaryPanel[0], "Resource: Team 1"));
+		assertNull(findLabel(summaryPanel[0], "Incident: Test Incident"));
+		assertEquals("Resource: Team 1", ((JLabel) summaryPanel[0].getComponent(0)).getText());
 	}
 
 	@Test
@@ -289,13 +377,20 @@ class SarTaskPanelTest {
 	}
 
 	private static Object createEditor(SarTaskAssignment task, String modeName, int resourceRows) throws Exception {
+		return createEditor(task, modeName, resourceRows, List.of(), null, List.of());
+	}
+
+	private static Object createEditor(SarTaskAssignment task, String modeName, int resourceRows, List<TCard> availableTCards,
+			AppController controller, List<ClueLogEntry> clueLogEntries) throws Exception {
 		Class<?> editorClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$SarTaskEditor");
 		Class<?> modeClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$EditorMode");
 		Object mode = enumConstant(modeClass, modeName);
 		Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass, List.class,
-				int.class, java.util.function.Function.class, List.class, List.class, Set.class);
+				int.class, java.util.function.Function.class, List.class, List.class, Set.class, AppController.class);
 		constructor.setAccessible(true);
-		return constructor.newInstance(task, mode, List.of(), resourceRows, null, List.of(), List.of(), Set.of());
+		List<String> availableNames = availableTCards.stream().map(TCard::getDisplayLabel).toList();
+		return constructor.newInstance(task, mode, clueLogEntries, resourceRows, null, availableNames, availableTCards,
+				Set.of(), controller);
 	}
 
 	private static Object enumConstant(Class<?> enumClass, String name) {
@@ -424,6 +519,10 @@ class SarTaskPanelTest {
 	}
 
 	private static AppController sampleController() throws Exception {
+		return sampleControllerWithCards();
+	}
+
+	private static AppController sampleControllerWithCards(TCard... cards) throws Exception {
 		SarTaskAssignment task = sampleTask();
 		ResourceAssignment resource = new ResourceAssignment();
 		resource.setAssignmentId(task.getAssignmentId());
@@ -454,6 +553,7 @@ class SarTaskPanelTest {
 		context.setTaskMap(task.getTaskMap());
 
 		AppData data = new AppData(context, new Ics202Form(), form204, List.of(task));
+		data.setTCards(List.of(cards));
 		ClueLogEntry clue = new ClueLogEntry();
 		clue.setAssignmentId(task.getAssignmentId());
 		clue.setDetectingTask(task.getAssignmentTeamNumber());

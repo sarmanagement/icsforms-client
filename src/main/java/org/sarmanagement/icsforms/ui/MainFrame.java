@@ -392,16 +392,24 @@ public class MainFrame extends JFrame {
 				controller.getData().isUseSystemTimeZone());
 		JRadioButtonMenuItem specifiedTimeZoneItem = new JRadioButtonMenuItem("Use specified time zone…",
 				!controller.getData().isUseSystemTimeZone());
+		Runnable refreshTimeZoneLabels = () -> {
+			systemTimeZoneItem.setText("Use system local time zone (" + humanReadableTimeZone(ZoneId.systemDefault()) + ")");
+			String configured = controller.getData().isUseSystemTimeZone()
+					? "currently using system local time zone"
+					: humanReadableTimeZone(configuredZoneId(controller.getData()));
+			specifiedTimeZoneItem.setText("Use specified time zone… (" + configured + ")");
+		};
 		systemTimeZoneItem.addActionListener(e -> {
 			controller.getData().setUseSystemTimeZone(true);
 			applyConfiguredTimeZone();
+			refreshTimeZoneLabels.run();
 			refreshFromModel();
 			controller.markDirty();
 		});
 		specifiedTimeZoneItem.addActionListener(e -> {
 			String current = controller.getData().getConfiguredTimeZoneId();
-			String chosen = JOptionPane.showInputDialog(this, "Enter time zone ID (e.g., UTC, America/Denver):",
-					current == null || current.isBlank() ? "UTC" : current);
+			String chosen = UiSupport.showFilterableSelectionDialog(this, "Date/Time Zone", "Time zone ID",
+					supportedTimeZoneIds(), current == null || current.isBlank() ? "UTC" : current);
 			if (chosen == null) {
 				systemTimeZoneItem.setSelected(controller.getData().isUseSystemTimeZone());
 				specifiedTimeZoneItem.setSelected(!controller.getData().isUseSystemTimeZone());
@@ -419,6 +427,7 @@ public class MainFrame extends JFrame {
 			controller.getData().setUseSystemTimeZone(false);
 			controller.getData().setConfiguredTimeZoneId(chosen.trim());
 			applyConfiguredTimeZone();
+			refreshTimeZoneLabels.run();
 			refreshFromModel();
 			controller.markDirty();
 		});
@@ -426,6 +435,7 @@ public class MainFrame extends JFrame {
 		timeZoneGroup.add(specifiedTimeZoneItem);
 		timeZoneMenu.add(systemTimeZoneItem);
 		timeZoneMenu.add(specifiedTimeZoneItem);
+		refreshTimeZoneLabels.run();
 		configMenu.addSeparator();
 		configMenu.add(timeZoneMenu);
 
@@ -681,6 +691,48 @@ public class MainFrame extends JFrame {
 		} catch (DateTimeException ex) {
 			UiSupport.setDateTimeDisplayZone(ZoneId.systemDefault());
 		}
+	}
+
+	/**
+	 * Returns the configured timezone, falling back to the system default when the
+	 * configured ID is invalid.
+	 *
+	 * @param data
+	 *            incident document containing the timezone preference.
+	 * @return configured display timezone.
+	 */
+	static ZoneId configuredZoneId(AppData data) {
+		if (data == null || data.isUseSystemTimeZone()) {
+			return ZoneId.systemDefault();
+		}
+		try {
+			return ZoneId.of(data.getConfiguredTimeZoneId());
+		} catch (DateTimeException exception) {
+			return ZoneId.systemDefault();
+		}
+	}
+
+	/**
+	 * Returns the supported IANA timezone IDs sorted for use in the picker dialog.
+	 *
+	 * @return sorted timezone IDs.
+	 */
+	static List<String> supportedTimeZoneIds() {
+		return ZoneId.getAvailableZoneIds().stream().sorted().toList();
+	}
+
+	/**
+	 * Returns a human-readable timezone label including offset and abbreviation.
+	 *
+	 * @param zoneId
+	 *            timezone to describe.
+	 * @return readable timezone label.
+	 */
+	static String humanReadableTimeZone(ZoneId zoneId) {
+		ZoneId resolved = zoneId == null ? ZoneId.systemDefault() : zoneId;
+		java.time.ZonedDateTime now = java.time.ZonedDateTime.now(resolved);
+		return resolved.getId() + " (UTC" + now.getOffset() + ", " + now.format(java.time.format.DateTimeFormatter.ofPattern("z"))
+				+ ")";
 	}
 
 	private void rebuildVisibleTabs() {
