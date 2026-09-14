@@ -611,8 +611,8 @@ public class Ics214Panel extends JPanel {
 				? ""
 				: SarTaskPanel.formatDateTimeValue(entry.getTimestamp()) + " ")
 				+ resolvedEventTypeLabel(entry.getEventTypeId());
-		int confirm = JOptionPane.showConfirmDialog(this, "Remove activity entry '" + label.trim() + "'?",
-				"Remove Activity Entry", JOptionPane.YES_NO_OPTION);
+		int confirm = JOptionPane.showConfirmDialog(this, "Strike out activity entry '" + label.trim() + "'?",
+				"Strike Out Activity Entry", JOptionPane.YES_NO_OPTION);
 		if (confirm != JOptionPane.YES_OPTION) {
 			return;
 		}
