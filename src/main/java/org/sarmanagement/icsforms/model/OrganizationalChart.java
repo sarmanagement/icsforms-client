@@ -133,6 +133,8 @@ public class OrganizationalChart {
 
 	/**
 	 * Returns the incident commander or unified command names.
+	 *
+	 * @return configured incident commander / unified-command names.
 	 */
 	public List<String> getIncidentCommanders() {
 		return incidentCommanders;

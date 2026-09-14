@@ -1149,7 +1149,16 @@ public class MainFrame extends JFrame {
 		return value == null ? "" : value;
 	}
 
-	/** A document that can be linked to an ICS 214 activity log. */
+	/**
+	 * A document that can be linked to an ICS 214 activity log.
+	 *
+	 * @param label
+	 *            display label shown in selectors.
+	 * @param ics204FormId
+	 *            linked ICS 204 form identifier, or blank.
+	 * @param sarTaskAssignmentId
+	 *            linked SAR task assignment identifier, or blank.
+	 */
 	private record AssociableDocument(String label, String ics204FormId, String sarTaskAssignmentId) {
 		/** No associated document (ICP-level log). */
 		static AssociableDocument none() {

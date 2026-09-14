@@ -1903,6 +1903,9 @@ public class AppController {
 	 *
 	 * @param clue
 	 *            the newly added clue log entry.
+	 * @return {@code true} when a new ICS 214 activity entry is appended;
+	 *         {@code false} when no linked log exists or the clue was already
+	 *         represented.
 	 */
 	public boolean propagateClueToActivityLog(ClueLogEntry clue) {
 		if (clue == null || safe(clue.getAssignmentId()).isBlank()) {

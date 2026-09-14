@@ -21,10 +21,10 @@
 
     <module name="JavadocType"/>
     <module name="JavadocMethod">
+      <property name="accessModifiers" value="public"/>
       <property name="allowMissingParamTags" value="false"/>
       <property name="allowMissingReturnTag" value="false"/>
     </module>
-    <module name="JavadocVariable"/>
   </module>
 
   <module name="NewlineAtEndOfFile"/>
