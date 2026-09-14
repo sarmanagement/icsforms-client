@@ -133,11 +133,11 @@
         </formats>
 
         <java>
-          <!-- Tabs + K&R via Eclipse formatter profile -->
-          <eclipse>
-            <file>config/formatter/eclipse-java-formatter.xml</file>
-          </eclipse>
           <removeUnusedImports/>
+          <indent>
+            <tabs>true</tabs>
+            <spacesPerTab>4</spacesPerTab>
+          </indent>
           <trimTrailingWhitespace/>
           <endWithNewline/>
         </java>

@@ -29,29 +29,56 @@ public class AppData {
 		public OperationalPeriodRecord() {
 		}
 
-		/** Returns the operational period start date/time. */
+		/**
+		 * Returns the operational period start date/time.
+		 *
+		 * @return start date/time for the recorded period, or {@code null} when unset.
+		 */
 		public LocalDateTime getPeriodStart() {
 			return periodStart;
 		}
-		/** Sets the operational period start date/time. */
+		/**
+		 * Sets the operational period start date/time.
+		 *
+		 * @param periodStart
+		 *            start date/time for the recorded period.
+		 */
 		public void setPeriodStart(LocalDateTime periodStart) {
 			this.periodStart = periodStart;
 		}
 
-		/** Returns the operational period end date/time. */
+		/**
+		 * Returns the operational period end date/time.
+		 *
+		 * @return end date/time for the recorded period, or {@code null} when unset.
+		 */
 		public LocalDateTime getPeriodEnd() {
 			return periodEnd;
 		}
-		/** Sets the operational period end date/time. */
+		/**
+		 * Sets the operational period end date/time.
+		 *
+		 * @param periodEnd
+		 *            end date/time for the recorded period.
+		 */
 		public void setPeriodEnd(LocalDateTime periodEnd) {
 			this.periodEnd = periodEnd;
 		}
 
-		/** Returns the incident commander / unified-command names for this period. */
+		/**
+		 * Returns the incident commander / unified-command names for this period.
+		 *
+		 * @return commander names captured for the recorded period.
+		 */
 		public List<String> getIncidentCommanders() {
 			return incidentCommanders;
 		}
-		/** Sets the incident commander / unified-command names for this period. */
+		/**
+		 * Sets the incident commander / unified-command names for this period.
+		 *
+		 * @param incidentCommanders
+		 *            commander names; {@code null} is treated as an empty list.
+		 */
 		public void setIncidentCommanders(List<String> incidentCommanders) {
 			this.incidentCommanders = incidentCommanders == null ? new ArrayList<>() : incidentCommanders;
 		}
@@ -503,6 +530,11 @@ public class AppData {
 		this.tCards = tCards == null ? new ArrayList<>() : tCards;
 	}
 
+	/**
+	 * Returns PDF layout preferences used by form renderers during export.
+	 *
+	 * @return PDF page size and margin settings (never {@code null}).
+	 */
 	public PdfLayoutSettings getPdfLayoutSettings() {
 		if (pdfLayoutSettings == null) {
 			pdfLayoutSettings = new PdfLayoutSettings();
@@ -510,6 +542,12 @@ public class AppData {
 		return pdfLayoutSettings;
 	}
 
+	/**
+	 * Sets PDF layout preferences used by form renderers during export.
+	 *
+	 * @param pdfLayoutSettings
+	 *            PDF page size and margin settings; {@code null} resets to defaults.
+	 */
 	public void setPdfLayoutSettings(PdfLayoutSettings pdfLayoutSettings) {
 		this.pdfLayoutSettings = pdfLayoutSettings == null ? new PdfLayoutSettings() : pdfLayoutSettings;
 	}

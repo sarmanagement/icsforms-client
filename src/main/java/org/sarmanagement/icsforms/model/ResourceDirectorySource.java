@@ -79,6 +79,8 @@ public final class ResourceDirectorySource {
 	/**
 	 * Returns a comparator that sorts rows alphabetically by last name, then full
 	 * name.
+	 *
+	 * @return comparator for canonical directory-entry ordering.
 	 */
 	public static Comparator<ResourceDirectoryEntry> byLastName() {
 		return Comparator.comparing((ResourceDirectoryEntry row) -> lastNameSortKey(row.name()))
@@ -88,6 +90,8 @@ public final class ResourceDirectorySource {
 
 	/**
 	 * Returns a comparator that sorts display names alphabetically by last name.
+	 *
+	 * @return comparator for display-name ordering.
 	 */
 	public static Comparator<String> displayNameComparator() {
 		return Comparator.comparing(ResourceDirectorySource::lastNameSortKey)

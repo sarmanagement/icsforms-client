@@ -258,10 +258,10 @@ class IncidentModeAndTCardTest {
 		// @JsonAlias annotations must migrate those values into the new *Phone fields.
 		String legacyJson = """
 				{
-				  "safetyOfficerName": "Sam Safety",
-				  "safetyOfficerContact": "555-9999",
-				  "publicInformationOfficerName": "PIO Pat",
-				  "publicInformationOfficerContact": "555-8888"
+				"safetyOfficerName": "Sam Safety",
+				"safetyOfficerContact": "555-9999",
+				"publicInformationOfficerName": "PIO Pat",
+				"publicInformationOfficerContact": "555-8888"
 				}""";
 		OrganizationalChart chart = mapper.readValue(legacyJson, OrganizationalChart.class);
 		assertEquals("Sam Safety", chart.getSafetyOfficerName());

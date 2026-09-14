@@ -482,6 +482,12 @@ abstract class AbstractPdfRenderer {
 	 *            form height.
 	 * @param headerBaseline
 	 *            baseline for the centered header text.
+	 * @param pageWidth
+	 *            PDF page width in points.
+	 * @param pageHeight
+	 *            PDF page height in points.
+	 * @param pageMargin
+	 *            minimum inner margin in points.
 	 */
 	protected record FormLayout(float x, float y, float width, float height, float headerBaseline, float pageWidth,
 			float pageHeight, float pageMargin) {
