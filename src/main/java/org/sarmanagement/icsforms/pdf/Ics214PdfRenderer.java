@@ -31,8 +31,6 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	private static final float HEADING_FONT_SIZE = 10f;
 	private static final float LINE_HEIGHT = 12f;
 	private static final float CELL_PADDING = 4f;
-	private AppData currentData = new AppData();
-
 	/** {@inheritDoc} */
 	@Override
 	public String getFormKey() {
@@ -43,9 +41,9 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
 		Files.createDirectories(outputFile.getParent());
-		currentData = data == null ? new AppData() : data;
+		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
-			renderDocument(document, currentData);
+			renderDocument(document, safeData);
 			document.save(outputFile.toFile());
 		}
 	}
@@ -116,7 +114,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			drawSimpleSection(stream, bold, regular, layout.x(), y - row1, halfWidth, row1, "1. Incident Name",
 					List.of(safe(context.getIncidentName())));
 			drawOperationalPeriodSection(stream, bold, regular, layout.x() + halfWidth, y - row1, halfWidth, row1,
-					context);
+					context, data);
 			y -= row1;
 
 			drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row2);
@@ -137,26 +135,27 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			}
 
 			drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row4);
-			drawActivityLogSection(stream, bold, regular, layout.x(), y - row4, pageWidth, row4, entries, eventTypes);
+			drawActivityLogSection(stream, bold, regular, layout.x(), y - row4, pageWidth, row4, entries, eventTypes,
+					data);
 			y -= row4;
 
 			drawPreparedBySection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5, 24f, form, pageNumber,
-					totalPages);
+					totalPages, data);
 		}
 	}
 
 	private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
-			float x, float y, float width, float height, IncidentContext context) throws IOException {
+			float x, float y, float width, float height, IncidentContext context, AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "2. Operational Period");
 		float labelY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY, "Date From",
-				formatDate(context.getOperationalPeriodStart()));
+				formatDate(data, context.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY, "Date To",
-				formatDate(context.getOperationalPeriodEnd()));
+				formatDate(data, context.getOperationalPeriodEnd()));
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY - 18f, "Time From",
-				formatTime(context.getOperationalPeriodStart()));
+				formatTime(data, context.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY - 18f, "Time To",
-				formatTime(context.getOperationalPeriodEnd()));
+				formatTime(data, context.getOperationalPeriodEnd()));
 	}
 
 	private void drawResourcesSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
@@ -202,8 +201,8 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	private void drawActivityLogSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, List<ActivityLogEntry> entries, List<ActivityEventType> eventTypes)
-			throws IOException {
+			float y, float width, float height, List<ActivityLogEntry> entries, List<ActivityEventType> eventTypes,
+			AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "7. Activity Log");
 		float tableTop = y + height - 18f;
 		float headerHeight = 24f;
@@ -228,20 +227,20 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			}
 			ActivityLogEntry entry = entries.get(rowIndex);
 			writeWrappedCellText(stream, regular, x, rowBottom, dateTimeWidth, rowTop - rowBottom,
-					wrap(formatDateTime(entry.getTimestamp()), 14));
+					wrap(formatDateTime(data, entry.getTimestamp()), 14));
 			writeWrappedCellText(stream, regular, x + dateTimeWidth, rowBottom, activityWidth, rowTop - rowBottom,
 					wrap(activityText(entry, eventTypes), 48));
 		}
 	}
 
 	private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, float footerHeight, Ics214Form form, int pageNumber, int totalPages)
-			throws IOException {
+			float y, float width, float height, float footerHeight, Ics214Form form, int pageNumber, int totalPages,
+			AppData data) throws IOException {
 		drawPreparedByMetadataSection(stream, bold, regular, BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING, x, y,
 				width, height, footerHeight, "8. Prepared By", safe(form.getPreparedByName()),
 				safe(form.getPreparedByPositionTitle()), safe(form.getPreparedBySignature()),
 				formPageLabel("ICS 214", pageNumber, totalPages), addPageOffset(form.getIapPage(), pageNumber - 1),
-				formatDateTime(form.getPreparedDateTime()));
+				formatDateTime(data, form.getPreparedDateTime()));
 	}
 
 	private void drawSimpleSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
@@ -373,16 +372,16 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return starts;
 	}
 
-	private String formatDate(LocalDateTime value) {
-		return formatPdfDate(currentData, value);
+	private String formatDate(AppData data, LocalDateTime value) {
+		return formatPdfDate(data, value);
 	}
 
-	private String formatTime(LocalDateTime value) {
-		return formatPdfTime(currentData, value);
+	private String formatTime(AppData data, LocalDateTime value) {
+		return formatPdfTime(data, value);
 	}
 
-	private String formatDateTime(LocalDateTime value) {
-		return formatPdfDateTime(currentData, value);
+	private String formatDateTime(AppData data, LocalDateTime value) {
+		return formatPdfDateTime(data, value);
 	}
 
 	private String safe(String value) {

@@ -13,9 +13,8 @@ import org.sarmanagement.icsforms.model.ResourceDirectorySource;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -35,7 +34,6 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	private static final float FOOTER_BAND_HEIGHT = 24f;
 	private static final float SECTION_HEADING_HEIGHT = 18f;
 	private static final float TABLE_HEADER_HEIGHT = 28f;
-	private AppData currentData = new AppData();
 
 	@Override
 	public String getFormKey() {
@@ -49,10 +47,10 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 			Files.createDirectories(parent);
 		}
 		AppData safeData = data == null ? new AppData() : data;
-		currentData = safeData;
 		List<ResourceDirectoryEntry> entries = ResourceDirectorySource.build(safeData).stream()
 				.sorted(ResourceDirectorySource.byLastName()).toList();
-		LocalDateTime preparedAt = LocalDateTime.ofInstant(Instant.now(), ZoneOffset.UTC).withSecond(0).withNano(0);
+		String preparedAt = DATE_TIME_FORMATTER
+				.format(ZonedDateTime.now(pdfZoneId(safeData)).withSecond(0).withNano(0));
 		try (PDDocument document = new PDDocument()) {
 			int rowsPerPage = defaultRowsPerPage();
 			int totalPages = pageCount(entries.size(), rowsPerPage);
@@ -67,7 +65,7 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	}
 
 	private void renderPage(PDDocument document, AppData data, List<ResourceDirectoryEntry> entries, int pageNumber,
-			int totalPages, LocalDateTime preparedAt, int rowsPerPage) throws IOException {
+			int totalPages, String preparedAt, int rowsPerPage) throws IOException {
 		IncidentContext context = data.getIncidentContext() == null ? new IncidentContext() : data.getIncidentContext();
 		PDPage page = newPage(data);
 		document.addPage(page);
@@ -86,7 +84,7 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 			drawSimpleSection(stream, bold, regular, layout.x(), y - TOP_SECTION_HEIGHT, halfWidth, TOP_SECTION_HEIGHT,
 					"1. Incident Name", List.of(safe(context.getIncidentName())));
 			drawOperationalPeriodSection(stream, bold, regular, layout.x() + halfWidth, y - TOP_SECTION_HEIGHT,
-					halfWidth, TOP_SECTION_HEIGHT, context);
+					halfWidth, TOP_SECTION_HEIGHT, context, data);
 			y -= TOP_SECTION_HEIGHT;
 
 			float tableSectionHeight = layout.height() - TOP_SECTION_HEIGHT - FOOTER_HEIGHT;
@@ -122,17 +120,17 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	}
 
 	private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
-			float x, float y, float width, float height, IncidentContext context) throws IOException {
+			float x, float y, float width, float height, IncidentContext context, AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "2. Operational Period");
 		float labelY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY, "Date From",
-				formatDate(context.getOperationalPeriodStart()));
+				formatDate(data, context.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY, "Date To",
-				formatDate(context.getOperationalPeriodEnd()));
+				formatDate(data, context.getOperationalPeriodEnd()));
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY - 18f, "Time From",
-				formatTime(context.getOperationalPeriodStart()));
+				formatTime(data, context.getOperationalPeriodStart()));
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY - 18f, "Time To",
-				formatTime(context.getOperationalPeriodEnd()));
+				formatTime(data, context.getOperationalPeriodEnd()));
 	}
 
 	private void drawCommunicationsSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
@@ -181,12 +179,12 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	}
 
 	private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, IncidentContext context, LocalDateTime preparedAt, int pageNumber,
+			float y, float width, float height, IncidentContext context, String preparedAt, int pageNumber,
 			int totalPages, String iapPage) throws IOException {
 		drawPreparedByMetadataSection(stream, bold, regular, BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING, x, y,
 				width, height, FOOTER_BAND_HEIGHT, "4. Prepared By", safe(context.getCurrentUser()),
 				safe(context.getCurrentUserPositionTitle()), "____________________",
-				formPageLabel("ICS 205A", pageNumber, totalPages), safe(iapPage), formatDateTime(preparedAt));
+				formPageLabel("ICS 205A", pageNumber, totalPages), safe(iapPage), safe(preparedAt));
 	}
 
 	private void drawSimpleSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
@@ -296,16 +294,12 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		return value == null ? "" : value.trim();
 	}
 
-	private String formatDate(LocalDateTime value) {
-		return formatPdfDate(currentData, value);
+	private String formatDate(AppData data, LocalDateTime value) {
+		return formatPdfDate(data, value);
 	}
 
-	private String formatTime(LocalDateTime value) {
-		return formatPdfTime(currentData, value);
-	}
-
-	private String formatDateTime(LocalDateTime value) {
-		return formatPdfDateTime(currentData, value);
+	private String formatTime(AppData data, LocalDateTime value) {
+		return formatPdfTime(data, value);
 	}
 
 	private String fitText(PDType1Font font, String value, float maxWidth) throws IOException {
