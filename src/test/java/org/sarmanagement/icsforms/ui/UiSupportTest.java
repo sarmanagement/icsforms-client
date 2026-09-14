@@ -7,7 +7,9 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JTable;
 import java.awt.Component;
+import java.awt.Rectangle;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -156,6 +158,36 @@ class UiSupportTest {
 		assertTrue(TCardPanel.useLargeDirectoryFont(8));
 		assertFalse(TCardPanel.useLargeDirectoryFont(9));
 		assertFalse(TCardPanel.useLargeDirectoryFont(0));
+	}
+
+	@Test
+	void scrollTableToLastRowRequestsLastRowRectangle() throws Exception {
+		class TrackingTable extends JTable {
+			private Rectangle lastScrolledRect;
+
+			@Override
+			public void scrollRectToVisible(Rectangle rectangle) {
+				lastScrolledRect = rectangle;
+			}
+		}
+
+		TrackingTable table = new TrackingTable();
+		table.setModel(new javax.swing.table.DefaultTableModel(20, 2));
+
+		UiSupport.scrollTableToLastRow(table);
+		javax.swing.SwingUtilities.invokeAndWait(() -> {
+		});
+
+		assertEquals(table.getCellRect(table.getRowCount() - 1, 0, true), table.lastScrolledRect);
+	}
+
+	@Test
+	void humanReadableTimeZoneIncludesIdOffsetAndAbbreviation() {
+		String label = MainFrame.humanReadableTimeZone(java.time.ZoneId.of("America/Denver"));
+
+		assertTrue(label.startsWith("America/Denver (UTC-"));
+		assertTrue(label.endsWith(")"));
+		assertTrue(label.contains("MST") || label.contains("MDT"));
 	}
 
 	private static JLabel findLabel(Component component, String text) {

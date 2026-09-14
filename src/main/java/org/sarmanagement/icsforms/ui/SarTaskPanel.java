@@ -354,6 +354,7 @@ public class SarTaskPanel extends JPanel {
 		JMenuItem open214Item = new JMenuItem("Open ICS 214 for Task…");
 		editItem.addActionListener(e -> openBoardTaskEditor(task, EditorMode.ASSIGNMENT));
 		debriefItem.addActionListener(e -> openBoardTaskEditor(task, EditorMode.DEBRIEFING));
+		debriefItem.setEnabled(isReadyForDebrief(task));
 		changeStatusItem.addActionListener(e -> openQuickStatusDialog(task));
 		open214Item.addActionListener(e -> {
 			if (on214Request != null)
@@ -447,7 +448,8 @@ public class SarTaskPanel extends JPanel {
 		}
 		controller.getData().setClueLogEntries(editor.applyTo(task, controller.getData().getClueLogEntries()));
 		if (!java.util.Objects.equals(previousLifecycleStatus, task.getTaskLifecycleStatus())) {
-			controller.recordTaskLifecycleTransition(task, task.getTaskLifecycleStatus());
+			showLifecycleWarning(controller.recordTaskLifecycleTransition(task, previousLifecycleStatus,
+					task.getTaskLifecycleStatus(), LocalDateTime.now().withSecond(0).withNano(0)));
 		}
 		List<SarTaskAssignment> rows = new ArrayList<>(tableModel.getRows());
 		rows.add(task);
@@ -675,6 +677,7 @@ public class SarTaskPanel extends JPanel {
 			@Override
 			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
 				SarTaskAssignment selected = selectedTaskFromTable();
+				editDebriefingItem.setEnabled(selected != null && isReadyForDebrief(selected));
 				changeStatusItem.setEnabled(selected != null && isPlannedOrAssigned(selected.getTaskLifecycleStatus()));
 			}
 
@@ -785,11 +788,12 @@ public class SarTaskPanel extends JPanel {
 		if (java.util.Objects.equals(previous, updated)) {
 			return;
 		}
-		task.setTaskLifecycleStatus(updated);
 		if (isAssignedState(previous) && "returned".equalsIgnoreCase(updated.trim())) {
 			promptResourceDispositionOnReturn(task);
 		}
-		controller.recordTaskLifecycleTransition(task, updated);
+		AppController.TaskLifecycleChangeResult result = controller.recordTaskLifecycleTransition(task, previous, updated,
+				LocalDateTime.now().withSecond(0).withNano(0));
+		showLifecycleWarning(result);
 		controller.syncIcs204ResourcesFromSarTasks();
 		tableModel.setRows(tableModel.getRows(), controller.getData().getClueLogEntries(),
 				controller.getData().getForm204().getResourcesAssigned());
@@ -856,6 +860,12 @@ public class SarTaskPanel extends JPanel {
 			}
 			Object selected = options.get(choice);
 			if ("Debrief…".equals(selected)) {
+				List<String> validationErrors = assignmentEditorValidationErrors(editor);
+				if (!validationErrors.isEmpty()) {
+					showValidationErrors(validationErrors);
+					continue;
+				}
+				applyEditorChanges(rowIndex, row, editor, mode, previousLifecycleStatus);
 				openTaskDebriefDialog(row.getAssignmentId(), row.getAssignmentTeamNumber());
 				return;
 			}
@@ -865,14 +875,34 @@ public class SarTaskPanel extends JPanel {
 				return;
 			}
 		}
+		applyEditorChanges(rowIndex, row, editor, mode, previousLifecycleStatus);
+	}
+
+	/**
+	 * Applies editor changes back to the selected task row and refreshes dependent
+	 * UI/model state.
+	 *
+	 * @param rowIndex
+	 *            edited model row index.
+	 * @param row
+	 *            task assignment being edited.
+	 * @param editor
+	 *            editor supplying current field values.
+	 * @param mode
+	 *            editor mode.
+	 * @param previousLifecycleStatus
+	 *            lifecycle value before edits started.
+	 */
+	private void applyEditorChanges(int rowIndex, SarTaskAssignment row, SarTaskEditor editor, EditorMode mode,
+			String previousLifecycleStatus) {
 		controller.getData().setClueLogEntries(editor.applyTo(row, controller.getData().getClueLogEntries()));
-		// Wire item 3: notify linked ICS 214 log when lifecycle status changes.
 		String newLifecycleStatus = row.getTaskLifecycleStatus();
 		if (!java.util.Objects.equals(previousLifecycleStatus, newLifecycleStatus)) {
 			if (isAssignedState(previousLifecycleStatus) && "returned".equalsIgnoreCase(newLifecycleStatus.trim())) {
 				promptResourceDispositionOnReturn(row);
 			}
-			controller.recordTaskLifecycleTransition(row, newLifecycleStatus);
+			showLifecycleWarning(controller.recordTaskLifecycleTransition(row, previousLifecycleStatus, newLifecycleStatus,
+					LocalDateTime.now().withSecond(0).withNano(0)));
 		}
 		if (mode == EditorMode.ASSIGNMENT) {
 			updateLinkedResourcePersonCount(row, editor.resourceCount());
@@ -886,6 +916,51 @@ public class SarTaskPanel extends JPanel {
 		if (viewRow >= 0 && viewRow < table.getRowCount()) {
 			table.setRowSelectionInterval(viewRow, viewRow);
 		}
+	}
+
+	/**
+	 * Returns assignment-editor validation errors that should block the debrief
+	 * handoff.
+	 *
+	 * @param editor
+	 *            assignment editor to validate.
+	 * @return ordered validation errors.
+	 */
+	private List<String> assignmentEditorValidationErrors(SarTaskEditor editor) {
+		if (editor == null) {
+			return List.of("Unable to validate the SAR task editor.");
+		}
+		return editor.assignmentValidationErrors();
+	}
+
+	/**
+	 * Shows task-editor validation errors.
+	 *
+	 * @param errors
+	 *            validation errors to display.
+	 */
+	private void showValidationErrors(List<String> errors) {
+		if (errors == null || errors.isEmpty()) {
+			return;
+		}
+		StringBuilder builder = new StringBuilder("Please resolve the following before opening debrief:\n\n");
+		for (String error : errors) {
+			builder.append("- ").append(error).append('\n');
+		}
+		JOptionPane.showMessageDialog(this, builder.toString(), "Validation required", JOptionPane.WARNING_MESSAGE);
+	}
+
+	/**
+	 * Shows a lifecycle warning returned by the controller.
+	 *
+	 * @param result
+	 *            lifecycle change result to inspect.
+	 */
+	private void showLifecycleWarning(AppController.TaskLifecycleChangeResult result) {
+		if (result == null || !result.hasWarning()) {
+			return;
+		}
+		JOptionPane.showMessageDialog(this, result.warningMessage(), "SAR Task Status", JOptionPane.WARNING_MESSAGE);
 	}
 
 	private JPanel sarTaskEditorDialogContent(JPanel editorPanel) {
@@ -1781,14 +1856,14 @@ public class SarTaskPanel extends JPanel {
 			resourceTypeField = new JComboBox<>(SarTaskSupport.resourceTypes().toArray(String[]::new));
 			resourceTypeField.setEditable(true);
 			resourceTypeField.setSelectedItem(row.getResourceType());
-			resourceTypeField.setPreferredSize(new Dimension(50, resourceTypeField.getPreferredSize().height));
+			UiSupport.configureDialogComboBox(resourceTypeField, 170);
 			taskTypeField = new JComboBox<>(SarTaskSupport.taskTypes().toArray(String[]::new));
 			taskTypeField.setEditable(true);
 			taskTypeField.setSelectedItem(row.getTaskType());
-			taskTypeField.setPreferredSize(new Dimension(50, taskTypeField.getPreferredSize().height));
+			UiSupport.configureDialogComboBox(taskTypeField, 170);
 			taskLifecycleField = new JComboBox<>(LIFECYCLE_OPTIONS);
 			taskLifecycleField.setSelectedItem(row.getTaskLifecycleStatus());
-			taskLifecycleField.setPreferredSize(new Dimension(150, taskLifecycleField.getPreferredSize().height));
+			UiSupport.configureDialogComboBox(taskLifecycleField, 220);
 			incidentNameField = textField(row.getIncidentName(), false);
 			resourceIdentifierField = textField(row.getResourceIdentifier(), false);
 			leaderRoleField = textField(row.getLeaderRole(), false);
@@ -1859,8 +1934,8 @@ public class SarTaskPanel extends JPanel {
 			clueEntriesField = clueEditorPanel(clueEntryTableModel, cluesForTask(row, clueLogEntries));
 			canineSearchTypeField = comboBox(CANINE_SEARCH_TYPE_OPTIONS, row.getCanineSearchType());
 			canineImprintField = comboBox(CANINE_IMPRINT_OPTIONS, row.getCanineImprint());
-			canineSearchTypeField.setPreferredSize(new Dimension(140, canineSearchTypeField.getPreferredSize().height));
-			canineImprintField.setPreferredSize(new Dimension(150, canineImprintField.getPreferredSize().height));
+			UiSupport.configureDialogComboBox(canineSearchTypeField, 170);
+			UiSupport.configureDialogComboBox(canineImprintField, 170);
 			canineSunAngleField = textField(row.getCanineSunAngle(), true, 8);
 			canineDayNightField = textField(row.getCanineDayNight(), true, 8);
 			canineCloudCoverField = textField(row.getCanineCloudCover(), true, 8);
@@ -2046,6 +2121,23 @@ public class SarTaskPanel extends JPanel {
 			}
 			updatedClues.addAll(clueValuesFrom(clueEntryTableModel.getRows(), row, row.getAssignmentTeamNumber()));
 			return updatedClues;
+		}
+
+		/**
+		 * Returns assignment-editor validation errors that should block save/open
+		 * actions.
+		 *
+		 * @return ordered validation errors.
+		 */
+		private List<String> assignmentValidationErrors() {
+			List<String> errors = new ArrayList<>();
+			if (mode != EditorMode.ASSIGNMENT) {
+				return errors;
+			}
+			if (assignmentTeamNumberField.getText().trim().isBlank()) {
+				errors.add("Assignment/Team # is required.");
+			}
+			return errors;
 		}
 
 		private int resourceCount() {

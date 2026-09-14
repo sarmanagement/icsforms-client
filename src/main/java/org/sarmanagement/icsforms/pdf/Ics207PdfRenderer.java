@@ -42,6 +42,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	private static final float BODY_FONT_SIZE = 9f;
 	private static final float HEADING_FONT_SIZE = 9f;
 	private static final float CELL_PADDING = 4f;
+	private AppData currentData = new AppData();
 
 	/** {@inheritDoc} */
 	@Override
@@ -53,8 +54,9 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
 		Files.createDirectories(outputFile.getParent());
+		currentData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
-			renderPage(document, data);
+			renderPage(document, currentData);
 			document.save(outputFile.toFile());
 		}
 	}
@@ -468,15 +470,15 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return s.length() <= max ? s : s.substring(0, Math.max(0, max - 1)) + "…";
 	}
 
-	private static String formatDate(LocalDateTime dt) {
-		return dt == null ? "" : dt.format(DATE_FMT);
+	private String formatDate(LocalDateTime dt) {
+		return formatPdfDate(currentData, dt);
 	}
 
-	private static String formatTime(LocalDateTime dt) {
-		return dt == null ? "" : dt.format(TIME_FMT);
+	private String formatTime(LocalDateTime dt) {
+		return formatPdfTime(currentData, dt);
 	}
 
-	private static String formatDateTime(java.time.LocalDateTime dt) {
-		return dt == null ? "" : dt.format(DATE_TIME_FMT);
+	private String formatDateTime(java.time.LocalDateTime dt) {
+		return formatPdfDateTime(currentData, dt);
 	}
 }

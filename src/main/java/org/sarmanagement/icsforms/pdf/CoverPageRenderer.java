@@ -11,15 +11,12 @@ import org.sarmanagement.icsforms.model.IncidentContext;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
  * Renders the title page prepended to merged IAP bundle exports.
  */
 public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRenderer {
-	private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 	private static final float TITLE_FONT_SIZE = 22f;
 	private static final float LABEL_FONT_SIZE = 12f;
@@ -54,9 +51,10 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
 				IncidentContext context = data == null ? null : data.getIncidentContext();
 
 				String incidentName = context == null ? "" : safe(context.getIncidentName());
-				String operationalPeriod = formatOperationalPeriod(context);
-				String datePrepared = DATE_FORMATTER.format(LocalDate.now());
+				String operationalPeriod = formatOperationalPeriod(data, context);
+				String datePrepared = DATE_FORMATTER.format(java.time.LocalDate.now(pdfZoneId(data)));
 				String preparedWith = applicationMetadata.preparedWithValue();
+				String allTimesIn = pdfTimeZoneLabel(data);
 
 				float pageWidth = page.getMediaBox().getWidth();
 				float pageHeight = page.getMediaBox().getHeight();
@@ -64,10 +62,11 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
 				float[] lineWidths = new float[]{pairWidth(bold, regular, "Incident Name:", incidentName),
 						pairWidth(bold, regular, "Operational Period:", operationalPeriod),
 						pairWidth(bold, regular, "Date Prepared:", datePrepared),
+						pairWidth(bold, regular, "All times in:", allTimesIn),
 						pairWidth(bold, regular, "Prepared with:", preparedWith)};
 				float maxLineWidth = Math.max(Math.max(lineWidths[0], lineWidths[1]),
-						Math.max(lineWidths[2], lineWidths[3]));
-				float blockHeight = TITLE_FONT_SIZE + 20f + (LINE_SPACING * 4f);
+						Math.max(lineWidths[2], Math.max(lineWidths[3], lineWidths[4])));
+				float blockHeight = TITLE_FONT_SIZE + 20f + (LINE_SPACING * 5f);
 				float centerX = pageWidth / 2f;
 				float startY = (pageHeight + blockHeight) / 2f;
 				float lineStartX = centerX - (maxLineWidth / 2f);
@@ -79,7 +78,9 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
 						operationalPeriod);
 				drawInlinePair(stream, bold, regular, lineStartX, startY - 40f - (LINE_SPACING * 2f), "Date Prepared:",
 						datePrepared);
-				drawInlinePair(stream, bold, regular, lineStartX, startY - 40f - (LINE_SPACING * 3f), "Prepared with:",
+				drawInlinePair(stream, bold, regular, lineStartX, startY - 40f - (LINE_SPACING * 3f), "All times in:",
+						allTimesIn);
+				drawInlinePair(stream, bold, regular, lineStartX, startY - 40f - (LINE_SPACING * 4f), "Prepared with:",
 						preparedWith);
 			}
 			document.save(outputFile.toFile());
@@ -117,19 +118,28 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return labelWidth + 8f + valueWidth;
 	}
 
-	private String formatOperationalPeriod(IncidentContext context) {
-		LocalDateTime start = context == null ? null : context.getOperationalPeriodStart();
-		LocalDateTime end = context == null ? null : context.getOperationalPeriodEnd();
+	/**
+	 * Formats the operational period using the configured PDF timezone.
+	 *
+	 * @param data
+	 *            incident document containing timezone settings.
+	 * @param context
+	 *            incident context containing the operational period.
+	 * @return formatted operational-period text.
+	 */
+	private String formatOperationalPeriod(AppData data, IncidentContext context) {
+		java.time.LocalDateTime start = context == null ? null : context.getOperationalPeriodStart();
+		java.time.LocalDateTime end = context == null ? null : context.getOperationalPeriodEnd();
 		if (start == null && end == null) {
 			return "Not set";
 		}
 		if (start != null && end == null) {
-			return DATE_TIME_FORMATTER.format(start);
+			return formatPdfDateTime(data, start);
 		}
 		if (start == null) {
-			return DATE_TIME_FORMATTER.format(end);
+			return formatPdfDateTime(data, end);
 		}
-		return DATE_TIME_FORMATTER.format(start) + " to " + DATE_TIME_FORMATTER.format(end);
+		return formatPdfDateTime(data, start) + " to " + formatPdfDateTime(data, end);
 	}
 
 	private String safe(String value) {

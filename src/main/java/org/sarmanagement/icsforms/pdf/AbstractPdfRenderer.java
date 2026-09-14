@@ -12,6 +12,11 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,6 +32,8 @@ abstract class AbstractPdfRenderer {
 	private static final float BLOCK_SPACING = 10f;
 	protected static final float FORM_MARGIN = 36f;
 	protected static final float FORM_HEADER_HEIGHT = 14f;
+	private static final DateTimeFormatter PDF_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+	private static final DateTimeFormatter PDF_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
 	/**
 	 * Writes a centered header line plus bordered content blocks across one or more
@@ -200,6 +207,97 @@ abstract class AbstractPdfRenderer {
 		float top = page.getMediaBox().getHeight() - formMargin - FORM_HEADER_HEIGHT;
 		return new FormLayout(formMargin, formMargin, width, top - formMargin, top + FORM_HEADER_HEIGHT,
 				page.getMediaBox().getWidth(), page.getMediaBox().getHeight(), pageMargin(data));
+	}
+
+	/**
+	 * Formats a stored UTC date/time for PDF display using the configured export
+	 * timezone.
+	 *
+	 * @param data
+	 *            incident document containing timezone settings.
+	 * @param value
+	 *            stored UTC local date/time.
+	 * @return formatted local date/time text.
+	 */
+	protected String formatPdfDateTime(AppData data, LocalDateTime value) {
+		return value == null ? "" : formatPdfDate(data, value) + " " + formatPdfTime(data, value);
+	}
+
+	/**
+	 * Formats a stored UTC date/time date portion for PDF display using the
+	 * configured export timezone.
+	 *
+	 * @param data
+	 *            incident document containing timezone settings.
+	 * @param value
+	 *            stored UTC local date/time.
+	 * @return formatted local date text.
+	 */
+	protected String formatPdfDate(AppData data, LocalDateTime value) {
+		ZonedDateTime zonedDateTime = zonedPdfDateTime(data, value);
+		return zonedDateTime == null ? "" : PDF_DATE_FORMATTER.format(zonedDateTime);
+	}
+
+	/**
+	 * Formats a stored UTC date/time time portion for PDF display using the
+	 * configured export timezone.
+	 *
+	 * @param data
+	 *            incident document containing timezone settings.
+	 * @param value
+	 *            stored UTC local date/time.
+	 * @return formatted local time text.
+	 */
+	protected String formatPdfTime(AppData data, LocalDateTime value) {
+		ZonedDateTime zonedDateTime = zonedPdfDateTime(data, value);
+		return zonedDateTime == null ? "" : PDF_TIME_FORMATTER.format(zonedDateTime);
+	}
+
+	/**
+	 * Returns a human-readable timezone label for PDF headers.
+	 *
+	 * @param data
+	 *            incident document containing timezone settings.
+	 * @return timezone label with ID, offset, and abbreviation.
+	 */
+	protected String pdfTimeZoneLabel(AppData data) {
+		ZoneId zoneId = pdfZoneId(data);
+		ZonedDateTime now = ZonedDateTime.now(zoneId);
+		return zoneId.getId() + " (UTC" + now.getOffset() + ", " + now.format(DateTimeFormatter.ofPattern("z")) + ")";
+	}
+
+	/**
+	 * Resolves the timezone to use for PDF export.
+	 *
+	 * @param data
+	 *            incident document containing timezone settings.
+	 * @return configured export timezone.
+	 */
+	protected ZoneId pdfZoneId(AppData data) {
+		if (data == null || data.isUseSystemTimeZone()) {
+			return ZoneId.systemDefault();
+		}
+		try {
+			return ZoneId.of(data.getConfiguredTimeZoneId());
+		} catch (RuntimeException exception) {
+			return ZoneId.systemDefault();
+		}
+	}
+
+	/**
+	 * Converts a stored UTC local date/time into the configured PDF timezone.
+	 *
+	 * @param data
+	 *            incident document containing timezone settings.
+	 * @param value
+	 *            stored UTC local date/time.
+	 * @return zoned value in the configured export timezone.
+	 */
+	protected ZonedDateTime zonedPdfDateTime(AppData data, LocalDateTime value) {
+		if (value == null) {
+			return null;
+		}
+		return value.atOffset(ZoneOffset.UTC).atZoneSameInstant(pdfZoneId(data));
 	}
 
 	/**

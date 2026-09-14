@@ -33,6 +33,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 	private static final float LINE_HEIGHT = 11f;
 	private static final float CELL_PADDING = 4f;
 	private static final int RESOURCE_SLOT_COUNT = 18;
+	private AppData currentData = new AppData();
 
 	@Override
 	public String getFormKey() {
@@ -42,13 +43,14 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
 		Files.createDirectories(outputFile.getParent());
+		currentData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
-			List<SarTaskAssignment> tasks = data.getSarTaskAssignments().isEmpty()
+			List<SarTaskAssignment> tasks = currentData.getSarTaskAssignments().isEmpty()
 					? List.of(new SarTaskAssignment())
-					: data.getSarTaskAssignments();
+					: currentData.getSarTaskAssignments();
 			for (SarTaskAssignment task : tasks) {
-				renderAssignmentPage(document, data, data.getIncidentContext(), task);
-				renderDebriefPage(document, data, task, data.getClueLogEntries());
+				renderAssignmentPage(document, currentData, currentData.getIncidentContext(), task);
+				renderDebriefPage(document, currentData, task, currentData.getClueLogEntries());
 			}
 			document.save(outputFile.toFile());
 		}
@@ -627,15 +629,15 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 	}
 
 	private String formatDate(LocalDateTime value) {
-		return value == null ? "" : DATE_FORMATTER.format(value);
+		return formatPdfDate(currentData, value);
 	}
 
 	private String formatTime(LocalDateTime value) {
-		return value == null ? "" : TIME_FORMATTER.format(value);
+		return formatPdfTime(currentData, value);
 	}
 
 	private String formatDateTime(LocalDateTime value) {
-		return value == null ? "" : formatDate(value) + " " + formatTime(value);
+		return formatPdfDateTime(currentData, value);
 	}
 
 	private String joinNonBlank(String... values) {

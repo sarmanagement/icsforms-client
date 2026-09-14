@@ -33,6 +33,7 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	private static final float FOOTER_BAND_HEIGHT = 24f;
 	private static final float SECTION_HEADING_HEIGHT = 18f;
 	private static final float TABLE_HEADER_HEIGHT = 28f;
+	private AppData currentData = new AppData();
 
 	@Override
 	public String getFormKey() {
@@ -46,9 +47,10 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 			Files.createDirectories(parent);
 		}
 		AppData safeData = data == null ? new AppData() : data;
+		currentData = safeData;
 		List<ResourceDirectoryEntry> entries = ResourceDirectorySource.build(safeData).stream()
 				.sorted(ResourceDirectorySource.byLastName()).toList();
-		LocalDateTime preparedAt = LocalDateTime.now();
+		LocalDateTime preparedAt = LocalDateTime.now(java.time.Clock.systemUTC());
 		try (PDDocument document = new PDDocument()) {
 			int rowsPerPage = defaultRowsPerPage();
 			int totalPages = pageCount(entries.size(), rowsPerPage);
@@ -293,15 +295,15 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	}
 
 	private String formatDate(LocalDateTime value) {
-		return value == null ? "" : value.format(DATE_FORMATTER);
+		return formatPdfDate(currentData, value);
 	}
 
 	private String formatTime(LocalDateTime value) {
-		return value == null ? "" : value.format(TIME_FORMATTER);
+		return formatPdfTime(currentData, value);
 	}
 
 	private String formatDateTime(LocalDateTime value) {
-		return value == null ? "" : value.format(DATE_TIME_FORMATTER);
+		return formatPdfDateTime(currentData, value);
 	}
 
 	private String fitText(PDType1Font font, String value, float maxWidth) throws IOException {

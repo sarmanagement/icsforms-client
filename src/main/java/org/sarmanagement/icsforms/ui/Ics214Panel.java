@@ -70,6 +70,7 @@ public class Ics214Panel extends JPanel {
 	private final ActivityLogTableModel activityLogTableModel = new ActivityLogTableModel();
 	private final JTable resourcesTable = new JTable(resourcesTableModel);
 	private final JTable activityLogTable = new JTable(activityLogTableModel);
+	private final JScrollPane activityLogScrollPane = new JScrollPane(activityLogTable);
 	private AppData currentData;
 	private Ics214Form currentForm;
 
@@ -135,7 +136,7 @@ public class Ics214Panel extends JPanel {
 
 		JPanel activityPanel = new JPanel(new BorderLayout());
 		activityPanel.setBorder(BorderFactory.createTitledBorder("Section 7 - Activity Log"));
-		activityPanel.add(new JScrollPane(activityLogTable), BorderLayout.CENTER);
+		activityPanel.add(activityLogScrollPane, BorderLayout.CENTER);
 		activityPanel.add(activityButtonsPanel(), BorderLayout.SOUTH);
 
 		JPanel tablesPanel = new JPanel(new GridLayout(2, 1, 8, 8));
@@ -246,6 +247,7 @@ public class Ics214Panel extends JPanel {
 		}
 		SarTaskResource[] resourceArray = resources.toArray(new SarTaskResource[0]);
 		JComboBox<SarTaskResource> combo = new JComboBox<>(resourceArray);
+		UiSupport.configureDialogComboBox(combo, 280);
 		combo.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
 			JLabel label = new JLabel(value == null ? "" : value.getName() + " (" + value.getIcsPosition() + ")");
 			if (isSelected) {
@@ -285,6 +287,7 @@ public class Ics214Panel extends JPanel {
 			return;
 		}
 		JComboBox<Section3Choice> combo = new JComboBox<>(choices.toArray(new Section3Choice[0]));
+		UiSupport.configureDialogComboBox(combo, 360);
 		combo.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
 			String display = value == null ? "" : value.displayLabel();
 			JLabel label = new JLabel(display);
@@ -437,6 +440,13 @@ public class Ics214Panel extends JPanel {
 		ActivityLogEntry entry = editor.toEntry();
 		currentForm.getActivityLog().add(entry);
 		activityLogTableModel.setRows(currentForm.getActivityLog(), types);
+		UiSupport.scrollTableToLastRow(activityLogTable);
+		AppController.TaskLifecycleChangeResult lifecycleResult = controller.applyTaskLifecycleFromLogEntry(currentForm,
+				entry);
+		if (lifecycleResult.hasWarning()) {
+			JOptionPane.showMessageDialog(this, lifecycleResult.warningMessage(), "SAR Task Status",
+					JOptionPane.WARNING_MESSAGE);
+		}
 
 		// For clue-related event types, open the clue capture dialog.
 		String eventTypeId = entry.getEventTypeId();
@@ -943,11 +953,13 @@ public class Ics214Panel extends JPanel {
 			}
 			resourceIdentifierField = new JComboBox<>(items.toArray(new String[0]));
 			resourceIdentifierField.setEditable(true);
+			UiSupport.configureDialogComboBox(resourceIdentifierField, 260);
 			if (defaultResourceIdentifier != null && !defaultResourceIdentifier.isBlank()) {
 				resourceIdentifierField.setSelectedItem(defaultResourceIdentifier);
 			} else {
 				resourceIdentifierField.setSelectedItem("");
 			}
+			UiSupport.configureDialogComboBox(eventTypeField, 220);
 			UiSupport.addRow(panel, 0, "Date/time", timestampField);
 			UiSupport.addRow(panel, 1, "Event type", eventTypeField);
 			UiSupport.addRow(panel, 2, "Resource identifier", resourceIdentifierField);

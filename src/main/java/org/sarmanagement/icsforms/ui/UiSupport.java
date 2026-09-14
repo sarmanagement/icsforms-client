@@ -3,6 +3,7 @@ package org.sarmanagement.icsforms.ui;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JList;
@@ -11,6 +12,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerDateModel;
 import javax.swing.JTextArea;
@@ -36,6 +38,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import javax.swing.text.JTextComponent;
 
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
@@ -257,6 +260,71 @@ final class UiSupport {
 		spinner.setValue(new Date());
 		spinner.setPreferredSize(new Dimension(180, spinner.getPreferredSize().height));
 		return spinner;
+	}
+
+	/**
+	 * Scrolls a table so its last row is visible.
+	 *
+	 * @param table
+	 *            table to scroll.
+	 */
+	static void scrollTableToLastRow(JTable table) {
+		if (table == null || table.getRowCount() <= 0) {
+			return;
+		}
+		int lastRow = table.getRowCount() - 1;
+		javax.swing.SwingUtilities.invokeLater(() -> table.scrollRectToVisible(table.getCellRect(lastRow, 0, true)));
+	}
+
+	/**
+	 * Configures a combo box for use inside compact dialogs.
+	 *
+	 * <p>
+	 * The combo is widened to a sensible minimum and left-clicking the field or its
+	 * editor opens the popup so editable combos behave consistently with other
+	 * pickers in the application.
+	 * </p>
+	 *
+	 * @param comboBox
+	 *            combo box to configure.
+	 * @param minimumWidth
+	 *            preferred minimum width in pixels.
+	 */
+	static void configureDialogComboBox(JComboBox<?> comboBox, int minimumWidth) {
+		if (comboBox == null) {
+			return;
+		}
+		comboBox.setMaximumRowCount(16);
+		Dimension preferredSize = comboBox.getPreferredSize();
+		comboBox.setPreferredSize(new Dimension(Math.max(preferredSize.width, minimumWidth), preferredSize.height));
+		installPopupOpenOnClick(comboBox, comboBox);
+		if (comboBox.getEditor() != null && comboBox.getEditor().getEditorComponent() instanceof JTextComponent editor) {
+			installPopupOpenOnClick(comboBox, editor);
+		}
+	}
+
+	/**
+	 * Opens a filterable single-selection dialog for a list of string values.
+	 *
+	 * @param parent
+	 *            parent component.
+	 * @param title
+	 *            dialog title.
+	 * @param fieldLabel
+	 *            filter field label.
+	 * @param options
+	 *            available selectable values.
+	 * @param selectedValue
+	 *            value to pre-select when present.
+	 * @return selected value, or {@code null} when cancelled.
+	 */
+	static String showFilterableSelectionDialog(Component parent, String title, String fieldLabel, List<String> options,
+			String selectedValue) {
+		JTextField anchorField = new JTextField();
+		anchorField.setText(selectedValue == null ? "" : selectedValue);
+		final String[] selected = new String[1];
+		openSelectionPickerDialog(anchorField, title, fieldLabel, options, selectedValue, choice -> selected[0] = choice);
+		return selected[0];
 	}
 
 	/**
@@ -526,6 +594,156 @@ final class UiSupport {
 		dialog.setLocationRelativeTo(nameField);
 		filterField.requestFocusInWindow();
 		dialog.setVisible(true);
+	}
+
+	/**
+	 * Opens a generic filterable selection dialog.
+	 *
+	 * @param anchor
+	 *            anchor field used for dialog placement.
+	 * @param title
+	 *            dialog title.
+	 * @param fieldLabel
+	 *            filter field label.
+	 * @param allOptions
+	 *            available options.
+	 * @param selectedValue
+	 *            option to pre-select when present.
+	 * @param onSelected
+	 *            callback receiving the chosen option.
+	 */
+	private static void openSelectionPickerDialog(JTextField anchor, String title, String fieldLabel, List<String> allOptions,
+			String selectedValue, Consumer<String> onSelected) {
+		Window owner = anchor.isShowing() ? (Window) javax.swing.SwingUtilities.getWindowAncestor(anchor) : null;
+		JDialog dialog = new JDialog(owner, title, java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+		JTextField filterField = new JTextField(selectedValue == null ? "" : selectedValue.trim(), 24);
+		DefaultListModel<String> listModel = new DefaultListModel<>();
+		JList<String> list = new JList<>(listModel);
+		list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		list.setVisibleRowCount(12);
+
+		Runnable applyFilter = () -> {
+			String filter = filterField.getText().trim().toLowerCase(Locale.ROOT);
+			listModel.clear();
+			allOptions.stream().filter(option -> filter.isEmpty() || option.toLowerCase(Locale.ROOT).contains(filter))
+					.forEach(listModel::addElement);
+			if (!listModel.isEmpty()) {
+				int selectedIndex = 0;
+				if (selectedValue != null && !selectedValue.isBlank()) {
+					for (int i = 0; i < listModel.size(); i++) {
+						if (selectedValue.equals(listModel.get(i))) {
+							selectedIndex = i;
+							break;
+						}
+					}
+				}
+				list.setSelectedIndex(selectedIndex);
+				list.ensureIndexIsVisible(selectedIndex);
+			}
+		};
+		applyFilter.run();
+		filterField.getDocument().addDocumentListener(new DocumentListener() {
+			@Override
+			public void insertUpdate(DocumentEvent event) {
+				applyFilter.run();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent event) {
+				applyFilter.run();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent event) {
+			}
+		});
+
+		Runnable accept = () -> {
+			String choice = list.getSelectedValue();
+			if (choice != null) {
+				dialog.dispose();
+				onSelected.accept(choice);
+			}
+		};
+		filterField.addActionListener(event -> accept.run());
+		list.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent event) {
+				if (event.getClickCount() >= 2) {
+					accept.run();
+				}
+			}
+		});
+		list.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyPressed(KeyEvent event) {
+				if (event.getKeyCode() == KeyEvent.VK_ENTER) {
+					accept.run();
+				}
+			}
+		});
+
+		JButton selectButton = new JButton("Select");
+		selectButton.addActionListener(event -> accept.run());
+		JButton cancelButton = new JButton("Cancel");
+		cancelButton.addActionListener(event -> dialog.dispose());
+
+		JPanel top = new JPanel(new BorderLayout(4, 4));
+		top.setBorder(BorderFactory.createEmptyBorder(4, 4, 0, 4));
+		top.add(new JLabel(fieldLabel), BorderLayout.WEST);
+		top.add(filterField, BorderLayout.CENTER);
+
+		JPanel center = new JPanel(new BorderLayout());
+		center.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+		center.add(new JScrollPane(list), BorderLayout.CENTER);
+
+		JPanel buttons = new JPanel();
+		buttons.add(selectButton);
+		buttons.add(cancelButton);
+
+		dialog.getContentPane().setLayout(new BorderLayout());
+		dialog.getContentPane().add(top, BorderLayout.NORTH);
+		dialog.getContentPane().add(center, BorderLayout.CENTER);
+		dialog.getContentPane().add(buttons, BorderLayout.SOUTH);
+		dialog.pack();
+		dialog.setMinimumSize(new Dimension(320, 320));
+		dialog.setLocationRelativeTo(parentFor(anchor));
+		filterField.requestFocusInWindow();
+		dialog.setVisible(true);
+	}
+
+	/**
+	 * Returns the best parent component for positioning child dialogs.
+	 *
+	 * @param component
+	 *            anchor component.
+	 * @return parent window or the component itself.
+	 */
+	private static Component parentFor(Component component) {
+		Window owner = component == null ? null : javax.swing.SwingUtilities.getWindowAncestor(component);
+		return owner == null ? component : owner;
+	}
+
+	/**
+	 * Installs left-click popup-open behavior on a combo box or its editor.
+	 *
+	 * @param comboBox
+	 *            combo box to open.
+	 * @param target
+	 *            component receiving the click.
+	 */
+	private static void installPopupOpenOnClick(JComboBox<?> comboBox, Component target) {
+		if (target == null) {
+			return;
+		}
+		target.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent event) {
+				if (event.getButton() == MouseEvent.BUTTON1 && comboBox.isEnabled()) {
+					javax.swing.SwingUtilities.invokeLater(comboBox::showPopup);
+				}
+			}
+		});
 	}
 
 	/**

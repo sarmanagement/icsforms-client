@@ -31,6 +31,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	private static final float HEADING_FONT_SIZE = 10f;
 	private static final float LINE_HEIGHT = 12f;
 	private static final float CELL_PADDING = 4f;
+	private AppData currentData = new AppData();
 
 	/** {@inheritDoc} */
 	@Override
@@ -42,8 +43,9 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
 		Files.createDirectories(outputFile.getParent());
+		currentData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
-			renderDocument(document, data == null ? new AppData() : data);
+			renderDocument(document, currentData);
 			document.save(outputFile.toFile());
 		}
 	}
@@ -372,15 +374,15 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	private String formatDate(LocalDateTime value) {
-		return value == null ? "" : DATE_FORMATTER.format(value);
+		return formatPdfDate(currentData, value);
 	}
 
 	private String formatTime(LocalDateTime value) {
-		return value == null ? "" : TIME_FORMATTER.format(value);
+		return formatPdfTime(currentData, value);
 	}
 
 	private String formatDateTime(LocalDateTime value) {
-		return value == null ? "" : DATE_TIME_FORMATTER.format(value);
+		return formatPdfDateTime(currentData, value);
 	}
 
 	private String safe(String value) {

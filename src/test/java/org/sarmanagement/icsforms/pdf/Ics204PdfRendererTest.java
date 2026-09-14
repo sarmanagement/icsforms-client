@@ -11,11 +11,14 @@ import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
 
 import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -54,6 +57,59 @@ class Ics204PdfRendererTest {
 			assertTrue(text.contains("IAP Page 3") || text.contains("IAP Page: 3"));
 			assertEquals(1, countRectangles(pdf.getPage(0), 36f, 36f, 540f, 72f));
 		}
+	}
+
+	@Test
+	void workAssignmentSectionUsesFullIdentifiersAndCombinesMatchingAssignments() throws Exception {
+		Ics204Form form = new Ics204Form();
+		ResourceAssignment first = new ResourceAssignment();
+		first.setAssignmentTeamNumber("2");
+		first.setResourceIdentifier("Team Violet");
+		first.setAssignment("Sweep the creek drainage");
+		ResourceAssignment second = new ResourceAssignment();
+		second.setAssignmentTeamNumber("1");
+		second.setResourceIdentifier("Team Frodo");
+		second.setAssignment("Sweep the creek drainage");
+		ResourceAssignment third = new ResourceAssignment();
+		third.setAssignmentTeamNumber("3");
+		third.setResourceIdentifier("Team Sam");
+		third.setAssignment("Check the ridge spur");
+		form.setResourcesAssigned(List.of(first, second, third));
+
+		Method method = Ics204PdfRenderer.class.getDeclaredMethod("workAssignmentLines", Ics204Form.class);
+		method.setAccessible(true);
+
+		@SuppressWarnings("unchecked")
+		List<String> lines = (List<String>) method.invoke(new Ics204PdfRenderer(), form);
+
+		assertEquals("1: Team Frodo; 2: Team Violet: Sweep the creek drainage", lines.get(0));
+		assertEquals("3: Team Sam: Check the ridge spur", lines.get(1));
+	}
+
+	@Test
+	void sectionHeightRebalancingReclaimsBlankResourceRowsWhenWorkWouldOverflow() throws Exception {
+		Ics204Form form = new Ics204Form();
+		ResourceAssignment resource = new ResourceAssignment();
+		resource.setAssignmentTeamNumber("1");
+		resource.setResourceIdentifier("Team Frodo");
+		resource.setAssignment("Alpha Bravo Charlie Delta Echo Foxtrot Golf Hotel India Juliet Kilo Lima Mike November Oscar Papa Quebec Romeo Sierra Tango Uniform Victor Whiskey X-ray Yankee Zulu "
+				.repeat(12));
+		form.setResourcesAssigned(List.of(resource));
+		form.setSpecialInstructions("Short special instructions");
+
+		Method method = Ics204PdfRenderer.class.getDeclaredMethod("adjustedSectionHeights", Ics204Form.class, float.class,
+				float.class, float.class);
+		method.setAccessible(true);
+
+		Object heights = method.invoke(new Ics204PdfRenderer(), form, 282f, 84f, 60f);
+		Class<?> heightsClass = heights.getClass();
+		Method resourcesHeight = heightsClass.getDeclaredMethod("resourcesHeight");
+		Method workHeight = heightsClass.getDeclaredMethod("workAssignmentHeight");
+		Method resourceRowCount = heightsClass.getDeclaredMethod("resourceRowCount");
+
+		assertTrue(((Float) resourcesHeight.invoke(heights)) < 282f);
+		assertTrue(((Float) workHeight.invoke(heights)) > 84f);
+		assertEquals(2, resourceRowCount.invoke(heights));
 	}
 
 	private int countRectangles(PDPage page, float x, float y, float width, float height) throws Exception {
