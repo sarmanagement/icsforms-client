@@ -742,7 +742,7 @@ final class UiSupport {
 		target.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent event) {
-				if (event.getButton() == MouseEvent.BUTTON1 && comboBox.isEnabled()) {
+				if (event.getButton() == MouseEvent.BUTTON1 && comboBox.isEnabled() && !comboBox.isPopupVisible()) {
 					javax.swing.SwingUtilities.invokeLater(comboBox::showPopup);
 				}
 			}

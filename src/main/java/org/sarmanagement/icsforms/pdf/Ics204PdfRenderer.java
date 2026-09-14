@@ -609,12 +609,16 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	private List<String> workAssignmentLines(Ics204Form form) {
 		List<String> lines = new ArrayList<>();
 		Map<String, List<String>> identifiersByAssignment = new LinkedHashMap<>();
+		Map<String, String> displayAssignmentByKey = new LinkedHashMap<>();
 		for (ResourceAssignment resource : form.getResourcesAssigned()) {
 			String assignment = effectiveAssignment(resource, form);
-			if (assignment.isBlank()) {
+			String assignmentKey = normalizeAssignmentText(assignment);
+			if (assignmentKey.isBlank()) {
 				continue;
 			}
-			identifiersByAssignment.computeIfAbsent(assignment, unused -> new ArrayList<>()).add(resourceIdentifierLabel(resource));
+			displayAssignmentByKey.putIfAbsent(assignmentKey, assignmentKey);
+			identifiersByAssignment.computeIfAbsent(assignmentKey, unused -> new ArrayList<>())
+					.add(resourceIdentifierLabel(resource));
 		}
 		for (List<String> identifiers : identifiersByAssignment.values()) {
 			identifiers.sort(this::compareAssignmentIdentifiers);
@@ -623,7 +627,8 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		groupedAssignments.sort((left, right) -> compareAssignmentIdentifiers(left.getValue().isEmpty() ? "" : left.getValue().get(0),
 				right.getValue().isEmpty() ? "" : right.getValue().get(0)));
 		for (Map.Entry<String, List<String>> entry : groupedAssignments) {
-			lines.addAll(prefixWrapped(String.join("; ", entry.getValue()) + ": ", wrap(entry.getKey(), 72)));
+			lines.addAll(prefixWrapped(String.join("; ", entry.getValue()) + ": ",
+					wrap(displayAssignmentByKey.getOrDefault(entry.getKey(), entry.getKey()), 72)));
 		}
 		if (lines.isEmpty() && !safe(form.getSharedWorkAssignment()).isBlank()) {
 			return wrap(form.getSharedWorkAssignment(), 92);
@@ -642,6 +647,18 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		String teamNum = safe(resource == null ? "" : resource.getAssignmentTeamNumber());
 		String resourceIdentifier = safe(resource == null ? "" : resource.getResourceIdentifier());
 		return teamNum.isBlank() ? resourceIdentifier : teamNum + ": " + resourceIdentifier;
+	}
+
+	/**
+	 * Normalizes assignment text so equivalent work descriptions with different
+	 * whitespace are consolidated in section 6.
+	 *
+	 * @param assignment
+	 *            raw assignment text.
+	 * @return normalized single-line text.
+	 */
+	private String normalizeAssignmentText(String assignment) {
+		return safe(assignment).trim().replaceAll("\\s+", " ");
 	}
 
 	/**

@@ -87,6 +87,28 @@ class Ics204PdfRendererTest {
 	}
 
 	@Test
+	void identicalAssignmentsGroupDespiteWhitespaceDifferences() throws Exception {
+		Ics204Form form = new Ics204Form();
+		ResourceAssignment first = new ResourceAssignment();
+		first.setAssignmentTeamNumber("2");
+		first.setResourceIdentifier("Team Violet");
+		first.setAssignment("Search   drainage");
+		ResourceAssignment second = new ResourceAssignment();
+		second.setAssignmentTeamNumber("1");
+		second.setResourceIdentifier("Team Frodo");
+		second.setAssignment(" Search\ndrainage ");
+		form.setResourcesAssigned(List.of(first, second));
+
+		Method method = Ics204PdfRenderer.class.getDeclaredMethod("workAssignmentLines", Ics204Form.class);
+		method.setAccessible(true);
+
+		@SuppressWarnings("unchecked")
+		List<String> lines = (List<String>) method.invoke(new Ics204PdfRenderer(), form);
+
+		assertEquals(List.of("1: Team Frodo; 2: Team Violet: Search drainage"), lines);
+	}
+
+	@Test
 	void sectionHeightRebalancingReclaimsBlankResourceRowsWhenWorkWouldOverflow() throws Exception {
 		Ics204Form form = new Ics204Form();
 		ResourceAssignment resource = new ResourceAssignment();

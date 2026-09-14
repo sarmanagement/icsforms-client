@@ -88,7 +88,7 @@ class AppControllerLifecycleLoggingTest {
 		AppController.TaskLifecycleChangeResult result = controller.applyTaskLifecycleFromLogEntry(taskLog, entry);
 
 		assertTrue(result.hasWarning());
-		assertEquals("assigned - on task", task.getTaskLifecycleStatus());
+		assertEquals("returned", task.getTaskLifecycleStatus());
 	}
 
 	@Test
@@ -101,7 +101,7 @@ class AppControllerLifecycleLoggingTest {
 				"assigned - on task", LocalDateTime.parse("2026-01-01T20:00:00"));
 
 		assertTrue(result.hasWarning());
-		assertEquals("assigned - on task", task.getTaskLifecycleStatus());
+		assertEquals("returned", task.getTaskLifecycleStatus());
 		assertEquals(0, controller.getData().getActivityLogs().stream()
 				.filter(log -> log.getLogScope() == ActivityLogScope.ICP)
 				.mapToInt(log -> log.getActivityLog() == null ? 0 : log.getActivityLog().size()).sum());

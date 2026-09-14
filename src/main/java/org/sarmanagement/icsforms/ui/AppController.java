@@ -1470,14 +1470,15 @@ public class AppController {
 			return new TaskLifecycleChangeResult(false, "");
 		}
 		boolean inSequence = isExpectedLifecycleTransition(previous, normalized);
-		task.setTaskLifecycleStatus(normalized);
-		applyDebriefLifecycleTimes(task, previous, normalized, effectiveTime);
 		if (inSequence) {
+			task.setTaskLifecycleStatus(normalized);
+			applyDebriefLifecycleTimes(task, previous, normalized, effectiveTime);
 			TransitionRecord transition = transitionRecordForStatus(task, normalized, effectiveTime);
 			appendIcpLifecycleEntry(transition);
 			appendTaskLifecycleEntry(task, transition);
+			return new TaskLifecycleChangeResult(true, "");
 		}
-		return new TaskLifecycleChangeResult(true, lifecycleTransitionWarning(previous, normalized));
+		return new TaskLifecycleChangeResult(false, lifecycleTransitionWarning(previous, normalized));
 	}
 
 	/**
@@ -1507,6 +1508,10 @@ public class AppController {
 		}
 		String previousStatus = task.getTaskLifecycleStatus();
 		String normalized = normalizeLifecycleStatus(requestedStatus);
+		if (!isExpectedLifecycleTransition(normalizeLifecycleStatus(previousStatus), normalized)
+				&& !java.util.Objects.equals(normalizeLifecycleStatus(previousStatus), normalized)) {
+			return new TaskLifecycleChangeResult(false, lifecycleTransitionWarning(previousStatus, normalized));
+		}
 		task.setTaskLifecycleStatus(normalized);
 		applyDebriefLifecycleTimes(task, previousStatus, normalized, entry == null ? null : entry.getTimestamp());
 		return new TaskLifecycleChangeResult(!java.util.Objects.equals(previousStatus, normalized),
