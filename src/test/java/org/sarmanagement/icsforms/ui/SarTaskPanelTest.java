@@ -220,6 +220,31 @@ class SarTaskPanelTest {
 	}
 
 	@Test
+	void assignmentEditorPlacesInheritedTaskDataBelowAssignmentAndShowsResourceFirst() throws Exception {
+		Object editor = createEditor(sampleTask(), "ASSIGNMENT", 1);
+		Field panelField = editor.getClass().getDeclaredField("panel");
+		panelField.setAccessible(true);
+		Field assignmentSummaryField = editor.getClass().getDeclaredField("assignmentSummaryField");
+		assignmentSummaryField.setAccessible(true);
+
+		JLabel[] inheritedLabel = new JLabel[1];
+		JLabel[] taskSetupLabel = new JLabel[1];
+		JPanel[] summaryPanel = new JPanel[1];
+		SwingUtilities.invokeAndWait(() -> {
+			Component panel = (Component) getFieldValue(panelField, editor);
+			inheritedLabel[0] = findLabel(panel, "Inherited task data");
+			taskSetupLabel[0] = findLabel(panel, "Task setup");
+			summaryPanel[0] = (JPanel) getFieldValue(assignmentSummaryField, editor);
+		});
+
+		assertEquals(1, gridY(inheritedLabel[0]));
+		assertEquals(2, gridY(taskSetupLabel[0]));
+		assertNotNull(findLabel(summaryPanel[0], "Resource: Team 1"));
+		assertNull(findLabel(summaryPanel[0], "Incident: Test Incident"));
+		assertEquals("Resource: Team 1", ((JLabel) summaryPanel[0].getComponent(0)).getText());
+	}
+
+	@Test
 	void assignmentEditorDefaultsResourceRowsFromIcs204PersonCount() throws Exception {
 		AppController controller = sampleController();
 		SarTaskPanel panel = new SarTaskPanel(controller);

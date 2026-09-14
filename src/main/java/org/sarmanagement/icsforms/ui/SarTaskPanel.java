@@ -1910,9 +1910,9 @@ public class SarTaskPanel extends JPanel {
 			}
 
 			String leaderLabel = isCanineTask ? "Leader/Handler: " : "Leader: ";
-			assignmentSummaryField = inlineSummaryPanel(2, "Incident: " + safeValue(row.getIncidentName()),
-					"Resource: " + safeValue(row.getResourceIdentifier()), leaderLabel + safeValue(row.getLeader()),
-					"Leader Role: " + safeValue(row.getLeaderRole()), "Leader Contact: " + safeValue(row.getContact()));
+			assignmentSummaryField = inlineSummaryPanel(2, "Resource: " + safeValue(row.getResourceIdentifier()),
+					leaderLabel + safeValue(row.getLeader()), "Leader Role: " + safeValue(row.getLeaderRole()),
+					"Leader Contact: " + safeValue(row.getContact()));
 			debriefSummaryField = inlineSummaryPanel(2, "Incident: " + safeValue(row.getIncidentName()),
 					"Resource: " + safeValue(row.getResourceIdentifier()));
 			operationsField = textArea(SarTaskTableModel.joinOperations(row), 2, false);
@@ -1954,12 +1954,12 @@ public class SarTaskPanel extends JPanel {
 
 			int rowIndex = 0;
 			UiSupport.addRequiredRow(panel, rowIndex++, "Assignment/Team #", assignmentTeamNumberField);
+			UiSupport.addRow(panel, rowIndex++, "Inherited task data", assignmentSummaryField);
 			UiSupport.addRow(panel, rowIndex++, "Task setup",
 					inlineFieldPanel(new LabeledComponent("Resource type", resourceTypeField),
 							new LabeledComponent("Task Geometry", taskTypeField)));
 			if (mode == EditorMode.ASSIGNMENT) {
 				UiSupport.addRow(panel, rowIndex++, "Task status", taskLifecycleField);
-				UiSupport.addRow(panel, rowIndex++, "Inherited task data", assignmentSummaryField);
 				UiSupport.addRow(panel, rowIndex++, "Operations personnel", operationsField);
 				UiSupport.addRow(panel, rowIndex++, "Context", contextField);
 				UiSupport.addRow(panel, rowIndex++, "Resources assigned", resourcesAssignedField);
