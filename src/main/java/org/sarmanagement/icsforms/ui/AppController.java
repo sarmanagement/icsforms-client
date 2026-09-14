@@ -1577,6 +1577,7 @@ public class AppController {
 			if (matchKey.equals(safe(task.getAssignmentId()).trim().toLowerCase(java.util.Locale.ROOT))
 					|| matchKey.equals(safe(task.getAssignmentTeamNumber()).trim().toLowerCase(java.util.Locale.ROOT))
 					|| matchKey.equals(safe(task.getResourceIdentifier()).trim().toLowerCase(java.util.Locale.ROOT))
+					|| matchKey.equals(SarTaskSupport.taskResourceDisplayLabel(task).trim().toLowerCase(java.util.Locale.ROOT))
 					|| matchKey.equals(UiSupport.taskLabel(task).trim().toLowerCase(java.util.Locale.ROOT))) {
 				return task;
 			}

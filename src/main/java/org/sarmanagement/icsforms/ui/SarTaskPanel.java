@@ -1802,6 +1802,7 @@ public class SarTaskPanel extends JPanel {
 		private final JTextField taskMapField;
 		private final JScrollPane specialEquipmentField;
 		private final JTextField debriefingSupervisorField;
+		private final JButton pickDebriefingSupervisorButton = new JButton("Pick…");
 		private final JSpinner assignmentStartField;
 		private final JSpinner assignmentEndField;
 		private final JTextField vehicleMilesField;
@@ -1821,6 +1822,7 @@ public class SarTaskPanel extends JPanel {
 		private final JScrollPane hazardsObservedField;
 		private final List<TCard> availableTCards;
 		private final AppController controller;
+		private String debriefingSupervisorResourceId = "";
 		/**
 		 * Resource IDs of cards currently committed to an active ("On Task") SAR task.
 		 */
@@ -1925,7 +1927,9 @@ public class SarTaskPanel extends JPanel {
 			transportationField = textArea(row.getTransportationInstructions(), 2, true);
 			taskMapField = textField(row.getTaskMap(), true, 14);
 			specialEquipmentField = textArea(row.getSpecialEquipment(), 2, true);
-			debriefingSupervisorField = textField(row.getDebriefingSupervisor(), true, 12);
+			debriefingSupervisorResourceId = initialDebriefingSupervisorResourceId(row);
+			debriefingSupervisorField = textField(initialDebriefingSupervisorName(row), true, 12);
+			configureDebriefingSupervisorField();
 			assignmentStartField = dateTimeSpinner(row.getAssignmentStart(), 132);
 			assignmentEndField = dateTimeSpinner(row.getAssignmentEnd(), 132);
 			vehicleMilesField = textField(row.getVehicleMiles(), true, 6);
@@ -1968,7 +1972,7 @@ public class SarTaskPanel extends JPanel {
 			}
 			UiSupport.addRow(panel, rowIndex++, "Task summary", debriefSummaryField);
 			UiSupport.addRow(panel, rowIndex++, "Debrief details",
-					inlineFieldPanel(new LabeledComponent("Debrief supervisor", debriefingSupervisorField),
+					inlineFieldPanel(new LabeledComponent("Debrief supervisor", debriefingSupervisorPickerField()),
 							new LabeledComponent("Reported POD (%)", reportedPodField),
 							new LabeledComponent("Vehicle miles", vehicleMilesField)));
 			UiSupport.addRow(panel, rowIndex++, "Time on assignment",
@@ -2085,7 +2089,9 @@ public class SarTaskPanel extends JPanel {
 				row.setSpecialEquipment(textAreaFrom(specialEquipmentField).getText().trim());
 				return clueLogEntries == null ? new ArrayList<>() : new ArrayList<>(clueLogEntries);
 			}
-			row.setDebriefingSupervisor(debriefingSupervisorField.getText().trim());
+			String supervisorName = debriefingSupervisorField.getText().trim();
+			row.setDebriefingSupervisor(supervisorName);
+			row.setDebriefingSupervisorResourceId(resolveDebriefingSupervisorResourceId(supervisorName));
 			row.setAssignmentStart(spinnerDateTimeValue(assignmentStartField));
 			row.setAssignmentEnd(spinnerDateTimeValue(assignmentEndField));
 			row.setVehicleMiles(vehicleMilesField.getText().trim());
@@ -2121,6 +2127,175 @@ public class SarTaskPanel extends JPanel {
 			}
 			updatedClues.addAll(clueValuesFrom(clueEntryTableModel.getRows(), row, row.getAssignmentTeamNumber()));
 			return updatedClues;
+		}
+
+		/**
+		 * Installs picker-backed personnel selection behavior for the debriefing
+		 * supervisor field.
+		 */
+		private void configureDebriefingSupervisorField() {
+			UiSupport.installNameAutocomplete(debriefingSupervisorField, this::availablePersonnelSupervisorNames,
+					this::syncDebriefingSupervisorSelection, proposedName -> {
+						if (controller == null) {
+							return "";
+						}
+						TCard created = controller.createPersonnelCardViaDialog(proposedName, "", "");
+						if (created != null) {
+							debriefingSupervisorResourceId = created.getResourceId();
+							return created.getPersonName();
+						}
+						return "";
+					});
+			pickDebriefingSupervisorButton.setToolTipText("Select from known personnel (T-cards)");
+			pickDebriefingSupervisorButton.addActionListener(
+					event -> SwingUtilities.invokeLater(() -> UiSupport.openInstalledNamePicker(debriefingSupervisorField)));
+			pickDebriefingSupervisorButton
+					.setEnabled(!availablePersonnelSupervisorNames().isEmpty() || controller != null);
+		}
+
+		/**
+		 * Builds the debriefing supervisor editor control with a dedicated picker
+		 * button.
+		 *
+		 * @return composite field component.
+		 */
+		private JPanel debriefingSupervisorPickerField() {
+			JPanel panel = new JPanel(new BorderLayout(4, 0));
+			panel.setOpaque(false);
+			panel.add(debriefingSupervisorField, BorderLayout.CENTER);
+			panel.add(pickDebriefingSupervisorButton, BorderLayout.EAST);
+			return panel;
+		}
+
+		/**
+		 * Returns available personnel-card names that can be chosen as debriefing
+		 * supervisors.
+		 *
+		 * @return sorted supervisor name list.
+		 */
+		private List<String> availablePersonnelSupervisorNames() {
+			List<String> names = new ArrayList<>();
+			for (TCard card : availableTCards) {
+				if (card == null || card.getCardType() != TCardType.PERSONNEL) {
+					continue;
+				}
+				String displayName = card.getDisplayLabel().trim();
+				if (!displayName.isBlank() && !names.contains(displayName)) {
+					names.add(displayName);
+				}
+			}
+			names.sort(String.CASE_INSENSITIVE_ORDER);
+			return names;
+		}
+
+		/**
+		 * Resolves the supervisor name to display when the editor opens.
+		 *
+		 * @param row
+		 *            task being edited.
+		 * @return canonical personnel display name, or the stored fallback text.
+		 */
+		private String initialDebriefingSupervisorName(SarTaskAssignment row) {
+			TCard linkedCard = findPersonnelCardByResourceId(row.getDebriefingSupervisorResourceId());
+			if (linkedCard != null) {
+				return linkedCard.getDisplayLabel();
+			}
+			return row.getDebriefingSupervisor();
+		}
+
+		/**
+		 * Resolves the initial linked personnel identifier for the supervisor field.
+		 *
+		 * @param row
+		 *            task being edited.
+		 * @return linked personnel resource identifier, or blank when unresolved.
+		 */
+		private String initialDebriefingSupervisorResourceId(SarTaskAssignment row) {
+			String linkedResourceId = row.getDebriefingSupervisorResourceId();
+			if (!linkedResourceId.isBlank()) {
+				return linkedResourceId;
+			}
+			TCard matchedCard = findPersonnelCardByDisplayName(row.getDebriefingSupervisor());
+			return matchedCard == null ? "" : matchedCard.getResourceId();
+		}
+
+		/**
+		 * Updates the stored linked personnel identifier after picker selection.
+		 *
+		 * @param selectedName
+		 *            selected supervisor display name.
+		 */
+		private void syncDebriefingSupervisorSelection(String selectedName) {
+			TCard selectedCard = findPersonnelCardByDisplayName(selectedName);
+			debriefingSupervisorResourceId = selectedCard == null ? "" : selectedCard.getResourceId();
+		}
+
+		/**
+		 * Resolves the linked personnel identifier that should be saved with the
+		 * supervisor field.
+		 *
+		 * @param supervisorName
+		 *            supervisor display name entered or picked by the operator.
+		 * @return linked personnel resource identifier, or blank for free-form text.
+		 */
+		private String resolveDebriefingSupervisorResourceId(String supervisorName) {
+			String normalizedName = supervisorName == null ? "" : supervisorName.trim();
+			if (normalizedName.isBlank()) {
+				debriefingSupervisorResourceId = "";
+				return "";
+			}
+			TCard linkedCard = findPersonnelCardByResourceId(debriefingSupervisorResourceId);
+			if (linkedCard != null && normalizedName.equalsIgnoreCase(linkedCard.getDisplayLabel().trim())) {
+				return linkedCard.getResourceId();
+			}
+			if (linkedCard == null && !debriefingSupervisorResourceId.isBlank()) {
+				return debriefingSupervisorResourceId;
+			}
+			TCard matchedCard = findPersonnelCardByDisplayName(normalizedName);
+			debriefingSupervisorResourceId = matchedCard == null ? "" : matchedCard.getResourceId();
+			return debriefingSupervisorResourceId;
+		}
+
+		/**
+		 * Finds a personnel T-card by stable resource identifier.
+		 *
+		 * @param resourceId
+		 *            personnel resource identifier.
+		 * @return matching personnel T-card, or {@code null}.
+		 */
+		private TCard findPersonnelCardByResourceId(String resourceId) {
+			String normalizedId = resourceId == null ? "" : resourceId.trim();
+			if (normalizedId.isBlank()) {
+				return null;
+			}
+			for (TCard card : availableTCards) {
+				if (card != null && card.getCardType() == TCardType.PERSONNEL
+						&& normalizedId.equals(card.getResourceId())) {
+					return card;
+				}
+			}
+			return null;
+		}
+
+		/**
+		 * Finds a personnel T-card by display name.
+		 *
+		 * @param displayName
+		 *            personnel display name.
+		 * @return matching personnel T-card, or {@code null}.
+		 */
+		private TCard findPersonnelCardByDisplayName(String displayName) {
+			String normalizedName = displayName == null ? "" : displayName.trim();
+			if (normalizedName.isBlank()) {
+				return null;
+			}
+			for (TCard card : availableTCards) {
+				if (card != null && card.getCardType() == TCardType.PERSONNEL
+						&& normalizedName.equalsIgnoreCase(card.getDisplayLabel().trim())) {
+					return card;
+				}
+			}
+			return null;
 		}
 
 		/**

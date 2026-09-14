@@ -206,7 +206,6 @@ public class ClueLogPanel extends JPanel {
 		controller.recordClueInIcpActivityLog(clue);
 		controller.propagateClueToActivityLog(clue);
 		controller.markDirty();
-		showClueDetails(tableModel.getRowCount() - 1);
 	}
 
 	/**

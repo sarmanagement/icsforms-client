@@ -12,6 +12,8 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
@@ -19,6 +21,7 @@ import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JComboBox;
@@ -144,6 +147,39 @@ class SarTaskPanelTest {
 		method.setAccessible(true);
 
 		assertTrue((Boolean) method.invoke(null, task));
+	}
+
+	@Test
+	void debriefEditorProvidesSupervisorPickerAndPersistsLinkedPersonnelId() throws Exception {
+		SarTaskAssignment task = sampleTask();
+		task.setDebriefingSupervisor("Legacy Name");
+		TCard supervisor = new TCard();
+		supervisor.setCardType(TCardType.PERSONNEL);
+		supervisor.setPersonName("Debrief Lead");
+		task.setDebriefingSupervisorResourceId(supervisor.getResourceId());
+		Object editor = createEditor(task, "DEBRIEFING", 1, List.of(supervisor), sampleControllerWithCards(supervisor), List.of());
+		Field supervisorField = editor.getClass().getDeclaredField("debriefingSupervisorField");
+		supervisorField.setAccessible(true);
+		Field pickButtonField = editor.getClass().getDeclaredField("pickDebriefingSupervisorButton");
+		pickButtonField.setAccessible(true);
+		Method applyTo = editor.getClass().getDeclaredMethod("applyTo", SarTaskAssignment.class, List.class);
+		applyTo.setAccessible(true);
+
+		JTextField[] fieldHolder = new JTextField[1];
+		JButton[] buttonHolder = new JButton[1];
+		SwingUtilities.invokeAndWait(() -> {
+			fieldHolder[0] = (JTextField) getFieldValue(supervisorField, editor);
+			buttonHolder[0] = (JButton) getFieldValue(pickButtonField, editor);
+		});
+
+		assertEquals("Debrief Lead", fieldHolder[0].getText());
+		assertEquals("Pick…", buttonHolder[0].getText());
+		SwingUtilities.invokeAndWait(() -> fieldHolder[0].setText("Debrief Lead"));
+
+		applyTo.invoke(editor, task, List.of());
+
+		assertEquals("Debrief Lead", task.getDebriefingSupervisor());
+		assertEquals(supervisor.getResourceId(), task.getDebriefingSupervisorResourceId());
 	}
 
 	@Test
@@ -300,13 +336,20 @@ class SarTaskPanelTest {
 	}
 
 	private static Object createEditor(SarTaskAssignment task, String modeName, int resourceRows) throws Exception {
+		return createEditor(task, modeName, resourceRows, List.of(), null, List.of());
+	}
+
+	private static Object createEditor(SarTaskAssignment task, String modeName, int resourceRows, List<TCard> availableTCards,
+			AppController controller, List<ClueLogEntry> clueLogEntries) throws Exception {
 		Class<?> editorClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$SarTaskEditor");
 		Class<?> modeClass = Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$EditorMode");
 		Object mode = enumConstant(modeClass, modeName);
 		Constructor<?> constructor = editorClass.getDeclaredConstructor(SarTaskAssignment.class, modeClass, List.class,
-				int.class, java.util.function.Function.class, List.class, List.class, Set.class);
+				int.class, java.util.function.Function.class, List.class, List.class, Set.class, AppController.class);
 		constructor.setAccessible(true);
-		return constructor.newInstance(task, mode, List.of(), resourceRows, null, List.of(), List.of(), Set.of());
+		List<String> availableNames = availableTCards.stream().map(TCard::getDisplayLabel).toList();
+		return constructor.newInstance(task, mode, clueLogEntries, resourceRows, null, availableNames, availableTCards,
+				Set.of(), controller);
 	}
 
 	private static Object enumConstant(Class<?> enumClass, String name) {
@@ -435,6 +478,10 @@ class SarTaskPanelTest {
 	}
 
 	private static AppController sampleController() throws Exception {
+		return sampleControllerWithCards();
+	}
+
+	private static AppController sampleControllerWithCards(TCard... cards) throws Exception {
 		SarTaskAssignment task = sampleTask();
 		ResourceAssignment resource = new ResourceAssignment();
 		resource.setAssignmentId(task.getAssignmentId());
@@ -465,6 +512,7 @@ class SarTaskPanelTest {
 		context.setTaskMap(task.getTaskMap());
 
 		AppData data = new AppData(context, new Ics202Form(), form204, List.of(task));
+		data.setTCards(List.of(cards));
 		ClueLogEntry clue = new ClueLogEntry();
 		clue.setAssignmentId(task.getAssignmentId());
 		clue.setDetectingTask(task.getAssignmentTeamNumber());

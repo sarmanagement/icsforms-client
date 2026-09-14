@@ -92,6 +92,24 @@ class AppControllerLifecycleLoggingTest {
 	}
 
 	@Test
+	void icpStatusLogEntryResolvesTaskFromCanonicalResourceLabel() throws Exception {
+		AppController controller = sampleControllerWithTaskLog();
+		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(0);
+		task.setTaskLifecycleStatus("assigned - returning from assignment");
+		Ics214Form icpLog = new Ics214Form();
+		ActivityLogEntry entry = new ActivityLogEntry();
+		entry.setTimestamp(LocalDateTime.parse("2026-01-01T19:30:00"));
+		entry.setEventTypeId(ActivityEventType.ID_RESOURCE_RETURNED_STAGING);
+		entry.setResourceIdentifier("T-1: RES-1");
+
+		AppController.TaskLifecycleChangeResult result = controller.applyTaskLifecycleFromLogEntry(icpLog, entry);
+
+		assertFalse(result.hasWarning());
+		assertEquals("returned", task.getTaskLifecycleStatus());
+		assertEquals(LocalDateTime.parse("2026-01-01T19:30:00"), task.getAssignmentEnd());
+	}
+
+	@Test
 	void outOfSequenceTaskStatusChangeWarnsWithoutAddingMirroredLifecycleRows() throws Exception {
 		AppController controller = sampleControllerWithTaskLog();
 		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(0);

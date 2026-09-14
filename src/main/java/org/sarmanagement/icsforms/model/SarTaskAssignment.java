@@ -38,6 +38,7 @@ public class SarTaskAssignment {
 	private String preparedByPositionTitle = "";
 	private java.time.LocalDateTime preparedDateTime;
 	private String debriefingSupervisor = "";
+	private String debriefingSupervisorResourceId = "";
 	private java.time.LocalDateTime assignmentStart;
 	private java.time.LocalDateTime assignmentEnd;
 	private String vehicleMiles = "";
@@ -478,6 +479,18 @@ public class SarTaskAssignment {
 	 */
 	public void setDebriefingSupervisor(String debriefingSupervisor) {
 		this.debriefingSupervisor = debriefingSupervisor == null ? "" : debriefingSupervisor;
+	}
+	/** @return debriefing supervisor linked personnel resource identifier. */
+	public String getDebriefingSupervisorResourceId() {
+		return debriefingSupervisorResourceId;
+	}
+	/**
+	 * @param debriefingSupervisorResourceId
+	 *            debriefing supervisor linked personnel resource identifier.
+	 */
+	public void setDebriefingSupervisorResourceId(String debriefingSupervisorResourceId) {
+		this.debriefingSupervisorResourceId = debriefingSupervisorResourceId == null ? ""
+				: debriefingSupervisorResourceId;
 	}
 	/** @return assignment start. */
 	public java.time.LocalDateTime getAssignmentStart() {
