@@ -13,7 +13,9 @@
     <module name="RightCurly"/>
 
     <module name="TypeName"/>
-    <module name="MethodName"/>
+    <module name="MethodName">
+      <property name="format" value="^[a-z][a-zA-Z0-9_]*$"/>
+    </module>
     <module name="ParameterName"/>
     <module name="LocalVariableName"/>
     <module name="MemberName"/>

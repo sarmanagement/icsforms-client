@@ -134,6 +134,10 @@
 
         <java>
           <removeUnusedImports/>
+          <indent>
+            <tabs>true</tabs>
+            <spacesPerTab>4</spacesPerTab>
+          </indent>
           <trimTrailingWhitespace/>
           <endWithNewline/>
         </java>
@@ -162,7 +166,7 @@
       </dependencies>
       <configuration>
         <configLocation>config/checkstyle/checkstyle.xml</configLocation>
-        <includeTestSourceDirectory>false</includeTestSourceDirectory>
+        <includeTestSourceDirectory>true</includeTestSourceDirectory>
         <consoleOutput>true</consoleOutput>
         <failsOnError>true</failsOnError>
         <violationSeverity>warning</violationSeverity>
