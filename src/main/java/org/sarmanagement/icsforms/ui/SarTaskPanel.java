@@ -225,9 +225,9 @@ public class SarTaskPanel extends JPanel {
 	 * <li><b>Planned</b> — taskLifecycleStatus is "Planned"</li>
 	 * <li><b>On Task</b> — taskLifecycleStatus is "On Task"</li>
 	 * <li><b>Returned</b> — taskLifecycleStatus is "Returned" but no debriefing
-	 * supervisor set</li>
-	 * <li><b>Completed</b> — taskLifecycleStatus is "Returned" and a debriefing
-	 * supervisor is set</li>
+	 * supervisor set yet</li>
+	 * <li><b>Completed</b> — taskLifecycleStatus is "Returned" and debriefing data
+	 * has already been entered, though the debrief remains editable</li>
 	 * </ol>
 	 * Clicking a task card opens the assignment editor for that task.
 	 * </p>
@@ -582,7 +582,7 @@ public class SarTaskPanel extends JPanel {
 			return false;
 		}
 		String lifecycle = safeValue(task.getTaskLifecycleStatus()).trim().toLowerCase(java.util.Locale.ROOT);
-		return "returned".equals(lifecycle) && safeValue(task.getDebriefingSupervisor()).isBlank();
+		return "returned".equals(lifecycle);
 	}
 
 	static String formatDateTimeValue(LocalDateTime value) {

@@ -136,6 +136,17 @@ class SarTaskPanelTest {
 	}
 
 	@Test
+	void returnedTaskWithExistingDebriefRemainsEligibleForDebriefEditing() throws Exception {
+		SarTaskAssignment task = sampleTask();
+		task.setTaskLifecycleStatus("returned");
+		task.setDebriefingSupervisor("Debrief Lead");
+		Method method = SarTaskPanel.class.getDeclaredMethod("isReadyForDebrief", SarTaskAssignment.class);
+		method.setAccessible(true);
+
+		assertTrue((Boolean) method.invoke(null, task));
+	}
+
+	@Test
 	void assignmentEditorUsesCompactResourceListWithoutPrimaryTaskResource() throws Exception {
 		SarTaskAssignment task = sampleTask();
 		List<SarTaskResource> resources = new ArrayList<>(task.getResourcesAssigned());
