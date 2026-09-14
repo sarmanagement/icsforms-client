@@ -111,6 +111,19 @@ class AppControllerLifecycleLoggingTest {
 	}
 
 	@Test
+	void plannedToReturnedStatusChangeWarnsAndLeavesTaskUnchanged() throws Exception {
+		AppController controller = sampleControllerWithTaskLog();
+		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(0);
+		task.setTaskLifecycleStatus("planned");
+
+		AppController.TaskLifecycleChangeResult result = controller.recordTaskLifecycleTransition(task, "planned",
+				"returned", LocalDateTime.parse("2026-01-01T20:05:00"));
+
+		assertTrue(result.hasWarning());
+		assertEquals("planned", task.getTaskLifecycleStatus());
+	}
+
+	@Test
 	void clueLoggingAddsIcpActivityEntry() throws Exception {
 		Path tempFile = Files.createTempDirectory("icsforms-clue").resolve("incident.json");
 		AppController controller = new AppController(new AppData(), new LocalRepository(tempFile),

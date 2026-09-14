@@ -9,12 +9,13 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.ResourceDirectoryEntry;
 import org.sarmanagement.icsforms.model.ResourceDirectorySource;
-import org.sarmanagement.icsforms.ui.AppController;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -51,7 +52,7 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		currentData = safeData;
 		List<ResourceDirectoryEntry> entries = ResourceDirectorySource.build(safeData).stream()
 				.sorted(ResourceDirectorySource.byLastName()).toList();
-		LocalDateTime preparedAt = AppController.toLocalDateTime(new java.util.Date()).withSecond(0).withNano(0);
+		LocalDateTime preparedAt = LocalDateTime.ofInstant(Instant.now(), ZoneOffset.UTC).withSecond(0).withNano(0);
 		try (PDDocument document = new PDDocument()) {
 			int rowsPerPage = defaultRowsPerPage();
 			int totalPages = pageCount(entries.size(), rowsPerPage);

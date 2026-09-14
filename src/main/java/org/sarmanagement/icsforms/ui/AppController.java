@@ -1514,8 +1514,7 @@ public class AppController {
 		}
 		task.setTaskLifecycleStatus(normalized);
 		applyDebriefLifecycleTimes(task, previousStatus, normalized, entry == null ? null : entry.getTimestamp());
-		return new TaskLifecycleChangeResult(!java.util.Objects.equals(previousStatus, normalized),
-				lifecycleTransitionWarning(previousStatus, normalized));
+		return new TaskLifecycleChangeResult(!java.util.Objects.equals(previousStatus, normalized), "");
 	}
 
 	/**
@@ -1647,7 +1646,7 @@ public class AppController {
 	private boolean isExpectedLifecycleTransition(String previousStatus, String newStatus) {
 		return switch (previousStatus) {
 			case "planned" -> "assigned - enroute to assignment".equals(newStatus)
-					|| "assigned - on task".equals(newStatus) || "returned".equals(newStatus);
+					|| "assigned - on task".equals(newStatus);
 			case "assigned - enroute to assignment" -> "assigned - on task".equals(newStatus)
 					|| "returned".equals(newStatus) || "planned".equals(newStatus);
 			case "assigned - on task" -> "assigned - returning from assignment".equals(newStatus)
