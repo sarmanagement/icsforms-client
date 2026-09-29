@@ -4,11 +4,13 @@ import com.fasterxml.jackson.annotation.JsonAlias;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Search and rescue task scaffold linked from an ICS 204 assignment entry.
  */
 public class SarTaskAssignment {
+	private String taskId;
 	private String assignmentId = "";
 	private String assignmentTeamNumber = "";
 	private String resourceType = "";
@@ -172,13 +174,43 @@ public class SarTaskAssignment {
 		return value == null ? "" : value;
 	}
 
-	/** @return linked assignment identifier. */
+	/**
+	 * Returns the stable identity of this task, assigning a UUID to legacy tasks
+	 * without one.
+	 *
+	 * @return task UUID, never {@code null} or blank.
+	 */
+	public String getTaskId() {
+		if (taskId == null || taskId.isBlank()) {
+			taskId = UUID.randomUUID().toString();
+		}
+		return taskId;
+	}
+
+	/**
+	 * Sets this task's identity during deserialization or migration.
+	 *
+	 * @param taskId
+	 *            task UUID; missing values are generated on first access.
+	 */
+	public void setTaskId(String taskId) {
+		this.taskId = taskId;
+	}
+
+	/**
+	 * Returns the linked ICS 204 resource assignment identifier.
+	 *
+	 * @return linked assignment identifier, or blank when not linked.
+	 */
 	public String getAssignmentId() {
 		return assignmentId;
 	}
+
 	/**
+	 * Sets the linked ICS 204 resource assignment identifier.
+	 *
 	 * @param assignmentId
-	 *            linked assignment identifier.
+	 *            linked assignment identifier; {@code null} is treated as blank.
 	 */
 	public void setAssignmentId(String assignmentId) {
 		this.assignmentId = assignmentId == null ? "" : assignmentId;

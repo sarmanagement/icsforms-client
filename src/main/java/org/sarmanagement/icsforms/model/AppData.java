@@ -2,18 +2,21 @@ package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Canonical root document for the local first-cut ICS workspace. Shared
  * incident context, form content, and linked SAR task scaffolding are persisted
  * together.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 5;
+	public static final int CURRENT_SCHEMA_VERSION = 6;
 
 	/**
 	 * A lightweight snapshot of the shared context at the end of one operational
@@ -85,6 +88,11 @@ public class AppData {
 	}
 
 	private int schemaVersion = CURRENT_SCHEMA_VERSION;
+	private String incidentId;
+	private long revision = 1;
+	private Instant createdAt;
+	private Instant updatedAt;
+	private String originNodeId = "";
 	private boolean useSystemTimeZone = true;
 	private String configuredTimeZoneId = "UTC";
 	private IncidentMode incidentMode = IncidentMode.SAR;
@@ -186,6 +194,156 @@ public class AppData {
 	 */
 	public void setSchemaVersion(int schemaVersion) {
 		this.schemaVersion = schemaVersion;
+	}
+
+	/**
+	 * Returns the stable identity of this incident document without assigning one.
+	 *
+	 * @return incident UUID, or {@code null}/blank when not yet assigned.
+	 */
+	public String getIncidentId() {
+		return incidentId;
+	}
+
+	/**
+	 * Sets the incident document identity during deserialization or migration.
+	 *
+	 * @param incidentId
+	 *            incident UUID; missing values are assigned by
+	 *            {@link #normalizeIdentity()}.
+	 */
+	public void setIncidentId(String incidentId) {
+		this.incidentId = incidentId;
+	}
+
+	/**
+	 * Returns the document revision for persistence coordination.
+	 *
+	 * @return persisted revision.
+	 */
+	public long getRevision() {
+		return revision;
+	}
+
+	/**
+	 * Sets the document revision without treating deserialization as an edit.
+	 *
+	 * @param revision
+	 *            persisted revision.
+	 */
+	public void setRevision(long revision) {
+		this.revision = revision;
+	}
+
+	/**
+	 * Returns the stored document creation instant without initializing it.
+	 *
+	 * @return creation instant, or {@code null} when not yet assigned.
+	 */
+	public Instant getCreatedAt() {
+		return createdAt;
+	}
+
+	/**
+	 * Sets the document creation instant.
+	 *
+	 * @param createdAt
+	 *            creation instant, or {@code null} when not yet assigned.
+	 */
+	public void setCreatedAt(Instant createdAt) {
+		this.createdAt = createdAt;
+	}
+
+	/**
+	 * Returns the stored last modification instant without initializing it.
+	 *
+	 * @return modification instant, or {@code null} when not yet assigned.
+	 */
+	public Instant getUpdatedAt() {
+		return updatedAt;
+	}
+
+	/**
+	 * Sets the last modification instant without marking the document as edited.
+	 *
+	 * @param updatedAt
+	 *            modification instant, or {@code null} when not yet assigned.
+	 */
+	public void setUpdatedAt(Instant updatedAt) {
+		this.updatedAt = updatedAt;
+	}
+
+	/**
+	 * Returns the identifier of the node that originated this document.
+	 *
+	 * @return origin node identifier, or blank when not yet assigned.
+	 */
+	public String getOriginNodeId() {
+		return originNodeId == null ? "" : originNodeId;
+	}
+
+	/**
+	 * Sets the origin node identifier supplied by the persistence layer.
+	 *
+	 * @param originNodeId
+	 *            origin node identifier; {@code null} clears it.
+	 */
+	public void setOriginNodeId(String originNodeId) {
+		this.originNodeId = originNodeId == null ? "" : originNodeId;
+	}
+
+	/**
+	 * Assigns missing incident and child identities and missing document timestamps.
+	 * Existing identifiers, timestamps, revisions, and origin node identifiers are
+	 * preserved. Call only after the persistence layer has had an opportunity to
+	 * supply an incident ID and timestamps for legacy documents.
+	 */
+	public void normalizeIdentity() {
+		if (incidentId == null || incidentId.isBlank()) {
+			incidentId = UUID.randomUUID().toString();
+		}
+		if (createdAt == null) {
+			createdAt = updatedAt == null ? Instant.now() : updatedAt;
+		}
+		if (updatedAt == null) {
+			updatedAt = createdAt;
+		}
+		if (tCards != null) {
+			for (TCard card : tCards) {
+				if (card != null) {
+					card.getResourceId();
+				}
+			}
+		}
+		if (clueLogEntries != null) {
+			for (ClueLogEntry entry : clueLogEntries) {
+				if (entry != null) {
+					entry.getEntryId();
+				}
+			}
+		}
+		if (sarTaskAssignments != null) {
+			for (SarTaskAssignment task : sarTaskAssignments) {
+				if (task != null) {
+					task.getTaskId();
+				}
+			}
+		}
+		if (activityLogs != null) {
+			for (Ics214Form log : activityLogs) {
+				if (log != null) {
+					List<ActivityLogEntry> entries = log.getActivityLog();
+					if (entries == null) {
+						continue;
+					}
+					for (ActivityLogEntry entry : entries) {
+						if (entry != null) {
+							entry.getEntryId();
+						}
+					}
+				}
+			}
+		}
 	}
 
 	public boolean isUseSystemTimeZone() {

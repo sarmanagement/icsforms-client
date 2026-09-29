@@ -1,5 +1,8 @@
 package org.sarmanagement.icsforms.ui;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
@@ -18,6 +21,11 @@ import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.IncidentId;
+import org.sarmanagement.icsforms.persistence.IncidentStore;
+import org.sarmanagement.icsforms.persistence.IncidentSummary;
+import org.sarmanagement.icsforms.persistence.StoreConflictException;
+import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
@@ -44,8 +52,12 @@ import java.util.Set;
  */
 public class AppController {
 	private static final int AUTOSAVE_DELAY_MS = 750;
+	private static final ObjectMapper INCIDENT_COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
+			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
 	private final LocalRepository repository;
+	private final IncidentStore store;
+	private IncidentId activeIncidentId;
 	private final PdfExportService exportService;
 	private final IncidentValidator validator;
 	private final Timer autosaveTimer;
@@ -53,6 +65,9 @@ public class AppController {
 	private boolean dirty;
 	private LinkSource activeLinkSource = LinkSource.NONE;
 	private PersonnelCardCreator personnelCardCreator;
+	private java.util.function.Consumer<RuntimeException> autosaveErrorHandler = exception -> {
+		throw exception;
+	};
 
 	@FunctionalInterface
 	public interface PersonnelCardCreator {
@@ -98,26 +113,112 @@ public class AppController {
 	 *            PDF export service.
 	 * @param validator
 	 *            validation service.
+	 * @deprecated use the incident-store constructor for new application code.
 	 */
+	@Deprecated
 	public AppController(AppData data, LocalRepository repository, PdfExportService exportService,
 			IncidentValidator validator) {
+		this(data, null, null, repository, exportService, validator);
+	}
+
+	/**
+	 * Creates a controller for a store-backed incident.
+	 *
+	 * @param data initial incident document.
+	 * @param store incident store.
+	 * @param incidentId identifier of the active incident.
+	 * @param exportService PDF export service.
+	 * @param validator validation service.
+	 */
+	public AppController(AppData data, IncidentStore store, IncidentId incidentId, PdfExportService exportService,
+			IncidentValidator validator) {
+		this(data, store, incidentId, null, exportService, validator);
+		claimEditLock(incidentId);
+	}
+
+	/**
+	 * Initializes either a store-backed or legacy test controller.
+	 *
+	 * @param data initial incident document.
+	 * @param store incident store, if present.
+	 * @param incidentId active incident identifier, if present.
+	 * @param repository legacy repository, if present.
+	 * @param exportService PDF export service.
+	 * @param validator validation service.
+	 */
+	private AppController(AppData data, IncidentStore store, IncidentId incidentId, LocalRepository repository,
+			PdfExportService exportService, IncidentValidator validator) {
 		this.data = data == null ? createDefaultData() : data;
 		ensureDefaults(this.data);
 		this.repository = repository;
+		this.store = store;
+		this.activeIncidentId = incidentId;
 		this.exportService = exportService;
 		this.validator = validator;
-		this.autosaveTimer = new Timer(AUTOSAVE_DELAY_MS, event -> save());
+		this.autosaveTimer = new Timer(AUTOSAVE_DELAY_MS, event -> {
+			try {
+				save();
+			} catch (RuntimeException exception) {
+				autosaveErrorHandler.accept(exception);
+			}
+		});
 		this.autosaveTimer.setRepeats(false);
 		syncSarTasks();
 	}
 
 	/**
-	 * Returns the file path where the active document is persisted.
+	 * Returns the file path where the active document is persisted, if the store
+	 * exposes one.
 	 *
-	 * @return workspace file path.
+	 * @return workspace file path, or {@code null} when unavailable.
 	 */
 	public java.nio.file.Path getFilePath() {
-		return repository.getFilePath();
+		if (store == null) {
+			return repository.getFilePath();
+		}
+		return store.list().stream().filter(summary -> summary.incidentId().equals(activeIncidentId))
+				.map(IncidentSummary::path).findFirst().orElse(null);
+	}
+
+	/**
+	 * Returns the identifier of the incident currently being edited.
+	 *
+	 * @return active incident identifier, or {@code null} for legacy controllers.
+	 */
+	public IncidentId getActiveIncidentId() {
+		return activeIncidentId;
+	}
+
+	/**
+	 * Returns the configured incident store.
+	 *
+	 * @return incident store, or {@code null} for legacy controllers.
+	 */
+	public IncidentStore getStore() {
+		return store;
+	}
+
+	/**
+	 * Describes where the active incident is stored without assuming a file path.
+	 *
+	 * @return store location and incident identifier, or the legacy workspace path.
+	 */
+	public String getStoreDisplayLabel() {
+		if (store == null) {
+			return repository.getFilePath().toString();
+		}
+		var descriptor = store.describe();
+		return descriptor.type() + ": " + descriptor.location()
+				+ (activeIncidentId == null ? "" : " — " + activeIncidentId.value());
+	}
+
+	/**
+	 * Configures how automatic save failures are presented to the operator.
+	 *
+	 * @param handler error handler for autosave exceptions.
+	 */
+	public void setAutosaveErrorHandler(java.util.function.Consumer<RuntimeException> handler) {
+		autosaveErrorHandler = java.util.Objects.requireNonNull(handler);
 	}
 
 	/**
@@ -281,12 +382,23 @@ public class AppController {
 	public void save(LinkSource source) {
 		synchronizeLinkedFields(source);
 		syncSarTasks();
-		repository.save(data);
+		if (store == null) {
+			repository.save(data);
+		} else {
+			try {
+				store.save(activeIncidentId, data);
+			} catch (StoreConflictException conflict) {
+				dirty = true;
+				autosaveTimer.stop();
+				throw conflict;
+			}
+		}
 		dirty = false;
 	}
 
 	/**
-	 * Saves the active document to a different location.
+	 * Exports the active incident to a different location without changing its
+	 * identity. Legacy controllers write a separate workspace file.
 	 *
 	 * @param path
 	 *            destination file path.
@@ -296,8 +408,8 @@ public class AppController {
 	}
 
 	/**
-	 * Saves the active document to a different location using the current
-	 * authoritative linked-field source.
+	 * Exports the active incident using the current authoritative linked-field
+	 * source without changing the active incident.
 	 *
 	 * @param path
 	 *            destination file path.
@@ -305,28 +417,165 @@ public class AppController {
 	 *            source tab for linked role values.
 	 */
 	public void saveAs(Path path, LinkSource source) {
-		synchronizeLinkedFields(source);
-		syncSarTasks();
-		new LocalRepository(path).save(data);
-		dirty = false;
+		if (store == null) {
+			synchronizeLinkedFields(source);
+			syncSarTasks();
+			new LocalRepository(path).save(data);
+			dirty = false;
+		} else {
+			exportIncident(path, source);
+		}
 	}
 
 	/**
-	 * Loads a document from a specific path.
+	 * Exports the current incident as a portable JSON file without changing the active incident.
+	 *
+	 * @param path destination file.
+	 * @param source authoritative linked-field source.
+	 */
+	public void exportIncident(Path path, LinkSource source) {
+		save(source);
+		store.exportFile(activeIncidentId, path);
+	}
+
+	/**
+	 * Imports a JSON file and activates the imported incident if it contains one.
+	 *
+	 * @param path source file.
+	 * @return whether an incident was imported.
+	 */
+	public boolean importIncident(Path path) {
+		IncidentId imported = store.importFile(path).orElse(null);
+		if (imported == null) {
+			return false;
+		}
+		open(imported);
+		return true;
+	}
+
+	/**
+	 * Creates and activates an independent copy of the in-memory incident,
+	 * including unsaved edits. The original is not saved or replaced.
+	 *
+	 * @return identifier of the duplicate.
+	 */
+	public IncidentId duplicateIncident() {
+		AppData copy;
+		try {
+			copy = INCIDENT_COPIER.readValue(INCIDENT_COPIER.writeValueAsBytes(data), AppData.class);
+		} catch (IOException exception) {
+			throw new IllegalStateException("Cannot duplicate incident data", exception);
+		}
+		copy.setIncidentId(IncidentId.newId().value());
+		copy.setRevision(0);
+		copy.setCreatedAt(null);
+		copy.setUpdatedAt(null);
+		copy.setOriginNodeId(null);
+		IncidentId duplicate = store.create(copy);
+		claimEditLock(duplicate);
+		IncidentId previousId = activeIncidentId;
+		setData(copy);
+		activeIncidentId = duplicate;
+		autosaveTimer.stop();
+		releasePreviousLock(previousId);
+		return duplicate;
+	}
+
+	/**
+	 * Opens a saved incident, leaving the active one unchanged if loading fails.
+	 *
+	 * @param incidentId identifier to open.
+	 */
+	public void open(IncidentId incidentId) {
+		IncidentId previousId = activeIncidentId;
+		claimEditLock(incidentId);
+		AppData loaded;
+		try {
+			loaded = store.load(incidentId);
+		} catch (RuntimeException exception) {
+			if (!incidentId.equals(previousId) && store instanceof FileIncidentStore fileStore) {
+				fileStore.unlock(incidentId);
+			}
+			throw exception;
+		}
+		autosaveTimer.stop();
+		setData(loaded);
+		activeIncidentId = incidentId;
+		releasePreviousLock(previousId);
+	}
+
+	/**
+	 * Releases the prior file-store lock only after an incident switch succeeds.
+	 *
+	 * @param previousId formerly active incident identifier.
+	 */
+	private void releasePreviousLock(IncidentId previousId) {
+		if (previousId != null && !previousId.equals(activeIncidentId)
+				&& store instanceof FileIncidentStore fileStore) {
+			fileStore.unlock(previousId);
+		}
+	}
+
+	/**
+	 * Acquires a file-store advisory lock before the incident can be edited.
+	 * Other store implementations manage their own concurrency.
+	 *
+	 * @param incidentId identifier to edit.
+	 * @throws StoreConflictException when another editor already owns the file lock.
+	 */
+	private void claimEditLock(IncidentId incidentId) {
+		if (store instanceof FileIncidentStore fileStore && incidentId != null
+				&& (fileStore.isLockedElsewhere(incidentId) || !fileStore.lock(incidentId))) {
+			throw new StoreConflictException("Incident is open in another window: " + incidentId.value());
+		}
+	}
+
+	/**
+	 * Imports a document from a specific path when store-backed; legacy
+	 * controllers load the file directly.
 	 *
 	 * @param path
 	 *            source file path.
 	 */
 	public void open(Path path) {
-		setData(new LocalRepository(path).loadOrDefault());
+		if (store == null) {
+			setData(new LocalRepository(path).loadOrDefault());
+		} else {
+			importIncident(path);
+		}
 	}
 
 	/**
-	 * Resets the editor to a fresh incident document.
+	 * Creates a fresh pre-operational SAR incident.
 	 */
 	public void newDocument() {
-		setData(createDefaultData());
-		markDirty();
+		newDocument(org.sarmanagement.icsforms.model.IapPhase.PRE_OP,
+				org.sarmanagement.icsforms.model.IncidentMode.SAR);
+	}
+
+	/**
+	 * Creates a new incident with the chosen phase and mode.
+	 *
+	 * @param phase initial IAP phase.
+	 * @param mode incident mode.
+	 */
+	public void newDocument(org.sarmanagement.icsforms.model.IapPhase phase,
+			org.sarmanagement.icsforms.model.IncidentMode mode) {
+		AppData created = createDefaultData();
+		created.setIapPhase(phase);
+		created.setIncidentMode(mode);
+		if (store != null) {
+			IncidentId id = store.create(created);
+			claimEditLock(id);
+			IncidentId previousId = activeIncidentId;
+			autosaveTimer.stop();
+			setData(created);
+			activeIncidentId = id;
+			releasePreviousLock(previousId);
+		} else {
+			setData(created);
+			markDirty();
+		}
 	}
 
 	/**

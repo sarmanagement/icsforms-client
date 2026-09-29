@@ -4,7 +4,7 @@
 
 This project is intended to support the **SAR** (Search and Rescue) community, but it is also useful for generic ICS incident planning and documentation. The application currently supports ICS 201, ICS 202, ICS 204, and ICS 214 forms, along with SAR task assignment forms, a clue log, T-cards, and an organizational chart.  I got tired of copying the same header information from one form to another by hand, and having to subject people to my handwriting in SAR Task Assignment Form Debriefing sections, so this tool is intended to make it easier to author ICS forms and share them with others in a clean, legible format.
 
-Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. The incident workspace is persisted locally in JSON format at `~/.icsforms/incident.json`, with a rolling backup at `~/.icsforms/incident.json.bak`. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF.  Intent is to develop a multi-user application backed by a networked persistence layer in the future.
+Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. Each incident is persisted locally at `~/.icsforms/incidents/<incidentId>.json`, with its own `.json.bak` backup; the install's node identity is kept in `~/.icsforms/node.json`. On first launch, an existing `~/.icsforms/incident.json` is imported as a new incident if no incidents exist yet. The original is left untouched and `incident.json.migrated` prevents repeat imports. File → Import JSON can also import an external workspace as a separate incident. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF. An H2-backed store and offline-to-remote synchronization are planned, but not yet implemented.
 
 This project is open source under the Apache 2.0 license. Contributions are welcome.
 
@@ -28,6 +28,8 @@ This project is open source under the Apache 2.0 license. Contributions are welc
 6. Save locally or allow autosave to persist the incident workspace.
 7. Export individual PDFs, all PDFs as separate files, or the merged **Export IAP Bundle** PDF.
 
+File → New always creates a separate incident. File → Duplicate Incident copies the current document under a new ID; File → Import JSON and Export JSON move portable copies between stores. The picker lists active incidents, and detects another editor's advisory lock rather than silently overwriting its work. A stale revision is rejected, with the option to duplicate unsaved work or reload.
+
 ## Current features
 
 - Shared incident context for incident name, operational period, and preparer identity.
@@ -45,8 +47,8 @@ This project is open source under the Apache 2.0 license. Contributions are welc
   - T-Cards
   - Activity Logs (ICS 214)
 - SAR Task Assignment forms with debriefing and POD factoring support.
-- Local JSON persistence at `~/.icsforms/incident.json`.
-- Backup-assisted recovery from `~/.icsforms/incident.json.bak`.
+- Local JSON persistence at `~/.icsforms/incidents/<incidentId>.json`.
+- Backup-assisted recovery from each incident's `.json.bak`.
 - PDF export for each supported form.
 - **Export All PDFs** for individual per-form PDF files.
 - **Export IAP Bundle** for a single merged PDF bundle of selected forms with a cover page.
@@ -74,13 +76,13 @@ All production source lives under `src/main/java/org/sarmanagement/icsforms/`, w
 
 **`App.java`** is the application entry point. It initialises the Swing look-and-feel, constructs the top-level `AppController`, and opens the `MainFrame` window.
 
-**`model/`** holds the plain-Java data model. `AppData` is the root object that is serialised to and deserialised from `~/.icsforms/incident.json`; it owns `IncidentContext` (shared header fields, mode, and IAP phase) alongside one instance of each form model class (`Ics201Form`, `Ics202Form`, `Ics204Form`, `Ics214Form`, etc.). Supporting value types for SAR task assignments, T-cards, clue log entries, activity log entries, and the organizational chart also live here.
+**`model/`** holds the plain-Java data model. `AppData` is the root object serialised to each incident's JSON document; it owns `IncidentContext` (shared header fields, mode, and IAP phase) alongside one instance of each form model class (`Ics201Form`, `Ics202Form`, `Ics204Form`, `Ics214Form`, etc.). Supporting value types for SAR task assignments, T-cards, clue log entries, activity log entries, and the organizational chart also live here.
 
 **`ui/`** contains the Swing presentation layer. `MainFrame` builds the top-level tabbed pane and houses all the per-form panels. `AppController` wires the model to the UI and drives save, load, and export actions. Each form has a dedicated panel class (e.g. `Ics201Panel`, `Ics202Panel`) that owns its own sub-tabs or sections. `UiSupport` provides shared Swing helper utilities used across panels.
 
 **`pdf/`** is responsible for turning the in-memory model into PDF files. `AbstractPdfRenderer` and `PdfFormRenderer` provide the shared drawing infrastructure (Apache PDFBox). Each form has a dedicated renderer (e.g. `Ics201PdfRenderer`, `Ics204PdfRenderer`). `CoverPageRenderer` produces the IAP bundle cover page. `PdfExportService` coordinates single-form export, bulk export, and the merged IAP bundle export.
 
-**`persistence/`** handles reading and writing the incident workspace. `LocalRepository` serialises `AppData` to JSON (Jackson) and maintains a rolling backup at `incident.json.bak`.
+**`persistence/`** defines the store-independent `IncidentStore` contract. `FileIncidentStore` stores each incident as JSON with a separate backup, revision checks, and advisory locks; `LocalRepository` remains for compatibility with older integrations.
 
 **`validation/`** contains pre-export checks. `IncidentValidator` walks the model and collects `ValidationMessage` instances for any required fields that are missing or invalid, blocking PDF export until the workspace is clean.
 

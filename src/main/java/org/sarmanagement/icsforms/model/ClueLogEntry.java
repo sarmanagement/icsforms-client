@@ -3,6 +3,7 @@ package org.sarmanagement.icsforms.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Structured clue entry captured from SAR task debriefing and shown in the
@@ -24,6 +25,7 @@ import java.time.LocalDateTime;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ClueLogEntry {
+	private String entryId;
 	private String assignmentId = "";
 	private String detectingTask = "";
 	/**
@@ -37,6 +39,29 @@ public class ClueLogEntry {
 	private String immediateAction = "";
 	private String followUp = "";
 	private boolean possibleDuplicate = false;
+
+	/**
+	 * Returns this clue's stable identity, assigning a UUID to legacy entries
+	 * without one.
+	 *
+	 * @return clue entry UUID, never {@code null} or blank.
+	 */
+	public String getEntryId() {
+		if (entryId == null || entryId.isBlank()) {
+			entryId = UUID.randomUUID().toString();
+		}
+		return entryId;
+	}
+
+	/**
+	 * Sets this clue's identity during deserialization or migration.
+	 *
+	 * @param entryId
+	 *            stable entry UUID; missing values are generated on first access.
+	 */
+	public void setEntryId(String entryId) {
+		this.entryId = entryId;
+	}
 
 	public String getAssignmentId() {
 		return assignmentId;
