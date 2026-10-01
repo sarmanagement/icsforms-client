@@ -11,6 +11,9 @@ import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.IncidentId;
+import org.sarmanagement.icsforms.persistence.IncidentStore;
+import org.sarmanagement.icsforms.persistence.StoreConflictException;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
@@ -102,11 +105,39 @@ public class MainFrame extends JFrame {
 	 *            validation service.
 	 * @param defaultDirectory
 	 *            default directory for file chooser startup.
+	 * @deprecated use the incident-store constructor for new application code.
 	 */
+	@Deprecated
 	public MainFrame(AppData data, LocalRepository repository, PdfExportService exportService,
 			IncidentValidator validator, Path defaultDirectory) {
+		this(new AppController(data, repository, exportService, validator), defaultDirectory);
+	}
+
+	/**
+	 * Creates the editor for a store-backed incident.
+	 *
+	 * @param data loaded incident data.
+	 * @param store incident store.
+	 * @param incidentId active incident identifier.
+	 * @param exportService PDF export service.
+	 * @param validator validation service.
+	 * @param defaultDirectory default directory for file choosers.
+	 */
+	public MainFrame(AppData data, IncidentStore store, IncidentId incidentId, PdfExportService exportService,
+			IncidentValidator validator, Path defaultDirectory) {
+		this(new AppController(data, store, incidentId, exportService, validator), defaultDirectory);
+	}
+
+	/**
+	 * Initializes the editor with its incident controller.
+	 *
+	 * @param controller incident controller.
+	 * @param defaultDirectory default directory for file choosers.
+	 */
+	private MainFrame(AppController controller, Path defaultDirectory) {
 		super("ICS Forms Desktop");
-		this.controller = new AppController(data, repository, exportService, validator);
+		this.controller = controller;
+		this.controller.setAutosaveErrorHandler(exception -> showSaveError(exception));
 		this.incidentContextPanel = new IncidentContextPanel(controller);
 		this.organizationalChartPanel = new OrganizationalChartPanel(controller);
 		this.ics201Panel = new Ics201Panel(controller);
@@ -136,7 +167,13 @@ public class MainFrame extends JFrame {
 		registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
 		registerTab("Clue Log", clueLogPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
 		registerTab("T-Cards", tCardPanel, AppController.LinkSource.NONE, T_CARDS_GROUP);
-		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+		addWindowListener(new java.awt.event.WindowAdapter() {
+			@Override
+			public void windowClosing(java.awt.event.WindowEvent event) {
+				closeAfterSave();
+			}
+		});
 		setPreferredSize(new Dimension(1120, 820));
 		setJMenuBar(createMenuBar(defaultDirectory));
 		setLayout(new BorderLayout(8, 8));
@@ -196,44 +233,53 @@ public class MainFrame extends JFrame {
 		JMenuItem newItem = new JMenuItem("New…");
 		newItem.setMnemonic(KeyEvent.VK_N);
 		newItem.addActionListener(event -> {
-			StartupDialog startup = new StartupDialog(MainFrame.this, defaultDirectory, false);
+			if (controller.getStore() == null || !saveBeforeSwitch()) {
+				return;
+			}
+			StartupDialog startup = new StartupDialog(MainFrame.this, controller.getStore(), false);
 			startup.setVisible(true);
 			StartupDialog.StartupAction action = startup.getChosenAction();
 			if (action == null) {
 				return; // cancelled
 			}
-			switch (action) {
-				case OPEN_EXISTING -> {
-					controller.open(startup.getChosenPath());
+			try {
+				switch (action) {
+					case OPEN_EXISTING -> controller.open(startup.getChosenIncidentId());
+					case OPEN_NEW_PERIOD -> {
+						controller.open(startup.getChosenIncidentId());
+						controller.newOperationalPeriod();
+					}
+					case NEW_PRE_OP, NEW_INITIAL_RESPONSE, NEW_OPERATIONAL_PERIOD -> {
+						IapPhase phase = switch (action) {
+							case NEW_INITIAL_RESPONSE -> IapPhase.INITIAL_RESPONSE;
+							case NEW_OPERATIONAL_PERIOD -> IapPhase.DURING_OP;
+							default -> IapPhase.PRE_OP;
+						};
+						controller.newDocument(phase, startup.getChosenMode());
+					}
 				}
-				case OPEN_NEW_PERIOD -> {
-					controller.open(startup.getChosenPath());
-					controller.newOperationalPeriod();
-				}
-				case NEW_PRE_OP, NEW_INITIAL_RESPONSE, NEW_OPERATIONAL_PERIOD -> {
-					controller.newDocument();
-					IapPhase phase = switch (action) {
-						case NEW_INITIAL_RESPONSE -> IapPhase.INITIAL_RESPONSE;
-						case NEW_OPERATIONAL_PERIOD -> IapPhase.DURING_OP;
-						case NEW_PRE_OP -> IapPhase.PRE_OP;
-						default -> IapPhase.PRE_OP;
-					};
-					controller.setIapPhase(phase);
-					controller.setIncidentMode(startup.getChosenMode());
-				}
+				refreshFromModel();
+			} catch (RuntimeException exception) {
+				showSaveError(exception);
 			}
-			refreshFromModel();
 		});
 
 		JMenuItem openItem = new JMenuItem("Open…");
 		openItem.setMnemonic(KeyEvent.VK_O);
 		openItem.addActionListener(event -> {
-			IncidentPickerDialog picker = new IncidentPickerDialog(MainFrame.this, defaultDirectory);
+			if (controller.getStore() == null || !saveBeforeSwitch()) {
+				return;
+			}
+			IncidentPickerDialog picker = new IncidentPickerDialog(MainFrame.this, controller.getStore());
 			picker.setVisible(true);
-			Path chosen = picker.getChosenPath();
+			IncidentId chosen = picker.getChosenIncidentId();
 			if (chosen != null) {
-				controller.open(chosen);
-				refreshFromModel();
+				try {
+					controller.open(chosen);
+					refreshFromModel();
+				} catch (RuntimeException exception) {
+					showSaveError(exception);
+				}
 			}
 		});
 
@@ -242,27 +288,59 @@ public class MainFrame extends JFrame {
 		saveItem.addActionListener(event -> {
 			AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
 			pushToModel(source);
-			controller.save(source);
-			refreshStatus();
+			try {
+				controller.save(source);
+				refreshStatus();
+			} catch (RuntimeException exception) {
+				showSaveError(exception);
+			}
 		});
 
-		JMenuItem saveAsItem = new JMenuItem("Save As…");
+		JMenuItem saveAsItem = new JMenuItem("Export Incident JSON…");
 		saveAsItem.setMnemonic(KeyEvent.VK_A);
 		saveAsItem.addActionListener(event -> chooseFile(defaultDirectory, true, path -> {
 			AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
 			pushToModel(source);
-			controller.saveAs(path, source);
-			refreshStatus();
+			try {
+				controller.saveAs(path, source);
+				refreshStatus();
+			} catch (RuntimeException exception) {
+				showSaveError(exception);
+			}
 		}));
 
 		JMenuItem exitItem = new JMenuItem("Exit");
 		exitItem.setMnemonic(KeyEvent.VK_E);
 		exitItem.addActionListener(event -> {
-			AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-			pushToModel(source);
-			controller.save(source);
-			dispose();
+			closeAfterSave();
 		});
+
+		JMenuItem duplicateItem = new JMenuItem("Duplicate Incident");
+		duplicateItem.addActionListener(event -> {
+			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			try {
+				controller.duplicateIncident();
+				refreshFromModel();
+			} catch (RuntimeException exception) {
+				showSaveError(exception);
+			}
+		});
+		JMenuItem importIncidentItem = new JMenuItem("Import Incident JSON…");
+		importIncidentItem.addActionListener(event -> chooseFile(defaultDirectory, false, path -> {
+			if (!saveBeforeSwitch()) {
+				return;
+			}
+			try {
+				if (controller.importIncident(path)) {
+					refreshFromModel();
+				} else {
+					JOptionPane.showMessageDialog(this, "No incident was imported.", "Import Incident",
+							JOptionPane.WARNING_MESSAGE);
+				}
+			} catch (RuntimeException exception) {
+				showSaveError(exception);
+			}
+		}));
 
 		for (Map.Entry<String, Boolean> entry : groupVisible.entrySet()) {
 			// CORE_GROUP is always visible; SAR_ONLY_GROUP is controlled exclusively by the
@@ -318,10 +396,12 @@ public class MainFrame extends JFrame {
 		fileMenu.add(openItem);
 		fileMenu.add(saveItem);
 		fileMenu.add(saveAsItem);
+		fileMenu.add(duplicateItem);
 		fileMenu.addSeparator();
 		fileMenu.add(exitItem);
 		exportMenu.add(exportFormsPdfItem);
 		exportMenu.add(exportResourcesCsvItem);
+		importMenu.add(importIncidentItem);
 		logsMenu.add(addLogItem);
 		logsMenu.add(removeCurrentLogItem);
 		logsMenu.addSeparator();
@@ -813,7 +893,78 @@ public class MainFrame extends JFrame {
 	private void refreshStatus() {
 		List<ValidationMessage> messages = controller.validate(linkSourceForTab(tabs.getSelectedIndex()));
 		validationLabel.setText(messages.isEmpty() ? "Ready" : messages.get(0).message());
-		setTitle((controller.isDirty() ? "* " : "") + "ICS Forms Desktop");
+		IncidentId id = controller.getActiveIncidentId();
+		String incidentName = controller.getData().getIncidentContext().getIncidentName();
+		String label = incidentName == null || incidentName.isBlank() ? "(unnamed)" : incidentName.trim();
+		setTitle((controller.isDirty() ? "* " : "") + "ICS Forms Desktop — " + label
+				+ (id == null ? "" : " [" + id.value().substring(0, 8) + "]"));
+	}
+
+	/**
+	 * Saves pending edits before changing incidents so failed saves cannot discard them.
+	 *
+	 * @return {@code true} if it is safe to switch incidents.
+	 */
+	private boolean saveBeforeSwitch() {
+		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
+		pushToModel(source);
+		try {
+			controller.save(source);
+			return true;
+		} catch (RuntimeException exception) {
+			showSaveError(exception);
+			return false;
+		}
+	}
+
+	/**
+	 * Closes the editor only after its active incident has been saved successfully.
+	 */
+	private void closeAfterSave() {
+		if (!saveBeforeSwitch()) {
+			return;
+		}
+		if (controller.getStore() != null) {
+			controller.getStore().close();
+		}
+		dispose();
+	}
+
+	/**
+	 * Explains a save conflict without silently overwriting another editor's changes.
+	 *
+	 * @param exception persistence failure.
+	 */
+	private void showSaveError(RuntimeException exception) {
+		if (exception instanceof StoreConflictException && controller.getStore() != null) {
+			Object[] choices = {"Duplicate my changes", "Reload stored incident", "Keep editing"};
+			int selected = JOptionPane.showOptionDialog(this,
+					"Another editor changed or locked this incident. Your edits are still in this window.\n"
+							+ exception.getMessage() + "\nDuplicate to preserve your edits, or reload to discard them.",
+					"Incident save conflict", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE,
+					null, choices, choices[0]);
+			if (selected == 0) {
+				try {
+					controller.duplicateIncident();
+					refreshFromModel();
+				} catch (RuntimeException duplicateFailure) {
+					showError("Could not duplicate incident", duplicateFailure);
+				}
+			} else if (selected == 1
+					&& JOptionPane.showConfirmDialog(this, "Discard your local changes and reload from the store?",
+							"Discard local changes", JOptionPane.YES_NO_OPTION,
+							JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION) {
+				try {
+					controller.open(controller.getActiveIncidentId());
+					refreshFromModel();
+				} catch (RuntimeException reloadFailure) {
+					showError("Could not reload incident", reloadFailure);
+				}
+			}
+		} else {
+			showError("Incident operation failed", exception);
+		}
+		refreshStatus();
 	}
 
 	/**
@@ -857,9 +1008,19 @@ public class MainFrame extends JFrame {
 	 */
 	private void chooseFile(Path defaultDirectory, boolean saveMode, java.util.function.Consumer<Path> consumer) {
 		JFileChooser chooser = new JFileChooser(defaultDirectory.toFile());
+		chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Incident JSON (*.json)", "json"));
 		int result = saveMode ? chooser.showSaveDialog(this) : chooser.showOpenDialog(this);
 		if (result == JFileChooser.APPROVE_OPTION) {
-			consumer.accept(chooser.getSelectedFile().toPath());
+			Path selected = chooser.getSelectedFile().toPath();
+			if (saveMode && !selected.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".json")) {
+				selected = selected.resolveSibling(selected.getFileName() + ".json");
+			}
+			if (saveMode && java.nio.file.Files.exists(selected)
+					&& JOptionPane.showConfirmDialog(this, "Replace " + selected + "?", "Overwrite incident export",
+							JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+				return;
+			}
+			consumer.accept(selected);
 		}
 	}
 

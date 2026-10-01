@@ -19,10 +19,10 @@ import java.util.List;
  * under {@code ~/.icsforms/incident.json} by default and maintains a
  * last-known-good backup.
  */
+@Deprecated
 public class LocalRepository {
 	private static final String DIRECTORY_NAME = ".icsforms";
 	private static final String FILE_NAME = "incident.json";
-	private static final String BACKUP_FILE_NAME = "incident.json.bak";
 
 	/**
 	 * Shared, thread-safe mapper used by both instance save/load and static
@@ -51,7 +51,7 @@ public class LocalRepository {
 	 */
 	public LocalRepository(Path filePath) {
 		this.filePath = filePath;
-		this.backupPath = filePath.resolveSibling(BACKUP_FILE_NAME);
+		this.backupPath = filePath.resolveSibling(filePath.getFileName() + ".bak");
 		this.objectMapper = SHARED_MAPPER;
 	}
 
@@ -75,6 +75,8 @@ public class LocalRepository {
 	 */
 	public void save(AppData appData) {
 		try {
+			appData.normalizeIdentity();
+			appData.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
 			Path parent = filePath.getParent();
 			if (parent != null) {
 				Files.createDirectories(parent);
@@ -102,11 +104,15 @@ public class LocalRepository {
 			return new AppData();
 		}
 		try {
-			return objectMapper.readValue(filePath.toFile(), AppData.class);
+			AppData data = objectMapper.readValue(filePath.toFile(), AppData.class);
+			data.normalizeIdentity();
+			return data;
 		} catch (IOException primaryFailure) {
 			if (Files.exists(backupPath)) {
 				try {
-					return objectMapper.readValue(backupPath.toFile(), AppData.class);
+					AppData data = objectMapper.readValue(backupPath.toFile(), AppData.class);
+					data.normalizeIdentity();
+					return data;
 				} catch (IOException backupFailure) {
 					throw new IllegalStateException("Failed to load local data or backup", backupFailure);
 				}
