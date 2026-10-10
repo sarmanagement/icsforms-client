@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Structured clue entry captured from SAR task debriefing and shown in the
@@ -30,6 +31,7 @@ import java.util.List;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ClueLogEntry {
+	private String entryId;
 	private String assignmentId = "";
 	private String detectingTask = "";
 	/**
@@ -48,6 +50,29 @@ public class ClueLogEntry {
 	private LocalDateTime followUpTargetDate;
 	private LocalDateTime followUpCompletedDate;
 	private String followUpStatus = "";
+
+	/**
+	 * Returns this clue's stable identity, assigning a UUID to legacy entries
+	 * without one.
+	 *
+	 * @return clue entry UUID, never {@code null} or blank.
+	 */
+	public String getEntryId() {
+		if (entryId == null || entryId.isBlank()) {
+			entryId = UUID.randomUUID().toString();
+		}
+		return entryId;
+	}
+
+	/**
+	 * Sets this clue's identity during deserialization or migration.
+	 *
+	 * @param entryId
+	 *            stable entry UUID; missing values are generated on first access.
+	 */
+	public void setEntryId(String entryId) {
+		this.entryId = entryId;
+	}
 
 	/**
 	 * Returns the linked task assignment identifier.
