@@ -264,11 +264,7 @@ public class MainFrame extends JFrame {
 							case NEW_OPERATIONAL_PERIOD -> IapPhase.DURING_OP;
 							default -> IapPhase.PRE_OP;
 						};
-						AppData created = new AppData();
-						created.setIapPhase(phase);
-						created.setIncidentMode(startup.getChosenMode());
-						startup.applyNewIncidentSettings(created);
-						controller.createNewIncident(created);
+						controller.newDocument(phase, startup.getChosenMode(), startup::applyNewIncidentSettings);
 					}
 				}
 				refreshFromModel();

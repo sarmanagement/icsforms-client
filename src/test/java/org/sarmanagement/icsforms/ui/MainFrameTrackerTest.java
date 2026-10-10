@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Assumptions;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.OpenActionItem;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.FileIncidentStore;
+import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
@@ -27,17 +28,17 @@ class MainFrameTrackerTest {
 	@Test
 	void trackerSurvivesSarGenericDisableAndPersistence() throws Exception {
 		Assumptions.assumeFalse(GraphicsEnvironment.isHeadless());
-		Path path = Path.of("target/main-frame-tracker-smoke.json");
+		Path path = Path.of("target/main-frame-tracker-store");
 		AppData data = new AppData();
 		OpenActionItem item = new OpenActionItem();
 		item.setNumber(1);
 		item.setItem("Preserved action");
 		data.setOpenActionItems(List.of(item));
 		data.setOpenActionTrackerEnabled(true);
-		LocalRepository repository = new LocalRepository(path);
-		try {
+		try (FileIncidentStore store = new FileIncidentStore(path)) {
+			IncidentId id = store.create(data);
 			SwingUtilities.invokeAndWait(() -> {
-				MainFrame frame = new MainFrame(data, repository,
+				MainFrame frame = new MainFrame(data, store, id,
 						new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
 								new SarTaskAssignmentPdfRenderer()),
 						new IncidentValidator(), Path.of("target"));
@@ -70,12 +71,18 @@ class MainFrameTrackerTest {
 				}
 			});
 			data.setOpenActionTrackerEnabled(false);
-			repository.save(data);
-			AppData restored = repository.loadOrDefault();
+			store.save(id, data);
+			AppData restored = store.load(id);
 			assertFalse(restored.isOpenActionTrackerEnabled());
 			assertEquals("Preserved action", restored.getOpenActionItems().get(0).getItem());
 		} finally {
-			Files.deleteIfExists(path);
+			if (Files.exists(path)) {
+				try (var files = Files.walk(path)) {
+					for (Path file : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
+						Files.deleteIfExists(file);
+					}
+				}
+			}
 		}
 	}
 }

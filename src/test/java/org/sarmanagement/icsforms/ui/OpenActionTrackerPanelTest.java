@@ -9,7 +9,7 @@ import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.OpenActionItem;
 import org.sarmanagement.icsforms.model.PocAssignment;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
@@ -90,32 +90,47 @@ class OpenActionTrackerPanelTest {
 	}
 
 	@Test
-	void filtersRetainAllItemsAndNumbersCloseGaps() {
-		AppController controller = controller(new AppData());
-		OpenActionTrackerPanel panel = new OpenActionTrackerPanel(controller);
-		OpenActionItem open = new OpenActionItem();
-		open.setPoc("Current POC");
-		OpenActionItem completed = new OpenActionItem();
-		completed.setActualDate(LocalDateTime.now(ZoneOffset.UTC));
-		panel.addItem(open);
-		panel.addItem(completed);
-		JTable table = (JTable) ((JScrollPane) panel.getComponent(1)).getViewport().getView();
-		JComboBox<?> filter = (JComboBox<?>) ((JPanel) panel.getComponent(0)).getComponent(1);
-		assertEquals(1, table.getRowCount());
-		assertEquals("Current POC", table.getValueAt(0, 2));
-		filter.setSelectedItem("Completed");
-		assertEquals(1, table.getRowCount());
-		assertEquals(2, table.getValueAt(0, 0));
-		filter.setSelectedItem("All");
-		assertEquals(2, table.getRowCount());
-		controller.getData().setIncidentMode(IncidentMode.GENERIC);
-		controller.getData().setOpenActionTrackerEnabled(false);
-		panel.refreshFromModel();
-		assertEquals(2, controller.getData().getOpenActionItems().size());
-		panel.removeItem(open);
-		assertEquals(1, completed.getNumber());
-		assertEquals(1, table.getRowCount());
-		assertTrue(controller.isDirty());
+	void filtersRetainAllItemsAndNumbersCloseGaps() throws Exception {
+		Path path = Path.of("target/tracker-panel-store");
+		try (FileIncidentStore store = new FileIncidentStore(path)) {
+			AppData data = new AppData();
+			AppController controller = new AppController(data, store, store.create(data),
+					new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
+							new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
+			OpenActionTrackerPanel panel = new OpenActionTrackerPanel(controller);
+			OpenActionItem open = new OpenActionItem();
+			open.setPoc("Current POC");
+			OpenActionItem completed = new OpenActionItem();
+			completed.setActualDate(LocalDateTime.now(ZoneOffset.UTC));
+			panel.addItem(open);
+			panel.addItem(completed);
+			JTable table = (JTable) ((JScrollPane) panel.getComponent(1)).getViewport().getView();
+			JComboBox<?> filter = (JComboBox<?>) ((JPanel) panel.getComponent(0)).getComponent(1);
+			assertEquals(1, table.getRowCount());
+			assertEquals("Current POC", table.getValueAt(0, 2));
+			filter.setSelectedItem("Completed");
+			assertEquals(1, table.getRowCount());
+			assertEquals(2, table.getValueAt(0, 0));
+			filter.setSelectedItem("All");
+			assertEquals(2, table.getRowCount());
+			controller.getData().setIncidentMode(IncidentMode.GENERIC);
+			controller.getData().setOpenActionTrackerEnabled(false);
+			panel.refreshFromModel();
+			assertEquals(2, controller.getData().getOpenActionItems().size());
+			panel.removeItem(open);
+			assertEquals(1, completed.getNumber());
+			assertEquals(1, table.getRowCount());
+			assertTrue(controller.isDirty());
+			controller.save();
+		} finally {
+			if (java.nio.file.Files.exists(path)) {
+				try (var files = java.nio.file.Files.walk(path)) {
+					for (Path file : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
+						java.nio.file.Files.deleteIfExists(file);
+					}
+				}
+			}
+		}
 	}
 
 	@Test
@@ -228,6 +243,8 @@ class OpenActionTrackerPanelTest {
 		List<ClueLogEntry> restored = (List<ClueLogEntry>) convert.invoke(null, copies,
 				new org.sarmanagement.icsforms.model.SarTaskAssignment(), "Task");
 		assertEquals("POC", restored.get(0).getFollowUpAssignedTo());
+		assertEquals(clue.getEntryId(), copies.get(0).getEntryId());
+		assertEquals(clue.getEntryId(), restored.get(0).getEntryId());
 		assertTrue(restored.get(0).isFollowUpBriefed());
 		assertEquals(clue.getFollowUpTargetDate(), restored.get(0).getFollowUpTargetDate());
 		assertEquals(clue.getFollowUpCompletedDate(), restored.get(0).getFollowUpCompletedDate());
@@ -235,14 +252,4 @@ class OpenActionTrackerPanelTest {
 		assertNotSame(clue, copies.get(0));
 	}
 
-	/**
-	 * Creates a controller without creating any filesystem artifacts.
-	 * @param data incident data
-	 * @return test controller
-	 */
-	private static AppController controller(AppData data) {
-		return new AppController(data, new LocalRepository(Path.of("target/tracker-test-unused.json")),
-				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
-						new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
-	}
 }

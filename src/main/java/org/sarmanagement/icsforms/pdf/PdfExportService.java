@@ -376,11 +376,16 @@ public class PdfExportService {
 	 * Copies the root document for temporary export-only form substitutions.
 	 *
 	 * @param data source document.
-	 * @return copy retaining incident data and export preferences.
+	 * @return copy retaining document identity, revision, metadata, and preferences.
 	 */
 	private AppData copyAppData(AppData data) {
 		AppData copy = new AppData();
 		copy.setSchemaVersion(data.getSchemaVersion());
+		copy.setIncidentId(data.getIncidentId());
+		copy.setRevision(data.getRevision());
+		copy.setCreatedAt(data.getCreatedAt());
+		copy.setUpdatedAt(data.getUpdatedAt());
+		copy.setOriginNodeId(data.getOriginNodeId());
 		copy.setUseSystemTimeZone(data.isUseSystemTimeZone());
 		copy.setConfiguredTimeZoneId(data.getConfiguredTimeZoneId());
 		copy.setIncidentMode(data.getIncidentMode());

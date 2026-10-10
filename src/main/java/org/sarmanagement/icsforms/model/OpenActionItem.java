@@ -6,10 +6,12 @@ package org.sarmanagement.icsforms.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /** An ICS 233 action item with its current point of contact and UTC dates. */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class OpenActionItem {
+	private String entryId;
 	private int number;
 	private String item = "";
 	private String poc = "";
@@ -21,6 +23,25 @@ public class OpenActionItem {
 
 	/** Creates an empty action item. */
 	public OpenActionItem() {
+	}
+
+	/**
+	 * Returns the stable identity, assigning one for a legacy action when needed.
+	 * @return action UUID, never null or blank
+	 */
+	public String getEntryId() {
+		if (entryId == null || entryId.isBlank()) {
+			entryId = UUID.randomUUID().toString();
+		}
+		return entryId;
+	}
+
+	/**
+	 * Sets the identity during deserialization or migration.
+	 * @param entryId stable UUID; missing values are generated on first access
+	 */
+	public void setEntryId(String entryId) {
+		this.entryId = entryId;
 	}
 
 	/**

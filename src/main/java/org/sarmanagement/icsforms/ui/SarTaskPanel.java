@@ -1537,11 +1537,12 @@ public class SarTaskPanel extends JPanel {
 	}
 
 	/**
-	 * Copies clue follow-up fields untouched by the SAR debrief editor.
+	 * Copies stable identity and follow-up fields untouched by the debrief editor.
 	 * @param source source clue
 	 * @param target destination clue
 	 */
 	private static void copyFollowUp(ClueLogEntry source, ClueLogEntry target) {
+		target.setEntryId(source.getEntryId());
 		target.setDetectedBy(source.getDetectedBy());
 		target.setFollowUpAssignments(source.getFollowUpAssignments());
 		target.setFollowUpBriefed(source.isFollowUpBriefed());

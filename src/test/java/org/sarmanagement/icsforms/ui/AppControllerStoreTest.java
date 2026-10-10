@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
@@ -23,6 +26,74 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AppControllerStoreTest {
 	@TempDir
 	Path directory;
+
+	@Test
+	void startupPreferencesAndDisabledTrackerSurviveStoreAndNewPeriod() {
+		IncidentId id;
+		String clueId;
+		String actionId;
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			AppData initial = new AppData();
+			AppController controller = controller(store, store.create(initial), initial);
+			controller.newDocument(IapPhase.INITIAL_RESPONSE, IncidentMode.GENERIC, data -> {
+				data.setOpenActionTrackerEnabled(true);
+				data.setIcs233Portrait(true);
+				data.setClueLogIcs233Enabled(true);
+			});
+			AppData created = controller.getData();
+			id = controller.getActiveIncidentId();
+			AppData persisted = store.load(id);
+			assertTrue(persisted.isOpenActionTrackerEnabled());
+			assertTrue(persisted.isIcs233Portrait());
+			assertTrue(persisted.isClueLogIcs233Enabled());
+			assertEquals(IncidentMode.GENERIC, persisted.getIncidentMode());
+			assertEquals(IapPhase.INITIAL_RESPONSE, persisted.getIapPhase());
+
+			var action = new org.sarmanagement.icsforms.model.OpenActionItem();
+			action.setItem("Keep searching");
+			created.setOpenActionItems(java.util.List.of(action));
+			var clue = new org.sarmanagement.icsforms.model.ClueLogEntry();
+			clue.setFollowUpAssignments(java.util.List.of(
+					new org.sarmanagement.icsforms.model.PocAssignment("First",
+							java.time.LocalDateTime.parse("2026-01-01T12:00")),
+					new org.sarmanagement.icsforms.model.PocAssignment("Second",
+							java.time.LocalDateTime.parse("2026-01-02T12:00"))));
+			clue.setFollowUpBriefed(true);
+			clue.setFollowUpStatus("In progress");
+			created.setClueLogEntries(java.util.List.of(clue));
+			created.setOpenActionTrackerEnabled(false);
+			long revision = created.getRevision();
+			controller.save();
+			assertEquals(revision + 1, created.getRevision());
+			clueId = clue.getEntryId();
+			actionId = action.getEntryId();
+			controller.open(id);
+			assertFalse(controller.getData().isOpenActionTrackerEnabled());
+			var loadedClue = controller.getData().getClueLogEntries().get(0);
+			assertEquals(clueId, loadedClue.getEntryId());
+			assertEquals(2, loadedClue.getFollowUpAssignments().size());
+			assertEquals("First", loadedClue.getFollowUpAssignments().get(0).getAssignee());
+			assertEquals("Second", loadedClue.getFollowUpAssignedTo());
+			assertTrue(loadedClue.isFollowUpBriefed());
+			assertEquals("In progress", loadedClue.getFollowUpStatus());
+			controller.newOperationalPeriod();
+			controller.save();
+			assertEquals(revision + 2, controller.getData().getRevision());
+		}
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			AppData restored = store.load(id);
+			assertEquals(id.value(), restored.getIncidentId());
+			assertEquals(IncidentMode.GENERIC, restored.getIncidentMode());
+			assertFalse(restored.isOpenActionTrackerEnabled());
+			assertTrue(restored.isIcs233Portrait());
+			assertTrue(restored.isClueLogIcs233Enabled());
+			assertEquals(IapPhase.DURING_OP, restored.getIapPhase());
+			assertEquals(1, restored.getOperationalPeriodHistory().size());
+			assertEquals(actionId, restored.getOpenActionItems().get(0).getEntryId());
+			assertEquals("Keep searching", restored.getOpenActionItems().get(0).getItem());
+			assertTrue(restored.getClueLogEntries().isEmpty());
+		}
+	}
 
 	@Test
 	void createsAndDuplicatesIndependentIncidents() {

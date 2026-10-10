@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -374,7 +377,7 @@ public class AppController {
 
 	/**
 	 * Saves the active document immediately using the current authoritative
-	 * linked-field source.
+	 * linked-field source and cancels any pending autosave after success.
 	 *
 	 * @param source
 	 *            source tab for linked role values.
@@ -394,6 +397,7 @@ public class AppController {
 			}
 		}
 		dirty = false;
+		autosaveTimer.stop();
 	}
 
 	/**
@@ -561,9 +565,24 @@ public class AppController {
 	 */
 	public void newDocument(org.sarmanagement.icsforms.model.IapPhase phase,
 			org.sarmanagement.icsforms.model.IncidentMode mode) {
+		newDocument(phase, mode, created -> {
+		});
+	}
+
+	/**
+	 * Creates an incident with defaults and applies preferences before persisting it.
+	 *
+	 * @param phase initial IAP phase.
+	 * @param mode incident mode.
+	 * @param preferences settings to apply only to the new document.
+	 */
+	public void newDocument(org.sarmanagement.icsforms.model.IapPhase phase,
+			org.sarmanagement.icsforms.model.IncidentMode mode,
+			java.util.function.Consumer<AppData> preferences) {
 		AppData created = createDefaultData();
 		created.setIapPhase(phase);
 		created.setIncidentMode(mode);
+		preferences.accept(created);
 		createNewIncident(created);
 	}
 

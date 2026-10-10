@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.junit.jupiter.api.Test;
@@ -22,6 +25,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * inclusion rules and IAP page numbering.
  */
 class PdfExportServiceTest {
+
+	@Test
+	void exportCopyRetainsStoreMetadataAndTrackerPreferences() throws Exception {
+		AppData data = new AppData();
+		data.normalizeIdentity();
+		data.setRevision(12);
+		data.setOriginNodeId("origin");
+		data.setOpenActionTrackerEnabled(true);
+		data.setIcs233Portrait(true);
+		data.setClueLogIcs233Enabled(true);
+		PdfExportService service = new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
+				new SarTaskAssignmentPdfRenderer());
+		var method = PdfExportService.class.getDeclaredMethod("copyAppData", AppData.class);
+		method.setAccessible(true);
+		AppData copy = (AppData) method.invoke(service, data);
+		assertEquals(data.getIncidentId(), copy.getIncidentId());
+		assertEquals(data.getRevision(), copy.getRevision());
+		assertEquals(data.getCreatedAt(), copy.getCreatedAt());
+		assertEquals(data.getUpdatedAt(), copy.getUpdatedAt());
+		assertEquals(data.getOriginNodeId(), copy.getOriginNodeId());
+		assertTrue(copy.isOpenActionTrackerEnabled());
+		assertTrue(copy.isIcs233Portrait());
+		assertTrue(copy.isClueLogIcs233Enabled());
+	}
 
 	// -------------------------------------------------------------------------
 	// ics201HasContent
