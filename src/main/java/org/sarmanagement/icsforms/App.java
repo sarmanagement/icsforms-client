@@ -10,6 +10,8 @@ import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
 import org.sarmanagement.icsforms.pdf.ClueLogPdfRenderer;
+import org.sarmanagement.icsforms.pdf.ClueLogIcs233PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics233CgPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics201PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics203PdfRenderer;
@@ -107,7 +109,8 @@ public final class App {
 
 			PdfExportService exportService = new PdfExportService(new Ics201PdfRenderer(), new Ics202PdfRenderer(),
 					new Ics203PdfRenderer(), new Ics205aPdfRenderer(), new Ics207PdfRenderer(), new Ics204PdfRenderer(),
-					new Ics214PdfRenderer(), new SarTaskAssignmentPdfRenderer(), new ClueLogPdfRenderer());
+					new Ics214PdfRenderer(), new SarTaskAssignmentPdfRenderer(), new ClueLogPdfRenderer(),
+					new Ics233CgPdfRenderer(), new ClueLogIcs233PdfRenderer());
 			try {
 				MainFrame frame = new MainFrame(data, store, id, exportService, new IncidentValidator(), homeDir);
 				frame.setVisible(true);

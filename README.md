@@ -44,6 +44,7 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   - ICS 204
   - SAR Tasks (SAR mode only)
   - Clue Log (SAR mode only)
+  - Optional Incident Open Action Tracker (ICS 233-CG), available in both SAR and Generic modes as a separate tab.
   - T-Cards
   - Activity Logs (ICS 214)
 - SAR Task Assignment forms with debriefing and POD factoring support.
@@ -54,6 +55,33 @@ File → New always creates a separate incident. File → Duplicate Incident cop
 - **Export IAP Bundle** for a single merged PDF bundle of selected forms with a cover page.
 - **ICS 203 – Organization Assignment List** PDF from the Org Chart, alongside the existing ICS 207 chart. Select ICS 203 in **Export forms as PDF…** for an individual PDF or a combined IAP. Its optional **Include ICS 203 in IAP** setting defaults on, but a bundle includes it only when the Org Chart has entries, immediately after ICS 202. Unused positions remain blank labeled rows. When no Operations branches are entered, division/group rows come from ICS 204 and SAR task assignments. Additional entries continue on further pages; paper size, margins, and display timezone follow the shared PDF settings.
 - Validation that blocks export when required fields are missing.
+
+### Open actions and clue follow-up
+
+Enable the tracker under **Configuration → Open Action Tracker** to track incident
+actions independently of SAR tasks and clues. Disabling the tab does not delete
+its entries; incident-level actions also carry forward to subsequent operational
+periods. POC means *Point of Contact*: the person or section responsible for
+the action. Mark Briefed once that person has been informed of and acknowledged
+the assignment. Completed actions remain available in the Completed/All views;
+target dates highlight overdue actions in red and actions due within a day in yellow.
+The tracker is disabled by default for new incidents; startup only selects phase
+and mode.
+
+The clue details editor retains follow-up POC assignment history without changing
+the existing clue fields, duplicate detection, or activity-log synchronization.
+The standard clue-log PDF remains the default. In the **Export forms as PDF**
+dialog, select **Clue Log** and check **Export SAR clue log as adapted ICS 233**
+for a table containing every clue, ordered open, assigned, then followed
+up on. Its Item column uses Description, Location, and Found by headings, and its
+POC column includes assignment history. The regular tracker prints only the current POC.
+
+ICS 233-CG output supports portrait (default) or landscape on the configured paper
+size. Choose **ICS 233 orientation** in the PDF generation dialog for either
+individual PDFs or the combined IAP bundle. Each dialog starts with portrait and
+standard clue output, regardless of legacy saved export flags. These print-time
+choices are not saved with the incident. Uncheck **Clue Log** to omit clues
+entirely; the enabled incident tracker remains a separate export selection.
 
 ## Incident phases
 

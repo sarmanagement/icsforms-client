@@ -94,6 +94,19 @@ class PdfExportServiceTest {
 	}
 
 	@Test
+	void emptyPageNumberSelectionIncludesNoForms() {
+		AppData data = new AppData();
+		data.getOrganizationalChart().setSafetyOfficerName("A. Safety");
+		data.getOrganizationalChart().getAssignmentList().setIapPage("99");
+		data.setForm205aIapPage("88");
+		PdfExportService.assignIapPageNumbers(data, List.of(), true);
+		assertEquals("", data.getOrganizationalChart().getAssignmentList().getIapPage());
+		assertEquals("", data.getForm205aIapPage());
+		assertEquals("", data.getForm202().getIapPage());
+		assertEquals("", data.getForm207().getIapPage());
+	}
+
+	@Test
 	void deselectedOrganizationAssignmentListDoesNotConsumeIapPages() {
 		AppData data = new AppData();
 		data.getOrganizationalChart().setSafetyOfficerName("A. Safety");
@@ -116,6 +129,30 @@ class PdfExportServiceTest {
 		try (PDDocument pdf = Loader.loadPDF(service.exportIapBundle(data, outputDirectory).toFile())) {
 			return pdf.getNumberOfPages();
 		}
+	}
+
+	@Test
+	void exportCopyRetainsStoreMetadataAndTrackerPreferences() throws Exception {
+		AppData data = new AppData();
+		data.normalizeIdentity();
+		data.setRevision(12);
+		data.setOriginNodeId("origin");
+		data.setOpenActionTrackerEnabled(true);
+		data.setIcs233Portrait(true);
+		data.setClueLogIcs233Enabled(true);
+		PdfExportService service = new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
+				new SarTaskAssignmentPdfRenderer());
+		var method = PdfExportService.class.getDeclaredMethod("copyAppData", AppData.class);
+		method.setAccessible(true);
+		AppData copy = (AppData) method.invoke(service, data);
+		assertEquals(data.getIncidentId(), copy.getIncidentId());
+		assertEquals(data.getRevision(), copy.getRevision());
+		assertEquals(data.getCreatedAt(), copy.getCreatedAt());
+		assertEquals(data.getUpdatedAt(), copy.getUpdatedAt());
+		assertEquals(data.getOriginNodeId(), copy.getOriginNodeId());
+		assertTrue(copy.isOpenActionTrackerEnabled());
+		assertTrue(copy.isIcs233Portrait());
+		assertTrue(copy.isClueLogIcs233Enabled());
 	}
 
 	// -------------------------------------------------------------------------
