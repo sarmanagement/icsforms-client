@@ -35,6 +35,7 @@ class ClueLogHistoryPdfTest {
 		clue.setFollowUpAssignments(List.of(
 				new PocAssignment("Initial team", LocalDateTime.of(2026, 10, 10, 10, 0)),
 				new PocAssignment("Follow-up team", LocalDateTime.of(2026, 10, 10, 11, 0))));
+		clue.getFollowUpAssignments().add(null);
 		data.setClueLogEntries(List.of(clue));
 		Path pdf = output.resolve("clues.pdf");
 		new ClueLogPdfRenderer().render(data, pdf);

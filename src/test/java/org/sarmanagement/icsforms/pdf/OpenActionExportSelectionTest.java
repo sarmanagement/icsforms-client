@@ -93,7 +93,12 @@ class OpenActionExportSelectionTest {
 				new RecordingRenderer("Clue Log (ICS 233-CG adapted)", rendered));
 	}
 
-	/** Records calls without creating PDF files. */
+	/**
+	 * Records calls without creating PDF files.
+	 *
+	 * @param key form identifier.
+	 * @param rendered destination list for rendered keys.
+	 */
 	private record RecordingRenderer(String key, List<String> rendered) implements PdfFormRenderer {
 		/** {@inheritDoc} */
 		@Override

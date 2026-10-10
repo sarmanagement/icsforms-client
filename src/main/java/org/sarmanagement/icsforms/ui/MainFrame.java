@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityEventType;
@@ -62,6 +65,8 @@ public class MainFrame extends JFrame {
 	private static final String ACTIVITY_LOGS_GROUP = "Activity Logs";
 	/** Tab group for SAR-specific features hidden when mode is Generic. */
 	private static final String SAR_ONLY_GROUP = "SAR Features";
+	/** Independent regular action tracker tab group. */
+	private static final String ACTION_TRACKER_GROUP = "Open Action Tracker";
 	/** Tab group for T-Card (ICS 219) resource status tabs. */
 	private static final String T_CARDS_GROUP = "T-Cards";
 	/**
@@ -79,6 +84,7 @@ public class MainFrame extends JFrame {
 	private final List<Ics214Panel> ics214Panels = new ArrayList<>();
 	private final SarTaskPanel sarTaskPanel;
 	private final ClueLogPanel clueLogPanel;
+	private final OpenActionTrackerPanel openActionTrackerPanel;
 	private final TCardPanel tCardPanel;
 	private final JTabbedPane tabs = new JTabbedPane();
 	private final Map<Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
@@ -114,6 +120,7 @@ public class MainFrame extends JFrame {
 		this.ics204Panel = new Ics204Panel(controller);
 		this.sarTaskPanel = new SarTaskPanel(controller);
 		this.clueLogPanel = new ClueLogPanel(controller);
+		this.openActionTrackerPanel = new OpenActionTrackerPanel(controller);
 		this.tCardPanel = new TCardPanel(controller);
 		controller.setPersonnelCardCreator(tCardPanel::createPersonnelCardFromPicker);
 		ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
@@ -128,6 +135,7 @@ public class MainFrame extends JFrame {
 		groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
 		groupVisible.put(ICS_201_GROUP, controller.getIapPhase() == IapPhase.INITIAL_RESPONSE);
 		groupVisible.put(T_CARDS_GROUP, true);
+		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		registerTab("Shared", incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
 		registerTab("Org Chart", organizationalChartPanel, AppController.LinkSource.ORG_CHART, CORE_GROUP);
 		registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, ICS_201_GROUP);
@@ -135,6 +143,7 @@ public class MainFrame extends JFrame {
 		registerTab("ICS 204", ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
 		registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
 		registerTab("Clue Log", clueLogPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
+		registerTab("Open Action Tracker", openActionTrackerPanel, AppController.LinkSource.NONE, ACTION_TRACKER_GROUP);
 		registerTab("T-Cards", tCardPanel, AppController.LinkSource.NONE, T_CARDS_GROUP);
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setPreferredSize(new Dimension(1120, 820));
@@ -220,6 +229,7 @@ public class MainFrame extends JFrame {
 					};
 					controller.setIapPhase(phase);
 					controller.setIncidentMode(startup.getChosenMode());
+					startup.applyNewIncidentSettings(controller.getData());
 				}
 			}
 			refreshFromModel();
@@ -267,7 +277,8 @@ public class MainFrame extends JFrame {
 		for (Map.Entry<String, Boolean> entry : groupVisible.entrySet()) {
 			// CORE_GROUP is always visible; SAR_ONLY_GROUP is controlled exclusively by the
 			// Incident Mode menu (Configuration > Incident Mode) and must not appear here.
-			if (CORE_GROUP.equals(entry.getKey()) || SAR_ONLY_GROUP.equals(entry.getKey())) {
+			if (CORE_GROUP.equals(entry.getKey()) || SAR_ONLY_GROUP.equals(entry.getKey())
+					|| ACTION_TRACKER_GROUP.equals(entry.getKey())) {
 				continue;
 			}
 			JCheckBoxMenuItem item = new JCheckBoxMenuItem(entry.getKey(), entry.getValue());
@@ -301,15 +312,18 @@ public class MainFrame extends JFrame {
 
 		logsMenu.addMenuListener(new MenuListener() {
 			@Override
+			/** {@inheritDoc} */
 			public void menuSelected(MenuEvent event) {
 				rebuildLogsListMenu(logsListMenu);
 			}
 
 			@Override
+			/** {@inheritDoc} */
 			public void menuDeselected(MenuEvent event) {
 			}
 
 			@Override
+			/** {@inheritDoc} */
 			public void menuCanceled(MenuEvent event) {
 			}
 		});
@@ -334,6 +348,9 @@ public class MainFrame extends JFrame {
 		pdfExportSettingsItem.setMnemonic(KeyEvent.VK_P);
 		pdfExportSettingsItem.addActionListener(event -> openPdfExportSettingsDialog());
 		configMenu.add(pdfExportSettingsItem);
+		JMenuItem actionSettingsItem = new JMenuItem("Open Action Tracker / ICS 233…");
+		actionSettingsItem.addActionListener(event -> openActionSettingsDialog());
+		configMenu.add(actionSettingsItem);
 
 		JMenu modeMenu = new JMenu("Incident Mode");
 		modeMenu.setMnemonic(KeyEvent.VK_M);
@@ -450,6 +467,10 @@ public class MainFrame extends JFrame {
 		return bar;
 	}
 
+	/**
+	 * Offers registered form exports using the incident's persisted defaults.
+	 * @param defaultDirectory initial destination directory
+	 */
 	private void openFormsExportDialog(Path defaultDirectory) {
 		List<String> formKeys = controller.exportableFormKeys();
 		if (formKeys.isEmpty()) {
@@ -462,7 +483,11 @@ public class MainFrame extends JFrame {
 		JPanel checksPanel = new JPanel();
 		checksPanel.setLayout(new javax.swing.BoxLayout(checksPanel, javax.swing.BoxLayout.Y_AXIS));
 		for (String key : formKeys) {
-			javax.swing.JCheckBox check = new javax.swing.JCheckBox(exportFormDisplayLabel(key), true);
+			if (!isExportFormVisible(key, controller.getData())) {
+				continue;
+			}
+			javax.swing.JCheckBox check = new javax.swing.JCheckBox(exportFormDisplayLabel(key),
+					isExportFormSelectedByDefault(key, controller.getData()));
 			check.setOpaque(false);
 			selectors.put(key, check);
 			checksPanel.add(check);
@@ -513,6 +538,7 @@ public class MainFrame extends JFrame {
 		});
 	}
 
+	/** Edits paper size and page margins for PDF output. */
 	private void openPdfExportSettingsDialog() {
 		AppData data = controller.getData();
 		PdfLayoutSettings settings = data.getPdfLayoutSettings();
@@ -534,6 +560,36 @@ public class MainFrame extends JFrame {
 		refreshStatus();
 	}
 
+	/**
+	 * Returns whether an export choice is offered for the active incident.
+	 * @param formKey renderer key
+	 * @param data active incident preferences
+	 * @return false only for the disabled independent tracker
+	 */
+	static boolean isExportFormVisible(String formKey, AppData data) {
+		return !"ICS 233-CG".equals(formKey) || data.isOpenActionTrackerEnabled();
+	}
+
+	/**
+	 * Returns the persisted default selection without changing existing exports.
+	 * @param formKey renderer key
+	 * @param data active incident preferences
+	 * @return true when selected by default
+	 */
+	static boolean isExportFormSelectedByDefault(String formKey, AppData data) {
+		return switch (formKey) {
+			case "ICS 233-CG" -> data.isOpenActionTrackerEnabled();
+			case "Clue Log (ICS 233-CG adapted)" -> data.isClueLogIcs233Enabled();
+			case "Clue Log" -> !data.isClueLogIcs233Enabled();
+			default -> true;
+		};
+	}
+
+	/**
+	 * Returns a descriptive export checkbox label.
+	 * @param formKey renderer key
+	 * @return display label
+	 */
 	static String exportFormDisplayLabel(String formKey) {
 		return switch (formKey) {
 			case "ICS 201" -> "ICS 201 – Incident Briefing";
@@ -544,10 +600,16 @@ public class MainFrame extends JFrame {
 			case "ICS 214" -> "ICS 214 – Activity Log";
 			case "SAR Task Assignment" -> "SAR Task Assignment Forms";
 			case "Clue Log" -> "Clue Log";
+			case "ICS 233-CG" -> "ICS 233-CG – Open Action Tracker";
+			case "Clue Log (ICS 233-CG adapted)" -> "Clue Log – Adapted ICS 233-CG";
 			default -> formKey;
 		};
 	}
 
+	/**
+	 * Creates individual and combined PDF output choices.
+	 * @return mutually exclusive controls, defaulting to combined output
+	 */
 	static ExportModeControls createExportModeControls() {
 		JRadioButton individual = new JRadioButton("Export selected forms as individual PDFs");
 		JRadioButton combined = new JRadioButton("Export selected forms as combined IAP PDF", true);
@@ -562,16 +624,33 @@ public class MainFrame extends JFrame {
 		return new ExportModeControls(individual, combined, modePanel);
 	}
 
+	/**
+	 * Applies PDF page settings, converting inches to points.
+	 * @param data active incident
+	 * @param paperSize selected paper size
+	 * @param marginInches nonnegative page margin in inches
+	 */
 	static void applyPdfLayoutSettings(AppData data, PdfLayoutSettings.PaperSize paperSize, double marginInches) {
 		PdfLayoutSettings settings = data.getPdfLayoutSettings();
 		settings.setPaperSize(paperSize);
 		settings.setPageMarginPoints((float) (Math.max(0d, marginInches) * 72d));
 	}
 
+	/**
+	 * Converts PDF points to inches rounded to two decimal places.
+	 * @param points page margin in points
+	 * @return nonnegative inches
+	 */
 	static double pointsToInches(float points) {
 		return Math.round((Math.max(0f, points) / 72d) * 100d) / 100d;
 	}
 
+	/**
+	 * Output mode controls grouped for embedding in the export dialog.
+	 * @param individual individual file choice
+	 * @param combined combined IAP choice
+	 * @param panel container for both choices
+	 */
 	record ExportModeControls(JRadioButton individual, JRadioButton combined, JPanel panel) {
 	}
 
@@ -600,6 +679,10 @@ public class MainFrame extends JFrame {
 		});
 	}
 
+	/**
+	 * Flushes all editor fields and synchronizes linked document data.
+	 * @param source editor that initiated synchronization
+	 */
 	private void pushToModel(AppController.LinkSource source) {
 		incidentContextPanel.pushToModel();
 		organizationalChartPanel.pushToModel();
@@ -615,6 +698,10 @@ public class MainFrame extends JFrame {
 		controller.markDirty(source);
 	}
 
+	/**
+	 * Ensures the active document has its initial activity log.
+	 * @param data active incident
+	 */
 	private void ensureLogs(AppData data) {
 		if (data.getActivityLogs().isEmpty() && data.getIapPhase() != IapPhase.PRE_OP) {
 			Ics214Form form = new Ics214Form();
@@ -625,6 +712,7 @@ public class MainFrame extends JFrame {
 		}
 	}
 
+	/** Recreates activity-log editors for the current incident's logs. */
 	private void rebuildLogTabs() {
 		rebuildingTabs = true;
 		try {
@@ -647,6 +735,18 @@ public class MainFrame extends JFrame {
 		}
 	}
 
+	/** Configures the independent tracker and both ICS 233 output layouts. */
+	private void openActionSettingsDialog() {
+		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		ActionTrackerSettingsPanel settings = new ActionTrackerSettingsPanel(controller.getData());
+		if (UiSupport.showResizableConfirmDialog(this, "Open Action Tracker / ICS 233", settings,
+				new Dimension(620, 300))) {
+			settings.applyTo(controller.getData());
+			controller.markDirty();
+			refreshFromModel();
+		}
+	}
+
 	/** Reloads panel state from the active incident document. */
 	private void refreshFromModel() {
 		applyConfiguredTimeZone();
@@ -661,9 +761,11 @@ public class MainFrame extends JFrame {
 		rebuildLogTabs();
 		sarTaskPanel.refreshFromModel();
 		clueLogPanel.refreshFromModel();
+		openActionTrackerPanel.refreshFromModel();
 		tCardPanel.refreshFromModel();
 		// Keep SAR-only tabs visible only in SAR mode.
 		groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
+		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		// Reset ICS 201 group visibility to the phase-based default only when the phase
 		// changes
 		// (e.g. on document load or explicit phase switch). User toggles via the View
@@ -680,6 +782,7 @@ public class MainFrame extends JFrame {
 		refreshStatus();
 	}
 
+	/** Applies the active incident display timezone, keeping stored dates in UTC. */
 	private void applyConfiguredTimeZone() {
 		AppData data = controller.getData();
 		if (data.isUseSystemTimeZone()) {
@@ -735,10 +838,16 @@ public class MainFrame extends JFrame {
 				+ ")";
 	}
 
+	/** Rebuilds visible tabs while retaining the current selection. */
 	private void rebuildVisibleTabs() {
 		rebuildVisibleTabs(tabs.getSelectedComponent(), selectedLogIndex(tabs.getSelectedComponent()));
 	}
 
+	/**
+	 * Rebuilds the tab strip while retaining the selected editor where possible.
+	 * @param preferredComponent previously selected editor
+	 * @param preferredLogIndex previously selected activity log index
+	 */
 	private void rebuildVisibleTabs(Component preferredComponent, int preferredLogIndex) {
 		rebuildingTabs = true;
 		try {
@@ -752,6 +861,7 @@ public class MainFrame extends JFrame {
 			// checks
 			// group visibility and skips them automatically in GENERIC mode.
 			addVisibleTab(sarTaskPanel);
+			addVisibleTab(openActionTrackerPanel);
 			// ICS-214 activity log tabs are to the right of SAR Tasks.
 			if (isGroupVisible(ACTIVITY_LOGS_GROUP)) {
 				for (Ics214Panel panel : ics214Panels) {
@@ -772,6 +882,12 @@ public class MainFrame extends JFrame {
 		lastSelectedTabIndex = tabs.getSelectedIndex();
 	}
 
+	/**
+	 * Resolves the editor to select after rebuilding tabs.
+	 * @param preferredComponent previously selected editor
+	 * @param preferredLogIndex previously selected activity log index
+	 * @return available editor, or null when none exists
+	 */
 	private Component resolveSelection(Component preferredComponent, int preferredLogIndex) {
 		if (preferredLogIndex >= 0 && preferredLogIndex < ics214Panels.size() && isGroupVisible(ACTIVITY_LOGS_GROUP)) {
 			return ics214Panels.get(preferredLogIndex);
@@ -782,6 +898,10 @@ public class MainFrame extends JFrame {
 		return incidentContextPanel;
 	}
 
+	/**
+	 * Adds an editor only when its group is visible.
+	 * @param component registered editor
+	 */
 	private void addVisibleTab(Component component) {
 		String group = tabGroups.getOrDefault(component, CORE_GROUP);
 		if (!CORE_GROUP.equals(group) && !isGroupVisible(group)) {
@@ -790,16 +910,33 @@ public class MainFrame extends JFrame {
 		tabs.addTab(tabTitles.getOrDefault(component, ""), component);
 	}
 
+	/**
+	 * Returns the current visibility of a tab group.
+	 * @param group group identifier
+	 * @return visibility, defaulting to true
+	 */
 	private boolean isGroupVisible(String group) {
 		return groupVisible.getOrDefault(group, true);
 	}
 
+	/**
+	 * Records an editor's title, synchronization source, and visibility group.
+	 * @param title tab title
+	 * @param component editor component
+	 * @param source synchronization source
+	 * @param group visibility group
+	 */
 	private void registerTab(String title, Component component, AppController.LinkSource source, String group) {
 		tabSources.put(component, source);
 		tabGroups.put(component, group);
 		tabTitles.put(component, title);
 	}
 
+	/**
+	 * Resolves a visible tab to its linked-data synchronization source.
+	 * @param tabIndex visible tab index
+	 * @return source, or NONE when unavailable
+	 */
 	private AppController.LinkSource linkSourceForTab(int tabIndex) {
 		if (tabIndex < 0 || tabIndex >= tabs.getTabCount()) {
 			return AppController.LinkSource.NONE;
@@ -879,6 +1016,7 @@ public class MainFrame extends JFrame {
 		}
 	}
 
+	/** Opens the incident's activity-event type editor. */
 	private void manageEventTypes() {
 		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
 		AppData data = controller.getData();
@@ -952,6 +1090,10 @@ public class MainFrame extends JFrame {
 		refreshStatus();
 	}
 
+	/**
+	 * Opens or creates an activity log for an assigned resource.
+	 * @param resource resource requesting a log
+	 */
 	private void addOrOpenLog214ForResource(ResourceAssignment resource) {
 		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
 		AppData data = controller.getData();
@@ -991,10 +1133,19 @@ public class MainFrame extends JFrame {
 		refreshStatus();
 	}
 
+	/**
+	 * Opens the SAR task linked to an assignment.
+	 * @param assignmentId stable assignment identifier
+	 */
 	private void openSarTaskEditorForAssignment(String assignmentId) {
 		openSarTaskEditorForAssignment(assignmentId, true);
 	}
 
+	/**
+	 * Opens an assignment's SAR editor, optionally selecting the SAR tab.
+	 * @param assignmentId stable assignment identifier
+	 * @param switchToSarTab true to select the SAR tab
+	 */
 	private void openSarTaskEditorForAssignment(String assignmentId, boolean switchToSarTab) {
 		if (assignmentId == null || assignmentId.isBlank()) {
 			return;
@@ -1019,6 +1170,10 @@ public class MainFrame extends JFrame {
 		}
 	}
 
+	/**
+	 * Opens the ICS 204 editor for a linked assignment.
+	 * @param assignmentId stable assignment identifier
+	 */
 	private void openIcs204EditorForAssignment(String assignmentId) {
 		if (assignmentId == null || assignmentId.isBlank()) {
 			return;
@@ -1030,6 +1185,7 @@ public class MainFrame extends JFrame {
 		}
 	}
 
+	/** Creates an activity log using the selected scope and linked document. */
 	private void addLog() {
 		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
 		AppData data = controller.getData();
@@ -1068,6 +1224,7 @@ public class MainFrame extends JFrame {
 		refreshStatus();
 	}
 
+	/** Removes the selected activity log after operator confirmation. */
 	private void removeCurrentLog() {
 		if (!(tabs.getSelectedComponent() instanceof Ics214Panel selectedPanel)) {
 			JOptionPane.showMessageDialog(this, "Select an ICS 214 activity log tab first.", "Cannot Remove",
@@ -1106,6 +1263,10 @@ public class MainFrame extends JFrame {
 		refreshStatus();
 	}
 
+	/**
+	 * Refreshes navigation choices for the current activity logs.
+	 * @param logsListMenu navigation menu to rebuild
+	 */
 	private void rebuildLogsListMenu(JMenu logsListMenu) {
 		logsListMenu.removeAll();
 		ButtonGroup group = new ButtonGroup();
@@ -1127,6 +1288,11 @@ public class MainFrame extends JFrame {
 		logsListMenu.setEnabled(!logs.isEmpty());
 	}
 
+	/**
+	 * Resolves an editor to an activity-log index.
+	 * @param component selected editor
+	 * @return log index, or -1 when not an activity log
+	 */
 	private int selectedLogIndex(Component component) {
 		if (component instanceof Ics214Panel panel) {
 			return ics214Panels.indexOf(panel);
@@ -1134,6 +1300,11 @@ public class MainFrame extends JFrame {
 		return -1;
 	}
 
+	/**
+	 * Builds a descriptive activity-log navigation label.
+	 * @param form activity log
+	 * @return navigation label
+	 */
 	private String logMenuLabel(Ics214Form form) {
 		String linked = resolveLinkedDocumentLabel(form, controller.getData());
 		if (linked.isBlank()) {
@@ -1142,6 +1313,12 @@ public class MainFrame extends JFrame {
 		return form.getLogScope().getLabel() + " – " + linked;
 	}
 
+	/**
+	 * Builds a compact tab title using the log's scope and linkage.
+	 * @param form activity log
+	 * @param data active incident
+	 * @return compact title
+	 */
 	private static String shortLogTabTitle(Ics214Form form, AppData data) {
 		// For resource-linked logs (TASK_ASSIGNMENT), identify the tab by the resource
 		// name (section 3)
@@ -1189,6 +1366,12 @@ public class MainFrame extends JFrame {
 		return "";
 	}
 
+	/**
+	 * Shortens display text to a bounded length.
+	 * @param value source text
+	 * @param maxLength maximum display length
+	 * @return shortened text
+	 */
 	private static String truncate(String value, int maxLength) {
 		if (value == null) {
 			return "";
@@ -1197,6 +1380,11 @@ public class MainFrame extends JFrame {
 		return trimmed.length() <= maxLength ? trimmed : trimmed.substring(0, maxLength);
 	}
 
+	/**
+	 * Normalizes optional text for display.
+	 * @param value nullable text
+	 * @return nonnull display text
+	 */
 	private static String safe(String value) {
 		return value == null ? "" : value;
 	}
@@ -1231,6 +1419,7 @@ public class MainFrame extends JFrame {
 		}
 
 		@Override
+		/** {@inheritDoc} */
 		public String toString() {
 			return label;
 		}
@@ -1263,10 +1452,22 @@ public class MainFrame extends JFrame {
 		return docs;
 	}
 
+	/**
+	 * Creates a linkable ICS 204 document choice.
+	 * @param form assignment list
+	 * @param ordinal one-based list number
+	 * @return document choice
+	 */
 	private static AssociableDocument labelFor204(Ics204Form form, int ordinal) {
 		return AssociableDocument.forIcs204(labelStringFor204(form, ordinal), form.getFormId());
 	}
 
+	/**
+	 * Builds an ICS 204 choice label from context or list number.
+	 * @param form assignment list
+	 * @param ordinal one-based list number
+	 * @return display label
+	 */
 	private static String labelStringFor204(Ics204Form form, int ordinal) {
 		String context = form.getSelectedContextValue();
 		String heading = form.getSelectedContextHeading();
@@ -1279,10 +1480,20 @@ public class MainFrame extends JFrame {
 		return "ICS 204 #" + ordinal;
 	}
 
+	/**
+	 * Creates a linkable SAR assignment choice.
+	 * @param assignment SAR task
+	 * @return document choice
+	 */
 	private static AssociableDocument labelForAssignment(SarTaskAssignment assignment) {
 		return AssociableDocument.forSarTask(labelStringForAssignment(assignment), assignment.getAssignmentId());
 	}
 
+	/**
+	 * Builds a SAR choice label from its identifier and resource.
+	 * @param assignment SAR task
+	 * @return display label
+	 */
 	private static String labelStringForAssignment(SarTaskAssignment assignment) {
 		String id = assignment.getAssignmentId();
 		String resource = assignment.getResourceIdentifier();

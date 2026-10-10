@@ -142,7 +142,7 @@ final class Ics233PdfLayout extends AbstractPdfRenderer {
 							Math.min(offset + take, cell.size()))));
 				}
 				if (offset > 0 && slice.get(0).isEmpty()) {
-					slice.set(0, cells.get(0));
+					slice.set(0, cells.get(0).subList(0, Math.min(take, cells.get(0).size())));
 				}
 				page.add(new Segment(slice, take));
 				remaining -= take * LEADING + 2f * PADDING;

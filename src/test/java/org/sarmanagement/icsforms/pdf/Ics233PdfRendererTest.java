@@ -173,6 +173,9 @@ class Ics233PdfRendererTest {
 		assertTrue(pdf.cellTexts().get(5).replaceAll("\\s+", "")
 				.contains(longText("Status").replaceAll("\\s+", "")));
 		assertTrue(itemText.contains("FINAL_ACTION_SENTINEL"));
+		for (String page : pdf.pageTexts()) {
+			assertTrue(normalized(page).contains("17"));
+		}
 		assertRepeatedHeaders(pdf);
 	}
 
@@ -199,6 +202,9 @@ class Ics233PdfRendererTest {
 		String pocs = pdf.cellTexts().get(2).replaceAll("\\s+", "");
 		for (int index = 0; index < 100; index++) {
 			assertTrue(pocs.contains("Assignee" + index));
+		}
+		for (String page : pdf.pageTexts()) {
+			assertTrue(normalized(page).contains("ICS 233-CG INCIDENT OPEN ACTION TRACKER Adapted as a Clue Log"));
 		}
 		assertRepeatedHeaders(pdf);
 	}

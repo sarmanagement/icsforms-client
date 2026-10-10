@@ -54,7 +54,8 @@ This project is open source under the Apache 2.0 license. Contributions are welc
 
 ### Open actions and clue follow-up
 
-Enable **Open Action Tracker (ICS 233-CG)** in Configuration to track incident
+Enable the tracker under **Configuration → Open Action Tracker / ICS 233** (or
+when creating a new incident) to track incident
 actions independently of SAR tasks and clues. Disabling the tab does not delete
 its entries; incident-level actions also carry forward to subsequent operational
 periods. POC means *Point of Contact*: the person or section responsible for

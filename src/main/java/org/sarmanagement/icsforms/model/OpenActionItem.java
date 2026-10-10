@@ -64,7 +64,7 @@ public class OpenActionItem {
 	}
 
 	/**
-	 * Sets the current point of contact without keeping history.
+	 * Sets the current point of contact without history or persistence side effects.
 	 * @param poc responsible person or resource; null becomes empty
 	 */
 	public void setPoc(String poc) {
@@ -152,11 +152,11 @@ public class OpenActionItem {
 	}
 
 	/**
-	 * Returns whether an actual completion time has been recorded.
+	 * Returns whether an actual completion time or completed status is recorded.
 	 * @return true when completed
 	 */
 	@JsonIgnore
 	public boolean isCompleted() {
-		return actualDate != null;
+		return actualDate != null || "completed".equalsIgnoreCase(status.trim());
 	}
 }

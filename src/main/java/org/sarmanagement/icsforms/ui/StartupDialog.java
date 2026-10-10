@@ -1,5 +1,9 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentMode;
 
 import javax.swing.BorderFactory;
@@ -61,6 +65,7 @@ public class StartupDialog extends JDialog {
 	private IncidentMode chosenMode = IncidentMode.SAR;
 	private Path chosenPath;
 	private final boolean exitOnClose;
+	private final ActionTrackerSettingsPanel actionSettings = new ActionTrackerSettingsPanel(new AppData());
 
 	/**
 	 * Creates the startup dialog.
@@ -83,7 +88,12 @@ public class StartupDialog extends JDialog {
 		content.setBorder(BorderFactory.createEmptyBorder(16, 16, 12, 16));
 
 		content.add(buildActionPanel(defaultDirectory), BorderLayout.CENTER);
-		content.add(buildModePanel(), BorderLayout.SOUTH);
+		JPanel preferences = new JPanel(new BorderLayout());
+		preferences.add(buildModePanel(), BorderLayout.NORTH);
+		preferences.add(actionSettings, BorderLayout.CENTER);
+		preferences.add(new JLabel("Tracker/export settings apply only to new incidents; opening retains saved settings."),
+				BorderLayout.SOUTH);
+		content.add(preferences, BorderLayout.SOUTH);
 
 		setContentPane(content);
 		pack();
@@ -94,6 +104,7 @@ public class StartupDialog extends JDialog {
 		// startup.
 		addWindowListener(new java.awt.event.WindowAdapter() {
 			@Override
+			/** {@inheritDoc} */
 			public void windowClosing(java.awt.event.WindowEvent event) {
 				if (exitOnClose) {
 					System.exit(0);
@@ -131,8 +142,21 @@ public class StartupDialog extends JDialog {
 		return chosenPath;
 	}
 
+	/**
+	 * Applies new-incident tracker preferences; callers must not use this on opens.
+	 * @param data newly created incident
+	 */
+	public void applyNewIncidentSettings(AppData data) {
+		actionSettings.applyTo(data);
+	}
+
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Builds incident creation and opening buttons.
+	 * @param defaultDirectory incident picker directory
+	 * @return action panel
+	 */
 	private JPanel buildActionPanel(Path defaultDirectory) {
 		JPanel panel = new JPanel();
 		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -173,6 +197,14 @@ public class StartupDialog extends JDialog {
 		return panel;
 	}
 
+	/**
+	 * Builds one startup action button and explanation.
+	 * @param title button label
+	 * @param description explanatory HTML
+	 * @param action startup action
+	 * @param defaultDirectory incident picker directory
+	 * @return action row
+	 */
 	private JPanel buildActionRow(String title, String description, StartupAction action, Path defaultDirectory) {
 		JButton button = new JButton(title);
 		button.setAlignmentX(LEFT_ALIGNMENT);
@@ -200,12 +232,21 @@ public class StartupDialog extends JDialog {
 		return row;
 	}
 
+	/**
+	 * Opens the incident picker.
+	 * @param defaultDirectory initial directory
+	 * @return selected path, or null when cancelled
+	 */
 	private Path pickIncident(Path defaultDirectory) {
 		IncidentPickerDialog picker = new IncidentPickerDialog(this, defaultDirectory);
 		picker.setVisible(true);
 		return picker.getChosenPath();
 	}
 
+	/**
+	 * Builds independent SAR and Generic mode controls.
+	 * @return mode panel
+	 */
 	private JPanel buildModePanel() {
 		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
 		panel.setBorder(BorderFactory.createTitledBorder("Incident mode"));

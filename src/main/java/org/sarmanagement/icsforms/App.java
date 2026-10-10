@@ -81,6 +81,7 @@ public final class App {
 						default -> IapPhase.PRE_OP;
 					};
 					data.setIapPhase(phase);
+					startup.applyNewIncidentSettings(data);
 				}
 			}
 

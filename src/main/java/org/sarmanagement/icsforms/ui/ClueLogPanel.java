@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityLogScope;
@@ -44,14 +47,60 @@ public class ClueLogPanel extends JPanel {
 	private static final String DETECTING_TASK_OTHER = "Other";
 	private final AppController controller;
 	private final ClueLogTableModel tableModel = new ClueLogTableModel();
-	private final JTable table = new JTable(tableModel);
+	private final JTable table = new JTable(tableModel) {
+		/**
+		 * Highlights outstanding follow-up targets in the shared clue log.
+		 * @param renderer cell renderer
+		 * @param row view row
+		 * @param column view column
+		 * @return rendered component
+		 */
+		@Override
+		public java.awt.Component prepareRenderer(javax.swing.table.TableCellRenderer renderer, int row, int column) {
+			java.awt.Component component = super.prepareRenderer(renderer, row, column);
+			if (!isRowSelected(row)) {
+				component.setBackground(followUpTargetColor(tableModel.getRows().get(convertRowIndexToModel(row)),
+						getBackground()));
+			}
+			return component;
+		}
+	};
 
+	/**
+	 * Returns overdue red or due-within-24-hours yellow for outstanding follow-up.
+	 * @param clue clue to inspect
+	 * @param normal normal table background
+	 * @return highlight color, or normal when not due
+	 */
+	static java.awt.Color followUpTargetColor(ClueLogEntry clue, java.awt.Color normal) {
+		String status = clue.getFollowUpStatus().trim();
+		if (clue.getFollowUpCompletedDate() != null || "completed".equalsIgnoreCase(status)
+				|| "followed up".equalsIgnoreCase(status) || clue.getFollowUpTargetDate() == null) {
+			return normal;
+		}
+		LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
+		if (clue.getFollowUpTargetDate().isBefore(now)) {
+			return new java.awt.Color(255, 225, 210);
+		}
+		return clue.getFollowUpTargetDate().isAfter(now.plusHours(24))
+				? normal : new java.awt.Color(255, 245, 180);
+	}
+
+	/**
+	 * Creates the shared clue editor.
+	 * @param controller incident controller
+	 */
 	public ClueLogPanel(AppController controller) {
 		super(new BorderLayout());
 		this.controller = controller;
 
 		table.setFillsViewportHeight(true);
 		table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		tableModel.addTableModelListener(event -> {
+			if (event.getColumn() != javax.swing.event.TableModelEvent.ALL_COLUMNS) {
+				controller.markDirty();
+			}
+		});
 		setBorder(BorderFactory.createTitledBorder("Clue Log"));
 		add(new JScrollPane(table), BorderLayout.CENTER);
 
@@ -65,6 +114,10 @@ public class ClueLogPanel extends JPanel {
 		});
 		rowMenu.add(detailsItem);
 		table.addMouseListener(new MouseAdapter() {
+			/**
+			 * Opens the context menu for a clue row.
+			 * @param e mouse event
+			 */
 			private void maybeShow(MouseEvent e) {
 				if (e.isPopupTrigger()) {
 					int row = table.rowAtPoint(e.getPoint());
@@ -75,14 +128,17 @@ public class ClueLogPanel extends JPanel {
 				}
 			}
 			@Override
+			/** {@inheritDoc} */
 			public void mousePressed(MouseEvent e) {
 				maybeShow(e);
 			}
 			@Override
+			/** {@inheritDoc} */
 			public void mouseReleased(MouseEvent e) {
 				maybeShow(e);
 			}
 			@Override
+			/** {@inheritDoc} */
 			public void mouseClicked(MouseEvent e) {
 				if (e.getClickCount() == 2 && e.getButton() == MouseEvent.BUTTON1) {
 					int row = table.rowAtPoint(e.getPoint());
@@ -210,6 +266,7 @@ public class ClueLogPanel extends JPanel {
 
 	/**
 	 * Shows an editable details dialog for the clue at the given table row.
+	 * @param row clue row index
 	 */
 	private void showClueDetails(int row) {
 		ClueLogEntry clue = tableModel.getRows().get(row);
@@ -239,6 +296,7 @@ public class ClueLogPanel extends JPanel {
 		JCheckBox dupCheck = new JCheckBox("Possible duplicate", clue.isPossibleDuplicate());
 		JTextArea followUpArea = UiSupport.textArea(2);
 		followUpArea.setText(clue.getFollowUp());
+		ClueFollowUpPanel followUpDetails = new ClueFollowUpPanel(clue);
 
 		int r = 0;
 		UiSupport.addRow(form, r++, "Task", taskField);
@@ -248,12 +306,20 @@ public class ClueLogPanel extends JPanel {
 		UiSupport.addRow(form, r++, "Description", new JScrollPane(descArea));
 		UiSupport.addRow(form, r++, "Immediate action taken", new JScrollPane(actionArea));
 		UiSupport.addRow(form, r++, "", dupCheck);
-		UiSupport.addRow(form, r, "Follow up", new JScrollPane(followUpArea));
+		UiSupport.addRow(form, r++, "Follow up", new JScrollPane(followUpArea));
+		UiSupport.addRow(form, r, "Follow-up tracking", followUpDetails);
 
 		JScrollPane scrollPane = new JScrollPane(form);
 		scrollPane.setBorder(BorderFactory.createEmptyBorder());
-		boolean ok = UiSupport.showResizableConfirmDialog(this, "Clue Details", scrollPane, new Dimension(640, 470));
-		if (ok) {
+		while (UiSupport.showResizableConfirmDialog(this, "Clue Details", scrollPane, new Dimension(740, 700))) {
+			try {
+				dateField.commitEdit();
+				followUpDetails.saveTo(clue);
+			} catch (java.text.ParseException exception) {
+				JOptionPane.showMessageDialog(this, "Enter valid dates or clear their Set checkboxes.",
+						"Invalid Date", JOptionPane.ERROR_MESSAGE);
+				continue;
+			}
 			clue.setDateTimeCollected(AppController.toLocalDateTime((Date) dateField.getValue()));
 			clue.setDetectedBy(detectedByField.getText().trim());
 			clue.setLocation(locationField.getText().trim());
@@ -263,6 +329,7 @@ public class ClueLogPanel extends JPanel {
 			clue.setFollowUp(followUpArea.getText().trim());
 			tableModel.fireTableRowsUpdated(row, row);
 			controller.markDirty();
+			return;
 		}
 	}
 
@@ -272,6 +339,7 @@ public class ClueLogPanel extends JPanel {
 	 * linked ICS 214 form names (i.e. the resource identifier), not the assignment
 	 * description text. Falls back to {@link UiSupport#taskLabel} when no linked
 	 * 214 forms exist.
+	 * @return assignment labels
 	 */
 	private Map<String, String> buildTaskLabelMap() {
 		Map<String, String> map = new HashMap<>();
@@ -305,10 +373,12 @@ public class ClueLogPanel extends JPanel {
 		return map;
 	}
 
+	/** Refreshes shared clue rows and linked task labels. */
 	public void refreshFromModel() {
 		tableModel.setRows(controller.getData().getClueLogEntries(), buildTaskLabelMap());
 	}
 
+	/** Saves all clue rows, including follow-up history. */
 	public void pushToModel() {
 		controller.getData().setClueLogEntries(tableModel.getRows());
 	}
@@ -382,10 +452,16 @@ public class ClueLogPanel extends JPanel {
 		controller.markDirty();
 	}
 
+	/**
+	 * Escapes text used in duplicate-resolution HTML.
+	 * @param s text, or null
+	 * @return escaped text
+	 */
 	private static String escape(String s) {
 		return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 
+	/** Shared clue columns retaining the original in-table editing workflow. */
 	private static class ClueLogTableModel extends AbstractTableModel {
 		private final String[] columns = {"Task", "Detected By", "Date/Time Collected", "Location", "Description",
 				"Immediate Action", "Poss. Dup", "Follow Up"};
@@ -396,56 +472,80 @@ public class ClueLogPanel extends JPanel {
 		 */
 		private Map<String, String> taskLabelById = new HashMap<>();
 
+		/**
+		 * Sets rows and their task display labels.
+		 * @param rows clue rows
+		 * @param taskLabelById task labels
+		 */
 		void setRows(List<ClueLogEntry> rows, Map<String, String> taskLabelById) {
 			this.rows = rows == null ? new ArrayList<>() : rows;
 			this.taskLabelById = taskLabelById == null ? new HashMap<>() : taskLabelById;
 			fireTableDataChanged();
 		}
 
-		/** @deprecated kept for callers that don't have task context. */
+		/**
+		 * Sets rows without task context.
+		 * @param rows clue rows
+		 * @deprecated kept for callers that don't have task context
+		 */
 		void setRows(List<ClueLogEntry> rows) {
 			setRows(rows, null);
 		}
 
+		/**
+		 * Returns all clue rows.
+		 * @return clue rows
+		 */
 		List<ClueLogEntry> getRows() {
 			return rows;
 		}
 
+		/**
+		 * Adds a clue.
+		 * @param entry clue to add
+		 */
 		void addRow(ClueLogEntry entry) {
 			rows.add(entry);
 			fireTableRowsInserted(rows.size() - 1, rows.size() - 1);
 		}
 
+		/** Adds an empty clue. */
 		void addRow() {
 			rows.add(new ClueLogEntry());
 			fireTableRowsInserted(rows.size() - 1, rows.size() - 1);
 		}
 
 		@Override
+		/** {@inheritDoc} */
 		public int getRowCount() {
 			return rows.size();
 		}
 		@Override
+		/** {@inheritDoc} */
 		public int getColumnCount() {
 			return columns.length;
 		}
 		@Override
+		/** {@inheritDoc} */
 		public String getColumnName(int column) {
 			return columns[column];
 		}
 
 		@Override
+		/** {@inheritDoc} */
 		public boolean isCellEditable(int rowIndex, int columnIndex) {
 			// Col 0 (Task) is read-only — derived from assignmentId.
 			return columnIndex != 0;
 		}
 
 		@Override
+		/** {@inheritDoc} */
 		public Class<?> getColumnClass(int columnIndex) {
 			return columnIndex == 6 ? Boolean.class : String.class;
 		}
 
 		@Override
+		/** {@inheritDoc} */
 		public Object getValueAt(int rowIndex, int columnIndex) {
 			ClueLogEntry row = rows.get(rowIndex);
 			return switch (columnIndex) {
@@ -468,6 +568,7 @@ public class ClueLogPanel extends JPanel {
 		}
 
 		@Override
+		/** {@inheritDoc} */
 		public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
 			ClueLogEntry row = rows.get(rowIndex);
 			switch (columnIndex) {

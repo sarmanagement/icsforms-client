@@ -222,6 +222,8 @@ public class AppData {
 	 * activity logs are cleared so that the new period starts fresh. The IAP phase
 	 * is set to {@link IapPhase#DURING_OP}. The incident context, incident mode,
 	 * and activity event types are retained.
+	 * Incident-level open action items and tracker/export preferences are also
+	 * retained so unfinished IC/UC work carries into the next operational period.
 	 * </p>
 	 */
 	public void advanceToNewOperationalPeriod() {
@@ -266,18 +268,34 @@ public class AppData {
 		this.schemaVersion = schemaVersion;
 	}
 
+	/**
+	 * Returns whether timestamps display in the system timezone.
+	 * @return true for system-local display
+	 */
 	public boolean isUseSystemTimeZone() {
 		return useSystemTimeZone;
 	}
 
+	/**
+	 * Chooses system-local or explicitly configured timestamp display.
+	 * @param useSystemTimeZone true for system-local display
+	 */
 	public void setUseSystemTimeZone(boolean useSystemTimeZone) {
 		this.useSystemTimeZone = useSystemTimeZone;
 	}
 
+	/**
+	 * Returns the explicitly configured IANA timezone identifier.
+	 * @return timezone identifier
+	 */
 	public String getConfiguredTimeZoneId() {
 		return configuredTimeZoneId;
 	}
 
+	/**
+	 * Sets the explicit display timezone without changing persisted UTC dates.
+	 * @param configuredTimeZoneId IANA identifier; null becomes UTC
+	 */
 	public void setConfiguredTimeZoneId(String configuredTimeZoneId) {
 		this.configuredTimeZoneId = configuredTimeZoneId == null || configuredTimeZoneId.isBlank()
 				? "UTC"

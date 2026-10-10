@@ -83,6 +83,9 @@ public class ClueLogPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 				block.add("Follow-up:         " + safe(e.getFollowUp()));
 			}
 			for (PocAssignment assignment : e.getFollowUpAssignments()) {
+				if (assignment == null) {
+					continue;
+				}
 				block.add("Follow-up POC:     " + assignment.getAssignee()
 						+ (assignment.getAssignedAt() == null ? ""
 								: " (" + formatPdfDateTime(data, assignment.getAssignedAt()) + ")"));

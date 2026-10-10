@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ClueLogEntry;
@@ -1500,6 +1503,13 @@ public class SarTaskPanel extends JPanel {
 		return communications;
 	}
 
+	/**
+	 * Builds clue records from debrief rows while retaining follow-up metadata.
+	 * @param entries edited clue rows
+	 * @param row linked SAR assignment
+	 * @param detectingTask display label of the detecting task
+	 * @return updated clue records
+	 */
 	private static List<ClueLogEntry> clueValuesFrom(List<ClueLogEntry> entries, SarTaskAssignment row,
 			String detectingTask) {
 		List<ClueLogEntry> clues = new ArrayList<>();
@@ -1520,9 +1530,24 @@ public class SarTaskPanel extends JPanel {
 			clue.setImmediateAction(entry.getImmediateAction().trim());
 			clue.setPossibleDuplicate(entry.isPossibleDuplicate());
 			clue.setFollowUp(entry.getFollowUp().trim());
+			copyFollowUp(entry, clue);
 			clues.add(clue);
 		}
 		return clues;
+	}
+
+	/**
+	 * Copies clue follow-up fields untouched by the SAR debrief editor.
+	 * @param source source clue
+	 * @param target destination clue
+	 */
+	private static void copyFollowUp(ClueLogEntry source, ClueLogEntry target) {
+		target.setDetectedBy(source.getDetectedBy());
+		target.setFollowUpAssignments(source.getFollowUpAssignments());
+		target.setFollowUpBriefed(source.isFollowUpBriefed());
+		target.setFollowUpTargetDate(source.getFollowUpTargetDate());
+		target.setFollowUpCompletedDate(source.getFollowUpCompletedDate());
+		target.setFollowUpStatus(source.getFollowUpStatus());
 	}
 
 	private static List<ClueLogEntry> cluesForTask(SarTaskAssignment row, List<ClueLogEntry> clues) {
@@ -1564,6 +1589,10 @@ public class SarTaskPanel extends JPanel {
 				"Follow Up"};
 		private final List<ClueLogEntry> rows = new ArrayList<>();
 
+		/**
+		 * Copies clue rows so cancelled debrief edits do not change stored clues.
+		 * @param clues clues for the current task
+		 */
 		private void setRows(List<ClueLogEntry> clues) {
 			rows.clear();
 			if (clues != null) {
@@ -1577,6 +1606,7 @@ public class SarTaskPanel extends JPanel {
 					copy.setImmediateAction(clue.getImmediateAction());
 					copy.setPossibleDuplicate(clue.isPossibleDuplicate());
 					copy.setFollowUp(clue.getFollowUp());
+					copyFollowUp(clue, copy);
 					rows.add(copy);
 				}
 			}
