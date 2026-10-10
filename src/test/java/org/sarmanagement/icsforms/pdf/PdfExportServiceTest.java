@@ -232,7 +232,8 @@ class PdfExportServiceTest {
 		assertEquals("1", data.getForm201().getIapPage(),
 				"Completed ICS 201 must be assigned page 1 even in DURING_OP phase");
 		assertEquals("5", data.getForm202().getIapPage(), "ICS 202 should follow immediately after ICS 201");
-		assertEquals("6", data.getForm205aIapPage(), "ICS 205A should follow immediately after ICS 202");
+		assertEquals("9", data.getForm205aIapPage(),
+				"ICS 205A follows ICS 204 and its selected SAR task assignment pages");
 	}
 
 	@Test
@@ -260,8 +261,8 @@ class PdfExportServiceTest {
 
 		PdfExportService.assignIapPageNumbers(data);
 
-		assertEquals("6", data.getForm205aIapPage());
-		assertEquals("8", data.getForm207().getIapPage());
+		assertEquals("9", data.getForm205aIapPage());
+		assertEquals(String.valueOf(9 + Ics205aPdfRenderer.pageCount(data)), data.getForm207().getIapPage());
 	}
 
 	@Test
@@ -313,11 +314,27 @@ class PdfExportServiceTest {
 	}
 
 	@Test
-	void orderForIapBundlePlacesSarTaskAssignmentBeforeIcs214() {
+	void orderForIapBundleUsesNumericalOrderAndPlacesSarTasksAfterIcs204() {
 		List<String> ordered = PdfExportService.orderForIapBundle(
-				List.of("ICS 201", "ICS 202", "ICS 205A", "ICS 207", "ICS 204", "ICS 214", "SAR Task Assignment"));
+				List.of("ICS 215A", "Clue Log", "ICS 214", "ICS 208", "ICS 205A", "ICS 204", "SAR Task Assignment",
+						"ICS 202"));
 
-		assertEquals(List.of("ICS 201", "ICS 202", "ICS 205A", "ICS 207", "ICS 204", "SAR Task Assignment", "ICS 214"),
-				ordered);
+		assertEquals(List.of("ICS 202", "ICS 204", "SAR Task Assignment", "ICS 205A", "ICS 208", "ICS 214",
+				"ICS 215A", "Clue Log"), ordered);
+	}
+
+	@Test
+	void iapPageNumbersUseTheSameOrderAsTheCombinedFormSequence() {
+		AppData data = new AppData();
+		SarTaskAssignment task = new SarTaskAssignment();
+		data.setSarTaskAssignments(List.of(task));
+		PdfExportService.assignIapPageNumbers(data,
+				List.of("ICS 215A", "ICS 208", "SAR Task Assignment", "ICS 204", "ICS 202"), true);
+
+		assertEquals("1", data.getForm202().getIapPage());
+		assertEquals("2", data.getForm204().getIapPage());
+		assertEquals("3", task.getIapPage());
+		assertEquals("5", data.getForm208().getIapPage());
+		assertEquals("6", data.getForm215a().getIapPage());
 	}
 }

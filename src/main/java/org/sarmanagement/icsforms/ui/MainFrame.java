@@ -17,6 +17,7 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
+import org.sarmanagement.icsforms.pdf.FormOrder;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
@@ -55,7 +56,6 @@ import java.nio.file.Path;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -767,48 +767,12 @@ public class MainFrame extends JFrame {
 	 * @return identifiers in display order.
 	 */
 	static List<String> sortExportFormKeys(List<String> formKeys) {
-		return formKeys.stream().sorted(Comparator.comparingInt(MainFrame::icsFormNumber)
-				.thenComparing(MainFrame::icsFormSuffix)).toList();
-	}
-
-	/**
-	 * Returns the numeric ICS form number used for export-list sorting.
-	 *
-	 * @param formKey registered form identifier.
-	 * @return form number, or {@link Integer#MAX_VALUE} for non-ICS exports.
-	 */
-	private static int icsFormNumber(String formKey) {
-		if (!formKey.startsWith("ICS ")) {
-			return Integer.MAX_VALUE;
-		}
-		String suffix = formKey.substring(4);
-		int digitsEnd = 0;
-		while (digitsEnd < suffix.length() && Character.isDigit(suffix.charAt(digitsEnd))) {
-			digitsEnd++;
-		}
-		return digitsEnd == 0 ? Integer.MAX_VALUE : Integer.parseInt(suffix.substring(0, digitsEnd));
-	}
-
-	/**
-	 * Returns the suffix of an ICS number for stable numeric-form ordering.
-	 *
-	 * @param formKey registered form identifier.
-	 * @return form suffix, or blank for non-ICS exports.
-	 */
-	private static String icsFormSuffix(String formKey) {
-		if (!formKey.startsWith("ICS ")) {
-			return "";
-		}
-		String suffix = formKey.substring(4);
-		int digitsEnd = 0;
-		while (digitsEnd < suffix.length() && Character.isDigit(suffix.charAt(digitsEnd))) {
-			digitsEnd++;
-		}
-		return suffix.substring(digitsEnd);
+		return FormOrder.sort(formKeys);
 	}
 
 	/**
 	 * Returns a descriptive export checkbox label.
+	 *
 	 * @param formKey renderer key
 	 * @return display label
 	 */

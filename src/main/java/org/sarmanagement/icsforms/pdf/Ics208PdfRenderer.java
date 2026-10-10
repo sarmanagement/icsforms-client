@@ -26,7 +26,7 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	private static final float FONT_SIZE = 9f;
 	private static final float LINE_HEIGHT = 11f;
 	private static final float BLOCK_PADDING = 6f;
-	private static final float FIRST_PAGE_BOTTOM_BLOCKS = 91f;
+	private static final float FIRST_PAGE_BOTTOM_BLOCKS = 160f;
 
 	/** {@inheritDoc} */
 	@Override
@@ -71,36 +71,78 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @param form safety message/plan.
 	 * @return wrapped text lines.
 	 */
-	private List<String> messageLines(Ics208Form form) {
-		List<String> lines = new ArrayList<>();
+	private List<MessageLine> messageLines(Ics208Form form) {
+		List<MessageLine> lines = new ArrayList<>();
 		if (form.getMessageMode() == Ics208Form.MessageMode.FREE_TEXT) {
-			lines.addAll(wrapContent(form.getFreeText(), 104));
+			addContent(lines, form.getFreeText(), MessageLineStyle.NORMAL);
 		} else {
-			addParagraph(lines, "General requirements", form.getGeneralRequirements());
+			String generalRequirements = safe(form.getGeneralRequirements()).replaceAll("\\s+", " ").trim();
+			addContent(lines, generalRequirements, MessageLineStyle.NORMAL);
+			if (!generalRequirements.isBlank()) {
+				lines.add(new MessageLine("", "", MessageLineStyle.BLANK));
+			}
 			for (SafetyMessageBlock block : form.getHazardBlocks()) {
-				addParagraph(lines, block.getIncidentArea() + " — Hazard", block.getHazard());
-				addParagraph(lines, "Precautions", block.getPrecautions());
+				boolean hasContent = false;
+				String area = safe(block.getIncidentArea()).trim();
+				String hazardPrefix = area.isBlank() || area.equalsIgnoreCase("All") ? "Hazard: "
+						: area + " Hazard: ";
+				hasContent |= addStyledContent(lines, hazardPrefix, block.getHazard(), MessageLineStyle.HAZARD);
+				hasContent |= addStyledContent(lines, "Mitigation: ", block.getPrecautions(),
+						MessageLineStyle.BOLD);
+				if (hasContent) {
+					lines.add(new MessageLine("", "", MessageLineStyle.BLANK));
+				}
 			}
 		}
 		for (Map.Entry<String, String> section : form.getSiteSafetyPlan().getTextSections().entrySet()) {
-			addParagraph(lines, "Site Safety Plan — " + section.getKey(), section.getValue());
+			addStyledContent(lines, "Site Safety Plan - " + section.getKey() + ": ", section.getValue(),
+					MessageLineStyle.NORMAL);
+		}
+		while (!lines.isEmpty() && lines.get(lines.size() - 1).style() == MessageLineStyle.BLANK) {
+			lines.remove(lines.size() - 1);
 		}
 		return lines;
 	}
 
 	/**
-	 * Adds a labeled non-empty paragraph to block 3.
+	 * Adds wrapped ordinary text to block 3.
 	 *
 	 * @param lines destination lines.
-	 * @param heading paragraph heading.
 	 * @param content paragraph content.
+	 * @param style text style.
 	 */
-	private void addParagraph(List<String> lines, String heading, String content) {
-		if (content != null && !content.isBlank()) {
-			lines.add(heading + ":");
-			lines.addAll(wrapContent(content, 104));
-			lines.add("");
+	private void addContent(List<MessageLine> lines, String content, MessageLineStyle style) {
+		if (content == null || content.isBlank()) {
+			return;
 		}
+		for (String line : wrapContent(content, 104)) {
+			lines.add(new MessageLine("", line, style));
+		}
+	}
+
+	/**
+	 * Adds a prefixed block with wrapped content.
+	 *
+	 * @param lines destination lines.
+	 * @param prefix heading shown before the first line.
+	 * @param content block content.
+	 * @param style text style.
+	 * @return true when any content was added.
+	 */
+	private boolean addStyledContent(List<MessageLine> lines, String prefix, String content, MessageLineStyle style) {
+		if (content == null || content.isBlank()) {
+			return false;
+		}
+		List<String> wrapped = wrapContent(content, Math.max(1, 104 - prefix.length()));
+		if (wrapped.isEmpty()) {
+			return false;
+		}
+		lines.add(new MessageLine(prefix, wrapped.get(0), style));
+		String continuationPrefix = " ".repeat(prefix.length());
+		for (int index = 1; index < wrapped.size(); index++) {
+			lines.add(new MessageLine(continuationPrefix, wrapped.get(index), style));
+		}
+		return true;
 	}
 
 	/** {@inheritDoc} */
@@ -123,7 +165,7 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 */
 	private void renderDocument(PDDocument document, AppData data) throws IOException {
 		Ics208Form form = data.getForm208();
-		List<String> lines = messageLines(form);
+		List<MessageLine> lines = messageLines(form);
 		PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
 		PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 		PDPage page = newPage(data);
@@ -161,7 +203,7 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @throws IOException when PDF drawing fails.
 	 */
 	private int drawPage(PDDocument document, PDPage page, AppData data, FormLayout layout, Ics208Form form,
-			PDType1Font regular, PDType1Font bold, List<String> lines, int offset, int capacity, int pageNumber,
+			PDType1Font regular, PDType1Font bold, List<MessageLine> lines, int offset, int capacity, int pageNumber,
 			boolean continuation) throws IOException {
 		try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
 			String title = form.getMessageType() == Ics208Form.MessageType.HAZARDOUS_MATERIALS_SITE_SAFETY_PLAN
@@ -188,8 +230,7 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			float y = metadataBottom - 27f;
 			int end = Math.min(lines.size(), offset + capacity);
 			for (int index = offset; index < end; index++) {
-				String line = lines.get(index);
-				drawTextLine(stream, regular, left + BLOCK_PADDING, y, safe(line));
+				drawMessageLine(stream, regular, bold, left + BLOCK_PADDING, y, lines.get(index));
 				y -= LINE_HEIGHT;
 			}
 			drawPageLabel(stream, regular, layout, pageNumber, form.getIapPage());
@@ -259,8 +300,8 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		float left = layout.x();
 		float right = left + layout.width();
 		float bottom = layout.y() + 24f;
-		float top = bottom + FIRST_PAGE_BOTTOM_BLOCKS - 24f;
-		float block4Bottom = top - 29f;
+		float top = layout.y() + FIRST_PAGE_BOTTOM_BLOCKS;
+		float block4Bottom = top - 28f;
 		float block5Bottom = block4Bottom - 34f;
 		stream.moveTo(left, block4Bottom);
 		stream.lineTo(right, block4Bottom);
@@ -276,9 +317,38 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		drawTextLine(stream, regular, left + BLOCK_PADDING, block5Bottom + 7f,
 				safe(form.getSiteSafetyPlan().getLocatedAt()));
 		drawPreparedByMetadataSection(stream, bold, regular, FONT_SIZE, 8f, BLOCK_PADDING, left,
-				layout.y() + 1f, layout.width(), 22f, 6f, "Prepared by", form.getPreparedByName(),
+				bottom, layout.width(), block5Bottom - bottom, 22f, 8f, "Prepared by", form.getPreparedByName(),
 				form.getPreparedByPositionTitle(), form.getPreparedBySignature(), "ICS 208", form.getIapPage(),
 				formatPdfDateTime(data, form.getPreparedDateTime()));
+	}
+
+	/**
+	 * Draws a styled message line within block 3.
+	 *
+	 * @param stream page stream.
+	 * @param regular regular font.
+	 * @param bold bold font.
+	 * @param x left coordinate.
+	 * @param y baseline.
+	 * @param line styled message line.
+	 * @throws IOException when PDF drawing fails.
+	 */
+	private void drawMessageLine(PDPageContentStream stream, PDType1Font regular, PDType1Font bold, float x, float y,
+			MessageLine line) throws IOException {
+		if (line.style() == MessageLineStyle.BLANK) {
+			return;
+		}
+		if (line.style() != MessageLineStyle.HAZARD) {
+			drawTextLine(stream, line.style() == MessageLineStyle.BOLD ? bold : regular, x, y,
+					line.prefix() + line.text());
+			return;
+		}
+		String prefix = safe(line.prefix());
+		drawTextLine(stream, bold, x, y, prefix);
+		float prefixWidth = bold.getStringWidth(prefix) / 1000f * FONT_SIZE;
+		stream.setNonStrokingColor(1f, 0f, 0f);
+		drawTextLine(stream, bold, x + prefixWidth, y, line.text());
+		stream.setNonStrokingColor(0f, 0f, 0f);
 	}
 
 	/**
@@ -298,6 +368,26 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		stream.newLineAtOffset(x, y);
 		stream.showText(safe(text));
 		stream.endText();
+	}
+
+	/**
+	 * Describes the style applied to a printable message line.
+	 */
+	private enum MessageLineStyle {
+		NORMAL,
+		BOLD,
+		HAZARD,
+		BLANK
+	}
+
+	/**
+	 * One wrapped line in the ICS 208 safety message.
+	 *
+	 * @param prefix label preceding the content.
+	 * @param text printable content.
+	 * @param style line style.
+	 */
+	private record MessageLine(String prefix, String text, MessageLineStyle style) {
 	}
 
 	/**

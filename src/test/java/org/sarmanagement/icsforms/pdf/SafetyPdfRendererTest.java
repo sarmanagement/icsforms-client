@@ -53,6 +53,7 @@ class SafetyPdfRendererTest {
 		try (PDDocument pdf = Loader.loadPDF(output.toFile())) {
 			String text = new PDFTextStripper().getText(pdf);
 			assertTrue(text.contains("INCIDENT ACTION PLAN SAFETY ANALYSIS"));
+			assertTrue(text.contains("INCIDENT ACTION PLAN SAFETY ANALYSIS (ICS 215A)"));
 			assertTrue(text.contains("1. Incident Name: Mountain Search"));
 			assertTrue(text.contains("2. Operational Period"));
 			assertTrue(text.contains("5. Incident Area"));
@@ -63,7 +64,7 @@ class SafetyPdfRendererTest {
 			assertTrue(text.contains("Terrain, Dense Brush, Trip Hazards"));
 			assertTrue(text.contains("Appropriate equipment"));
 			PDFStreamParser parser = new PDFStreamParser(pdf.getPage(0));
-			assertEquals(1, parser.parse().stream()
+			assertEquals(3, parser.parse().stream()
 					.filter(token -> token instanceof Operator operator && operator.getName().equals("re")).count());
 			assertTrue(pdf.getNumberOfPages() > 1);
 			assertEquals(Ics215aPdfRenderer.pageCount(data), pdf.getNumberOfPages());
@@ -78,6 +79,7 @@ class SafetyPdfRendererTest {
 		data.getIncidentContext().setIncidentName("Mountain Search");
 		data.getForm208().setMessageMode(Ics208Form.MessageMode.HAZARD_PRECAUTIONS);
 		data.getForm208().setSiteSafetyPlanRequired(Boolean.TRUE);
+		data.getForm208().setGeneralRequirements("Monitor weather. Maintain radio contact.");
 		data.getForm208().setPreparedDateTime(LocalDateTime.of(2026, 10, 10, 7, 30));
 		SafetyMessageBlock block = new SafetyMessageBlock();
 		block.setIncidentArea("All");
@@ -99,11 +101,42 @@ class SafetyPdfRendererTest {
 			assertTrue(text.contains("Prepared by"));
 			assertTrue(text.contains("Terrain, Dense Brush, Trip Hazards"));
 			assertTrue(text.contains("Avoid steep drops and cliffs."));
+			assertTrue(text.contains("Hazard: Terrain, Dense Brush, Trip Hazards"));
+			assertTrue(text.contains("Mitigation: Avoid steep drops and cliffs."));
+			assertTrue(text.indexOf("Monitor weather") < text.indexOf("Hazard: Terrain"));
+			assertFalse(text.contains("All Hazard"));
+			assertFalse(text.contains("Precautions:"));
 			assertTrue(text.contains("2026-10-09 21:30"));
 			PDFStreamParser parser = new PDFStreamParser(pdf.getPage(0));
-			assertTrue(parser.parse().stream()
-					.filter(token -> token instanceof Operator operator && operator.getName().equals("re")).count() <= 4);
+			List<Object> tokens = parser.parse();
+			assertTrue(tokens.stream().filter(token -> token instanceof Operator operator
+					&& operator.getName().equals("re")).count() <= 4);
+			assertTrue(tokens.stream().anyMatch(token -> token instanceof Operator operator
+					&& operator.getName().equals("rg")));
 			assertEquals(Ics208PdfRenderer.pageCount(data), pdf.getNumberOfPages());
+		}
+	}
+
+	@Test
+	void ics202ListsCheckedIncludedFormsInCanonicalOrder() throws Exception {
+		AppData data = new AppData();
+		data.getForm202().setIncidentActionPlanAttachments(
+				List.of("ICS 202", "ICS 204", "SAR Task Assignment", "ICS 208", "ICS 215A", "Clue Log"));
+		Path output = Files.createTempFile("ics-202-", ".pdf");
+
+		new Ics202PdfRenderer().render(data, output);
+
+		try (PDDocument pdf = Loader.loadPDF(output.toFile())) {
+			String text = new PDFTextStripper().getText(pdf);
+			assertTrue(text.contains("INCIDENT OBJECTIVES (ICS 202)"));
+			assertTrue(text.contains("[X] ICS 202"));
+			assertTrue(text.contains("[X] ICS 204"));
+			assertTrue(text.contains("[X] SAR Task Assignment"));
+			assertTrue(text.contains("[X] ICS 208"));
+			assertTrue(text.contains("[X] ICS 215A"));
+			assertTrue(text.contains("[X] Clue Log"));
+			assertTrue(text.indexOf("[X] ICS 204") < text.indexOf("[X] SAR Task Assignment"));
+			assertTrue(text.indexOf("[X] ICS 208") < text.indexOf("[X] ICS 215A"));
 		}
 	}
 
@@ -128,8 +161,8 @@ class SafetyPdfRendererTest {
 		data.getForm202().setIncidentActionPlanAttachments(List.of("ICS 215A", "ICS 208"));
 		data.getIncidentContext().setIncidentName("With Safety Forms");
 		Path withSafety = service.exportIapBundle(data, outputDirectory);
-		assertEquals("2", data.getForm215a().getIapPage());
-		assertEquals("3", data.getForm208().getIapPage());
+		assertEquals("3", data.getForm215a().getIapPage());
+		assertEquals("2", data.getForm208().getIapPage());
 		try (PDDocument pdf = Loader.loadPDF(withSafety.toFile())) {
 			String text = new PDFTextStripper().getText(pdf);
 			assertEquals(4, pdf.getNumberOfPages());

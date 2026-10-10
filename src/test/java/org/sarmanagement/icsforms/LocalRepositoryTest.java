@@ -299,7 +299,7 @@ class LocalRepositoryTest {
 		try (PDDocument pdf = Loader.loadPDF(pdf201.toFile())) {
 			String text = new PDFTextStripper().getText(pdf);
 			assertEquals(4, pdf.getNumberOfPages());
-			assertTrue(text.contains("ICS 201 INCIDENT BRIEFING"));
+			assertTrue(text.contains("INCIDENT BRIEFING (ICS 201)"));
 			assertTrue(text.contains("1. Incident Name"));
 			assertTrue(text.contains("10. Resource Summary"));
 			assertTrue(text.contains("ICS 201, Page 4"));
@@ -308,7 +308,7 @@ class LocalRepositoryTest {
 
 		try (PDDocument pdf = Loader.loadPDF(pdf202.toFile())) {
 			String text = new PDFTextStripper().getText(pdf);
-			assertTrue(text.contains("ICS 202 INCIDENT OBJECTIVES"));
+			assertTrue(text.contains("INCIDENT OBJECTIVES (ICS 202)"));
 			assertTrue(text.contains("1. Incident Name"));
 			assertTrue(text.contains("2. Operational Period"));
 			assertTrue(text.contains("8. Approved By Incident Commander"));
@@ -320,7 +320,7 @@ class LocalRepositoryTest {
 
 		try (PDDocument pdf = Loader.loadPDF(pdf204.toFile())) {
 			String text = new PDFTextStripper().getText(pdf);
-			assertTrue(text.contains("ICS 204 ASSIGNMENT LIST"));
+			assertTrue(text.contains("ASSIGNMENT LIST (ICS 204)"));
 			assertTrue(text.contains("4. Operations Personnel"));
 			assertTrue(text.contains("3. Division"));
 			assertTrue(text.contains("Division Supervisor"));
@@ -421,16 +421,23 @@ class LocalRepositoryTest {
 
 		try (PDDocument merged = Loader.loadPDF(bundlePath.toFile())) {
 			PDFTextStripper stripper = new PDFTextStripper();
-			stripper.setStartPage(10);
-			stripper.setEndPage(10);
-			String sarPageText = stripper.getText(merged).replaceAll("\\s+", " ");
-			stripper.setStartPage(12);
-			stripper.setEndPage(12);
-			String ics214Text = stripper.getText(merged).replaceAll("\\s+", " ");
-
-			assertTrue(sarPageText.contains("SAR TASK ASSIGNMENT FORM"));
-			assertTrue(ics214Text.contains("ICS 214 ACTIVITY LOG"));
-			assertTrue(ics214Text.contains("IAP Page 11") || ics214Text.contains("IAP Page: 11"));
+			int sarTaskPage = -1;
+			int activityLogPage = -1;
+			for (int page = 1; page <= merged.getNumberOfPages(); page++) {
+				stripper.setStartPage(page);
+				stripper.setEndPage(page);
+				String pageText = stripper.getText(merged).replaceAll("\\s+", " ");
+				if (sarTaskPage < 0 && pageText.contains("SAR TASK ASSIGNMENT FORM")) {
+					sarTaskPage = page;
+				}
+				if (pageText.contains("ACTIVITY LOG (ICS 214)")) {
+					activityLogPage = page;
+					assertTrue(pageText.contains("IAP Page " + (page - 1))
+							|| pageText.contains("IAP Page: " + (page - 1)));
+				}
+			}
+			assertTrue(sarTaskPage > 0);
+			assertTrue(activityLogPage > sarTaskPage);
 		}
 	}
 

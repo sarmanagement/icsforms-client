@@ -26,7 +26,7 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	private static final float LINE_HEIGHT = 11f;
 	private static final float METADATA_HEIGHT = 62f;
 	private static final float TABLE_HEADER_HEIGHT = 25f;
-	private static final float FOOTER_HEIGHT = 58f;
+	private static final float FOOTER_HEIGHT = 74f;
 	private static final float CELL_PADDING = 5f;
 
 	/** {@inheritDoc} */
@@ -215,11 +215,10 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 			AppData data) throws IOException {
 		float x = layout.x();
 		float top = layout.top();
-		float[] widths = columnWidths(layout);
 		float row1Bottom = top - 27f;
 		float row2Bottom = top - METADATA_HEIGHT;
 		stream.moveTo(x, row1Bottom);
-		stream.lineTo(x + layout.width(), row1Bottom);
+		stream.lineTo(x + layout.width() * .55f, row1Bottom);
 		stream.moveTo(x, row2Bottom);
 		stream.lineTo(x + layout.width(), row2Bottom);
 		float nameEnd = x + layout.width() * .55f;
@@ -228,7 +227,7 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		stream.stroke();
 		drawLine(stream, bold, x + CELL_PADDING, top - 12f,
 				"1. Incident Name: " + safe(data.getIncidentContext().getIncidentName()));
-		drawLine(stream, regular, nameEnd + CELL_PADDING, top - 12f, "2. Operational Period");
+		drawLine(stream, bold, nameEnd + CELL_PADDING, top - 12f, "2. Operational Period");
 		drawLine(stream, regular, x + CELL_PADDING, row1Bottom - 13f,
 				"3. Incident Number: " + safe(data.getForm215a().getIncidentNumber()));
 		drawLine(stream, regular, x + CELL_PADDING, row1Bottom - 26f,
@@ -238,9 +237,10 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 				"Date From: " + safe(formatPdfDate(data, data.getIncidentContext().getOperationalPeriodStart())));
 		drawLine(stream, regular, rightX, row1Bottom - 26f,
 				"Time From: " + safe(formatPdfTime(data, data.getIncidentContext().getOperationalPeriodStart())));
-		drawLine(stream, regular, rightX + widths[0] * .72f, row1Bottom - 13f,
+		float dateToX = nameEnd + (layout.width() - layout.width() * .55f) / 2f;
+		drawLine(stream, regular, dateToX, row1Bottom - 13f,
 				"Date To: " + safe(formatPdfDate(data, data.getIncidentContext().getOperationalPeriodEnd())));
-		drawLine(stream, regular, rightX + widths[0] * .72f, row1Bottom - 26f,
+		drawLine(stream, regular, dateToX, row1Bottom - 26f,
 				"Time To: " + safe(formatPdfTime(data, data.getIncidentContext().getOperationalPeriodEnd())));
 	}
 
@@ -337,7 +337,7 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		float bottom = layout.y();
 		float width = layout.width();
 		float top = bottom + FOOTER_HEIGHT;
-		float divider = top - 27f;
+		float divider = top - 30f;
 		float footerBandTop = bottom + 18f;
 		stream.moveTo(x, top);
 		stream.lineTo(x + width, top);
@@ -352,18 +352,9 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		drawLine(stream, regular, x + CELL_PADDING, divider - 13f,
 				"Operations Section Chief: " + safe(form.getOperationsSectionChiefName()) + "   Signature: "
 						+ safe(form.getOperationsSectionChiefSignature()));
-		float firstCell = width * .22f;
-		float secondCell = width * .20f;
-		stream.moveTo(x + firstCell, bottom);
-		stream.lineTo(x + firstCell, footerBandTop);
-		stream.moveTo(x + firstCell + secondCell, bottom);
-		stream.lineTo(x + firstCell + secondCell, footerBandTop);
-		stream.stroke();
-		drawLine(stream, bold, x + CELL_PADDING, bottom + 6f, "ICS 215A");
-		drawLine(stream, regular, x + firstCell + CELL_PADDING, bottom + 6f,
-				"IAP Page " + safe(addPageOffset(form.getIapPage(), pageNumber - 1)));
-		drawLine(stream, regular, x + firstCell + secondCell + CELL_PADDING, bottom + 6f,
-				"Prepared: " + safe(formatPdfDateTime(data, form.getPreparedDateTime())));
+		drawFormFooterBand(stream, bold, regular, FONT_SIZE, CELL_PADDING, x, bottom, width, footerBandTop - bottom,
+				.42f, "ICS 215A", safe(addPageOffset(form.getIapPage(), pageNumber - 1)),
+				safe(formatPdfDateTime(data, form.getPreparedDateTime())));
 	}
 
 	/**

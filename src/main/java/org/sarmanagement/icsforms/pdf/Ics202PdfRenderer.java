@@ -66,9 +66,12 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			float row1 = 60f;
 			float row4 = 54f;
 			float row5 = 34f;
-			float row6 = 40f;
 			float row7 = 34f;
 			float row8 = 80f;
+			List<String> formsLines = includedFormsLines(form.getIncidentActionPlanAttachments());
+			float otherRowsHeight = row1 + 110f + 80f + row4 + row5 + row7 + row8;
+			float row6 = Math.min(Math.max(40f, 31f + (formsLines.size() * LINE_HEIGHT)),
+					Math.max(40f, gridHeight - otherRowsHeight));
 			float row9 = 24f;
 			float[] rows = expandRowToFill(gridHeight, 1, row1, 110f, 80f, row4, row5, row6, row7, row8);
 			float row2 = rows[1];
@@ -113,9 +116,9 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			y -= row5;
 
 			drawCell(stream, layout.x(), y - row6, pageWidth, row6);
-			List<String> formsLines = includedFormsLines(form.getIncidentActionPlanAttachments());
 			overflowSections.addAll(drawSection(stream, bold, regular, layout.x(), y - row6, pageWidth, row6,
-					"6. Incident Action Plan (Included Forms)", formsLines, null));
+					"6. Incident Action Plan (Included Forms)", formsLines,
+					"6. Incident Action Plan (Included Forms)"));
 			y -= row6;
 
 			drawCell(stream, layout.x(), y - row7, pageWidth, row7);
@@ -358,19 +361,31 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	private List<String> includedFormsLines(List<String> attachments) {
-		List<String> supported = List.of("ICS 202", "ICS 204", "SAR Task Assignment", "Map packet");
+		List<String> supported = new ArrayList<>(FormOrder.formKeys());
+		supported.add("Map packet");
+		List<String> checks = new ArrayList<>();
+		for (String formKey : supported) {
+			checks.add(checkLine(formKey, attachments));
+		}
+		if (attachments != null) {
+			attachments.stream().filter(item -> item != null && !item.isBlank())
+					.filter(item -> supported.stream().noneMatch(key -> key.equalsIgnoreCase(item)))
+					.distinct().forEach(item -> checks.add(checkLine(item, attachments)));
+		}
 		List<String> lines = new ArrayList<>();
-		lines.add(checkLine("ICS 202", attachments));
-		lines.add(checkLine("ICS 204", attachments));
-		lines.add(checkLine("SAR Task Assignment", attachments));
-		lines.add(checkLine("Map packet", attachments));
-		List<String> additional = attachments == null
-				? List.of()
-				: attachments.stream()
-						.filter(item -> item != null && supported.stream().noneMatch(s -> s.equalsIgnoreCase(item)))
-						.toList();
-		if (!additional.isEmpty()) {
-			lines.add("Additional: " + String.join(", ", additional));
+		StringBuilder line = new StringBuilder();
+		for (String check : checks) {
+			if (!line.isEmpty() && line.length() + check.length() + 2 > 108) {
+				lines.add(line.toString());
+				line.setLength(0);
+			}
+			if (!line.isEmpty()) {
+				line.append("  ");
+			}
+			line.append(check);
+		}
+		if (!line.isEmpty()) {
+			lines.add(line.toString());
 		}
 		return lines;
 	}
