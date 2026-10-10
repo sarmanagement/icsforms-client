@@ -19,7 +19,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 6;
+	public static final int CURRENT_SCHEMA_VERSION = 7;
 
 	/**
 	 * A lightweight snapshot of the shared context at the end of one operational
@@ -105,6 +105,8 @@ public class AppData {
 	private OrganizationalChart organizationalChart = new OrganizationalChart();
 	private Ics201Form form201 = new Ics201Form();
 	private Ics202Form form202 = new Ics202Form();
+	private Ics215aForm form215a = new Ics215aForm();
+	private Ics208Form form208 = new Ics208Form();
 	private String form205aIapPage = "";
 	private Ics207Form form207 = new Ics207Form();
 	private Ics204Form form204 = new Ics204Form();
@@ -555,6 +557,48 @@ public class AppData {
 	 */
 	public void setForm202(Ics202Form form202) {
 		this.form202 = form202 == null ? new Ics202Form() : form202;
+	}
+
+	/**
+	 * Returns ICS 215A incident action plan safety analysis.
+	 *
+	 * @return safety analysis form.
+	 */
+	public Ics215aForm getForm215a() {
+		if (form215a == null) {
+			form215a = new Ics215aForm();
+		}
+		return form215a;
+	}
+
+	/**
+	 * Sets ICS 215A incident action plan safety analysis.
+	 *
+	 * @param form215a safety analysis form; null resets to an empty form.
+	 */
+	public void setForm215a(Ics215aForm form215a) {
+		this.form215a = form215a == null ? new Ics215aForm() : form215a;
+	}
+
+	/**
+	 * Returns ICS 208 safety message/plan.
+	 *
+	 * @return safety message/plan.
+	 */
+	public Ics208Form getForm208() {
+		if (form208 == null) {
+			form208 = new Ics208Form();
+		}
+		return form208;
+	}
+
+	/**
+	 * Sets ICS 208 safety message/plan.
+	 *
+	 * @param form208 safety message/plan; null resets to an empty form.
+	 */
+	public void setForm208(Ics208Form form208) {
+		this.form208 = form208 == null ? new Ics208Form() : form208;
 	}
 
 	/**
