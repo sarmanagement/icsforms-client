@@ -85,7 +85,7 @@ class ClueLogHistoryPdfTest {
 			try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
 				assertTrue(document.getNumberOfPages() > 2);
 				String text = new VisibleTextStripper().getText(document);
-				String compact = text.replaceAll("\\s+", "");
+				String compact = text.replace("Clue #1 (continued)", "").replaceAll("\\s+", "");
 				for (int index = 0; index < 700; index++) {
 					assertTrue(compact.contains("DescriptionSentinel" + index));
 				}

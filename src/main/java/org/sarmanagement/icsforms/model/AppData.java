@@ -216,13 +216,6 @@ public class AppData {
 		this.form201 = new Ics201Form();
 		this.form202 = form202 == null ? new Ics202Form() : form202;
 		this.form204 = form204 == null ? new Ics204Form() : form204;
-		if (openActionItems != null) {
-			for (OpenActionItem item : openActionItems) {
-				if (item != null) {
-					item.getEntryId();
-				}
-			}
-		}
 		if (sarTaskAssignments != null) {
 			this.sarTaskAssignments = sarTaskAssignments;
 		}
@@ -413,6 +406,13 @@ public class AppData {
 			for (SarTaskAssignment task : sarTaskAssignments) {
 				if (task != null) {
 					task.getTaskId();
+				}
+			}
+		}
+		if (openActionItems != null) {
+			for (OpenActionItem item : openActionItems) {
+				if (item != null) {
+					item.getEntryId();
 				}
 			}
 		}

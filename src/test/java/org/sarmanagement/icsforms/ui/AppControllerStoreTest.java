@@ -31,6 +31,7 @@ class AppControllerStoreTest {
 	void startupPreferencesAndDisabledTrackerSurviveStoreAndNewPeriod() {
 		IncidentId id;
 		String clueId;
+		String actionId;
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			AppData initial = new AppData();
 			AppController controller = controller(store, store.create(initial), initial);
@@ -65,6 +66,7 @@ class AppControllerStoreTest {
 			controller.save();
 			assertEquals(revision + 1, created.getRevision());
 			clueId = clue.getEntryId();
+			actionId = action.getEntryId();
 			controller.open(id);
 			assertFalse(controller.getData().isOpenActionTrackerEnabled());
 			var loadedClue = controller.getData().getClueLogEntries().get(0);
@@ -88,6 +90,7 @@ class AppControllerStoreTest {
 			assertEquals(IapPhase.DURING_OP, restored.getIapPhase());
 			assertEquals(1, restored.getOperationalPeriodHistory().size());
 			assertEquals("Keep searching", restored.getOpenActionItems().get(0).getItem());
+			assertEquals(actionId, restored.getOpenActionItems().get(0).getEntryId());
 			assertTrue(restored.getClueLogEntries().isEmpty());
 		}
 	}
