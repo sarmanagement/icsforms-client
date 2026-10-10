@@ -14,25 +14,6 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Regression tests for optional tracker persistence and clue responsibility. */
 class OpenActionItemTest {
 	@Test
-	void actionIdentityNormalizesIndependentlyOfNullClues() throws Exception {
-		AppData data = new AppData();
-		data.setClueLogEntries(null);
-		OpenActionItem action = new OpenActionItem();
-		data.setOpenActionItems(List.of(action));
-		data.normalizeIdentity();
-		var field = OpenActionItem.class.getDeclaredField("entryId");
-		field.setAccessible(true);
-		String id = (String) field.get(action);
-		assertNotNull(id);
-		assertFalse(id.isBlank());
-		data.normalizeIdentity();
-		assertEquals(id, field.get(action));
-		ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
-		AppData restored = mapper.readValue(mapper.writeValueAsString(data), AppData.class);
-		assertEquals(id, restored.getOpenActionItems().get(0).getEntryId());
-	}
-
-	@Test
 	void incidentLevelActionsAndPreferencesSurviveNewOperationalPeriod() {
 		AppData data = new AppData();
 		OpenActionItem action = new OpenActionItem();

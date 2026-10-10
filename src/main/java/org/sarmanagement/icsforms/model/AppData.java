@@ -409,13 +409,6 @@ public class AppData {
 				}
 			}
 		}
-		if (openActionItems != null) {
-			for (OpenActionItem item : openActionItems) {
-				if (item != null) {
-					item.getEntryId();
-				}
-			}
-		}
 		if (activityLogs != null) {
 			for (Ics214Form log : activityLogs) {
 				if (log != null) {
