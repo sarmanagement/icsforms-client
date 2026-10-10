@@ -112,6 +112,8 @@ class AppControllerStoreTest {
 			assertNotEquals(duplicate, controller.getActiveIncidentId());
 			assertEquals(IapPhase.INITIAL_RESPONSE, store.load(controller.getActiveIncidentId()).getIapPhase());
 			assertEquals(IncidentMode.GENERIC, store.load(controller.getActiveIncidentId()).getIncidentMode());
+			assertFalse(controller.getData().isOpenActionTrackerEnabled());
+			assertFalse(store.load(controller.getActiveIncidentId()).isOpenActionTrackerEnabled());
 			assertTrue(controller.getStoreDisplayLabel().contains(controller.getActiveIncidentId().value()));
 		}
 	}

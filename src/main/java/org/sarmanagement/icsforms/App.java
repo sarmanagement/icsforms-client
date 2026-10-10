@@ -93,7 +93,6 @@ public final class App {
 						};
 						data.setIapPhase(phase);
 						data.setIncidentMode(startup.getChosenMode());
-						startup.applyNewIncidentSettings(data);
 						id = store.create(data);
 						if (store instanceof FileIncidentStore fileStore && !fileStore.lock(id)) {
 							throw new StoreConflictException("Incident is open in another window: " + id.value());

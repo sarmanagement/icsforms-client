@@ -56,25 +56,30 @@ File → New always creates a separate incident. File → Duplicate Incident cop
 
 ### Open actions and clue follow-up
 
-Enable the tracker under **Configuration → Open Action Tracker / ICS 233** (or
-when creating a new incident) to track incident
+Enable the tracker under **Configuration → Open Action Tracker** to track incident
 actions independently of SAR tasks and clues. Disabling the tab does not delete
 its entries; incident-level actions also carry forward to subsequent operational
 periods. POC means *Point of Contact*: the person or section responsible for
 the action. Mark Briefed once that person has been informed of and acknowledged
 the assignment. Completed actions remain available in the Completed/All views;
 target dates highlight overdue actions in red and actions due within a day in yellow.
+The tracker is disabled by default for new incidents; startup only selects phase
+and mode.
 
 The clue details editor retains follow-up POC assignment history without changing
 the existing clue fields, duplicate detection, or activity-log synchronization.
-The standard clue-log PDF remains the default. Choose **Clue Log (ICS 233-CG
-adapted)** for a table containing every clue, ordered open, assigned, then followed
+The standard clue-log PDF remains the default. In the **Export forms as PDF**
+dialog, select **Clue Log** and check **Export SAR clue log as adapted ICS 233**
+for a table containing every clue, ordered open, assigned, then followed
 up on. Its Item column uses Description, Location, and Found by headings, and its
 POC column includes assignment history. The regular tracker prints only the current POC.
 
 ICS 233-CG output supports landscape (default) or portrait on the configured paper
-size. The Configuration export preferences control the default format in bulk/IAP
-exports; individual formats can also be explicitly selected in the PDF export dialog.
+size. Choose **ICS 233 orientation** in the PDF generation dialog for either
+individual PDFs or the combined IAP bundle. Each dialog starts with landscape and
+standard clue output, regardless of legacy saved export flags. These print-time
+choices are not saved with the incident. Uncheck **Clue Log** to omit clues
+entirely; the enabled incident tracker remains a separate export selection.
 - Validation that blocks export when required fields are missing.
 
 ## Incident phases

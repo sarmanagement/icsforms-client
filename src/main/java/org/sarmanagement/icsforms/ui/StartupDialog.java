@@ -3,7 +3,6 @@
  */
 package org.sarmanagement.icsforms.ui;
 
-import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
@@ -62,7 +61,6 @@ public class StartupDialog extends JDialog {
 
 	private StartupAction chosenAction;
 	private IncidentMode chosenMode = IncidentMode.SAR;
-	private final ActionTrackerSettingsPanel actionSettings = new ActionTrackerSettingsPanel(new AppData());
 	private IncidentId chosenIncidentId;
 
 	/**
@@ -83,12 +81,7 @@ public class StartupDialog extends JDialog {
 		content.setBorder(BorderFactory.createEmptyBorder(16, 16, 12, 16));
 
 		content.add(buildActionPanel(store), BorderLayout.CENTER);
-		JPanel preferences = new JPanel(new BorderLayout());
-		preferences.add(buildModePanel(), BorderLayout.NORTH);
-		preferences.add(actionSettings, BorderLayout.CENTER);
-		preferences.add(new JLabel("Tracker/export settings apply only to new incidents; opening retains saved settings."),
-				BorderLayout.SOUTH);
-		content.add(preferences, BorderLayout.SOUTH);
+		content.add(buildModePanel(), BorderLayout.SOUTH);
 
 		setContentPane(content);
 		pack();
@@ -124,14 +117,6 @@ public class StartupDialog extends JDialog {
 	 */
 	public IncidentId getChosenIncidentId() {
 		return chosenIncidentId;
-	}
-
-	/**
-	 * Applies new-incident tracker preferences; callers must not use this on opens.
-	 * @param data newly created incident
-	 */
-	public void applyNewIncidentSettings(AppData data) {
-		actionSettings.applyTo(data);
 	}
 
 	// -------------------------------------------------------------------------

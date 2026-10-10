@@ -71,21 +71,21 @@ class OpenActionTrackerPanelTest {
 	}
 
 	@Test
-	void exportDefaultsFollowPersistedFlagsAndPreserveExistingSelections() {
+	void exportDefaultsIgnoreLegacyPrintFlagsAndPreserveExistingSelections() {
 		AppData data = new AppData();
 		assertFalse(MainFrame.isExportFormVisible("ICS 233-CG", data));
 		assertFalse(MainFrame.isExportFormSelectedByDefault("ICS 233-CG", data));
 		assertFalse(MainFrame.isExportFormSelectedByDefault("Clue Log (ICS 233-CG adapted)", data));
 		assertTrue(MainFrame.isExportFormSelectedByDefault("Clue Log", data));
 		assertTrue(MainFrame.isExportFormSelectedByDefault("ICS 202", data));
-		assertTrue(MainFrame.isExportFormVisible("Clue Log (ICS 233-CG adapted)", data));
+		assertFalse(MainFrame.isExportFormVisible("Clue Log (ICS 233-CG adapted)", data));
 		data.setOpenActionTrackerEnabled(true);
 		data.setClueLogIcs233Enabled(true);
 		data.setIncidentMode(IncidentMode.GENERIC);
 		assertTrue(MainFrame.isExportFormVisible("ICS 233-CG", data));
 		assertTrue(MainFrame.isExportFormSelectedByDefault("ICS 233-CG", data));
-		assertTrue(MainFrame.isExportFormSelectedByDefault("Clue Log (ICS 233-CG adapted)", data));
-		assertFalse(MainFrame.isExportFormSelectedByDefault("Clue Log", data));
+		assertFalse(MainFrame.isExportFormSelectedByDefault("Clue Log (ICS 233-CG adapted)", data));
+		assertTrue(MainFrame.isExportFormSelectedByDefault("Clue Log", data));
 		assertTrue(MainFrame.isExportFormSelectedByDefault("ICS 202", data));
 	}
 
@@ -164,19 +164,27 @@ class OpenActionTrackerPanelTest {
 		AppData data = new AppData();
 		data.setOpenActionItems(List.of(new OpenActionItem()));
 		data.setClueLogEntries(List.of(new ClueLogEntry()));
+		data.setIcs233Portrait(true);
 		ActionTrackerSettingsPanel panel = new ActionTrackerSettingsPanel(data);
 		JPanel form = (JPanel) panel.getComponent(0);
+		int checkboxCount = 0;
 		for (java.awt.Component component : form.getComponents()) {
 			if (component instanceof JCheckBox check) {
+				checkboxCount++;
 				check.setSelected(true);
-			} else if (component instanceof JComboBox<?> combo) {
-				combo.setSelectedIndex(1);
 			}
+			assertFalse(component instanceof JComboBox<?>);
 		}
+		assertEquals(1, checkboxCount);
 		panel.applyTo(data);
 		assertTrue(data.isOpenActionTrackerEnabled());
-		assertTrue(data.isClueLogIcs233Enabled());
+		assertFalse(data.isClueLogIcs233Enabled());
 		assertTrue(data.isIcs233Portrait());
+		data.setClueLogIcs233Enabled(true);
+		data.setIcs233Portrait(false);
+		panel.applyTo(data);
+		assertTrue(data.isClueLogIcs233Enabled());
+		assertFalse(data.isIcs233Portrait());
 		assertEquals(1, data.getOpenActionItems().size());
 		assertEquals(1, data.getClueLogEntries().size());
 	}

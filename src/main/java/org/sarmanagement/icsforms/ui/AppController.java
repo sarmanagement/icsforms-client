@@ -734,10 +734,24 @@ public class AppController {
 		return exportService.exportIapBundle(data, outputDirectory);
 	}
 
+	/**
+	 * Lists renderer keys available for explicit PDF export.
+	 *
+	 * @return registered form keys
+	 */
 	public List<String> exportableFormKeys() {
 		return exportService.formKeys();
 	}
 
+	/**
+	 * Exports selected forms using legacy incident layout preferences.
+	 *
+	 * @param formKeys selected renderer keys, or null for no forms
+	 * @param outputDirectory destination directory
+	 * @param source authoritative linked-field source
+	 * @return created files by renderer key
+	 * @throws IOException when rendering fails
+	 */
 	public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory,
 			LinkSource source) throws IOException {
 		synchronizeLinkedFields(source);
@@ -755,12 +769,78 @@ public class AppController {
 		return exported;
 	}
 
+	/**
+	 * Exports a selected bundle using legacy incident layout preferences.
+	 *
+	 * @param formKeys selected renderer keys, or null/empty for default forms
+	 * @param outputDirectory destination directory
+	 * @param source authoritative linked-field source
+	 * @return merged bundle file
+	 * @throws IOException when rendering or merging fails
+	 */
 	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source)
 			throws IOException {
 		synchronizeLinkedFields(source);
 		syncSarTasks();
 		syncTCards();
 		return exportService.exportIapBundle(data, outputDirectory, formKeys);
+	}
+
+	/**
+	 * Exports selected individual PDFs with print-time orientation on an isolated snapshot.
+	 *
+	 * @param formKeys selected renderer keys, or null for no forms
+	 * @param outputDirectory destination directory
+	 * @param source authoritative linked-field source
+	 * @param portrait true for portrait ICS 233 pages, false for landscape
+	 * @return created files by renderer key
+	 * @throws IOException when copying or rendering fails
+	 */
+	public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory,
+			LinkSource source, boolean portrait) throws IOException {
+		AppData exportData = createPrintSnapshot(source, portrait);
+		java.util.Map<String, Path> exported = new LinkedHashMap<>();
+		if (formKeys != null) {
+			for (String formKey : formKeys.stream().distinct().toList()) {
+				if (exportService.supports(formKey)) {
+					exported.put(formKey, exportService.exportSelected(formKey, exportData, outputDirectory));
+				}
+			}
+		}
+		return exported;
+	}
+
+	/**
+	 * Exports a selected bundle without persisting orientation or assigned PDF page numbers.
+	 *
+	 * @param formKeys selected renderer keys, or null/empty for standard default forms
+	 * @param outputDirectory destination directory
+	 * @param source authoritative linked-field source
+	 * @param portrait true for portrait ICS 233 pages, false for landscape
+	 * @return merged bundle file
+	 * @throws IOException when copying, rendering, or merging fails
+	 */
+	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source,
+			boolean portrait) throws IOException {
+		return exportService.exportIapBundle(createPrintSnapshot(source, portrait), outputDirectory, formKeys);
+	}
+
+	/**
+	 * Synchronizes incident content and copies it before applying non-persistent print options.
+	 *
+	 * @param source authoritative linked-field source
+	 * @param portrait print-time ICS 233 orientation
+	 * @return independent export document with standard clue defaults
+	 * @throws IOException when the incident cannot be copied
+	 */
+	private AppData createPrintSnapshot(LinkSource source, boolean portrait) throws IOException {
+		synchronizeLinkedFields(source);
+		syncSarTasks();
+		syncTCards();
+		AppData snapshot = INCIDENT_COPIER.readValue(INCIDENT_COPIER.writeValueAsBytes(data), AppData.class);
+		snapshot.setIcs233Portrait(portrait);
+		snapshot.setClueLogIcs233Enabled(false);
+		return snapshot;
 	}
 
 	/**

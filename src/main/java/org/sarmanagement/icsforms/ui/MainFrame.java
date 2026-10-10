@@ -264,7 +264,7 @@ public class MainFrame extends JFrame {
 							case NEW_OPERATIONAL_PERIOD -> IapPhase.DURING_OP;
 							default -> IapPhase.PRE_OP;
 						};
-						controller.newDocument(phase, startup.getChosenMode(), startup::applyNewIncidentSettings);
+						controller.newDocument(phase, startup.getChosenMode());
 					}
 				}
 				refreshFromModel();
@@ -427,7 +427,7 @@ public class MainFrame extends JFrame {
 		pdfExportSettingsItem.setMnemonic(KeyEvent.VK_P);
 		pdfExportSettingsItem.addActionListener(event -> openPdfExportSettingsDialog());
 		configMenu.add(pdfExportSettingsItem);
-		JMenuItem actionSettingsItem = new JMenuItem("Open Action Tracker / ICS 233…");
+		JMenuItem actionSettingsItem = new JMenuItem("Open Action Tracker…");
 		actionSettingsItem.addActionListener(event -> openActionSettingsDialog());
 		configMenu.add(actionSettingsItem);
 
@@ -547,7 +547,7 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Offers registered form exports using the incident's persisted defaults.
+	 * Offers registered form exports with non-persistent print-time layout choices.
 	 * @param defaultDirectory initial destination directory
 	 */
 	private void openFormsExportDialog(Path defaultDirectory) {
@@ -579,17 +579,19 @@ public class MainFrame extends JFrame {
 		controls.add(selectAll);
 		controls.add(selectNone);
 		ExportModeControls exportModeControls = createExportModeControls();
+		PdfPrintOptionsPanel printOptions = new PdfPrintOptionsPanel(formKeys);
 		UiSupport.addRow(form, 0, "Forms", new JScrollPane(checksPanel));
 		UiSupport.addRow(form, 1, "", controls);
 		UiSupport.addRow(form, 2, "Output", exportModeControls.panel());
+		UiSupport.addRow(form, 3, "Print options", printOptions);
 		JScrollPane pane = new JScrollPane(form);
 		pane.setBorder(BorderFactory.createEmptyBorder());
 		if (!UiSupport.showResizableConfirmDialog(this, "Export forms as PDF", pane, new Dimension(560, 440))) {
 			return;
 		}
 
-		List<String> selected = selectors.entrySet().stream().filter(en -> en.getValue().isSelected())
-				.map(Map.Entry::getKey).toList();
+		List<String> selected = printOptions.selectedFormKeys(selectors.entrySet().stream()
+				.filter(en -> en.getValue().isSelected()).map(Map.Entry::getKey).toList());
 		if (selected.isEmpty()) {
 			JOptionPane.showMessageDialog(this, "Select at least one form to export.", "Export forms as PDF",
 					JOptionPane.WARNING_MESSAGE);
@@ -603,11 +605,12 @@ public class MainFrame extends JFrame {
 			pushToModel(source);
 			try {
 				if (exportModeControls.combined().isSelected()) {
-					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source);
+					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source,
+							printOptions.isPortrait());
 					JOptionPane.showMessageDialog(this, "Exported IAP bundle to\n" + bundlePath, "Export complete",
 							JOptionPane.INFORMATION_MESSAGE);
 				} else {
-					controller.exportSelectedForms(selected, directory, source);
+					controller.exportSelectedForms(selected, directory, source, printOptions.isPortrait());
 					JOptionPane.showMessageDialog(this, "Exported selected PDFs to\n" + directory, "Export complete",
 							JOptionPane.INFORMATION_MESSAGE);
 				}
@@ -643,14 +646,15 @@ public class MainFrame extends JFrame {
 	 * Returns whether an export choice is offered for the active incident.
 	 * @param formKey renderer key
 	 * @param data active incident preferences
-	 * @return false only for the disabled independent tracker
+	 * @return false for the disabled tracker or the adapted layout offered as a print option
 	 */
 	static boolean isExportFormVisible(String formKey, AppData data) {
-		return !"ICS 233-CG".equals(formKey) || data.isOpenActionTrackerEnabled();
+		return !PdfPrintOptionsPanel.ADAPTED_CLUE_LOG.equals(formKey)
+				&& (!"ICS 233-CG".equals(formKey) || data.isOpenActionTrackerEnabled());
 	}
 
 	/**
-	 * Returns the persisted default selection without changing existing exports.
+	 * Returns standard clue-log defaults independently of legacy print preferences.
 	 * @param formKey renderer key
 	 * @param data active incident preferences
 	 * @return true when selected by default
@@ -658,8 +662,7 @@ public class MainFrame extends JFrame {
 	static boolean isExportFormSelectedByDefault(String formKey, AppData data) {
 		return switch (formKey) {
 			case "ICS 233-CG" -> data.isOpenActionTrackerEnabled();
-			case "Clue Log (ICS 233-CG adapted)" -> data.isClueLogIcs233Enabled();
-			case "Clue Log" -> !data.isClueLogIcs233Enabled();
+			case "Clue Log (ICS 233-CG adapted)" -> false;
 			default -> true;
 		};
 	}
@@ -814,12 +817,12 @@ public class MainFrame extends JFrame {
 		}
 	}
 
-	/** Configures the independent tracker and both ICS 233 output layouts. */
+	/** Configures availability of the independent incident tracker. */
 	private void openActionSettingsDialog() {
 		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
 		ActionTrackerSettingsPanel settings = new ActionTrackerSettingsPanel(controller.getData());
-		if (UiSupport.showResizableConfirmDialog(this, "Open Action Tracker / ICS 233", settings,
-				new Dimension(620, 300))) {
+		if (UiSupport.showResizableConfirmDialog(this, "Open Action Tracker", settings,
+				new Dimension(620, 220))) {
 			settings.applyTo(controller.getData());
 			controller.markDirty();
 			refreshFromModel();
