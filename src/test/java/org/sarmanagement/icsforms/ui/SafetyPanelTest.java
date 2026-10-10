@@ -16,6 +16,7 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.SwingUtilities;
 import javax.swing.JTabbedPane;
+import java.awt.event.MouseEvent;
 import java.time.LocalDateTime;
 import java.util.Map;
 import javax.swing.JTable;
@@ -109,6 +110,26 @@ class SafetyPanelTest {
 		SwingUtilities.invokeAndWait(() -> panel[0].refreshFromModel());
 		assertTrue(((javax.swing.JLabel) field(panel[0], "hazardReportCoverage")).getText()
 				.startsWith("All SAR-reported hazards accounted for"));
+	}
+
+	@Test
+	void tableDoubleClickSelectsAndEditsTheClickedRowOnly() throws Exception {
+		javax.swing.JTable table = new javax.swing.JTable(new Object[][] {{"first"}, {"second"}},
+				new Object[] {"Hazard"});
+		table.setSize(200, table.getRowHeight() * 2);
+		java.util.List<Integer> editedRows = new java.util.ArrayList<>();
+		var listener = SafetyPanel.installDoubleClickEditor(table, editedRows::add);
+
+		SwingUtilities.invokeAndWait(() -> listener.mouseClicked(new MouseEvent(table, MouseEvent.MOUSE_CLICKED,
+				System.currentTimeMillis(), 0, 5, table.getRowHeight() + 2, 2, false, MouseEvent.BUTTON1)));
+
+		assertEquals(java.util.List.of(1), editedRows);
+		assertEquals(1, table.getSelectedRow());
+		SwingUtilities.invokeAndWait(() -> listener.mouseClicked(new MouseEvent(table, MouseEvent.MOUSE_CLICKED,
+				System.currentTimeMillis(), 0, 5, table.getHeight() + 2, 2, false, MouseEvent.BUTTON1)));
+		SwingUtilities.invokeAndWait(() -> listener.mouseClicked(new MouseEvent(table, MouseEvent.MOUSE_CLICKED,
+				System.currentTimeMillis(), 0, 5, 2, 2, false, MouseEvent.BUTTON3)));
+		assertEquals(java.util.List.of(1), editedRows);
 	}
 
 	@Test

@@ -34,6 +34,8 @@ import javax.swing.table.DefaultTableModel;
 
 import java.awt.Component;
 import java.awt.BorderLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -42,6 +44,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 
 /**
  * Shared safety workspace for the ICS 215A, ICS 208, and SAR hazard reports.
@@ -276,6 +279,7 @@ public class SafetyPanel extends JPanel {
 		button(actions, "Save common library CSV", this::exportCommonCsv);
 		button(actions, "Save analysis as CSV", this::exportAnalysisCsv);
 		button(actions, "Export ICS 215A PDF", () -> exportRequest.accept("ICS 215A"));
+		installDoubleClickEditor(analysisTable, this::editAnalysisRow);
 		panel.add(metadata, BorderLayout.NORTH);
 		panel.add(new JScrollPane(analysisTable), BorderLayout.CENTER);
 		panel.add(actions, BorderLayout.SOUTH);
@@ -317,12 +321,37 @@ public class SafetyPanel extends JPanel {
 		button(blockActions, "Remove block", this::removeMessageBlock);
 		button(blockActions, "Generate/update from 215A", this::generateMessage);
 		button(blockActions, "Export ICS 208 PDF", () -> exportRequest.accept("ICS 208"));
+		installDoubleClickEditor(messageTable, this::editMessageBlock);
 		blocks.add(blockActions, BorderLayout.SOUTH);
 		JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(controls), blocks);
 		split.setResizeWeight(0.5);
 		panel.add(split, BorderLayout.CENTER);
 		panel.add(buildSiteSectionsPanel(), BorderLayout.SOUTH);
 		return panel;
+	}
+
+	/**
+	 * Opens a table row editor when a user double-clicks a valid row.
+	 *
+	 * @param table table with selectable rows.
+	 * @param editor callback receiving the selected row index.
+	 * @return installed mouse listener.
+	 */
+	static MouseAdapter installDoubleClickEditor(JTable table, IntConsumer editor) {
+		MouseAdapter listener = new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent event) {
+				if (event.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(event)) {
+					int row = table.rowAtPoint(event.getPoint());
+					if (row >= 0) {
+						table.setRowSelectionInterval(row, row);
+						editor.accept(row);
+					}
+				}
+			}
+		};
+		table.addMouseListener(listener);
+		return listener;
 	}
 
 	/**
