@@ -10,9 +10,13 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.OpenActionItem;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.pdf.ClueLogIcs233PdfRenderer;
 import org.sarmanagement.icsforms.pdf.ClueLogPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics203PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics207PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics233CgPdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.pdf.PdfFormRenderer;
@@ -224,6 +228,87 @@ class PdfPrintOptionsTest {
 	}
 
 	@Test
+	void organizationListTrackerAndAdaptedCluesCombineOnIsolatedPrintSnapshot() throws Exception {
+		Path directory = testDirectory();
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			AppData data = new AppData();
+			data.setOpenActionTrackerEnabled(true);
+			data.setIcs233Portrait(true);
+			data.setClueLogIcs233Enabled(true);
+			data.getOrganizationalChart().setSafetyOfficerName("Snapshot safety");
+			for (int i = 0; i < 60; i++) {
+				OrgChartEntry representative = new OrgChartEntry();
+				representative.setTitle("Agency " + i);
+				representative.setName("Representative " + i);
+				data.getOrganizationalChart().getAssignmentList().getAgencyRepresentatives().add(representative);
+			}
+			ClueLogEntry clue = new ClueLogEntry();
+			clue.setDescription("Print-only clue");
+			data.setClueLogEntries(List.of(clue));
+			OpenActionItem action = new OpenActionItem();
+			action.setItem("Snapshot tracker action");
+			data.setOpenActionItems(List.of(action));
+			data.getForm202().setIapPage("88");
+			data.getForm207().setIapPage("77");
+			var organization = data.getOrganizationalChart();
+			var assignmentList = organization.getAssignmentList();
+			assignmentList.setIapPage("66");
+			var id = store.create(data);
+			long revision = data.getRevision();
+			AppController controller = new AppController(data, store, id, service(), new IncidentValidator());
+			List<String> keys = List.of("ICS 233-CG", PdfPrintOptionsPanel.ADAPTED_CLUE_LOG,
+					"ICS 207", "ICS 203", "ICS 202");
+			int pages203 = Ics203PdfRenderer.pageCount(data);
+			assertTrue(pages203 > 1);
+			for (boolean include : List.of(true, false)) {
+				assignmentList.setIncludeInIap(include);
+				var individual = controller.exportSelectedForms(keys, directory, AppController.LinkSource.NONE, false);
+				assertEquals(keys, new ArrayList<>(individual.keySet()));
+				try (PDDocument pdf = Loader.loadPDF(individual.get("ICS 203").toFile())) {
+					assertEquals(pages203, pdf.getNumberOfPages());
+					assertTrue(new PDFTextStripper().getText(pdf).contains("Snapshot safety"));
+				}
+				Path bundle = controller.exportSelectedIapBundle(keys, directory, AppController.LinkSource.NONE, false);
+				try (PDDocument pdf = Loader.loadPDF(bundle.toFile())) {
+					assertEquals(5 + (include ? pages203 : 0), pdf.getNumberOfPages());
+					assertTrue(pageText(pdf, 2).contains("INCIDENT OBJECTIVES"));
+					if (include) {
+						String organizationText = pageText(pdf, 3);
+						assertTrue(organizationText.contains("ORGANIZATION ASSIGNMENT LIST"));
+						assertTrue(organizationText.matches("(?s).*IAP Page\\s+2\\b.*"));
+					}
+					int chartPage = 3 + (include ? pages203 : 0);
+					String chartText = pageText(pdf, chartPage);
+					assertTrue(chartText.contains("INCIDENT ORGANIZATION CHART"));
+					assertTrue(chartText.matches("(?s).*IAP Page:?\\s+" + (chartPage - 1) + "\\b.*"));
+					assertOrientation(pdf, chartPage, false);
+					assertOrientation(pdf, chartPage + 1, false);
+					assertTrue(new PDFTextStripper().getText(pdf).contains("Snapshot tracker action"));
+					assertClueText(pdf, true);
+				}
+				assertSame(data, controller.getData());
+				assertSame(organization, data.getOrganizationalChart());
+				assertSame(assignmentList, organization.getAssignmentList());
+				assertEquals(include, assignmentList.isIncludeInIap());
+				assertEquals("66", assignmentList.getIapPage());
+				assertEquals("88", data.getForm202().getIapPage());
+				assertEquals("77", data.getForm207().getIapPage());
+				assertEquals(60, assignmentList.getAgencyRepresentatives().size());
+				assertTrue(data.isIcs233Portrait());
+				assertTrue(data.isClueLogIcs233Enabled());
+				assertFalse(controller.isDirty());
+				assertEquals(revision, data.getRevision());
+				AppData saved = store.load(id);
+				assertEquals(revision, saved.getRevision());
+				assertTrue(saved.getOrganizationalChart().getAssignmentList().isIncludeInIap());
+				assertEquals("66", saved.getOrganizationalChart().getAssignmentList().getIapPage());
+			}
+		} finally {
+			deleteDirectory(directory);
+		}
+	}
+
+	@Test
 	void failingIndividualAndCombinedExportsCannotLeakRendererMutations() throws Exception {
 		Path directory = testDirectory();
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
@@ -263,11 +348,26 @@ class PdfPrintOptionsTest {
 	/**
 	 * Creates the real renderers used by generation dialog tests.
 	 *
-	 * @return export service for standard clues, adapted clues, tracker and ICS 202
+	 * @return export service for clue layouts, tracker, objectives and organization forms
 	 */
 	private PdfExportService service() {
-		return new PdfExportService(new Ics202PdfRenderer(), new ClueLogPdfRenderer(), new Ics233CgPdfRenderer(),
-				new ClueLogIcs233PdfRenderer());
+		return new PdfExportService(new Ics202PdfRenderer(), new Ics203PdfRenderer(), new Ics207PdfRenderer(),
+				new ClueLogPdfRenderer(), new Ics233CgPdfRenderer(), new ClueLogIcs233PdfRenderer());
+	}
+
+	/**
+	 * Extracts text from one physical PDF page, including the unnumbered cover.
+	 *
+	 * @param document exported document
+	 * @param page one-based physical page number
+	 * @return text on the requested page
+	 * @throws IOException when text extraction fails
+	 */
+	private String pageText(PDDocument document, int page) throws IOException {
+		PDFTextStripper stripper = new PDFTextStripper();
+		stripper.setStartPage(page);
+		stripper.setEndPage(page);
+		return stripper.getText(document);
 	}
 
 	/**

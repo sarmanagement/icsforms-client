@@ -1,5 +1,15 @@
+/*
+ * Copyright (C) 2026 SAR Management
+ * This program is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 3 of the License, or any later version.
+ * This program is distributed WITHOUT ANY WARRANTY; without even the implied
+ * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See <https://www.gnu.org/licenses/>.
+ */
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.Ics203Form;
 import org.sarmanagement.icsforms.model.Ics207Form;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
@@ -30,7 +40,11 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.text.ParseException;
 
 /**
  * Shared editor for organizational chart roles linked across forms.
@@ -38,8 +52,9 @@ import java.util.List;
  * <p>
  * Each staff position shows a Name field and — visible only when the name is
  * non-blank — separate Radio and Phone fields. Positions are grouped into:
- * Incident Command, Command Staff, General Staff, Planning Section Positions,
- * and Logistics Section Positions.
+ * Incident Command, Command Staff, Agency/Organization Representatives, General
+ * Staff, Planning Section Positions, and Logistics Section Positions. Agency
+ * representatives support free-text agency, person, radio, and phone entries.
  * </p>
  */
 public class OrganizationalChartPanel extends JPanel {
@@ -48,6 +63,8 @@ public class OrganizationalChartPanel extends JPanel {
 	private final JButton addIncidentCommanderButton = new JButton("Add");
 	private final JLabel incidentCommanderModeLabel = new JLabel("Incident Commander");
 	private final List<IncidentCommanderRow> incidentCommanderRows = new ArrayList<>();
+	private final EntryTable agencyRepresentatives = new EntryTable("Agency/Organization Representatives",
+			"Agency / Organization", "Representative", List.of(), true);
 
 	// Command Staff
 	private final JTextField safetyOfficerNameField = UiSupport.textField();
@@ -303,6 +320,8 @@ public class OrganizationalChartPanel extends JPanel {
 		all.add(Box.createVerticalStrut(8));
 		all.add(financeSection);
 		all.add(Box.createVerticalStrut(8));
+		all.add(agencyRepresentatives);
+		all.add(Box.createVerticalStrut(8));
 		all.add(customSection);
 		all.add(Box.createVerticalStrut(8));
 		all.add(preparerSection);
@@ -314,6 +333,333 @@ public class OrganizationalChartPanel extends JPanel {
 		JScrollPane scrollPane = new JScrollPane(topAligned);
 		scrollPane.setBorder(BorderFactory.createEmptyBorder());
 		add(scrollPane, BorderLayout.CENTER);
+		JButton details = new JButton("ICS 203 details...");
+		details.setToolTipText("Optional organization assignment list: deputies, agencies, branches and preparer");
+		details.addActionListener(event -> showAssignmentListDialog());
+		JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		actions.add(details);
+		actions.add(new JLabel("Unified command: Name / Agency; trainees: Name (T)"));
+		add(actions, BorderLayout.NORTH);
+	}
+
+	/** Opens the supplemental ICS 203 editor, synchronizing representatives on open and acceptance. */
+	private void showAssignmentListDialog() {
+		AssignmentListEditor editor = createAssignmentListEditor();
+		JScrollPane scroll = new JScrollPane(editor);
+		scroll.setPreferredSize(new Dimension(820, 650));
+		while (JOptionPane.showConfirmDialog(this, scroll, "ICS 203 Organization Assignment List (optional)",
+				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION) {
+			try {
+				applyAssignmentListEditor(editor);
+				controller.markDirty();
+				return;
+			} catch (ParseException exception) {
+				JOptionPane.showMessageDialog(this, "Enter a valid preparation date/time.",
+						"Invalid date/time", JOptionPane.ERROR_MESSAGE);
+			}
+		}
+	}
+
+	/**
+	 * Commits main-tab representative edits before creating a detached supplemental editor.
+	 * @return supplemental editor initialized with current representative values.
+	 */
+	AssignmentListEditor createAssignmentListEditor() {
+		Ics203Form form = controller.getData().getOrganizationalChart().getAssignmentList();
+		form.setAgencyRepresentatives(agencyRepresentatives.getEntries());
+		return new AssignmentListEditor(form);
+	}
+
+	/**
+	 * Accepts supplemental edits and reloads representatives to prevent stale main-tab saves.
+	 * @param editor accepted supplemental editor.
+	 * @throws ParseException if the preparation timestamp is invalid.
+	 */
+	void applyAssignmentListEditor(AssignmentListEditor editor) throws ParseException {
+		Ics203Form form = controller.getData().getOrganizationalChart().getAssignmentList();
+		editor.applyTo(form);
+		agencyRepresentatives.setEntries(form.getAgencyRepresentatives());
+	}
+
+	/** Cancel-safe supplemental editor; the shared chart remains untouched until acceptance. */
+	static final class AssignmentListEditor extends JPanel {
+		private final Map<Ics203Form.Position, JTextField> positions = new EnumMap<>(Ics203Form.Position.class);
+		private final EntryTable agencies;
+		private final List<Ics203Form.Branch> branches = new ArrayList<>();
+		private final DefaultTableModel branchModel = new DefaultTableModel(
+				new String[]{"Branch", "Director", "Deputy"}, 0);
+		private final JTable branchTable = new JTable(branchModel);
+		private final JCheckBox include = new JCheckBox("Include optional ICS 203 in IAP");
+		private final JTextField preparedName = UiSupport.textField();
+		private final JTextField preparedTitle = UiSupport.textField();
+		private final JTextField signature = UiSupport.textField();
+		private final JTextField page = UiSupport.textField();
+		private final JCheckBox hasPreparedDate = new JCheckBox("Specify preparation date/time");
+		private final JSpinner preparedDate = UiSupport.dateTimeSpinner();
+
+		/**
+		 * Creates an editor with detached copies of all assignment rows.
+		 * @param form source supplemental form.
+		 */
+		AssignmentListEditor(Ics203Form form) {
+			setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+			add(new JLabel("Shared roles are edited on the Org Chart tab. Use Name / Agency for UC; Name (T) for trainees."));
+			include.setSelected(form.isIncludeInIap());
+			add(include);
+			JPanel roles = UiSupport.formPanel();
+			roles.setBorder(BorderFactory.createTitledBorder("Supplemental positions"));
+			for (Ics203Form.Position position : Ics203Form.Position.values()) {
+				JTextField field = UiSupport.textField();
+				field.setText(form.getPosition(position));
+				positions.put(position, field);
+				StringBuilder labelText = new StringBuilder();
+				for (String word : position.name().toLowerCase(Locale.ROOT).split("_")) {
+					if (!labelText.isEmpty()) {
+						labelText.append(' ');
+					}
+					labelText.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+				}
+				String label = labelText.toString();
+				field.getAccessibleContext().setAccessibleName(label);
+				UiSupport.addRow(roles, position.ordinal(), label, field);
+			}
+			add(roles);
+			agencies = new EntryTable("Agency representatives", "Agency", "Representative",
+					form.getAgencyRepresentatives(), true);
+			add(agencies);
+			for (Ics203Form.Branch source : form.getBranches()) {
+				if (source != null) {
+					Ics203Form.Branch branch = new Ics203Form.Branch();
+					branch.setDivisions(new EntryTable("Divisions", "Division / Group", "Supervisor",
+							source.getDivisions()).getEntries());
+					branches.add(branch);
+					branchModel.addRow(new Object[]{source.getName(), source.getDirector(), source.getDeputy()});
+				}
+			}
+			branchTable.getAccessibleContext().setAccessibleName("Operations branches");
+			branchTable.getTableHeader().setReorderingAllowed(false);
+			JPanel branchPanel = new JPanel(new BorderLayout());
+			branchPanel.setBorder(BorderFactory.createTitledBorder("Operations branches"));
+			branchPanel.add(new JScrollPane(branchTable), BorderLayout.CENTER);
+			JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+			JButton addBranch = new JButton("Add branch");
+			addBranch.addActionListener(event -> {
+				stopEditing(branchTable);
+				branches.add(new Ics203Form.Branch());
+				branchModel.addRow(new Object[]{"", "", ""});
+				branchTable.setRowSelectionInterval(branchModel.getRowCount() - 1, branchModel.getRowCount() - 1);
+			});
+			JButton removeBranch = new JButton("Remove branch");
+			removeBranch.addActionListener(event -> {
+				stopEditing(branchTable);
+				int row = branchTable.getSelectedRow();
+				if (row >= 0) {
+					branches.remove(row);
+					branchModel.removeRow(row);
+				}
+			});
+			JButton divisions = new JButton("Edit selected branch divisions / groups...");
+			divisions.addActionListener(event -> editDivisions());
+			buttons.add(addBranch);
+			buttons.add(removeBranch);
+			buttons.add(divisions);
+			branchPanel.add(buttons, BorderLayout.SOUTH);
+			branchPanel.setPreferredSize(new Dimension(760, 170));
+			add(branchPanel);
+			JPanel preparer = UiSupport.formPanel();
+			preparer.setBorder(BorderFactory.createTitledBorder("ICS 203 preparer"));
+			preparedName.setText(form.getPreparedByName());
+			preparedTitle.setText(form.getPreparedByPositionTitle().isBlank()
+					? "Resources Unit Leader" : form.getPreparedByPositionTitle());
+			signature.setText(form.getPreparedBySignature());
+			page.setText(form.getIapPage());
+			page.setEditable(false);
+			page.setToolTipText("Assigned automatically on IAP export");
+			hasPreparedDate.setSelected(form.getPreparedDateTime() != null);
+			preparedDate.setValue(AppController.toDate(form.getPreparedDateTime()));
+			preparedDate.setEnabled(hasPreparedDate.isSelected());
+			hasPreparedDate.addActionListener(event -> preparedDate.setEnabled(hasPreparedDate.isSelected()));
+			UiSupport.addRow(preparer, 0, "Name", preparedName);
+			UiSupport.addRow(preparer, 1, "Position / Title", preparedTitle);
+			UiSupport.addRow(preparer, 2, "Signature (typed)", signature);
+			UiSupport.addRow(preparer, 3, "Preparation date", hasPreparedDate);
+			UiSupport.addRow(preparer, 4, "Date / Time", preparedDate);
+			UiSupport.addRow(preparer, 5, "IAP page (auto)", page);
+			add(preparer);
+			UiSupport.applyDateTimeDisplayZone(this);
+		}
+
+		/** Edits divisions belonging exclusively to the selected operations branch. */
+		private void editDivisions() {
+			stopEditing(branchTable);
+			int row = branchTable.getSelectedRow();
+			if (row < 0) {
+				JOptionPane.showMessageDialog(this, "Select an operations branch first.");
+				return;
+			}
+			EntryTable editor = new EntryTable("Divisions / Groups", "Division / Group", "Supervisor",
+					branches.get(row).getDivisions());
+			if (JOptionPane.showConfirmDialog(this, editor,
+					"Divisions / Groups — " + branchModel.getValueAt(row, 0),
+					JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION) {
+				branches.get(row).setDivisions(editor.getEntries());
+			}
+		}
+
+		/**
+		 * Applies accepted edits, leaving all shared ICS 207 data alone.
+		 * @param form destination supplemental form.
+		 * @throws ParseException if a specified preparation timestamp cannot be parsed.
+		 */
+		void applyTo(Ics203Form form) throws ParseException {
+			if (hasPreparedDate.isSelected()) {
+				preparedDate.commitEdit();
+			}
+			stopEditing(branchTable);
+			positions.forEach((position, field) -> form.setPosition(position, field.getText().trim()));
+			form.setAgencyRepresentatives(agencies.getEntries());
+			for (int row = 0; row < branches.size(); row++) {
+				Ics203Form.Branch branch = branches.get(row);
+				branch.setName(cell(branchModel, row, 0));
+				branch.setDirector(cell(branchModel, row, 1));
+				branch.setDeputy(cell(branchModel, row, 2));
+			}
+			form.setBranches(branches);
+			form.setIncludeInIap(include.isSelected());
+			form.setPreparedByName(preparedName.getText().trim());
+			form.setPreparedByPositionTitle(preparedTitle.getText().trim());
+			form.setPreparedBySignature(signature.getText().trim());
+			form.setPreparedDateTime(hasPreparedDate.isSelected()
+					? AppController.toLocalDateTime((java.util.Date) preparedDate.getValue()) : null);
+		}
+	}
+
+	/** Editable organizational entries with optional contact columns and detached row metadata. */
+	static final class EntryTable extends JPanel {
+		private final DefaultTableModel model;
+		private final JTable table;
+		private final List<OrgChartEntry> entries = new ArrayList<>();
+		private final boolean contacts;
+
+		/**
+		 * Creates editable agency or division rows with add/remove controls.
+		 * @param title accessible table and panel title.
+		 * @param labelColumn organizational label column.
+		 * @param nameColumn assigned person column.
+		 * @param source source entries copied for cancel-safe editing.
+		 */
+		EntryTable(String title, String labelColumn, String nameColumn, List<OrgChartEntry> source) {
+			this(title, labelColumn, nameColumn, source, false);
+		}
+
+		/**
+		 * Creates editable organizational rows with optional radio and phone columns.
+		 * @param title accessible table and panel title.
+		 * @param labelColumn organizational label column.
+		 * @param nameColumn assigned person column.
+		 * @param source source entries copied for cancel-safe editing.
+		 * @param contacts whether contact columns are visible and editable.
+		 */
+		EntryTable(String title, String labelColumn, String nameColumn, List<OrgChartEntry> source,
+				boolean contacts) {
+			super(new BorderLayout());
+			this.contacts = contacts;
+			setBorder(BorderFactory.createTitledBorder(title));
+			model = new DefaultTableModel(contacts
+					? new String[]{labelColumn, nameColumn, "Radio", "Phone"}
+					: new String[]{labelColumn, nameColumn}, 0);
+			table = new JTable(model);
+			table.getAccessibleContext().setAccessibleName(title);
+			table.getTableHeader().setReorderingAllowed(false);
+			setEntries(source);
+			add(new JScrollPane(table), BorderLayout.CENTER);
+			JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+			JButton addEntry = new JButton("Add");
+			addEntry.getAccessibleContext().setAccessibleName("Add " + title);
+			addEntry.addActionListener(event -> {
+				stopEditing(table);
+				entries.add(new OrgChartEntry());
+				model.addRow(contacts ? new Object[]{"", "", "", ""} : new Object[]{"", ""});
+				table.setRowSelectionInterval(model.getRowCount() - 1, model.getRowCount() - 1);
+			});
+			JButton removeEntry = new JButton("Remove");
+			removeEntry.getAccessibleContext().setAccessibleName("Remove " + title);
+			removeEntry.addActionListener(event -> {
+				stopEditing(table);
+				int row = table.getSelectedRow();
+				if (row >= 0) {
+					entries.remove(row);
+					model.removeRow(row);
+				}
+			});
+			buttons.add(addEntry);
+			buttons.add(removeEntry);
+			add(buttons, BorderLayout.SOUTH);
+			setPreferredSize(new Dimension(760, 170));
+		}
+
+		/**
+		 * Replaces visible rows with detached copies, discarding any stale active edit.
+		 * @param source organizational entries to load.
+		 */
+		void setEntries(List<OrgChartEntry> source) {
+			if (table.isEditing()) {
+				table.getCellEditor().cancelCellEditing();
+			}
+			entries.clear();
+			model.setRowCount(0);
+			for (OrgChartEntry entry : source) {
+				if (entry != null) {
+					OrgChartEntry copy = new OrgChartEntry();
+					copy.setSection(entry.getSection());
+					copy.setRadio(entry.getRadio());
+					copy.setPhone(entry.getPhone());
+					entries.add(copy);
+					model.addRow(contacts
+							? new Object[]{entry.getTitle(), entry.getName(), entry.getRadio(), entry.getPhone()}
+							: new Object[]{entry.getTitle(), entry.getName()});
+				}
+			}
+		}
+
+		/**
+		 * Commits pending cell edits and returns edited detached entries.
+		 * @return entries in visible row order, including organizational labels without names.
+		 */
+		List<OrgChartEntry> getEntries() {
+			stopEditing(table);
+			for (int row = 0; row < entries.size(); row++) {
+				entries.get(row).setTitle(cell(model, row, 0));
+				entries.get(row).setName(cell(model, row, 1));
+				if (contacts) {
+					entries.get(row).setRadio(cell(model, row, 2));
+					entries.get(row).setPhone(cell(model, row, 3));
+				}
+			}
+			return entries;
+		}
+	}
+
+	/**
+	 * Commits an active table cell before saving or changing rows.
+	 * @param table edited table.
+	 */
+	private static void stopEditing(JTable table) {
+		if (table.isEditing()) {
+			table.getCellEditor().stopCellEditing();
+		}
+	}
+
+	/**
+	 * Reads a nullable table cell as trimmed text.
+	 * @param model source model.
+	 * @param row row index.
+	 * @param column column index.
+	 * @return cell text, or blank.
+	 */
+	private static String cell(DefaultTableModel model, int row, int column) {
+		Object value = model.getValueAt(row, column);
+		return value == null ? "" : value.toString().trim();
 	}
 
 	/**
@@ -442,10 +788,11 @@ public class OrganizationalChartPanel extends JPanel {
 	}
 
 	/**
-	 * Loads field values from the model.
+	 * Loads field values and agency representatives from the model, discarding stale table edits.
 	 */
 	public void refreshFromModel() {
 		OrganizationalChart chart = controller.getData().getOrganizationalChart();
+		agencyRepresentatives.setEntries(chart.getAssignmentList().getAgencyRepresentatives());
 		incidentCommanderRows.clear();
 		if (chart.getIncidentCommanderEntries() != null && !chart.getIncidentCommanderEntries().isEmpty()) {
 			for (OrgChartEntry entry : chart.getIncidentCommanderEntries()) {
@@ -568,10 +915,11 @@ public class OrganizationalChartPanel extends JPanel {
 	}
 
 	/**
-	 * Applies field values to the model.
+	 * Applies field values and agency representatives to the model, committing pending representative edits.
 	 */
 	public void pushToModel() {
 		OrganizationalChart chart = controller.getData().getOrganizationalChart();
+		chart.getAssignmentList().setAgencyRepresentatives(agencyRepresentatives.getEntries());
 		List<String> icNames = new ArrayList<>();
 		List<OrgChartEntry> icEntries = new ArrayList<>();
 		boolean propagate = false;
