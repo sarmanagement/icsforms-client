@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -102,6 +105,10 @@ public class AppData {
 	private List<ActivityEventType> activityEventTypes = new ArrayList<>();
 	private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
 	private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
+	private List<OpenActionItem> openActionItems = new ArrayList<>();
+	private boolean openActionTrackerEnabled;
+	private boolean ics233Portrait;
+	private boolean clueLogIcs233Enabled;
 	private List<TCard> tCards = new ArrayList<>();
 	private PdfLayoutSettings pdfLayoutSettings = new PdfLayoutSettings();
 
@@ -109,6 +116,77 @@ public class AppData {
 	 * Creates an empty incident document.
 	 */
 	public AppData() {
+	}
+
+	/**
+	 * Returns regular action items independently of SAR clues.
+	 * @return mutable action list, never null
+	 */
+	public List<OpenActionItem> getOpenActionItems() {
+		return openActionItems;
+	}
+
+	/**
+	 * Sets regular action items, excluding null records.
+	 * @param openActionItems action list; null becomes empty
+	 */
+	public void setOpenActionItems(List<OpenActionItem> openActionItems) {
+		this.openActionItems = new ArrayList<>();
+		if (openActionItems != null) {
+			for (OpenActionItem item : openActionItems) {
+				if (item != null) {
+					this.openActionItems.add(item);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Returns whether the independent action tracker is enabled.
+	 * @return true when enabled
+	 */
+	public boolean isOpenActionTrackerEnabled() {
+		return openActionTrackerEnabled;
+	}
+
+	/**
+	 * Enables or hides the tracker without discarding its records.
+	 * @param openActionTrackerEnabled true to enable
+	 */
+	public void setOpenActionTrackerEnabled(boolean openActionTrackerEnabled) {
+		this.openActionTrackerEnabled = openActionTrackerEnabled;
+	}
+
+	/**
+	 * Returns the ICS 233 page orientation.
+	 * @return true for portrait; false for the default landscape
+	 */
+	public boolean isIcs233Portrait() {
+		return ics233Portrait;
+	}
+
+	/**
+	 * Sets the ICS 233 page orientation.
+	 * @param ics233Portrait true for portrait
+	 */
+	public void setIcs233Portrait(boolean ics233Portrait) {
+		this.ics233Portrait = ics233Portrait;
+	}
+
+	/**
+	 * Returns whether clue export uses the adapted ICS 233 layout.
+	 * @return true for adapted output; false for standard clue output
+	 */
+	public boolean isClueLogIcs233Enabled() {
+		return clueLogIcs233Enabled;
+	}
+
+	/**
+	 * Selects adapted clue output without changing stored clues.
+	 * @param clueLogIcs233Enabled true for adapted ICS 233 output
+	 */
+	public void setClueLogIcs233Enabled(boolean clueLogIcs233Enabled) {
+		this.clueLogIcs233Enabled = clueLogIcs233Enabled;
 	}
 
 	/**

@@ -1,3 +1,7 @@
+/*
+ * Licensed under the GNU General Public License, version 3 or later.
+ * See LICENSE for details.
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.multipdf.PDFMergerUtility;
@@ -56,6 +60,16 @@ public class PdfExportService {
 		return exportSelected(formKey, data, outputDirectory, BlankExportPages.NONE);
 	}
 
+	/**
+	 * Exports a form with any bundle-specific blank-page metadata.
+	 *
+	 * @param formKey form identifier.
+	 * @param data incident document.
+	 * @param outputDirectory destination directory.
+	 * @param blankExportPages bundle page numbers for blank fallback forms.
+	 * @return created file.
+	 * @throws IOException when rendering fails.
+	 */
 	private Path exportSelected(String formKey, AppData data, Path outputDirectory, BlankExportPages blankExportPages)
 			throws IOException {
 		PdfFormRenderer renderer = renderers.get(formKey);
@@ -80,7 +94,7 @@ public class PdfExportService {
 	 */
 	public Map<String, Path> exportAll(AppData data, Path outputDirectory) throws IOException {
 		Map<String, Path> exported = new LinkedHashMap<>();
-		for (String formKey : renderers.keySet()) {
+		for (String formKey : defaultFormKeys(data)) {
 			exported.put(formKey, exportSelected(formKey, data, outputDirectory));
 		}
 		return exported;
@@ -97,8 +111,33 @@ public class PdfExportService {
 		return renderers.containsKey(formKey);
 	}
 
+	/**
+	 * Lists all supported formats, including optional formats for explicit export.
+	 *
+	 * @return registered form identifiers.
+	 */
 	public List<String> formKeys() {
 		return new ArrayList<>(renderers.keySet());
+	}
+
+	/**
+	 * Selects default exports without duplicating the clue log or enabling a tracker.
+	 *
+	 * @param data incident document containing export preferences.
+	 * @return selected registered form identifiers.
+	 */
+	private List<String> defaultFormKeys(AppData data) {
+		List<String> keys = formKeys();
+		if (data == null || !data.isOpenActionTrackerEnabled()) {
+			keys.remove("ICS 233-CG");
+		}
+		if (data != null && data.isClueLogIcs233Enabled()
+				&& renderers.containsKey("Clue Log (ICS 233-CG adapted)")) {
+			keys.remove("Clue Log");
+		} else {
+			keys.remove("Clue Log (ICS 233-CG adapted)");
+		}
+		return keys;
 	}
 
 	/**
@@ -145,7 +184,7 @@ public class PdfExportService {
 		// DURING_OP.
 		boolean skipIcs201 = !ics201HasContent(data.getForm201());
 		List<String> includedFormKeys = (selectedFormKeys == null || selectedFormKeys.isEmpty())
-				? new ArrayList<>(renderers.keySet())
+				? defaultFormKeys(data)
 				: new ArrayList<>(selectedFormKeys);
 		includedFormKeys = orderForIapBundle(includedFormKeys);
 		CoverPageRenderer coverPageRenderer = new CoverPageRenderer();
@@ -188,13 +227,6 @@ public class PdfExportService {
 	}
 
 	/**
-	 * Generates a stable file name from a form identifier.
-	 *
-	 * @param formKey
-	 *            form identifier.
-	 * @return PDF file name.
-	 */
-	/**
 	 * Assigns sequential IAP page numbers to all forms in the document, ordered by
 	 * ICS form number: ICS 201 (page 1), ICS 202, ICS 204 forms (primary then
 	 * additional), SAR Task Assignment forms, ICS 214 activity logs.
@@ -212,6 +244,14 @@ public class PdfExportService {
 		assignIapPageNumbers(data, null, !ics201HasContent(data.getForm201()));
 	}
 
+	/**
+	 * Assigns page numbers for the selected bundle components.
+	 *
+	 * @param data incident document.
+	 * @param includedFormKeys selected forms, or null for all.
+	 * @param skipIcs201 whether to omit the initial briefing.
+	 * @return starting page numbers for blank fallback forms.
+	 */
 	static BlankExportPages assignIapPageNumbers(AppData data, List<String> includedFormKeys, boolean skipIcs201) {
 		int page = 1;
 		String blankSarTaskPage = "";
@@ -283,6 +323,12 @@ public class PdfExportService {
 		return new BlankExportPages(blankSarTaskPage, blankIcs214Page);
 	}
 
+	/**
+	 * Orders known IAP forms before remaining selected formats.
+	 *
+	 * @param formKeys selected identifiers.
+	 * @return ordered identifiers.
+	 */
 	static List<String> orderForIapBundle(List<String> formKeys) {
 		List<String> ordered = new ArrayList<>();
 		for (String formKey : IAP_BUNDLE_FORM_ORDER) {
@@ -298,6 +344,14 @@ public class PdfExportService {
 		return ordered;
 	}
 
+	/**
+	 * Supplies blank fallback forms without mutating the incident.
+	 *
+	 * @param formKey selected format.
+	 * @param data incident document.
+	 * @param blankExportPages starting pages for blank forms.
+	 * @return original data or a copy with a numbered blank form.
+	 */
 	private AppData exportData(String formKey, AppData data, BlankExportPages blankExportPages) {
 		if ("SAR Task Assignment".equals(formKey) && data.getSarTaskAssignments().isEmpty()
 				&& !blankExportPages.sarTaskAssignmentStartPage().isBlank()) {
@@ -318,6 +372,12 @@ public class PdfExportService {
 		return data;
 	}
 
+	/**
+	 * Copies the root document for temporary export-only form substitutions.
+	 *
+	 * @param data source document.
+	 * @return copy retaining incident data and export preferences.
+	 */
 	private AppData copyAppData(AppData data) {
 		AppData copy = new AppData();
 		copy.setSchemaVersion(data.getSchemaVersion());
@@ -338,6 +398,10 @@ public class PdfExportService {
 		copy.setActivityEventTypes(data.getActivityEventTypes());
 		copy.setSarTaskAssignments(data.getSarTaskAssignments());
 		copy.setClueLogEntries(data.getClueLogEntries());
+		copy.setOpenActionItems(data.getOpenActionItems());
+		copy.setOpenActionTrackerEnabled(data.isOpenActionTrackerEnabled());
+		copy.setIcs233Portrait(data.isIcs233Portrait());
+		copy.setClueLogIcs233Enabled(data.isClueLogIcs233Enabled());
 		copy.setTCards(data.getTCards());
 		PdfLayoutSettings settings = new PdfLayoutSettings();
 		settings.setPaperSize(data.getPdfLayoutSettings().getPaperSize());
@@ -346,10 +410,23 @@ public class PdfExportService {
 		return copy;
 	}
 
+	/**
+	 * Checks membership in an optional form selection.
+	 *
+	 * @param included selection, or null for all.
+	 * @param formKey candidate identifier.
+	 * @return whether the candidate is included.
+	 */
 	private static boolean includedOrAll(java.util.Set<String> included, String formKey) {
 		return included == null || included.contains(formKey);
 	}
 
+	/**
+	 * Bundle numbering for blank fallback forms.
+	 *
+	 * @param sarTaskAssignmentStartPage blank SAR task starting page.
+	 * @param ics214StartPage blank activity log starting page.
+	 */
 	private record BlankExportPages(String sarTaskAssignmentStartPage, String ics214StartPage) {
 		private static final BlankExportPages NONE = new BlankExportPages("", "");
 	}
@@ -359,6 +436,9 @@ public class PdfExportService {
 	 * deliberately completed during an initial incident response. A form with both
 	 * {@code situationSummary} and {@code preparedByName} blank is treated as never
 	 * filled in and is excluded from the IAP bundle.
+	 *
+	 * @param form initial briefing, or null.
+	 * @return whether the form was filled in.
 	 */
 	static boolean ics201HasContent(Ics201Form form) {
 		if (form == null) {
@@ -367,6 +447,12 @@ public class PdfExportService {
 		return !form.getSituationSummary().isBlank() || !form.getPreparedByName().isBlank();
 	}
 
+	/**
+	 * Generates a stable export file name.
+	 *
+	 * @param formKey form identifier.
+	 * @return PDF file name.
+	 */
 	private String fileName(String formKey) {
 		return formKey.toLowerCase().replace(' ', '-') + ".pdf";
 	}

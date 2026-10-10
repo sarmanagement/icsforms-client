@@ -1,8 +1,13 @@
+/*
+ * Licensed under the GNU General Public License, version 3 or later.
+ * See LICENSE for details.
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.PocAssignment;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -45,6 +50,12 @@ public class ClueLogPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		}
 	}
 
+	/**
+	 * Builds the existing clue blocks, including optional follow-up POC history.
+	 *
+	 * @param data incident document.
+	 * @return printable clue blocks.
+	 */
 	private List<List<String>> buildBlocks(AppData data) {
 		List<ClueLogEntry> entries = data.getClueLogEntries();
 		if (entries == null || entries.isEmpty()) {
@@ -71,11 +82,22 @@ public class ClueLogPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 			if (!safe(e.getFollowUp()).isBlank()) {
 				block.add("Follow-up:         " + safe(e.getFollowUp()));
 			}
+			for (PocAssignment assignment : e.getFollowUpAssignments()) {
+				block.add("Follow-up POC:     " + assignment.getAssignee()
+						+ (assignment.getAssignedAt() == null ? ""
+								: " (" + formatPdfDateTime(data, assignment.getAssignedAt()) + ")"));
+			}
 			blocks.add(block);
 		}
 		return blocks;
 	}
 
+	/**
+	 * Normalizes optional text for the existing block layout.
+	 *
+	 * @param value optional text.
+	 * @return non-null text.
+	 */
 	private String safe(String value) {
 		return value == null ? "" : value;
 	}

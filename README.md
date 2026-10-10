@@ -42,6 +42,7 @@ This project is open source under the Apache 2.0 license. Contributions are welc
   - ICS 204
   - SAR Tasks (SAR mode only)
   - Clue Log (SAR mode only)
+  - Optional Incident Open Action Tracker (ICS 233-CG), available in both SAR and Generic modes as a separate tab.
   - T-Cards
   - Activity Logs (ICS 214)
 - SAR Task Assignment forms with debriefing and POD factoring support.
@@ -50,6 +51,27 @@ This project is open source under the Apache 2.0 license. Contributions are welc
 - PDF export for each supported form.
 - **Export All PDFs** for individual per-form PDF files.
 - **Export IAP Bundle** for a single merged PDF bundle of selected forms with a cover page.
+
+### Open actions and clue follow-up
+
+Enable **Open Action Tracker (ICS 233-CG)** in Configuration to track incident
+actions independently of SAR tasks and clues. Disabling the tab does not delete
+its entries; incident-level actions also carry forward to subsequent operational
+periods. POC means *Point of Contact*: the person or section responsible for
+the action. Mark Briefed once that person has been informed of and acknowledged
+the assignment. Completed actions remain available in the Completed/All views;
+target dates highlight overdue actions in red and actions due within a day in yellow.
+
+The clue details editor retains follow-up POC assignment history without changing
+the existing clue fields, duplicate detection, or activity-log synchronization.
+The standard clue-log PDF remains the default. Choose **Clue Log (ICS 233-CG
+adapted)** for a table containing every clue, ordered open, assigned, then followed
+up on. Its Item column uses Description, Location, and Found by headings, and its
+POC column includes assignment history. The regular tracker prints only the current POC.
+
+ICS 233-CG output supports landscape (default) or portrait on the configured paper
+size. The Configuration export preferences control the default format in bulk/IAP
+exports; individual formats can also be explicitly selected in the PDF export dialog.
 - Validation that blocks export when required fields are missing.
 
 ## Incident phases
