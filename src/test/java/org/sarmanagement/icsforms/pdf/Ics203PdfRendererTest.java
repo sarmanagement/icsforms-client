@@ -200,6 +200,81 @@ class Ics203PdfRendererTest {
 	}
 
 	@Test
+	void ordinaryMetadataUsesFullCellsAndBlankPreparerDefaultsToResourcesLeader() throws Exception {
+		AppData data = new AppData();
+		Ics203Form form = data.getOrganizationalChart().getAssignmentList();
+		data.getIncidentContext().setIncidentName("A normally named incident with a full title");
+		data.getOrganizationalChart().setResourcesUnitLeaderName("Elizabeth Montgomery");
+		assertEquals(1, Ics203PdfRenderer.pageCount(data));
+		try (PDDocument pdf = render(data)) {
+			String text = text(pdf);
+			assertTrue(text.contains("Name: Elizabeth Montgomery"));
+			assertTrue(text.contains("Position/Title: Resources Unit Leader"));
+		}
+		form.setPreparedByName("Christopher Anderson");
+		form.setPreparedByPositionTitle("Planning Section Chief");
+		form.setPreparedBySignature("Christopher Anderson");
+		assertEquals(1, Ics203PdfRenderer.pageCount(data));
+		try (PDDocument pdf = render(data)) {
+			assertTrue(text(pdf).contains("Name: Christopher Anderson"));
+		}
+	}
+
+	@Test
+	void continuationIapPagesIncrementNumericStartsAndPreserveCustomLabels() throws Exception {
+		AppData data = new AppData();
+		Ics203Form form = data.getOrganizationalChart().getAssignmentList();
+		for (int i = 0; i < 5; i++) {
+			form.getAgencyRepresentatives().add(entry("Agency" + i, "Person" + i));
+		}
+		form.setIapPage("12");
+		try (PDDocument pdf = render(data)) {
+			assertEquals(3, pdf.getNumberOfPages());
+			String text = text(pdf);
+			assertTrue(text.contains("IAP Page 12"));
+			assertTrue(text.contains("IAP Page 13"));
+			assertTrue(text.contains("IAP Page 14"));
+		}
+		form.setIapPage("Annex A");
+		try (PDDocument pdf = render(data)) {
+			assertEquals(3, occurrences(text(pdf), "IAP Page Annex A"));
+		}
+	}
+
+	@Test
+	void twoAgencyRepresentativesFitOnePageAndOverflowBranchesKeepTheirContext() throws Exception {
+			AppData data = new AppData();
+			Ics203Form form = data.getOrganizationalChart().getAssignmentList();
+			form.getAgencyRepresentatives().add(entry("Agency A", "Person A"));
+			form.getAgencyRepresentatives().add(entry("Agency B", "Person B"));
+			assertEquals(1, Ics203PdfRenderer.pageCount(data));
+			for (int i = 0; i < 4; i++) {
+				Branch branch = new Branch();
+				branch.setName("Branch" + i);
+				branch.setDirector("Director" + i);
+				branch.setDeputy("Deputy" + i);
+				for (int j = 0; j < 7; j++) {
+					branch.getDivisions().add(entry("Division" + i + "-" + j, "Supervisor" + i + "-" + j));
+				}
+				form.getBranches().add(branch);
+			}
+			try (PDDocument pdf = render(data)) {
+				for (int page = 1; page <= pdf.getNumberOfPages(); page++) {
+					PDFTextStripper stripper = new PDFTextStripper();
+					stripper.setStartPage(page);
+					stripper.setEndPage(page);
+					String text = stripper.getText(pdf);
+					for (int i = 0; i < 4; i++) {
+						if (text.contains("Supervisor" + i + "-6")) {
+							assertTrue(text.contains("Branch" + i));
+							assertTrue(text.contains("Director" + i));
+							assertTrue(text.contains("Deputy" + i));
+						}
+					}
+				}
+			}
+		}
+	@Test
 	void overflowRetainsBranchesRepresentativesAndLongUnbrokenTextOnRepeatedForms() throws Exception {
 		AppData data = new AppData();
 		Ics203Form form = data.getOrganizationalChart().getAssignmentList();
@@ -250,6 +325,84 @@ class Ics203PdfRendererTest {
 					assertTrue(page.contains(block + ". "), "block " + block + " on page " + i);
 				}
 			}
+		}
+	}
+
+	@Test
+	void longOverflowBranchDirectorsStayGroupedWithTheirGrayBranchHeading() throws Exception {
+		AppData data = new AppData();
+		Ics203Form form = data.getOrganizationalChart().getAssignmentList();
+		for (int i = 0; i < 4; i++) {
+			Branch branch = new Branch();
+			branch.setName("Branch" + i);
+			branch.setDirector(i == 3 ? "$".repeat(800) + " DIRECTOREND" : "Director" + i);
+			branch.setDeputy("Deputy" + i);
+			branch.getDivisions().add(entry("Division" + i, "Supervisor" + i));
+			form.getBranches().add(branch);
+		}
+		try (PDDocument pdf = render(data)) {
+			assertEquals(800, occurrences(text(pdf), "$"));
+			assertTrue(text(pdf).contains("DIRECTOREND"));
+			for (int page = 1; page <= pdf.getNumberOfPages(); page++) {
+				PDFTextStripper stripper = new PDFTextStripper();
+				stripper.setStartPage(page);
+				stripper.setEndPage(page);
+				String text = stripper.getText(pdf);
+				if (text.contains("$") || text.contains("DIRECTOREND")) {
+					assertTrue(text.contains("Branch3"));
+					assertTrue(text.contains("Deputy3"));
+				}
+			}
+		}
+	}
+
+	@Test
+	void unnamedOverflowBranchKeepsIndexedIdentityOnEveryLeadershipContinuation() throws Exception {
+		AppData data = new AppData();
+		Ics203Form form = data.getOrganizationalChart().getAssignmentList();
+		for (int i = 0; i < 4; i++) {
+			Branch branch = new Branch();
+			branch.setDirector(i == 3 ? "$".repeat(500) : "Director" + i);
+			branch.setDeputy(i == 3 ? "Overflow Deputy" : "Deputy" + i);
+			form.getBranches().add(branch);
+		}
+		try (PDDocument pdf = render(data)) {
+			for (int page = 1; page <= pdf.getNumberOfPages(); page++) {
+				PDFTextStripper stripper = new PDFTextStripper();
+				stripper.setStartPage(page);
+				stripper.setEndPage(page);
+				String text = stripper.getText(pdf).replaceAll("\\s+", " ");
+				if (text.contains("$")) {
+					assertTrue(text.contains("Branch 4"));
+					assertTrue(text.contains("Overflow Deputy"));
+				}
+			}
+		}
+	}
+
+	@Test
+	void fallbackKeepsIdenticallyNamedDivisionsUnderDistinctSourceBranches() throws Exception {
+		AppData data = new AppData();
+		data.getForm204().setBranch("East");
+		data.getForm204().setDivision("A");
+		data.getForm204().setDivisionGroupSupervisorName("East Supervisor");
+		Ics204Form west = new Ics204Form();
+		west.setBranch("West");
+		west.setDivision("A");
+		west.setDivisionGroupSupervisorName("West Supervisor");
+		data.getAdditionalForms204().add(west);
+		SarTaskAssignment duplicate = new SarTaskAssignment();
+		duplicate.setBranch("East");
+		duplicate.setDivision("A");
+		duplicate.setLeader("Wrong Task Leader");
+		data.getSarTaskAssignments().add(duplicate);
+		try (PDDocument pdf = render(data)) {
+			String text = text(pdf);
+			assertTrue(text.contains("Branch East / Division A"));
+			assertTrue(text.contains("Branch West / Division A"));
+			assertTrue(text.contains("East Supervisor"));
+			assertTrue(text.contains("West Supervisor"));
+			assertFalse(text.contains("Wrong Task Leader"));
 		}
 	}
 

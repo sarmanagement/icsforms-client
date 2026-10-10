@@ -12,8 +12,13 @@ package org.sarmanagement.icsforms.model;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
+import org.sarmanagement.icsforms.persistence.FileIncidentStore;
+import org.sarmanagement.icsforms.persistence.IncidentId;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +28,70 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Regression coverage for supplemental ICS 203 storage and assignment detection. */
 class Ics203FormTest {
 	private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+
+	@Test
+	void assignmentListSurvivesFileStoreCreateSaveExportAndImport() throws Exception {
+		Path directory = Files.createDirectories(Path.of("target"));
+		Path workspace = Files.createTempDirectory(directory, "ics203-store-");
+		try (FileIncidentStore store = new FileIncidentStore(workspace.resolve("store"))) {
+			AppData data = new AppData();
+			OrganizationalChart chart = data.getOrganizationalChart();
+			chart.setIncidentCommanders(List.of("Commander / Agency (T)"));
+			chart.setSafetyOfficerName("Shared Safety");
+			Ics203Form form = chart.getAssignmentList();
+			for (Ics203Form.Position position : Ics203Form.Position.values()) {
+				form.setPosition(position, "Assigned " + position.name());
+			}
+			OrgChartEntry agency = new OrgChartEntry();
+			agency.setTitle("Partner Agency");
+			agency.setName("Representative");
+			form.setAgencyRepresentatives(List.of(agency));
+			Ics203Form.Branch branch = new Ics203Form.Branch();
+			branch.setName("North Branch");
+			branch.setDirector("Director");
+			branch.setDeputy("Deputy (T)");
+			OrgChartEntry division = new OrgChartEntry();
+			division.setTitle("Division A");
+			division.setName("Supervisor");
+			branch.setDivisions(List.of(division));
+			form.setBranches(List.of(branch));
+			form.setIncludeInIap(false);
+			form.setIapPage("7");
+			form.setPreparedByName("Planner");
+			form.setPreparedByPositionTitle("Resources Unit Leader");
+			form.setPreparedBySignature("Signed");
+			form.setPreparedDateTime(LocalDateTime.of(2026, 10, 10, 14, 30));
+			IncidentId originalId = store.create(data);
+			AppData loaded = store.load(originalId);
+			assertEquals(mapper.valueToTree(chart), mapper.valueToTree(loaded.getOrganizationalChart()));
+			assertEquals(AppData.CURRENT_SCHEMA_VERSION, loaded.getSchemaVersion());
+			loaded.getOrganizationalChart().getAssignmentList().getBranches().get(0).setDeputy("Updated Deputy");
+			loaded.getOrganizationalChart().getAssignmentList().setPreparedBySignature("Updated Signature");
+			store.save(originalId, loaded);
+			AppData saved = store.load(originalId);
+			assertEquals(1, saved.getRevision());
+			assertEquals("Updated Deputy", saved.getOrganizationalChart().getAssignmentList().getBranches().get(0).getDeputy());
+			Path exported = workspace.resolve("exported.json");
+			store.exportFile(originalId, exported);
+			IncidentId importedId = store.importFile(exported).orElseThrow();
+			assertNotEquals(originalId, importedId);
+			AppData imported = store.load(importedId);
+			assertEquals(mapper.valueToTree(saved.getOrganizationalChart()),
+					mapper.valueToTree(imported.getOrganizationalChart()));
+			assertEquals("Updated Signature", imported.getOrganizationalChart().getAssignmentList().getPreparedBySignature());
+			assertTrue(imported.getOrganizationalChart().hasAssignments());
+			try (FileIncidentStore reopened = new FileIncidentStore(workspace.resolve("store"))) {
+				assertEquals(mapper.valueToTree(saved.getOrganizationalChart()),
+						mapper.valueToTree(reopened.load(importedId).getOrganizationalChart()));
+			}
+		} finally {
+			try (var paths = Files.walk(workspace)) {
+				for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(path);
+				}
+			}
+		}
+	}
 
 	@Test
 	void oldAndNullJsonRetainEmptyDefaultAssignmentList() throws Exception {

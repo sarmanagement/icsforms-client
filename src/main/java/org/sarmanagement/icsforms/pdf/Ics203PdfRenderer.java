@@ -113,7 +113,14 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				pages = Math.max(pages, row.prepare(width, size));
 			}
 			List<Row> extras = new ArrayList<>();
-			for (Row row : block.rows().subList(block.fixed(), block.rows().size())) {
+			List<Row> sourceExtras = block.rows().subList(block.fixed(), block.rows().size());
+			for (int source = 0; source < sourceExtras.size(); source++) {
+				Row row = sourceExtras.get(source);
+				if (row.shade() && "Branch".equals(row.label) && source + 5 < sourceExtras.size()) {
+					appendWrappedBranch(extras, sourceExtras.subList(source, source + 6), width, size);
+					source += 5;
+					continue;
+				}
 				int count = row.prepare(width, size);
 				for (int i = 0; i < count; i++) {
 					Row fragment = new Row(row.label(i), row.value(i), row.shade());
@@ -126,16 +133,67 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			int capacity = block.slots() - 1 - block.fixed();
 			pages = Math.max(pages, (extras.size() + capacity - 1) / capacity);
 		}
-		List<Row> metadata = List.of(new Row("Name:", form.getPreparedByName()),
-				new Row("Position/Title:", form.getPreparedByPositionTitle()),
+		boolean defaultPreparer = clean(form.getPreparedByName()).isBlank();
+		List<Row> metadata = List.of(new Row("Name:", defaultPreparer
+				? chart.getResourcesUnitLeaderName() : form.getPreparedByName()),
+				new Row("Position/Title:", defaultPreparer && !clean(chart.getResourcesUnitLeaderName()).isBlank()
+						&& clean(form.getPreparedByPositionTitle()).isBlank()
+								? "Resources Unit Leader" : form.getPreparedByPositionTitle()),
 				new Row("Signature:", form.getPreparedBySignature()), new Row("IAP Page", form.getIapPage()),
 				new Row("1. Incident Name", data.getIncidentContext().getIncidentName()));
 		float[] widths = {layout.width() * .30f, layout.width() * .34f, layout.width() * .36f,
 				layout.width() * .20f, width};
 		for (int i = 0; i < metadata.size(); i++) {
-			pages = Math.max(pages, metadata.get(i).prepare(widths[i], size));
+			pages = Math.max(pages, metadata.get(i).prepareMetadata(widths[i], size, i != 4));
 		}
 		return new Plan(layout, blocks, metadata, rowHeight, size, pages);
+	}
+
+	/**
+	 * Wraps an overflow branch as complete six-row continuation groups so even
+	 * long director or deputy values remain beneath their branch heading.
+	 *
+	 * @param output flattened continuation rows.
+	 * @param group branch heading, director, deputy and three division rows.
+	 * @param width column width.
+	 * @param size font size.
+	 * @throws IOException when font metrics fail.
+	 */
+	private void appendWrappedBranch(List<Row> output, List<Row> group, float width, float size) throws IOException {
+		while (output.size() % 6 != 0) {
+			Row blank = new Row("", "");
+			blank.prepare(width, size);
+			output.add(blank);
+		}
+		int contextPages = 1;
+		for (int i = 0; i < 3; i++) {
+			contextPages = Math.max(contextPages, group.get(i).prepare(width, size));
+		}
+		List<Row> divisions = new ArrayList<>();
+		for (int i = 3; i < 6; i++) {
+			Row row = group.get(i);
+			int count = row.prepare(width, size);
+			for (int fragment = 0; fragment < count; fragment++) {
+				Row part = new Row(row.label(fragment), row.value(fragment));
+				part.prepare(width, size);
+				divisions.add(part);
+			}
+		}
+		int pages = Math.max(contextPages, (divisions.size() + 2) / 3);
+		for (int page = 0; page < pages; page++) {
+			for (int i = 0; i < 3; i++) {
+				Row row = group.get(i);
+				Row part = new Row(row.label(page), row.value(page), row.shade());
+				part.prepare(width, size);
+				output.add(part);
+			}
+			for (int i = 0; i < 3; i++) {
+				int division = page * 3 + i;
+				Row row = division < divisions.size() ? divisions.get(division) : new Row("Division/Group", "");
+				row.prepare(width, size);
+				output.add(row);
+			}
+		}
 	}
 
 	/**
@@ -160,7 +218,7 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		command.add("Liaison Officer", chart.getLiaisonOfficerName());
 		command.fix();
 		Block agencies = new Block("4. Agency/Organization Representatives", false, 5);
-		agencies.add("Agency/Organization", "Name");
+		agencies.rows().add(new Row("Agency/Organization", "Name", true));
 		agencies.add("Agency/Organization", "");
 		agencies.fix();
 		for (OrgChartEntry entry : form.getAgencyRepresentatives()) {
@@ -215,9 +273,9 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				OrgChartEntry entry = divisions.get(i);
 				if (i < 9) {
 					operations.rows().set(6 + (i / 3) * 6 + i % 3,
-							new Row("Division/Group: " + entry.getTitle(), entry.getName()));
+							new Row(entry.getTitle(), entry.getName()));
 				} else {
-					operations.add("Division/Group: " + entry.getTitle(), entry.getName());
+					operations.add(entry.getTitle(), entry.getName());
 				}
 			}
 		} else {
@@ -238,18 +296,7 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			}
 			for (int i = 0; i < branches.size(); i++) {
 				Ics203Form.Branch branch = branches.get(i);
-				if (i >= 3) {
-					operations.rows().add(new Row("Branch", branch.getName(), true));
-					operations.add("Director", branch.getDirector());
-					operations.add("Deputy", branch.getDeputy());
-				}
-				for (int j = i < 3 ? 3 : 0; j < branch.getDivisions().size(); j++) {
-					OrgChartEntry entry = branch.getDivisions().get(j);
-					if (entry != null) {
-						operations.add("Branch " + branch.getName() + " Division/Group: " + entry.getTitle(),
-								entry.getName());
-					}
-				}
+				addBranchContinuations(operations, branch, i < 3 ? 3 : 0, i >= 3, i + 1);
 			}
 		}
 		Block finance = new Block("8. Finance/Administration Section", true, 8);
@@ -294,6 +341,36 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	/**
+	 * Keeps overflow branch identity, director and deputy together with up to
+	 * three division rows in each continuation's six available operations slots.
+	 *
+	 * @param operations operations block.
+	 * @param branch explicit branch.
+	 * @param start first division not already in the standard branch template.
+	 * @param includeEmpty whether a branch without divisions still needs a group.
+	 * @param branchNumber one-based fallback identity for unnamed branches.
+	 */
+	private void addBranchContinuations(Block operations, Ics203Form.Branch branch, int start,
+			boolean includeEmpty, int branchNumber) {
+		int count = branch.getDivisions().size();
+		String branchName = clean(branch.getName()).isBlank() ? String.valueOf(branchNumber) : branch.getName();
+		for (int first = start; first < count || includeEmpty; first += 3) {
+			includeEmpty = false;
+			while ((operations.rows().size() - operations.fixed()) % 6 != 0) {
+				operations.add("", "");
+			}
+			operations.rows().add(new Row("Branch", branchName, true));
+			operations.add("Director", branch.getDirector());
+			operations.add("Deputy", branch.getDeputy());
+			for (int offset = 0; offset < 3; offset++) {
+				OrgChartEntry entry = first + offset < count ? branch.getDivisions().get(first + offset) : null;
+				operations.add(entry == null ? "Division/Group" : "Division/Group: " + entry.getTitle(),
+						entry == null ? "" : entry.getName());
+			}
+		}
+	}
+
+	/**
 	 * Collects distinct actual division/group labels, giving ICS 204 supervisors
 	 * precedence over SAR task leaders. Task identifiers are never used as labels.
 	 *
@@ -307,14 +384,14 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		forms.addAll(data.getAdditionalForms204());
 		for (Ics204Form form : forms) {
 			if (form != null) {
-				addDivision(rows, "Division", form.getDivision(), form.getDivisionGroupSupervisorName());
-				addDivision(rows, "Group", form.getGroup(), form.getDivisionGroupSupervisorName());
+				addDivision(rows, form.getBranch(), "Division", form.getDivision(), form.getDivisionGroupSupervisorName());
+				addDivision(rows, form.getBranch(), "Group", form.getGroup(), form.getDivisionGroupSupervisorName());
 			}
 		}
 		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
 			if (task != null) {
-				addDivision(rows, "Division", task.getDivision(), task.getLeader());
-				addDivision(rows, "Group", task.getGroup(), task.getLeader());
+				addDivision(rows, task.getBranch(), "Division", task.getDivision(), task.getLeader());
+				addDivision(rows, task.getBranch(), "Group", task.getGroup(), task.getLeader());
 			}
 		}
 		return new ArrayList<>(rows.values());
@@ -324,11 +401,12 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * Adds a labeled fallback row without replacing an already mapped supervisor.
 	 *
 	 * @param rows ordered distinct assignments.
+	 * @param branch source assignment's branch name.
 	 * @param kind division or group.
 	 * @param name actual division/group name.
 	 * @param supervisor supervisor or fallback task leader.
 	 */
-	private void addDivision(Map<String, OrgChartEntry> rows, String kind, String name, String supervisor) {
+	private void addDivision(Map<String, OrgChartEntry> rows, String branch, String kind, String name, String supervisor) {
 		String label = clean(name).trim();
 		if (label.isBlank()) {
 			return;
@@ -337,11 +415,12 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		if (label.toLowerCase(Locale.ROOT).startsWith(prefix)) {
 			label = label.substring(prefix.length()).trim();
 		}
-		String key = kind + ":" + label.toLowerCase(Locale.ROOT);
+		String branchName = clean(branch).trim();
+		String key = branchName.toLowerCase(Locale.ROOT) + ":" + kind + ":" + label.toLowerCase(Locale.ROOT);
 		OrgChartEntry existing = rows.get(key);
 		if (existing == null) {
 			OrgChartEntry entry = new OrgChartEntry();
-			entry.setTitle(kind + " " + label);
+			entry.setTitle((branchName.isBlank() ? "" : "Branch " + branchName + " / ") + kind + " " + label);
 			entry.setName(clean(supervisor));
 			rows.put(key, entry);
 		} else if (clean(existing.getName()).isBlank()) {
@@ -403,6 +482,10 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				}
 				stream.moveTo(x, rowTop - plan.rowHeight());
 				stream.lineTo(x + width, rowTop - plan.rowHeight());
+				if (!row.shade() || block == plan.blocks().get(1)) {
+					stream.moveTo(x + width * .53f, rowTop);
+					stream.lineTo(x + width * .53f, rowTop - plan.rowHeight());
+				}
 				stream.stroke();
 				int fragmentIndex = slot < block.fixed() ? index : 0;
 				text(stream, bold, plan.size(), x + PADDING, rowTop - plan.size() - PADDING,
@@ -419,7 +502,8 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		drawPreparedByMetadataSection(stream, bold, regular, plan.size(), plan.size(), PADDING, layout.x(),
 				layout.y(), layout.width(), FOOTER_HEIGHT, 18f, 14f, .30f, .64f, .64f, "9. Prepared By",
 				plan.metadata().get(0).value(index), plan.metadata().get(1).value(index),
-				plan.metadata().get(2).value(index), "ICS 203", plan.metadata().get(3).value(index),
+				plan.metadata().get(2).value(index), "ICS 203",
+				addPageOffset(plan.metadata().get(3).value(index), index),
 				formatPdfDateTime(data, data.getOrganizationalChart().getAssignmentList().getPreparedDateTime()));
 		text(stream, regular, plan.size(), layout.x() + PADDING, layout.y() + 44f,
 				"Page " + (index + 1) + " of " + plan.pages());
@@ -633,6 +717,24 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			values = fragments(value, new PDType1Font(Standard14Fonts.FontName.HELVETICA), size,
 					width * .47f - 2f * PADDING);
 			return Math.max(labels.size(), values.size());
+		}
+
+		/**
+		 * Measures a full-width metadata value, reserving only its inline label.
+		 *
+		 * @param width complete metadata cell width.
+		 * @param size font size.
+		 * @param inline whether the label shares the value's baseline.
+		 * @return required value continuation count.
+		 * @throws IOException when font metrics fail.
+		 */
+		private int prepareMetadata(float width, float size, boolean inline) throws IOException {
+			PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+			float labelWidth = inline ? bold.getStringWidth(label + " ") * size / 1000f : 0f;
+			labels = List.of(clean(label));
+			values = fragments(value, new PDType1Font(Standard14Fonts.FontName.HELVETICA), size,
+					width - labelWidth - 2f * PADDING);
+			return values.size();
 		}
 
 		/** @return whether this is a shaded branch heading. */
