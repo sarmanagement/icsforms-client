@@ -401,13 +401,6 @@ public class AppData {
 					entry.getEntryId();
 				}
 			}
-			if (openActionItems != null) {
-				for (OpenActionItem item : openActionItems) {
-					if (item != null) {
-						item.getEntryId();
-					}
-				}
-			}
 		}
 		if (sarTaskAssignments != null) {
 			for (SarTaskAssignment task : sarTaskAssignments) {
