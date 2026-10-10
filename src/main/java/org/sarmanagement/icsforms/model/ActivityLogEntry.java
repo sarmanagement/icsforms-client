@@ -1,6 +1,7 @@
 package org.sarmanagement.icsforms.model;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Activity row recorded on an ICS 214 activity log.
@@ -13,11 +14,35 @@ import java.time.LocalDateTime;
  * </p>
  */
 public class ActivityLogEntry {
+	private String entryId;
 	private LocalDateTime timestamp;
 	private String eventTypeId = ActivityEventType.ID_FREE_TEXT;
 	private String resourceIdentifier = "";
 	private String notableActivity = "";
 	private boolean struckOut;
+
+	/**
+	 * Returns this activity row's stable identity, assigning a UUID to legacy
+	 * rows without one.
+	 *
+	 * @return activity entry UUID, never {@code null} or blank.
+	 */
+	public String getEntryId() {
+		if (entryId == null || entryId.isBlank()) {
+			entryId = UUID.randomUUID().toString();
+		}
+		return entryId;
+	}
+
+	/**
+	 * Sets this activity row's identity during deserialization or migration.
+	 *
+	 * @param entryId
+	 *            stable entry UUID; missing values are generated on first access.
+	 */
+	public void setEntryId(String entryId) {
+		this.entryId = entryId;
+	}
 
 	/**
 	 * Returns the recorded date/time.

@@ -17,8 +17,32 @@ import java.time.Instant;
  *            IAP phase recorded in the workspace.
  * @param lastModified
  *            file-system last-modified timestamp.
+ * @param incidentId
+ *            stable incident identity, or null for legacy listings.
+ * @param incidentNumber
+ *            incident number shown on the briefing form.
+ * @param revision
+ *            stored document revision.
+ * @param storeLocation
+ *            human-readable store location.
  */
-public record IncidentSummary(Path path, String incidentName, IapPhase iapPhase, Instant lastModified) {
+public record IncidentSummary(Path path, String incidentName, IapPhase iapPhase, Instant lastModified,
+		IncidentId incidentId, String incidentNumber, long revision, String storeLocation) {
+	/**
+	 * Retains the legacy path-based summary constructor.
+	 *
+	 * @param path
+	 *            workspace path.
+	 * @param incidentName
+	 *            incident name.
+	 * @param iapPhase
+	 *            phase.
+	 * @param lastModified
+	 *            modification time.
+	 */
+	public IncidentSummary(Path path, String incidentName, IapPhase iapPhase, Instant lastModified) {
+		this(path, incidentName, iapPhase, lastModified, null, "", 0, path.toString());
+	}
 
 	/**
 	 * Returns a human-readable label suitable for display in a list.
