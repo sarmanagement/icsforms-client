@@ -17,6 +17,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -218,8 +220,7 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		command.add("Liaison Officer", chart.getLiaisonOfficerName());
 		command.fix();
 		Block agencies = new Block("4. Agency/Organization Representatives", false, 5);
-		agencies.rows().add(new Row("Agency/Organization", "Name", true));
-		agencies.add("Agency/Organization", "");
+		agencies.rows().add(new Row("Agency/Organization", "", true));
 		agencies.fix();
 		for (OrgChartEntry entry : form.getAgencyRepresentatives()) {
 			if (entry != null) {
@@ -452,9 +453,13 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				plan.metadata().get(4).value(index));
 		text(stream, bold, plan.size(), layout.x() + width + PADDING, layout.top() - 11f, "2. Operational Period");
 		text(stream, regular, plan.size(), layout.x() + width + PADDING, layout.top() - 25f,
-				"From: " + formatPdfDateTime(data, data.getIncidentContext().getOperationalPeriodStart()));
+				"Date From: " + periodValue(data, data.getIncidentContext().getOperationalPeriodStart(), "MM/dd/yyyy"));
+		text(stream, regular, plan.size(), layout.x() + width * 1.5f + PADDING, layout.top() - 25f,
+				"Date To: " + periodValue(data, data.getIncidentContext().getOperationalPeriodEnd(), "MM/dd/yyyy"));
 		text(stream, regular, plan.size(), layout.x() + width + PADDING, layout.top() - 39f,
-				"To: " + formatPdfDateTime(data, data.getIncidentContext().getOperationalPeriodEnd()));
+				"Time From: " + periodValue(data, data.getIncidentContext().getOperationalPeriodStart(), "HH:mm"));
+		text(stream, regular, plan.size(), layout.x() + width * 1.5f + PADDING, layout.top() - 39f,
+				"Time To: " + periodValue(data, data.getIncidentContext().getOperationalPeriodEnd(), "HH:mm"));
 		float left = layout.top() - TOP_HEIGHT;
 		float right = left;
 		for (Block block : plan.blocks()) {
@@ -472,7 +477,11 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			for (int slot = 0; slot < block.slots() - 1; slot++) {
 				int rowIndex = slot < block.fixed() ? slot : block.fixed() + index * extraSlots
 						+ slot - block.fixed();
-				Row row = rowIndex < block.rows().size() ? block.rows().get(rowIndex) : new Row("", "");
+				Row row = rowIndex < block.rows().size() ? block.rows().get(rowIndex)
+						: new Row(block == plan.blocks().get(1) ? "Agency/Organization" : "", "");
+				if (rowIndex >= block.rows().size()) {
+					row.prepare(width, plan.size());
+				}
 				float rowTop = top - (slot + 1) * plan.rowHeight();
 				if (row.shade()) {
 					stream.setNonStrokingColor(.92f);
@@ -483,8 +492,12 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				stream.moveTo(x, rowTop - plan.rowHeight());
 				stream.lineTo(x + width, rowTop - plan.rowHeight());
 				if (!row.shade() || block == plan.blocks().get(1)) {
+					stream.stroke();
+					stream.setLineWidth(.4f);
 					stream.moveTo(x + width * .53f, rowTop);
 					stream.lineTo(x + width * .53f, rowTop - plan.rowHeight());
+					stream.stroke();
+					stream.setLineWidth(1f);
 				}
 				stream.stroke();
 				int fragmentIndex = slot < block.fixed() ? index : 0;
@@ -507,6 +520,18 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				formatPdfDateTime(data, data.getOrganizationalChart().getAssignmentList().getPreparedDateTime()));
 		text(stream, regular, plan.size(), layout.x() + PADDING, layout.y() + 44f,
 				"Page " + (index + 1) + " of " + plan.pages());
+	}
+
+	/**
+	 * Formats one operational-period component in the configured display timezone.
+	 *
+	 * @param data incident document.
+	 * @param value stored UTC timestamp, possibly null.
+	 * @param pattern date or time format.
+	 * @return formatted component, or blank when no timestamp is set.
+	 */
+	private String periodValue(AppData data, LocalDateTime value, String pattern) {
+		return value == null ? "" : zonedPdfDateTime(data, value).format(DateTimeFormatter.ofPattern(pattern));
 	}
 
 	/**

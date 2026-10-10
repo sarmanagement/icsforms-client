@@ -22,6 +22,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.contentstream.operator.Operator;
+import org.apache.pdfbox.cos.COSNumber;
+import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -43,6 +46,51 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Regression coverage for the independent ICS 203 assignment-list renderer. */
 class Ics203PdfRendererTest {
+	@Test
+	void operationalPeriodHasSeparateDateAndTimeFieldsInConfiguredTimezone() throws Exception {
+		AppData data = new AppData();
+		data.setUseSystemTimeZone(false);
+		data.setConfiguredTimeZoneId("America/New_York");
+		data.getIncidentContext().setOperationalPeriodStart(LocalDateTime.of(2026, 1, 1, 1, 30));
+		data.getIncidentContext().setOperationalPeriodEnd(LocalDateTime.of(2026, 1, 1, 8, 45));
+		try (PDDocument pdf = render(data)) {
+			String content = text(pdf);
+			for (String value : List.of("Date From: 12/31/2025", "Date To: 01/01/2026",
+					"Time From: 20:30", "Time To: 03:45")) {
+				assertTrue(content.contains(value), value);
+			}
+			Positions positions = new Positions();
+			positions.getText(pdf);
+			assertEquals(positions.y("Date From:"), positions.y("Date To:"), .1f);
+			assertEquals(positions.y("Time From:"), positions.y("Time To:"), .1f);
+			assertTrue(positions.x("Date From:") < positions.x("Date To:"));
+		}
+	}
+
+	@Test
+	void agencyHeaderHasNoExtraneousNameAndAssignmentRowsHaveThinSeparators() throws Exception {
+		try (PDDocument pdf = render(null)) {
+			String content = text(pdf);
+			String agencies = content.substring(content.indexOf("4. Agency/Organization Representatives"),
+					content.indexOf("5. Planning Section"));
+			assertFalse(agencies.matches("(?s).*\\bName\\b.*"));
+			List<Object> tokens = new PDFStreamParser(pdf.getPage(0)).parse();
+			int thinSeparators = 0;
+			for (int i = 1; i < tokens.size(); i++) {
+				if (tokens.get(i) instanceof Operator operator && "w".equals(operator.getName())
+						&& tokens.get(i - 1) instanceof COSNumber width
+						&& Math.abs(width.floatValue() - .4f) < .01f) {
+					assertTrue(tokens.get(i + 3) instanceof Operator move && "m".equals(move.getName()));
+					assertTrue(tokens.get(i + 6) instanceof Operator line && "l".equals(line.getName()));
+					assertEquals(((COSNumber) tokens.get(i + 1)).floatValue(),
+							((COSNumber) tokens.get(i + 4)).floatValue(), .01f);
+					thinSeparators++;
+				}
+			}
+			assertTrue(thinSeparators >= 50, "Expected thin vertical dividers across both columns");
+		}
+	}
+
 	@Test
 	void blankAndNullDocumentsHaveAllNumberedBlocksAndEmptyLabeledRows() throws Exception {
 		assertEquals(1, Ics203PdfRenderer.pageCount(null));
@@ -229,15 +277,14 @@ class Ics203PdfRendererTest {
 		}
 		form.setIapPage("12");
 		try (PDDocument pdf = render(data)) {
-			assertEquals(3, pdf.getNumberOfPages());
+			assertEquals(2, pdf.getNumberOfPages());
 			String text = text(pdf);
 			assertTrue(text.contains("IAP Page 12"));
 			assertTrue(text.contains("IAP Page 13"));
-			assertTrue(text.contains("IAP Page 14"));
 		}
 		form.setIapPage("Annex A");
 		try (PDDocument pdf = render(data)) {
-			assertEquals(3, occurrences(text(pdf), "IAP Page Annex A"));
+			assertEquals(2, occurrences(text(pdf), "IAP Page Annex A"));
 		}
 	}
 
@@ -247,6 +294,7 @@ class Ics203PdfRendererTest {
 			Ics203Form form = data.getOrganizationalChart().getAssignmentList();
 			form.getAgencyRepresentatives().add(entry("Agency A", "Person A"));
 			form.getAgencyRepresentatives().add(entry("Agency B", "Person B"));
+			form.getAgencyRepresentatives().add(entry("Agency C", "Person C"));
 			assertEquals(1, Ics203PdfRenderer.pageCount(data));
 			for (int i = 0; i < 4; i++) {
 				Branch branch = new Branch();
@@ -422,8 +470,10 @@ class Ics203PdfRendererTest {
 			assertEquals(1, pdf.getNumberOfPages());
 			assertEquals(Ics203PdfRenderer.pageCount(data), pdf.getNumberOfPages());
 			String text = text(pdf);
-			assertTrue(text.contains("2025-12-31 20:30"));
-			assertTrue(text.contains("2026-01-01 03:45"));
+			assertTrue(text.contains("Date From: 12/31/2025"));
+			assertTrue(text.contains("Date To: 01/01/2026"));
+			assertTrue(text.contains("Time From: 20:30"));
+			assertTrue(text.contains("Time To: 03:45"));
 			assertTrue(text.contains("2025-12-31 21:30"));
 			Positions positions = new Positions();
 			positions.getText(pdf);
