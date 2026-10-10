@@ -1,17 +1,26 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IapPhase;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,6 +31,92 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * inclusion rules and IAP page numbering.
  */
 class PdfExportServiceTest {
+	@TempDir
+	Path outputDirectory;
+
+	@Test
+	void organizationAssignmentListBundleRequiresEntriesAndEnabledSetting() throws Exception {
+		AppData data = new AppData();
+		PdfExportService service = new PdfExportService(new Ics203PdfRenderer());
+		data.getOrganizationalChart().getAssignmentList().setPreparedByName("Preparer only");
+		assertFalse(PdfExportService.includeIcs203(data));
+		assertEquals(1, bundlePages(service, data));
+
+		data.getOrganizationalChart().setSafetyOfficerName("A. Safety");
+		assertTrue(PdfExportService.includeIcs203(data));
+		assertEquals(2, bundlePages(service, data));
+
+		data.getOrganizationalChart().getAssignmentList().setIncludeInIap(false);
+		assertFalse(PdfExportService.includeIcs203(data));
+		assertEquals(1, bundlePages(service, data));
+		try (PDDocument pdf = Loader.loadPDF(service.exportSelected("ICS 203", data, outputDirectory).toFile())) {
+			assertEquals(1, pdf.getNumberOfPages());
+			assertTrue(new PDFTextStripper().getText(pdf).contains("A. Safety"));
+		}
+	}
+
+	@Test
+	void organizationAssignmentListFollows202AndOffsetsLaterFormsForContinuationPages() throws Exception {
+		AppData data = new AppData();
+		data.getOrganizationalChart().setSafetyOfficerName("A. Safety");
+		for (int i = 0; i < 60; i++) {
+			OrgChartEntry representative = new OrgChartEntry();
+			representative.setTitle("Agency " + i);
+			representative.setName("Representative " + i);
+			data.getOrganizationalChart().getAssignmentList().getAgencyRepresentatives().add(representative);
+		}
+		int pages203 = Ics203PdfRenderer.pageCount(data);
+		assertTrue(pages203 > 1);
+		PdfExportService.assignIapPageNumbers(data, List.of("ICS 207", "ICS 203", "ICS 202"), true);
+		assertEquals("1", data.getForm202().getIapPage());
+		assertEquals("2", data.getOrganizationalChart().getAssignmentList().getIapPage());
+		assertEquals(String.valueOf(2 + pages203), data.getForm207().getIapPage());
+		PdfExportService service = new PdfExportService(new Ics207PdfRenderer(), new Ics203PdfRenderer(),
+				new Ics202PdfRenderer());
+		Path bundle = service.exportIapBundle(data, outputDirectory, List.of("ICS 207", "ICS 203", "ICS 202"));
+		try (PDDocument pdf = Loader.loadPDF(bundle.toFile())) {
+			assertEquals(3 + pages203, pdf.getNumberOfPages());
+			PDFTextStripper stripper = new PDFTextStripper();
+			stripper.setStartPage(2);
+			stripper.setEndPage(2);
+			assertTrue(stripper.getText(pdf).contains("INCIDENT OBJECTIVES"));
+			stripper.setStartPage(3);
+			stripper.setEndPage(3);
+			assertTrue(stripper.getText(pdf).contains("ORGANIZATION ASSIGNMENT LIST"));
+			stripper.setStartPage(3 + pages203);
+			stripper.setEndPage(3 + pages203);
+			assertTrue(stripper.getText(pdf).contains("INCIDENT ORGANIZATION CHART"));
+		}
+		data.getOrganizationalChart().getAssignmentList().setIncludeInIap(false);
+		PdfExportService.assignIapPageNumbers(data, List.of("ICS 202", "ICS 203", "ICS 207"), true);
+		assertEquals("", data.getOrganizationalChart().getAssignmentList().getIapPage());
+		assertEquals("2", data.getForm207().getIapPage());
+	}
+
+	@Test
+	void deselectedOrganizationAssignmentListDoesNotConsumeIapPages() {
+		AppData data = new AppData();
+		data.getOrganizationalChart().setSafetyOfficerName("A. Safety");
+		PdfExportService.assignIapPageNumbers(data, List.of("ICS 202", "ICS 207"), true);
+		assertEquals("", data.getOrganizationalChart().getAssignmentList().getIapPage());
+		assertEquals("2", data.getForm207().getIapPage());
+		assertEquals(List.of("ICS 202", "ICS 203", "ICS 205A", "ICS 207"),
+				PdfExportService.orderForIapBundle(List.of("ICS 207", "ICS 203", "ICS 205A", "ICS 202")));
+	}
+
+	/**
+	 * Exports and counts an IAP containing only the registered organization list.
+	 *
+	 * @param service export service.
+	 * @param data incident document.
+	 * @return rendered page count including the cover.
+	 * @throws Exception when PDF export or loading fails.
+	 */
+	private int bundlePages(PdfExportService service, AppData data) throws Exception {
+		try (PDDocument pdf = Loader.loadPDF(service.exportIapBundle(data, outputDirectory).toFile())) {
+			return pdf.getNumberOfPages();
+		}
+	}
 
 	// -------------------------------------------------------------------------
 	// ics201HasContent

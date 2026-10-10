@@ -2,7 +2,7 @@
 
 `icsforms-client` is a Java Swing desktop application for authoring Incident Command System (ICS) incident forms with local JSON persistence and PDF export. Development is ongoing and the application is still evolving as additional forms and functionality are added.
 
-This project is intended to support the **SAR** (Search and Rescue) community, but it is also useful for generic ICS incident planning and documentation. The application currently supports ICS 201, ICS 202, ICS 204, and ICS 214 forms, along with SAR task assignment forms, a clue log, T-cards, and an organizational chart.  I got tired of copying the same header information from one form to another by hand, and having to subject people to my handwriting in SAR Task Assignment Form Debriefing sections, so this tool is intended to make it easier to author ICS forms and share them with others in a clean, legible format.
+This project is intended to support the **SAR** (Search and Rescue) community, but it is also useful for generic ICS incident planning and documentation. The application currently supports ICS 201, ICS 202, ICS 203, ICS 204, ICS 205A, ICS 207, and ICS 214 PDF forms, along with SAR task assignment forms, a clue log, T-cards, and an organizational chart.  I got tired of copying the same header information from one form to another by hand, and having to subject people to my handwriting in SAR Task Assignment Form Debriefing sections, so this tool is intended to make it easier to author ICS forms and share them with others in a clean, legible format.
 
 Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. The incident workspace is persisted locally in JSON format at `~/.icsforms/incident.json`, with a rolling backup at `~/.icsforms/incident.json.bak`. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF.  Intent is to develop a multi-user application backed by a networked persistence layer in the future.
 
@@ -23,7 +23,7 @@ This project is open source under the Apache 2.0 license. Contributions are welc
    - incident name
    - operational period
    - preparer identity
-4. Maintain the current organization on **Org Chart**.
+4. Maintain the current organization on **Org Chart**. Use **ICS 203 details…** for deputies, agency representatives, Operations branches/divisions, and assignment-list preparer information. Names may include agencies, slash-separated shift assignments, and `(T)` for trainees.
 5. Complete the appropriate forms based on the current phase (see below).
 6. Save locally or allow autosave to persist the incident workspace.
 7. Export individual PDFs, all PDFs as separate files, or the merged **Export IAP Bundle** PDF.
@@ -50,6 +50,7 @@ This project is open source under the Apache 2.0 license. Contributions are welc
 - PDF export for each supported form.
 - **Export All PDFs** for individual per-form PDF files.
 - **Export IAP Bundle** for a single merged PDF bundle of selected forms with a cover page.
+- **ICS 203 – Organization Assignment List** PDF from the Org Chart, alongside the existing ICS 207 chart. Select ICS 203 in **Export forms as PDF…** for an individual PDF or a combined IAP. Its optional **Include ICS 203 in IAP** setting defaults on, but a bundle includes it only when the Org Chart has entries, immediately after ICS 202. Unused positions remain blank labeled rows. When no Operations branches are entered, division/group rows come from ICS 204 and SAR task assignments. Additional entries continue on further pages; paper size, margins, and display timezone follow the shared PDF settings.
 - Validation that blocks export when required fields are missing.
 
 ## Incident phases

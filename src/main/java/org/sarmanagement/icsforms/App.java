@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms;
 
 import org.sarmanagement.icsforms.model.AppData;
@@ -6,6 +9,7 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.ClueLogPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics201PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics203PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics205aPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics207PdfRenderer;
@@ -24,6 +28,7 @@ import java.nio.file.Path;
  * Application entry point for the first-cut ICS desktop editor.
  */
 public final class App {
+	/** Prevents instantiation of the application entry point. */
 	private App() {
 	}
 
@@ -80,8 +85,8 @@ public final class App {
 			data.setIncidentMode(startup.getChosenMode());
 
 			PdfExportService exportService = new PdfExportService(new Ics201PdfRenderer(), new Ics202PdfRenderer(),
-					new Ics205aPdfRenderer(), new Ics207PdfRenderer(), new Ics204PdfRenderer(), new Ics214PdfRenderer(),
-					new SarTaskAssignmentPdfRenderer(), new ClueLogPdfRenderer());
+					new Ics203PdfRenderer(), new Ics205aPdfRenderer(), new Ics207PdfRenderer(), new Ics204PdfRenderer(),
+					new Ics214PdfRenderer(), new SarTaskAssignmentPdfRenderer(), new ClueLogPdfRenderer());
 			MainFrame frame = new MainFrame(data, repository, exportService, new IncidentValidator(), homeDir);
 			frame.setVisible(true);
 		});

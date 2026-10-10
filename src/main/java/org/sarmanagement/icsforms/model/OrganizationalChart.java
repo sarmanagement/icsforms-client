@@ -1,6 +1,16 @@
+/*
+ * Copyright (C) 2026 SAR Management
+ * This program is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 3 of the License, or any later version.
+ * This program is distributed WITHOUT ANY WARRANTY; without even the implied
+ * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See <https://www.gnu.org/licenses/>.
+ */
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.ArrayList;
 import java.util.List;
@@ -130,6 +140,53 @@ public class OrganizationalChart {
 
 	// User-defined additional positions
 	private List<OrgChartEntry> additionalPositions = new ArrayList<>();
+	private Ics203Form assignmentList = new Ics203Form();
+
+	/**
+	 * Returns supplemental ICS 203 assignments without affecting ICS 207.
+	 * @return non-null assignment list.
+	 */
+	public Ics203Form getAssignmentList() {
+		return assignmentList;
+	}
+
+	/**
+	 * Replaces supplemental ICS 203 data.
+	 * @param value assignment list; null resets it to an empty form.
+	 */
+	public void setAssignmentList(Ics203Form value) {
+		assignmentList = value == null ? new Ics203Form() : value;
+	}
+
+	/**
+	 * Detects names and organizational labels, excluding radio/phone-only records.
+	 * @return true when shared or supplemental organizational assignments exist.
+	 */
+	@JsonIgnore
+	public boolean hasAssignments() {
+		List<String> names = List.of(getSafetyOfficerName(), getPublicInformationOfficerName(),
+				getLiaisonOfficerName(), getOperationsSectionChiefName(), getPlanningSectionChiefName(),
+				getLogisticsSectionChiefName(), getFinanceAdminSectionChiefName(),
+				getDocumentationUnitLeaderName(), getResourcesUnitLeaderName(), getSituationUnitLeaderName(),
+				getDemobilizationUnitLeaderName(), getStagingAreaManagerName(), getCommunicationsUnitLeaderName(),
+				getCommunicationsTechnicianName(), getSupplyUnitLeaderName(), getFacilitiesUnitLeaderName(),
+				getGroundSupportUnitLeaderName(), getFoodUnitLeaderName(), getTimeUnitLeaderName(),
+				getProcurementUnitLeaderName(), getCompClaimsUnitLeaderName(), getCostUnitLeaderName());
+		return names.stream().anyMatch(name -> !name.isBlank())
+				|| incidentCommanders.stream().anyMatch(name -> name != null && !name.isBlank())
+				|| incidentCommanderEntries.stream().anyMatch(entry -> entry != null && !entry.getName().isBlank())
+				|| additionalPositions.stream().anyMatch(OrganizationalChart::hasEntryAssignment)
+				|| assignmentList.hasAssignments();
+	}
+
+	/**
+	 * Tests an organizational entry's label and name.
+	 * @param entry entry, possibly null.
+	 * @return true when its label or assigned name is nonblank.
+	 */
+	private static boolean hasEntryAssignment(OrgChartEntry entry) {
+		return entry != null && (!entry.getTitle().isBlank() || !entry.getName().isBlank());
+	}
 
 	/**
 	 * Returns the incident commander or unified command names.

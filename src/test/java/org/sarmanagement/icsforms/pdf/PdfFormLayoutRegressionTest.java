@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.Loader;
@@ -50,6 +53,7 @@ class PdfFormLayoutRegressionTest {
 
 		assertFormLayout(new Ics201PdfRenderer(), data, tempDir.resolve("ics201.pdf"), DEFAULT_PAGE_MARGIN);
 		assertFormLayout(new Ics202PdfRenderer(), data, tempDir.resolve("ics202.pdf"), DEFAULT_PAGE_MARGIN);
+		assertFormLayout(new Ics203PdfRenderer(), data, tempDir.resolve("ics203.pdf"), DEFAULT_PAGE_MARGIN);
 		assertFormLayout(new Ics204PdfRenderer(), data, tempDir.resolve("ics204.pdf"), DEFAULT_PAGE_MARGIN);
 		assertFormLayout(new Ics205aPdfRenderer(), data, tempDir.resolve("ics205a.pdf"), DEFAULT_PAGE_MARGIN);
 		assertFormLayout(new Ics207PdfRenderer(), data, tempDir.resolve("ics207.pdf"), DEFAULT_PAGE_MARGIN);

@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityEventType;
@@ -450,6 +453,11 @@ public class MainFrame extends JFrame {
 		return bar;
 	}
 
+	/**
+	 * Opens the selected-form PDF export workflow.
+	 *
+	 * @param defaultDirectory initial destination directory.
+	 */
 	private void openFormsExportDialog(Path defaultDirectory) {
 		List<String> formKeys = controller.exportableFormKeys();
 		if (formKeys.isEmpty()) {
@@ -463,6 +471,10 @@ public class MainFrame extends JFrame {
 		checksPanel.setLayout(new javax.swing.BoxLayout(checksPanel, javax.swing.BoxLayout.Y_AXIS));
 		for (String key : formKeys) {
 			javax.swing.JCheckBox check = new javax.swing.JCheckBox(exportFormDisplayLabel(key), true);
+			if ("ICS 203".equals(key)) {
+				check.setToolTipText("Individual export always available; IAP inclusion requires Org Chart entries "
+						+ "and the optional setting in ICS 203 details.");
+			}
 			check.setOpaque(false);
 			selectors.put(key, check);
 			checksPanel.add(check);
@@ -534,10 +546,17 @@ public class MainFrame extends JFrame {
 		refreshStatus();
 	}
 
+	/**
+	 * Returns a descriptive form label for the export selector.
+	 *
+	 * @param formKey renderer identifier.
+	 * @return user-facing form label.
+	 */
 	static String exportFormDisplayLabel(String formKey) {
 		return switch (formKey) {
 			case "ICS 201" -> "ICS 201 – Incident Briefing";
 			case "ICS 202" -> "ICS 202 – Incident Objectives";
+			case "ICS 203" -> "ICS 203 – Organization Assignment List";
 			case "ICS 205A" -> "ICS 205A Communications List";
 			case "ICS 204" -> "ICS 204 – Assignment List";
 			case "ICS 207" -> "ICS 207 – Incident Organization Chart";
