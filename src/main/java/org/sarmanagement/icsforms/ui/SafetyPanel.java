@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Shared safety workspace for the ICS 215A, ICS 208, and SAR hazard reports.
@@ -97,6 +98,7 @@ public class SafetyPanel extends JPanel {
 	};
 	private final JTable reportTable = new JTable(reportTableModel);
 	private final List<HazardReportSource> reportSources = new ArrayList<>();
+	private Consumer<String> exportRequest = this::exportPdf;
 
 	/**
 	 * Creates the shared Safety workspace.
@@ -110,6 +112,15 @@ public class SafetyPanel extends JPanel {
 		sections.addTab("ICS 208 Message / Plan", buildMessagePanel());
 		sections.addTab("Reported SAR Hazards", buildReportsPanel());
 		add(sections, BorderLayout.CENTER);
+	}
+
+	/**
+	 * Sets the handler used to open the shared forms export dialog.
+	 *
+	 * @param exportRequest callback receiving the requested form key.
+	 */
+	public void setExportRequest(Consumer<String> exportRequest) {
+		this.exportRequest = exportRequest == null ? this::exportPdf : exportRequest;
 	}
 
 	/**
@@ -242,7 +253,7 @@ public class SafetyPanel extends JPanel {
 		button(actions, "Add common item", this::addCommonHazard);
 		button(actions, "Save common library CSV", this::exportCommonCsv);
 		button(actions, "Save analysis as CSV", this::exportAnalysisCsv);
-		button(actions, "Export ICS 215A PDF", () -> exportPdf("ICS 215A"));
+		button(actions, "Export ICS 215A PDF", () -> exportRequest.accept("ICS 215A"));
 		panel.add(metadata, BorderLayout.NORTH);
 		panel.add(new JScrollPane(analysisTable), BorderLayout.CENTER);
 		panel.add(actions, BorderLayout.SOUTH);
@@ -283,7 +294,7 @@ public class SafetyPanel extends JPanel {
 		button(blockActions, "Edit block", () -> editMessageBlock(messageTable.getSelectedRow()));
 		button(blockActions, "Remove block", this::removeMessageBlock);
 		button(blockActions, "Generate/update from 215A", this::generateMessage);
-		button(blockActions, "Export ICS 208 PDF", () -> exportPdf("ICS 208"));
+		button(blockActions, "Export ICS 208 PDF", () -> exportRequest.accept("ICS 208"));
 		blocks.add(blockActions, BorderLayout.SOUTH);
 		JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(controls), blocks);
 		split.setResizeWeight(0.5);

@@ -10,7 +10,6 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics208Form;
-import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.SafetyMessageBlock;
 
 import java.io.IOException;
@@ -18,13 +17,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Renders the ICS 208 Safety Message/Plan and hazardous materials variant.
  */
 public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRenderer {
-	private static final float FONT_SIZE = 10f;
-	private static final float LINE_HEIGHT = 13f;
+	private static final float FONT_SIZE = 9f;
+	private static final float LINE_HEIGHT = 11f;
+	private static final float BLOCK_PADDING = 6f;
+	private static final float FIRST_PAGE_BOTTOM_BLOCKS = 91f;
 
 	/** {@inheritDoc} */
 	@Override
@@ -33,7 +35,7 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	/**
-	 * Counts the pages required by the same wrapped message sections used by rendering.
+	 * Counts the pages required by the wrapped block 3 text.
 	 *
 	 * @param data incident data.
 	 * @return page count, at least one.
@@ -41,38 +43,64 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	public static int pageCount(AppData data) {
 		AppData safeData = data == null ? new AppData() : data;
 		Ics208PdfRenderer renderer = new Ics208PdfRenderer();
-		PDPage page = renderer.newPage(safeData);
-		FormLayout layout = renderer.formLayout(page, safeData);
-		int pages = 1;
-		float y = renderer.contextStartY(layout, safeData);
-		for (Section section : renderer.contentSections(safeData.getForm208(), safeData)) {
-			int remaining = wrapContent(section.content(), 98).size();
-			while (remaining > 0) {
-				if (y < layout.y() + LINE_HEIGHT * 2) {
-					pages++;
-					y = layout.top() - 24;
-				}
-				int available = Math.max(1, (int) ((y - layout.y() - LINE_HEIGHT * 2) / LINE_HEIGHT));
-				int fit = Math.min(remaining, available);
-				remaining -= fit;
-				y -= LINE_HEIGHT + 2 + (fit * LINE_HEIGHT) + 8;
-				if (remaining > 0) {
-					pages++;
-					y = layout.top() - 24;
-				}
-			}
+		FormLayout layout = renderer.formLayout(renderer.newPage(safeData), safeData);
+		int firstPageCapacity = renderer.block3Capacity(layout, FIRST_PAGE_BOTTOM_BLOCKS);
+		int remainingLines = renderer.messageLines(safeData.getForm208()).size();
+		if (remainingLines <= firstPageCapacity) {
+			return 1;
 		}
-		return pages;
+		int continuationCapacity = renderer.block3Capacity(layout, 24f);
+		return 1 + (int) Math.ceil((double) (remainingLines - firstPageCapacity) / continuationCapacity);
 	}
 
 	/**
-	 * Returns vertical space consumed by a bold label and its wrapped body.
+	 * Returns the number of message lines that fit in block 3.
 	 *
-	 * @param text body text.
-	 * @return vertical space in points.
+	 * @param layout page layout.
+	 * @param bottomReserved height reserved below block 3.
+	 * @return line capacity.
 	 */
-	private static float textHeight(String text) {
-		return LINE_HEIGHT + (wrapContent(text, 98).size() * LINE_HEIGHT) + 4;
+	private int block3Capacity(FormLayout layout, float bottomReserved) {
+		float blockHeight = layout.height() - 53f - bottomReserved;
+		return Math.max(1, (int) ((blockHeight - BLOCK_PADDING * 2 - (LINE_HEIGHT * 2)) / LINE_HEIGHT));
+	}
+
+	/**
+	 * Returns printable block 3 lines.
+	 *
+	 * @param form safety message/plan.
+	 * @return wrapped text lines.
+	 */
+	private List<String> messageLines(Ics208Form form) {
+		List<String> lines = new ArrayList<>();
+		if (form.getMessageMode() == Ics208Form.MessageMode.FREE_TEXT) {
+			lines.addAll(wrapContent(form.getFreeText(), 104));
+		} else {
+			addParagraph(lines, "General requirements", form.getGeneralRequirements());
+			for (SafetyMessageBlock block : form.getHazardBlocks()) {
+				addParagraph(lines, block.getIncidentArea() + " — Hazard", block.getHazard());
+				addParagraph(lines, "Precautions", block.getPrecautions());
+			}
+		}
+		for (Map.Entry<String, String> section : form.getSiteSafetyPlan().getTextSections().entrySet()) {
+			addParagraph(lines, "Site Safety Plan — " + section.getKey(), section.getValue());
+		}
+		return lines;
+	}
+
+	/**
+	 * Adds a labeled non-empty paragraph to block 3.
+	 *
+	 * @param lines destination lines.
+	 * @param heading paragraph heading.
+	 * @param content paragraph content.
+	 */
+	private void addParagraph(List<String> lines, String heading, String content) {
+		if (content != null && !content.isBlank()) {
+			lines.add(heading + ":");
+			lines.addAll(wrapContent(content, 104));
+			lines.add("");
+		}
 	}
 
 	/** {@inheritDoc} */
@@ -87,7 +115,7 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	/**
-	 * Renders safety message sections with continuation pages.
+	 * Renders the bordered ICS 208 form and any block 3 continuation pages.
 	 *
 	 * @param document target document.
 	 * @param data source incident data.
@@ -95,226 +123,220 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 */
 	private void renderDocument(PDDocument document, AppData data) throws IOException {
 		Ics208Form form = data.getForm208();
-		IncidentContext context = data.getIncidentContext();
-		List<Section> sections = contentSections(form, data);
-		PDPage page = newPage(data);
-		document.addPage(page);
-		PDPageContentStream stream = new PDPageContentStream(document, page);
+		List<String> lines = messageLines(form);
 		PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
 		PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+		PDPage page = newPage(data);
+		document.addPage(page);
 		FormLayout layout = formLayout(page, data);
-		drawFormHeader(stream, bold, layout, "ICS 208",
-				form.getMessageType() == Ics208Form.MessageType.HAZARDOUS_MATERIALS_SITE_SAFETY_PLAN
-						? "SITE SAFETY AND CONTROL PLAN" : "SAFETY MESSAGE / PLAN");
-		float y = drawContext(stream, bold, regular, layout, layout.top() - 24, context, data);
-		int pageNumber = 1;
-		for (Section section : sections) {
-			List<String> lines = wrapContent(section.content(), 98);
-			List<String> remaining = new ArrayList<>(lines);
-			while (!remaining.isEmpty()) {
-				if (y < layout.y() + LINE_HEIGHT * 2) {
-					drawPageLabel(stream, regular, layout, pageNumber, form.getIapPage());
-					stream.close();
-					page = newPage(data);
-					document.addPage(page);
-					stream = new PDPageContentStream(document, page);
-					layout = formLayout(page, data);
-					drawFormHeader(stream, bold, layout, "ICS 208", "SAFETY MESSAGE / PLAN (CONTINUED)");
-					y = drawContext(stream, bold, regular, layout, layout.top() - 24, context, data);
-					pageNumber++;
-				}
-				float sectionStart = y;
-				float maxLines = Math.max(1, (y - layout.y() - LINE_HEIGHT * 2) / LINE_HEIGHT);
-				int fit = Math.min(remaining.size(), (int) maxLines);
-				stream.beginText();
-				stream.setFont(bold, FONT_SIZE);
-				stream.newLineAtOffset(layout.x(), y);
-				stream.showText(safe(section.heading()));
-				stream.endText();
-				y -= LINE_HEIGHT + 2;
-				for (int index = 0; index < fit; index++) {
-					String text = remaining.remove(0);
-					stream.beginText();
-					stream.setFont(section.hazard() ? bold : regular, FONT_SIZE);
-					stream.newLineAtOffset(layout.x() + 8, y);
-					stream.showText(safe(text));
-					stream.endText();
-					y -= LINE_HEIGHT;
-				}
-				stream.addRect(layout.x(), y - 3, layout.width(), sectionStart - y + 3);
-				stream.stroke();
-				y -= 8;
-				if (!remaining.isEmpty()) {
-					drawPageLabel(stream, regular, layout, pageNumber, form.getIapPage());
-					stream.close();
-					page = newPage(data);
-					document.addPage(page);
-					stream = new PDPageContentStream(document, page);
-					layout = formLayout(page, data);
-					drawFormHeader(stream, bold, layout, "ICS 208", "SAFETY MESSAGE / PLAN (CONTINUED)");
-					y = drawContext(stream, bold, regular, layout, layout.top() - 24, context, data);
-					pageNumber++;
-				}
-			}
+		float firstCapacity = block3Capacity(layout, FIRST_PAGE_BOTTOM_BLOCKS);
+		int offset = drawPage(document, page, data, layout, form, regular, bold, lines, 0,
+				(int) firstCapacity, 1, false);
+		int pageNumber = 2;
+		while (offset < lines.size()) {
+			page = newPage(data);
+			document.addPage(page);
+			layout = formLayout(page, data);
+			offset = drawPage(document, page, data, layout, form, regular, bold, lines, offset,
+					block3Capacity(layout, 24f), pageNumber++, true);
 		}
-		drawPageLabel(stream, regular, layout, pageNumber, form.getIapPage());
-		stream.close();
 	}
 
 	/**
-	 * Creates printable sections from the selected message representation and site plan.
+	 * Draws one form page and returns the next unread message line.
 	 *
-	 * @param form safety message/plan.
-	 * @return ordered printable sections.
+	 * @param document PDF document.
+	 * @param page target page.
+	 * @param data incident metadata.
+	 * @param layout shared form layout.
+	 * @param form safety form.
+	 * @param regular regular font.
+	 * @param bold bold font.
+	 * @param lines wrapped message text.
+	 * @param offset first unread message line.
+	 * @param capacity number of message lines to render.
+	 * @param pageNumber local page number.
+	 * @param continuation whether this is a continuation page.
+	 * @return next unread message line.
+	 * @throws IOException when PDF drawing fails.
 	 */
-	private List<Section> contentSections(Ics208Form form, AppData data) {
-		List<Section> sections = new ArrayList<>();
-		if (form.getMessageMode() == Ics208Form.MessageMode.FREE_TEXT) {
-			sections.add(new Section("3. Safety Message / Expanded Safety Message / Safety Plan / Site Safety Plan",
-					form.getFreeText(), false));
-		} else {
-			sections.add(new Section("3. Safety Message — General Requirements",
-					form.getGeneralRequirements(), false));
-			for (SafetyMessageBlock block : form.getHazardBlocks()) {
-				sections.add(new Section(block.getIncidentArea() + " — Hazard",
-						block.getHazard(), true));
-				sections.add(new Section("Precautions", block.getPrecautions(), false));
+	private int drawPage(PDDocument document, PDPage page, AppData data, FormLayout layout, Ics208Form form,
+			PDType1Font regular, PDType1Font bold, List<String> lines, int offset, int capacity, int pageNumber,
+			boolean continuation) throws IOException {
+		try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+			String title = form.getMessageType() == Ics208Form.MessageType.HAZARDOUS_MATERIALS_SITE_SAFETY_PLAN
+					? "SITE SAFETY AND CONTROL PLAN (ICS 208)" : "SAFETY MESSAGE/PLAN (ICS 208)";
+			drawIcs208Header(stream, bold, layout, continuation ? title + " (CONTINUED)" : title);
+			drawFormFrame(stream, layout);
+			float left = layout.x();
+			float right = left + layout.width();
+			float top = layout.top();
+			float metadataBottom = top - 43f;
+			float messageBottom = continuation ? layout.y() + 24f
+					: Math.max(layout.y() + FIRST_PAGE_BOTTOM_BLOCKS, metadataBottom - 53f);
+			stream.moveTo(left, metadataBottom);
+			stream.lineTo(right, metadataBottom);
+			stream.moveTo(left, messageBottom);
+			stream.lineTo(right, messageBottom);
+			stream.stroke();
+			drawIncidentMetadata(stream, bold, regular, layout, data, top);
+			drawTextLine(stream, bold, left + BLOCK_PADDING, metadataBottom - 12f,
+					continuation ? "3. Safety Message/Plan (continued)" : "3. Safety Message/Expanded Safety Message, Safety Plan, Site Safety Plan");
+			if (!continuation) {
+				drawBottomBlocks(stream, bold, regular, layout, form, data);
 			}
-
+			float y = metadataBottom - 27f;
+			int end = Math.min(lines.size(), offset + capacity);
+			for (int index = offset; index < end; index++) {
+				String line = lines.get(index);
+				drawTextLine(stream, regular, left + BLOCK_PADDING, y, safe(line));
+				y -= LINE_HEIGHT;
+			}
+			drawPageLabel(stream, regular, layout, pageNumber, form.getIapPage());
+			return end;
 		}
-		for (var section : form.getSiteSafetyPlan().getTextSections().entrySet()) {
-			sections.add(new Section("Site Safety Plan — " + section.getKey(), section.getValue(), false));
-		}
-		if (!form.getSiteSafetyPlan().getPreparedByName().isBlank()
-				|| !form.getSiteSafetyPlan().getPreparedByPositionTitle().isBlank()) {
-			sections.add(new Section("Site Safety Plan Prepared by",
-					form.getSiteSafetyPlan().getPreparedByName() + " — "
-							+ form.getSiteSafetyPlan().getPreparedByPositionTitle() + " — "
-							+ form.getSiteSafetyPlan().getPreparedBySignature() + " — "
-							+ formatPdfDateTime(data, form.getSiteSafetyPlan().getPreparedDateTime()), false));
-		}
-		sections.add(new Section("4. Site Safety Plan Required?",
-				form.getSiteSafetyPlanRequired() == null ? "Not answered"
-						: form.getSiteSafetyPlanRequired() ? "Yes" : "No", false));
-		sections.add(new Section("5. Approved Site Safety Plan(s) Located At",
-				form.getSiteSafetyPlan().getLocatedAt(), false));
-		sections.add(new Section("Prepared by",
-				form.getPreparedByName() + " — " + form.getPreparedByPositionTitle() + " — "
-						+ form.getPreparedBySignature() + " — " + formatPdfDateTime(data, form.getPreparedDateTime()),
-				false));
-		return sections;
 	}
 
 	/**
-	 * Draws repeated incident and operational-period context.
+	 * Draws the ICS 208 template title centered above the form frame.
 	 *
-	 * @param stream PDF content stream.
+	 * @param stream page stream.
+	 * @param bold bold font.
+	 * @param layout shared form layout.
+	 * @param title form title.
+	 * @throws IOException when PDF drawing fails.
+	 */
+	private void drawIcs208Header(PDPageContentStream stream, PDType1Font bold, FormLayout layout, String title)
+			throws IOException {
+		float titleWidth = bold.getStringWidth(safe(title)) / 1000f * 14f;
+		stream.beginText();
+		stream.setFont(bold, 14f);
+		stream.newLineAtOffset((layout.pageWidth() - titleWidth) / 2f, layout.headerBaseline());
+		stream.showText(safe(title));
+		stream.endText();
+	}
+
+	/**
+	 * Draws the ICS 208 incident name and operational period blocks.
+	 *
+	 * @param stream page stream.
 	 * @param bold bold font.
 	 * @param regular regular font.
-	 * @param layout current page layout.
-	 * @param y initial baseline.
-	 * @param context shared incident context.
-	 * @param data incident timezone preferences.
-	 * @return next content baseline.
-	 * @throws IOException when drawing fails.
+	 * @param layout page layout.
+	 * @param data incident metadata.
+	 * @param top top edge of frame.
+	 * @throws IOException when PDF drawing fails.
 	 */
-	private float drawContext(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, FormLayout layout,
-			float y, IncidentContext context, AppData data) throws IOException {
-		y = drawText(stream, bold, regular, layout.x(), y, 10, "1. Incident Name", safe(context.getIncidentName()),
-				false);
-		y = drawText(stream, bold, regular, layout.x(), y, 10, "2. Operational Period",
-				formatPdfDateTime(data, context.getOperationalPeriodStart()) + " to "
-						+ formatPdfDateTime(data, context.getOperationalPeriodEnd()), false);
-		return y - 4;
+	private void drawIncidentMetadata(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+			FormLayout layout, AppData data, float top) throws IOException {
+		var context = data.getIncidentContext();
+		float middle = layout.x() + layout.width() * 0.52f;
+		stream.moveTo(middle, top);
+		stream.lineTo(middle, top - 43f);
+		stream.stroke();
+		drawTextLine(stream, bold, layout.x() + BLOCK_PADDING, top - 12f, "1. Incident Name");
+		drawTextLine(stream, regular, layout.x() + BLOCK_PADDING, top - 29f,
+				safe(context.getIncidentName()));
+		drawTextLine(stream, bold, middle + BLOCK_PADDING, top - 12f, "2. Operational Period");
+		drawTextLine(stream, regular, middle + BLOCK_PADDING, top - 27f,
+				"From: " + safe(formatPdfDateTime(data, context.getOperationalPeriodStart())));
+		drawTextLine(stream, regular, middle + BLOCK_PADDING, top - 38f,
+				"To: " + safe(formatPdfDateTime(data, context.getOperationalPeriodEnd())));
 	}
 
 	/**
-	 * Calculates the first message baseline after repeated incident context.
+	 * Draws the site-plan requirement, location, and preparer blocks.
 	 *
-	 * @param layout current form layout.
-	 * @param data incident data.
-	 * @return baseline for content sections.
-	 */
-	private float contextStartY(FormLayout layout, AppData data) {
-		IncidentContext context = data.getIncidentContext();
-		return layout.top() - 24 - textHeight(context.getIncidentName())
-				- textHeight(formatPdfDateTime(data, context.getOperationalPeriodStart()) + " to "
-						+ formatPdfDateTime(data, context.getOperationalPeriodEnd()))
-				- 4;
-	}
-
-	/**
-	 * Draws section label followed by wrapped text.
-	 *
-	 * @param stream PDF stream.
+	 * @param stream page stream.
 	 * @param bold bold font.
 	 * @param regular regular font.
+	 * @param layout page layout.
+	 * @param form safety form.
+	 * @throws IOException when PDF drawing fails.
+	 */
+	private void drawBottomBlocks(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+			FormLayout layout, Ics208Form form, AppData data) throws IOException {
+		float left = layout.x();
+		float right = left + layout.width();
+		float bottom = layout.y() + 24f;
+		float top = bottom + FIRST_PAGE_BOTTOM_BLOCKS - 24f;
+		float block4Bottom = top - 29f;
+		float block5Bottom = block4Bottom - 34f;
+		stream.moveTo(left, block4Bottom);
+		stream.lineTo(right, block4Bottom);
+		stream.moveTo(left, block5Bottom);
+		stream.lineTo(right, block5Bottom);
+		stream.stroke();
+		drawTextLine(stream, bold, left + BLOCK_PADDING, top - 12f, "4. Site Safety Plan Required?");
+		drawTextLine(stream, regular, left + BLOCK_PADDING, top - 24f,
+				form.getSiteSafetyPlanRequired() == null ? "Yes [ ]   No [ ]"
+						: form.getSiteSafetyPlanRequired() ? "Yes [X]   No [ ]" : "Yes [ ]   No [X]");
+		drawTextLine(stream, bold, left + BLOCK_PADDING, block4Bottom - 13f,
+				"5. Approved Site Safety Plan(s) Located At");
+		drawTextLine(stream, regular, left + BLOCK_PADDING, block5Bottom + 7f,
+				safe(form.getSiteSafetyPlan().getLocatedAt()));
+		drawPreparedByMetadataSection(stream, bold, regular, FONT_SIZE, 8f, BLOCK_PADDING, left,
+				layout.y() + 1f, layout.width(), 22f, 6f, "Prepared by", form.getPreparedByName(),
+				form.getPreparedByPositionTitle(), form.getPreparedBySignature(), "ICS 208", form.getIapPage(),
+				formatPdfDateTime(data, form.getPreparedDateTime()));
+	}
+
+	/**
+	 * Draws one line of text at its baseline.
+	 *
+	 * @param stream page stream.
+	 * @param font display font.
 	 * @param x left coordinate.
 	 * @param y baseline.
-	 * @param size font size.
-	 * @param heading section label.
-	 * @param content section content.
-	 * @param hazard whether body text is hazard text.
-	 * @return next baseline.
-	 * @throws IOException when PDF output fails.
+	 * @param text printable text.
+	 * @throws IOException when PDF drawing fails.
 	 */
-	private static float drawText(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
-			float size, String heading, String content, boolean hazard) throws IOException {
+	private static void drawTextLine(PDPageContentStream stream, PDType1Font font, float x, float y, String text)
+			throws IOException {
 		stream.beginText();
-		stream.setFont(bold, size);
+		stream.setFont(font, FONT_SIZE);
 		stream.newLineAtOffset(x, y);
-		stream.showText(safe(heading));
+		stream.showText(safe(text));
 		stream.endText();
-		y -= LINE_HEIGHT;
-		for (String line : wrapContent(content, 98)) {
-			stream.beginText();
-			stream.setFont(hazard ? bold : regular, size);
-			stream.newLineAtOffset(x + 8, y);
-			stream.showText(safe(line));
-			stream.endText();
-			y -= LINE_HEIGHT;
-		}
-		return y - 4;
 	}
 
 	/**
-	 * Wraps paragraph text for the fixed-width PDF font.
+	 * Wraps paragraphs for the standard PDF font.
 	 *
-	 * @param content text content.
+	 * @param content source text.
 	 * @param width target character width.
-	 * @return wrapped lines preserving paragraph boundaries.
+	 * @return wrapped lines preserving paragraph breaks.
 	 */
 	private static List<String> wrapContent(String content, int width) {
 		List<String> result = new ArrayList<>();
-		for (String paragraph : safe(content).split("\\R", -1)) {
-			if (paragraph.isBlank()) {
-				result.add("");
-			} else {
-				result.addAll(new Ics208PdfRenderer().wrap(paragraph, width));
-			}
+		if (content == null || content.isEmpty()) {
+			return result;
+		}
+		for (String paragraph : content.split("\\R", -1)) {
+			result.addAll(paragraph.isBlank() ? List.of("") : new Ics208PdfRenderer().wrap(paragraph, width));
 		}
 		return result;
 	}
 
 	/**
-	 * Returns a non-null printable value.
+	 * Returns text safe for PDFBox standard fonts.
 	 *
 	 * @param value source text.
-	 * @return safe text for PDFBox standard fonts.
+	 * @return printable ASCII text.
 	 */
 	private static String safe(String value) {
 		return value == null ? "" : value.replaceAll("[^\\x20-\\x7E]", "?");
 	}
 
 	/**
-	 * Draws local and IAP page labels at the bottom of the current page.
+	 * Draws local and IAP page labels.
 	 *
-	 * @param stream PDF stream.
+	 * @param stream page stream.
 	 * @param font regular font.
 	 * @param layout page layout.
 	 * @param pageNumber local page number.
-	 * @param iapFirstPage first IAP page label.
-	 * @throws IOException when PDF drawing fails.
+	 * @param iapFirstPage first IAP page.
+	 * @throws IOException when drawing fails.
 	 */
 	private static void drawPageLabel(PDPageContentStream stream, PDType1Font font, FormLayout layout, int pageNumber,
 			String iapFirstPage) throws IOException {
@@ -326,35 +348,10 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				label += " | IAP Page " + iapFirstPage;
 			}
 		}
-		drawTextLine(stream, font, layout.x(), layout.y() + 8, label);
-	}
-
-	/**
-	 * Draws footer text at a fixed baseline.
-	 *
-	 * @param stream PDF stream.
-	 * @param font display font.
-	 * @param x left coordinate.
-	 * @param y baseline.
-	 * @param label footer text.
-	 * @throws IOException when PDF drawing fails.
-	 */
-	private static void drawTextLine(PDPageContentStream stream, PDType1Font font, float x, float y, String label)
-			throws IOException {
 		stream.beginText();
-		stream.setFont(font, 8);
-		stream.newLineAtOffset(x, y);
+		stream.setFont(font, 8f);
+		stream.newLineAtOffset(layout.x() + BLOCK_PADDING, layout.y() + 8f);
 		stream.showText(safe(label));
 		stream.endText();
-	}
-
-	/**
-	 * One independently paginated section.
-	 *
-	 * @param heading visible section heading.
-	 * @param content body text.
-	 * @param hazard whether content is hazard text.
-	 */
-	private record Section(String heading, String content, boolean hazard) {
 	}
 }

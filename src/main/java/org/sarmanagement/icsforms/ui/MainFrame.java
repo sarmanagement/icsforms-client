@@ -157,6 +157,7 @@ public class MainFrame extends JFrame {
 		this.openActionTrackerPanel = new OpenActionTrackerPanel(controller);
 		this.tCardPanel = new TCardPanel(controller);
 		this.safetyPanel = new SafetyPanel(controller);
+		safetyPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		controller.setPersonnelCardCreator(tCardPanel::createPersonnelCardFromPicker);
 		ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
 		ics204Panel.setOnEditSarTaskRequest(this::openSarTaskEditorForAssignment);
@@ -557,6 +558,16 @@ public class MainFrame extends JFrame {
 	 * @param defaultDirectory initial destination directory.
 	 */
 	private void openFormsExportDialog(Path defaultDirectory) {
+		openFormsExportDialog(defaultDirectory, null);
+	}
+
+	/**
+	 * Offers registered form exports, preselecting a form requested by its workspace.
+	 *
+	 * @param defaultDirectory initial destination directory.
+	 * @param requestedFormKey form key to add to the default selections.
+	 */
+	private void openFormsExportDialog(Path defaultDirectory, String requestedFormKey) {
 		List<String> formKeys = sortExportFormKeys(controller.exportableFormKeys());
 		if (formKeys.isEmpty()) {
 			JOptionPane.showMessageDialog(this, "No PDF forms are available to export.", "Export forms as PDF",
@@ -572,7 +583,7 @@ public class MainFrame extends JFrame {
 				continue;
 			}
 			javax.swing.JCheckBox check = new javax.swing.JCheckBox(exportFormDisplayLabel(key),
-					isExportFormSelectedByDefault(key, controller.getData()));
+					key.equals(requestedFormKey) || isExportFormSelectedByDefault(key, controller.getData()));
 			if ("ICS 203".equals(key)) {
 				check.setToolTipText("Individual export always available; IAP inclusion requires Org Chart entries "
 						+ "and the optional setting in ICS 203 details.");

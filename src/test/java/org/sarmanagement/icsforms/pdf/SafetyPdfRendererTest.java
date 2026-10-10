@@ -4,7 +4,9 @@
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.contentstream.operator.Operator;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
@@ -76,10 +78,19 @@ class SafetyPdfRendererTest {
 
 		try (PDDocument pdf = Loader.loadPDF(output.toFile())) {
 			String text = new PDFTextStripper().getText(pdf);
+			assertTrue(text.contains("SAFETY MESSAGE/PLAN (ICS 208)"));
+			assertTrue(text.contains("1. Incident Name"));
+			assertTrue(text.contains("2. Operational Period"));
+			assertTrue(text.contains("3. Safety Message"));
+			assertTrue(text.contains("4. Site Safety Plan Required?"));
+			assertTrue(text.contains("5. Approved Site Safety Plan(s) Located At"));
+			assertTrue(text.contains("Prepared by"));
 			assertTrue(text.contains("Terrain, Dense Brush, Trip Hazards"));
 			assertTrue(text.contains("Avoid steep drops and cliffs."));
-			assertTrue(text.contains("Site Safety Plan Required?"));
 			assertTrue(text.contains("2026-10-09 21:30"));
+			PDFStreamParser parser = new PDFStreamParser(pdf.getPage(0));
+			assertTrue(parser.parse().stream()
+					.filter(token -> token instanceof Operator operator && operator.getName().equals("re")).count() <= 4);
 			assertEquals(Ics208PdfRenderer.pageCount(data), pdf.getNumberOfPages());
 		}
 	}
