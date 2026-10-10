@@ -387,7 +387,14 @@ public class OrganizationalChartPanel extends JPanel {
 				JTextField field = UiSupport.textField();
 				field.setText(form.getPosition(position));
 				positions.put(position, field);
-				String label = position.name().toLowerCase(Locale.ROOT).replace('_', ' ');
+				StringBuilder labelText = new StringBuilder();
+				for (String word : position.name().toLowerCase(Locale.ROOT).split("_")) {
+					if (!labelText.isEmpty()) {
+						labelText.append(' ');
+					}
+					labelText.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+				}
+				String label = labelText.toString();
 				field.getAccessibleContext().setAccessibleName(label);
 				UiSupport.addRow(roles, position.ordinal(), label, field);
 			}
@@ -437,7 +444,8 @@ public class OrganizationalChartPanel extends JPanel {
 			JPanel preparer = UiSupport.formPanel();
 			preparer.setBorder(BorderFactory.createTitledBorder("ICS 203 preparer"));
 			preparedName.setText(form.getPreparedByName());
-			preparedTitle.setText(form.getPreparedByPositionTitle());
+			preparedTitle.setText(form.getPreparedByPositionTitle().isBlank()
+					? "Resources Unit Leader" : form.getPreparedByPositionTitle());
 			signature.setText(form.getPreparedBySignature());
 			page.setText(form.getIapPage());
 			page.setEditable(false);

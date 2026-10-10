@@ -17,9 +17,14 @@ import javax.swing.JCheckBox;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.JDialog;
+import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.GraphicsEnvironment;
+import java.awt.Window;
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -27,9 +32,81 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /** Headless workflow coverage for the supplemental organization assignment editor. */
 class OrganizationalChartPanelTest {
+	@Test
+	void visibleDivisionDialogKeepsRowsGroupedUnderSelectedBranch() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		SwingUtilities.invokeAndWait(() -> {
+			Ics203Form form = new Ics203Form();
+			var editor = new OrganizationalChartPanel.AssignmentListEditor(form);
+			button(editor, "Add branch").doClick();
+			Timer closeDivisionDialog = new Timer(200, event -> {
+				for (Window window : Window.getWindows()) {
+					if (window instanceof JDialog dialog && dialog.isShowing()
+							&& dialog.getTitle().startsWith("Divisions / Groups")) {
+						var divisions = findEntryTable(dialog);
+						button(divisions, "Add").doClick();
+						try {
+							JTable table = (JTable) field(divisions, "table");
+							table.setValueAt("Division A", 0, 0);
+							table.setValueAt("Supervisor (T)", 0, 1);
+						} catch (ReflectiveOperationException exception) {
+							throw new AssertionError(exception);
+						}
+						button(dialog, "OK").doClick();
+					}
+				}
+			});
+			closeDivisionDialog.setRepeats(false);
+			Timer operateEditor = new Timer(200, event -> {
+				closeDivisionDialog.start();
+				button(editor, "Edit selected branch divisions / groups...").doClick();
+				for (Window window : Window.getWindows()) {
+					if (window instanceof JDialog dialog && dialog.isShowing()
+							&& dialog.getTitle().equals("ICS 203 workflow smoke test")) {
+						button(dialog, "OK").doClick();
+					}
+				}
+			});
+			operateEditor.setRepeats(false);
+			operateEditor.start();
+			int result = JOptionPane.showConfirmDialog(null, editor, "ICS 203 workflow smoke test",
+					JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+			assertEquals(JOptionPane.OK_OPTION, result);
+			try {
+				editor.applyTo(form);
+			} catch (java.text.ParseException exception) {
+				throw new AssertionError(exception);
+			}
+			assertEquals(1, form.getBranches().size());
+			assertEquals("Division A", form.getBranches().get(0).getDivisions().get(0).getTitle());
+			assertEquals("Supervisor (T)", form.getBranches().get(0).getDivisions().get(0).getName());
+		});
+	}
+
+	/**
+	 * Finds the visible agency/division table inside a modal editor.
+	 * @param root dialog component tree.
+	 * @return nested entry editor, or null.
+	 */
+	private static OrganizationalChartPanel.EntryTable findEntryTable(Component root) {
+		if (root instanceof OrganizationalChartPanel.EntryTable entryTable) {
+			return entryTable;
+		}
+		if (root instanceof Container container) {
+			for (Component child : container.getComponents()) {
+				var match = findEntryTable(child);
+				if (match != null) {
+					return match;
+				}
+			}
+		}
+		return null;
+	}
+
 	@Test
 	void editorCommitsRowsPreparerAndInclusionWithoutLosingBranchGrouping() throws Exception {
 		SwingUtilities.invokeAndWait(() -> {
@@ -109,6 +186,7 @@ class OrganizationalChartPanelTest {
 				try {
 					UiSupport.setDateTimeDisplayZone(ZoneId.of("America/New_York"));
 					var editor = new OrganizationalChartPanel.AssignmentListEditor(form);
+					assertEquals("Resources Unit Leader", ((JTextField) field(editor, "preparedTitle")).getText());
 					JSpinner spinner = (JSpinner) field(editor, "preparedDate");
 					assertEquals("America/New_York",
 							((JSpinner.DateEditor) spinner.getEditor()).getFormat().getTimeZone().getID());
