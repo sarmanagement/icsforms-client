@@ -117,6 +117,19 @@ class PdfExportServiceTest {
 				PdfExportService.orderForIapBundle(List.of("ICS 207", "ICS 203", "ICS 205A", "ICS 202")));
 	}
 
+	@Test
+	void defaultSafetyPageNumbersFollowIcs202Attachments() {
+		AppData data = new AppData();
+		data.getForm202().setIncidentActionPlanAttachments(List.of("ICS 208"));
+
+		PdfExportService.assignIapPageNumbers(data, null, true);
+
+		assertFalse(data.getForm208().getIapPage().isBlank());
+		assertTrue(data.getForm215a().getIapPage().isBlank());
+		assertTrue(PdfExportService.isIapAttachmentSelected(data, "ICS 208"));
+		assertFalse(PdfExportService.isIapAttachmentSelected(data, "ICS 215A"));
+	}
+
 	/**
 	 * Exports and counts an IAP containing only the registered organization list.
 	 *

@@ -102,8 +102,7 @@ class SafetyPdfRendererTest {
 			assertFalse(new PDFTextStripper().getText(pdf).contains("Steep terrain"));
 		}
 
-		data.getForm215a().setIncludeInIap(true);
-		data.getForm208().setIncludeInIap(true);
+		data.getForm202().setIncidentActionPlanAttachments(List.of("ICS 215A", "ICS 208"));
 		data.getIncidentContext().setIncidentName("With Safety Forms");
 		Path withSafety = service.exportIapBundle(data, outputDirectory);
 		assertEquals("2", data.getForm215a().getIapPage());

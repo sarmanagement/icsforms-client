@@ -55,6 +55,7 @@ import java.nio.file.Path;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -556,7 +557,7 @@ public class MainFrame extends JFrame {
 	 * @param defaultDirectory initial destination directory.
 	 */
 	private void openFormsExportDialog(Path defaultDirectory) {
-		List<String> formKeys = controller.exportableFormKeys();
+		List<String> formKeys = sortExportFormKeys(controller.exportableFormKeys());
 		if (formKeys.isEmpty()) {
 			JOptionPane.showMessageDialog(this, "No PDF forms are available to export.", "Export forms as PDF",
 					JOptionPane.INFORMATION_MESSAGE);
@@ -612,6 +613,7 @@ public class MainFrame extends JFrame {
 				return;
 			}
 			pushToModel(source);
+			addSelectedFormsToIcs202Attachments(selected);
 			try {
 				if (exportModeControls.combined().isSelected()) {
 					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source,
@@ -702,8 +704,96 @@ public class MainFrame extends JFrame {
 		return switch (formKey) {
 			case "ICS 233-CG" -> data.isOpenActionTrackerEnabled();
 			case "Clue Log (ICS 233-CG adapted)" -> false;
+			case "ICS 208", "ICS 215A" -> data.getForm202().getIncidentActionPlanAttachments().stream()
+					.anyMatch(item -> formKey.equalsIgnoreCase(item));
 			default -> true;
 		};
+	}
+
+	/**
+	 * Adds printed forms to the ICS 202 attachment list without removing prior selections.
+	 *
+	 * @param selectedFormKeys forms selected in the export dialog.
+	 */
+	private void addSelectedFormsToIcs202Attachments(List<String> selectedFormKeys) {
+		List<String> attachments = controller.getData().getForm202().getIncidentActionPlanAttachments();
+		List<String> merged = mergeSelectedFormsWithIcs202Attachments(attachments, selectedFormKeys);
+		attachments.clear();
+		attachments.addAll(merged);
+		ics202Panel.refreshFromModel();
+		controller.markDirty();
+	}
+
+	/**
+	 * Adds print selections to the existing ICS 202 attachment list without deselecting prior forms.
+	 *
+	 * @param existingAttachments current ICS 202 attachments.
+	 * @param selectedFormKeys forms selected for printing.
+	 * @return case-insensitively deduplicated attachment list.
+	 */
+	static List<String> mergeSelectedFormsWithIcs202Attachments(List<String> existingAttachments,
+			List<String> selectedFormKeys) {
+		List<String> merged = new ArrayList<>();
+		for (String formKey : existingAttachments) {
+			if (formKey != null && !formKey.isBlank()
+					&& merged.stream().noneMatch(item -> item.equalsIgnoreCase(formKey))) {
+				merged.add(formKey);
+			}
+		}
+		for (String formKey : selectedFormKeys) {
+			if (formKey != null && !formKey.isBlank()
+					&& merged.stream().noneMatch(item -> item.equalsIgnoreCase(formKey))) {
+				merged.add(formKey);
+			}
+		}
+		return merged;
+	}
+
+	/**
+	 * Sorts ICS exports by form number while preserving the relative order of other exports.
+	 *
+	 * @param formKeys registered form identifiers.
+	 * @return identifiers in display order.
+	 */
+	static List<String> sortExportFormKeys(List<String> formKeys) {
+		return formKeys.stream().sorted(Comparator.comparingInt(MainFrame::icsFormNumber)
+				.thenComparing(MainFrame::icsFormSuffix)).toList();
+	}
+
+	/**
+	 * Returns the numeric ICS form number used for export-list sorting.
+	 *
+	 * @param formKey registered form identifier.
+	 * @return form number, or {@link Integer#MAX_VALUE} for non-ICS exports.
+	 */
+	private static int icsFormNumber(String formKey) {
+		if (!formKey.startsWith("ICS ")) {
+			return Integer.MAX_VALUE;
+		}
+		String suffix = formKey.substring(4);
+		int digitsEnd = 0;
+		while (digitsEnd < suffix.length() && Character.isDigit(suffix.charAt(digitsEnd))) {
+			digitsEnd++;
+		}
+		return digitsEnd == 0 ? Integer.MAX_VALUE : Integer.parseInt(suffix.substring(0, digitsEnd));
+	}
+
+	/**
+	 * Returns the suffix of an ICS number for stable numeric-form ordering.
+	 *
+	 * @param formKey registered form identifier.
+	 * @return form suffix, or blank for non-ICS exports.
+	 */
+	private static String icsFormSuffix(String formKey) {
+		if (!formKey.startsWith("ICS ")) {
+			return "";
+		}
+		String suffix = formKey.substring(4);
+		int digitsEnd = 0;
+		while (digitsEnd < suffix.length() && Character.isDigit(suffix.charAt(digitsEnd))) {
+			digitsEnd++;
+		}
+		return suffix.substring(digitsEnd);
 	}
 
 	/**
@@ -719,7 +809,9 @@ public class MainFrame extends JFrame {
 			case "ICS 205A" -> "ICS 205A Communications List";
 			case "ICS 204" -> "ICS 204 – Assignment List";
 			case "ICS 207" -> "ICS 207 – Incident Organization Chart";
+			case "ICS 208" -> "ICS 208 – Safety Message / Plan";
 			case "ICS 214" -> "ICS 214 – Activity Log";
+			case "ICS 215A" -> "ICS 215A – Incident Action Plan Safety Analysis";
 			case "SAR Task Assignment" -> "SAR Task Assignment Forms";
 			case "Clue Log" -> "Clue Log";
 			case "ICS 233-CG" -> "ICS 233-CG – Open Action Tracker";

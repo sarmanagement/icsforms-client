@@ -8,6 +8,7 @@ import org.sarmanagement.icsforms.model.Ics208Form;
 import org.sarmanagement.icsforms.model.Ics215aForm;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.SafetyAnalysisEntry;
+import org.sarmanagement.icsforms.model.SafetyHazardReport;
 import org.sarmanagement.icsforms.model.SafetyMessageBlock;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SiteSafetyPlan;
@@ -18,7 +19,6 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
-import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
@@ -86,18 +86,17 @@ public class SafetyPanel extends JPanel {
 	private final JTextField preparedByPosition = new JTextField();
 	private final JTextField preparedBySignature = new JTextField();
 	private final JTextField preparedDateTime = new JTextField();
-	private final JCheckBox include215aInIap = new JCheckBox("Include ICS 215A in IAP bundle");
-	private final JCheckBox include208InIap = new JCheckBox("Include ICS 208 in IAP bundle");
 	private final JLabel messageCoverage = new JLabel("No analysis rows.");
 	private final Map<String, JTextArea> siteTextAreas = new LinkedHashMap<>();
 	private final DefaultTableModel reportTableModel = new DefaultTableModel(
-			new String[] {"Task", "Area", "Debrief Status", "Reported Hazards"}, 0) {
+			new String[] {"Operational Period", "Task", "Area", "Debrief Status", "Safety Review", "Reported Hazards"}, 0) {
 		@Override
 		public boolean isCellEditable(int row, int column) {
 			return false;
 		}
 	};
 	private final JTable reportTable = new JTable(reportTableModel);
+	private final List<HazardReportSource> reportSources = new ArrayList<>();
 
 	/**
 	 * Creates the shared Safety workspace.
@@ -125,7 +124,6 @@ public class SafetyPanel extends JPanel {
 		operationsChiefField.setText(analysis.getOperationsSectionChiefName());
 		operationsChiefSignature.setText(analysis.getOperationsSectionChiefSignature());
 		analysisPreparedField.setText(isoDateTime(analysis.getPreparedDateTime()));
-		include215aInIap.setSelected(analysis.isIncludeInIap());
 		analysisTableModel.setRowCount(0);
 		for (SafetyAnalysisEntry entry : analysis.getEntries()) {
 			analysisTableModel.addRow(new Object[] {entry.getIncidentArea(), entry.getHazardsRisks(), entry.getMitigations()});
@@ -149,7 +147,6 @@ public class SafetyPanel extends JPanel {
 		preparedByPosition.setText(message.getPreparedByPositionTitle());
 		preparedBySignature.setText(message.getPreparedBySignature());
 		preparedDateTime.setText(isoDateTime(message.getPreparedDateTime()));
-		include208InIap.setSelected(message.isIncludeInIap());
 		siteTextAreas.clear();
 		sitePlanRevision.setText(plan.getRevision());
 		sitePlanPreparer.setText(plan.getPreparedByName());
@@ -174,7 +171,6 @@ public class SafetyPanel extends JPanel {
 		analysis.setOperationsSectionChiefName(operationsChiefField.getText().trim());
 		analysis.setOperationsSectionChiefSignature(operationsChiefSignature.getText().trim());
 		analysis.setPreparedDateTime(parseDateTime(analysisPreparedField.getText()));
-		analysis.setIncludeInIap(include215aInIap.isSelected());
 		List<SafetyAnalysisEntry> entries = new ArrayList<>();
 		for (int i = 0; i < analysisTableModel.getRowCount(); i++) {
 			SafetyAnalysisEntry entry = i < analysis.getEntries().size() ? analysis.getEntries().get(i)
@@ -219,7 +215,6 @@ public class SafetyPanel extends JPanel {
 		message.setPreparedByPositionTitle(preparedByPosition.getText().trim());
 		message.setPreparedBySignature(preparedBySignature.getText().trim());
 		message.setPreparedDateTime(parseDateTime(preparedDateTime.getText()));
-		message.setIncludeInIap(include208InIap.isSelected());
 	}
 
 	/**
@@ -248,7 +243,6 @@ public class SafetyPanel extends JPanel {
 		button(actions, "Save common library CSV", this::exportCommonCsv);
 		button(actions, "Save analysis as CSV", this::exportAnalysisCsv);
 		button(actions, "Export ICS 215A PDF", () -> exportPdf("ICS 215A"));
-		actions.add(include215aInIap);
 		panel.add(metadata, BorderLayout.NORTH);
 		panel.add(new JScrollPane(analysisTable), BorderLayout.CENTER);
 		panel.add(actions, BorderLayout.SOUTH);
@@ -290,7 +284,6 @@ public class SafetyPanel extends JPanel {
 		button(blockActions, "Remove block", this::removeMessageBlock);
 		button(blockActions, "Generate/update from 215A", this::generateMessage);
 		button(blockActions, "Export ICS 208 PDF", () -> exportPdf("ICS 208"));
-		blockActions.add(include208InIap);
 		blocks.add(blockActions, BorderLayout.SOUTH);
 		JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(controls), blocks);
 		split.setResizeWeight(0.5);
@@ -309,10 +302,13 @@ public class SafetyPanel extends JPanel {
 		reportTable.setFillsViewportHeight(true);
 		JButton promote = new JButton("Add selected report to ICS 215A");
 		promote.addActionListener(event -> promoteHazardReport());
-		panel.add(new JLabel("Reported hazards from task assignment debriefings (including unfinished debriefs)."),
-				BorderLayout.NORTH);
+		panel.add(new JLabel("Reported hazards from all operational periods. Link each report to the 215A or record "
+				+ "that the Safety Officer has noted it."), BorderLayout.NORTH);
 		panel.add(new JScrollPane(reportTable), BorderLayout.CENTER);
-		panel.add(promote, BorderLayout.SOUTH);
+		JPanel actions = new JPanel();
+		actions.add(promote);
+		button(actions, "Mark noted by Safety Officer", this::acknowledgeHazardReport);
+		panel.add(actions, BorderLayout.SOUTH);
 		return panel;
 	}
 
@@ -696,17 +692,52 @@ public class SafetyPanel extends JPanel {
 		if (row < 0) {
 			return;
 		}
-		SarTaskAssignment task = taskForReportRow(row);
-		if (task == null) {
+		HazardReportSource source = reportSources.get(row);
+		if (isHazardLinkedToAnalysis(source)) {
+			JOptionPane.showMessageDialog(this, "This report is already linked to an ICS 215A row.",
+					"Hazard already included", JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
 		SafetyAnalysisEntry entry = new SafetyAnalysisEntry();
-		entry.setIncidentArea(reportArea(task));
-		entry.setHazardsRisks(task.getHazardsObserved());
+		entry.setIncidentArea(source.incidentArea());
+		entry.setHazardsRisks(source.hazards());
 		controller.getData().getForm215a().getEntries().add(entry);
 		analysisTableModel.addRow(new Object[] {entry.getIncidentArea(), entry.getHazardsRisks(), ""});
+		if (source.task() != null) {
+			source.task().setSafetyHazardAnalysisEntryId(entry.getEntryId());
+		} else {
+			source.archivedReport().setAnalysisEntryId(entry.getEntryId());
+		}
 		controller.markDirty();
+		refreshReportedHazards(controller.getData());
 		sections.setSelectedIndex(0);
+	}
+
+	/**
+	 * Records the Safety Officer's acknowledgement for the selected report.
+	 */
+	private void acknowledgeHazardReport() {
+		int row = reportTable.getSelectedRow();
+		if (row < 0) {
+			return;
+		}
+		String defaultName = safetyOfficerField.getText().trim();
+		String name = JOptionPane.showInputDialog(this, "Safety Officer noting this report:",
+				defaultName.isBlank() ? "" : defaultName);
+		if (name == null || name.isBlank()) {
+			return;
+		}
+		HazardReportSource source = reportSources.get(row);
+		if (source.task() != null) {
+			source.task().setSafetyHazardNotedBy(name.trim());
+			source.task().setSafetyHazardNotedDateTime(LocalDateTime.now());
+		} else {
+			source.archivedReport().setNotedBySafetyOfficer(name.trim());
+			source.archivedReport().setNotedDateTime(LocalDateTime.now());
+		}
+		controller.markDirty();
+		refreshReportedHazards(controller.getData());
+		reportTable.setRowSelectionInterval(row, row);
 	}
 
 	/**
@@ -716,33 +747,81 @@ public class SafetyPanel extends JPanel {
 	 */
 	private void refreshReportedHazards(AppData data) {
 		reportTableModel.setRowCount(0);
+		reportSources.clear();
 		if (data.getIncidentMode() != IncidentMode.SAR) {
 			return;
 		}
+		for (SafetyHazardReport report : data.getArchivedSafetyHazardReports()) {
+			if (report != null && !report.getHazards().isBlank()) {
+				HazardReportSource source = new HazardReportSource(null, report);
+				reportSources.add(source);
+				reportTableModel.addRow(new Object[] {periodLabel(report.getPeriodStart(), report.getPeriodEnd()),
+						report.getTaskLabel(), report.getIncidentArea(),
+						report.isDebriefingCompleted() ? "Completed" : "Unfinished",
+						reportReviewStatus(source), report.getHazards()});
+			}
+		}
+		LocalDateTime periodStart = data.getIncidentContext().getOperationalPeriodStart();
+		LocalDateTime periodEnd = data.getIncidentContext().getOperationalPeriodEnd();
 		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
 			if (task != null && task.getHazardsObserved() != null && !task.getHazardsObserved().isBlank()) {
-				reportTableModel.addRow(new Object[] {taskLabel(task), reportArea(task),
-						task.isDebriefingCompleted() ? "Completed" : "Unfinished", task.getHazardsObserved()});
+				HazardReportSource source = new HazardReportSource(task, null);
+				reportSources.add(source);
+				reportTableModel.addRow(new Object[] {periodLabel(periodStart, periodEnd), taskLabel(task),
+						reportArea(task), task.isDebriefingCompleted() ? "Completed" : "Unfinished",
+						reportReviewStatus(source), task.getHazardsObserved()});
 			}
 		}
 	}
 
 	/**
-	 * Resolves a displayed report row to its source task.
+	 * Produces the review status for a reported hazard.
 	 *
-	 * @param reportRow report table row.
-	 * @return task that supplied the row, or null if it no longer exists.
+	 * @param source report source.
+	 * @return coverage and acknowledgement status.
 	 */
-	private SarTaskAssignment taskForReportRow(int reportRow) {
-		int index = 0;
-		for (SarTaskAssignment task : controller.getData().getSarTaskAssignments()) {
-			if (task != null && task.getHazardsObserved() != null && !task.getHazardsObserved().isBlank()) {
-				if (index++ == reportRow) {
-					return task;
-				}
-			}
+	private String reportReviewStatus(HazardReportSource source) {
+		boolean linked = isHazardLinkedToAnalysis(source);
+		String notedBy = source.task() == null
+				? source.archivedReport().getNotedBySafetyOfficer()
+				: source.task().getSafetyHazardNotedBy();
+		if (linked && !notedBy.isBlank()) {
+			return "Included in ICS 215A; noted by " + notedBy;
 		}
-		return null;
+		if (linked) {
+			return "Included in ICS 215A";
+		}
+		return notedBy.isBlank() ? "Not yet reviewed" : "Noted by " + notedBy;
+	}
+
+	/**
+	 * Checks whether a report's linked analysis row still exists.
+	 *
+	 * @param source report source.
+	 * @return true when the report links to a current ICS 215A row.
+	 */
+	private boolean isHazardLinkedToAnalysis(HazardReportSource source) {
+		String entryId = source.task() == null
+				? source.archivedReport().getAnalysisEntryId()
+				: source.task().getSafetyHazardAnalysisEntryId();
+		return !entryId.isBlank() && controller.getData().getForm215a().getEntries().stream()
+				.anyMatch(entry -> entryId.equals(entry.getEntryId()));
+	}
+
+	/**
+	 * Formats an operational period range for the hazard report table.
+	 *
+	 * @param start period start.
+	 * @param end period end.
+	 * @return ISO-formatted period range.
+	 */
+	private String periodLabel(LocalDateTime start, LocalDateTime end) {
+		String from = isoDateTime(start);
+		String to = isoDateTime(end);
+		if (from.isBlank() && to.isBlank()) {
+			return "Unknown period";
+		}
+		return from + " – " + to;
 	}
 
 	/**
@@ -863,5 +942,31 @@ public class SafetyPanel extends JPanel {
 			label = task.getAssignmentId();
 		}
 		return label == null || label.isBlank() ? task.getTaskId() : label;
+	}
+
+	/**
+	 * Provides access to the live current-period or archived hazard report.
+	 *
+	 * @param task current-period task, or null for an archived report.
+	 * @param archivedReport archived report, or null for a current-period task.
+	 */
+	private record HazardReportSource(SarTaskAssignment task, SafetyHazardReport archivedReport) {
+		/**
+		 * Returns the incident area associated with this report.
+		 *
+		 * @return incident area.
+		 */
+		private String incidentArea() {
+			return task == null ? archivedReport.getIncidentArea() : reportArea(task);
+		}
+
+		/**
+		 * Returns the reported hazard text.
+		 *
+		 * @return reported hazards.
+		 */
+		private String hazards() {
+			return task == null ? archivedReport.getHazards() : task.getHazardsObserved();
+		}
 	}
 }

@@ -136,13 +136,25 @@ public class PdfExportService {
 		} else {
 			keys.remove("Clue Log (ICS 233-CG adapted)");
 		}
-		if (data == null || !data.getForm215a().isIncludeInIap()) {
+		if (data == null || !isIapAttachmentSelected(data, "ICS 215A")) {
 			keys.remove("ICS 215A");
 		}
-		if (data == null || !data.getForm208().isIncludeInIap()) {
+		if (data == null || !isIapAttachmentSelected(data, "ICS 208")) {
 			keys.remove("ICS 208");
 		}
 		return keys;
+	}
+
+	/**
+	 * Checks whether ICS 202 lists a form as an IAP attachment.
+	 *
+	 * @param data incident document.
+	 * @param formKey registered renderer key.
+	 * @return true when included on ICS 202.
+	 */
+	static boolean isIapAttachmentSelected(AppData data, String formKey) {
+		return data.getForm202().getIncidentActionPlanAttachments().stream()
+				.anyMatch(item -> formKey.equalsIgnoreCase(item));
 	}
 
 	/**
@@ -294,11 +306,11 @@ public class PdfExportService {
 			data.setForm205aIapPage(String.valueOf(page));
 			page += Ics205aPdfRenderer.pageCount(data);
 		}
-		if (includeSafetyForm(included, "ICS 215A", data.getForm215a().isIncludeInIap())) {
+		if (includedOrDefaultAttachment(included, data, "ICS 215A")) {
 			data.getForm215a().setIapPage(String.valueOf(page));
 			page += Ics215aPdfRenderer.pageCount(data);
 		}
-		if (includeSafetyForm(included, "ICS 208", data.getForm208().isIncludeInIap())) {
+		if (includedOrDefaultAttachment(included, data, "ICS 208")) {
 			data.getForm208().setIapPage(String.valueOf(page));
 			page += Ics208PdfRenderer.pageCount(data);
 		}
@@ -437,6 +449,7 @@ public class PdfExportService {
 		copy.setActivityLogs(data.getActivityLogs());
 		copy.setActivityEventTypes(data.getActivityEventTypes());
 		copy.setSarTaskAssignments(data.getSarTaskAssignments());
+		copy.setArchivedSafetyHazardReports(data.getArchivedSafetyHazardReports());
 		copy.setCommonSafetyHazards(data.getCommonSafetyHazards());
 		copy.setClueLogEntries(data.getClueLogEntries());
 		copy.setOpenActionItems(data.getOpenActionItems());
@@ -470,8 +483,8 @@ public class PdfExportService {
 	 * @param preference saved IAP preference.
 	 * @return whether the safety form is bundled.
 	 */
-	private static boolean includeSafetyForm(java.util.Set<String> included, String formKey, boolean preference) {
-		return included == null ? preference : included.contains(formKey);
+	private static boolean includedOrDefaultAttachment(java.util.Set<String> included, AppData data, String formKey) {
+		return included == null ? isIapAttachmentSelected(data, formKey) : included.contains(formKey);
 	}
 
 	/**

@@ -48,7 +48,7 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		Files.writeString(tempDir.resolve("incident.json"), "{\"schemaVersion\":5}");
 		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
 			assertEquals(1, store.list().size());
-			assertEquals(7, store.load(store.list().get(0).incidentId()).getSchemaVersion());
+			assertEquals(AppData.CURRENT_SCHEMA_VERSION, store.load(store.list().get(0).incidentId()).getSchemaVersion());
 			assertEquals(0, store.list().get(0).revision());
 			assertTrue(Files.exists(tempDir.resolve("incident.json.migrated")));
 			assertEquals("{\"schemaVersion\":5}", Files.readString(tempDir.resolve("incident.json")));

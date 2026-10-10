@@ -19,7 +19,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 7;
+	public static final int CURRENT_SCHEMA_VERSION = 8;
 
 	/**
 	 * A lightweight snapshot of the shared context at the end of one operational
@@ -114,6 +114,7 @@ public class AppData {
 	private List<Ics214Form> activityLogs = new ArrayList<>();
 	private List<ActivityEventType> activityEventTypes = new ArrayList<>();
 	private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
+	private List<SafetyHazardReport> archivedSafetyHazardReports = new ArrayList<>();
 	private List<SafetyAnalysisEntry> commonSafetyHazards = new ArrayList<>();
 	private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
 	private List<OpenActionItem> openActionItems = new ArrayList<>();
@@ -229,7 +230,8 @@ public class AppData {
 	 *
 	 * <p>
 	 * The organizational chart and ICS 201 initial-response record are preserved as
-	 * historical context. ICS 202, ICS 204, SAR tasks, clue log, T-cards, and
+	 * historical context. Nonblank SAR hazard reports are archived before ICS 202,
+	 * ICS 204, SAR tasks, clue log, T-cards, and
 	 * activity logs are cleared so that the new period starts fresh. The IAP phase
 	 * is set to {@link IapPhase#DURING_OP}. The incident context, incident mode,
 	 * and activity event types are retained.
@@ -248,6 +250,8 @@ public class AppData {
 			record.setIncidentCommanders(new ArrayList<>(organizationalChart.getIncidentCommanders()));
 		}
 		operationalPeriodHistory.add(record);
+		getArchivedSafetyHazardReports().addAll(archiveSafetyHazardReports(sarTaskAssignments,
+				record.getPeriodStart(), record.getPeriodEnd()));
 
 		this.iapPhase = IapPhase.DURING_OP;
 		this.form202 = new Ics202Form();
@@ -739,6 +743,66 @@ public class AppData {
 	 */
 	public void setSarTaskAssignments(List<SarTaskAssignment> sarTaskAssignments) {
 		this.sarTaskAssignments = sarTaskAssignments == null ? new ArrayList<>() : sarTaskAssignments;
+	}
+
+	/**
+	 * Returns SAR hazard reports archived from completed operational periods.
+	 *
+	 * @return archived reports, never null.
+	 */
+	public List<SafetyHazardReport> getArchivedSafetyHazardReports() {
+		if (archivedSafetyHazardReports == null) {
+			archivedSafetyHazardReports = new ArrayList<>();
+		}
+		return archivedSafetyHazardReports;
+	}
+
+	/**
+	 * Replaces the archived SAR hazard report history.
+	 *
+	 * @param archivedSafetyHazardReports archived reports; null becomes empty.
+	 */
+	public void setArchivedSafetyHazardReports(List<SafetyHazardReport> archivedSafetyHazardReports) {
+		this.archivedSafetyHazardReports = archivedSafetyHazardReports == null
+				? new ArrayList<>()
+				: archivedSafetyHazardReports;
+	}
+
+	/**
+	 * Copies nonblank current-period debrief hazards into immutable-period records.
+	 *
+	 * @param tasks current-period task assignments.
+	 * @param periodStart completed period start.
+	 * @param periodEnd completed period end.
+	 * @return snapshots of reported hazards.
+	 */
+	private static List<SafetyHazardReport> archiveSafetyHazardReports(List<SarTaskAssignment> tasks,
+			LocalDateTime periodStart, LocalDateTime periodEnd) {
+		List<SafetyHazardReport> reports = new ArrayList<>();
+		if (tasks == null) {
+			return reports;
+		}
+		for (SarTaskAssignment task : tasks) {
+			if (task == null || task.getHazardsObserved().isBlank()) {
+				continue;
+			}
+			SafetyHazardReport report = new SafetyHazardReport();
+			report.setTaskId(task.getAssignmentId().isBlank() ? task.getTaskId() : task.getAssignmentId());
+			report.setTaskLabel(task.getAssignmentTeamNumber().isBlank()
+					? task.getResourceIdentifier()
+					: task.getAssignmentTeamNumber());
+			report.setIncidentArea(java.util.stream.Stream.of(task.getBranch(), task.getDivision(), task.getGroup())
+					.filter(value -> value != null && !value.isBlank()).collect(java.util.stream.Collectors.joining(", ")));
+			report.setHazards(task.getHazardsObserved());
+			report.setPeriodStart(periodStart);
+			report.setPeriodEnd(periodEnd);
+			report.setDebriefingCompleted(task.isDebriefingCompleted());
+			report.setAnalysisEntryId(task.getSafetyHazardAnalysisEntryId());
+			report.setNotedBySafetyOfficer(task.getSafetyHazardNotedBy());
+			report.setNotedDateTime(task.getSafetyHazardNotedDateTime());
+			reports.add(report);
+		}
+		return reports;
 	}
 
 	/**
