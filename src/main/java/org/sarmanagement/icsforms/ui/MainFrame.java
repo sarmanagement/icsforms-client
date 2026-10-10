@@ -90,6 +90,7 @@ public class MainFrame extends JFrame {
 	private final ClueLogPanel clueLogPanel;
 	private final OpenActionTrackerPanel openActionTrackerPanel;
 	private final TCardPanel tCardPanel;
+	private final SafetyPanel safetyPanel;
 	private final JTabbedPane tabs = new JTabbedPane();
 	private final Map<Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
 	private final Map<Component, String> tabGroups = new IdentityHashMap<>();
@@ -154,6 +155,7 @@ public class MainFrame extends JFrame {
 		this.clueLogPanel = new ClueLogPanel(controller);
 		this.openActionTrackerPanel = new OpenActionTrackerPanel(controller);
 		this.tCardPanel = new TCardPanel(controller);
+		this.safetyPanel = new SafetyPanel(controller);
 		controller.setPersonnelCardCreator(tCardPanel::createPersonnelCardFromPicker);
 		ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
 		ics204Panel.setOnEditSarTaskRequest(this::openSarTaskEditorForAssignment);
@@ -173,6 +175,7 @@ public class MainFrame extends JFrame {
 		registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, ICS_201_GROUP);
 		registerTab("ICS 202", ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
 		registerTab("ICS 204", ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
+		registerTab("Safety", safetyPanel, AppController.LinkSource.NONE, CORE_GROUP);
 		registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
 		registerTab("Clue Log", clueLogPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
 		registerTab("Open Action Tracker", openActionTrackerPanel, AppController.LinkSource.NONE, ACTION_TRACKER_GROUP);
@@ -808,6 +811,7 @@ public class MainFrame extends JFrame {
 		ics201Panel.pushToModel();
 		ics202Panel.pushToModel();
 		ics204Panel.pushToModel();
+		safetyPanel.pushToModel();
 		for (Ics214Panel panel : ics214Panels) {
 			panel.saveToModel();
 		}
@@ -876,6 +880,7 @@ public class MainFrame extends JFrame {
 		ics201Panel.refreshFromModel();
 		ics202Panel.refreshFromModel();
 		ics204Panel.refreshFromModel();
+		safetyPanel.refreshFromModel();
 		ensureLogs(controller.getData());
 		rebuildLogTabs();
 		sarTaskPanel.refreshFromModel();
@@ -976,6 +981,7 @@ public class MainFrame extends JFrame {
 			addVisibleTab(ics201Panel);
 			addVisibleTab(ics202Panel);
 			addVisibleTab(ics204Panel);
+			addVisibleTab(safetyPanel);
 			// sarTaskPanel and clueLogPanel belong to SAR_ONLY_GROUP; addVisibleTab()
 			// checks
 			// group visibility and skips them automatically in GENERIC mode.

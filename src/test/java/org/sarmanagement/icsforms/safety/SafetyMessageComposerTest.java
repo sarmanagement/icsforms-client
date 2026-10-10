@@ -66,6 +66,14 @@ class SafetyMessageComposerTest {
 		assertFalse(message.getHazardBlocks().get(0).getPrecautions().isEmpty());
 	}
 
+	/**
+	 * Creates a source row for message-composition tests.
+	 *
+	 * @param hazard hazard description.
+	 * @param mitigation mitigation text.
+	 * @param equipment explicitly classified equipment.
+	 * @return configured analysis row.
+	 */
 	private static SafetyAnalysisEntry entry(String hazard, String mitigation, String equipment) {
 		SafetyAnalysisEntry entry = new SafetyAnalysisEntry();
 		entry.setHazardsRisks(hazard);

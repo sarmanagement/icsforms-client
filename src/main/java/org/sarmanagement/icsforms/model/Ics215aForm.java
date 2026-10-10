@@ -14,7 +14,9 @@ public class Ics215aForm {
 	private String incidentNumber = "";
 	private LocalDateTime preparedDateTime;
 	private String safetyOfficerName = "";
+	private String safetyOfficerSignature = "";
 	private String operationsSectionChiefName = "";
+	private String operationsSectionChiefSignature = "";
 	private LocalDateTime reviewedDateTime;
 	private List<SafetyAnalysisEntry> entries = new ArrayList<>();
 	private boolean includeInIap;
@@ -75,6 +77,24 @@ public class Ics215aForm {
 	}
 
 	/**
+	 * Returns the Safety Officer signature.
+	 *
+	 * @return Safety Officer signature.
+	 */
+	public String getSafetyOfficerSignature() {
+		return safe(safetyOfficerSignature);
+	}
+
+	/**
+	 * Sets the Safety Officer signature.
+	 *
+	 * @param safetyOfficerSignature Safety Officer signature.
+	 */
+	public void setSafetyOfficerSignature(String safetyOfficerSignature) {
+		this.safetyOfficerSignature = safe(safetyOfficerSignature);
+	}
+
+	/**
 	 * Returns the collaborating Operations Section Chief.
 	 *
 	 * @return Operations Section Chief name.
@@ -90,6 +110,24 @@ public class Ics215aForm {
 	 */
 	public void setOperationsSectionChiefName(String operationsSectionChiefName) {
 		this.operationsSectionChiefName = safe(operationsSectionChiefName);
+	}
+
+	/**
+	 * Returns the Operations Section Chief signature.
+	 *
+	 * @return Operations Section Chief signature.
+	 */
+	public String getOperationsSectionChiefSignature() {
+		return safe(operationsSectionChiefSignature);
+	}
+
+	/**
+	 * Sets the Operations Section Chief signature.
+	 *
+	 * @param operationsSectionChiefSignature Operations Section Chief signature.
+	 */
+	public void setOperationsSectionChiefSignature(String operationsSectionChiefSignature) {
+		this.operationsSectionChiefSignature = safe(operationsSectionChiefSignature);
 	}
 
 	/**

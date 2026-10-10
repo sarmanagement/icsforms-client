@@ -3,6 +3,7 @@
  */
 package org.sarmanagement.icsforms.model;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -16,7 +17,7 @@ public class SiteSafetyPlan {
 	private String preparedByName = "";
 	private String preparedByPositionTitle = "";
 	private String preparedBySignature = "";
-	private String preparedDateTime = "";
+	private LocalDateTime preparedDateTime;
 	private Map<String, String> textSections = new LinkedHashMap<>();
 
 	/**
@@ -128,21 +129,21 @@ public class SiteSafetyPlan {
 	}
 
 	/**
-	 * Returns the preparation date/time text in ISO date format.
+	 * Returns the preparation date/time.
 	 *
 	 * @return preparation date/time.
 	 */
-	public String getPreparedDateTime() {
-		return safe(preparedDateTime);
+	public LocalDateTime getPreparedDateTime() {
+		return preparedDateTime;
 	}
 
 	/**
-	 * Sets the preparation date/time text in ISO date format.
+	 * Sets the preparation date/time.
 	 *
 	 * @param preparedDateTime preparation date/time.
 	 */
-	public void setPreparedDateTime(String preparedDateTime) {
-		this.preparedDateTime = safe(preparedDateTime);
+	public void setPreparedDateTime(LocalDateTime preparedDateTime) {
+		this.preparedDateTime = preparedDateTime;
 	}
 
 	/**

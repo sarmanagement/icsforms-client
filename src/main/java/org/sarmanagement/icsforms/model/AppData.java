@@ -114,6 +114,7 @@ public class AppData {
 	private List<Ics214Form> activityLogs = new ArrayList<>();
 	private List<ActivityEventType> activityEventTypes = new ArrayList<>();
 	private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
+	private List<SafetyAnalysisEntry> commonSafetyHazards = new ArrayList<>();
 	private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
 	private List<OpenActionItem> openActionItems = new ArrayList<>();
 	private boolean openActionTrackerEnabled;
@@ -738,6 +739,27 @@ public class AppData {
 	 */
 	public void setSarTaskAssignments(List<SarTaskAssignment> sarTaskAssignments) {
 		this.sarTaskAssignments = sarTaskAssignments == null ? new ArrayList<>() : sarTaskAssignments;
+	}
+
+	/**
+	 * Returns this incident's reusable common hazard and mitigation library.
+	 *
+	 * @return reusable hazard entries, never null.
+	 */
+	public List<SafetyAnalysisEntry> getCommonSafetyHazards() {
+		if (commonSafetyHazards == null) {
+			commonSafetyHazards = new ArrayList<>();
+		}
+		return commonSafetyHazards;
+	}
+
+	/**
+	 * Replaces the reusable common hazard and mitigation library.
+	 *
+	 * @param commonSafetyHazards library entries; null becomes empty.
+	 */
+	public void setCommonSafetyHazards(List<SafetyAnalysisEntry> commonSafetyHazards) {
+		this.commonSafetyHazards = commonSafetyHazards == null ? new ArrayList<>() : commonSafetyHazards;
 	}
 
 	/**

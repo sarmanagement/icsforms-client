@@ -26,7 +26,7 @@ import java.util.Map;
  */
 public class PdfExportService {
 	private static final List<String> IAP_BUNDLE_FORM_ORDER = List.of("ICS 201", "ICS 202", "ICS 203", "ICS 205A", "ICS 207",
-			"ICS 204", "SAR Task Assignment", "ICS 214");
+			"ICS 215A", "ICS 208", "ICS 204", "SAR Task Assignment", "ICS 214");
 
 	private final Map<String, PdfFormRenderer> renderers = new LinkedHashMap<>();
 
@@ -135,6 +135,12 @@ public class PdfExportService {
 			keys.remove("Clue Log");
 		} else {
 			keys.remove("Clue Log (ICS 233-CG adapted)");
+		}
+		if (data == null || !data.getForm215a().isIncludeInIap()) {
+			keys.remove("ICS 215A");
+		}
+		if (data == null || !data.getForm208().isIncludeInIap()) {
+			keys.remove("ICS 208");
 		}
 		return keys;
 	}
@@ -261,6 +267,8 @@ public class PdfExportService {
 				? null
 				: new java.util.LinkedHashSet<>(includedFormKeys);
 		data.setForm205aIapPage("");
+		data.getForm215a().setIapPage("");
+		data.getForm208().setIapPage("");
 		data.getOrganizationalChart().getAssignmentList().setIapPage("");
 		// ICS 201 is included whenever it was actually completed during an initial
 		// response.
@@ -285,6 +293,14 @@ public class PdfExportService {
 		if (includedOrAll(included, "ICS 205A")) {
 			data.setForm205aIapPage(String.valueOf(page));
 			page += Ics205aPdfRenderer.pageCount(data);
+		}
+		if (includeSafetyForm(included, "ICS 215A", data.getForm215a().isIncludeInIap())) {
+			data.getForm215a().setIapPage(String.valueOf(page));
+			page += Ics215aPdfRenderer.pageCount(data);
+		}
+		if (includeSafetyForm(included, "ICS 208", data.getForm208().isIncludeInIap())) {
+			data.getForm208().setIapPage(String.valueOf(page));
+			page += Ics208PdfRenderer.pageCount(data);
 		}
 		// ICS 207
 		if (includedOrAll(included, "ICS 207")) {
@@ -412,6 +428,8 @@ public class PdfExportService {
 		copy.setOrganizationalChart(data.getOrganizationalChart());
 		copy.setForm201(data.getForm201());
 		copy.setForm202(data.getForm202());
+		copy.setForm215a(data.getForm215a());
+		copy.setForm208(data.getForm208());
 		copy.setForm205aIapPage(data.getForm205aIapPage());
 		copy.setForm207(data.getForm207());
 		copy.setForm204(data.getForm204());
@@ -419,6 +437,7 @@ public class PdfExportService {
 		copy.setActivityLogs(data.getActivityLogs());
 		copy.setActivityEventTypes(data.getActivityEventTypes());
 		copy.setSarTaskAssignments(data.getSarTaskAssignments());
+		copy.setCommonSafetyHazards(data.getCommonSafetyHazards());
 		copy.setClueLogEntries(data.getClueLogEntries());
 		copy.setOpenActionItems(data.getOpenActionItems());
 		copy.setOpenActionTrackerEnabled(data.isOpenActionTrackerEnabled());
@@ -441,6 +460,18 @@ public class PdfExportService {
 	 */
 	private static boolean includedOrAll(java.util.Set<String> included, String formKey) {
 		return included == null || included.contains(formKey);
+	}
+
+	/**
+	 * Checks explicit bundle selection or the saved optional-form preference.
+	 *
+	 * @param included explicit bundle keys, or null for default selection.
+	 * @param formKey safety form identifier.
+	 * @param preference saved IAP preference.
+	 * @return whether the safety form is bundled.
+	 */
+	private static boolean includeSafetyForm(java.util.Set<String> included, String formKey, boolean preference) {
+		return included == null ? preference : included.contains(formKey);
 	}
 
 	/**
