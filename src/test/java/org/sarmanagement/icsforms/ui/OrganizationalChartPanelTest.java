@@ -27,6 +27,8 @@ import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.JPanel;
+import javax.swing.border.TitledBorder;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.GraphicsEnvironment;
@@ -107,6 +109,10 @@ class OrganizationalChartPanelTest {
 				assertEquals("Agency/Organization Representatives",
 						table.getAccessibleContext().getAccessibleName());
 				assertTrue(SwingUtilities.isDescendingFrom(table, panel));
+				Container sections = agencies.getParent();
+				int agencyIndex = sections.getComponentZOrder(agencies);
+				assertEquals("Additional Positions",
+						((TitledBorder) ((JPanel) sections.getComponent(agencyIndex + 2)).getBorder()).getTitle());
 				assertEquals(0, table.getRowCount());
 				assertEquals(4, table.getColumnCount());
 				button(agencies, "Add").doClick();

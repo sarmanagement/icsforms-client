@@ -310,8 +310,6 @@ public class OrganizationalChartPanel extends JPanel {
 		all.add(Box.createVerticalStrut(8));
 		all.add(commandSection);
 		all.add(Box.createVerticalStrut(8));
-		all.add(agencyRepresentatives);
-		all.add(Box.createVerticalStrut(8));
 		all.add(generalSection);
 		all.add(Box.createVerticalStrut(8));
 		all.add(opsSection);
@@ -321,6 +319,8 @@ public class OrganizationalChartPanel extends JPanel {
 		all.add(logisticsSection);
 		all.add(Box.createVerticalStrut(8));
 		all.add(financeSection);
+		all.add(Box.createVerticalStrut(8));
+		all.add(agencyRepresentatives);
 		all.add(Box.createVerticalStrut(8));
 		all.add(customSection);
 		all.add(Box.createVerticalStrut(8));
