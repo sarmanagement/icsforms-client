@@ -30,7 +30,7 @@ class Ics207PdfRendererTest {
 	Path directory;
 
 	@Test
-	void commandStaffNamesShareTitleBaselineInsideWiderBoxesRightOfStem() throws Exception {
+	void commandStaffNamesShareTitleBaselineInsideNarrowerBoxesShiftedRight() throws Exception {
 		for (float margin : List.of(18f, 54f, 108f)) {
 			AppData data = new AppData();
 			if (margin > 18f) {
@@ -84,7 +84,7 @@ class Ics207PdfRendererTest {
 	}
 
 	/**
-	 * Verifies the staff rectangle shifted left without crossing the central stem.
+	 * Verifies the staff rectangle is one-third narrower and shifted right of the stem.
 	 *
 	 * @param page rendered page.
 	 * @param title title position inside the box.
@@ -102,8 +102,11 @@ class Ics207PdfRendererTest {
 				float height = ((COSNumber) tokens.get(i - 1)).floatValue();
 				if (Math.abs(height - 18f) < .1f && baseline > y && baseline < y + height
 						&& Math.abs(x + 2f - title.getXDirAdj()) < .1f) {
-					assertEquals(page.getMediaBox().getWidth() / 2f + 8f, x, .1f);
-					assertTrue(width > (margin == 18f ? 140f : 100f));
+					float stemX = page.getMediaBox().getWidth() / 2f;
+					float previousWidth = stemX - Math.max(36f, margin) - 4f - 12f;
+					assertEquals(stemX + 20f, x, .1f);
+					assertEquals(previousWidth * 2f / 3f, width, .1f);
+					assertTrue(x + width < page.getMediaBox().getWidth() - Math.max(36f, margin));
 					return;
 				}
 			}

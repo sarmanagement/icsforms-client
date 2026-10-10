@@ -187,9 +187,9 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		List<String[]> cmdStaff = buildCmdStaff(chart);
 
 		float sBoxH = 18f, sGap = 3f;
-		// Staff boxes start just right of the stem and use the remaining chart width.
-		float sLeft = icCX + 8f;
-		float sBoxW = (LEFT + CWIDTH) - sLeft - 4f;
+		// Staff boxes leave space beside the stem and at the chart's right edge.
+		float sLeft = icCX + 20f;
+		float sBoxW = ((LEFT + CWIDTH) - icCX - 12f) * 2f / 3f;
 
 		float cmdBot = icBot;
 		for (int i = 0; i < cmdStaff.size(); i++) {
