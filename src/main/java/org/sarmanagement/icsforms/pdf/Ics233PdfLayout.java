@@ -36,9 +36,11 @@ final class Ics233PdfLayout extends AbstractPdfRenderer {
 	 * @param outputFile destination PDF
 	 * @param title form title
 	 * @param rows eight-cell rows corresponding to blocks 2 through 9
+	 * @param adaptedClues whether to use clue-specific POC headings
 	 * @throws IOException if output fails or the margins leave no usable grid
 	 */
-	void render(AppData data, Path outputFile, String title, List<List<String>> rows) throws IOException {
+	void render(AppData data, Path outputFile, String title, List<List<String>> rows, boolean adaptedClues)
+			throws IOException {
 		Path parent = outputFile.getParent();
 		if (parent != null) {
 			Files.createDirectories(parent);
@@ -57,7 +59,7 @@ final class Ics233PdfLayout extends AbstractPdfRenderer {
 		float titleHeight = titleLines.size() * LEADING + 13f;
 		List<String> incidentLines = wrapCell(regular, "1. Incident name: " + safe(incident), width - 2f * PADDING);
 		float incidentHeight = incidentLines.size() * LEADING + 2f * PADDING;
-		List<List<String>> headings = headerLines(bold, width);
+		List<List<String>> headings = headerLines(bold, width, adaptedClues);
 		int headingCount = 1;
 		for (List<String> heading : headings) {
 			headingCount = Math.max(headingCount, heading.size());
@@ -157,13 +159,19 @@ final class Ics233PdfLayout extends AbstractPdfRenderer {
 	 *
 	 * @param font heading font
 	 * @param width grid width
+	 * @param adaptedClues whether to use clue-specific POC headings
 	 * @return wrapped heading cells
 	 * @throws IOException if font metrics cannot be read
 	 */
-	private List<List<String>> headerLines(PDType1Font font, float width) throws IOException {
+	private List<List<String>> headerLines(PDType1Font font, float width, boolean adaptedClues) throws IOException {
+		String[] headers = HEADERS.clone();
+		if (adaptedClues) {
+			headers[2] = "4. Assigned to/POC";
+			headers[3] = "5. POC Briefed";
+		}
 		List<List<String>> cells = new ArrayList<>();
-		for (int column = 0; column < HEADERS.length; column++) {
-			cells.add(wrapCell(font, HEADERS[column], width * FRACTIONS[column] - 2f * PADDING));
+		for (int column = 0; column < headers.length; column++) {
+			cells.add(wrapCell(font, headers[column], width * FRACTIONS[column] - 2f * PADDING));
 		}
 		return cells;
 	}

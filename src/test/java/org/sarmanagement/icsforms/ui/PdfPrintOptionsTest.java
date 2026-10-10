@@ -47,7 +47,7 @@ class PdfPrintOptionsTest {
 				PdfPrintOptionsPanel.ADAPTED_CLUE_LOG, "ICS 233-CG"));
 		JCheckBox adapt = components(panel, JCheckBox.class).get(0);
 		assertFalse(adapt.isSelected());
-		assertFalse(panel.isPortrait());
+		assertTrue(panel.isPortrait());
 		assertEquals(List.of("Clue Log", "ICS 233-CG"),
 				panel.selectedFormKeys(List.of("Clue Log", "ICS 233-CG")));
 		adapt.setSelected(true);
@@ -55,11 +55,11 @@ class PdfPrintOptionsTest {
 				panel.selectedFormKeys(List.of("Clue Log", PdfPrintOptionsPanel.ADAPTED_CLUE_LOG, "ICS 233-CG")));
 		assertEquals(List.of("ICS 233-CG"), panel.selectedFormKeys(List.of("ICS 233-CG")));
 		assertTrue(panel.selectedFormKeys(List.of()).isEmpty());
-		components(panel, JComboBox.class).get(0).setSelectedIndex(1);
-		assertTrue(panel.isPortrait());
+		components(panel, JComboBox.class).get(0).setSelectedItem("Landscape");
+		assertFalse(panel.isPortrait());
 		PdfPrintOptionsPanel reopened = new PdfPrintOptionsPanel(List.of("Clue Log",
 				PdfPrintOptionsPanel.ADAPTED_CLUE_LOG));
-		assertFalse(reopened.isPortrait());
+		assertTrue(reopened.isPortrait());
 		assertFalse(components(reopened, JCheckBox.class).get(0).isSelected());
 	}
 
@@ -109,11 +109,11 @@ class PdfPrintOptionsTest {
 								&& "Export forms as PDF".equals(dialog.getTitle())) {
 							try {
 								PdfPrintOptionsPanel options = components(dialog, PdfPrintOptionsPanel.class).get(0);
-								assertFalse(options.isPortrait());
+								assertTrue(options.isPortrait());
 								JCheckBox adapt = components(options, JCheckBox.class).get(0);
 								assertFalse(adapt.isSelected());
 								adapt.setSelected(true);
-								components(options, JComboBox.class).get(0).setSelectedIndex(1);
+								components(options, JComboBox.class).get(0).setSelectedItem("Landscape");
 								List<JCheckBox> selectors = components(dialog, JCheckBox.class);
 								assertEquals(1, selectors.stream().filter(check -> check.getText().equals("Clue Log")).count());
 								assertTrue(selectors.stream().filter(check -> check.getText().equals("Clue Log"))

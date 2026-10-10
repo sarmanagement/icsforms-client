@@ -56,7 +56,7 @@ public final class ClueLogIcs233PdfRenderer extends AbstractPdfRenderer implemen
 					formatPdfDateTime(source, clue.getFollowUpCompletedDate())));
 		}
 		new Ics233PdfLayout().render(source, outputFile,
-				"ICS 233-CG INCIDENT OPEN ACTION TRACKER Adapted as a Clue Log", rows);
+				"ICS 233-CG INCIDENT OPEN ACTION TRACKER Adapted as a Clue Log", rows, true);
 	}
 
 	/**

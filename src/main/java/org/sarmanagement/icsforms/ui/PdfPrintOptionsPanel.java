@@ -16,13 +16,14 @@ class PdfPrintOptionsPanel extends JPanel {
 	private final JCheckBox adaptedClues = new JCheckBox("Export SAR clue log as adapted ICS 233");
 
 	/**
-	 * Creates standard clue-log and landscape defaults for each export dialog.
+	 * Creates standard clue-log and portrait defaults for each export dialog.
 	 *
 	 * @param formKeys supported renderer keys
 	 */
 	PdfPrintOptionsPanel(List<String> formKeys) {
 		super(new BorderLayout());
 		JPanel form = UiSupport.formPanel();
+		orientation.setSelectedItem("Portrait");
 		adaptedClues.setEnabled(formKeys.contains("Clue Log") && formKeys.contains(ADAPTED_CLUE_LOG));
 		UiSupport.addRow(form, 0, "ICS 233 orientation", orientation);
 		UiSupport.addRow(form, 1, "", adaptedClues);

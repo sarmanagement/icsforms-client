@@ -74,9 +74,9 @@ for a table containing every clue, ordered open, assigned, then followed
 up on. Its Item column uses Description, Location, and Found by headings, and its
 POC column includes assignment history. The regular tracker prints only the current POC.
 
-ICS 233-CG output supports landscape (default) or portrait on the configured paper
+ICS 233-CG output supports portrait (default) or landscape on the configured paper
 size. Choose **ICS 233 orientation** in the PDF generation dialog for either
-individual PDFs or the combined IAP bundle. Each dialog starts with landscape and
+individual PDFs or the combined IAP bundle. Each dialog starts with portrait and
 standard clue output, regardless of legacy saved export flags. These print-time
 choices are not saved with the incident. Uncheck **Clue Log** to omit clues
 entirely; the enabled incident tracker remains a separate export selection.

@@ -299,8 +299,12 @@ class Ics233PdfRendererTest {
 			assertTrue(text.contains("1. Incident name:"));
 			assertTrue(text.contains("2. No."));
 			assertTrue(text.contains("3. Item"));
-			assertTrue(text.contains("4. For/POC"));
-			assertTrue(text.contains("5. Briefed"));
+			boolean adapted = text.contains("Adapted as a Clue Log");
+			String compact = text.replaceAll("\\s+", "");
+			assertTrue(compact.contains(adapted ? "4.Assignedto/POC" : "4.For/POC"));
+			assertTrue(compact.contains(adapted ? "5.POCBriefed" : "5.Briefed"));
+			assertFalse(compact.contains(adapted ? "4.For/POC" : "4.Assignedto/POC"));
+			assertFalse(compact.contains(adapted ? "5.Briefed" : "5.POCBriefed"));
 			assertTrue(text.contains("6. Start"));
 			assertTrue(text.contains("7. Status"));
 			assertTrue(text.contains("8. Target"));
@@ -342,6 +346,10 @@ class Ics233PdfRendererTest {
 				float[] fractions = {0.05f, 0.285f, 0.17f, 0.075f, 0.105f, 0.105f, 0.105f, 0.105f};
 				String[] headings = {"2.No.", "3.Item", "4.For/POC", "5.Briefed", "6.Start",
 						"7.Status", "8.Target", "9.Actual"};
+				if (renderer instanceof ClueLogIcs233PdfRenderer) {
+					headings[2] = "4.Assignedto/POC";
+					headings[3] = "5.POCBriefed";
+				}
 				for (int index = 0; index < document.getNumberOfPages(); index++) {
 					PDFTextStripper stripper = new PDFTextStripper();
 					stripper.setStartPage(index + 1);

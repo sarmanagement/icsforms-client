@@ -38,6 +38,6 @@ public final class Ics233CgPdfRenderer extends AbstractPdfRenderer implements Pd
 						formatPdfDateTime(source, item.getTargetDate()), formatPdfDateTime(source, item.getActualDate())));
 			}
 		}
-		new Ics233PdfLayout().render(source, outputFile, "ICS 233-CG OPEN ACTION TRACKER", rows);
+		new Ics233PdfLayout().render(source, outputFile, "ICS 233-CG OPEN ACTION TRACKER", rows, false);
 	}
 }
