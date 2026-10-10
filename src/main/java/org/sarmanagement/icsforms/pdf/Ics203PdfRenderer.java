@@ -220,7 +220,7 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		command.add("Liaison Officer", chart.getLiaisonOfficerName());
 		command.fix();
 		Block agencies = new Block("4. Agency/Organization Representatives", false, 5);
-		agencies.rows().add(new Row("Agency/Organization", "", true));
+		agencies.rows().add(new Row("Agency/Organization", "Name", true));
 		agencies.fix();
 		for (OrgChartEntry entry : form.getAgencyRepresentatives()) {
 			if (entry != null) {
@@ -477,8 +477,7 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			for (int slot = 0; slot < block.slots() - 1; slot++) {
 				int rowIndex = slot < block.fixed() ? slot : block.fixed() + index * extraSlots
 						+ slot - block.fixed();
-				Row row = rowIndex < block.rows().size() ? block.rows().get(rowIndex)
-						: new Row(block == plan.blocks().get(1) ? "Agency/Organization" : "", "");
+				Row row = rowIndex < block.rows().size() ? block.rows().get(rowIndex) : new Row("", "");
 				if (rowIndex >= block.rows().size()) {
 					row.prepare(width, plan.size());
 				}

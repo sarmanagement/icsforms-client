@@ -68,13 +68,20 @@ class Ics203PdfRendererTest {
 	}
 
 	@Test
-	void agencyHeaderHasNoExtraneousNameAndAssignmentRowsHaveThinSeparators() throws Exception {
+	void agencyColumnHeaderHasNameAndUnusedRowsAreBlankWithThinSeparators() throws Exception {
 		try (PDDocument pdf = render(null)) {
 			String content = text(pdf);
 			String agencies = content.substring(content.indexOf("4. Agency/Organization Representatives"),
 					content.indexOf("5. Planning Section"));
-			assertFalse(agencies.matches("(?s).*\\bName\\b.*"));
+			assertEquals(2, occurrences(agencies, "Agency/Organization"),
+					"Only the section title and column heading should contain Agency/Organization");
+			assertEquals(1, occurrences(agencies, "Name"));
+			Positions positions = new Positions();
+			positions.getText(pdf);
+			float headingY = positions.y("4. Agency/Organization Representatives");
 			List<Object> tokens = new PDFStreamParser(pdf.getPage(0)).parse();
+			float agencyDivider = 36f + (540f / 2f) * .53f;
+			int agencyDividers = 0;
 			int thinSeparators = 0;
 			for (int i = 1; i < tokens.size(); i++) {
 				if (tokens.get(i) instanceof Operator operator && "w".equals(operator.getName())
@@ -84,10 +91,19 @@ class Ics203PdfRendererTest {
 					assertTrue(tokens.get(i + 6) instanceof Operator line && "l".equals(line.getName()));
 					assertEquals(((COSNumber) tokens.get(i + 1)).floatValue(),
 							((COSNumber) tokens.get(i + 4)).floatValue(), .01f);
+					if (Math.abs(((COSNumber) tokens.get(i + 1)).floatValue() - agencyDivider) < .1f) {
+						float top = ((COSNumber) tokens.get(i + 2)).floatValue();
+						float bottom = ((COSNumber) tokens.get(i + 5)).floatValue();
+						float titleBaseline = 792f - headingY;
+						assertFalse(top >= titleBaseline && bottom <= titleBaseline,
+								"The Block 4 section heading must span both columns");
+						agencyDividers++;
+					}
 					thinSeparators++;
 				}
 			}
 			assertTrue(thinSeparators >= 50, "Expected thin vertical dividers across both columns");
+			assertTrue(agencyDividers >= 4, "Column heading and blank agency rows retain vertical dividers");
 		}
 	}
 

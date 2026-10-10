@@ -23,7 +23,7 @@ This project is open source under the Apache 2.0 license. Contributions are welc
    - incident name
    - operational period
    - preparer identity
-4. Maintain the current organization on **Org Chart**. Use **ICS 203 details…** for deputies, agency representatives, Operations branches/divisions, and assignment-list preparer information. Names may include agencies, slash-separated shift assignments, and `(T)` for trainees.
+4. Maintain the current organization on **Org Chart**. The **Agency/Organization Representatives** section near Command Staff lets you add, edit, or remove free-text agency and representative names with optional radio and phone contacts; no T-card is required. Use **ICS 203 details…** for deputies, Operations branches/divisions, and assignment-list preparer information; its agency editor stays synchronized with the main tab. Names may include agencies, slash-separated shift assignments, and `(T)` for trainees.
 5. Complete the appropriate forms based on the current phase (see below).
 6. Save locally or allow autosave to persist the incident workspace.
 7. Export individual PDFs, all PDFs as separate files, or the merged **Export IAP Bundle** PDF.

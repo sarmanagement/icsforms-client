@@ -52,8 +52,9 @@ import java.text.ParseException;
  * <p>
  * Each staff position shows a Name field and — visible only when the name is
  * non-blank — separate Radio and Phone fields. Positions are grouped into:
- * Incident Command, Command Staff, General Staff, Planning Section Positions,
- * and Logistics Section Positions.
+ * Incident Command, Command Staff, Agency/Organization Representatives, General
+ * Staff, Planning Section Positions, and Logistics Section Positions. Agency
+ * representatives support free-text agency, person, radio, and phone entries.
  * </p>
  */
 public class OrganizationalChartPanel extends JPanel {
@@ -62,6 +63,8 @@ public class OrganizationalChartPanel extends JPanel {
 	private final JButton addIncidentCommanderButton = new JButton("Add");
 	private final JLabel incidentCommanderModeLabel = new JLabel("Incident Commander");
 	private final List<IncidentCommanderRow> incidentCommanderRows = new ArrayList<>();
+	private final EntryTable agencyRepresentatives = new EntryTable("Agency/Organization Representatives",
+			"Agency / Organization", "Representative", List.of(), true);
 
 	// Command Staff
 	private final JTextField safetyOfficerNameField = UiSupport.textField();
@@ -307,6 +310,8 @@ public class OrganizationalChartPanel extends JPanel {
 		all.add(Box.createVerticalStrut(8));
 		all.add(commandSection);
 		all.add(Box.createVerticalStrut(8));
+		all.add(agencyRepresentatives);
+		all.add(Box.createVerticalStrut(8));
 		all.add(generalSection);
 		all.add(Box.createVerticalStrut(8));
 		all.add(opsSection);
@@ -337,16 +342,15 @@ public class OrganizationalChartPanel extends JPanel {
 		add(actions, BorderLayout.NORTH);
 	}
 
-	/** Opens a cancel-safe editor for supplemental ICS 203 assignments. */
+	/** Opens the supplemental ICS 203 editor, synchronizing representatives on open and acceptance. */
 	private void showAssignmentListDialog() {
-		Ics203Form form = controller.getData().getOrganizationalChart().getAssignmentList();
-		AssignmentListEditor editor = new AssignmentListEditor(form);
+		AssignmentListEditor editor = createAssignmentListEditor();
 		JScrollPane scroll = new JScrollPane(editor);
 		scroll.setPreferredSize(new Dimension(820, 650));
 		while (JOptionPane.showConfirmDialog(this, scroll, "ICS 203 Organization Assignment List (optional)",
 				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION) {
 			try {
-				editor.applyTo(form);
+				applyAssignmentListEditor(editor);
 				controller.markDirty();
 				return;
 			} catch (ParseException exception) {
@@ -354,6 +358,27 @@ public class OrganizationalChartPanel extends JPanel {
 						"Invalid date/time", JOptionPane.ERROR_MESSAGE);
 			}
 		}
+	}
+
+	/**
+	 * Commits main-tab representative edits before creating a detached supplemental editor.
+	 * @return supplemental editor initialized with current representative values.
+	 */
+	AssignmentListEditor createAssignmentListEditor() {
+		Ics203Form form = controller.getData().getOrganizationalChart().getAssignmentList();
+		form.setAgencyRepresentatives(agencyRepresentatives.getEntries());
+		return new AssignmentListEditor(form);
+	}
+
+	/**
+	 * Accepts supplemental edits and reloads representatives to prevent stale main-tab saves.
+	 * @param editor accepted supplemental editor.
+	 * @throws ParseException if the preparation timestamp is invalid.
+	 */
+	void applyAssignmentListEditor(AssignmentListEditor editor) throws ParseException {
+		Ics203Form form = controller.getData().getOrganizationalChart().getAssignmentList();
+		editor.applyTo(form);
+		agencyRepresentatives.setEntries(form.getAgencyRepresentatives());
 	}
 
 	/** Cancel-safe supplemental editor; the shared chart remains untouched until acceptance. */
@@ -400,7 +425,7 @@ public class OrganizationalChartPanel extends JPanel {
 			}
 			add(roles);
 			agencies = new EntryTable("Agency representatives", "Agency", "Representative",
-					form.getAgencyRepresentatives());
+					form.getAgencyRepresentatives(), true);
 			add(agencies);
 			for (Ics203Form.Branch source : form.getBranches()) {
 				if (source != null) {
@@ -509,11 +534,12 @@ public class OrganizationalChartPanel extends JPanel {
 		}
 	}
 
-	/** Editable two-column organizational entries, preserving non-visible contact metadata. */
+	/** Editable organizational entries with optional contact columns and detached row metadata. */
 	static final class EntryTable extends JPanel {
 		private final DefaultTableModel model;
 		private final JTable table;
 		private final List<OrgChartEntry> entries = new ArrayList<>();
+		private final boolean contacts;
 
 		/**
 		 * Creates editable agency or division rows with add/remove controls.
@@ -523,22 +549,29 @@ public class OrganizationalChartPanel extends JPanel {
 		 * @param source source entries copied for cancel-safe editing.
 		 */
 		EntryTable(String title, String labelColumn, String nameColumn, List<OrgChartEntry> source) {
+			this(title, labelColumn, nameColumn, source, false);
+		}
+
+		/**
+		 * Creates editable organizational rows with optional radio and phone columns.
+		 * @param title accessible table and panel title.
+		 * @param labelColumn organizational label column.
+		 * @param nameColumn assigned person column.
+		 * @param source source entries copied for cancel-safe editing.
+		 * @param contacts whether contact columns are visible and editable.
+		 */
+		EntryTable(String title, String labelColumn, String nameColumn, List<OrgChartEntry> source,
+				boolean contacts) {
 			super(new BorderLayout());
+			this.contacts = contacts;
 			setBorder(BorderFactory.createTitledBorder(title));
-			model = new DefaultTableModel(new String[]{labelColumn, nameColumn}, 0);
+			model = new DefaultTableModel(contacts
+					? new String[]{labelColumn, nameColumn, "Radio", "Phone"}
+					: new String[]{labelColumn, nameColumn}, 0);
 			table = new JTable(model);
 			table.getAccessibleContext().setAccessibleName(title);
 			table.getTableHeader().setReorderingAllowed(false);
-			for (OrgChartEntry entry : source) {
-				if (entry != null) {
-					OrgChartEntry copy = new OrgChartEntry();
-					copy.setSection(entry.getSection());
-					copy.setRadio(entry.getRadio());
-					copy.setPhone(entry.getPhone());
-					entries.add(copy);
-					model.addRow(new Object[]{entry.getTitle(), entry.getName()});
-				}
-			}
+			setEntries(source);
 			add(new JScrollPane(table), BorderLayout.CENTER);
 			JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
 			JButton addEntry = new JButton("Add");
@@ -546,7 +579,7 @@ public class OrganizationalChartPanel extends JPanel {
 			addEntry.addActionListener(event -> {
 				stopEditing(table);
 				entries.add(new OrgChartEntry());
-				model.addRow(new Object[]{"", ""});
+				model.addRow(contacts ? new Object[]{"", "", "", ""} : new Object[]{"", ""});
 				table.setRowSelectionInterval(model.getRowCount() - 1, model.getRowCount() - 1);
 			});
 			JButton removeEntry = new JButton("Remove");
@@ -566,6 +599,30 @@ public class OrganizationalChartPanel extends JPanel {
 		}
 
 		/**
+		 * Replaces visible rows with detached copies, discarding any stale active edit.
+		 * @param source organizational entries to load.
+		 */
+		void setEntries(List<OrgChartEntry> source) {
+			if (table.isEditing()) {
+				table.getCellEditor().cancelCellEditing();
+			}
+			entries.clear();
+			model.setRowCount(0);
+			for (OrgChartEntry entry : source) {
+				if (entry != null) {
+					OrgChartEntry copy = new OrgChartEntry();
+					copy.setSection(entry.getSection());
+					copy.setRadio(entry.getRadio());
+					copy.setPhone(entry.getPhone());
+					entries.add(copy);
+					model.addRow(contacts
+							? new Object[]{entry.getTitle(), entry.getName(), entry.getRadio(), entry.getPhone()}
+							: new Object[]{entry.getTitle(), entry.getName()});
+				}
+			}
+		}
+
+		/**
 		 * Commits pending cell edits and returns edited detached entries.
 		 * @return entries in visible row order, including organizational labels without names.
 		 */
@@ -574,6 +631,10 @@ public class OrganizationalChartPanel extends JPanel {
 			for (int row = 0; row < entries.size(); row++) {
 				entries.get(row).setTitle(cell(model, row, 0));
 				entries.get(row).setName(cell(model, row, 1));
+				if (contacts) {
+					entries.get(row).setRadio(cell(model, row, 2));
+					entries.get(row).setPhone(cell(model, row, 3));
+				}
 			}
 			return entries;
 		}
@@ -727,10 +788,11 @@ public class OrganizationalChartPanel extends JPanel {
 	}
 
 	/**
-	 * Loads field values from the model.
+	 * Loads field values and agency representatives from the model, discarding stale table edits.
 	 */
 	public void refreshFromModel() {
 		OrganizationalChart chart = controller.getData().getOrganizationalChart();
+		agencyRepresentatives.setEntries(chart.getAssignmentList().getAgencyRepresentatives());
 		incidentCommanderRows.clear();
 		if (chart.getIncidentCommanderEntries() != null && !chart.getIncidentCommanderEntries().isEmpty()) {
 			for (OrgChartEntry entry : chart.getIncidentCommanderEntries()) {
@@ -853,10 +915,11 @@ public class OrganizationalChartPanel extends JPanel {
 	}
 
 	/**
-	 * Applies field values to the model.
+	 * Applies field values and agency representatives to the model, committing pending representative edits.
 	 */
 	public void pushToModel() {
 		OrganizationalChart chart = controller.getData().getOrganizationalChart();
+		chart.getAssignmentList().setAgencyRepresentatives(agencyRepresentatives.getEntries());
 		List<String> icNames = new ArrayList<>();
 		List<OrgChartEntry> icEntries = new ArrayList<>();
 		boolean propagate = false;

@@ -45,6 +45,8 @@ class Ics203FormTest {
 			OrgChartEntry agency = new OrgChartEntry();
 			agency.setTitle("Partner Agency");
 			agency.setName("Representative");
+			agency.setRadio("Agency Channel 3");
+			agency.setPhone("555-0103");
 			form.setAgencyRepresentatives(List.of(agency));
 			Ics203Form.Branch branch = new Ics203Form.Branch();
 			branch.setName("North Branch");
@@ -65,6 +67,10 @@ class Ics203FormTest {
 			AppData loaded = store.load(originalId);
 			assertEquals(mapper.valueToTree(chart), mapper.valueToTree(loaded.getOrganizationalChart()));
 			assertEquals(AppData.CURRENT_SCHEMA_VERSION, loaded.getSchemaVersion());
+			assertEquals("Agency Channel 3", loaded.getOrganizationalChart().getAssignmentList()
+					.getAgencyRepresentatives().get(0).getRadio());
+			assertEquals("555-0103", loaded.getOrganizationalChart().getAssignmentList()
+					.getAgencyRepresentatives().get(0).getPhone());
 			loaded.getOrganizationalChart().getAssignmentList().getBranches().get(0).setDeputy("Updated Deputy");
 			loaded.getOrganizationalChart().getAssignmentList().setPreparedBySignature("Updated Signature");
 			store.save(originalId, loaded);
@@ -79,6 +85,10 @@ class Ics203FormTest {
 			assertEquals(mapper.valueToTree(saved.getOrganizationalChart()),
 					mapper.valueToTree(imported.getOrganizationalChart()));
 			assertEquals("Updated Signature", imported.getOrganizationalChart().getAssignmentList().getPreparedBySignature());
+			assertEquals("Agency Channel 3", imported.getOrganizationalChart().getAssignmentList()
+					.getAgencyRepresentatives().get(0).getRadio());
+			assertEquals("555-0103", imported.getOrganizationalChart().getAssignmentList()
+					.getAgencyRepresentatives().get(0).getPhone());
 			assertTrue(imported.getOrganizationalChart().hasAssignments());
 			try (FileIncidentStore reopened = new FileIncidentStore(workspace.resolve("store"))) {
 				assertEquals(mapper.valueToTree(saved.getOrganizationalChart()),
@@ -101,6 +111,7 @@ class Ics203FormTest {
 			assertNotNull(chart.getAssignmentList());
 			assertTrue(chart.getAssignmentList().isIncludeInIap());
 			assertFalse(chart.getAssignmentList().hasAssignments());
+			assertTrue(chart.getAssignmentList().getAgencyRepresentatives().isEmpty());
 			assertEquals("Safety", chart.getSafetyOfficerName());
 		}
 	}

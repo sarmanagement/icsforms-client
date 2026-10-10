@@ -10,8 +10,14 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
+import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics203Form;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
+import org.sarmanagement.icsforms.pdf.PdfExportService;
+import org.sarmanagement.icsforms.persistence.FileIncidentStore;
+import org.sarmanagement.icsforms.persistence.IncidentId;
+import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.validation.IncidentValidator;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JSpinner;
@@ -26,16 +32,203 @@ import java.awt.Container;
 import java.awt.GraphicsEnvironment;
 import java.awt.Window;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Comparator;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
-/** Headless workflow coverage for the supplemental organization assignment editor. */
+/** Workflow coverage for main-tab representatives and supplemental organization assignments. */
 class OrganizationalChartPanelTest {
+	@Test
+	void mainPanelRepresentativesAndContactsSurviveFileStoreSaveAndReload() throws Exception {
+		Path directory = Files.createDirectories(Path.of("target"));
+		Path workspace = Files.createTempDirectory(directory, "org-chart-store-");
+		try (FileIncidentStore store = new FileIncidentStore(workspace.resolve("store"))) {
+			IncidentId id = store.create(new AppData());
+			AppController controller = new AppController(store.load(id), store, id,
+					new PdfExportService(), new IncidentValidator());
+			SwingUtilities.invokeAndWait(() -> {
+				try {
+					var panel = new OrganizationalChartPanel(controller);
+					panel.refreshFromModel();
+					var agencies = (OrganizationalChartPanel.EntryTable) field(panel, "agencyRepresentatives");
+					JTable table = (JTable) field(agencies, "table");
+					button(agencies, "Add").doClick();
+					table.setValueAt("Free-text Partner Agency", 0, 0);
+					table.setValueAt("Free-text Representative", 0, 1);
+					table.setValueAt("Partner Radio 4", 0, 2);
+					assertTrue(table.editCellAt(0, 3));
+					((JTextField) table.getEditorComponent()).setText("555-0134");
+					panel.pushToModel();
+					store.save(id, controller.getData());
+					AppData reloaded = store.load(id);
+					AppController reloadedController = new AppController(reloaded, store, id,
+							new PdfExportService(), new IncidentValidator());
+					var reloadedPanel = new OrganizationalChartPanel(reloadedController);
+					reloadedPanel.refreshFromModel();
+					var reloadedAgencies = (OrganizationalChartPanel.EntryTable) field(
+							reloadedPanel, "agencyRepresentatives");
+					JTable reloadedTable = (JTable) field(reloadedAgencies, "table");
+					assertEquals(1, reloadedTable.getRowCount());
+					assertEquals("Free-text Partner Agency", reloadedTable.getValueAt(0, 0));
+					assertEquals("Free-text Representative", reloadedTable.getValueAt(0, 1));
+					assertEquals("Partner Radio 4", reloadedTable.getValueAt(0, 2));
+					assertEquals("555-0134", reloadedTable.getValueAt(0, 3));
+					assertEquals(AppData.CURRENT_SCHEMA_VERSION, reloaded.getSchemaVersion());
+					assertTrue(reloaded.getTCards().isEmpty());
+				} catch (Exception exception) {
+					throw new AssertionError(exception);
+				}
+			});
+		} finally {
+			try (var paths = Files.walk(workspace)) {
+				for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(path);
+				}
+			}
+		}
+	}
+
+	@Test
+	void mainPanelAddsEditsRefreshesAndRemovesFreeTextRepresentativesWithoutTCards() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			try {
+				AppController controller = sampleController();
+				var panel = new OrganizationalChartPanel(controller);
+				panel.refreshFromModel();
+				var agencies = (OrganizationalChartPanel.EntryTable) field(panel, "agencyRepresentatives");
+				JTable table = (JTable) field(agencies, "table");
+				assertEquals("Agency/Organization Representatives",
+						table.getAccessibleContext().getAccessibleName());
+				assertTrue(SwingUtilities.isDescendingFrom(table, panel));
+				assertEquals(0, table.getRowCount());
+				assertEquals(4, table.getColumnCount());
+				button(agencies, "Add").doClick();
+				table.setValueAt("County Volunteer Organization", 0, 0);
+				table.setValueAt("Alex Free Text", 0, 1);
+				table.setValueAt("County Channel", 0, 2);
+				assertTrue(table.editCellAt(0, 3));
+				((JTextField) table.getEditorComponent()).setText("555-0123");
+				panel.pushToModel();
+				Ics203Form form = controller.getData().getOrganizationalChart().getAssignmentList();
+				assertEquals(1, form.getAgencyRepresentatives().size());
+				OrgChartEntry saved = form.getAgencyRepresentatives().get(0);
+				assertEquals("County Volunteer Organization", saved.getTitle());
+				assertEquals("Alex Free Text", saved.getName());
+				assertEquals("County Channel", saved.getRadio());
+				assertEquals("555-0123", saved.getPhone());
+				assertTrue(controller.getData().getTCards().isEmpty());
+
+				panel.refreshFromModel();
+				assertEquals("555-0123", table.getValueAt(0, 3));
+				assertTrue(table.editCellAt(0, 1));
+				((JTextField) table.getEditorComponent()).setText("Updated Representative");
+				panel.pushToModel();
+				assertEquals("Updated Representative", form.getAgencyRepresentatives().get(0).getName());
+				assertTrue(table.editCellAt(0, 1));
+				((JTextField) table.getEditorComponent()).setText("Stale unsaved name");
+				form.getAgencyRepresentatives().get(0).setName("Reloaded Representative");
+				panel.refreshFromModel();
+				panel.pushToModel();
+				assertEquals("Reloaded Representative", table.getValueAt(0, 1));
+				assertEquals("Reloaded Representative", form.getAgencyRepresentatives().get(0).getName());
+
+				button(agencies, "Add").doClick();
+				table.setValueAt("Agency without assigned person", 1, 0);
+				panel.pushToModel();
+				assertEquals("", form.getAgencyRepresentatives().get(1).getName());
+				table.setRowSelectionInterval(0, 0);
+				button(agencies, "Remove").doClick();
+				panel.pushToModel();
+				assertEquals("Agency without assigned person", form.getAgencyRepresentatives().get(0).getTitle());
+				table.setRowSelectionInterval(0, 0);
+				button(agencies, "Remove").doClick();
+				panel.pushToModel();
+				panel.refreshFromModel();
+				assertTrue(form.getAgencyRepresentatives().isEmpty());
+				assertEquals(0, table.getRowCount());
+				assertTrue(controller.getData().getTCards().isEmpty());
+			} catch (Exception exception) {
+				throw new AssertionError(exception);
+			}
+		});
+	}
+
+	@Test
+	void supplementalEditorSynchronizesMainRepresentativesOnOpenAndAcceptanceButNotCancellation() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			try {
+				AppController controller = sampleController();
+				var panel = new OrganizationalChartPanel(controller);
+				panel.refreshFromModel();
+				var mainAgencies = (OrganizationalChartPanel.EntryTable) field(panel, "agencyRepresentatives");
+				JTable mainTable = (JTable) field(mainAgencies, "table");
+				button(mainAgencies, "Add").doClick();
+				mainTable.setValueAt("Main agency", 0, 0);
+				mainTable.setValueAt("Main radio", 0, 2);
+				mainTable.setValueAt("Main phone", 0, 3);
+				assertTrue(mainTable.editCellAt(0, 1));
+				((JTextField) mainTable.getEditorComponent()).setText("Pending main person");
+				var editor = panel.createAssignmentListEditor();
+				var modalAgencies = (OrganizationalChartPanel.EntryTable) field(editor, "agencies");
+				JTable modalTable = (JTable) field(modalAgencies, "table");
+				assertEquals("Pending main person", modalTable.getValueAt(0, 1));
+				assertEquals("Main phone", modalTable.getValueAt(0, 3));
+				modalTable.setValueAt("Cancelled agency", 0, 0);
+				panel.pushToModel();
+				Ics203Form form = controller.getData().getOrganizationalChart().getAssignmentList();
+				assertEquals("Main agency", form.getAgencyRepresentatives().get(0).getTitle());
+
+				editor = panel.createAssignmentListEditor();
+				modalAgencies = (OrganizationalChartPanel.EntryTable) field(editor, "agencies");
+				modalTable = (JTable) field(modalAgencies, "table");
+				modalTable.setValueAt("Accepted agency", 0, 0);
+				modalTable.setValueAt("Accepted person", 0, 1);
+				modalTable.setValueAt("Accepted radio", 0, 2);
+				assertTrue(modalTable.editCellAt(0, 3));
+				((JTextField) modalTable.getEditorComponent()).setText("Accepted phone");
+				panel.applyAssignmentListEditor(editor);
+				assertEquals("Accepted agency", mainTable.getValueAt(0, 0));
+				assertEquals("Accepted person", mainTable.getValueAt(0, 1));
+				assertEquals("Accepted radio", mainTable.getValueAt(0, 2));
+				assertEquals("Accepted phone", mainTable.getValueAt(0, 3));
+				panel.pushToModel();
+				assertEquals("Accepted person", form.getAgencyRepresentatives().get(0).getName());
+				assertEquals("Accepted phone", form.getAgencyRepresentatives().get(0).getPhone());
+				mainTable.setValueAt("Edited after acceptance", 0, 1);
+				panel.pushToModel();
+				assertEquals("Edited after acceptance", form.getAgencyRepresentatives().get(0).getName());
+				editor = panel.createAssignmentListEditor();
+				modalAgencies = (OrganizationalChartPanel.EntryTable) field(editor, "agencies");
+				modalTable = (JTable) field(modalAgencies, "table");
+				modalTable.setRowSelectionInterval(0, 0);
+				button(modalAgencies, "Remove").doClick();
+				panel.applyAssignmentListEditor(editor);
+				panel.pushToModel();
+				assertEquals(0, mainTable.getRowCount());
+				assertTrue(form.getAgencyRepresentatives().isEmpty());
+				assertTrue(controller.getData().getTCards().isEmpty());
+			} catch (Exception exception) {
+				throw new AssertionError(exception);
+			}
+		});
+	}
+
+	/**
+	 * Creates an empty incident controller without writing a workspace or requiring T-cards.
+	 * @return controller for main-tab workflow tests.
+	 */
+	private static AppController sampleController() {
+		return new AppController(new AppData(), new LocalRepository(Path.of("target", "org-chart-ui.json")),
+				new PdfExportService(), new IncidentValidator());
+	}
+
 	@Test
 	void visibleDivisionDialogKeepsRowsGroupedUnderSelectedBranch() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
