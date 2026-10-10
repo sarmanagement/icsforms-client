@@ -38,6 +38,7 @@ import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 import javax.swing.JComboBox;
 import javax.swing.JFormattedTextField;
 import javax.swing.SpinnerNumberModel;
@@ -592,17 +593,46 @@ public class MainFrame extends JFrame {
 			try {
 				if (exportModeControls.combined().isSelected()) {
 					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source);
-					JOptionPane.showMessageDialog(this, "Exported IAP bundle to\n" + bundlePath, "Export complete",
+					JOptionPane.showMessageDialog(this, createExportCompletePanel(List.of(bundlePath)), "Export complete",
 							JOptionPane.INFORMATION_MESSAGE);
 				} else {
-					controller.exportSelectedForms(selected, directory, source);
-					JOptionPane.showMessageDialog(this, "Exported selected PDFs to\n" + directory, "Export complete",
+					Map<String, Path> exported = controller.exportSelectedForms(selected, directory, source);
+					JOptionPane.showMessageDialog(this, createExportCompletePanel(new ArrayList<>(exported.values())), "Export complete",
 							JOptionPane.INFORMATION_MESSAGE);
 				}
 			} catch (IOException exception) {
 				showError("Failed to export PDFs", exception);
 			}
 		});
+	}
+
+	/**
+	 * Creates a selectable list of exported paths with a filename-copy action.
+	 *
+	 * @param files successfully exported files in export order.
+	 * @return completion panel with read-only paths and a clipboard button.
+	 */
+	static JPanel createExportCompletePanel(List<Path> files) {
+		JTextArea paths = new JTextArea(String.join("\n", files.stream().map(Path::toString).toList()),
+				Math.min(8, Math.max(2, files.size())), 50);
+		paths.setEditable(false);
+		paths.setCaretPosition(0);
+		paths.getAccessibleContext().setAccessibleName("Exported files");
+		JButton copy = new JButton("Copy filenames");
+		copy.setEnabled(!files.isEmpty());
+		copy.addActionListener(event -> {
+			JTextArea filenames = new JTextArea(
+					String.join("\n", files.stream().map(path -> path.getFileName().toString()).toList()));
+			filenames.selectAll();
+			filenames.copy();
+		});
+		JPanel panel = new JPanel(new BorderLayout(0, 8));
+		panel.add(new JLabel("Exported files (select paths to copy):"), BorderLayout.NORTH);
+		panel.add(new JScrollPane(paths), BorderLayout.CENTER);
+		JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+		actions.add(copy);
+		panel.add(actions, BorderLayout.SOUTH);
+		return panel;
 	}
 
 	private void openPdfExportSettingsDialog() {
@@ -691,7 +721,7 @@ public class MainFrame extends JFrame {
 			pushToModel(source);
 			try {
 				Path output = controller.exportSelected(formKey, directory, source);
-				JOptionPane.showMessageDialog(this, "Exported " + formKey + " to\n" + output, "Export complete",
+				JOptionPane.showMessageDialog(this, createExportCompletePanel(List.of(output)), "Export complete",
 						JOptionPane.INFORMATION_MESSAGE);
 			} catch (IOException exception) {
 				showError("Failed to export " + formKey, exception);
