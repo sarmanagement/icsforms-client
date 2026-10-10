@@ -38,6 +38,8 @@ class SafetyPdfRendererTest {
 		data.setConfiguredTimeZoneId("UTC");
 		data.getIncidentContext().setIncidentName("Mountain Search");
 		data.getIncidentContext().setOperationalPeriodStart(LocalDateTime.of(2026, 10, 10, 8, 0));
+		data.getForm215a().setSafetyOfficerName("A. Safety");
+		data.getForm215a().setSafetyOfficerSignature("A. Safety");
 		SafetyAnalysisEntry entry = new SafetyAnalysisEntry();
 		entry.setIncidentArea("Division A");
 		entry.setHazardsRisks("Terrain, Dense Brush, Trip Hazards");
@@ -50,9 +52,19 @@ class SafetyPdfRendererTest {
 
 		try (PDDocument pdf = Loader.loadPDF(output.toFile())) {
 			String text = new PDFTextStripper().getText(pdf);
+			assertTrue(text.contains("INCIDENT ACTION PLAN SAFETY ANALYSIS"));
+			assertTrue(text.contains("1. Incident Name: Mountain Search"));
+			assertTrue(text.contains("2. Operational Period"));
+			assertTrue(text.contains("5. Incident Area"));
+			assertTrue(text.contains("6. Hazards / Risks"));
+			assertTrue(text.contains("7. Mitigations / Controls"));
+			assertTrue(text.contains("A. Safety"));
 			assertTrue(text.contains("2026-10-10 07:30"));
 			assertTrue(text.contains("Terrain, Dense Brush, Trip Hazards"));
 			assertTrue(text.contains("Appropriate equipment"));
+			PDFStreamParser parser = new PDFStreamParser(pdf.getPage(0));
+			assertEquals(1, parser.parse().stream()
+					.filter(token -> token instanceof Operator operator && operator.getName().equals("re")).count());
 			assertTrue(pdf.getNumberOfPages() > 1);
 			assertEquals(Ics215aPdfRenderer.pageCount(data), pdf.getNumberOfPages());
 		}

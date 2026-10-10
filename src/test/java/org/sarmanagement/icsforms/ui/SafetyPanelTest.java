@@ -15,6 +15,7 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.SwingUtilities;
+import javax.swing.JTabbedPane;
 import java.time.LocalDateTime;
 import java.util.Map;
 import javax.swing.JTable;
@@ -73,6 +74,41 @@ class SafetyPanelTest {
 
 		assertEquals("Loose rocks near ridge.", task.getHazardsObserved());
 		assertEquals(Ics208Form.MessageMode.HAZARD_PRECAUTIONS, data.getForm208().getMessageMode());
+	}
+
+	@Test
+	void safetyTabsFollowAnalysisReviewMessageOrderAndHideReportsOutsideSar() throws Exception {
+		AppData data = new AppData();
+		data.setIncidentMode(IncidentMode.GENERIC);
+		AppController controller = new AppController(data, (LocalRepository) null, new PdfExportService(),
+				new IncidentValidator());
+		SafetyPanel[] panel = new SafetyPanel[1];
+		SwingUtilities.invokeAndWait(() -> {
+			panel[0] = new SafetyPanel(controller);
+			panel[0].refreshFromModel();
+		});
+		JTabbedPane tabs = (JTabbedPane) field(panel[0], "sections");
+		assertEquals(2, tabs.getTabCount());
+		assertEquals("ICS 215A Analysis", tabs.getTitleAt(0));
+		assertEquals("ICS 208 Message / Plan", tabs.getTitleAt(1));
+
+		data.setIncidentMode(IncidentMode.SAR);
+		SarTaskAssignment task = new SarTaskAssignment();
+		task.setHazardsObserved("Flooded trail");
+		data.getSarTaskAssignments().add(task);
+		SwingUtilities.invokeAndWait(() -> panel[0].refreshFromModel());
+		assertEquals(3, tabs.getTabCount());
+		assertEquals("ICS 215A Analysis", tabs.getTitleAt(0));
+		assertEquals("Reported SAR Hazards", tabs.getTitleAt(1));
+		assertEquals("ICS 208 Message / Plan", tabs.getTitleAt(2));
+
+		SafetyAnalysisEntry entry = new SafetyAnalysisEntry();
+		entry.setHazardsRisks("Flooded trail");
+		data.getForm215a().getEntries().add(entry);
+		task.setSafetyHazardAnalysisEntryId(entry.getEntryId());
+		SwingUtilities.invokeAndWait(() -> panel[0].refreshFromModel());
+		assertTrue(((javax.swing.JLabel) field(panel[0], "hazardReportCoverage")).getText()
+				.startsWith("All SAR-reported hazards accounted for"));
 	}
 
 	@Test
@@ -159,5 +195,11 @@ class SafetyPanelTest {
 		assertEquals("A. Safety", report.getNotedBySafetyOfficer());
 		assertTrue(report.isDebriefingCompleted());
 		assertEquals(0, data.getSarTaskAssignments().size());
+	}
+
+	private static Object field(Object target, String name) throws ReflectiveOperationException {
+		var field = target.getClass().getDeclaredField(name);
+		field.setAccessible(true);
+		return field.get(target);
 	}
 }

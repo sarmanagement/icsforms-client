@@ -9,7 +9,6 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.sarmanagement.icsforms.model.AppData;
-import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.Ics215aForm;
 import org.sarmanagement.icsforms.model.SafetyAnalysisEntry;
 
@@ -25,6 +24,10 @@ import java.util.List;
 public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRenderer {
 	private static final float FONT_SIZE = 9f;
 	private static final float LINE_HEIGHT = 11f;
+	private static final float METADATA_HEIGHT = 62f;
+	private static final float TABLE_HEADER_HEIGHT = 25f;
+	private static final float FOOTER_HEIGHT = 58f;
+	private static final float CELL_PADDING = 5f;
 
 	/** {@inheritDoc} */
 	@Override
@@ -33,45 +36,94 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	}
 
 	/**
-	 * Estimates continuation pages using the same wrapped row sizing as the renderer.
+	 * Counts pages using the same row wrapping and available table height as rendering.
 	 *
 	 * @param data incident data.
 	 * @return rendered page count, at least one.
 	 */
 	public static int pageCount(AppData data) {
 		AppData safeData = data == null ? new AppData() : data;
-		PDPage page = new Ics215aPdfRenderer().newPage(safeData);
-		FormLayout layout = new Ics215aPdfRenderer().formLayout(page, safeData);
-		float y = layout.top() - 22 - (4 * 14) - 5 - 22;
-		float minY = layout.y() + 34;
-		int count = 1;
+		Ics215aPdfRenderer renderer = new Ics215aPdfRenderer();
+		FormLayout layout = renderer.formLayout(renderer.newPage(safeData), safeData);
+		int pages = 1;
+		float y = renderer.tableStartY(layout);
+		float minY = renderer.tableBottomY(layout);
 		int rowIndex = 0;
-		int rowLineOffset = 0;
-		float[] widths = {layout.width() * .18f, layout.width() * .36f, layout.width() * .46f};
-		List<SafetyAnalysisEntry> entries = safeData.getForm215a().getEntries();
-		while (rowIndex < entries.size()) {
-			if (y - minY < 34) {
-				count++;
-				y = layout.top() - 22 - (4 * 14) - 5 - 22;
+		int lineOffset = 0;
+		while (rowIndex < safeData.getForm215a().getEntries().size()) {
+			if (y - minY < 34f) {
+				pages++;
+				y = renderer.tableStartY(layout);
 			}
-			SafetyAnalysisEntry entry = entries.get(rowIndex);
-			int totalLines = Math.max(wrapCell(entry.getIncidentArea(), (int) (widths[0] / 5)).size(),
-					Math.max(wrapCell(entry.getHazardsRisks(), (int) (widths[1] / 5)).size(),
-							wrapCell(entry.getMitigations(), (int) (widths[2] / 5)).size()));
-			int fitLines = Math.max(1, (int) ((y - minY - 12) / LINE_HEIGHT));
-			int renderedLines = Math.min(totalLines - rowLineOffset, fitLines);
-			float height = Math.max(34, renderedLines * LINE_HEIGHT + 12);
-			y -= height;
-			rowLineOffset += renderedLines;
-			if (rowLineOffset >= totalLines) {
+			SafetyAnalysisEntry entry = safeData.getForm215a().getEntries().get(rowIndex);
+			int lineCount = renderer.rowLineCount(entry, layout);
+			int fit = Math.max(1, (int) ((y - minY - 2 * CELL_PADDING) / LINE_HEIGHT));
+			int rendered = Math.min(lineCount - lineOffset, fit);
+			y -= Math.max(34f, rendered * LINE_HEIGHT + 2 * CELL_PADDING);
+			lineOffset += rendered;
+			if (lineOffset == lineCount) {
 				rowIndex++;
-				rowLineOffset = 0;
+				lineOffset = 0;
 			} else {
-				count++;
-				y = layout.top() - 22 - (4 * 14) - 5 - 22;
+				pages++;
+				y = renderer.tableStartY(layout);
 			}
 		}
-		return count;
+		return pages;
+	}
+
+	/**
+	 * Returns the top of the table body after metadata and its header.
+	 *
+	 * @param layout form layout.
+	 * @return initial body baseline.
+	 */
+	private float tableStartY(FormLayout layout) {
+		return layout.top() - METADATA_HEIGHT - TABLE_HEADER_HEIGHT;
+	}
+
+	/**
+	 * Returns the bottom boundary of the table body above the signature footer.
+	 *
+	 * @param layout form layout.
+	 * @return table bottom.
+	 */
+	private float tableBottomY(FormLayout layout) {
+		return layout.y() + FOOTER_HEIGHT;
+	}
+
+	/**
+	 * Calculates maximum wrapped row lines at the active page width.
+	 *
+	 * @param entry safety analysis row.
+	 * @param layout form layout.
+	 * @return wrapped line count, at least one.
+	 */
+	private int rowLineCount(SafetyAnalysisEntry entry, FormLayout layout) {
+		float[] widths = columnWidths(layout);
+		return Math.max(wrapCell(entry.getIncidentArea(), charWidth(widths[0])).size(),
+				Math.max(wrapCell(entry.getHazardsRisks(), charWidth(widths[1])).size(),
+						wrapCell(entry.getMitigations(), charWidth(widths[2])).size()));
+	}
+
+	/**
+	 * Returns the number of characters that fit conservatively in a table column.
+	 *
+	 * @param width column width in points.
+	 * @return maximum approximate characters.
+	 */
+	private int charWidth(float width) {
+		return Math.max(1, (int) ((width - 2 * CELL_PADDING) / (FONT_SIZE * 0.53f)));
+	}
+
+	/**
+	 * Calculates the table column widths.
+	 *
+	 * @param layout form layout.
+	 * @return incident area, hazards, and mitigation widths.
+	 */
+	private float[] columnWidths(FormLayout layout) {
+		return new float[] {layout.width() * .20f, layout.width() * .36f, layout.width() * .44f};
 	}
 
 	/** {@inheritDoc} */
@@ -86,7 +138,7 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	}
 
 	/**
-	 * Renders row content across continuation pages.
+	 * Renders table rows and continuation pages inside the ICS 215A form frame.
 	 *
 	 * @param document target PDF document.
 	 * @param data source incident data.
@@ -94,128 +146,243 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	 */
 	private void renderPages(PDDocument document, AppData data) throws IOException {
 		Ics215aForm form = data.getForm215a();
-		IncidentContext context = data.getIncidentContext();
 		PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
 		PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 		int rowIndex = 0;
-		int rowLineOffset = 0;
+		int lineOffset = 0;
 		int pageNumber = 1;
 		do {
 			PDPage page = newPage(data);
 			document.addPage(page);
+			FormLayout layout = formLayout(page, data);
 			try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
-				FormLayout layout = formLayout(page, data);
-				drawFormHeader(stream, bold, layout, "ICS 215A", "INCIDENT ACTION PLAN SAFETY ANALYSIS");
-				float y = layout.top() - 22;
-				y = line(stream, bold, layout.x(), y, 10, "1. Incident Name: " + safe(context.getIncidentName()));
-				y = line(stream, regular, layout.x(), y, 10, "2. Incident Number: " + form.getIncidentNumber());
-				y = line(stream, regular, layout.x(), y, 10,
-						"3. Date/Time Prepared: " + formatPdfDateTime(data, form.getPreparedDateTime()));
-				y = line(stream, regular, layout.x(), y, 10, "4. Operational Period: "
-						+ formatPdfDateTime(data, context.getOperationalPeriodStart()) + " to "
-						+ formatPdfDateTime(data, context.getOperationalPeriodEnd()));
-				y -= 5;
-				float[] widths = {layout.width() * .18f, layout.width() * .36f, layout.width() * .46f};
-				float[] xs = {layout.x(), layout.x() + widths[0], layout.x() + widths[0] + widths[1]};
-				float headerHeight = 22;
-				drawRow(stream, bold, xs, widths, y, headerHeight,
-						List.of("5. Incident Area", "6. Hazards / Risks", "7. Mitigations"));
-				y -= headerHeight;
-				float maxY = layout.y() + 34;
-				while (rowIndex < form.getEntries().size() && y > maxY) {
+				drawFormHeader(stream, bold, layout, "ICS 215A",
+						"INCIDENT ACTION PLAN SAFETY ANALYSIS" + (pageNumber == 1 ? "" : " (CONTINUED)"));
+				drawFormFrame(stream, layout);
+				drawMetadata(stream, bold, regular, layout, data);
+				float[] widths = columnWidths(layout);
+				drawTableHeader(stream, bold, layout, widths);
+				float y = tableStartY(layout);
+				float minY = tableBottomY(layout);
+				while (rowIndex < form.getEntries().size() && y - minY >= 34f) {
 					SafetyAnalysisEntry entry = form.getEntries().get(rowIndex);
-					List<List<String>> cells = List.of(wrapCell(entry.getIncidentArea(), 18),
-							wrapCell(entry.getHazardsRisks(), 36), wrapCell(entry.getMitigations(), 46));
-					int totalLines = Math.max(cells.get(0).size(), Math.max(cells.get(1).size(), cells.get(2).size()));
-					if (y - maxY < 34) {
-						break;
-					}
-					int fitLines = Math.max(1, (int) ((y - maxY - 12) / LINE_HEIGHT));
-					int renderedLines = Math.min(totalLines - rowLineOffset, fitLines);
-					float renderedHeight = Math.max(34, renderedLines * LINE_HEIGHT + 12);
-					drawRow(stream, regular, xs, widths, y, renderedHeight,
-							List.of(joinLines(cells.get(0), rowLineOffset, renderedLines),
-									joinLines(cells.get(1), rowLineOffset, renderedLines),
-									joinLines(cells.get(2), rowLineOffset, renderedLines)));
-					y -= renderedHeight;
-					rowLineOffset += renderedLines;
-					if (rowLineOffset >= totalLines) {
+					List<List<String>> columns = List.of(
+							wrapCell(entry.getIncidentArea(), charWidth(widths[0])),
+							wrapCell(entry.getHazardsRisks(), charWidth(widths[1])),
+							wrapCell(entry.getMitigations(), charWidth(widths[2])));
+					int totalLines = Math.max(columns.get(0).size(),
+							Math.max(columns.get(1).size(), columns.get(2).size()));
+					int fit = Math.max(1, (int) ((y - minY - 2 * CELL_PADDING) / LINE_HEIGHT));
+					int rendered = Math.min(totalLines - lineOffset, fit);
+					float rowHeight = Math.max(34f, rendered * LINE_HEIGHT + 2 * CELL_PADDING);
+					drawTableRow(stream, regular, layout, widths, y, rowHeight, columns, lineOffset, rendered);
+					y -= rowHeight;
+					lineOffset += rendered;
+					if (lineOffset >= totalLines) {
 						rowIndex++;
-						rowLineOffset = 0;
+						lineOffset = 0;
 					}
 				}
-				if (form.getEntries().isEmpty()) {
-					drawRow(stream, regular, xs, widths, y, 34, List.of("", "", ""));
-					y -= 34;
+				if (form.getEntries().isEmpty() && pageNumber == 1) {
+					drawTableRow(stream, regular, layout, widths, y, 34f,
+							List.of(List.of(""), List.of(""), List.of("")), 0, 1);
 				}
-				y -= 12;
-				if (y > layout.y() + 15) {
-					y = line(stream, regular, layout.x(), y, 10, "8. Safety Officer: "
-							+ form.getSafetyOfficerName() + " | Signature: " + form.getSafetyOfficerSignature());
-					y = line(stream, regular, layout.x(), y, 10, "Operations Section Chief: "
-							+ form.getOperationsSectionChiefName() + " | Signature: "
-							+ form.getOperationsSectionChiefSignature());
-					line(stream, regular, layout.x(), y, 10, "Reviewed: "
-							+ formatPdfDateTime(data, form.getReviewedDateTime()) + "    Prepared: "
-							+ formatPdfDateTime(data, form.getPreparedDateTime()));
-				}
-				String label = "ICS 215A - Page " + pageNumber
-						+ (rowIndex < form.getEntries().size() ? " (continued)" : "")
-						+ iapPageLabel(form.getIapPage(), pageNumber);
-				line(stream, regular, layout.x(), layout.y() + 8, 8, label);
+				drawFooter(stream, bold, regular, layout, data, form, pageNumber);
 			}
-			pageNumber++;
-		} while (rowIndex < form.getEntries().size());
+			if (rowIndex < form.getEntries().size() && lineOffset > 0) {
+				pageNumber++;
+				continue;
+			}
+			if (rowIndex < form.getEntries().size()) {
+				pageNumber++;
+				continue;
+			}
+			break;
+		} while (true);
 	}
 
 	/**
-	 * Draws an outlined table row and wrapped cells.
+	 * Draws the incident and operational period metadata blocks.
 	 *
-	 * @param stream PDF content stream.
+	 * @param stream PDF page stream.
+	 * @param bold bold font.
+	 * @param regular regular font.
+	 * @param layout form layout.
+	 * @param data incident data.
+	 * @throws IOException when PDF drawing fails.
+	 */
+	private void drawMetadata(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, FormLayout layout,
+			AppData data) throws IOException {
+		float x = layout.x();
+		float top = layout.top();
+		float[] widths = columnWidths(layout);
+		float row1Bottom = top - 27f;
+		float row2Bottom = top - METADATA_HEIGHT;
+		stream.moveTo(x, row1Bottom);
+		stream.lineTo(x + layout.width(), row1Bottom);
+		stream.moveTo(x, row2Bottom);
+		stream.lineTo(x + layout.width(), row2Bottom);
+		float nameEnd = x + layout.width() * .55f;
+		stream.moveTo(nameEnd, top);
+		stream.lineTo(nameEnd, row2Bottom);
+		stream.stroke();
+		drawLine(stream, bold, x + CELL_PADDING, top - 12f,
+				"1. Incident Name: " + safe(data.getIncidentContext().getIncidentName()));
+		drawLine(stream, regular, nameEnd + CELL_PADDING, top - 12f, "2. Operational Period");
+		drawLine(stream, regular, x + CELL_PADDING, row1Bottom - 13f,
+				"3. Incident Number: " + safe(data.getForm215a().getIncidentNumber()));
+		drawLine(stream, regular, x + CELL_PADDING, row1Bottom - 26f,
+				"4. Date/Time Prepared: " + safe(formatPdfDateTime(data, data.getForm215a().getPreparedDateTime())));
+		float rightX = nameEnd + CELL_PADDING;
+		drawLine(stream, regular, rightX, row1Bottom - 13f,
+				"Date From: " + safe(formatPdfDate(data, data.getIncidentContext().getOperationalPeriodStart())));
+		drawLine(stream, regular, rightX, row1Bottom - 26f,
+				"Time From: " + safe(formatPdfTime(data, data.getIncidentContext().getOperationalPeriodStart())));
+		drawLine(stream, regular, rightX + widths[0] * .72f, row1Bottom - 13f,
+				"Date To: " + safe(formatPdfDate(data, data.getIncidentContext().getOperationalPeriodEnd())));
+		drawLine(stream, regular, rightX + widths[0] * .72f, row1Bottom - 26f,
+				"Time To: " + safe(formatPdfTime(data, data.getIncidentContext().getOperationalPeriodEnd())));
+	}
+
+	/**
+	 * Draws the column headings for the analysis table.
+	 *
+	 * @param stream page stream.
+	 * @param bold bold font.
+	 * @param layout form layout.
+	 * @param widths column widths.
+	 * @throws IOException when PDF drawing fails.
+	 */
+	private void drawTableHeader(PDPageContentStream stream, PDType1Font bold, FormLayout layout, float[] widths)
+			throws IOException {
+		float top = layout.top() - METADATA_HEIGHT;
+		float bottom = top - TABLE_HEADER_HEIGHT;
+		drawTableGrid(stream, layout, widths, top, TABLE_HEADER_HEIGHT);
+		float x = layout.x();
+		drawLine(stream, bold, x + CELL_PADDING, top - 15f, "5. Incident Area");
+		x += widths[0];
+		drawLine(stream, bold, x + CELL_PADDING, top - 15f, "6. Hazards / Risks");
+		x += widths[1];
+		drawLine(stream, bold, x + CELL_PADDING, top - 15f, "7. Mitigations / Controls");
+	}
+
+	/**
+	 * Draws the cells and wrapped text for one table row segment.
+	 *
+	 * @param stream page stream.
 	 * @param font cell font.
-	 * @param xs column x-coordinates.
+	 * @param layout form layout.
 	 * @param widths column widths.
 	 * @param top row top.
 	 * @param height row height.
-	 * @param cells cell text.
+	 * @param columns wrapped cell lines.
+	 * @param offset first line offset.
+	 * @param count number of lines to draw.
 	 * @throws IOException when PDF drawing fails.
 	 */
-	private static void drawRow(PDPageContentStream stream, PDType1Font font, float[] xs, float[] widths,
-			float top, float height, List<String> cells) throws IOException {
-		for (int column = 0; column < cells.size(); column++) {
-			stream.addRect(xs[column], top - height, widths[column], height);
-			stream.stroke();
-			stream.beginText();
-			stream.setFont(font, FONT_SIZE);
-			stream.newLineAtOffset(xs[column] + 4, top - 13);
-			for (String line : cells.get(column).split("\n", -1)) {
-				stream.showText(safe(line));
-				stream.newLineAtOffset(0, -LINE_HEIGHT);
+	private void drawTableRow(PDPageContentStream stream, PDType1Font font, FormLayout layout, float[] widths,
+			float top, float height, List<List<String>> columns, int offset, int count) throws IOException {
+		drawTableGrid(stream, layout, widths, top, height);
+		float x = layout.x() + CELL_PADDING;
+		for (int column = 0; column < columns.size(); column++) {
+			float y = top - CELL_PADDING - FONT_SIZE;
+			List<String> lines = columns.get(column);
+			for (int index = offset; index < Math.min(lines.size(), offset + count); index++) {
+				drawLine(stream, font, x, y, lines.get(index));
+				y -= LINE_HEIGHT;
 			}
-			stream.endText();
+			x += widths[column];
 		}
 	}
 
 	/**
-	 * Draws a single text line at the specified baseline.
+	 * Draws table row borders and column dividers.
 	 *
-	 * @param stream PDF stream.
+	 * @param stream page stream.
+	 * @param layout form layout.
+	 * @param widths column widths.
+	 * @param top row top.
+	 * @param height row height.
+	 * @throws IOException when PDF drawing fails.
+	 */
+	private void drawTableGrid(PDPageContentStream stream, FormLayout layout, float[] widths, float top, float height)
+			throws IOException {
+		float bottom = top - height;
+		stream.moveTo(layout.x(), bottom);
+		stream.lineTo(layout.x() + layout.width(), bottom);
+		float x = layout.x() + widths[0];
+		stream.moveTo(x, top);
+		stream.lineTo(x, bottom);
+		x += widths[1];
+		stream.moveTo(x, top);
+		stream.lineTo(x, bottom);
+		stream.stroke();
+	}
+
+	/**
+	 * Draws preparer/signature metadata and the form/page footer band.
+	 *
+	 * @param stream page stream.
+	 * @param bold bold font.
+	 * @param regular regular font.
+	 * @param layout form layout.
+	 * @param data incident data.
+	 * @param form ICS 215A content.
+	 * @param pageNumber local page number.
+	 * @throws IOException when PDF drawing fails.
+	 */
+	private void drawFooter(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, FormLayout layout,
+			AppData data, Ics215aForm form, int pageNumber) throws IOException {
+		float x = layout.x();
+		float bottom = layout.y();
+		float width = layout.width();
+		float top = bottom + FOOTER_HEIGHT;
+		float divider = top - 27f;
+		float footerBandTop = bottom + 18f;
+		stream.moveTo(x, top);
+		stream.lineTo(x + width, top);
+		stream.moveTo(x, divider);
+		stream.lineTo(x + width, divider);
+		stream.moveTo(x, footerBandTop);
+		stream.lineTo(x + width, footerBandTop);
+		stream.stroke();
+		drawLine(stream, bold, x + CELL_PADDING, top - 12f,
+				"8. Safety Officer: " + safe(form.getSafetyOfficerName()) + "   Signature: "
+						+ safe(form.getSafetyOfficerSignature()));
+		drawLine(stream, regular, x + CELL_PADDING, divider - 13f,
+				"Operations Section Chief: " + safe(form.getOperationsSectionChiefName()) + "   Signature: "
+						+ safe(form.getOperationsSectionChiefSignature()));
+		float firstCell = width * .22f;
+		float secondCell = width * .20f;
+		stream.moveTo(x + firstCell, bottom);
+		stream.lineTo(x + firstCell, footerBandTop);
+		stream.moveTo(x + firstCell + secondCell, bottom);
+		stream.lineTo(x + firstCell + secondCell, footerBandTop);
+		stream.stroke();
+		drawLine(stream, bold, x + CELL_PADDING, bottom + 6f, "ICS 215A");
+		drawLine(stream, regular, x + firstCell + CELL_PADDING, bottom + 6f,
+				"IAP Page " + safe(addPageOffset(form.getIapPage(), pageNumber - 1)));
+		drawLine(stream, regular, x + firstCell + secondCell + CELL_PADDING, bottom + 6f,
+				"Prepared: " + safe(formatPdfDateTime(data, form.getPreparedDateTime())));
+	}
+
+	/**
+	 * Draws one text line at its baseline.
+	 *
+	 * @param stream page stream.
 	 * @param font text font.
 	 * @param x left coordinate.
 	 * @param y baseline.
-	 * @param size font size.
-	 * @param value displayed text.
-	 * @return the next baseline.
+	 * @param value display text.
 	 * @throws IOException when PDF drawing fails.
 	 */
-	private static float line(PDPageContentStream stream, PDType1Font font, float x, float y, float size, String value)
+	private static void drawLine(PDPageContentStream stream, PDType1Font font, float x, float y, String value)
 			throws IOException {
 		stream.beginText();
-		stream.setFont(font, size);
+		stream.setFont(font, FONT_SIZE);
 		stream.newLineAtOffset(x, y);
 		stream.showText(safe(value));
 		stream.endText();
-		return y - size - 4;
 	}
 
 	/**
@@ -234,44 +401,13 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	}
 
 	/**
-	 * Joins the requested cell-line segment for the current printable row.
-	 *
-	 * @param lines wrapped cell lines.
-	 * @param offset first line index.
-	 * @param count maximum lines.
-	 * @return text for this row segment.
-	 */
-	private static String joinLines(List<String> lines, int offset, int count) {
-		int start = Math.min(offset, lines.size());
-		int end = Math.min(start + count, lines.size());
-		return String.join("\n", lines.subList(start, end));
-	}
-
-	/**
-	 * Returns a non-null display string.
+	 * Returns a non-null printable string.
 	 *
 	 * @param value source value.
-	 * @return non-null value.
+	 * @return printable ASCII value.
 	 */
 	private static String safe(String value) {
 		return value == null ? "" : value.replaceAll("[^\\x20-\\x7E]", "?");
 	}
 
-	/**
-	 * Returns the IAP page label for a continuation page.
-	 *
-	 * @param firstPage first IAP page label.
-	 * @param pageOffset local page number.
-	 * @return optional IAP page suffix.
-	 */
-	private static String iapPageLabel(String firstPage, int pageOffset) {
-		if (firstPage == null || firstPage.isBlank()) {
-			return "";
-		}
-		try {
-			return " | IAP Page " + (Integer.parseInt(firstPage) + pageOffset - 1);
-		} catch (NumberFormatException exception) {
-			return " | IAP Page " + firstPage;
-		}
-	}
 }

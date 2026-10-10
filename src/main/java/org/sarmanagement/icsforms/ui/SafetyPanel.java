@@ -31,6 +31,8 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTabbedPane;
 import javax.swing.table.DefaultTableModel;
+
+import java.awt.Component;
 import java.awt.BorderLayout;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -51,10 +53,11 @@ public class SafetyPanel extends JPanel {
 	private final JTabbedPane sections = new JTabbedPane();
 	private final JTextField incidentNumberField = new JTextField();
 	private final JTextField safetyOfficerField = new JTextField();
-	private final JTextField safetyOfficerSignature = new JTextField();
 	private final JTextField operationsChiefField = new JTextField();
-	private final JTextField operationsChiefSignature = new JTextField();
 	private final JTextField analysisPreparedField = new JTextField();
+	private final JLabel hazardReportCoverage = new JLabel("No SAR-reported hazards to account for.");
+	private final JPanel reportedHazardsPanel;
+	private final JPanel messagePanel;
 	private final DefaultTableModel analysisTableModel = new DefaultTableModel(
 			new String[] {"Incident Area", "Hazards / Risks", "Mitigations"}, 0) {
 		@Override
@@ -109,8 +112,11 @@ public class SafetyPanel extends JPanel {
 		super(new BorderLayout());
 		this.controller = controller;
 		sections.addTab("ICS 215A Analysis", buildAnalysisPanel());
-		sections.addTab("ICS 208 Message / Plan", buildMessagePanel());
-		sections.addTab("Reported SAR Hazards", buildReportsPanel());
+		reportedHazardsPanel = buildReportsPanel();
+		messagePanel = buildMessagePanel();
+		sections.addTab("Reported SAR Hazards", reportedHazardsPanel);
+		sections.addTab("ICS 208 Message / Plan", messagePanel);
+		configureReportedHazardsTab(controller.getIncidentMode() == IncidentMode.SAR);
 		add(sections, BorderLayout.CENTER);
 	}
 
@@ -124,6 +130,26 @@ public class SafetyPanel extends JPanel {
 	}
 
 	/**
+	 * Shows the reported-hazards subtab only for SAR incidents and keeps it between the forms.
+	 *
+	 * @param visible whether this incident is in SAR mode.
+	 */
+	private void configureReportedHazardsTab(boolean visible) {
+		Component selected = sections.getSelectedComponent();
+		int index = sections.indexOfComponent(reportedHazardsPanel);
+		if (visible && index < 0) {
+			sections.insertTab("Reported SAR Hazards", null, reportedHazardsPanel, null, 1);
+		} else if (!visible && index >= 0) {
+			sections.removeTabAt(index);
+		}
+		hazardReportCoverage.setVisible(visible);
+		int selectedIndex = sections.indexOfComponent(selected);
+		if (selectedIndex >= 0) {
+			sections.setSelectedIndex(selectedIndex);
+		}
+	}
+
+	/**
 	 * Loads safety form values into the panel.
 	 */
 	public void refreshFromModel() {
@@ -131,9 +157,7 @@ public class SafetyPanel extends JPanel {
 		Ics215aForm analysis = data.getForm215a();
 		incidentNumberField.setText(analysis.getIncidentNumber());
 		safetyOfficerField.setText(analysis.getSafetyOfficerName());
-		safetyOfficerSignature.setText(analysis.getSafetyOfficerSignature());
 		operationsChiefField.setText(analysis.getOperationsSectionChiefName());
-		operationsChiefSignature.setText(analysis.getOperationsSectionChiefSignature());
 		analysisPreparedField.setText(isoDateTime(analysis.getPreparedDateTime()));
 		analysisTableModel.setRowCount(0);
 		for (SafetyAnalysisEntry entry : analysis.getEntries()) {
@@ -167,7 +191,7 @@ public class SafetyPanel extends JPanel {
 		buildSiteSections(plan.getTextSections());
 		refreshCoverage(data);
 		refreshReportedHazards(data);
-		sections.setEnabledAt(2, data.getIncidentMode() == IncidentMode.SAR);
+		configureReportedHazardsTab(data.getIncidentMode() == IncidentMode.SAR);
 	}
 
 	/**
@@ -178,9 +202,7 @@ public class SafetyPanel extends JPanel {
 		Ics215aForm analysis = data.getForm215a();
 		analysis.setIncidentNumber(incidentNumberField.getText().trim());
 		analysis.setSafetyOfficerName(safetyOfficerField.getText().trim());
-		analysis.setSafetyOfficerSignature(safetyOfficerSignature.getText().trim());
 		analysis.setOperationsSectionChiefName(operationsChiefField.getText().trim());
-		analysis.setOperationsSectionChiefSignature(operationsChiefSignature.getText().trim());
 		analysis.setPreparedDateTime(parseDateTime(analysisPreparedField.getText()));
 		List<SafetyAnalysisEntry> entries = new ArrayList<>();
 		for (int i = 0; i < analysisTableModel.getRowCount(); i++) {
@@ -226,6 +248,7 @@ public class SafetyPanel extends JPanel {
 		message.setPreparedByPositionTitle(preparedByPosition.getText().trim());
 		message.setPreparedBySignature(preparedBySignature.getText().trim());
 		message.setPreparedDateTime(parseDateTime(preparedDateTime.getText()));
+		refreshReportedHazards(data);
 	}
 
 	/**
@@ -238,10 +261,9 @@ public class SafetyPanel extends JPanel {
 		JPanel metadata = UiSupport.formPanel();
 		UiSupport.addRow(metadata, 0, "Incident number", incidentNumberField);
 		UiSupport.addRow(metadata, 1, "Safety Officer", safetyOfficerField);
-		UiSupport.addRow(metadata, 2, "Safety Officer signature", safetyOfficerSignature);
-		UiSupport.addRow(metadata, 3, "Operations Section Chief", operationsChiefField);
-		UiSupport.addRow(metadata, 4, "Operations Section Chief signature", operationsChiefSignature);
-		UiSupport.addRow(metadata, 5, "Prepared (yyyy-MM-dd'T'HH:mm)", analysisPreparedField);
+		UiSupport.addRow(metadata, 2, "Operations Section Chief", operationsChiefField);
+		UiSupport.addRow(metadata, 3, "Prepared (yyyy-MM-dd'T'HH:mm)", analysisPreparedField);
+		UiSupport.addRow(metadata, 4, "SAR hazard report coverage", hazardReportCoverage);
 		analysisTable.setFillsViewportHeight(true);
 		JPanel actions = new JPanel();
 		button(actions, "Add hazard", () -> editAnalysisRow(-1));
@@ -373,7 +395,7 @@ public class SafetyPanel extends JPanel {
 	 * @param value section text.
 	 */
 	private void addSiteSection(String name, String value) {
-		JPanel parent = (JPanel) sections.getComponentAt(1);
+		JPanel parent = messagePanel;
 		JPanel south = (JPanel) ((BorderLayout) parent.getLayout()).getLayoutComponent(BorderLayout.SOUTH);
 		JScrollPane scroll = (JScrollPane) ((BorderLayout) south.getLayout()).getLayoutComponent(BorderLayout.CENTER);
 		JPanel sectionBody = (JPanel) scroll.getViewport().getView();
@@ -404,7 +426,7 @@ public class SafetyPanel extends JPanel {
 	 */
 	private Map<String, String> readSiteSections() {
 		Map<String, String> sectionsByName = new LinkedHashMap<>();
-		JPanel parent = (JPanel) sections.getComponentAt(1);
+		JPanel parent = messagePanel;
 		JPanel south = (JPanel) ((BorderLayout) parent.getLayout()).getLayoutComponent(BorderLayout.SOUTH);
 		JScrollPane scroll = (JScrollPane) ((BorderLayout) south.getLayout()).getLayoutComponent(BorderLayout.CENTER);
 		JPanel body = (JPanel) scroll.getViewport().getView();
@@ -455,6 +477,7 @@ public class SafetyPanel extends JPanel {
 			analysisTableModel.addRow(new Object[] {entry.getIncidentArea(), entry.getHazardsRisks(), entry.getMitigations()});
 		}
 		controller.markDirty();
+		refreshCoverage(controller.getData());
 	}
 
 	/**
@@ -466,6 +489,7 @@ public class SafetyPanel extends JPanel {
 			controller.getData().getForm215a().getEntries().remove(row);
 			analysisTableModel.removeRow(row);
 			controller.markDirty();
+			refreshCoverage(controller.getData());
 		}
 	}
 
@@ -491,6 +515,7 @@ public class SafetyPanel extends JPanel {
 		analysisTableModel.insertRow(destination, values);
 		analysisTable.setRowSelectionInterval(destination, destination);
 		controller.markDirty();
+		refreshCoverage(controller.getData());
 	}
 
 	/**
@@ -531,6 +556,7 @@ public class SafetyPanel extends JPanel {
 				}
 			}
 			controller.markDirty();
+			refreshCoverage(controller.getData());
 		} catch (IOException | IllegalArgumentException exception) {
 			JOptionPane.showMessageDialog(this, exception.getMessage(), "Could not load hazard library",
 					JOptionPane.ERROR_MESSAGE);
@@ -596,6 +622,7 @@ public class SafetyPanel extends JPanel {
 		controller.getData().getForm215a().getEntries().add(entry);
 		analysisTableModel.addRow(new Object[] {entry.getIncidentArea(), entry.getHazardsRisks(), entry.getMitigations()});
 		controller.markDirty();
+		refreshCoverage(controller.getData());
 	}
 
 	/**
@@ -693,6 +720,7 @@ public class SafetyPanel extends JPanel {
 				.filter(SafetyMessageBlock::isNeedsReview).count();
 		messageCoverage.setText(represented.size() + " of " + data.getForm215a().getEntries().size()
 				+ " analysis rows represented; " + stale + " block(s) need review.");
+		refreshHazardReportCoverage();
 	}
 
 	/**
@@ -760,6 +788,7 @@ public class SafetyPanel extends JPanel {
 		reportTableModel.setRowCount(0);
 		reportSources.clear();
 		if (data.getIncidentMode() != IncidentMode.SAR) {
+			refreshHazardReportCoverage();
 			return;
 		}
 		for (SafetyHazardReport report : data.getArchivedSafetyHazardReports()) {
@@ -782,6 +811,30 @@ public class SafetyPanel extends JPanel {
 						reportArea(task), task.isDebriefingCompleted() ? "Completed" : "Unfinished",
 						reportReviewStatus(source), task.getHazardsObserved()});
 			}
+		}
+		refreshHazardReportCoverage();
+	}
+
+	/**
+	 * Summarizes whether each SAR-reported hazard is linked to an analysis entry or acknowledged.
+	 */
+	private void refreshHazardReportCoverage() {
+		int accounted = 0;
+		for (HazardReportSource source : reportSources) {
+			String notedBy = source.task() == null
+					? source.archivedReport().getNotedBySafetyOfficer()
+					: source.task().getSafetyHazardNotedBy();
+			if (isHazardLinkedToAnalysis(source) || !notedBy.isBlank()) {
+				accounted++;
+			}
+		}
+		int total = reportSources.size();
+		if (total == 0) {
+			hazardReportCoverage.setText("No SAR-reported hazards to account for.");
+		} else if (accounted == total) {
+			hazardReportCoverage.setText("All SAR-reported hazards accounted for (" + accounted + " of " + total + ").");
+		} else {
+			hazardReportCoverage.setText("SAR-reported hazards accounted for: " + accounted + " of " + total + ".");
 		}
 	}
 
