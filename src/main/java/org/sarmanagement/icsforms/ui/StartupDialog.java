@@ -1,6 +1,8 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.IncidentMode;
+import org.sarmanagement.icsforms.persistence.IncidentId;
+import org.sarmanagement.icsforms.persistence.IncidentStore;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -16,7 +18,6 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Frame;
-import java.nio.file.Path;
 
 /**
  * Modal startup dialog presented when the application launches or when File →
@@ -26,10 +27,8 @@ import java.nio.file.Path;
  * The operator selects an action (start a new incident in one of the three
  * phases, open an existing incident, or open an existing incident and advance
  * to a new operational period) and chooses the incident mode (SAR or Generic).
- * When {@code exitOnClose} is {@code true} (the default for application
- * startup) dismissing the dialog without a selection terminates the JVM; when
- * {@code false} (used from the File → New menu action) it simply disposes the
- * dialog.
+ * Dismissing the dialog without a selection returns control to its caller,
+ * which can close the incident store before exiting at startup.
  * </p>
  */
 public class StartupDialog extends JDialog {
@@ -59,30 +58,26 @@ public class StartupDialog extends JDialog {
 
 	private StartupAction chosenAction;
 	private IncidentMode chosenMode = IncidentMode.SAR;
-	private Path chosenPath;
-	private final boolean exitOnClose;
+	private IncidentId chosenIncidentId;
 
 	/**
 	 * Creates the startup dialog.
 	 *
 	 * @param owner
 	 *            owning frame (may be {@code null}).
-	 * @param defaultDirectory
-	 *            directory offered to the incident picker and file chooser.
+	 * @param store incident store used by the picker.
 	 * @param exitOnClose
-	 *            when {@code true}, closing without a selection terminates the JVM;
-	 *            when {@code false}, the dialog is simply disposed (used from File
-	 *            → New).
+	 *            retained for startup caller compatibility; closing without a
+	 *            selection always disposes the dialog so its caller can clean up.
 	 */
-	public StartupDialog(Frame owner, Path defaultDirectory, boolean exitOnClose) {
+	public StartupDialog(Frame owner, IncidentStore store, boolean exitOnClose) {
 		super(owner, "ICS Forms Desktop — Start", true);
-		this.exitOnClose = exitOnClose;
 		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
 		JPanel content = new JPanel(new BorderLayout(12, 12));
 		content.setBorder(BorderFactory.createEmptyBorder(16, 16, 12, 16));
 
-		content.add(buildActionPanel(defaultDirectory), BorderLayout.CENTER);
+		content.add(buildActionPanel(store), BorderLayout.CENTER);
 		content.add(buildModePanel(), BorderLayout.SOUTH);
 
 		setContentPane(content);
@@ -90,16 +85,6 @@ public class StartupDialog extends JDialog {
 		setMinimumSize(new Dimension(480, getHeight()));
 		setLocationRelativeTo(owner);
 
-		// Exit the application if the dialog is closed without choosing an action at
-		// startup.
-		addWindowListener(new java.awt.event.WindowAdapter() {
-			@Override
-			public void windowClosing(java.awt.event.WindowEvent event) {
-				if (exitOnClose) {
-					System.exit(0);
-				}
-			}
-		});
 	}
 
 	/**
@@ -122,18 +107,24 @@ public class StartupDialog extends JDialog {
 	}
 
 	/**
-	 * Returns the file path chosen when the operator selected an open action, or
+	 * Returns the identifier chosen when the operator selected an open action, or
 	 * {@code null} for new-incident actions.
 	 *
-	 * @return chosen file path, or {@code null}.
+	 * @return chosen incident identifier, or {@code null}.
 	 */
-	public Path getChosenPath() {
-		return chosenPath;
+	public IncidentId getChosenIncidentId() {
+		return chosenIncidentId;
 	}
 
 	// -------------------------------------------------------------------------
 
-	private JPanel buildActionPanel(Path defaultDirectory) {
+	/**
+	 * Builds the incident actions.
+	 *
+	 * @param store incident store used for opening incidents.
+	 * @return action panel.
+	 */
+	private JPanel buildActionPanel(IncidentStore store) {
 		JPanel panel = new JPanel();
 		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
 		panel.setBorder(BorderFactory.createTitledBorder("Choose an action"));
@@ -141,48 +132,57 @@ public class StartupDialog extends JDialog {
 		panel.add(buildActionRow("New incident — Pre-Operational (planning)",
 				"<html>Prepare for a potential or anticipated incident before response begins.<br>"
 						+ "ICS 201 is available but not yet primary.</html>",
-				StartupAction.NEW_PRE_OP, defaultDirectory));
+				StartupAction.NEW_PRE_OP, store));
 		panel.add(Box.createVerticalStrut(6));
 
 		panel.add(
 				buildActionRow("New incident — Initial Incident Response",
 						"<html>An incident has started.  ICS 201 is the primary capture tool<br>"
 								+ "and is fully editable.</html>",
-						StartupAction.NEW_INITIAL_RESPONSE, defaultDirectory));
+						StartupAction.NEW_INITIAL_RESPONSE, store));
 		panel.add(Box.createVerticalStrut(6));
 
 		panel.add(buildActionRow("New incident — Subsequent Operational Period",
 				"<html>Start a fresh workspace for a new operational period.<br>"
 						+ "ICS 202 and ICS 204 are the primary forms; ICS 201 is read-only.</html>",
-				StartupAction.NEW_OPERATIONAL_PERIOD, defaultDirectory));
+				StartupAction.NEW_OPERATIONAL_PERIOD, store));
 		panel.add(Box.createVerticalStrut(10));
 		panel.add(new JSeparator());
 		panel.add(Box.createVerticalStrut(10));
 
 		panel.add(buildActionRow("Open existing incident…",
 				"<html>Continue working on a previously saved incident workspace.</html>", StartupAction.OPEN_EXISTING,
-				defaultDirectory));
+				store));
 		panel.add(Box.createVerticalStrut(6));
 
 		panel.add(buildActionRow("Open existing incident and add a new operational period…",
 				"<html>Load an existing workspace and advance it to the next<br>"
 						+ "operational period, clearing operational forms while keeping<br>"
 						+ "the ICS 201 and org chart as historical context.</html>",
-				StartupAction.OPEN_NEW_PERIOD, defaultDirectory));
+				StartupAction.OPEN_NEW_PERIOD, store));
 
 		return panel;
 	}
 
-	private JPanel buildActionRow(String title, String description, StartupAction action, Path defaultDirectory) {
+	/**
+	 * Builds a selectable startup action.
+	 *
+	 * @param title button title.
+	 * @param description explanatory text.
+	 * @param action action selected by the button.
+	 * @param store incident store used for opening incidents.
+	 * @return action row.
+	 */
+	private JPanel buildActionRow(String title, String description, StartupAction action, IncidentStore store) {
 		JButton button = new JButton(title);
 		button.setAlignmentX(LEFT_ALIGNMENT);
 		button.addActionListener(event -> {
 			if (action == StartupAction.OPEN_EXISTING || action == StartupAction.OPEN_NEW_PERIOD) {
-				Path chosen = pickIncident(defaultDirectory);
+				IncidentId chosen = pickIncident(store);
 				if (chosen == null) {
 					return;
 				}
-				chosenPath = chosen;
+				chosenIncidentId = chosen;
 			}
 			chosenAction = action;
 			dispose();
@@ -200,12 +200,23 @@ public class StartupDialog extends JDialog {
 		return row;
 	}
 
-	private Path pickIncident(Path defaultDirectory) {
-		IncidentPickerDialog picker = new IncidentPickerDialog(this, defaultDirectory);
+	/**
+	 * Presents the incident picker.
+	 *
+	 * @param store incident store to browse.
+	 * @return selected identifier, or {@code null}.
+	 */
+	private IncidentId pickIncident(IncidentStore store) {
+		IncidentPickerDialog picker = new IncidentPickerDialog(this, store);
 		picker.setVisible(true);
-		return picker.getChosenPath();
+		return picker.getChosenIncidentId();
 	}
 
+	/**
+	 * Builds the incident mode controls.
+	 *
+	 * @return mode panel.
+	 */
 	private JPanel buildModePanel() {
 		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
 		panel.setBorder(BorderFactory.createTitledBorder("Incident mode"));

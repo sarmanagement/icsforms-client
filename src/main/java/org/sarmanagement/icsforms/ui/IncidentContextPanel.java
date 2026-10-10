@@ -27,7 +27,7 @@ import java.util.List;
  *
  * <p>
  * In addition to the editable fields, this panel shows read-only status
- * information: the workspace file path, the current IAP phase, and a table of
+ * information: the incident store location, the current IAP phase, and a table of
  * past operational periods (each with start/end date-times and the incident
  * commander names recorded at that time).
  * </p>
@@ -76,7 +76,7 @@ public class IncidentContextPanel extends JPanel {
 		// --- Status section (read-only) ---
 		JPanel statusForm = UiSupport.formPanel();
 		statusForm.setBorder(BorderFactory.createTitledBorder("Incident Status (read-only)"));
-		UiSupport.addRow(statusForm, 0, "Workspace file", filePathLabel);
+		UiSupport.addRow(statusForm, 0, "Incident store", filePathLabel);
 		UiSupport.addRow(statusForm, 1, "Current phase", phaseLabel);
 
 		// --- Editable context section ---
@@ -137,7 +137,7 @@ public class IncidentContextPanel extends JPanel {
 		currentUserPositionCombo.setSelectedItem(nullSafe(context.getCurrentUserPositionTitle()));
 
 		// Refresh read-only status labels.
-		filePathLabel.setText(controller.getFilePath().toString());
+		filePathLabel.setText(controller.getStoreDisplayLabel());
 		phaseLabel.setText(phaseDisplayName(controller.getData().getIapPhase()));
 
 		// Rebuild the period history table.
