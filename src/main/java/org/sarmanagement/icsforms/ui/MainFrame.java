@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityEventType;
@@ -35,6 +38,7 @@ import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 import javax.swing.JComboBox;
 import javax.swing.JFormattedTextField;
 import javax.swing.SpinnerNumberModel;
@@ -530,6 +534,11 @@ public class MainFrame extends JFrame {
 		return bar;
 	}
 
+	/**
+	 * Opens the selected-form PDF export workflow.
+	 *
+	 * @param defaultDirectory initial destination directory.
+	 */
 	private void openFormsExportDialog(Path defaultDirectory) {
 		List<String> formKeys = controller.exportableFormKeys();
 		if (formKeys.isEmpty()) {
@@ -543,6 +552,10 @@ public class MainFrame extends JFrame {
 		checksPanel.setLayout(new javax.swing.BoxLayout(checksPanel, javax.swing.BoxLayout.Y_AXIS));
 		for (String key : formKeys) {
 			javax.swing.JCheckBox check = new javax.swing.JCheckBox(exportFormDisplayLabel(key), true);
+			if ("ICS 203".equals(key)) {
+				check.setToolTipText("Individual export always available; IAP inclusion requires Org Chart entries "
+						+ "and the optional setting in ICS 203 details.");
+			}
 			check.setOpaque(false);
 			selectors.put(key, check);
 			checksPanel.add(check);
@@ -580,17 +593,46 @@ public class MainFrame extends JFrame {
 			try {
 				if (exportModeControls.combined().isSelected()) {
 					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source);
-					JOptionPane.showMessageDialog(this, "Exported IAP bundle to\n" + bundlePath, "Export complete",
+					JOptionPane.showMessageDialog(this, createExportCompletePanel(List.of(bundlePath)), "Export complete",
 							JOptionPane.INFORMATION_MESSAGE);
 				} else {
-					controller.exportSelectedForms(selected, directory, source);
-					JOptionPane.showMessageDialog(this, "Exported selected PDFs to\n" + directory, "Export complete",
+					Map<String, Path> exported = controller.exportSelectedForms(selected, directory, source);
+					JOptionPane.showMessageDialog(this, createExportCompletePanel(new ArrayList<>(exported.values())), "Export complete",
 							JOptionPane.INFORMATION_MESSAGE);
 				}
 			} catch (IOException exception) {
 				showError("Failed to export PDFs", exception);
 			}
 		});
+	}
+
+	/**
+	 * Creates a selectable list of exported paths with a filename-copy action.
+	 *
+	 * @param files successfully exported files in export order.
+	 * @return completion panel with read-only paths and a clipboard button.
+	 */
+	static JPanel createExportCompletePanel(List<Path> files) {
+		JTextArea paths = new JTextArea(String.join("\n", files.stream().map(Path::toString).toList()),
+				Math.min(8, Math.max(2, files.size())), 50);
+		paths.setEditable(false);
+		paths.setCaretPosition(0);
+		paths.getAccessibleContext().setAccessibleName("Exported files");
+		JButton copy = new JButton("Copy filenames");
+		copy.setEnabled(!files.isEmpty());
+		copy.addActionListener(event -> {
+			JTextArea filenames = new JTextArea(
+					String.join("\n", files.stream().map(path -> path.getFileName().toString()).toList()));
+			filenames.selectAll();
+			filenames.copy();
+		});
+		JPanel panel = new JPanel(new BorderLayout(0, 8));
+		panel.add(new JLabel("Exported files (select paths to copy):"), BorderLayout.NORTH);
+		panel.add(new JScrollPane(paths), BorderLayout.CENTER);
+		JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+		actions.add(copy);
+		panel.add(actions, BorderLayout.SOUTH);
+		return panel;
 	}
 
 	private void openPdfExportSettingsDialog() {
@@ -614,10 +656,17 @@ public class MainFrame extends JFrame {
 		refreshStatus();
 	}
 
+	/**
+	 * Returns a descriptive form label for the export selector.
+	 *
+	 * @param formKey renderer identifier.
+	 * @return user-facing form label.
+	 */
 	static String exportFormDisplayLabel(String formKey) {
 		return switch (formKey) {
 			case "ICS 201" -> "ICS 201 – Incident Briefing";
 			case "ICS 202" -> "ICS 202 – Incident Objectives";
+			case "ICS 203" -> "ICS 203 – Organization Assignment List";
 			case "ICS 205A" -> "ICS 205A Communications List";
 			case "ICS 204" -> "ICS 204 – Assignment List";
 			case "ICS 207" -> "ICS 207 – Incident Organization Chart";
@@ -672,7 +721,7 @@ public class MainFrame extends JFrame {
 			pushToModel(source);
 			try {
 				Path output = controller.exportSelected(formKey, directory, source);
-				JOptionPane.showMessageDialog(this, "Exported " + formKey + " to\n" + output, "Export complete",
+				JOptionPane.showMessageDialog(this, createExportCompletePanel(List.of(output)), "Export complete",
 						JOptionPane.INFORMATION_MESSAGE);
 			} catch (IOException exception) {
 				showError("Failed to export " + formKey, exception);

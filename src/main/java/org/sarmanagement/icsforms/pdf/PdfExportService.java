@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.multipdf.PDFMergerUtility;
@@ -22,7 +25,7 @@ import java.util.Map;
  * Coordinates exporting selected or all supported ICS forms to PDF files.
  */
 public class PdfExportService {
-	private static final List<String> IAP_BUNDLE_FORM_ORDER = List.of("ICS 201", "ICS 202", "ICS 205A", "ICS 207",
+	private static final List<String> IAP_BUNDLE_FORM_ORDER = List.of("ICS 201", "ICS 202", "ICS 203", "ICS 205A", "ICS 207",
 			"ICS 204", "SAR Task Assignment", "ICS 214");
 
 	private final Map<String, PdfFormRenderer> renderers = new LinkedHashMap<>();
@@ -148,6 +151,9 @@ public class PdfExportService {
 				? new ArrayList<>(renderers.keySet())
 				: new ArrayList<>(selectedFormKeys);
 		includedFormKeys = orderForIapBundle(includedFormKeys);
+		if (!includeIcs203(data)) {
+			includedFormKeys.remove("ICS 203");
+		}
 		CoverPageRenderer coverPageRenderer = new CoverPageRenderer();
 		Path coverPath = Files.createTempFile(outputDirectory, "cover-page-", ".pdf");
 		List<Path> tempFiles = new ArrayList<>();
@@ -196,8 +202,7 @@ public class PdfExportService {
 	 */
 	/**
 	 * Assigns sequential IAP page numbers to all forms in the document, ordered by
-	 * ICS form number: ICS 201 (page 1), ICS 202, ICS 204 forms (primary then
-	 * additional), SAR Task Assignment forms, ICS 214 activity logs.
+	 * bundle order, including all continuation pages.
 	 *
 	 * <p>
 	 * This method mutates the forms in {@code data} in-place and is called just
@@ -212,14 +217,23 @@ public class PdfExportService {
 		assignIapPageNumbers(data, null, !ics201HasContent(data.getForm201()));
 	}
 
+	/**
+	 * Assigns page labels only to the forms that will actually be bundled.
+	 *
+	 * @param data incident document.
+	 * @param includedFormKeys selected keys; null means all, empty means none.
+	 * @param skipIcs201 whether the unused initial briefing is omitted.
+	 * @return starting page labels for temporary blank task and activity forms.
+	 */
 	static BlankExportPages assignIapPageNumbers(AppData data, List<String> includedFormKeys, boolean skipIcs201) {
 		int page = 1;
 		String blankSarTaskPage = "";
 		String blankIcs214Page = "";
-		java.util.Set<String> included = includedFormKeys == null || includedFormKeys.isEmpty()
+		java.util.Set<String> included = includedFormKeys == null
 				? null
 				: new java.util.LinkedHashSet<>(includedFormKeys);
 		data.setForm205aIapPage("");
+		data.getOrganizationalChart().getAssignmentList().setIapPage("");
 		// ICS 201 is included whenever it was actually completed during an initial
 		// response.
 		// It is omitted only when the incident was created directly as a full
@@ -234,6 +248,10 @@ public class PdfExportService {
 		// ICS 202
 		if (includedOrAll(included, "ICS 202")) {
 			data.getForm202().setIapPage(String.valueOf(page++));
+		}
+		if (includedOrAll(included, "ICS 203") && includeIcs203(data)) {
+			data.getOrganizationalChart().getAssignmentList().setIapPage(String.valueOf(page));
+			page += Ics203PdfRenderer.pageCount(data);
 		}
 		// ICS 205A
 		if (includedOrAll(included, "ICS 205A")) {
@@ -296,6 +314,17 @@ public class PdfExportService {
 			}
 		}
 		return ordered;
+	}
+
+	/**
+	 * Tests whether the optional organization assignment list belongs in the IAP.
+	 *
+	 * @param data incident document.
+	 * @return true only when inclusion is enabled and the Org Chart has entries.
+	 */
+	static boolean includeIcs203(AppData data) {
+		return data.getOrganizationalChart().getAssignmentList().isIncludeInIap()
+				&& data.getOrganizationalChart().hasAssignments();
 	}
 
 	private AppData exportData(String formKey, AppData data, BlankExportPages blankExportPages) {

@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -136,6 +139,20 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	// Graphical org chart (section 3)
 	// -----------------------------------------------------------------------
 
+	/**
+	 * Draws the organization tree, with inline command-staff assignments beside its stem.
+	 *
+	 * @param stream page content stream.
+	 * @param bold title font.
+	 * @param regular name font.
+	 * @param sX chart left edge.
+	 * @param sY chart bottom edge.
+	 * @param width chart width.
+	 * @param height chart height.
+	 * @param chart organization assignments.
+	 * @param tasks operations task assignments.
+	 * @throws IOException when PDF drawing fails.
+	 */
 	private void drawOrgChart(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float sX, float sY,
 			float width, float height, OrganizationalChart chart, List<SarTaskAssignment> tasks) throws IOException {
 		drawCell(stream, sX, sY, width, height);
@@ -170,10 +187,9 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		List<String[]> cmdStaff = buildCmdStaff(chart);
 
 		float sBoxH = 18f, sGap = 3f;
-		// Staff boxes sit to the right of the IC box.
-		float sLeft = icLeft + icBoxW + 4f;
-		float sBoxW = Math.max(36f, Math.min(140f, (LEFT + CWIDTH) - sLeft - 4f));
-		float sRight = sLeft + sBoxW;
+		// Staff boxes leave space beside the stem and at the chart's right edge.
+		float sLeft = icCX + 20f;
+		float sBoxW = ((LEFT + CWIDTH) - icCX - 12f) * 2f / 3f;
 
 		float cmdBot = icBot;
 		for (int i = 0; i < cmdStaff.size(); i++) {
@@ -189,9 +205,8 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			// Staff box
 			stream.addRect(sLeft, sBotY, sBoxW, sBoxH);
 			stream.stroke();
-			drawOrgText(stream, bold, 7f, cmdStaff.get(i)[0], sLeft + 2f, sTop - 9f);
-			drawOrgText(stream, regular, 7f, truncate(cmdStaff.get(i)[1], (int) (sBoxW / 4.3f)), sLeft + 2f,
-					sTop - 17f);
+			drawCommandStaffText(stream, bold, regular, cmdStaff.get(i)[0], cmdStaff.get(i)[1],
+					sLeft + 2f, midY - 2.5f, sBoxW - 4f);
 		}
 
 		// IC box on top of connectors
@@ -383,6 +398,30 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	// -----------------------------------------------------------------------
 	// Drawing helpers
 	// -----------------------------------------------------------------------
+
+	/**
+	 * Places a staff title and its assigned name on one baseline, fitting both to the box.
+	 *
+	 * @param stream page content stream.
+	 * @param bold title font.
+	 * @param regular name font.
+	 * @param title position title.
+	 * @param name assigned officer.
+	 * @param x text left edge.
+	 * @param y shared baseline.
+	 * @param width available text width.
+	 * @throws IOException when font measurement or PDF drawing fails.
+	 */
+	private void drawCommandStaffText(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+			String title, String name, float x, float y, float width) throws IOException {
+		String label = safe(title);
+		String value = safe(name);
+		float naturalWidth = (bold.getStringWidth(label) + regular.getStringWidth(value)) / 1000f * 7f + 6f;
+		float size = Math.min(7f, 7f * width / naturalWidth);
+		drawOrgText(stream, bold, size, label, x, y);
+		float nameX = x + bold.getStringWidth(label) / 1000f * size + 6f * size / 7f;
+		drawOrgText(stream, regular, size, value, nameX, y);
+	}
 
 	private void drawCell(PDPageContentStream stream, float x, float y, float width, float height) throws IOException {
 		stream.addRect(x, y, width, height);
