@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.1"
+   width="256"
+   height="256"
+   viewBox="0 0 128 128"
+   id="svg12"
+   sodipodi:docname="icon.svg"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview12"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="3.1523438"
+     inkscape:cx="128"
+     inkscape:cy="128"
+     inkscape:window-width="1878"
+     inkscape:window-height="1046"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg12" />
+  <title
+     id="title1">ICS Forms Client</title>
+  <desc
+     id="desc1">
+    Two stacked slate-colored forms with a square ICP marker.
+    The marker has a white upper-left triangle, blue lower-right
+    triangle, and black border.
+  </desc>
+  <defs
+     id="defs4">
+    <linearGradient
+       id="back-sheet-gradient"
+       x1="18"
+       y1="12"
+       x2="84"
+       y2="100"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#465469"
+         id="stop1" />
+      <stop
+         offset="1"
+         stop-color="#303B4C"
+         id="stop2" />
+    </linearGradient>
+    <linearGradient
+       id="front-sheet-gradient"
+       x1="32"
+       y1="28"
+       x2="98"
+       y2="118"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#536278"
+         id="stop3" />
+      <stop
+         offset="1"
+         stop-color="#3B485A"
+         id="stop4" />
+    </linearGradient>
+  </defs>
+  <!-- Rear document -->
+  <g
+     id="back-sheet">
+    <rect
+       x="18"
+       y="12"
+       width="66"
+       height="88"
+       rx="12"
+       fill="url(#back-sheet-gradient)"
+       stroke="#6D7A8C"
+       stroke-width="2"
+       id="rect4" />
+  </g>
+  <!-- Front document: a subtle, filter-free shadow -->
+  <rect
+     x="33"
+     y="31"
+     width="66"
+     height="88"
+     rx="10"
+     fill="#17202D"
+     opacity="0.18"
+     id="rect5" />
+  <g
+     id="front-sheet">
+    <rect
+       x="32"
+       y="28"
+       width="66"
+       height="88"
+       rx="10"
+       fill="url(#front-sheet-gradient)"
+       stroke="#718096"
+       stroke-width="1.5"
+       id="rect6" />
+    <!-- Form entries -->
+    <rect
+       x="44"
+       y="44"
+       width="30"
+       height="6"
+       rx="3"
+       fill="#F5F7FA"
+       id="rect7" />
+    <rect
+       x="44"
+       y="59"
+       width="30"
+       height="6"
+       rx="3"
+       fill="#E5EBF2"
+       id="rect8" />
+    <rect
+       x="44"
+       y="74"
+       width="36"
+       height="6"
+       rx="3"
+       fill="#E5EBF2"
+       id="rect9" />
+    <rect
+       x="44"
+       y="89"
+       width="25"
+       height="6"
+       rx="3"
+       fill="#D1DAE6"
+       id="rect10" />
+  </g>
+  <!-- Square ICP marker, drawn above the forms -->
+  <g
+     id="icp-marker"
+     transform="translate(1.9033457,12)">
+    <!-- White upper-left field -->
+    <rect
+       x="82"
+       y="32"
+       width="36"
+       height="36"
+       fill="#ffffff"
+       id="rect11" />
+    <!-- Diagonal from bottom-left to top-right;
+         blue occupies the lower-right half -->
+    <path
+       d="M 82,68 118,32 V 68 Z"
+       fill="#0000ff"
+       id="path11" />
+    <!-- Border drawn last for a clean outline -->
+    <rect
+       x="82"
+       y="32"
+       width="36"
+       height="36"
+       fill="none"
+       stroke="#000000"
+       stroke-width="2"
+       stroke-linejoin="miter"
+       id="rect12" />
+  </g>
+</svg>
