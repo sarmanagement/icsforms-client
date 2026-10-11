@@ -215,11 +215,15 @@ public class CanineMedicalPanel extends JPanel {
 			stopEditing(selectionTable);
 			AppData data = controller.getData();
 			StagingLocation staging = data.getStagingLocation();
+			String previousBaseAddress = staging.getAddress();
 			staging.setLabel(stagingLabel.getText());
 			staging.setAddress(stagingAddress.getText());
 			Double latitude = coordinate(stagingLatitude.getText(), -90, 90);
 			Double longitude = coordinate(stagingLongitude.getText(), -180, 180);
-			if (latitude != null && longitude != null
+			if (!previousBaseAddress.equals(staging.getAddress())) {
+				stagingLatitude.setText("");
+				stagingLongitude.setText("");
+			} else if (latitude != null && longitude != null
 					&& (!latitude.equals(staging.getLatitude()) || !longitude.equals(staging.getLongitude()))) {
 				staging.setResolution(stagingAddress.getText(), latitude, longitude, "manual",
 						"Operator-entered coordinates", Instant.now());
@@ -571,6 +575,9 @@ public class CanineMedicalPanel extends JPanel {
 			facility.setAvailable24Hours(parseBoolean(cell(selectionModel, row, 4)));
 			if (!previousAddress.equals(facility.getAddress())) {
 				facility.clearDistance();
+				selectionModel.setValueAt("", row, 5);
+				selectionModel.setValueAt("", row, 6);
+				selectionModel.setValueAt("", row, 7);
 			}
 			facility.setCapabilities(cell(selectionModel, row, 8));
 			selectionModel.setValueAt(facility.copy(), row, 10);

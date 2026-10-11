@@ -1896,6 +1896,12 @@ public class MainFrame extends JFrame {
 		private final String label;
 		private final List<String> workspaceTitles;
 
+		/**
+		 * Creates one role-specific ordering for the shared workspaces.
+		 *
+		 * @param label display label.
+		 * @param workspaceTitles ordered workspace titles.
+		 */
 		Dashboard(String label, List<String> workspaceTitles) {
 			this.label = label;
 			this.workspaceTitles = workspaceTitles;
