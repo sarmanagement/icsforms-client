@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.model.SafetyMessageBlock;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SiteSafetyPlan;
 import org.sarmanagement.icsforms.safety.SafetyHazardCsvService;
+import org.sarmanagement.icsforms.safety.SafetyHazardLibraryService;
 import org.sarmanagement.icsforms.safety.SafetyMessageComposer;
 
 import javax.swing.BorderFactory;
@@ -52,6 +53,7 @@ import java.util.function.IntConsumer;
 public class SafetyPanel extends JPanel {
 	private final AppController controller;
 	private final SafetyHazardCsvService csvService = new SafetyHazardCsvService();
+	private final SafetyHazardLibraryService libraryService = new SafetyHazardLibraryService();
 	private final SafetyMessageComposer composer = new SafetyMessageComposer();
 	private final JTabbedPane sections = new JTabbedPane();
 	private final JTextField incidentNumberField = new JTextField();
@@ -565,7 +567,7 @@ public class SafetyPanel extends JPanel {
 				return;
 			}
 			if (choice == 0) {
-				controller.getData().setCommonSafetyHazards(copyEntries(imported));
+				libraryService.storeCommonLibrary(controller.getData(), imported);
 				controller.markDirty();
 				return;
 			}
@@ -596,14 +598,14 @@ public class SafetyPanel extends JPanel {
 	 * Exports current analysis rows as a reusable common-hazards CSV library.
 	 */
 	private void exportCommonCsv() {
-		exportCsv(controller.getData().getCommonSafetyHazards());
+		exportCsv(controller.getData().getForm215a().getEntries(), true);
 	}
 
 	/**
 	 * Saves the active analysis rows as a reusable CSV library.
 	 */
 	private void exportAnalysisCsv() {
-		exportCsv(controller.getData().getForm215a().getEntries());
+		exportCsv(controller.getData().getForm215a().getEntries(), false);
 	}
 
 	/**
@@ -611,7 +613,7 @@ public class SafetyPanel extends JPanel {
 	 *
 	 * @param entries rows to save.
 	 */
-	private void exportCsv(List<SafetyAnalysisEntry> entries) {
+	private void exportCsv(List<SafetyAnalysisEntry> entries, boolean saveAsCommonLibrary) {
 		JFileChooser chooser = new JFileChooser();
 		if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
 			return;
@@ -622,7 +624,12 @@ public class SafetyPanel extends JPanel {
 							JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
 				return;
 			}
-			csvService.write(chooser.getSelectedFile().toPath(), entries);
+			if (saveAsCommonLibrary) {
+				libraryService.saveAnalysisAsCommonLibrary(controller.getData(), chooser.getSelectedFile().toPath());
+				controller.markDirty();
+			} else {
+				csvService.write(chooser.getSelectedFile().toPath(), entries);
+			}
 		} catch (IOException exception) {
 			JOptionPane.showMessageDialog(this, exception.getMessage(), "Could not save hazard library",
 					JOptionPane.ERROR_MESSAGE);
@@ -652,16 +659,6 @@ public class SafetyPanel extends JPanel {
 		analysisTableModel.addRow(new Object[] {entry.getIncidentArea(), entry.getHazardsRisks(), entry.getMitigations()});
 		controller.markDirty();
 		refreshCoverage(controller.getData());
-	}
-
-	/**
-	 * Copies imported entries so library records remain separate from incident rows.
-	 *
-	 * @param entries source entries.
-	 * @return independent row copies.
-	 */
-	private static List<SafetyAnalysisEntry> copyEntries(List<SafetyAnalysisEntry> entries) {
-		return entries.stream().map(SafetyPanel::copyEntry).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
 	}
 
 	/**

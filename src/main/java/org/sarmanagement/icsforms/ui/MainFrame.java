@@ -145,6 +145,7 @@ public class MainFrame extends JFrame {
 	 */
 	private MainFrame(AppController controller, Path defaultDirectory) {
 		super("ICS Forms Desktop");
+		ApplicationIcon.install(this);
 		this.controller = controller;
 		this.controller.setAutosaveErrorHandler(exception -> showSaveError(exception));
 		this.incidentContextPanel = new IncidentContextPanel(controller);
