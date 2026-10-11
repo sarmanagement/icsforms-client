@@ -726,24 +726,49 @@ public class CanineMedicalPanel extends JPanel {
 		}
 		pushToModel();
 		List<Path> files = java.util.Arrays.stream(chooser.getSelectedFiles()).map(java.io.File::toPath).toList();
-		VetDirectoryFileService.ImportResult result = fileService.importFiles(files, controller.getData().getVetDirectory());
-		String preview = "Imported records: " + result.directory().getFacilities().size()
-				+ "\nDuplicates skipped: " + result.duplicateCount()
-				+ "\nConflicting IDs retained with new IDs: " + result.conflicts().size()
-				+ "\nParse errors: " + result.errors().size();
-		if (!result.conflicts().isEmpty()) {
-			preview += "\n\nConflicts:\n" + String.join("\n", result.conflicts());
-		}
-		if (!result.errors().isEmpty()) {
-			preview += "\n\nErrors:\n" + String.join("\n", result.errors());
-		}
-		if (JOptionPane.showConfirmDialog(this, preview, "Preview regional directory merge",
-				JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) {
-			return;
-		}
-		controller.getData().setVetDirectory(result.directory());
-		refreshFromModel();
-		controller.markDirty();
+		AppData incident = controller.getData();
+		VetDirectory existing = copyDirectory(incident.getVetDirectory());
+		startWorker(new SwingWorker<VetDirectoryFileService.ImportResult, Void>() {
+			@Override
+			protected VetDirectoryFileService.ImportResult doInBackground() {
+				return fileService.importFiles(files, existing);
+			}
+
+			@Override
+			protected void done() {
+				try {
+					VetDirectoryFileService.ImportResult result = get();
+					if (controller.getData() != incident || !isActive(this)) {
+						return;
+					}
+					String preview = "Imported records: " + result.directory().getFacilities().size()
+							+ "\nDuplicates skipped: " + result.duplicateCount()
+							+ "\nConflicting IDs retained with new IDs: " + result.conflicts().size()
+							+ "\nParse errors: " + result.errors().size();
+					if (!result.conflicts().isEmpty()) {
+						preview += "\n\nConflicts:\n" + String.join("\n", result.conflicts());
+					}
+					if (!result.errors().isEmpty()) {
+						preview += "\n\nErrors:\n" + String.join("\n", result.errors());
+					}
+					if (JOptionPane.showConfirmDialog(CanineMedicalPanel.this, preview,
+							"Preview regional directory merge", JOptionPane.OK_CANCEL_OPTION)
+							== JOptionPane.OK_OPTION && controller.getData() == incident && isActive(this)) {
+						incident.setVetDirectory(result.directory());
+						refreshFromModel();
+						controller.markDirty();
+					}
+				} catch (CancellationException exception) {
+					status.setText("Directory import cancelled.");
+				} catch (InterruptedException exception) {
+					Thread.currentThread().interrupt();
+				} catch (ExecutionException exception) {
+					showFileError(exception.getCause());
+				} finally {
+					finishWorker(this);
+				}
+			}
+		});
 	}
 
 	/**
@@ -766,13 +791,31 @@ public class CanineMedicalPanel extends JPanel {
 			}
 			overwrite = true;
 		}
-		try {
-			fileService.save(target, controller.getData().getVetDirectory(), overwrite);
-			status.setText("Regional directory explicitly saved to " + target.getFileName());
-		} catch (IOException exception) {
-			JOptionPane.showMessageDialog(this, exception.getMessage(), "Directory export failed",
-					JOptionPane.ERROR_MESSAGE);
-		}
+		boolean replaceExisting = overwrite;
+		VetDirectory snapshot = copyDirectory(controller.getData().getVetDirectory());
+		startWorker(new SwingWorker<Boolean, Void>() {
+			@Override
+			protected Boolean doInBackground() throws IOException {
+				return fileService.save(target, snapshot, replaceExisting);
+			}
+
+			@Override
+			protected void done() {
+				try {
+					if (get()) {
+						status.setText("Regional directory explicitly saved to " + target.getFileName());
+					}
+				} catch (CancellationException exception) {
+					status.setText("Directory export cancelled.");
+				} catch (InterruptedException exception) {
+					Thread.currentThread().interrupt();
+				} catch (ExecutionException exception) {
+					showFileError(exception.getCause());
+				} finally {
+					finishWorker(this);
+				}
+			}
+		});
 	}
 
 	/**
@@ -1114,6 +1157,18 @@ public class CanineMedicalPanel extends JPanel {
 		String message = failure instanceof IOException ? failure.getMessage() : "Provider request failed";
 		status.setText(message);
 		JOptionPane.showMessageDialog(this, message, "Location service", JOptionPane.WARNING_MESSAGE);
+	}
+
+	/**
+	 * Displays a local regional-file error without changing incident state.
+	 *
+	 * @param failure file-service failure.
+	 */
+	private void showFileError(Throwable failure) {
+		String message = failure == null || failure.getMessage() == null
+				? "Regional directory file operation failed" : failure.getMessage();
+		status.setText(message);
+		JOptionPane.showMessageDialog(this, message, "Regional directory", JOptionPane.WARNING_MESSAGE);
 	}
 
 	/**
