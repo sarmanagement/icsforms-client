@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.persistence;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;

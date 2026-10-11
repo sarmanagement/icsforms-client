@@ -130,6 +130,18 @@ class PdfExportServiceTest {
 		assertFalse(PdfExportService.isIapAttachmentSelected(data, "ICS 215A"));
 	}
 
+	@Test
+	void inactiveMedicalPlanIsExcludedFromDefaultsUntilSelectedInTheIap() throws Exception {
+		PdfExportService service = new PdfExportService(new Ics206PdfRenderer());
+		AppData data = new AppData();
+
+		assertTrue(service.exportAll(data, outputDirectory).isEmpty());
+
+		data.getMedicalPlan().setActive(true);
+		data.getForm202().setIncidentActionPlanAttachments(List.of("ICS 206"));
+		assertTrue(service.exportAll(data, outputDirectory).containsKey("ICS 206"));
+	}
+
 	/**
 	 * Exports and counts an IAP containing only the registered organization list.
 	 *

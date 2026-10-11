@@ -86,6 +86,7 @@ public class MainFrame extends JFrame {
 	private final Ics201Panel ics201Panel;
 	private final Ics202Panel ics202Panel;
 	private final Ics204Panel ics204Panel;
+	private final Ics206Panel medicalPlanPanel;
 	private final List<Ics214Panel> ics214Panels = new ArrayList<>();
 	private final SarTaskPanel sarTaskPanel;
 	private final ClueLogPanel clueLogPanel;
@@ -153,12 +154,14 @@ public class MainFrame extends JFrame {
 		this.ics201Panel = new Ics201Panel(controller);
 		this.ics202Panel = new Ics202Panel(controller);
 		this.ics204Panel = new Ics204Panel(controller);
+		this.medicalPlanPanel = new Ics206Panel(controller);
 		this.sarTaskPanel = new SarTaskPanel(controller);
 		this.clueLogPanel = new ClueLogPanel(controller);
 		this.openActionTrackerPanel = new OpenActionTrackerPanel(controller);
 		this.tCardPanel = new TCardPanel(controller);
 		this.safetyPanel = new SafetyPanel(controller);
 		safetyPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
+		medicalPlanPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		controller.setPersonnelCardCreator(tCardPanel::createPersonnelCardFromPicker);
 		ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
 		ics204Panel.setOnEditSarTaskRequest(this::openSarTaskEditorForAssignment);
@@ -178,6 +181,7 @@ public class MainFrame extends JFrame {
 		registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, ICS_201_GROUP);
 		registerTab("ICS 202", ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
 		registerTab("ICS 204", ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
+		registerTab("Medical Plan (ICS 206)", medicalPlanPanel, AppController.LinkSource.NONE, CORE_GROUP);
 		registerTab("Safety", safetyPanel, AppController.LinkSource.NONE, CORE_GROUP);
 		registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
 		registerTab("Clue Log", clueLogPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
@@ -783,6 +787,7 @@ public class MainFrame extends JFrame {
 			case "ICS 202" -> "ICS 202 – Incident Objectives";
 			case "ICS 203" -> "ICS 203 – Organization Assignment List";
 			case "ICS 205A" -> "ICS 205A Communications List";
+			case "ICS 206" -> "ICS 206 – Medical Plan";
 			case "ICS 204" -> "ICS 204 – Assignment List";
 			case "ICS 207" -> "ICS 207 – Incident Organization Chart";
 			case "ICS 208" -> "ICS 208 – Safety Message / Plan";
@@ -879,6 +884,7 @@ public class MainFrame extends JFrame {
 		ics201Panel.pushToModel();
 		ics202Panel.pushToModel();
 		ics204Panel.pushToModel();
+		medicalPlanPanel.pushToModel();
 		safetyPanel.pushToModel();
 		for (Ics214Panel panel : ics214Panels) {
 			panel.saveToModel();
@@ -948,6 +954,7 @@ public class MainFrame extends JFrame {
 		ics201Panel.refreshFromModel();
 		ics202Panel.refreshFromModel();
 		ics204Panel.refreshFromModel();
+		medicalPlanPanel.refreshFromModel();
 		safetyPanel.refreshFromModel();
 		ensureLogs(controller.getData());
 		rebuildLogTabs();
@@ -1049,6 +1056,7 @@ public class MainFrame extends JFrame {
 			addVisibleTab(ics201Panel);
 			addVisibleTab(ics202Panel);
 			addVisibleTab(ics204Panel);
+			addVisibleTab(medicalPlanPanel);
 			addVisibleTab(safetyPanel);
 			// sarTaskPanel and clueLogPanel belong to SAR_ONLY_GROUP; addVisibleTab()
 			// checks

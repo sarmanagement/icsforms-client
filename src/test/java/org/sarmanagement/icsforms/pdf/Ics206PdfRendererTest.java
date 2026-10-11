@@ -1,0 +1,82 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+package org.sarmanagement.icsforms.pdf;
+
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.MedicalPlan;
+
+import java.nio.file.Path;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class Ics206PdfRendererTest {
+	@TempDir
+	Path tempDirectory;
+
+	@Test
+	void standardFormRendersNumberedBlocksAndKeepsUnknownDistinctFromNo() throws Exception {
+		AppData data = new AppData();
+		data.getIncidentContext().setIncidentName("Fictional Incident");
+		MedicalPlan plan = data.getMedicalPlan();
+		plan.setActive(true);
+		plan.setPreparedByMedicalUnitLeader("Medical Lead");
+		plan.setReviewedBySafetyOfficer("Safety Reviewer");
+		plan.setReviewStatus("Reviewed");
+
+		MedicalPlan.AidStation station = new MedicalPlan.AidStation();
+		station.setName("Fictional Aid Station");
+		station.setParamedicsOnSite(null);
+		plan.getAidStations().add(station);
+		MedicalPlan.Hospital hospital = new MedicalPlan.Hospital();
+		hospital.setName("Fictional Regional Hospital");
+		hospital.setTraumaCenter(false);
+		hospital.setBurnCenter(null);
+		hospital.setHelipad(true);
+		plan.getHospitals().add(hospital);
+		plan.setSimpleMode(false);
+
+		Path output = tempDirectory.resolve("ics-206.pdf");
+		new Ics206PdfRenderer().render(data, output);
+
+		try (PDDocument pdf = Loader.loadPDF(output.toFile())) {
+			String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
+			for (String block : new String[] {"1. INCIDENT NAME", "2. OPERATIONAL PERIOD",
+					"3. MEDICAL AID STATIONS", "4. TRANSPORTATION", "5. HOSPITALS",
+					"6. SPECIAL MEDICAL EMERGENCY PROCEDURES", "7. PREPARED BY", "8. APPROVED BY"}) {
+				assertTrue(text.contains(block), block);
+			}
+			assertTrue(text.contains("UNKNOWN"));
+			assertTrue(text.contains("NO"));
+			assertTrue(text.contains("ICS 206"));
+			assertEquals(1, pdf.getNumberOfPages());
+		}
+	}
+
+	@Test
+	void longProceduresContinueAcrossPagesWithoutDroppingTheLastLine() throws Exception {
+		AppData data = new AppData();
+		String longText = IntStream.range(0, 800).mapToObj(index -> "procedure" + index)
+				.collect(Collectors.joining(" ")) + " END_OF_PROCEDURES";
+		data.getMedicalPlan().setEmergencyProcedures(longText);
+
+		Path output = tempDirectory.resolve("ics-206-long.pdf");
+		new Ics206PdfRenderer().render(data, output);
+
+		try (PDDocument pdf = Loader.loadPDF(output.toFile())) {
+			String text = new PDFTextStripper().getText(pdf);
+			assertTrue(pdf.getNumberOfPages() > 1);
+			assertEquals(Ics206PdfRenderer.pageCount(data), pdf.getNumberOfPages());
+			assertTrue(text.contains("END_OF_PROCEDURES"));
+			assertTrue(text.contains("CONTINUED"));
+		}
+	}
+}
