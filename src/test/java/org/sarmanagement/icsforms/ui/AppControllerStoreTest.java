@@ -3,6 +3,8 @@
  */
 package org.sarmanagement.icsforms.ui;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
@@ -117,11 +119,11 @@ class AppControllerStoreTest {
 
 			Path incidentFile = directory.resolve("incidents").resolve(id.value() + ".json");
 			int legacySchemaVersion = AppData.CURRENT_SCHEMA_VERSION - 1;
-			String json = Files.readString(incidentFile).replaceFirst(
-					"\"schemaVersion\"\\s*:\\s*" + AppData.CURRENT_SCHEMA_VERSION,
-					"\"schemaVersion\": " + legacySchemaVersion);
-			assertTrue(json.contains("\"schemaVersion\": " + legacySchemaVersion));
-			Files.writeString(incidentFile, json);
+			ObjectMapper mapper = new ObjectMapper();
+			ObjectNode json = (ObjectNode) mapper.readTree(Files.readString(incidentFile));
+			json.put("schemaVersion", legacySchemaVersion);
+			json.remove("archivedSafetyHazardReports");
+			Files.writeString(incidentFile, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(json));
 
 			AppData loaded = store.load(id);
 			assertEquals(AppData.CURRENT_SCHEMA_VERSION, loaded.getSchemaVersion());
