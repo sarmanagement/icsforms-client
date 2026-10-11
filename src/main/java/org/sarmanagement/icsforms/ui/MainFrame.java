@@ -72,6 +72,7 @@ public class MainFrame extends JFrame {
 	private static final String SAR_ONLY_GROUP = "SAR Features";
 	/** Independent regular action tracker tab group. */
 	private static final String ACTION_TRACKER_GROUP = "Open Action Tracker";
+	private static final String CANINE_MEDICAL_GROUP = "Canine Medical";
 	/** Tab group for T-Card (ICS 219) resource status tabs. */
 	private static final String T_CARDS_GROUP = "T-Cards";
 	/**
@@ -87,6 +88,7 @@ public class MainFrame extends JFrame {
 	private final Ics202Panel ics202Panel;
 	private final Ics204Panel ics204Panel;
 	private final Ics206Panel medicalPlanPanel;
+	private final CanineMedicalPanel canineMedicalPanel;
 	private final List<Ics214Panel> ics214Panels = new ArrayList<>();
 	private final SarTaskPanel sarTaskPanel;
 	private final ClueLogPanel clueLogPanel;
@@ -100,6 +102,7 @@ public class MainFrame extends JFrame {
 	private final Map<String, Boolean> groupVisible = new LinkedHashMap<>();
 	private int lastSelectedTabIndex = -1;
 	private boolean rebuildingTabs;
+	private boolean canineMedicalManuallyOpened;
 	private IapPhase lastKnownPhase;
 
 	/**
@@ -155,6 +158,7 @@ public class MainFrame extends JFrame {
 		this.ics202Panel = new Ics202Panel(controller);
 		this.ics204Panel = new Ics204Panel(controller);
 		this.medicalPlanPanel = new Ics206Panel(controller);
+		this.canineMedicalPanel = new CanineMedicalPanel(controller, defaultDirectory);
 		this.sarTaskPanel = new SarTaskPanel(controller);
 		this.clueLogPanel = new ClueLogPanel(controller);
 		this.openActionTrackerPanel = new OpenActionTrackerPanel(controller);
@@ -162,6 +166,7 @@ public class MainFrame extends JFrame {
 		this.safetyPanel = new SafetyPanel(controller);
 		safetyPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		medicalPlanPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
+		canineMedicalPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		controller.setPersonnelCardCreator(tCardPanel::createPersonnelCardFromPicker);
 		ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
 		ics204Panel.setOnEditSarTaskRequest(this::openSarTaskEditorForAssignment);
@@ -176,12 +181,15 @@ public class MainFrame extends JFrame {
 		groupVisible.put(ICS_201_GROUP, controller.getIapPhase() == IapPhase.INITIAL_RESPONSE);
 		groupVisible.put(T_CARDS_GROUP, true);
 		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
+		groupVisible.put(CANINE_MEDICAL_GROUP, controller.getData().isCanineMedicalWorkspaceEligible());
 		registerTab("Shared", incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
 		registerTab("Org Chart", organizationalChartPanel, AppController.LinkSource.ORG_CHART, CORE_GROUP);
 		registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, ICS_201_GROUP);
 		registerTab("ICS 202", ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
 		registerTab("ICS 204", ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
 		registerTab("Medical Plan (ICS 206)", medicalPlanPanel, AppController.LinkSource.NONE, CORE_GROUP);
+		registerTab("Canine Medical Plan (ICS 206CANINE, adapted)", canineMedicalPanel, AppController.LinkSource.NONE,
+				CANINE_MEDICAL_GROUP);
 		registerTab("Safety", safetyPanel, AppController.LinkSource.NONE, CORE_GROUP);
 		registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
 		registerTab("Clue Log", clueLogPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
@@ -366,7 +374,7 @@ public class MainFrame extends JFrame {
 			// CORE_GROUP is always visible; SAR_ONLY_GROUP is controlled exclusively by the
 			// Incident Mode menu (Configuration > Incident Mode) and must not appear here.
 			if (CORE_GROUP.equals(entry.getKey()) || SAR_ONLY_GROUP.equals(entry.getKey())
-					|| ACTION_TRACKER_GROUP.equals(entry.getKey())) {
+					|| ACTION_TRACKER_GROUP.equals(entry.getKey()) || CANINE_MEDICAL_GROUP.equals(entry.getKey())) {
 				continue;
 			}
 			JCheckBoxMenuItem item = new JCheckBoxMenuItem(entry.getKey(), entry.getValue());
@@ -377,6 +385,15 @@ public class MainFrame extends JFrame {
 			});
 			viewMenu.add(item);
 		}
+		JMenuItem openCaninePlanItem = new JMenuItem("Open Canine Medical Plan (saved workspace)");
+		openCaninePlanItem.addActionListener(event -> {
+			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			canineMedicalManuallyOpened = true;
+			groupVisible.put(CANINE_MEDICAL_GROUP, true);
+			rebuildVisibleTabs(canineMedicalPanel, -1);
+			refreshStatus();
+		});
+		viewMenu.add(openCaninePlanItem);
 
 		JMenuItem exportFormsPdfItem = new JMenuItem("Export forms as PDF…");
 		exportFormsPdfItem.setMnemonic(KeyEvent.VK_P);
@@ -885,6 +902,7 @@ public class MainFrame extends JFrame {
 		ics202Panel.pushToModel();
 		ics204Panel.pushToModel();
 		medicalPlanPanel.pushToModel();
+		canineMedicalPanel.pushToModel();
 		safetyPanel.pushToModel();
 		for (Ics214Panel panel : ics214Panels) {
 			panel.saveToModel();
@@ -955,6 +973,7 @@ public class MainFrame extends JFrame {
 		ics202Panel.refreshFromModel();
 		ics204Panel.refreshFromModel();
 		medicalPlanPanel.refreshFromModel();
+		canineMedicalPanel.refreshFromModel();
 		safetyPanel.refreshFromModel();
 		ensureLogs(controller.getData());
 		rebuildLogTabs();
@@ -964,6 +983,8 @@ public class MainFrame extends JFrame {
 		tCardPanel.refreshFromModel();
 		// Keep SAR-only tabs visible only in SAR mode.
 		groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
+		groupVisible.put(CANINE_MEDICAL_GROUP,
+				canineMedicalManuallyOpened || controller.getData().isCanineMedicalWorkspaceEligible());
 		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		// Reset ICS 201 group visibility to the phase-based default only when the phase
 		// changes
@@ -1057,6 +1078,7 @@ public class MainFrame extends JFrame {
 			addVisibleTab(ics202Panel);
 			addVisibleTab(ics204Panel);
 			addVisibleTab(medicalPlanPanel);
+			addVisibleTab(canineMedicalPanel);
 			addVisibleTab(safetyPanel);
 			// sarTaskPanel and clueLogPanel belong to SAR_ONLY_GROUP; addVisibleTab()
 			// checks

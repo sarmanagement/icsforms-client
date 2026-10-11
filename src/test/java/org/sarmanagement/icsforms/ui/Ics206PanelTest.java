@@ -26,6 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Verifies the human ICS 206 editor's model round-trip and edit flushing.
+ */
 class Ics206PanelTest {
 	@TempDir
 	Path tempDirectory;
@@ -71,11 +74,25 @@ class Ics206PanelTest {
 		assertEquals("Fictional County Hospital", data.getMedicalPlan().getHospitals().get(0).getName());
 	}
 
+	/**
+	 * Creates a test controller backed by a temporary local incident file.
+	 *
+	 * @param data active incident document.
+	 * @return configured controller.
+	 * @throws Exception when the temporary repository cannot be created.
+	 */
 	private AppController controller(AppData data) throws Exception {
 		return new AppController(data, new LocalRepository(tempDirectory.resolve("incident.json")),
 				new PdfExportService(new Ics206PdfRenderer()), new IncidentValidator());
 	}
 
+	/**
+	 * Returns a private Swing field for focused component tests.
+	 *
+	 * @param instance panel under test.
+	 * @param fieldName component field name.
+	 * @return field value.
+	 */
 	private static Object fieldValue(Object instance, String fieldName) {
 		try {
 			Field field = instance.getClass().getDeclaredField(fieldName);

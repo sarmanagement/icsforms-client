@@ -273,6 +273,31 @@ public class VetFacility {
 	}
 
 	/**
+	 * Creates an independent copy for an accepted plan snapshot.
+	 *
+	 * @return copied facility and provenance.
+	 */
+	public VetFacility copy() {
+		VetFacility copy = new VetFacility();
+		copy.setId(getId());
+		copy.setName(name);
+		copy.setTown(town);
+		copy.setAddress(address);
+		copy.setContactNumbers(new ArrayList<>(contactNumbers));
+		copy.setAvailable24Hours(available24Hours);
+		copy.setAvailabilityNotes(availabilityNotes);
+		copy.setCapabilities(capabilities);
+		copy.setVerifiedAt(verifiedAt);
+		if (latitude != null && longitude != null) {
+			copy.setCoordinates(latitude, longitude, geocodingProvider, geocodingProvenance);
+		}
+		copy.setDistance(distanceMeters, durationSeconds, distanceMethod, distanceProvenance, calculatedAt,
+				stagingGeneration);
+		copy.setSourceName(sourceName);
+		return copy;
+	}
+
+	/**
 	 * Replaces null text with an empty value.
 	 *
 	 * @param value input text.

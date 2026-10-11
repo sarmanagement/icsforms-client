@@ -186,6 +186,25 @@ public class StagingLocation {
 	}
 
 	/**
+	 * Creates a complete independent snapshot, including the current generation.
+	 *
+	 * @return copied base location.
+	 */
+	public StagingLocation copy() {
+		StagingLocation copy = new StagingLocation();
+		copy.label = label;
+		copy.address = address;
+		copy.resolvedAddress = resolvedAddress;
+		copy.latitude = latitude;
+		copy.longitude = longitude;
+		copy.geocodingProvider = geocodingProvider;
+		copy.geocodingProvenance = geocodingProvenance;
+		copy.resolvedAt = resolvedAt;
+		copy.generation = generation;
+		return copy;
+	}
+
+	/**
 	 * Clears provider data that no longer describes the entered address.
 	 */
 	private void invalidateResolution() {
