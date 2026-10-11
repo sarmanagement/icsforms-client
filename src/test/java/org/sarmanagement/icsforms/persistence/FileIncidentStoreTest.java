@@ -76,6 +76,22 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		}
 	}
 
+	@Test
+	void newerSchemaIsRejectedWithoutChangingTheIncidentDocument() throws Exception {
+		IncidentId id = IncidentId.newId();
+		Path directory = tempDir.resolve("incidents");
+		Files.createDirectories(directory);
+		Path document = directory.resolve(id.value() + ".json");
+		String original = "{\"schemaVersion\":10,\"incidentId\":\"" + id.value()
+				+ "\",\"futurePlan\":{\"mustKeep\":true}}";
+		Files.writeString(document, original);
+
+		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+			assertThrows(IllegalStateException.class, () -> store.load(id));
+			assertEquals(original, Files.readString(document));
+		}
+	}
+
 	/** A second store cannot acquire an incident's advisory lock. */
 	@Test
 	void anotherStoreDetectsLock() {
