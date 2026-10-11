@@ -320,7 +320,20 @@ abstract class AbstractPdfRenderer {
 	 */
 	protected void drawFormHeader(PDPageContentStream stream, PDType1Font bold, FormLayout layout, String formNumber,
 			String title) throws IOException {
-		String header = formNumber + " " + title;
+		String headerTitle = safeText(title);
+		if (formNumber.startsWith("ICS ")) {
+			boolean continued = headerTitle.endsWith(" (CONTINUED)");
+			if (continued) {
+				headerTitle = headerTitle.substring(0, headerTitle.length() - " (CONTINUED)".length());
+			}
+			headerTitle += " (" + formNumber + ")";
+			if (continued) {
+				headerTitle += " (CONTINUED)";
+			}
+		} else {
+			headerTitle = formNumber + " " + headerTitle;
+		}
+		String header = headerTitle;
 		float headerWidth = bold.getStringWidth(header) / 1000f * HEADER_FONT_SIZE;
 		stream.beginText();
 		stream.setFont(bold, HEADER_FONT_SIZE);
@@ -409,7 +422,6 @@ abstract class AbstractPdfRenderer {
 		drawMetadataHeading(stream, bold, headingFontSize, cellPadding, x, y + height, safeText(heading));
 
 		float footerTop = y + footerBandHeight;
-		float footerContentY = footerTop - cellPadding - bodyFontSize;
 		float topRowY = footerTop + topRowOffset;
 
 		float nameStart = x + cellPadding;
@@ -418,6 +430,39 @@ abstract class AbstractPdfRenderer {
 		float positionEnd = x + (width * positionEndRatio);
 		float signatureStart = positionEnd + cellPadding;
 		float signatureEnd = x + width - cellPadding;
+		writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize, nameStart, topRowY,
+				Math.max(0f, nameEnd - nameStart), "Name:", name);
+		writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize, positionStart, topRowY,
+				Math.max(0f, positionEnd - positionStart), "Position/Title:", positionTitle);
+		writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize, signatureStart, topRowY,
+				Math.max(0f, signatureEnd - signatureStart), "Signature:", signature);
+
+		drawFormFooterBand(stream, bold, regular, bodyFontSize, cellPadding, x, y, width, footerBandHeight,
+				lowerBandRightStartRatio, formLabel, iapPage, dateTime);
+	}
+
+	/**
+	 * Draws the shared form-number, IAP-page, and date/time footer band.
+	 *
+	 * @param stream page stream.
+	 * @param bold bold font.
+	 * @param regular regular font.
+	 * @param bodyFontSize body font size.
+	 * @param cellPadding padding inside footer cells.
+	 * @param x left coordinate.
+	 * @param y bottom coordinate.
+	 * @param width footer width.
+	 * @param footerBandHeight footer-band height.
+	 * @param lowerBandRightStartRatio position where date/time begins.
+	 * @param formLabel form identifier.
+	 * @param iapPage IAP page number.
+	 * @param dateTime prepared date and time.
+	 * @throws IOException when PDF drawing fails.
+	 */
+	protected void drawFormFooterBand(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+			float bodyFontSize, float cellPadding, float x, float y, float width, float footerBandHeight,
+			float lowerBandRightStartRatio, String formLabel, String iapPage, String dateTime) throws IOException {
+		float footerContentY = y + footerBandHeight - cellPadding - bodyFontSize;
 		float lowerBandRightStart = x + (width * lowerBandRightStartRatio) + cellPadding;
 		float minFooterCellWidth = width / 8f;
 		float footerBandAvailableWidth = Math.max(minFooterCellWidth * 2f, lowerBandRightStart - x - cellPadding);
@@ -438,25 +483,16 @@ abstract class AbstractPdfRenderer {
 			formBoxWidth = Math.max(minFooterCellWidth, formBoxWidth);
 			iapBoxWidth = Math.max(minFooterCellWidth, iapBoxWidth);
 		}
-
-		writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize, nameStart, topRowY,
-				Math.max(0f, nameEnd - nameStart), "Name:", name);
-		writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize, positionStart, topRowY,
-				Math.max(0f, positionEnd - positionStart), "Position/Title:", positionTitle);
-		writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize, signatureStart, topRowY,
-				Math.max(0f, signatureEnd - signatureStart), "Signature:", signature);
-
 		stream.addRect(x, y, formBoxWidth, footerBandHeight);
 		stream.stroke();
 		stream.addRect(x + formBoxWidth, y, iapBoxWidth, footerBandHeight);
 		stream.stroke();
-
 		writeFittedText(stream, bold, bodyFontSize, x + cellPadding, footerContentY,
 				Math.max(0f, formBoxWidth - (cellPadding * 2f)), formLabel);
 		writeInlineHeadingValue(stream, bold, regular, bodyFontSize, x + formBoxWidth + cellPadding, footerContentY,
 				"IAP Page", iapPage);
 		writeInlineHeadingValueWithinWidth(stream, bold, regular, bodyFontSize, lowerBandRightStart, footerContentY,
-				Math.max(0f, signatureEnd - lowerBandRightStart), "Date/Time:", dateTime);
+				Math.max(0f, x + width - cellPadding - lowerBandRightStart), "Date/Time:", dateTime);
 	}
 
 	protected String addPageOffset(String startPage, int offset) {

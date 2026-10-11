@@ -48,6 +48,9 @@ public class SarTaskAssignment {
 	private String reportedPod = "";
 	private String areasNotCovered = "";
 	private String hazardsObserved = "";
+	private String safetyHazardAnalysisEntryId = "";
+	private String safetyHazardNotedBy = "";
+	private java.time.LocalDateTime safetyHazardNotedDateTime;
 	private String canineSearchType = "";
 	private String canineImprint = "";
 	private String canineSunAngle = "";
@@ -600,6 +603,60 @@ public class SarTaskAssignment {
 	 */
 	public void setHazardsObserved(String hazardsObserved) {
 		this.hazardsObserved = hazardsObserved == null ? "" : hazardsObserved;
+	}
+
+	/**
+	 * Returns the linked 215A row for this reported hazard.
+	 *
+	 * @return linked analysis entry identifier, or blank when not included.
+	 */
+	public String getSafetyHazardAnalysisEntryId() {
+		return safetyHazardAnalysisEntryId == null ? "" : safetyHazardAnalysisEntryId;
+	}
+
+	/**
+	 * Links this reported hazard to an ICS 215A analysis row.
+	 *
+	 * @param safetyHazardAnalysisEntryId analysis entry identifier.
+	 */
+	public void setSafetyHazardAnalysisEntryId(String safetyHazardAnalysisEntryId) {
+		this.safetyHazardAnalysisEntryId = safetyHazardAnalysisEntryId == null ? "" : safetyHazardAnalysisEntryId;
+	}
+
+	/**
+	 * Returns the Safety Officer who acknowledged this report.
+	 *
+	 * @return Safety Officer name, or blank when unacknowledged.
+	 */
+	public String getSafetyHazardNotedBy() {
+		return safetyHazardNotedBy == null ? "" : safetyHazardNotedBy;
+	}
+
+	/**
+	 * Records the Safety Officer acknowledgement for this reported hazard.
+	 *
+	 * @param safetyHazardNotedBy acknowledging Safety Officer.
+	 */
+	public void setSafetyHazardNotedBy(String safetyHazardNotedBy) {
+		this.safetyHazardNotedBy = safetyHazardNotedBy == null ? "" : safetyHazardNotedBy;
+	}
+
+	/**
+	 * Returns the time the Safety Officer acknowledged this report.
+	 *
+	 * @return acknowledgement date/time, or null when not acknowledged.
+	 */
+	public java.time.LocalDateTime getSafetyHazardNotedDateTime() {
+		return safetyHazardNotedDateTime;
+	}
+
+	/**
+	 * Sets the acknowledgement date/time.
+	 *
+	 * @param safetyHazardNotedDateTime acknowledgement date/time.
+	 */
+	public void setSafetyHazardNotedDateTime(java.time.LocalDateTime safetyHazardNotedDateTime) {
+		this.safetyHazardNotedDateTime = safetyHazardNotedDateTime;
 	}
 	/** @return canine resource subtype. */
 	public String getCanineSearchType() {

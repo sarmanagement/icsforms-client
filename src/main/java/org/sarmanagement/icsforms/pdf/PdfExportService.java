@@ -25,9 +25,6 @@ import java.util.Map;
  * Coordinates exporting selected or all supported ICS forms to PDF files.
  */
 public class PdfExportService {
-	private static final List<String> IAP_BUNDLE_FORM_ORDER = List.of("ICS 201", "ICS 202", "ICS 203", "ICS 205A", "ICS 207",
-			"ICS 204", "SAR Task Assignment", "ICS 214");
-
 	private final Map<String, PdfFormRenderer> renderers = new LinkedHashMap<>();
 
 	/**
@@ -136,7 +133,25 @@ public class PdfExportService {
 		} else {
 			keys.remove("Clue Log (ICS 233-CG adapted)");
 		}
-		return keys;
+		if (data == null || !isIapAttachmentSelected(data, "ICS 215A")) {
+			keys.remove("ICS 215A");
+		}
+		if (data == null || !isIapAttachmentSelected(data, "ICS 208")) {
+			keys.remove("ICS 208");
+		}
+		return FormOrder.sort(keys);
+	}
+
+	/**
+	 * Checks whether ICS 202 lists a form as an IAP attachment.
+	 *
+	 * @param data incident document.
+	 * @param formKey registered renderer key.
+	 * @return true when included on ICS 202.
+	 */
+	static boolean isIapAttachmentSelected(AppData data, String formKey) {
+		return data.getForm202().getIncidentActionPlanAttachments().stream()
+				.anyMatch(item -> formKey.equalsIgnoreCase(item));
 	}
 
 	/**
@@ -260,69 +275,98 @@ public class PdfExportService {
 		java.util.Set<String> included = includedFormKeys == null
 				? null
 				: new java.util.LinkedHashSet<>(includedFormKeys);
+		data.getForm201().setIapPage("");
+		data.getForm202().setIapPage("");
 		data.setForm205aIapPage("");
+		data.getForm215a().setIapPage("");
+		data.getForm208().setIapPage("");
+		data.getForm207().setIapPage("");
 		data.getOrganizationalChart().getAssignmentList().setIapPage("");
-		// ICS 201 is included whenever it was actually completed during an initial
-		// response.
-		// It is omitted only when the incident was created directly as a full
-		// operational
-		// period and the form was never filled in (situation summary and preparer name
-		// both
-		// blank — the minimal signals of deliberate use).
-		if (!skipIcs201 && includedOrAll(included, "ICS 201")) {
-			data.getForm201().setIapPage(String.valueOf(page));
-			page += Ics201PdfRenderer.PAGE_COUNT;
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			task.setIapPage("");
 		}
-		// ICS 202
-		if (includedOrAll(included, "ICS 202")) {
-			data.getForm202().setIapPage(String.valueOf(page++));
+		for (Ics214Form log : data.getActivityLogs()) {
+			log.setIapPage("");
 		}
-		if (includedOrAll(included, "ICS 203") && includeIcs203(data)) {
-			data.getOrganizationalChart().getAssignmentList().setIapPage(String.valueOf(page));
-			page += Ics203PdfRenderer.pageCount(data);
-		}
-		// ICS 205A
-		if (includedOrAll(included, "ICS 205A")) {
-			data.setForm205aIapPage(String.valueOf(page));
-			page += Ics205aPdfRenderer.pageCount(data);
-		}
-		// ICS 207
-		if (includedOrAll(included, "ICS 207")) {
-			data.getForm207().setIapPage(String.valueOf(page++));
-		}
-		// ICS 204 — primary form
-		if (includedOrAll(included, "ICS 204")) {
-			data.getForm204().setIapPage(String.valueOf(page++));
-		}
-		// ICS 204 — additional forms
-		if (includedOrAll(included, "ICS 204")) {
-			for (Ics204Form form : data.getAdditionalForms204()) {
-				form.setIapPage(String.valueOf(page++));
-			}
-		}
-		// SAR Task Assignment forms (TAFs)
-		if (includedOrAll(included, "SAR Task Assignment")) {
-			List<SarTaskAssignment> tasks = data.getSarTaskAssignments();
-			if (tasks.isEmpty()) {
-				blankSarTaskPage = String.valueOf(page);
-				page += 2;
-			} else {
-				for (SarTaskAssignment task : tasks) {
-					task.setIapPage(String.valueOf(page));
-					page += 2;
+		for (String formKey : FormOrder.formKeys()) {
+			switch (formKey) {
+				case "ICS 201" -> {
+					if (!skipIcs201 && includedOrAll(included, formKey)) {
+						data.getForm201().setIapPage(String.valueOf(page));
+						page += Ics201PdfRenderer.PAGE_COUNT;
+					}
 				}
-			}
-		}
-		// ICS 214 activity logs
-		if (includedOrAll(included, "ICS 214")) {
-			List<Ics214Form> logs = data.getActivityLogs();
-			if (logs.isEmpty()) {
-				blankIcs214Page = String.valueOf(page);
-				page += 1;
-			} else {
-				for (Ics214Form log : logs) {
-					log.setIapPage(String.valueOf(page));
-					page += Ics214PdfRenderer.pageCount(log);
+				case "ICS 202" -> {
+					if (includedOrAll(included, formKey)) {
+						data.getForm202().setIapPage(String.valueOf(page++));
+					}
+				}
+				case "ICS 203" -> {
+					if (includedOrAll(included, formKey) && includeIcs203(data)) {
+						data.getOrganizationalChart().getAssignmentList().setIapPage(String.valueOf(page));
+						page += Ics203PdfRenderer.pageCount(data);
+					}
+				}
+				case "ICS 204" -> {
+					if (includedOrAll(included, formKey)) {
+						data.getForm204().setIapPage(String.valueOf(page++));
+						for (Ics204Form form : data.getAdditionalForms204()) {
+							form.setIapPage(String.valueOf(page++));
+						}
+					}
+				}
+				case "SAR Task Assignment" -> {
+					if (includedOrAll(included, formKey)) {
+						List<SarTaskAssignment> tasks = data.getSarTaskAssignments();
+						if (tasks.isEmpty()) {
+							blankSarTaskPage = String.valueOf(page);
+							page += 2;
+						} else {
+							for (SarTaskAssignment task : tasks) {
+								task.setIapPage(String.valueOf(page));
+								page += 2;
+							}
+						}
+					}
+				}
+				case "ICS 205A" -> {
+					if (includedOrAll(included, formKey)) {
+						data.setForm205aIapPage(String.valueOf(page));
+						page += Ics205aPdfRenderer.pageCount(data);
+					}
+				}
+				case "ICS 207" -> {
+					if (includedOrAll(included, formKey)) {
+						data.getForm207().setIapPage(String.valueOf(page++));
+					}
+				}
+				case "ICS 208" -> {
+					if (includedOrDefaultAttachment(included, data, formKey)) {
+						data.getForm208().setIapPage(String.valueOf(page));
+						page += Ics208PdfRenderer.pageCount(data);
+					}
+				}
+				case "ICS 214" -> {
+					if (includedOrAll(included, formKey)) {
+						List<Ics214Form> logs = data.getActivityLogs();
+						if (logs.isEmpty()) {
+							blankIcs214Page = String.valueOf(page);
+							page++;
+						} else {
+							for (Ics214Form log : logs) {
+								log.setIapPage(String.valueOf(page));
+								page += Ics214PdfRenderer.pageCount(log);
+							}
+						}
+					}
+				}
+				case "ICS 215A" -> {
+					if (includedOrDefaultAttachment(included, data, formKey)) {
+						data.getForm215a().setIapPage(String.valueOf(page));
+						page += Ics215aPdfRenderer.pageCount(data);
+					}
+				}
+				default -> {
 				}
 			}
 		}
@@ -336,18 +380,7 @@ public class PdfExportService {
 	 * @return ordered identifiers.
 	 */
 	static List<String> orderForIapBundle(List<String> formKeys) {
-		List<String> ordered = new ArrayList<>();
-		for (String formKey : IAP_BUNDLE_FORM_ORDER) {
-			if (formKeys.contains(formKey)) {
-				ordered.add(formKey);
-			}
-		}
-		for (String formKey : formKeys) {
-			if (!ordered.contains(formKey)) {
-				ordered.add(formKey);
-			}
-		}
-		return ordered;
+		return new ArrayList<>(FormOrder.sort(formKeys));
 	}
 
 	/**
@@ -412,6 +445,8 @@ public class PdfExportService {
 		copy.setOrganizationalChart(data.getOrganizationalChart());
 		copy.setForm201(data.getForm201());
 		copy.setForm202(data.getForm202());
+		copy.setForm215a(data.getForm215a());
+		copy.setForm208(data.getForm208());
 		copy.setForm205aIapPage(data.getForm205aIapPage());
 		copy.setForm207(data.getForm207());
 		copy.setForm204(data.getForm204());
@@ -419,6 +454,8 @@ public class PdfExportService {
 		copy.setActivityLogs(data.getActivityLogs());
 		copy.setActivityEventTypes(data.getActivityEventTypes());
 		copy.setSarTaskAssignments(data.getSarTaskAssignments());
+		copy.setArchivedSafetyHazardReports(data.getArchivedSafetyHazardReports());
+		copy.setCommonSafetyHazards(data.getCommonSafetyHazards());
 		copy.setClueLogEntries(data.getClueLogEntries());
 		copy.setOpenActionItems(data.getOpenActionItems());
 		copy.setOpenActionTrackerEnabled(data.isOpenActionTrackerEnabled());
@@ -441,6 +478,18 @@ public class PdfExportService {
 	 */
 	private static boolean includedOrAll(java.util.Set<String> included, String formKey) {
 		return included == null || included.contains(formKey);
+	}
+
+	/**
+	 * Checks explicit bundle selection or the saved optional-form preference.
+	 *
+	 * @param included explicit bundle keys, or null for default selection.
+	 * @param formKey safety form identifier.
+	 * @param preference saved IAP preference.
+	 * @return whether the safety form is bundled.
+	 */
+	private static boolean includedOrDefaultAttachment(java.util.Set<String> included, AppData data, String formKey) {
+		return included == null ? isIapAttachmentSelected(data, formKey) : included.contains(formKey);
 	}
 
 	/**

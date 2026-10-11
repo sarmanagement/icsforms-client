@@ -3,18 +3,24 @@
  */
 package org.sarmanagement.icsforms.ui;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IapPhase;
 import org.sarmanagement.icsforms.model.IncidentMode;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -89,6 +95,52 @@ class AppControllerStoreTest {
 			assertEquals(1, restored.getOperationalPeriodHistory().size());
 			assertEquals("Keep searching", restored.getOpenActionItems().get(0).getItem());
 			assertTrue(restored.getClueLogEntries().isEmpty());
+		}
+	}
+
+	@Test
+	void populatedFormsSurviveLegacySchemaOpenSaveAndReopen() throws Exception {
+		IncidentId id;
+		String assignmentId = "assignment-1";
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			AppData initial = new AppData();
+			initial.getForm202().setObjectives(List.of("Protect responders"));
+			ResourceAssignment assignment = new ResourceAssignment();
+			assignment.setAssignmentId(assignmentId);
+			assignment.setAssignmentTeamNumber("Team 1");
+			assignment.setAssignment("Search Sector A");
+			initial.getForm204().getResourcesAssigned().add(assignment);
+			SarTaskAssignment task = new SarTaskAssignment();
+			task.setTaskId("task-1");
+			task.setAssignmentId(assignmentId);
+			task.setHazardsObserved("Steep terrain");
+			initial.setSarTaskAssignments(List.of(task));
+			id = store.create(initial);
+
+			Path incidentFile = directory.resolve("incidents").resolve(id.value() + ".json");
+			int legacySchemaVersion = AppData.CURRENT_SCHEMA_VERSION - 1;
+			ObjectMapper mapper = new ObjectMapper();
+			ObjectNode json = (ObjectNode) mapper.readTree(Files.readString(incidentFile));
+			json.put("schemaVersion", legacySchemaVersion);
+			json.remove("archivedSafetyHazardReports");
+			Files.writeString(incidentFile, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(json));
+
+			AppData loaded = store.load(id);
+			assertEquals(AppData.CURRENT_SCHEMA_VERSION, loaded.getSchemaVersion());
+			AppController controller = controller(store, id, loaded);
+			controller.save();
+		}
+
+		try (FileIncidentStore reopened = new FileIncidentStore(directory)) {
+			AppData restored = reopened.load(id);
+			assertEquals(AppData.CURRENT_SCHEMA_VERSION, restored.getSchemaVersion());
+			assertEquals(List.of("Protect responders"), restored.getForm202().getObjectives());
+			assertEquals(1, restored.getForm204().getResourcesAssigned().size());
+			assertEquals(assignmentId, restored.getForm204().getResourcesAssigned().get(0).getAssignmentId());
+			assertEquals("Team 1", restored.getForm204().getResourcesAssigned().get(0).getAssignmentTeamNumber());
+			assertEquals(1, restored.getSarTaskAssignments().size());
+			assertEquals("task-1", restored.getSarTaskAssignments().get(0).getTaskId());
+			assertEquals("Steep terrain", restored.getSarTaskAssignments().get(0).getHazardsObserved());
 		}
 	}
 

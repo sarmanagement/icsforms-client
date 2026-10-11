@@ -39,7 +39,7 @@ class OpenActionExportSelectionTest {
 		AppData data = new AppData();
 		data.setOpenActionTrackerEnabled(true);
 		service.exportAll(data, output);
-		assertEquals(List.of("ICS 202", "Clue Log", "ICS 233-CG"), rendered);
+		assertEquals(List.of("ICS 202", "ICS 233-CG", "Clue Log"), rendered);
 
 		rendered.clear();
 		data.setClueLogIcs233Enabled(true);

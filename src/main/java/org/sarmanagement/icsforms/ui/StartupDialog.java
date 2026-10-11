@@ -75,6 +75,7 @@ public class StartupDialog extends JDialog {
 	 */
 	public StartupDialog(Frame owner, IncidentStore store, boolean exitOnClose) {
 		super(owner, "ICS Forms Desktop — Start", true);
+		ApplicationIcon.install(this);
 		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
 		JPanel content = new JPanel(new BorderLayout(12, 12));

@@ -17,6 +17,7 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
+import org.sarmanagement.icsforms.pdf.FormOrder;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
@@ -90,6 +91,7 @@ public class MainFrame extends JFrame {
 	private final ClueLogPanel clueLogPanel;
 	private final OpenActionTrackerPanel openActionTrackerPanel;
 	private final TCardPanel tCardPanel;
+	private final SafetyPanel safetyPanel;
 	private final JTabbedPane tabs = new JTabbedPane();
 	private final Map<Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
 	private final Map<Component, String> tabGroups = new IdentityHashMap<>();
@@ -143,6 +145,7 @@ public class MainFrame extends JFrame {
 	 */
 	private MainFrame(AppController controller, Path defaultDirectory) {
 		super("ICS Forms Desktop");
+		ApplicationIcon.install(this);
 		this.controller = controller;
 		this.controller.setAutosaveErrorHandler(exception -> showSaveError(exception));
 		this.incidentContextPanel = new IncidentContextPanel(controller);
@@ -154,6 +157,8 @@ public class MainFrame extends JFrame {
 		this.clueLogPanel = new ClueLogPanel(controller);
 		this.openActionTrackerPanel = new OpenActionTrackerPanel(controller);
 		this.tCardPanel = new TCardPanel(controller);
+		this.safetyPanel = new SafetyPanel(controller);
+		safetyPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		controller.setPersonnelCardCreator(tCardPanel::createPersonnelCardFromPicker);
 		ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
 		ics204Panel.setOnEditSarTaskRequest(this::openSarTaskEditorForAssignment);
@@ -173,6 +178,7 @@ public class MainFrame extends JFrame {
 		registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, ICS_201_GROUP);
 		registerTab("ICS 202", ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
 		registerTab("ICS 204", ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
+		registerTab("Safety", safetyPanel, AppController.LinkSource.NONE, CORE_GROUP);
 		registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
 		registerTab("Clue Log", clueLogPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
 		registerTab("Open Action Tracker", openActionTrackerPanel, AppController.LinkSource.NONE, ACTION_TRACKER_GROUP);
@@ -553,7 +559,17 @@ public class MainFrame extends JFrame {
 	 * @param defaultDirectory initial destination directory.
 	 */
 	private void openFormsExportDialog(Path defaultDirectory) {
-		List<String> formKeys = controller.exportableFormKeys();
+		openFormsExportDialog(defaultDirectory, null);
+	}
+
+	/**
+	 * Offers registered form exports, preselecting a form requested by its workspace.
+	 *
+	 * @param defaultDirectory initial destination directory.
+	 * @param requestedFormKey form key to add to the default selections.
+	 */
+	private void openFormsExportDialog(Path defaultDirectory, String requestedFormKey) {
+		List<String> formKeys = sortExportFormKeys(controller.exportableFormKeys());
 		if (formKeys.isEmpty()) {
 			JOptionPane.showMessageDialog(this, "No PDF forms are available to export.", "Export forms as PDF",
 					JOptionPane.INFORMATION_MESSAGE);
@@ -568,7 +584,7 @@ public class MainFrame extends JFrame {
 				continue;
 			}
 			javax.swing.JCheckBox check = new javax.swing.JCheckBox(exportFormDisplayLabel(key),
-					isExportFormSelectedByDefault(key, controller.getData()));
+					key.equals(requestedFormKey) || isExportFormSelectedByDefault(key, controller.getData()));
 			if ("ICS 203".equals(key)) {
 				check.setToolTipText("Individual export always available; IAP inclusion requires Org Chart entries "
 						+ "and the optional setting in ICS 203 details.");
@@ -609,6 +625,7 @@ public class MainFrame extends JFrame {
 				return;
 			}
 			pushToModel(source);
+			addSelectedFormsToIcs202Attachments(selected);
 			try {
 				if (exportModeControls.combined().isSelected()) {
 					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source,
@@ -699,12 +716,64 @@ public class MainFrame extends JFrame {
 		return switch (formKey) {
 			case "ICS 233-CG" -> data.isOpenActionTrackerEnabled();
 			case "Clue Log (ICS 233-CG adapted)" -> false;
+			case "ICS 208", "ICS 215A" -> data.getForm202().getIncidentActionPlanAttachments().stream()
+					.anyMatch(item -> formKey.equalsIgnoreCase(item));
 			default -> true;
 		};
 	}
 
 	/**
+	 * Adds printed forms to the ICS 202 attachment list without removing prior selections.
+	 *
+	 * @param selectedFormKeys forms selected in the export dialog.
+	 */
+	private void addSelectedFormsToIcs202Attachments(List<String> selectedFormKeys) {
+		List<String> attachments = controller.getData().getForm202().getIncidentActionPlanAttachments();
+		List<String> merged = mergeSelectedFormsWithIcs202Attachments(attachments, selectedFormKeys);
+		attachments.clear();
+		attachments.addAll(merged);
+		ics202Panel.refreshFromModel();
+		controller.markDirty();
+	}
+
+	/**
+	 * Adds print selections to the existing ICS 202 attachment list without deselecting prior forms.
+	 *
+	 * @param existingAttachments current ICS 202 attachments.
+	 * @param selectedFormKeys forms selected for printing.
+	 * @return case-insensitively deduplicated attachment list.
+	 */
+	static List<String> mergeSelectedFormsWithIcs202Attachments(List<String> existingAttachments,
+			List<String> selectedFormKeys) {
+		List<String> merged = new ArrayList<>();
+		for (String formKey : existingAttachments) {
+			if (formKey != null && !formKey.isBlank()
+					&& merged.stream().noneMatch(item -> item.equalsIgnoreCase(formKey))) {
+				merged.add(formKey);
+			}
+		}
+		for (String formKey : selectedFormKeys) {
+			if (formKey != null && !formKey.isBlank()
+					&& merged.stream().noneMatch(item -> item.equalsIgnoreCase(formKey))) {
+				merged.add(formKey);
+			}
+		}
+		return merged;
+	}
+
+	/**
+	 * Sorts ICS exports by form number while preserving the relative order of other exports.
+	 *
+	 * @param formKeys registered form identifiers.
+	 * @return identifiers in display order.
+	 */
+	static List<String> sortExportFormKeys(List<String> formKeys) {
+		return FormOrder.sort(formKeys);
+	}
+
+	/**
 	 * Returns a descriptive export checkbox label.
+	 *
 	 * @param formKey renderer key
 	 * @return display label
 	 */
@@ -716,7 +785,9 @@ public class MainFrame extends JFrame {
 			case "ICS 205A" -> "ICS 205A Communications List";
 			case "ICS 204" -> "ICS 204 – Assignment List";
 			case "ICS 207" -> "ICS 207 – Incident Organization Chart";
+			case "ICS 208" -> "ICS 208 – Safety Message / Plan";
 			case "ICS 214" -> "ICS 214 – Activity Log";
+			case "ICS 215A" -> "ICS 215A – Incident Action Plan Safety Analysis";
 			case "SAR Task Assignment" -> "SAR Task Assignment Forms";
 			case "Clue Log" -> "Clue Log";
 			case "ICS 233-CG" -> "ICS 233-CG – Open Action Tracker";
@@ -808,6 +879,7 @@ public class MainFrame extends JFrame {
 		ics201Panel.pushToModel();
 		ics202Panel.pushToModel();
 		ics204Panel.pushToModel();
+		safetyPanel.pushToModel();
 		for (Ics214Panel panel : ics214Panels) {
 			panel.saveToModel();
 		}
@@ -876,6 +948,7 @@ public class MainFrame extends JFrame {
 		ics201Panel.refreshFromModel();
 		ics202Panel.refreshFromModel();
 		ics204Panel.refreshFromModel();
+		safetyPanel.refreshFromModel();
 		ensureLogs(controller.getData());
 		rebuildLogTabs();
 		sarTaskPanel.refreshFromModel();
@@ -976,6 +1049,7 @@ public class MainFrame extends JFrame {
 			addVisibleTab(ics201Panel);
 			addVisibleTab(ics202Panel);
 			addVisibleTab(ics204Panel);
+			addVisibleTab(safetyPanel);
 			// sarTaskPanel and clueLogPanel belong to SAR_ONLY_GROUP; addVisibleTab()
 			// checks
 			// group visibility and skips them automatically in GENERIC mode.

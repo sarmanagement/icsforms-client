@@ -19,7 +19,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 6;
+	public static final int CURRENT_SCHEMA_VERSION = 8;
 
 	/**
 	 * A lightweight snapshot of the shared context at the end of one operational
@@ -105,6 +105,8 @@ public class AppData {
 	private OrganizationalChart organizationalChart = new OrganizationalChart();
 	private Ics201Form form201 = new Ics201Form();
 	private Ics202Form form202 = new Ics202Form();
+	private Ics215aForm form215a = new Ics215aForm();
+	private Ics208Form form208 = new Ics208Form();
 	private String form205aIapPage = "";
 	private Ics207Form form207 = new Ics207Form();
 	private Ics204Form form204 = new Ics204Form();
@@ -112,6 +114,8 @@ public class AppData {
 	private List<Ics214Form> activityLogs = new ArrayList<>();
 	private List<ActivityEventType> activityEventTypes = new ArrayList<>();
 	private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
+	private List<SafetyHazardReport> archivedSafetyHazardReports = new ArrayList<>();
+	private List<SafetyAnalysisEntry> commonSafetyHazards = new ArrayList<>();
 	private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
 	private List<OpenActionItem> openActionItems = new ArrayList<>();
 	private boolean openActionTrackerEnabled;
@@ -226,7 +230,8 @@ public class AppData {
 	 *
 	 * <p>
 	 * The organizational chart and ICS 201 initial-response record are preserved as
-	 * historical context. ICS 202, ICS 204, SAR tasks, clue log, T-cards, and
+	 * historical context. Nonblank SAR hazard reports are archived before ICS 202,
+	 * ICS 204, SAR tasks, clue log, T-cards, and
 	 * activity logs are cleared so that the new period starts fresh. The IAP phase
 	 * is set to {@link IapPhase#DURING_OP}. The incident context, incident mode,
 	 * and activity event types are retained.
@@ -245,6 +250,8 @@ public class AppData {
 			record.setIncidentCommanders(new ArrayList<>(organizationalChart.getIncidentCommanders()));
 		}
 		operationalPeriodHistory.add(record);
+		getArchivedSafetyHazardReports().addAll(archiveSafetyHazardReports(sarTaskAssignments,
+				record.getPeriodStart(), record.getPeriodEnd()));
 
 		this.iapPhase = IapPhase.DURING_OP;
 		this.form202 = new Ics202Form();
@@ -558,6 +565,48 @@ public class AppData {
 	}
 
 	/**
+	 * Returns ICS 215A incident action plan safety analysis.
+	 *
+	 * @return safety analysis form.
+	 */
+	public Ics215aForm getForm215a() {
+		if (form215a == null) {
+			form215a = new Ics215aForm();
+		}
+		return form215a;
+	}
+
+	/**
+	 * Sets ICS 215A incident action plan safety analysis.
+	 *
+	 * @param form215a safety analysis form; null resets to an empty form.
+	 */
+	public void setForm215a(Ics215aForm form215a) {
+		this.form215a = form215a == null ? new Ics215aForm() : form215a;
+	}
+
+	/**
+	 * Returns ICS 208 safety message/plan.
+	 *
+	 * @return safety message/plan.
+	 */
+	public Ics208Form getForm208() {
+		if (form208 == null) {
+			form208 = new Ics208Form();
+		}
+		return form208;
+	}
+
+	/**
+	 * Sets ICS 208 safety message/plan.
+	 *
+	 * @param form208 safety message/plan; null resets to an empty form.
+	 */
+	public void setForm208(Ics208Form form208) {
+		this.form208 = form208 == null ? new Ics208Form() : form208;
+	}
+
+	/**
 	 * Returns the ICS 205A IAP page number assigned during bundle export.
 	 *
 	 * @return ICS 205A IAP page number, or blank when not assigned.
@@ -694,6 +743,87 @@ public class AppData {
 	 */
 	public void setSarTaskAssignments(List<SarTaskAssignment> sarTaskAssignments) {
 		this.sarTaskAssignments = sarTaskAssignments == null ? new ArrayList<>() : sarTaskAssignments;
+	}
+
+	/**
+	 * Returns SAR hazard reports archived from completed operational periods.
+	 *
+	 * @return archived reports, never null.
+	 */
+	public List<SafetyHazardReport> getArchivedSafetyHazardReports() {
+		if (archivedSafetyHazardReports == null) {
+			archivedSafetyHazardReports = new ArrayList<>();
+		}
+		return archivedSafetyHazardReports;
+	}
+
+	/**
+	 * Replaces the archived SAR hazard report history.
+	 *
+	 * @param archivedSafetyHazardReports archived reports; null becomes empty.
+	 */
+	public void setArchivedSafetyHazardReports(List<SafetyHazardReport> archivedSafetyHazardReports) {
+		this.archivedSafetyHazardReports = archivedSafetyHazardReports == null
+				? new ArrayList<>()
+				: archivedSafetyHazardReports;
+	}
+
+	/**
+	 * Copies nonblank current-period debrief hazards into immutable-period records.
+	 *
+	 * @param tasks current-period task assignments.
+	 * @param periodStart completed period start.
+	 * @param periodEnd completed period end.
+	 * @return snapshots of reported hazards.
+	 */
+	private static List<SafetyHazardReport> archiveSafetyHazardReports(List<SarTaskAssignment> tasks,
+			LocalDateTime periodStart, LocalDateTime periodEnd) {
+		List<SafetyHazardReport> reports = new ArrayList<>();
+		if (tasks == null) {
+			return reports;
+		}
+		for (SarTaskAssignment task : tasks) {
+			if (task == null || task.getHazardsObserved().isBlank()) {
+				continue;
+			}
+			SafetyHazardReport report = new SafetyHazardReport();
+			report.setTaskId(task.getAssignmentId().isBlank() ? task.getTaskId() : task.getAssignmentId());
+			report.setTaskLabel(task.getAssignmentTeamNumber().isBlank()
+					? task.getResourceIdentifier()
+					: task.getAssignmentTeamNumber());
+			report.setIncidentArea(java.util.stream.Stream.of(task.getBranch(), task.getDivision(), task.getGroup())
+					.filter(value -> value != null && !value.isBlank()).collect(java.util.stream.Collectors.joining(", ")));
+			report.setHazards(task.getHazardsObserved());
+			report.setPeriodStart(periodStart);
+			report.setPeriodEnd(periodEnd);
+			report.setDebriefingCompleted(task.isDebriefingCompleted());
+			report.setAnalysisEntryId(task.getSafetyHazardAnalysisEntryId());
+			report.setNotedBySafetyOfficer(task.getSafetyHazardNotedBy());
+			report.setNotedDateTime(task.getSafetyHazardNotedDateTime());
+			reports.add(report);
+		}
+		return reports;
+	}
+
+	/**
+	 * Returns this incident's reusable common hazard and mitigation library.
+	 *
+	 * @return reusable hazard entries, never null.
+	 */
+	public List<SafetyAnalysisEntry> getCommonSafetyHazards() {
+		if (commonSafetyHazards == null) {
+			commonSafetyHazards = new ArrayList<>();
+		}
+		return commonSafetyHazards;
+	}
+
+	/**
+	 * Replaces the reusable common hazard and mitigation library.
+	 *
+	 * @param commonSafetyHazards library entries; null becomes empty.
+	 */
+	public void setCommonSafetyHazards(List<SafetyAnalysisEntry> commonSafetyHazards) {
+		this.commonSafetyHazards = commonSafetyHazards == null ? new ArrayList<>() : commonSafetyHazards;
 	}
 
 	/**

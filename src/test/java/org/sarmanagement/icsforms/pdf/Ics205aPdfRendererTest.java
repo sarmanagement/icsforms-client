@@ -76,7 +76,7 @@ class Ics205aPdfRendererTest {
 		try (PDDocument pdf = Loader.loadPDF(output.toFile())) {
 			String text = new PDFTextStripper().getText(pdf);
 			String normalizedText = text.replaceAll("\\s+", " ");
-			assertTrue(text.contains("ICS 205A COMMUNICATIONS LIST"));
+			assertTrue(text.contains("COMMUNICATIONS LIST (ICS 205A)"));
 			assertTrue(text.contains("1. Incident Name"));
 			assertTrue(text.contains("2. Operational Period"));
 			assertTrue(text.contains("3. Basic Local Communications Information"));
