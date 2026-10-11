@@ -2,7 +2,7 @@
 
 `icsforms-client` is a Java Swing desktop application for authoring Incident Command System (ICS) incident forms with local JSON persistence and PDF export. Development is ongoing and the application is still evolving as additional forms and functionality are added.
 
-This project is intended to support the **SAR** (Search and Rescue) community, but it is also useful for generic ICS incident planning and documentation. The application currently supports ICS 201, ICS 202, ICS 203, ICS 204, ICS 205A, ICS 207, ICS 208, ICS 214, and ICS 215A PDF forms, along with SAR task assignment forms, a clue log, T-cards, and an organizational chart.  I got tired of copying the same header information from one form to another by hand, and having to subject people to my handwriting in SAR Task Assignment Form Debriefing sections, so this tool is intended to make it easier to author ICS forms and share them with others in a clean, legible format.
+This project is intended to support the **SAR** (Search and Rescue) community, but it is also useful for generic ICS incident planning and documentation. The application currently supports ICS 201, ICS 202, ICS 203, ICS 204, ICS 205A, ICS 206, an adapted canine ICS 206, ICS 207, ICS 208, ICS 214, and ICS 215A PDF forms, along with SAR task assignment forms, a clue log, T-cards, and an organizational chart.  I got tired of copying the same header information from one form to another by hand, and having to subject people to my handwriting in SAR Task Assignment Form Debriefing sections, so this tool is intended to make it easier to author ICS forms and share them with others in a clean, legible format.
 
 Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. Each incident is persisted locally at `~/.icsforms/incidents/<incidentId>.json`, with its own `.json.bak` backup; the install's node identity is kept in `~/.icsforms/node.json`. On first launch, an existing `~/.icsforms/incident.json` is imported as a new incident if no incidents exist yet. The original is left untouched and `incident.json.migrated` prevents repeat imports. File → Import JSON can also import an external workspace as a separate incident. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF. An H2-backed store and offline-to-remote synchronization are planned, but not yet implemented.
 
@@ -42,6 +42,9 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   - ICS 201
   - ICS 202
   - ICS 204
+  - Medical Plan (ICS 206)
+  - Canine Medical Plan (ICS 206CANINE, adapted; eligible in SAR mode or when a canine T-card exists)
+  - Role-oriented dashboard ordering for IC/ICP, Safety Officer, Operations, and Communications
   - SAR Tasks (SAR mode only)
   - Clue Log (SAR mode only)
   - Optional Incident Open Action Tracker (ICS 233-CG), available in both SAR and Generic modes as a separate tab.
@@ -53,6 +56,10 @@ File → New always creates a separate incident. File → Duplicate Incident cop
 - Local JSON persistence at `~/.icsforms/incidents/<incidentId>.json`.
 - Backup-assisted recovery from each incident's `.json.bak`.
 - PDF export for each supported form.
+- ICS 206 medical plans use the shared incident/operational-period context. Human plans support a simple emergency-instruction mode and detailed records. Canine plans are explicitly adapted, not an official FEMA variant. Medical plans are inactive by default; only active plans selected as ICS 202 attachments enter default IAP exports.
+- Canine veterinary directories are incident-owned copies, not live links to source files. JSON regional files use schema version 1 (`schemaVersion` and `facilities`); CSV uses UTF-8, quoted fields and this exact header: `id,name,town,address,contactNumbers,available24Hours,availabilityNotes,capabilities,verifiedAt,latitude,longitude`. Multiple contacts are semicolon-separated. Blank availability is unknown, not confirmation of 24-hour service. Directory edits require explicit export and do not overwrite sources implicitly.
+- Address geocoding and driving routes are separate services. OpenRouteService is the default provider; requests send the entered base/veterinary addresses or coordinates to that third party. Set `ORS_API_KEY` or place the key in `~/.icsforms/ors-api-key`; credentials are not stored in incident JSON or regional files. Verify current terms, quotas, and service limits before operational use. Unresolved/unreachable locations remain visible for manual handling; any straight-line estimate is explicitly labeled and is not a driving time.
+- Role dashboards reorder the same editors; they do not duplicate incident data. ICS 205A remains available. The separate ICS 205 radio communications-plan work tracked by issue #14 is not implemented by the dashboard work.
 - **Export All PDFs** for individual per-form PDF files.
 - **Export IAP Bundle** for a single merged PDF bundle of selected forms with a cover page.
 - **ICS 203 – Organization Assignment List** PDF from the Org Chart, alongside the existing ICS 207 chart. Select ICS 203 in **Export forms as PDF…** for an individual PDF or a combined IAP. Its optional **Include ICS 203 in IAP** setting defaults on, but a bundle includes it only when the Org Chart has entries, immediately after ICS 202. Unused positions remain blank labeled rows. When no Operations branches are entered, division/group rows come from ICS 204 and SAR task assignments. Additional entries continue on further pages; paper size, margins, and display timezone follow the shared PDF settings.
@@ -134,6 +141,7 @@ java -jar target/icsforms-client-0.1.1-SNAPSHOT.jar
 - PDF output is structured for field use and printing, not a pixel-perfect facsimile of government forms.
 - Date/time entry currently uses validated text or spinner inputs in `yyyy-MM-dd`, `HH:mm`, or `yyyy-MM-dd HH:mm` formats depending on the form.
 - Development is ongoing; workflows, form coverage, and export behavior will continue to expand.
+- ORS official references: [services](https://openrouteservice.org/services/), [geocoder endpoint](https://giscience.github.io/openrouteservice/api-reference/endpoints/geocoder/), and [matrix endpoint](https://github.com/GIScience/openrouteservice/blob/main/docs/api-reference/endpoints/matrix/index.md). OSRM's table API is an alternative routing service but needs a separate geocoder and coordinates: [OSRM API](https://project-osrm.org/docs/v5.5.1/api/).
 
 ## Generative AI
 

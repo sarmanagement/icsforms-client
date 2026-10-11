@@ -35,6 +35,13 @@ class MedicalPlanDataTest {
 		plan.getHospitals().add(hospital);
 		plan.setSimpleMode(false);
 		plan.setSimpleMode(true);
+		CanineMedicalPlan caninePlan = data.getCanineMedicalPlan();
+		caninePlan.setAidStationInformation("Fictional base | paramedics unknown");
+		caninePlan.setTransportServices("Fictional canine-capable ground service");
+		VetFacility selectedVet = new VetFacility();
+		selectedVet.setName("Fictional 24-hour Vet");
+		selectedVet.setAvailable24Hours(true);
+		caninePlan.getSelectedFacilities().add(selectedVet);
 
 		AppData reloaded = mapper.readValue(mapper.writeValueAsBytes(data), AppData.class);
 		assertTrue(reloaded.getMedicalPlan().isSimpleMode());
@@ -42,6 +49,12 @@ class MedicalPlanDataTest {
 		assertEquals("Fictional Valley Hospital", reloaded.getMedicalPlan().getHospitals().get(0).getName());
 		assertNull(reloaded.getMedicalPlan().getHospitals().get(0).getHelipad());
 		assertEquals("Not reviewed", reloaded.getMedicalPlan().getReviewStatus());
+		assertEquals("Fictional base | paramedics unknown",
+				reloaded.getCanineMedicalPlan().getAidStationInformation());
+		assertEquals("Fictional canine-capable ground service",
+				reloaded.getCanineMedicalPlan().getTransportServices());
+		assertEquals("Fictional 24-hour Vet",
+				reloaded.getCanineMedicalPlan().getSelectedFacilities().get(0).getName());
 	}
 
 	@Test

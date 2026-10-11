@@ -60,6 +60,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.prefs.Preferences;
 
 /**
  * Main Swing frame for editing shared incident data, ICS 202, ICS 204, and SAR
@@ -73,6 +74,7 @@ public class MainFrame extends JFrame {
 	/** Independent regular action tracker tab group. */
 	private static final String ACTION_TRACKER_GROUP = "Open Action Tracker";
 	private static final String CANINE_MEDICAL_GROUP = "Canine Medical";
+	private static final String DASHBOARD_PREFERENCE = "workspace-dashboard";
 	/** Tab group for T-Card (ICS 219) resource status tabs. */
 	private static final String T_CARDS_GROUP = "T-Cards";
 	/**
@@ -96,6 +98,7 @@ public class MainFrame extends JFrame {
 	private final TCardPanel tCardPanel;
 	private final SafetyPanel safetyPanel;
 	private final JTabbedPane tabs = new JTabbedPane();
+	private final Preferences userPreferences = Preferences.userNodeForPackage(MainFrame.class);
 	private final Map<Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
 	private final Map<Component, String> tabGroups = new IdentityHashMap<>();
 	private final Map<Component, String> tabTitles = new IdentityHashMap<>();
@@ -104,6 +107,9 @@ public class MainFrame extends JFrame {
 	private boolean rebuildingTabs;
 	private boolean canineMedicalManuallyOpened;
 	private IapPhase lastKnownPhase;
+	private AppData lastRefreshedIncident;
+	private Dashboard activeDashboard = Dashboard.from(
+			Preferences.userNodeForPackage(MainFrame.class).get(DASHBOARD_PREFERENCE, "IC/ICP"));
 
 	/**
 	 * Creates the main application frame.
@@ -208,11 +214,13 @@ public class MainFrame extends JFrame {
 
 		JPanel content = new JPanel(new BorderLayout(8, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+		content.add(createDashboardChooser(), BorderLayout.NORTH);
 
 		tabs.addChangeListener(event -> {
 			if (rebuildingTabs) {
 				return;
 			}
+
 			int selectedIndex = tabs.getSelectedIndex();
 			if (selectedIndex == lastSelectedTabIndex) {
 				return;
@@ -232,6 +240,30 @@ public class MainFrame extends JFrame {
 		lastSelectedTabIndex = tabs.getSelectedIndex();
 		pack();
 		setLocationRelativeTo(null);
+	}
+
+	/**
+	 * Builds the dashboard chooser; dashboards reorder shared workspaces without cloning them.
+	 *
+	 * @return toolbar for role-oriented workspace navigation.
+	 */
+	private JPanel createDashboardChooser() {
+		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+		panel.add(new JLabel("Workspace dashboard:"));
+		JComboBox<Dashboard> chooser = new JComboBox<>(Dashboard.values());
+		chooser.setSelectedItem(activeDashboard);
+		chooser.addActionListener(event -> {
+			Dashboard selected = (Dashboard) chooser.getSelectedItem();
+			if (selected == null || selected == activeDashboard) {
+				return;
+			}
+			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			activeDashboard = selected;
+			userPreferences.put(DASHBOARD_PREFERENCE, selected.label());
+			rebuildVisibleTabs();
+		});
+		panel.add(chooser);
+		return panel;
 	}
 
 	/**
@@ -964,6 +996,10 @@ public class MainFrame extends JFrame {
 
 	/** Reloads panel state from the active incident document. */
 	private void refreshFromModel() {
+		if (lastRefreshedIncident != null && lastRefreshedIncident != controller.getData()) {
+			canineMedicalManuallyOpened = false;
+		}
+		lastRefreshedIncident = controller.getData();
 		applyConfiguredTimeZone();
 		Component selectedComponent = tabs.getSelectedComponent();
 		int selectedLogIndex = selectedLogIndex(selectedComponent);
@@ -1072,27 +1108,9 @@ public class MainFrame extends JFrame {
 		rebuildingTabs = true;
 		try {
 			tabs.removeAll();
-			addVisibleTab(incidentContextPanel);
-			addVisibleTab(organizationalChartPanel);
-			addVisibleTab(ics201Panel);
-			addVisibleTab(ics202Panel);
-			addVisibleTab(ics204Panel);
-			addVisibleTab(medicalPlanPanel);
-			addVisibleTab(canineMedicalPanel);
-			addVisibleTab(safetyPanel);
-			// sarTaskPanel and clueLogPanel belong to SAR_ONLY_GROUP; addVisibleTab()
-			// checks
-			// group visibility and skips them automatically in GENERIC mode.
-			addVisibleTab(sarTaskPanel);
-			addVisibleTab(openActionTrackerPanel);
-			// ICS-214 activity log tabs are to the right of SAR Tasks.
-			if (isGroupVisible(ACTIVITY_LOGS_GROUP)) {
-				for (Ics214Panel panel : ics214Panels) {
-					addVisibleTab(panel);
-				}
+			for (Component component : dashboardWorkspaces()) {
+				addVisibleTab(component);
 			}
-			addVisibleTab(clueLogPanel);
-			addVisibleTab(tCardPanel);
 			Component selection = resolveSelection(preferredComponent, preferredLogIndex);
 			if (selection != null && tabs.indexOfComponent(selection) >= 0) {
 				tabs.setSelectedComponent(selection);
@@ -1103,6 +1121,54 @@ public class MainFrame extends JFrame {
 			rebuildingTabs = false;
 		}
 		lastSelectedTabIndex = tabs.getSelectedIndex();
+	}
+
+	/**
+	 * Resolves one dashboard's ordered list of existing editor components.
+	 *
+	 * @return ordered shared workspaces and current activity logs.
+	 */
+	private List<Component> dashboardWorkspaces() {
+		Map<String, Component> workspaces = new LinkedHashMap<>();
+		workspaces.put("Shared", incidentContextPanel);
+		workspaces.put("Org Chart", organizationalChartPanel);
+		workspaces.put("ICS 201", ics201Panel);
+		workspaces.put("ICS 202", ics202Panel);
+		workspaces.put("ICS 204", ics204Panel);
+		workspaces.put("Medical Plan (ICS 206)", medicalPlanPanel);
+		workspaces.put("Canine Medical Plan (ICS 206CANINE, adapted)", canineMedicalPanel);
+		workspaces.put("Safety", safetyPanel);
+		workspaces.put("SAR Tasks", sarTaskPanel);
+		workspaces.put("Open Action Tracker", openActionTrackerPanel);
+		workspaces.put("Clue Log", clueLogPanel);
+		workspaces.put("T-Cards", tCardPanel);
+		for (Ics214Panel panel : ics214Panels) {
+			workspaces.putIfAbsent("Activity Logs", panel);
+		}
+		List<Component> ordered = new ArrayList<>();
+		for (String title : activeDashboard.workspaceTitles()) {
+			if ("Activity Logs".equals(title)) {
+				if (isGroupVisible(ACTIVITY_LOGS_GROUP)) {
+					ordered.addAll(ics214Panels);
+				}
+				continue;
+			}
+			Component component = workspaces.get(title);
+			if (component != null && !ordered.contains(component)) {
+				ordered.add(component);
+			}
+		}
+		for (Component component : workspaces.values()) {
+			if (!ordered.contains(component)) {
+				ordered.add(component);
+			}
+		}
+		for (Ics214Panel panel : ics214Panels) {
+			if (!ordered.contains(panel)) {
+				ordered.add(panel);
+			}
+		}
+		return ordered;
 	}
 
 	/**
@@ -1808,6 +1874,71 @@ public class MainFrame extends JFrame {
 			return "Assignment – " + resource;
 		}
 		return "Assignment";
+	}
+
+	/**
+	 * Role-oriented orderings of the same incident workspaces.
+	 */
+	private enum Dashboard {
+		IC_ICP("IC/ICP", List.of("Shared", "Org Chart", "ICS 201", "ICS 202", "ICS 204",
+				"Medical Plan (ICS 206)", "Canine Medical Plan (ICS 206CANINE, adapted)", "Safety", "SAR Tasks",
+				"Open Action Tracker", "Activity Logs", "Clue Log", "T-Cards")),
+		SAFETY_OFFICER("Safety Officer", List.of("Safety", "Medical Plan (ICS 206)",
+				"Canine Medical Plan (ICS 206CANINE, adapted)", "Org Chart", "Shared", "T-Cards", "ICS 204",
+				"SAR Tasks", "Clue Log", "Activity Logs", "Open Action Tracker", "ICS 202", "ICS 201")),
+		OPERATIONS("Operations", List.of("ICS 204", "SAR Tasks", "T-Cards", "Clue Log", "Activity Logs",
+				"Safety", "Org Chart", "Medical Plan (ICS 206)", "Canine Medical Plan (ICS 206CANINE, adapted)",
+				"Shared", "ICS 202", "ICS 201", "Open Action Tracker")),
+		COMMUNICATIONS("Communications", List.of("Safety", "Org Chart", "Medical Plan (ICS 206)",
+				"Canine Medical Plan (ICS 206CANINE, adapted)", "T-Cards", "Activity Logs", "Clue Log", "ICS 204",
+				"SAR Tasks", "Shared", "ICS 202", "ICS 201", "Open Action Tracker"));
+
+		private final String label;
+		private final List<String> workspaceTitles;
+
+		Dashboard(String label, List<String> workspaceTitles) {
+			this.label = label;
+			this.workspaceTitles = workspaceTitles;
+		}
+
+		/**
+		 * Returns the label presented in the dashboard selector.
+		 *
+		 * @return dashboard label.
+		 */
+		public String label() {
+			return label;
+		}
+
+		/**
+		 * Returns this dashboard's order of shared editors.
+		 *
+		 * @return ordered workspace titles.
+		 */
+		public List<String> workspaceTitles() {
+			return workspaceTitles;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public String toString() {
+			return label;
+		}
+
+		/**
+		 * Resolves a saved dashboard setting safely.
+		 *
+		 * @param label saved label.
+		 * @return matching dashboard or the legacy default.
+		 */
+		private static Dashboard from(String label) {
+			for (Dashboard dashboard : values()) {
+				if (dashboard.label.equals(label)) {
+					return dashboard;
+				}
+			}
+			return IC_ICP;
+		}
 	}
 
 	/**

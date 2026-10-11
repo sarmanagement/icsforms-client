@@ -142,6 +142,10 @@ public class PdfExportService {
 		if (data == null || !data.getMedicalPlan().isActive() || !isIapAttachmentSelected(data, "ICS 206")) {
 			keys.remove("ICS 206");
 		}
+		if (data == null || !data.getCanineMedicalPlan().isActive()
+				|| !isIapAttachmentSelected(data, "ICS 206CANINE")) {
+			keys.remove("ICS 206CANINE");
+		}
 		return FormOrder.sort(keys);
 	}
 
@@ -280,6 +284,8 @@ public class PdfExportService {
 				: new java.util.LinkedHashSet<>(includedFormKeys);
 		data.getForm201().setIapPage("");
 		data.getForm202().setIapPage("");
+		data.getMedicalPlan().setIapPage("");
+		data.getCanineMedicalPlan().setIapPage("");
 		data.setForm205aIapPage("");
 		data.getForm215a().setIapPage("");
 		data.getForm208().setIapPage("");
@@ -324,6 +330,14 @@ public class PdfExportService {
 							: included.contains(formKey)) {
 						data.getMedicalPlan().setIapPage(String.valueOf(page));
 						page += Ics206PdfRenderer.pageCount(data);
+					}
+				}
+				case "ICS 206CANINE" -> {
+					if (included == null
+							? data.getCanineMedicalPlan().isActive() && isIapAttachmentSelected(data, formKey)
+							: included.contains(formKey)) {
+						data.getCanineMedicalPlan().setIapPage(String.valueOf(page));
+						page += Ics206CaninePdfRenderer.pageCount(data);
 					}
 				}
 				case "SAR Task Assignment" -> {

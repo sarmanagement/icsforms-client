@@ -5,7 +5,6 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.medical.AddressGeocoder;
 import org.sarmanagement.icsforms.medical.DrivingRouteProvider;
-import org.sarmanagement.icsforms.medical.GeoPoint;
 import org.sarmanagement.icsforms.medical.OpenRouteServiceDrivingRouter;
 import org.sarmanagement.icsforms.medical.OpenRouteServiceGeocoder;
 import org.sarmanagement.icsforms.medical.VetDirectoryFileService;
@@ -41,7 +40,6 @@ import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.io.IOException;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -90,6 +88,8 @@ public class CanineMedicalPanel extends JPanel {
 	private final JTable directoryTable = new JTable(directoryModel);
 	private final JTable selectionTable = new JTable(selectionModel);
 	private final JTextField poisonContact = new JTextField();
+	private final JTextArea aidStations = new JTextArea(2, 40);
+	private final JTextArea transportServices = new JTextArea(2, 40);
 	private final JTextField onsiteVet = new JTextField();
 	private final JTextField onsiteDvm = new JTextField();
 	private final JTextArea capabilityNotes = new JTextArea(3, 50);
@@ -104,9 +104,11 @@ public class CanineMedicalPanel extends JPanel {
 			new String[] {"Not reviewed", "Reviewed", "Approved"});
 	private final JLabel status = new JLabel("Vet addresses are sent to the configured geocoding/routing provider.");
 	private final JProgressBar progress = new JProgressBar();
+	private final JButton cancelRequest = new JButton("Cancel request");
 	private Consumer<String> exportRequest = ignored -> { };
 	private boolean loading;
 	private boolean flushing;
+	private AppData lastLoadedIncident;
 	private SwingWorker<?, ?> activeWorker;
 
 	/**
@@ -143,6 +145,9 @@ public class CanineMedicalPanel extends JPanel {
 		JPanel footer = new JPanel(new BorderLayout(6, 2));
 		footer.add(progress, BorderLayout.WEST);
 		footer.add(status, BorderLayout.CENTER);
+		cancelRequest.setVisible(false);
+		cancelRequest.addActionListener(event -> cancelWorker());
+		footer.add(cancelRequest, BorderLayout.EAST);
 		bottom.add(footer, BorderLayout.SOUTH);
 		add(bottom, BorderLayout.SOUTH);
 		configureListeners();
@@ -165,6 +170,10 @@ public class CanineMedicalPanel extends JPanel {
 		loading = true;
 		try {
 			AppData data = controller.getData();
+			if (lastLoadedIncident != null && lastLoadedIncident != data) {
+				cancelWorker();
+			}
+			lastLoadedIncident = data;
 			StagingLocation staging = data.getStagingLocation();
 			CanineMedicalPlan plan = data.getCanineMedicalPlan();
 			active.setSelected(plan.isActive());
@@ -172,6 +181,8 @@ public class CanineMedicalPanel extends JPanel {
 			stagingAddress.setText(staging.getAddress());
 			stagingLatitude.setText(staging.getLatitude() == null ? "" : staging.getLatitude().toString());
 			stagingLongitude.setText(staging.getLongitude() == null ? "" : staging.getLongitude().toString());
+			aidStations.setText(plan.getAidStationInformation());
+			transportServices.setText(plan.getTransportServices());
 			poisonContact.setText(plan.getPoisonControlContact());
 			onsiteVet.setText(plan.getOnsiteVeterinarian());
 			onsiteDvm.setText(plan.getVeterinarianDvm());
@@ -214,6 +225,8 @@ public class CanineMedicalPanel extends JPanel {
 						"Operator-entered coordinates", Instant.now());
 			}
 			data.getCanineMedicalPlan().setActive(active.isSelected());
+			data.getCanineMedicalPlan().setAidStationInformation(aidStations.getText());
+			data.getCanineMedicalPlan().setTransportServices(transportServices.getText());
 			data.getCanineMedicalPlan().setPoisonControlContact(poisonContact.getText());
 			data.getCanineMedicalPlan().setOnsiteVeterinarian(onsiteVet.getText());
 			data.getCanineMedicalPlan().setVeterinarianDvm(onsiteDvm.getText());
@@ -344,6 +357,10 @@ public class CanineMedicalPanel extends JPanel {
 		JPanel root = new JPanel(new GridLayout(1, 2, 6, 4));
 		JPanel clinical = new JPanel(new GridLayout(0, 1, 2, 2));
 		clinical.setBorder(BorderFactory.createTitledBorder("Adapted canine medical plan"));
+		clinical.add(new JLabel("Medical aid stations: name, location, contacts/frequency, paramedic status"));
+		clinical.add(new JScrollPane(aidStations));
+		clinical.add(new JLabel("Canine transport: service, location, contacts, air/ground, canine capability"));
+		clinical.add(new JScrollPane(transportServices));
 		clinical.add(new JLabel("Poison-control contact text (editable)"));
 		clinical.add(poisonContact);
 		clinical.add(new JLabel("Onsite veterinarian"));
@@ -409,6 +426,8 @@ public class CanineMedicalPanel extends JPanel {
 		}
 		watch(capabilityNotes, false);
 		watch(procedures, false);
+		watch(aidStations, false);
+		watch(transportServices, false);
 		directoryModel.addTableModelListener(event -> inputChanged(true));
 		selectionModel.addTableModelListener(event -> inputChanged(false));
 	}
@@ -967,7 +986,8 @@ public class CanineMedicalPanel extends JPanel {
 		cancelWorker();
 		activeWorker = worker;
 		progress.setVisible(true);
-		status.setText("Working with the selected address/route provider. Cancel with Escape by changing incident.");
+		cancelRequest.setVisible(true);
+		status.setText("Working with the selected address/route provider.");
 		worker.execute();
 	}
 
@@ -980,6 +1000,7 @@ public class CanineMedicalPanel extends JPanel {
 		}
 		activeWorker = null;
 		progress.setVisible(false);
+		cancelRequest.setVisible(false);
 	}
 
 	/**
@@ -989,6 +1010,7 @@ public class CanineMedicalPanel extends JPanel {
 		if (activeWorker == worker) {
 			activeWorker = null;
 			progress.setVisible(false);
+			cancelRequest.setVisible(false);
 		}
 	}
 

@@ -15,6 +15,8 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CanineMedicalPlan {
 	private boolean active;
+	private String aidStationInformation = "";
+	private String transportServices = "";
 	private String poisonControlContact = "";
 	private String onsiteVeterinarian = "";
 	private String veterinarianDvm = "";
@@ -42,6 +44,26 @@ public class CanineMedicalPlan {
 	/** @param active true to activate the plan. */
 	public void setActive(boolean active) {
 		this.active = active;
+	}
+
+	/** @return canine medical aid-station entries. */
+	public String getAidStationInformation() {
+		return aidStationInformation;
+	}
+
+	/** @param aidStationInformation editable canine aid-station entries. */
+	public void setAidStationInformation(String aidStationInformation) {
+		this.aidStationInformation = safe(aidStationInformation);
+	}
+
+	/** @return canine-specific transport entries. */
+	public String getTransportServices() {
+		return transportServices;
+	}
+
+	/** @param transportServices editable canine transport services and capability notes. */
+	public void setTransportServices(String transportServices) {
+		this.transportServices = safe(transportServices);
 	}
 
 	/** @return editable poison-control contact text. */

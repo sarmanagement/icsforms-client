@@ -26,6 +26,8 @@ public class Ics202Panel extends JPanel {
 	private final JCheckBox includeIcs204 = new JCheckBox("ICS 204");
 	private final JCheckBox includeIcs208 = new JCheckBox("ICS 208");
 	private final JCheckBox includeIcs215a = new JCheckBox("ICS 215A");
+	private final JCheckBox includeIcs206 = new JCheckBox("ICS 206");
+	private final JCheckBox includeCanine206 = new JCheckBox("ICS 206CANINE (adapted)");
 	private final JCheckBox includeSarTaskAssignment = new JCheckBox("SAR Task Assignment");
 	private final JCheckBox includeMapPacket = new JCheckBox("Map packet");
 	private final JTextArea additionalFormsArea = UiSupport.textArea(2);
@@ -104,6 +106,8 @@ public class Ics202Panel extends JPanel {
 		checks.add(includeIcs204);
 		checks.add(includeIcs208);
 		checks.add(includeIcs215a);
+		checks.add(includeIcs206);
+		checks.add(includeCanine206);
 		checks.add(includeSarTaskAssignment);
 		checks.add(includeMapPacket);
 		panel.add(checks, BorderLayout.NORTH);
@@ -118,6 +122,8 @@ public class Ics202Panel extends JPanel {
 		includeIcs204.setSelected(false);
 		includeIcs208.setSelected(false);
 		includeIcs215a.setSelected(false);
+		includeIcs206.setSelected(false);
+		includeCanine206.setSelected(false);
 		includeSarTaskAssignment.setSelected(false);
 		includeMapPacket.setSelected(false);
 		List<String> additional = new ArrayList<>();
@@ -130,6 +136,10 @@ public class Ics202Panel extends JPanel {
 				includeIcs208.setSelected(true);
 			} else if ("ICS 215A".equalsIgnoreCase(item)) {
 				includeIcs215a.setSelected(true);
+			} else if ("ICS 206".equalsIgnoreCase(item)) {
+				includeIcs206.setSelected(true);
+			} else if ("ICS 206CANINE".equalsIgnoreCase(item)) {
+				includeCanine206.setSelected(true);
 			} else if ("SAR Task Assignment".equalsIgnoreCase(item)) {
 				includeSarTaskAssignment.setSelected(true);
 			} else if ("Map packet".equalsIgnoreCase(item)) {
@@ -154,6 +164,12 @@ public class Ics202Panel extends JPanel {
 		}
 		if (includeIcs215a.isSelected()) {
 			items.add("ICS 215A");
+		}
+		if (includeIcs206.isSelected()) {
+			items.add("ICS 206");
+		}
+		if (includeCanine206.isSelected()) {
+			items.add("ICS 206CANINE");
 		}
 		if (includeSarTaskAssignment.isSelected()) {
 			items.add("SAR Task Assignment");
