@@ -222,6 +222,32 @@ class Ics214PanelTest {
 		return (JScrollPane) field.get(panel);
 	}
 
+	@Test
+	void staticOpenInNewWindowAndClosePopOutWindowManageFrameLifecycle() throws Exception {
+		assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		AppData data = sampleDataWithTaskLog(1);
+		AppController controller = sampleController(data);
+		Ics214Form form = data.getActivityLogs().get(0);
+		Field windowsField = Ics214Panel.class.getDeclaredField("POP_OUT_WINDOWS");
+		windowsField.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		java.util.Map<Ics214Form, javax.swing.JFrame> windows =
+				(java.util.Map<Ics214Form, javax.swing.JFrame>) windowsField.get(null);
+		SwingUtilities.invokeAndWait(() -> {
+			try {
+				Ics214Panel.openInNewWindow(controller, form, data, () -> {});
+				assertTrue(windows.containsKey(form));
+				javax.swing.JFrame frame = windows.get(form);
+				assertTrue(frame.isDisplayable());
+				Ics214Panel.closePopOutWindow(form);
+				assertFalse(windows.containsKey(form));
+				assertFalse(frame.isDisplayable());
+			} finally {
+				Ics214Panel.closePopOutWindow(form);
+			}
+		});
+	}
+
 	/**
 	 * Creates a linked log fixture.
 	 *

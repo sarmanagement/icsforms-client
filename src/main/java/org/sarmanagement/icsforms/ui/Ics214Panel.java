@@ -1270,7 +1270,7 @@ public class Ics214Panel extends JPanel {
 	static class ActivityEntryEditor {
 		final JPanel panel = UiSupport.formPanel();
 		private final JSpinner timestampField = UiSupport.dateTimeSpinner();
-		private final JComboBox<ActivityEventType> eventTypeField;
+		final JComboBox<ActivityEventType> eventTypeField;
 		final JComboBox<String> resourceIdentifierField;
 		private final JTextArea notableActivityField = UiSupport.textArea(4);
 

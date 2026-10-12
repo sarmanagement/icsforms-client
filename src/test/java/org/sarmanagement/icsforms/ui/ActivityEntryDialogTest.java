@@ -15,6 +15,7 @@ import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
@@ -526,6 +527,69 @@ class ActivityEntryDialogTest {
 		assertEquals("Robin", followUp.getResourceIdentifier());
 		assertEquals("", followUp.getNotableActivity());
 		assertEquals(1, log.getActivityLog().size());
+	}
+
+	@Test
+	void clueDetectedLabelAdaptsBetweenIcpAndTaskDestination() throws Exception {
+		AppData data = new AppData();
+		data.setIncidentMode(IncidentMode.SAR);
+		Ics214Form icpLog = new Ics214Form();
+		icpLog.setName("ICP");
+		Ics214Form taskLog = new Ics214Form();
+		taskLog.setName("Task 101");
+		taskLog.setLinkedSarTaskAssignmentId("assignment-101");
+		data.getActivityLogs().addAll(List.of(icpLog, taskLog));
+
+		ActivityEntryDialog dialog = new ActivityEntryDialog(controller(data),
+				new LogEntryContext(new JPanel(), "", "assignment-101", "Search Team"), null);
+
+		JComboBox<ActivityEventType> events = editor(dialog).eventTypeField;
+		JComboBox<?> destinations = (JComboBox<?>) field(dialog, "destination");
+
+		ActivityEventType clueDetected = null;
+		for (int i = 0; i < events.getItemCount(); i++) {
+			if (ActivityEventType.ID_CLUE_DETECTED.equals(events.getItemAt(i).getId())) {
+				clueDetected = events.getItemAt(i);
+				break;
+			}
+		}
+		org.junit.jupiter.api.Assertions.assertNotNull(clueDetected);
+
+		javax.swing.ListCellRenderer<? super ActivityEventType> renderer = events.getRenderer();
+		java.awt.Component icpRendered = renderer.getListCellRendererComponent(
+				new javax.swing.JList<>(), clueDetected, 0, false, false);
+		assertTrue(icpRendered instanceof JLabel);
+		assertEquals("Clue detected by this assignment", ((JLabel) icpRendered).getText());
+
+		destinations.setSelectedIndex(1);
+		java.awt.Component taskRendered = events.getRenderer().getListCellRendererComponent(
+				new javax.swing.JList<>(), clueDetected, 0, false, false);
+		assertTrue(taskRendered instanceof JLabel);
+		assertEquals("Clue detected by my assignment", ((JLabel) taskRendered).getText());
+
+		destinations.setSelectedIndex(0);
+		java.awt.Component backToIcp = events.getRenderer().getListCellRendererComponent(
+				new javax.swing.JList<>(), clueDetected, 0, false, false);
+		assertEquals("Clue detected by this assignment", ((JLabel) backToIcp).getText());
+	}
+
+	@Test
+	void editorRendersClueDetectedBasedOnIcpScopeSupplier() {
+		List<ActivityEventType> types = List.of(
+				new ActivityEventType(ActivityEventType.ID_CLUE_DETECTED, "Clue Detected", true),
+				new ActivityEventType(ActivityEventType.ID_CLUE_REPORTED, "Clue Reported", true));
+		java.util.concurrent.atomic.AtomicBoolean isIcp = new java.util.concurrent.atomic.AtomicBoolean(true);
+		Ics214Panel.ActivityEntryEditor editor = new Ics214Panel.ActivityEntryEditor(
+				types, "", List.of(), isIcp::get);
+		ActivityEventType type = types.get(0);
+		javax.swing.ListCellRenderer<? super ActivityEventType> renderer = editor.eventTypeField.getRenderer();
+		JLabel label = (JLabel) renderer.getListCellRendererComponent(new javax.swing.JList<>(), type, 0, false, false);
+		assertEquals("Clue detected by this assignment", label.getText());
+
+		isIcp.set(false);
+		editor.refreshEventTypeDisplay();
+		label = (JLabel) renderer.getListCellRendererComponent(new javax.swing.JList<>(), type, 0, false, false);
+		assertEquals("Clue detected by my assignment", label.getText());
 	}
 
 	/**

@@ -56,10 +56,12 @@ import java.nio.file.Path;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Main Swing frame for editing shared incident data, ICS 202, ICS 204, and SAR
@@ -100,6 +102,8 @@ public class MainFrame extends JFrame {
 	private int lastSelectedTabIndex = -1;
 	private boolean rebuildingTabs;
 	private IapPhase lastKnownPhase;
+	private final Set<Ics214Form> closedLogForms = new HashSet<>();
+	private AppData lastData;
 
 	/**
 	 * Creates the main application frame.
@@ -147,6 +151,7 @@ public class MainFrame extends JFrame {
 		super("ICS Forms Desktop");
 		ApplicationIcon.install(this);
 		this.controller = controller;
+		this.lastData = controller.getData();
 		this.controller.setAutosaveErrorHandler(exception -> showSaveError(exception));
 		this.incidentContextPanel = new IncidentContextPanel(controller);
 		this.organizationalChartPanel = new OrganizationalChartPanel(controller);
@@ -251,6 +256,8 @@ public class MainFrame extends JFrame {
 		configMenu.setMnemonic(KeyEvent.VK_C);
 		JMenu logsListMenu = new JMenu("Go to Log");
 		logsListMenu.setMnemonic(KeyEvent.VK_G);
+		JMenu openLogInNewWindowMenu = new JMenu("Open Log in New Window");
+		openLogInNewWindowMenu.setMnemonic(KeyEvent.VK_O);
 
 		JMenuItem newItem = new JMenuItem("New…");
 		newItem.setMnemonic(KeyEvent.VK_N);
@@ -398,15 +405,16 @@ public class MainFrame extends JFrame {
 		addLogItem.setMnemonic(KeyEvent.VK_A);
 		addLogItem.addActionListener(event -> addLog());
 
-		JMenuItem removeCurrentLogItem = new JMenuItem("Remove Current Log");
-		removeCurrentLogItem.setMnemonic(KeyEvent.VK_R);
-		removeCurrentLogItem.addActionListener(event -> removeCurrentLog());
+		JMenuItem removeLogItem = new JMenuItem("Remove Log");
+		removeLogItem.setMnemonic(KeyEvent.VK_R);
+		removeLogItem.addActionListener(event -> removeLog());
 
 		logsMenu.addMenuListener(new MenuListener() {
 			@Override
 			/** {@inheritDoc} */
 			public void menuSelected(MenuEvent event) {
 				rebuildLogsListMenu(logsListMenu);
+				rebuildOpenLogInNewWindowMenu(openLogInNewWindowMenu);
 			}
 
 			@Override
@@ -430,10 +438,13 @@ public class MainFrame extends JFrame {
 		exportMenu.add(exportFormsPdfItem);
 		exportMenu.add(exportResourcesCsvItem);
 		importMenu.add(importIncidentItem);
-		logsMenu.add(addLogItem);
-		logsMenu.add(removeCurrentLogItem);
-		logsMenu.addSeparator();
 		logsMenu.add(logsListMenu);
+		logsMenu.add(openLogInNewWindowMenu);
+		logsMenu.addSeparator();
+		logsMenu.add(addLogItem);
+		logsMenu.add(removeLogItem);
+		rebuildLogsListMenu(logsListMenu);
+		rebuildOpenLogInNewWindowMenu(openLogInNewWindowMenu);
 		JMenuItem manageEventTypesItem = new JMenuItem("Manage Event Types…");
 		manageEventTypesItem.setMnemonic(KeyEvent.VK_E);
 		manageEventTypesItem.addActionListener(event -> manageEventTypes());
@@ -931,6 +942,9 @@ public class MainFrame extends JFrame {
 			ics214Panels.clear();
 			AppData data = controller.getData();
 			for (Ics214Form form : data.getActivityLogs()) {
+				if (closedLogForms.contains(form)) {
+					continue;
+				}
 				Ics214Panel panel = new Ics214Panel(controller);
 				panel.loadFromModel(form, data);
 				ics214Panels.add(panel);
@@ -964,6 +978,12 @@ public class MainFrame extends JFrame {
 		ics202Panel.refreshFromModel();
 		ics204Panel.refreshFromModel();
 		safetyPanel.refreshFromModel();
+		if (lastData != controller.getData()) {
+			closedLogForms.clear();
+			lastData = controller.getData();
+		} else {
+			closedLogForms.retainAll(controller.getData().getActivityLogs());
+		}
 		ensureLogs(controller.getData());
 		rebuildLogTabs();
 		sarTaskPanel.refreshFromModel();
@@ -1386,9 +1406,17 @@ public class MainFrame extends JFrame {
 			Ics214Form existing = data.getActivityLogs().get(i);
 			if (assignmentId.equals(existing.getLinkedSarTaskAssignmentId())) {
 				groupVisible.put(ACTIVITY_LOGS_GROUP, true);
-				rebuildVisibleTabs(ics214Panels.get(i), i);
-				if (tabs.indexOfComponent(ics214Panels.get(i)) >= 0) {
-					tabs.setSelectedComponent(ics214Panels.get(i));
+				if (closedLogForms.remove(existing)) {
+					rebuildLogTabs();
+				}
+				for (int j = 0; j < ics214Panels.size(); j++) {
+					if (ics214Panels.get(j).getCurrentForm() == existing) {
+						rebuildVisibleTabs(ics214Panels.get(j), j);
+						if (tabs.indexOfComponent(ics214Panels.get(j)) >= 0) {
+							tabs.setSelectedComponent(ics214Panels.get(j));
+						}
+						break;
+					}
 				}
 				return;
 			}
@@ -1405,8 +1433,11 @@ public class MainFrame extends JFrame {
 		controller.markDirty(AppController.LinkSource.ICS214);
 		rebuildLogTabs();
 		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
-		int newIndex = data.getActivityLogs().size() - 1;
-		rebuildVisibleTabs(newIndex < ics214Panels.size() ? ics214Panels.get(newIndex) : null, newIndex);
+		int newIndex = ics214Panels.size() - 1;
+		rebuildVisibleTabs(newIndex >= 0 ? ics214Panels.get(newIndex) : null, newIndex);
+		if (newIndex >= 0 && tabs.indexOfComponent(ics214Panels.get(newIndex)) >= 0) {
+			tabs.setSelectedComponent(ics214Panels.get(newIndex));
+		}
 		refreshStatus();
 	}
 
@@ -1422,9 +1453,17 @@ public class MainFrame extends JFrame {
 			Ics214Form existing = data.getActivityLogs().get(i);
 			if (assignmentId.equals(existing.getLinkedSarTaskAssignmentId())) {
 				groupVisible.put(ACTIVITY_LOGS_GROUP, true);
-				rebuildVisibleTabs(ics214Panels.get(i), i);
-				if (tabs.indexOfComponent(ics214Panels.get(i)) >= 0) {
-					tabs.setSelectedComponent(ics214Panels.get(i));
+				if (closedLogForms.remove(existing)) {
+					rebuildLogTabs();
+				}
+				for (int j = 0; j < ics214Panels.size(); j++) {
+					if (ics214Panels.get(j).getCurrentForm() == existing) {
+						rebuildVisibleTabs(ics214Panels.get(j), j);
+						if (tabs.indexOfComponent(ics214Panels.get(j)) >= 0) {
+							tabs.setSelectedComponent(ics214Panels.get(j));
+						}
+						break;
+					}
 				}
 				return;
 			}
@@ -1448,8 +1487,11 @@ public class MainFrame extends JFrame {
 		controller.markDirty(AppController.LinkSource.ICS214);
 		rebuildLogTabs();
 		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
-		int newIndex = data.getActivityLogs().size() - 1;
-		rebuildVisibleTabs(newIndex < ics214Panels.size() ? ics214Panels.get(newIndex) : null, newIndex);
+		int newIndex = ics214Panels.size() - 1;
+		rebuildVisibleTabs(newIndex >= 0 ? ics214Panels.get(newIndex) : null, newIndex);
+		if (newIndex >= 0 && tabs.indexOfComponent(ics214Panels.get(newIndex)) >= 0) {
+			tabs.setSelectedComponent(ics214Panels.get(newIndex));
+		}
 		refreshStatus();
 	}
 
@@ -1562,73 +1604,176 @@ public class MainFrame extends JFrame {
 		controller.markDirty(AppController.LinkSource.ICS214);
 		rebuildLogTabs();
 		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
-		int newIndex = data.getActivityLogs().size() - 1;
-		rebuildVisibleTabs(newIndex < ics214Panels.size() ? ics214Panels.get(newIndex) : null, newIndex);
+		int newIndex = ics214Panels.size() - 1;
+		rebuildVisibleTabs(newIndex >= 0 ? ics214Panels.get(newIndex) : null, newIndex);
+		if (newIndex >= 0 && tabs.indexOfComponent(ics214Panels.get(newIndex)) >= 0) {
+			tabs.setSelectedComponent(ics214Panels.get(newIndex));
+		}
 		refreshStatus();
 	}
 
-	/** Removes the selected activity log after operator confirmation. */
-	private void removeCurrentLog() {
-		if (!(tabs.getSelectedComponent() instanceof Ics214Panel selectedPanel)) {
-			JOptionPane.showMessageDialog(this, "Select an ICS 214 activity log tab first.", "Cannot Remove",
-					JOptionPane.WARNING_MESSAGE);
-			return;
-		}
+	/**
+	 * Removes an open activity log from the interface, deleting it only if empty and not the ICP log.
+	 */
+	void removeLog() {
+		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
 		AppData data = controller.getData();
 		ensureLogs(data);
-		int logIndex = ics214Panels.indexOf(selectedPanel);
-		if (logIndex < 0) {
+		List<Ics214Form> openLogs = data.getActivityLogs().stream()
+				.filter(log -> !closedLogForms.contains(log))
+				.toList();
+		if (openLogs.isEmpty()) {
+			JOptionPane.showMessageDialog(this, "No open activity logs are available to remove.", "Remove Log",
+					JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
-		if (data.getActivityLogs().size() <= 1) {
-			JOptionPane.showMessageDialog(this, "At least one activity log must remain.", "Cannot Remove",
-					JOptionPane.WARNING_MESSAGE);
+		Ics214Form activeForm = null;
+		if (tabs.getSelectedComponent() instanceof Ics214Panel activePanel) {
+			activeForm = activePanel.getCurrentForm();
+		}
+		JPanel panel = UiSupport.formPanel();
+		JLabel explanation = new JLabel("<html><body style='width: 320px;'>"
+				+ "This removes the log from the interface (and only deletes it if empty (no log entries), and the ICP log can't be deleted)."
+				+ "</body></html>");
+		JComboBox<LogRemovalChoice> logCombo = new JComboBox<>();
+		LogRemovalChoice selectedChoice = null;
+		for (Ics214Form log : openLogs) {
+			LogRemovalChoice choice = new LogRemovalChoice(log, logMenuLabel(log));
+			logCombo.addItem(choice);
+			if (log == activeForm) {
+				selectedChoice = choice;
+			}
+		}
+		if (selectedChoice != null) {
+			logCombo.setSelectedItem(selectedChoice);
+		}
+		UiSupport.addRow(panel, 0, "", explanation);
+		UiSupport.addRow(panel, 1, "Log", logCombo);
+		UiSupport.configureDialogComboBox(logCombo, 300);
+		JScrollPane scrollPane = new JScrollPane(panel);
+		scrollPane.setBorder(BorderFactory.createEmptyBorder());
+		if (!UiSupport.showResizableConfirmDialog(this, "Remove Log", scrollPane, new Dimension(480, 180))) {
 			return;
 		}
-		Ics214Form active = data.getActivityLogs().get(logIndex);
-		if (!active.getActivityLog().isEmpty()) {
-			JOptionPane.showMessageDialog(this,
-					"Cannot remove a log that contains activity entries. Remove all entries first.", "Cannot Remove",
-					JOptionPane.WARNING_MESSAGE);
+		LogRemovalChoice chosen = (LogRemovalChoice) logCombo.getSelectedItem();
+		if (chosen == null || chosen.form() == null) {
 			return;
 		}
-		int confirm = JOptionPane.showConfirmDialog(this, "Remove activity log '" + logMenuLabel(active) + "'?",
-				"Remove Log", JOptionPane.YES_NO_OPTION);
-		if (confirm != JOptionPane.YES_OPTION) {
-			return;
+		Ics214Form formToRemove = chosen.form();
+		boolean isIcp = formToRemove.getLogScope() == ActivityLogScope.ICP;
+		boolean isEmpty = formToRemove.getActivityLog().isEmpty();
+		if (isEmpty && !isIcp) {
+			data.getActivityLogs().remove(formToRemove);
+			closedLogForms.remove(formToRemove);
+			Ics214Panel.closePopOutWindow(formToRemove);
+		} else {
+			closedLogForms.add(formToRemove);
 		}
-		data.getActivityLogs().remove(logIndex);
 		controller.markDirty(AppController.LinkSource.ICS214);
 		rebuildLogTabs();
-		int newIndex = Math.max(0, logIndex - 1);
+		int newIndex = Math.max(0, ics214Panels.size() - 1);
 		rebuildVisibleTabs(newIndex < ics214Panels.size() ? ics214Panels.get(newIndex) : incidentContextPanel,
 				newIndex);
 		refreshStatus();
 	}
 
 	/**
+	 * Removes the current activity log, delegating to {@link #removeLog()}.
+	 *
+	 * @deprecated Use {@link #removeLog()} instead.
+	 */
+	@Deprecated
+	void removeCurrentLog() {
+		removeLog();
+	}
+
+	/**
+	 * Refreshes available logs to open in detached windows.
+	 *
+	 * @param openLogInNewWindowMenu submenu to rebuild
+	 */
+	private void rebuildOpenLogInNewWindowMenu(JMenu openLogInNewWindowMenu) {
+		openLogInNewWindowMenu.removeAll();
+		List<Ics214Form> logs = controller.getData().getActivityLogs();
+		for (Ics214Form log : logs) {
+			JMenuItem item = new JMenuItem(logMenuLabel(log));
+			item.addActionListener(event -> openLogInNewWindow(log));
+			openLogInNewWindowMenu.add(item);
+		}
+		openLogInNewWindowMenu.setEnabled(!logs.isEmpty());
+	}
+
+	/**
+	 * Opens an existing activity log in an independent window.
+	 *
+	 * @param log form to display in an independent window
+	 */
+	private void openLogInNewWindow(Ics214Form log) {
+		if (log == null) {
+			return;
+		}
+		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		Ics214Panel.openInNewWindow(controller, log, controller.getData(), () -> {
+			refreshStatus();
+			for (Ics214Panel panel : ics214Panels) {
+				if (panel.getCurrentForm() == log) {
+					panel.refreshActivityEntries();
+				}
+			}
+			clueLogPanel.refreshFromModel();
+		});
+	}
+
+	/**
 	 * Refreshes navigation choices for the current activity logs.
+	 *
 	 * @param logsListMenu navigation menu to rebuild
 	 */
 	private void rebuildLogsListMenu(JMenu logsListMenu) {
 		logsListMenu.removeAll();
 		ButtonGroup group = new ButtonGroup();
-		int selectedLogIndex = selectedLogIndex(tabs.getSelectedComponent());
+		Component selectedComponent = tabs.getSelectedComponent();
+		Ics214Form activeForm = selectedComponent instanceof Ics214Panel panel ? panel.getCurrentForm() : null;
 		List<Ics214Form> logs = controller.getData().getActivityLogs();
-		for (int i = 0; i < logs.size(); i++) {
-			final int logIndex = i;
-			JRadioButtonMenuItem item = new JRadioButtonMenuItem(logMenuLabel(logs.get(i)), i == selectedLogIndex);
+		for (Ics214Form log : logs) {
+			JRadioButtonMenuItem item = new JRadioButtonMenuItem(logMenuLabel(log), log == activeForm);
 			item.addActionListener(event -> {
 				groupVisible.put(ACTIVITY_LOGS_GROUP, true);
-				rebuildVisibleTabs(ics214Panels.get(logIndex), logIndex);
-				if (tabs.indexOfComponent(ics214Panels.get(logIndex)) >= 0) {
-					tabs.setSelectedComponent(ics214Panels.get(logIndex));
+				if (closedLogForms.remove(log)) {
+					rebuildLogTabs();
+				}
+				for (int j = 0; j < ics214Panels.size(); j++) {
+					if (ics214Panels.get(j).getCurrentForm() == log) {
+						rebuildVisibleTabs(ics214Panels.get(j), j);
+						if (tabs.indexOfComponent(ics214Panels.get(j)) >= 0) {
+							tabs.setSelectedComponent(ics214Panels.get(j));
+						}
+						break;
+					}
 				}
 			});
 			group.add(item);
 			logsListMenu.add(item);
 		}
 		logsListMenu.setEnabled(!logs.isEmpty());
+	}
+
+	/**
+	 * Selection item for log removal.
+	 *
+	 * @param form activity log form
+	 * @param label display label
+	 */
+	private record LogRemovalChoice(Ics214Form form, String label) {
+		/**
+		 * Returns the display label for the selection choice.
+		 *
+		 * @return display label
+		 */
+		@Override
+		public String toString() {
+			return label;
+		}
 	}
 
 	/**
