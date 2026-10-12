@@ -19,7 +19,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 8;
+	public static final int CURRENT_SCHEMA_VERSION = 9;
 
 	/**
 	 * A lightweight snapshot of the shared context at the end of one operational
@@ -30,6 +30,8 @@ public class AppData {
 		private LocalDateTime periodStart;
 		private LocalDateTime periodEnd;
 		private List<String> incidentCommanders = new ArrayList<>();
+		private MedicalPlan medicalPlan;
+		private CanineMedicalPlan canineMedicalPlan;
 
 		/** Creates an empty record. */
 		public OperationalPeriodRecord() {
@@ -88,6 +90,42 @@ public class AppData {
 		public void setIncidentCommanders(List<String> incidentCommanders) {
 			this.incidentCommanders = incidentCommanders == null ? new ArrayList<>() : incidentCommanders;
 		}
+
+		/**
+		 * Returns the archived standard medical plan for this period.
+		 *
+		 * @return archived plan, or null when no plan existed.
+		 */
+		public MedicalPlan getMedicalPlan() {
+			return medicalPlan;
+		}
+
+		/**
+		 * Sets the archived standard medical plan.
+		 *
+		 * @param medicalPlan archived plan.
+		 */
+		public void setMedicalPlan(MedicalPlan medicalPlan) {
+			this.medicalPlan = medicalPlan;
+		}
+
+		/**
+		 * Returns the archived canine medical plan for this period.
+		 *
+		 * @return archived plan, or null when no plan existed.
+		 */
+		public CanineMedicalPlan getCanineMedicalPlan() {
+			return canineMedicalPlan;
+		}
+
+		/**
+		 * Sets the archived canine medical plan.
+		 *
+		 * @param canineMedicalPlan archived plan.
+		 */
+		public void setCanineMedicalPlan(CanineMedicalPlan canineMedicalPlan) {
+			this.canineMedicalPlan = canineMedicalPlan;
+		}
 	}
 
 	private int schemaVersion = CURRENT_SCHEMA_VERSION;
@@ -123,6 +161,10 @@ public class AppData {
 	private boolean clueLogIcs233Enabled;
 	private List<TCard> tCards = new ArrayList<>();
 	private PdfLayoutSettings pdfLayoutSettings = new PdfLayoutSettings();
+	private MedicalPlan medicalPlan = new MedicalPlan();
+	private CanineMedicalPlan canineMedicalPlan = new CanineMedicalPlan();
+	private VetDirectory vetDirectory = new VetDirectory();
+	private StagingLocation stagingLocation = new StagingLocation();
 
 	/**
 	 * Creates an empty incident document.
@@ -249,6 +291,8 @@ public class AppData {
 		if (organizationalChart != null) {
 			record.setIncidentCommanders(new ArrayList<>(organizationalChart.getIncidentCommanders()));
 		}
+		record.setMedicalPlan(medicalPlan);
+		record.setCanineMedicalPlan(canineMedicalPlan);
 		operationalPeriodHistory.add(record);
 		getArchivedSafetyHazardReports().addAll(archiveSafetyHazardReports(sarTaskAssignments,
 				record.getPeriodStart(), record.getPeriodEnd()));
@@ -262,6 +306,8 @@ public class AppData {
 		this.clueLogEntries = new ArrayList<>();
 		this.tCards = new ArrayList<>();
 		this.activityLogs = new ArrayList<>();
+		this.medicalPlan = new MedicalPlan();
+		this.canineMedicalPlan = new CanineMedicalPlan();
 	}
 
 	/**
@@ -912,6 +958,102 @@ public class AppData {
 	 */
 	public void setTCards(List<TCard> tCards) {
 		this.tCards = tCards == null ? new ArrayList<>() : tCards;
+	}
+
+	/**
+	 * Returns the current period's standard medical plan.
+	 *
+	 * @return standard medical plan, never null.
+	 */
+	public MedicalPlan getMedicalPlan() {
+		if (medicalPlan == null) {
+			medicalPlan = new MedicalPlan();
+		}
+		return medicalPlan;
+	}
+
+	/**
+	 * Sets the current period's standard medical plan.
+	 *
+	 * @param medicalPlan plan; null becomes inactive and empty.
+	 */
+	public void setMedicalPlan(MedicalPlan medicalPlan) {
+		this.medicalPlan = medicalPlan == null ? new MedicalPlan() : medicalPlan;
+	}
+
+	/**
+	 * Returns the independent current period's canine medical plan.
+	 *
+	 * @return canine medical plan, never null.
+	 */
+	public CanineMedicalPlan getCanineMedicalPlan() {
+		if (canineMedicalPlan == null) {
+			canineMedicalPlan = new CanineMedicalPlan();
+		}
+		return canineMedicalPlan;
+	}
+
+	/**
+	 * Sets the independent current period's canine medical plan.
+	 *
+	 * @param canineMedicalPlan plan; null becomes inactive and empty.
+	 */
+	public void setCanineMedicalPlan(CanineMedicalPlan canineMedicalPlan) {
+		this.canineMedicalPlan = canineMedicalPlan == null ? new CanineMedicalPlan() : canineMedicalPlan;
+	}
+
+	/**
+	 * Returns incident-owned copies of imported regional veterinarian records.
+	 *
+	 * @return reusable directory, never null.
+	 */
+	public VetDirectory getVetDirectory() {
+		if (vetDirectory == null) {
+			vetDirectory = new VetDirectory();
+		}
+		return vetDirectory;
+	}
+
+	/**
+	 * Replaces the incident-owned regional directory.
+	 *
+	 * @param vetDirectory directory; null becomes empty.
+	 */
+	public void setVetDirectory(VetDirectory vetDirectory) {
+		this.vetDirectory = vetDirectory == null ? new VetDirectory() : vetDirectory;
+	}
+
+	/**
+	 * Returns the shared incident staging/base location.
+	 *
+	 * @return staging/base location, never null.
+	 */
+	public StagingLocation getStagingLocation() {
+		if (stagingLocation == null) {
+			stagingLocation = new StagingLocation();
+		}
+		return stagingLocation;
+	}
+
+	/**
+	 * Sets the shared incident staging/base location.
+	 *
+	 * @param stagingLocation location; null becomes empty.
+	 */
+	public void setStagingLocation(StagingLocation stagingLocation) {
+		this.stagingLocation = stagingLocation == null ? new StagingLocation() : stagingLocation;
+	}
+
+	/**
+	 * Determines canine workspace eligibility without regard to card status.
+	 *
+	 * @return true for SAR mode or when any card identifies a canine resource.
+	 */
+	public boolean isCanineMedicalWorkspaceEligible() {
+		if (getIncidentMode() == IncidentMode.SAR) {
+			return true;
+		}
+		return getTCards().stream().anyMatch(TCard::isCanineResourceCard);
 	}
 
 	/**

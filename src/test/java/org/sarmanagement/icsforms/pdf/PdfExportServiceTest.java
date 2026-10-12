@@ -130,6 +130,30 @@ class PdfExportServiceTest {
 		assertFalse(PdfExportService.isIapAttachmentSelected(data, "ICS 215A"));
 	}
 
+	@Test
+	void medicalPlanInclusionIsControlledByIcs202AttachmentSelection() throws Exception {
+		PdfExportService service = new PdfExportService(new Ics206PdfRenderer());
+		AppData data = new AppData();
+
+		assertTrue(service.exportAll(data, outputDirectory).isEmpty());
+
+		data.getForm202().setIncidentActionPlanAttachments(List.of("ICS 206"));
+		assertTrue(service.exportAll(data, outputDirectory).containsKey("ICS 206"));
+	}
+
+	@Test
+	void caninePlanInclusionIsControlledByIcs202AttachmentSelection() throws Exception {
+		PdfExportService service = new PdfExportService(new Ics206CaninePdfRenderer());
+		AppData data = new AppData();
+
+		assertTrue(service.exportAll(data, outputDirectory).isEmpty());
+
+		data.getForm202().setIncidentActionPlanAttachments(List.of("ICS 206CANINE"));
+		assertTrue(service.exportAll(data, outputDirectory).containsKey("ICS 206CANINE"));
+		PdfExportService.assignIapPageNumbers(data, List.of("ICS 206CANINE"), true);
+		assertEquals("1", data.getCanineMedicalPlan().getIapPage());
+	}
+
 	/**
 	 * Exports and counts an IAP containing only the registered organization list.
 	 *

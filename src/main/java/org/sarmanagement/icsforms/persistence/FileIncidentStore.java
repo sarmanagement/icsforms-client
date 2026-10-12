@@ -1,7 +1,11 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.persistence;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
@@ -285,7 +289,7 @@ public class FileIncidentStore implements IncidentStore {
 			return Optional.empty();
 		}
 		try {
-			AppData data = MAPPER.readValue(jsonFile.toFile(), AppData.class);
+			AppData data = readDocument(jsonFile);
 			data.setIncidentId(null);
 			data.setRevision(0);
 			data.setCreatedAt(null);
@@ -362,15 +366,33 @@ public class FileIncidentStore implements IncidentStore {
 	 */
 	private AppData readWithBackup(Path path) {
 		try {
-			return MAPPER.readValue(path.toFile(), AppData.class);
+			return readDocument(path);
 		} catch (IOException primaryFailure) {
 			try {
-				return MAPPER.readValue(backup(path).toFile(), AppData.class);
+				return readDocument(backup(path));
 			} catch (IOException backupFailure) {
 				backupFailure.addSuppressed(primaryFailure);
 				throw new IllegalStateException("Cannot read incident or backup: " + path, backupFailure);
 			}
 		}
+	}
+
+	/**
+	 * Reads an incident document only when its schema is supported by this client.
+	 *
+	 * @param path incident document path.
+	 * @return deserialized incident.
+	 * @throws IOException when the file cannot be parsed.
+	 * @throws IllegalStateException when a newer schema must not be rewritten.
+	 */
+	private AppData readDocument(Path path) throws IOException {
+		JsonNode document = MAPPER.readTree(path.toFile());
+		JsonNode version = document == null ? null : document.get("schemaVersion");
+		if (version != null && version.canConvertToInt() && version.intValue() > AppData.CURRENT_SCHEMA_VERSION) {
+			throw new IllegalStateException("Incident schema " + version.intValue()
+					+ " is newer than supported schema " + AppData.CURRENT_SCHEMA_VERSION + ": " + path);
+		}
+		return MAPPER.treeToValue(document, AppData.class);
 	}
 
 	/**

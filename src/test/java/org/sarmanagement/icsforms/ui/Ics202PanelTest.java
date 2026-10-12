@@ -79,6 +79,31 @@ class Ics202PanelTest {
 		assertFalse(controller.getData().getForm202().getIncidentActionPlanAttachments().contains("ICS 215A"));
 	}
 
+	@Test
+	void medicalPlanInclusionControlsAreDrivenByIcs202Attachments() throws Exception {
+		AppController controller = sampleController();
+		Ics202Panel panel = new Ics202Panel(controller);
+
+		SwingUtilities.invokeAndWait(() -> {
+			((JCheckBox) fieldValue(panel, "includeIcs206")).setSelected(true);
+			((JCheckBox) fieldValue(panel, "includeCanine206")).setSelected(true);
+			panel.pushToModel();
+		});
+
+		assertTrue(controller.getData().getMedicalPlan().isActive());
+		assertTrue(controller.getData().getCanineMedicalPlan().isActive());
+		assertTrue(controller.getData().getForm202().getIncidentActionPlanAttachments().contains("ICS 206"));
+		assertTrue(controller.getData().getForm202().getIncidentActionPlanAttachments().contains("ICS 206CANINE"));
+
+		SwingUtilities.invokeAndWait(() -> {
+			((JCheckBox) fieldValue(panel, "includeIcs206")).setSelected(false);
+			panel.pushToModel();
+		});
+
+		assertFalse(controller.getData().getMedicalPlan().isActive());
+		assertTrue(controller.getData().getCanineMedicalPlan().isActive());
+	}
+
 	private static Object fieldValue(Object instance, String fieldName) {
 		try {
 			Field field = instance.getClass().getDeclaredField(fieldName);

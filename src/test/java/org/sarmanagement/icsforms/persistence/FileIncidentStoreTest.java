@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.persistence;
 
 import org.junit.jupiter.api.Test;
@@ -73,6 +76,22 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 			assertEquals(0, upgraded.getRevision());
 			store.save(id, upgraded);
 			assertEquals(1, store.load(id).getRevision());
+		}
+	}
+
+	@Test
+	void newerSchemaIsRejectedWithoutChangingTheIncidentDocument() throws Exception {
+		IncidentId id = IncidentId.newId();
+		Path directory = tempDir.resolve("incidents");
+		Files.createDirectories(directory);
+		Path document = directory.resolve(id.value() + ".json");
+		String original = "{\"schemaVersion\":10,\"incidentId\":\"" + id.value()
+				+ "\",\"futurePlan\":{\"mustKeep\":true}}";
+		Files.writeString(document, original);
+
+		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+			assertThrows(IllegalStateException.class, () -> store.load(id));
+			assertEquals(original, Files.readString(document));
 		}
 	}
 

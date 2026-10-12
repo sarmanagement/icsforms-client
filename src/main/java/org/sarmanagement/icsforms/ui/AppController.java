@@ -1313,6 +1313,9 @@ public class AppController {
 								safe(res.getFunction()) + " — " + safe(task.getAssignmentTeamNumber())));
 						wanted.put(ref, card);
 						applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+						if (isCanineTask && card.getCardType() == TCardType.EQUIPMENT) {
+							card.setCanineResource(true);
+						}
 						continue;
 					}
 
@@ -1399,6 +1402,9 @@ public class AppController {
 						wanted.put(ref, card);
 						byName.putIfAbsent(resName.trim().toLowerCase(), card);
 						applyHigherPriorityStatus(taskDrivenStatus, card, lifecycleCardStatus);
+					}
+					if (isCanineTask && card.getCardType() == TCardType.EQUIPMENT) {
+						card.setCanineResource(true);
 					}
 				}
 			}
