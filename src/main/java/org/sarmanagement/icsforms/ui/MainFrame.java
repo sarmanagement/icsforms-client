@@ -167,6 +167,12 @@ public class MainFrame extends JFrame {
 		sarTaskPanel.setOnNewAssignmentRequest(ics204Panel::openNewAssignmentEditor);
 		sarTaskPanel.setOnEditIcs204AssignmentRequest(this::openIcs204EditorForAssignment);
 		tCardPanel.setOnEditSarAssignmentRequest(assignmentId -> openSarTaskEditorForAssignment(assignmentId, false));
+		ics204Panel.setOnAddLogEntryRequest((source, assignment) -> showAddLogEntry(
+				new LogEntryContext(source, "", assignment.getAssignmentId(), assignment.getResourceIdentifier())));
+		sarTaskPanel.setOnAddLogEntryRequest((source, assignment) -> showAddLogEntry(
+				new LogEntryContext(source, assignment.getTaskId(), assignment.getAssignmentId(),
+						org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(assignment))));
+		tCardPanel.setOnAddLogEntryRequest(this::showAddLogEntry);
 		groupVisible.put(CORE_GROUP, true);
 		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
 		groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
@@ -333,7 +339,9 @@ public class MainFrame extends JFrame {
 
 		JMenuItem duplicateItem = new JMenuItem("Duplicate Incident");
 		duplicateItem.addActionListener(event -> {
-			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			if (!saveBeforeSwitch()) {
+				return;
+			}
 			try {
 				controller.duplicateIncident();
 				refreshFromModel();
@@ -621,16 +629,23 @@ public class MainFrame extends JFrame {
 		}
 		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
 		chooseDirectory(defaultDirectory, directory -> {
-			if (!handleValidationBeforeExport()) {
-				return;
-			}
-			pushToModel(source);
-			addSelectedFormsToIcs202Attachments(selected);
 			try {
+				if (!handleValidationBeforeExport()) {
+					return;
+				}
+				pushToModel(source);
+				addSelectedFormsToIcs202Attachments(selected);
 				if (exportModeControls.combined().isSelected()) {
 					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source,
 							printOptions.isPortrait());
-					JOptionPane.showMessageDialog(this, createExportCompletePanel(List.of(bundlePath)), "Export complete",
+					JPanel completion = new JPanel(new BorderLayout(0, 8));
+					JTextArea summary = new JTextArea(controller.getLastPdfBundleSummary(), 3, 50);
+					summary.setEditable(false);
+					summary.setLineWrap(true);
+					summary.setWrapStyleWord(true);
+					completion.add(summary, BorderLayout.NORTH);
+					completion.add(createExportCompletePanel(List.of(bundlePath)), BorderLayout.CENTER);
+					JOptionPane.showMessageDialog(this, completion, "Export complete",
 							JOptionPane.INFORMATION_MESSAGE);
 				} else {
 					Map<String, Path> exported = controller.exportSelectedForms(selected, directory, source,
@@ -638,8 +653,8 @@ public class MainFrame extends JFrame {
 					JOptionPane.showMessageDialog(this, createExportCompletePanel(new ArrayList<>(exported.values())), "Export complete",
 							JOptionPane.INFORMATION_MESSAGE);
 				}
-			} catch (IOException exception) {
-				showError("Failed to export PDFs", exception);
+			} catch (IOException | RuntimeException exception) {
+				showPdfExportError("Failed to export PDFs", exception);
 			}
 		});
 	}
@@ -855,16 +870,16 @@ public class MainFrame extends JFrame {
 	private void exportOne(Path defaultDirectory, String formKey) {
 		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
 		chooseDirectory(defaultDirectory, directory -> {
-			if (!handleValidationBeforeExport()) {
-				return;
-			}
-			pushToModel(source);
 			try {
+				if (!handleValidationBeforeExport()) {
+					return;
+				}
+				pushToModel(source);
 				Path output = controller.exportSelected(formKey, directory, source);
 				JOptionPane.showMessageDialog(this, createExportCompletePanel(List.of(output)), "Export complete",
 						JOptionPane.INFORMATION_MESSAGE);
-			} catch (IOException exception) {
-				showError("Failed to export " + formKey, exception);
+			} catch (IOException | RuntimeException exception) {
+				showPdfExportError("Failed to export " + formKey, exception);
 			}
 		});
 	}
@@ -1156,6 +1171,9 @@ public class MainFrame extends JFrame {
 	 * @return {@code true} if it is safe to switch incidents.
 	 */
 	private boolean saveBeforeSwitch() {
+		if (!resolveOutstandingEditors()) {
+			return false;
+		}
 		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
 		pushToModel(source);
 		try {
@@ -1165,6 +1183,34 @@ public class MainFrame extends JFrame {
 			showSaveError(exception);
 			return false;
 		}
+	}
+
+	/**
+	 * Requires pending editors to be saved or explicitly discarded before replacing
+	 * their incident, including during save-conflict recovery.
+	 *
+	 * @return true when no outstanding editor can still modify the old incident.
+	 */
+	private boolean resolveOutstandingEditors() {
+		List<java.awt.Window> outstanding = UiSupport.outstandingIncidentWindows(this, controller.getData());
+		if (!outstanding.isEmpty()) {
+			Object[] options = {"Return to editors to save", "Discard open editors", "Cancel"};
+			int choice = JOptionPane.showOptionDialog(this,
+					"Editors or detached logs are still open. Return to them to save pending edits before "
+							+ "switching or closing this incident, or explicitly discard their pending edits.\n"
+							+ "Activity entries already added to the incident will be retained.",
+					"Resolve open incident editors", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE,
+					null, options, options[0]);
+			if (choice != 1) {
+				if (choice == 0) {
+					outstanding.get(outstanding.size() - 1).toFront();
+				}
+				return false;
+			}
+			outstanding.forEach(java.awt.Window::dispose);
+			UiSupport.disposeIncidentWindows(controller.getData());
+		}
+		return true;
 	}
 
 	/**
@@ -1193,14 +1239,14 @@ public class MainFrame extends JFrame {
 							+ exception.getMessage() + "\nDuplicate to preserve your edits, or reload to discard them.",
 					"Incident save conflict", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE,
 					null, choices, choices[0]);
-			if (selected == 0) {
+			if (selected == 0 && resolveOutstandingEditors()) {
 				try {
 					controller.duplicateIncident();
 					refreshFromModel();
 				} catch (RuntimeException duplicateFailure) {
 					showError("Could not duplicate incident", duplicateFailure);
 				}
-			} else if (selected == 1
+			} else if (selected == 1 && resolveOutstandingEditors()
 					&& JOptionPane.showConfirmDialog(this, "Discard your local changes and reload from the store?",
 							"Discard local changes", JOptionPane.YES_NO_OPTION,
 							JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION) {
@@ -1424,6 +1470,7 @@ public class MainFrame extends JFrame {
 		if (assignmentId == null || assignmentId.isBlank()) {
 			return;
 		}
+		sarTaskPanel.refreshFromModel();
 		Component previousTab = tabs.getSelectedComponent();
 		int previousLogIndex = selectedLogIndex(previousTab);
 		groupVisible.put(SAR_ONLY_GROUP, true);
@@ -1452,11 +1499,33 @@ public class MainFrame extends JFrame {
 		if (assignmentId == null || assignmentId.isBlank()) {
 			return;
 		}
+		ics204Panel.refreshFromModel();
 		tabs.setSelectedComponent(ics204Panel);
 		if (!ics204Panel.openEditorForAssignmentId(assignmentId)) {
 			JOptionPane.showMessageDialog(this, "No ICS 204 assignment found for assignment ID " + assignmentId,
 					"Open Assignment", JOptionPane.INFORMATION_MESSAGE);
 		}
+	}
+
+	/**
+	 * Launches the shared entry dialog without pushing or closing any pending editor.
+	 *
+	 * @param context initiating component and task/resource context
+	 */
+	private void showAddLogEntry(LogEntryContext context) {
+		AppData incident = controller.getData();
+		int previousLogCount = incident.getActivityLogs().size();
+		Component owner = ActivityEntryDialog.resolveOwner(context.source(), this);
+		if (!new ActivityEntryDialog(controller, context, null).show(owner) || controller.getData() != incident) {
+			return;
+		}
+		if (previousLogCount != controller.getData().getActivityLogs().size()) {
+			rebuildLogTabs();
+		}
+		for (Ics214Panel panel : ics214Panels) {
+			panel.refreshActivityEntries();
+		}
+		clueLogPanel.refreshFromModel();
 	}
 
 	/** Creates an activity log using the selected scope and linked document. */
@@ -1778,6 +1847,19 @@ public class MainFrame extends JFrame {
 			return "Assignment – " + resource;
 		}
 		return "Assignment";
+	}
+
+	/**
+	 * Logs a PDF failure with its complete cause and displays actionable details.
+	 *
+	 * @param title export operation that failed.
+	 * @param exception rendering, validation, or filesystem failure.
+	 */
+	private void showPdfExportError(String title, Exception exception) {
+		java.util.logging.Logger.getLogger(MainFrame.class.getName())
+				.log(java.util.logging.Level.SEVERE, title, exception);
+		String detail = exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
+		JOptionPane.showMessageDialog(this, title + ":\n" + detail, title, JOptionPane.ERROR_MESSAGE);
 	}
 
 	/**

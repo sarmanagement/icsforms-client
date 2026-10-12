@@ -376,6 +376,118 @@ public class AppController {
 	}
 
 	/**
+	 * Applies and saves editor changes atomically while retaining live model identities.
+	 * The edit callback must not open dialogs or yield to another Swing event.
+	 *
+	 * @param edits synchronous editor changes.
+	 * @throws RuntimeException when edits or persistence fail, after restoring the model.
+	 */
+	public void persistEditorChanges(Runnable edits) {
+		EditorModelSnapshot snapshot = new EditorModelSnapshot();
+		snapshot.capture(data);
+		boolean previousDirty = dirty;
+		LinkSource previousSource = activeLinkSource;
+		boolean pendingAutosave = autosaveTimer.isRunning();
+		try {
+			edits.run();
+			markDirty();
+			save();
+		} catch (RuntimeException exception) {
+			autosaveTimer.stop();
+			snapshot.restore();
+			dirty = previousDirty;
+			activeLinkSource = previousSource;
+			if (pendingAutosave) {
+				autosaveTimer.restart();
+			}
+			throw exception;
+		}
+	}
+
+	/** Captures a model graph without replacing objects held by detached editors. */
+	private static class EditorModelSnapshot {
+		private final Map<Object, Map<java.lang.reflect.Field, Object>> objects = new java.util.IdentityHashMap<>();
+		private final Map<List<?>, List<?>> lists = new java.util.IdentityHashMap<>();
+		private final Map<Map<?, ?>, Map<?, ?>> maps = new java.util.IdentityHashMap<>();
+
+		/**
+		 * Captures model fields and mutable collection contents before an edit.
+		 *
+		 * @param value reachable model value.
+		 */
+		private void capture(Object value) {
+			if (value instanceof List<?> list) {
+				if (lists.containsKey(list)) {
+					return;
+				}
+				lists.put(list, new ArrayList<>(list));
+				list.forEach(this::capture);
+			} else if (value instanceof Map<?, ?> map) {
+				if (maps.containsKey(map)) {
+					return;
+				}
+				maps.put(map, new LinkedHashMap<>(map));
+				map.values().forEach(this::capture);
+			} else if (value != null && !(value instanceof Enum<?>)
+					&& value.getClass().getPackageName().equals("org.sarmanagement.icsforms.model")
+					&& !objects.containsKey(value)) {
+				Map<java.lang.reflect.Field, Object> fields = new LinkedHashMap<>();
+				objects.put(value, fields);
+				for (Class<?> type = value.getClass(); type != null
+						&& type.getPackageName().equals("org.sarmanagement.icsforms.model"); type = type.getSuperclass()) {
+					for (java.lang.reflect.Field field : type.getDeclaredFields()) {
+						if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+							continue;
+						}
+						try {
+							field.setAccessible(true);
+							Object current = field.get(value);
+							if (!java.lang.reflect.Modifier.isFinal(field.getModifiers())) {
+								fields.put(field, current);
+							}
+							capture(current);
+						} catch (IllegalAccessException exception) {
+							throw new IllegalStateException("Unable to capture editor state", exception);
+						}
+					}
+				}
+			}
+		}
+
+		/**
+		 * Restores captured field values and original mutable collection identities.
+		 *
+		 * @throws IllegalStateException when a captured field cannot be restored.
+		 */
+		@SuppressWarnings({"rawtypes", "unchecked"})
+		private void restore() {
+			for (var object : objects.entrySet()) {
+				for (var field : object.getValue().entrySet()) {
+					try {
+						field.getKey().set(object.getKey(), field.getValue());
+					} catch (IllegalAccessException exception) {
+						throw new IllegalStateException("Unable to restore editor state", exception);
+					}
+				}
+			}
+			for (var entry : lists.entrySet()) {
+				if (!entry.getKey().equals(entry.getValue())) {
+					List original = entry.getKey();
+					original.clear();
+					original.addAll(entry.getValue());
+				}
+			}
+			for (var entry : maps.entrySet()) {
+				if (!entry.getKey().equals(entry.getValue())) {
+					Map original = entry.getKey();
+					original.clear();
+					original.putAll(entry.getValue());
+				}
+			}
+		}
+	}
+
+	/**
 	 * Saves the active document immediately using the current authoritative
 	 * linked-field source and cancels any pending autosave after success.
 	 *
@@ -744,7 +856,7 @@ public class AppController {
 	}
 
 	/**
-	 * Exports selected forms using legacy incident layout preferences.
+	 * Stages all selected forms before publishing them with legacy layout preferences.
 	 *
 	 * @param formKeys selected renderer keys, or null for no forms
 	 * @param outputDirectory destination directory
@@ -757,16 +869,10 @@ public class AppController {
 		synchronizeLinkedFields(source);
 		syncSarTasks();
 		syncTCards();
-		java.util.Map<String, Path> exported = new LinkedHashMap<>();
-		if (formKeys == null) {
-			return exported;
-		}
-		for (String formKey : formKeys) {
-			if (exportService.supports(formKey)) {
-				exported.put(formKey, exportService.exportSelected(formKey, data, outputDirectory));
-			}
-		}
-		return exported;
+		List<String> supported = formKeys == null ? List.of()
+				: formKeys.stream().distinct().filter(exportService::supports).toList();
+		return supported.isEmpty() ? new LinkedHashMap<>()
+				: exportService.exportForms(supported, data, outputDirectory);
 	}
 
 	/**
@@ -787,7 +893,7 @@ public class AppController {
 	}
 
 	/**
-	 * Exports selected individual PDFs with print-time orientation on an isolated snapshot.
+	 * Stages all selected individual PDFs with print-time orientation on an isolated snapshot.
 	 *
 	 * @param formKeys selected renderer keys, or null for no forms
 	 * @param outputDirectory destination directory
@@ -799,15 +905,19 @@ public class AppController {
 	public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory,
 			LinkSource source, boolean portrait) throws IOException {
 		AppData exportData = createPrintSnapshot(source, portrait);
-		java.util.Map<String, Path> exported = new LinkedHashMap<>();
-		if (formKeys != null) {
-			for (String formKey : formKeys.stream().distinct().toList()) {
-				if (exportService.supports(formKey)) {
-					exported.put(formKey, exportService.exportSelected(formKey, exportData, outputDirectory));
-				}
-			}
-		}
-		return exported;
+		List<String> supported = formKeys == null ? List.of()
+				: formKeys.stream().distinct().filter(exportService::supports).toList();
+		return supported.isEmpty() ? new LinkedHashMap<>()
+				: exportService.exportForms(supported, exportData, outputDirectory);
+	}
+
+	/**
+	 * Returns the inclusion or failure summary of the most recent PDF bundle.
+	 *
+	 * @return user-facing PDF bundle export summary.
+	 */
+	public String getLastPdfBundleSummary() {
+		return exportService.getLastBundleSummary();
 	}
 
 	/**
@@ -998,19 +1108,45 @@ public class AppController {
 	 */
 	public void syncSarTasks() {
 		IncidentContext context = data.getIncidentContext();
-		Ics204Form form = data.getForm204();
 		Map<String, SarTaskAssignment> existingById = new LinkedHashMap<>();
 		for (SarTaskAssignment existing : data.getSarTaskAssignments()) {
 			existingById.put(existing.getAssignmentId(), existing);
 		}
 		List<SarTaskAssignment> synced = new ArrayList<>();
-		for (ResourceAssignment resource : form.getResourcesAssigned()) {
-			SarTaskAssignment scaffold = SarTaskAssignment.fromResourceAssignment(resource, context, form);
-			scaffold.setPreparedDateTime(form.getPreparedDateTime());
-			SarTaskAssignment existing = existingById.get(resource.getAssignmentId());
-			synced.add(existing == null ? scaffold : mergeSarTask(existing, scaffold));
+		Set<String> seen = new java.util.HashSet<>();
+		for (Ics204Form form : getAssignmentForms()) {
+			for (ResourceAssignment resource : form.getResourcesAssigned()) {
+				if (!seen.add(resource.getAssignmentId())) {
+					continue;
+				}
+				SarTaskAssignment scaffold = SarTaskAssignment.fromResourceAssignment(resource, context, form);
+				scaffold.setPreparedDateTime(form.getPreparedDateTime());
+				SarTaskAssignment existing = existingById.get(resource.getAssignmentId());
+				synced.add(existing == null ? scaffold : mergeSarTask(existing, scaffold));
+			}
 		}
 		data.setSarTaskAssignments(synced);
+	}
+
+	/**
+	 * Returns every assignment form, with the primary form first.
+	 *
+	 * @return primary and additional ICS 204 forms.
+	 */
+	public List<Ics204Form> getAssignmentForms() {
+		List<Ics204Form> forms = new ArrayList<>();
+		forms.add(data.getForm204());
+		forms.addAll(data.getAdditionalForms204());
+		return forms;
+	}
+
+	/**
+	 * Returns all assignment rows for stable-identity navigation and synchronization.
+	 *
+	 * @return resources from every ICS 204 form.
+	 */
+	public List<ResourceAssignment> getAssignmentResources() {
+		return getAssignmentForms().stream().flatMap(form -> form.getResourcesAssigned().stream()).toList();
 	}
 
 	/**
@@ -1022,7 +1158,7 @@ public class AppController {
 		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
 			tasksById.put(task.getAssignmentId(), task);
 		}
-		for (ResourceAssignment resource : data.getForm204().getResourcesAssigned()) {
+		for (ResourceAssignment resource : getAssignmentResources()) {
 			SarTaskAssignment task = tasksById.get(resource.getAssignmentId());
 			if (task == null) {
 				continue;

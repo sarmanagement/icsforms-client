@@ -188,16 +188,14 @@ final class Ics233PdfLayout extends AbstractPdfRenderer {
 	 */
 	private List<String> wrapCell(PDType1Font font, String value, float width) throws IOException {
 		List<String> lines = new ArrayList<>();
-		for (String paragraph : safe(value).replace("\r\n", "\n").replace('\r', '\n').split("\n", -1)) {
+		PdfText.validateEscaped(value, "ICS 233-CG", "cell text");
+		for (String paragraph : PdfText.normalize(value).split("\n", -1)) {
 			StringBuilder line = new StringBuilder();
 			float used = 0f;
 			for (int position = 0; position < paragraph.length();) {
 				int codePoint = paragraph.codePointAt(position);
 				position += Character.charCount(codePoint);
 				String glyph = new String(Character.toChars(codePoint));
-				if ("\t".equals(glyph)) {
-					glyph = "    ";
-				}
 				try {
 					font.getStringWidth(glyph);
 				} catch (IllegalArgumentException exception) {
@@ -282,11 +280,11 @@ final class Ics233PdfLayout extends AbstractPdfRenderer {
 	 * @throws IOException if drawing fails
 	 */
 	private void text(PDPageContentStream stream, PDType1Font font, String value, float x, float y) throws IOException {
-		stream.beginText();
-		stream.setFont(font, FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(value);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(value));
+		}
 	}
 
 	/**
@@ -296,7 +294,7 @@ final class Ics233PdfLayout extends AbstractPdfRenderer {
 	 * @return non-null text
 	 */
 	static String safe(String value) {
-		return value == null ? "" : value;
+		return PdfText.normalize(value);
 	}
 
 	/**

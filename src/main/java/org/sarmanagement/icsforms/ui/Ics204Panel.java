@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.CommunicationEntry;
@@ -36,10 +39,16 @@ import java.util.List;
  * communications.
  */
 public class Ics204Panel extends JPanel {
+	/** Distinguishes an ordinary save from a completed editor handoff or cancel. */
+	private enum AssignmentEditorOutcome {
+		SAVED, NAVIGATED, CANCELLED
+	}
+
 	private final AppController controller;
 	private java.util.function.Consumer<ResourceAssignment> on214Request;
 	private java.util.function.Consumer<String> onEditSarTaskRequest;
 	private java.util.function.Consumer<String> onChangeSarTaskStatusRequest;
+	private java.util.function.BiConsumer<java.awt.Component, ResourceAssignment> onAddLogEntryRequest;
 	private final JComboBox<String> managementContextSelector = new JComboBox<>(
 			new String[]{"Incident", "Branch", "Division", "Group"});
 	private final JLabel selectedContextLabel = new JLabel("Staging area name");
@@ -201,20 +210,28 @@ public class Ics204Panel extends JPanel {
 	 * backing ICS 204 resource assignment created first.
 	 * </p>
 	 *
-	 * @return the newly created {@link ResourceAssignment}, or {@code null} if the
-	 *         user cancelled.
+	 * @return the saved assignment, or {@code null} if cancelled or already handed
+	 *         off to another editor.
 	 */
 	public ResourceAssignment openNewAssignmentEditor() {
 		ResourceAssignment row = new ResourceAssignment();
 		ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
 		JPanel content = resourceAssignmentEditorDialogContent(row, editor);
-		if (!confirmResourceAssignmentDialog("Create ICS 204 Assignment", row, content, new Dimension(920, 560))) {
+		if (confirmResourceAssignmentDialog("Create ICS 204 Assignment", row, editor, content,
+				new Dimension(920, 560)) != AssignmentEditorOutcome.SAVED) {
 			return null;
 		}
-		editor.applyTo(row);
-		resourceTableModel.addRow(row);
-		controller.markDirty();
 		return row;
+	}
+
+	/**
+	 * Installs contextual log entry creation for assignment editors.
+	 *
+	 * @param handler callback receiving the launching editor and assignment.
+	 */
+	public void setOnAddLogEntryRequest(
+			java.util.function.BiConsumer<java.awt.Component, ResourceAssignment> handler) {
+		onAddLogEntryRequest = handler;
 	}
 
 	/** Loads values from the model. */
@@ -390,6 +407,11 @@ public class Ics204Panel extends JPanel {
 		activeManagementContext = managementContext;
 	}
 
+	/**
+	 * Builds assignment creation, edit, removal and navigation controls.
+	 *
+	 * @return resource action controls.
+	 */
 	private JPanel resourcesButtonsPanel() {
 		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
 		JButton add = new JButton("Add");
@@ -405,16 +427,7 @@ public class Ics204Panel extends JPanel {
 			remove.setEnabled(selected);
 			editSarTask.setEnabled(selected && onEditSarTaskRequest != null);
 		});
-		add.addActionListener(event -> {
-			resourceTableModel.addRow();
-			int last = resourceTableModel.getRowCount() - 1;
-			if (last >= 0) {
-				resourceTable.setRowSelectionInterval(last, last);
-				resourceTable.scrollRectToVisible(resourceTable.getCellRect(last, 0, true));
-				openSelectedResourceEditor();
-			}
-			controller.markDirty();
-		});
+		add.addActionListener(event -> openNewAssignmentEditor());
 		edit.addActionListener(event -> openSelectedResourceEditor());
 		remove.addActionListener(event -> removeSelectedResourceRow());
 		editSarTask.addActionListener(event -> openLinkedSarTaskForSelection());
@@ -429,6 +442,7 @@ public class Ics204Panel extends JPanel {
 	 * Opens a dialog showing named incident staff (from the org chart) to add to
 	 * communications.
 	 */
+	/** Selects org-chart staff for communications using a document-scoped picker. */
 	private void addStaffToComms() {
 		org.sarmanagement.icsforms.model.OrganizationalChart chart = controller.getData().getOrganizationalChart();
 		// Collect all named staff positions as selectable entries.
@@ -475,7 +489,7 @@ public class Ics204Panel extends JPanel {
 						: chart.getCommunicationsTechnicianRadio());
 
 		if (entries.isEmpty()) {
-			javax.swing.JOptionPane.showMessageDialog(this, "No named staff positions found on the Org Chart.",
+			UiSupport.showDocumentMessage(this, "No named staff positions found on the Org Chart.",
 					"Add Staff", javax.swing.JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
@@ -494,9 +508,8 @@ public class Ics204Panel extends JPanel {
 		javax.swing.JScrollPane scroll = new javax.swing.JScrollPane(selTable);
 		scroll.setPreferredSize(new java.awt.Dimension(500, 180));
 
-		int result = javax.swing.JOptionPane.showConfirmDialog(this, scroll, "Select staff to add to Communications",
-				javax.swing.JOptionPane.OK_CANCEL_OPTION);
-		if (result != javax.swing.JOptionPane.OK_OPTION) {
+		if (!UiSupport.showResizableConfirmDialog(this, "Select staff to add to Communications", scroll,
+				new Dimension(500, 240))) {
 			return;
 		}
 		int[] selected = selTable.getSelectedRows();
@@ -515,6 +528,7 @@ public class Ics204Panel extends JPanel {
 		}
 	}
 
+	/** Installs creation, editing and linked-navigation actions on resource rows. */
 	private void installResourceRowEditor() {
 		JPopupMenu menu = new JPopupMenu();
 		JMenuItem addItem = new JMenuItem("Add assignment…");
@@ -523,10 +537,9 @@ public class Ics204Panel extends JPanel {
 		JMenuItem editSarTaskItem = new JMenuItem("Edit linked SAR task…");
 		JMenuItem changeStatusItem = new JMenuItem("Change linked task status…");
 		JMenuItem log214Item = new JMenuItem("Add ICS 214 Log…");
-		addItem.addActionListener(event -> {
-			resourceTableModel.addRow();
-			controller.markDirty();
-		});
+		JMenuItem addLogEntryItem = new JMenuItem("Add log entry…");
+		addLogEntryItem.addActionListener(event -> addLogEntryForSelectedResource());
+		addItem.addActionListener(event -> openNewAssignmentEditor());
 		editItem.addActionListener(event -> openSelectedResourceEditor());
 		removeItem.addActionListener(event -> removeSelectedResourceRow());
 		editSarTaskItem.addActionListener(event -> openLinkedSarTaskForSelection());
@@ -539,6 +552,7 @@ public class Ics204Panel extends JPanel {
 		menu.add(changeStatusItem);
 		menu.addSeparator();
 		menu.add(log214Item);
+		menu.add(addLogEntryItem);
 		menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
 			@Override
 			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
@@ -553,6 +567,7 @@ public class Ics204Panel extends JPanel {
 				editSarTaskItem.setVisible(onEditSarTaskRequest != null);
 				changeStatusItem.setVisible(onChangeSarTaskStatusRequest != null);
 				log214Item.setVisible(on214Request != null);
+				addLogEntryItem.setEnabled(onAddLogEntryRequest != null && viewRow >= 0);
 				changeStatusItem.setEnabled(canChangeSelectedLinkedTaskStatus());
 			}
 			@Override
@@ -566,9 +581,7 @@ public class Ics204Panel extends JPanel {
 		resourceTable.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent event) {
-				if (!event.isPopupTrigger()) {
-					selectResourceRow(event);
-				}
+				selectResourceRow(event);
 			}
 
 			@Override
@@ -588,6 +601,16 @@ public class Ics204Panel extends JPanel {
 		});
 	}
 
+	/** Launches contextual logging for the selected resource, respecting sorting. */
+	private void addLogEntryForSelectedResource() {
+		int viewRow = resourceTable.getSelectedRow();
+		if (onAddLogEntryRequest != null && viewRow >= 0) {
+			ResourceAssignment assignment = resourceTableModel.getRows()
+					.get(resourceTable.convertRowIndexToModel(viewRow));
+			onAddLogEntryRequest.accept(resourceTable, assignment);
+		}
+	}
+
 	private void selectResourceRow(MouseEvent event) {
 		int viewRow = resourceTable.rowAtPoint(event.getPoint());
 		if (viewRow >= 0) {
@@ -595,6 +618,7 @@ public class Ics204Panel extends JPanel {
 		}
 	}
 
+	/** Opens the selected resource with save-before-navigation semantics. */
 	private void openSelectedResourceEditor() {
 		int viewRow = resourceTable.getSelectedRow();
 		if (viewRow < 0) {
@@ -604,10 +628,10 @@ public class Ics204Panel extends JPanel {
 		ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
 		ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
 		JPanel content = resourceAssignmentEditorDialogContent(row, editor);
-		if (!confirmResourceAssignmentDialog(editor.dialogTitle(), row, content, new Dimension(920, 560))) {
+		if (confirmResourceAssignmentDialog(editor.dialogTitle(), row, editor, content, new Dimension(920, 560))
+				== AssignmentEditorOutcome.CANCELLED) {
 			return;
 		}
-		editor.applyTo(row);
 		resourceTableModel.fireTableRowsUpdated(modelRow, modelRow);
 	}
 
@@ -621,31 +645,100 @@ public class Ics204Panel extends JPanel {
 		return content;
 	}
 
-	private boolean confirmResourceAssignmentDialog(String title, ResourceAssignment assignment, JPanel content,
+	/**
+	 * Keeps entered fields available until validation and persistence succeed.
+	 *
+	 * @param title dialog title.
+	 * @param assignment assignment being edited or created.
+	 * @param editor field editor.
+	 * @param content dialog content.
+	 * @param preferredSize dialog size.
+	 * @return explicit save, completed navigation, or cancellation outcome.
+	 */
+	private AssignmentEditorOutcome confirmResourceAssignmentDialog(String title, ResourceAssignment assignment,
+			ResourceAssignmentEditor editor, JPanel content,
 			Dimension preferredSize) {
+		boolean existing = controller.getAssignmentResources().stream()
+				.anyMatch(row -> assignment.getAssignmentId().equals(row.getAssignmentId()));
+		if (existing && onAddLogEntryRequest != null) {
+			JButton logButton = new JButton("Add log entry…");
+			logButton.addActionListener(event -> onAddLogEntryRequest.accept(content, assignment));
+			content.add(logButton, BorderLayout.SOUTH);
+		}
 		while (true) {
 			java.util.List<Object> options = new ArrayList<>();
 			if (onEditSarTaskRequest != null && assignment.getAssignmentId() != null
 					&& !assignment.getAssignmentId().isBlank()) {
-				options.add("Open linked SAR task…");
+				options.add("Save and open linked SAR task…");
+			}
+			if (!existing && onAddLogEntryRequest != null) {
+				options.add("Save assignment and add log entry…");
 			}
 			int okIndex = options.size();
-			options.add("OK");
+			options.add("Save");
 			int cancelIndex = options.size();
 			options.add("Cancel");
 			int choice = UiSupport.showResizableOptionDialog(this, title, content, preferredSize, options.toArray(),
-					"OK");
-			if (choice == okIndex) {
-				return true;
-			}
+					"Save");
 			if (choice < 0 || choice == cancelIndex) {
-				return false;
+				return AssignmentEditorOutcome.CANCELLED;
 			}
-			if ("Open linked SAR task…".equals(options.get(choice)) && onEditSarTaskRequest != null
-					&& assignment.getAssignmentId() != null && !assignment.getAssignmentId().isBlank()) {
+			try {
+				saveAssignmentEditor(assignment, editor);
+			} catch (RuntimeException exception) {
+				UiSupport.showDocumentMessage(content, exception.getMessage(), "Unable to save assignment",
+						JOptionPane.ERROR_MESSAGE);
+				continue;
+			}
+			if (choice == okIndex) {
+				return AssignmentEditorOutcome.SAVED;
+			}
+			if ("Save assignment and add log entry…".equals(options.get(choice))) {
+				onAddLogEntryRequest.accept(content, assignment);
+				return AssignmentEditorOutcome.NAVIGATED;
+			}
+			if ("Save and open linked SAR task…".equals(options.get(choice))) {
 				onEditSarTaskRequest.accept(assignment.getAssignmentId());
-				return false;
+				return AssignmentEditorOutcome.NAVIGATED;
 			}
+		}
+	}
+
+	/**
+	 * Validates, inserts once by identity, synchronizes and persists an assignment.
+	 *
+	 * @param assignment backing assignment.
+	 * @param editor field values to save.
+	 * @throws IllegalArgumentException if the assignment number is missing.
+	 */
+	private void saveAssignmentEditor(ResourceAssignment assignment, ResourceAssignmentEditor editor) {
+		if (editor.assignmentTeamNumberField.getText().isBlank()) {
+			throw new IllegalArgumentException("Assignment/Team # is required.");
+		}
+		try {
+			controller.persistEditorChanges(() -> {
+				editor.applyTo(assignment);
+				if (controller.getAssignmentResources().stream()
+						.noneMatch(row -> assignment.getAssignmentId().equals(row.getAssignmentId()))) {
+					resourceTableModel.setRows(new ArrayList<>(controller.getData().getForm204().getResourcesAssigned()));
+					resourceTableModel.addRow(assignment);
+					controller.getData().getForm204().setResourcesAssigned(resourceTableModel.getRows());
+				}
+				controller.syncSarTasks();
+				for (org.sarmanagement.icsforms.model.SarTaskAssignment task : controller.getData().getSarTaskAssignments()) {
+					if (assignment.getAssignmentId().equals(task.getAssignmentId())) {
+						if (!java.util.Objects.equals(editor.initialAssignment, assignment.getAssignment())) {
+							task.setAssignment(assignment.getAssignment());
+						}
+						if (!java.util.Objects.equals(editor.initialEquipment, assignment.getSpecialEquipment())) {
+							task.setSpecialEquipment(assignment.getSpecialEquipment());
+						}
+					}
+				}
+			});
+		} catch (RuntimeException exception) {
+			resourceTableModel.setRows(controller.getData().getForm204().getResourcesAssigned());
+			throw exception;
 		}
 	}
 
@@ -662,6 +755,12 @@ public class Ics204Panel extends JPanel {
 		on214Request.accept(row);
 	}
 
+	/**
+	 * Opens an assignment in any primary or additional form by stable identity.
+	 *
+	 * @param assignmentId stable assignment identity.
+	 * @return whether an assignment was found.
+	 */
 	public boolean openEditorForAssignmentId(String assignmentId) {
 		if (assignmentId == null || assignmentId.isBlank()) {
 			return false;
@@ -677,9 +776,18 @@ public class Ics204Panel extends JPanel {
 				return true;
 			}
 		}
+		for (ResourceAssignment row : controller.getAssignmentResources()) {
+			if (assignmentId.equals(row.getAssignmentId())) {
+				ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
+				confirmResourceAssignmentDialog(editor.dialogTitle(), row, editor,
+						resourceAssignmentEditorDialogContent(row, editor), new Dimension(920, 560));
+				return true;
+			}
+		}
 		return false;
 	}
 
+	/** Opens the selected resource's linked task without application-modal feedback. */
 	private void openLinkedSarTaskForSelection() {
 		if (onEditSarTaskRequest == null) {
 			return;
@@ -691,7 +799,7 @@ public class Ics204Panel extends JPanel {
 		int modelRow = resourceTable.convertRowIndexToModel(viewRow);
 		ResourceAssignment row = resourceTableModel.getRows().get(modelRow);
 		if (row.getAssignmentId() == null || row.getAssignmentId().isBlank()) {
-			JOptionPane.showMessageDialog(this, "Selected assignment has no assignment ID to link to a SAR task.",
+			UiSupport.showDocumentMessage(this, "Selected assignment has no assignment ID to link to a SAR task.",
 					"Open SAR Task", JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
@@ -748,6 +856,7 @@ public class Ics204Panel extends JPanel {
 		return "planned".equals(value) || value.startsWith("assigned -");
 	}
 
+	/** Removes the selected assignment after document-scoped confirmation. */
 	private void removeSelectedResourceRow() {
 		int viewRow = resourceTable.getSelectedRow();
 		if (viewRow < 0) {
@@ -759,15 +868,21 @@ public class Ics204Panel extends JPanel {
 				? row.getResourceIdentifier()
 				: row.getAssignmentTeamNumber();
 		String detail = row.getLeader().isBlank() ? "" : " (Leader: " + row.getLeader() + ")";
-		int confirm = JOptionPane.showConfirmDialog(this,
-				"Remove assignment '" + (label.isBlank() ? ("row " + (viewRow + 1)) : label) + "'" + detail + "?",
-				"Remove Assignment", JOptionPane.YES_NO_OPTION);
-		if (confirm == JOptionPane.YES_OPTION) {
+		int confirm = UiSupport.showResizableOptionDialog(this, "Remove Assignment",
+				new JLabel("Remove assignment '" + (label.isBlank() ? ("row " + (viewRow + 1)) : label)
+						+ "'" + detail + "?"),
+				null, new Object[]{"Remove", "Cancel"}, "Cancel");
+		if (confirm == 0) {
 			resourceTableModel.removeRow(modelRow);
 			controller.markDirty();
 		}
 	}
 
+	/**
+	 * Removes a communication row after document-scoped confirmation.
+	 *
+	 * @param communicationsTable table containing the selected communication row.
+	 */
 	private void removeSelectedCommunicationRow(JTable communicationsTable) {
 		int row = communicationsTable.getSelectedRow();
 		if (row < 0) {
@@ -776,11 +891,11 @@ public class Ics204Panel extends JPanel {
 		CommunicationEntry entry = communicationsTableModel.getRows().get(row);
 		String who = entry.getName().isBlank() ? entry.getFunction() : entry.getName();
 		String contact = entry.getPrimaryContact() == null ? "" : entry.getPrimaryContact().trim();
-		int confirm = JOptionPane.showConfirmDialog(this,
-				"Remove communication entry for '" + (who.isBlank() ? ("row " + (row + 1)) : who) + "'"
-						+ (contact.isBlank() ? "" : " (" + contact + ")") + "?",
-				"Remove Communication Entry", JOptionPane.YES_NO_OPTION);
-		if (confirm == JOptionPane.YES_OPTION) {
+		int confirm = UiSupport.showResizableOptionDialog(this, "Remove Communication Entry",
+				new JLabel("Remove communication entry for '" + (who.isBlank() ? ("row " + (row + 1)) : who)
+						+ "'" + (contact.isBlank() ? "" : " (" + contact + ")") + "?"),
+				null, new Object[]{"Remove", "Cancel"}, "Cancel");
+		if (confirm == 0) {
 			communicationsTableModel.removeRow(row);
 			controller.markDirty();
 		}
@@ -852,8 +967,18 @@ public class Ics204Panel extends JPanel {
 		private final JScrollPane remarksField;
 		private final JScrollPane notesField;
 		private final JScrollPane assignmentField;
+		private final String initialAssignment;
+		private final String initialEquipment;
 
+		/**
+		 * Creates assignment fields and remembers shared-text values for merging.
+		 *
+		 * @param row backing resource assignment.
+		 * @param controller resource lookup controller.
+		 */
 		private ResourceAssignmentEditor(ResourceAssignment row, AppController controller) {
+			initialAssignment = row.getAssignment();
+			initialEquipment = row.getSpecialEquipment();
 			resourceTypeField.setEditable(true);
 			taskTypeField.setEditable(true);
 			UiSupport.configureDialogComboBox(resourceTypeField, 170);
@@ -935,6 +1060,11 @@ public class Ics204Panel extends JPanel {
 			return teamNumber.isBlank() ? "Edit assignment" : "Edit assignment " + teamNumber;
 		}
 
+		/**
+		 * Applies entered values to the backing assignment.
+		 *
+		 * @param row assignment to update.
+		 */
 		private void applyTo(ResourceAssignment row) {
 			row.setAssignmentTeamNumber(assignmentTeamNumberField.getText().trim());
 			row.setResourceType(selectedComboValue(resourceTypeField));

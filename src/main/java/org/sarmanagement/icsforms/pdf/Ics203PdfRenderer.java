@@ -73,6 +73,7 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, getFormKey());
 		AppData source = data == null ? new AppData() : data;
 		Plan plan = plan(source);
 		if (outputFile.getParent() != null) {
@@ -383,16 +384,22 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		List<Ics204Form> forms = new ArrayList<>();
 		forms.add(data.getForm204());
 		forms.addAll(data.getAdditionalForms204());
-		for (Ics204Form form : forms) {
+		for (int index = 0; index < forms.size(); index++) {
+			Ics204Form form = forms.get(index);
 			if (form != null) {
-				addDivision(rows, form.getBranch(), "Division", form.getDivision(), form.getDivisionGroupSupervisorName());
-				addDivision(rows, form.getBranch(), "Group", form.getGroup(), form.getDivisionGroupSupervisorName());
+				String path = index == 0 ? "form204" : "additionalForms204[" + index + "]";
+				addDivision(rows, form.getBranch(), "Division", form.getDivision(), form.getDivisionGroupSupervisorName(),
+						path, "divisionGroupSupervisorName");
+				addDivision(rows, form.getBranch(), "Group", form.getGroup(), form.getDivisionGroupSupervisorName(),
+						path, "divisionGroupSupervisorName");
 			}
 		}
-		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+		for (int index = 0; index < data.getSarTaskAssignments().size(); index++) {
+			SarTaskAssignment task = data.getSarTaskAssignments().get(index);
 			if (task != null) {
-				addDivision(rows, task.getBranch(), "Division", task.getDivision(), task.getLeader());
-				addDivision(rows, task.getBranch(), "Group", task.getGroup(), task.getLeader());
+				String path = "sarTaskAssignments[" + (index + 1) + "]";
+				addDivision(rows, task.getBranch(), "Division", task.getDivision(), task.getLeader(), path, "leader");
+				addDivision(rows, task.getBranch(), "Group", task.getGroup(), task.getLeader(), path, "leader");
 			}
 		}
 		return new ArrayList<>(rows.values());
@@ -406,8 +413,11 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @param kind division or group.
 	 * @param name actual division/group name.
 	 * @param supervisor supervisor or fallback task leader.
+	 * @param sourcePath source model path for actionable validation.
+	 * @param supervisorField source property supplying the supervisor name.
 	 */
-	private void addDivision(Map<String, OrgChartEntry> rows, String branch, String kind, String name, String supervisor) {
+	private void addDivision(Map<String, OrgChartEntry> rows, String branch, String kind, String name, String supervisor,
+			String sourcePath, String supervisorField) {
 		String label = clean(name).trim();
 		if (label.isBlank()) {
 			return;
@@ -420,11 +430,15 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		String key = branchName.toLowerCase(Locale.ROOT) + ":" + kind + ":" + label.toLowerCase(Locale.ROOT);
 		OrgChartEntry existing = rows.get(key);
 		if (existing == null) {
+			PdfText.validate(branch, getFormKey(), sourcePath + ".branch");
+			PdfText.validate(name, getFormKey(), sourcePath + "." + kind.toLowerCase(Locale.ROOT));
+			PdfText.validate(supervisor, getFormKey(), sourcePath + "." + supervisorField);
 			OrgChartEntry entry = new OrgChartEntry();
 			entry.setTitle((branchName.isBlank() ? "" : "Branch " + branchName + " / ") + kind + " " + label);
 			entry.setName(clean(supervisor));
 			rows.put(key, entry);
 		} else if (clean(existing.getName()).isBlank()) {
+			PdfText.validate(supervisor, getFormKey(), sourcePath + "." + supervisorField);
 			existing.setName(clean(supervisor));
 		}
 	}
@@ -546,36 +560,22 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 */
 	private void text(PDPageContentStream stream, PDType1Font font, float size, float x, float y, String value)
 			throws IOException {
-		stream.beginText();
-		stream.setFont(font, size);
-		stream.newLineAtOffset(x, y);
-		stream.showText(clean(value));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, size);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(clean(value)));
+		}
 	}
 
 	/**
-	 * Normalizes controls and unsupported Standard 14 glyphs, preserving typed
-	 * slashes, parentheses, and trainee designations.
+	 * Normalizes inline whitespace and rejects unsupported Standard 14 glyphs,
+	 * preserving typed slashes, parentheses, and trainee designations.
 	 *
 	 * @param value input string.
 	 * @return printable PDF text.
 	 */
 	private static String clean(String value) {
-		if (value == null) {
-			return "";
-		}
-		StringBuilder result = new StringBuilder();
-		PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-		value.codePoints().forEach(code -> {
-			String character = new String(Character.toChars(code));
-			try {
-				font.encode(character);
-				result.append(character);
-			} catch (IOException | IllegalArgumentException exception) {
-				result.append(Character.isWhitespace(code) ? " " : "?");
-			}
-		});
-		return result.toString();
+		return PdfText.singleLine(value);
 	}
 
 	/**
@@ -589,24 +589,29 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @throws IOException when font metrics fail.
 	 */
 	private static List<String> fragments(String value, PDType1Font font, float size, float width) throws IOException {
-		String text = clean(value);
+		PdfText.validate(value, "ICS 203", "organization field");
 		List<String> result = new ArrayList<>();
-		int start = 0;
-		while (start < text.length()) {
-			int end = start;
-			while (end < text.length()
-					&& font.getStringWidth(text.substring(start, end + 1)) * size / 1000f <= width) {
-				end++;
+		for (String text : PdfText.normalize(value).split("\n", -1)) {
+			int start = 0;
+			if (text.isEmpty()) {
+				result.add("");
 			}
-			end = Math.max(start + 1, end);
-			if (end < text.length()) {
-				int space = text.lastIndexOf(' ', end - 1);
-				if (space > start) {
-					end = space + 1;
+			while (start < text.length()) {
+				int end = start;
+				while (end < text.length()
+						&& font.getStringWidth(text.substring(start, end + 1)) * size / 1000f <= width) {
+					end++;
 				}
+				end = Math.max(start + 1, end);
+				if (end < text.length()) {
+					int space = text.lastIndexOf(' ', end - 1);
+					if (space > start) {
+						end = space + 1;
+					}
+				}
+				result.add(text.substring(start, end));
+				start = end;
 			}
-			result.add(text.substring(start, end));
-			start = end;
 		}
 		return result.isEmpty() ? List.of("") : result;
 	}
@@ -754,7 +759,7 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		 */
 		private int prepareMetadata(float width, float size, boolean inline) throws IOException {
 			PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-			float labelWidth = inline ? bold.getStringWidth(label + " ") * size / 1000f : 0f;
+			float labelWidth = inline ? bold.getStringWidth(PdfText.singleLine(label + " ")) * size / 1000f : 0f;
 			labels = List.of(clean(label));
 			values = fragments(value, new PDType1Font(Standard14Fonts.FontName.HELVETICA), size,
 					width - labelWidth - 2f * PADDING);

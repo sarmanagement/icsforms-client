@@ -76,7 +76,7 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		if (form.getMessageMode() == Ics208Form.MessageMode.FREE_TEXT) {
 			addContent(lines, form.getFreeText(), MessageLineStyle.NORMAL);
 		} else {
-			String generalRequirements = safe(form.getGeneralRequirements()).replaceAll("\\s+", " ").trim();
+			String generalRequirements = safe(form.getGeneralRequirements()).trim();
 			addContent(lines, generalRequirements, MessageLineStyle.NORMAL);
 			if (!generalRequirements.isBlank()) {
 				lines.add(new MessageLine("", "", MessageLineStyle.BLANK));
@@ -148,6 +148,7 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, getFormKey());
 		Files.createDirectories(outputFile.getParent());
 		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
@@ -249,12 +250,12 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 */
 	private void drawIcs208Header(PDPageContentStream stream, PDType1Font bold, FormLayout layout, String title)
 			throws IOException {
-		float titleWidth = bold.getStringWidth(safe(title)) / 1000f * 14f;
-		stream.beginText();
-		stream.setFont(bold, 14f);
-		stream.newLineAtOffset((layout.pageWidth() - titleWidth) / 2f, layout.headerBaseline());
-		stream.showText(safe(title));
-		stream.endText();
+		float titleWidth = bold.getStringWidth(PdfText.singleLine(safe(title))) / 1000f * 14f;
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, 14f);
+			stream.newLineAtOffset((layout.pageWidth() - titleWidth) / 2f, layout.headerBaseline());
+			stream.showText(PdfText.singleLine(safe(title)));
+		}
 	}
 
 	/**
@@ -345,7 +346,7 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		}
 		String prefix = safe(line.prefix());
 		drawTextLine(stream, bold, x, y, prefix);
-		float prefixWidth = bold.getStringWidth(prefix) / 1000f * FONT_SIZE;
+		float prefixWidth = bold.getStringWidth(PdfText.singleLine(prefix)) / 1000f * FONT_SIZE;
 		stream.setNonStrokingColor(1f, 0f, 0f);
 		drawTextLine(stream, bold, x + prefixWidth, y, line.text());
 		stream.setNonStrokingColor(0f, 0f, 0f);
@@ -363,11 +364,11 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 */
 	private static void drawTextLine(PDPageContentStream stream, PDType1Font font, float x, float y, String text)
 			throws IOException {
-		stream.beginText();
-		stream.setFont(font, FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(safe(text));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(safe(text)));
+		}
 	}
 
 	/**
@@ -399,23 +400,24 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 */
 	private static List<String> wrapContent(String content, int width) {
 		List<String> result = new ArrayList<>();
+		PdfText.validate(content, "ICS 208", "safety message");
 		if (content == null || content.isEmpty()) {
 			return result;
 		}
-		for (String paragraph : content.split("\\R", -1)) {
+		for (String paragraph : PdfText.normalize(content).split("\n", -1)) {
 			result.addAll(paragraph.isBlank() ? List.of("") : new Ics208PdfRenderer().wrap(paragraph, width));
 		}
 		return result;
 	}
 
 	/**
-	 * Returns text safe for PDFBox standard fonts.
+	 * Normalizes optional layout text without discarding source characters.
 	 *
 	 * @param value source text.
-	 * @return printable ASCII text.
+	 * @return normalized text retaining logical line breaks.
 	 */
 	private static String safe(String value) {
-		return value == null ? "" : value.replaceAll("[^\\x20-\\x7E]", "?");
+		return PdfText.normalize(value);
 	}
 
 	/**
@@ -438,10 +440,10 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				label += " | IAP Page " + iapFirstPage;
 			}
 		}
-		stream.beginText();
-		stream.setFont(font, 8f);
-		stream.newLineAtOffset(layout.x() + BLOCK_PADDING, layout.y() + 8f);
-		stream.showText(safe(label));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, 8f);
+			stream.newLineAtOffset(layout.x() + BLOCK_PADDING, layout.y() + 8f);
+			stream.showText(PdfText.singleLine(safe(label)));
+		}
 	}
 }

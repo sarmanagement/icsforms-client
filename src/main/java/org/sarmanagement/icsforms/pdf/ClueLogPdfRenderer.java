@@ -40,6 +40,7 @@ public class ClueLogPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, getFormKey());
 		Path parent = outputFile.getParent();
 		if (parent != null) {
 			Files.createDirectories(parent);
@@ -178,6 +179,6 @@ public class ClueLogPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	 * @return non-null text.
 	 */
 	private String safe(String value) {
-		return value == null ? "" : value;
+		return PdfText.normalize(value);
 	}
 }

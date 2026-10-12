@@ -55,17 +55,25 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.Iterator;
 import java.util.List;
 import java.util.EventObject;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * Editable SAR task assignment and debriefing grid linked from ICS 204 resource
  * assignments.
  */
 public class SarTaskPanel extends JPanel {
+	private java.util.function.BiConsumer<Component, SarTaskAssignment> onAddLogEntryRequest;
+
+	/**
+	 * Installs contextual logging without discarding unsaved editor fields.
+	 *
+	 * @param handler callback receiving the launching editor and task.
+	 */
+	public void setOnAddLogEntryRequest(java.util.function.BiConsumer<Component, SarTaskAssignment> handler) {
+		onAddLogEntryRequest = handler;
+	}
 	private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	private static final int MAX_RESOURCE_ROWS = 18;
 	/**
@@ -310,7 +318,13 @@ public class SarTaskPanel extends JPanel {
 		return col;
 	}
 
-	/** Builds a single task card widget for the board view. */
+	/**
+	 * Builds a task card with actions available on its label children as well.
+	 *
+	 * @param task task represented by this card.
+	 * @param bgColor lifecycle column color.
+	 * @return interactive task card.
+	 */
 	private JPanel buildBoardTaskCard(SarTaskAssignment task, Color bgColor) {
 		JPanel p = new JPanel(new BorderLayout(4, 2));
 		p.setBackground(bgColor.brighter());
@@ -369,10 +383,18 @@ public class SarTaskPanel extends JPanel {
 			cardMenu.add(changeStatusItem);
 		}
 		cardMenu.add(open214Item);
+		JMenuItem addLogEntryItem = new JMenuItem("Add log entry…");
+		addLogEntryItem.setEnabled(onAddLogEntryRequest != null);
+		addLogEntryItem.addActionListener(event -> {
+			if (onAddLogEntryRequest != null) {
+				onAddLogEntryRequest.accept(p, task);
+			}
+		});
+		cardMenu.add(addLogEntryItem);
 		p.setComponentPopupMenu(cardMenu);
 
 		// Double-click opens edit dialog; hover highlights border.
-		p.addMouseListener(new MouseAdapter() {
+		MouseAdapter cardMouseListener = new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				if (SwingUtilities.isLeftMouseButton(e)) {
@@ -398,8 +420,27 @@ public class SarTaskPanel extends JPanel {
 				p.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Color.GRAY),
 						BorderFactory.createEmptyBorder(5, 8, 5, 8)));
 			}
-		});
+		};
+		installBoardCardMouseActions(p, cardMouseListener);
 		return p;
+	}
+
+	/**
+	 * Installs card interaction and inherited popups on every child component.
+	 *
+	 * @param component card or child component.
+	 * @param listener shared card mouse listener.
+	 */
+	private void installBoardCardMouseActions(Component component, MouseAdapter listener) {
+		component.addMouseListener(listener);
+		if (component instanceof javax.swing.JComponent child) {
+			child.setInheritsPopupMenu(true);
+		}
+		if (component instanceof java.awt.Container container) {
+			for (Component child : container.getComponents()) {
+				installBoardCardMouseActions(child, listener);
+			}
+		}
 	}
 
 	/**
@@ -416,53 +457,16 @@ public class SarTaskPanel extends JPanel {
 	}
 
 	/**
-	 * Creates a new standalone SAR task, opens the assignment editor, and adds it
-	 * on confirm.
+	 * Creates a persisted backing ICS 204 assignment, then opens its linked task.
 	 */
 	private void addNewTask() {
-		// If a callback is registered, open the ICS 204 "Create Assignment" dialog
-		// first.
-		// The new assignment record is created in the ICS 204 form; the SAR task is
-		// then
-		// pre-populated from it so the two records stay linked from the start.
-		ResourceAssignment linkedAssignment = null;
-		if (onNewAssignmentRequest != null) {
-			linkedAssignment = onNewAssignmentRequest.get();
-			if (linkedAssignment == null) {
-				return; // user cancelled the ICS 204 assignment dialog
-			}
-		}
-
-		SarTaskAssignment task = linkedAssignment != null
-				? SarTaskAssignment.fromResourceAssignment(linkedAssignment, controller.getData().getIncidentContext(),
-						controller.getData().getForm204())
-				: new SarTaskAssignment();
-		if (task.getAssignmentId() == null || task.getAssignmentId().isBlank()) {
-			task.setAssignmentId(UUID.randomUUID().toString());
-		}
-		String previousLifecycleStatus = task.getTaskLifecycleStatus();
-		SarTaskEditor editor = new SarTaskEditor(task, EditorMode.ASSIGNMENT, controller.getData().getClueLogEntries(),
-				1, handlerName -> controller.findEquipmentForHandler(handlerName),
-				controller.getAvailableResourceNames(), controller.getAvailableTCards(),
-				controller.getOnTaskResourceIds(), controller);
-		JPanel content = sarTaskEditorDialogContent(editor.panel);
-		if (!UiSupport.showResizableConfirmDialog(this, "Add SAR Task", content, new Dimension(1100, 680))) {
+		if (onNewAssignmentRequest == null) {
 			return;
 		}
-		controller.getData().setClueLogEntries(editor.applyTo(task, controller.getData().getClueLogEntries()));
-		if (!java.util.Objects.equals(previousLifecycleStatus, task.getTaskLifecycleStatus())) {
-			showLifecycleWarning(controller.recordTaskLifecycleTransition(task, previousLifecycleStatus,
-					task.getTaskLifecycleStatus(), LocalDateTime.now().withSecond(0).withNano(0)));
-		}
-		List<SarTaskAssignment> rows = new ArrayList<>(tableModel.getRows());
-		rows.add(task);
-		controller.getData().setSarTaskAssignments(rows);
-		tableModel.setRows(rows, controller.getData().getClueLogEntries(),
-				controller.getData().getForm204().getResourcesAssigned());
-		controller.markDirty();
-		int newViewRow = table.convertRowIndexToView(rows.size() - 1);
-		if (newViewRow >= 0) {
-			table.setRowSelectionInterval(newViewRow, newViewRow);
+		ResourceAssignment linkedAssignment = onNewAssignmentRequest.get();
+		if (linkedAssignment != null) {
+			refreshFromModel();
+			openAssignmentEditorById(linkedAssignment.getAssignmentId());
 		}
 	}
 
@@ -478,16 +482,16 @@ public class SarTaskPanel extends JPanel {
 		}
 		SarTaskAssignment task = tableModel.getRows().get(modelRow);
 		String label = task.getAssignmentTeamNumber().isBlank() ? "this task" : task.getAssignmentTeamNumber();
-		int result = javax.swing.JOptionPane.showConfirmDialog(this, "Remove " + label + "?", "Remove Task",
-				javax.swing.JOptionPane.YES_NO_OPTION);
-		if (result != javax.swing.JOptionPane.YES_OPTION) {
+		int result = UiSupport.showResizableOptionDialog(this, "Remove Task", new JLabel("Remove " + label + "?"),
+				null, new Object[]{"Remove", "Cancel"}, "Cancel");
+		if (result != 0) {
 			return;
 		}
-		List<SarTaskAssignment> rows = new ArrayList<>(tableModel.getRows());
-		rows.remove(modelRow);
+		List<SarTaskAssignment> rows = new ArrayList<>(controller.getData().getSarTaskAssignments());
+		rows.removeIf(row -> task.getAssignmentId().equals(row.getAssignmentId()));
 		controller.getData().setSarTaskAssignments(rows);
 		tableModel.setRows(rows, controller.getData().getClueLogEntries(),
-				controller.getData().getForm204().getResourcesAssigned());
+				controller.getAssignmentResources());
 		controller.markDirty();
 	}
 
@@ -497,18 +501,25 @@ public class SarTaskPanel extends JPanel {
 	public void refreshFromModel() {
 		controller.syncSarTasks();
 		tableModel.setRows(controller.getData().getSarTaskAssignments(), controller.getData().getClueLogEntries(),
-				controller.getData().getForm204().getResourcesAssigned());
+				controller.getAssignmentResources());
 		if (currentSarView.equals(VIEW_BOARD)) {
 			rebuildBoardView();
 		}
 	}
 
 	/**
-	 * Applies edited rows back to the active document.
+	 * Commits inline edits without replacing newer canonical tasks with stale rows.
+	 * Reconciles additions and deletions by assignment identity; separate modal
+	 * editor fields are not refreshed or discarded.
 	 */
 	public void pushToModel() {
-		controller.getData().setSarTaskAssignments(tableModel.getRows());
+		if (table.isEditing() && table.getCellEditor() != null && !table.getCellEditor().stopCellEditing()) {
+			throw new IllegalStateException("Finish editing the selected SAR task before saving.");
+		}
 		controller.syncIcs204ResourcesFromSarTasks();
+		controller.syncSarTasks();
+		tableModel.setRows(controller.getData().getSarTaskAssignments(), controller.getData().getClueLogEntries(),
+				controller.getAssignmentResources());
 	}
 
 	/**
@@ -628,9 +639,15 @@ public class SarTaskPanel extends JPanel {
 		return "planned".equals(normalized) || normalized.startsWith("assigned -");
 	}
 
-	private void promptResourceDispositionOnReturn(SarTaskAssignment task) {
+	/**
+	 * Collects returned-resource statuses without mutating the live model.
+	 *
+	 * @param task returning task.
+	 * @return chosen statuses by resource identity, or an empty map when cancelled.
+	 */
+	private java.util.Map<String, String> promptResourceDispositionOnReturn(SarTaskAssignment task) {
 		if (task == null || task.getResourcesAssigned() == null || task.getResourcesAssigned().isEmpty()) {
-			return;
+			return java.util.Map.of();
 		}
 		JPanel form = UiSupport.formPanel();
 		java.util.Map<SarTaskResource, JComboBox<String>> statusByResource = new java.util.LinkedHashMap<>();
@@ -648,7 +665,7 @@ public class SarTaskPanel extends JPanel {
 		pane.setBorder(BorderFactory.createEmptyBorder());
 		if (!UiSupport.showResizableConfirmDialog(this, "Set returned resource status", pane,
 				new Dimension(620, 360))) {
-			return;
+			return java.util.Map.of();
 		}
 		java.util.Map<String, String> updates = new java.util.HashMap<>();
 		for (var entry : statusByResource.entrySet()) {
@@ -659,9 +676,10 @@ public class SarTaskPanel extends JPanel {
 				updates.put(res.getResourceId(), mapped);
 			}
 		}
-		controller.applyReturnedResourceStatuses(task, updates);
+		return updates;
 	}
 
+	/** Installs sorted-row editor, lifecycle and contextual logging actions. */
 	private void installRowEditor() {
 		JPopupMenu menu = new JPopupMenu();
 		JMenuItem editAssignmentItem = new JMenuItem("Edit assignment…");
@@ -676,12 +694,16 @@ public class SarTaskPanel extends JPanel {
 		JMenuItem open214Item = new JMenuItem("Open ICS 214 for Task…");
 		open214Item.addActionListener(event -> openIcs214ForSelected());
 		menu.add(open214Item);
+		JMenuItem addLogEntryItem = new JMenuItem("Add log entry…");
+		addLogEntryItem.addActionListener(event -> addLogEntryForSelectedTask());
+		menu.add(addLogEntryItem);
 		menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
 			@Override
 			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
 				SarTaskAssignment selected = selectedTaskFromTable();
 				editDebriefingItem.setEnabled(selected != null && isReadyForDebrief(selected));
 				changeStatusItem.setEnabled(selected != null && isPlannedOrAssigned(selected.getTaskLifecycleStatus()));
+				addLogEntryItem.setEnabled(onAddLogEntryRequest != null && selected != null);
 			}
 
 			@Override
@@ -716,6 +738,14 @@ public class SarTaskPanel extends JPanel {
 				}
 			}
 		});
+	}
+
+	/** Launches contextual logging for the selected task, respecting sorting. */
+	private void addLogEntryForSelectedTask() {
+		SarTaskAssignment selected = selectedTaskFromTable();
+		if (onAddLogEntryRequest != null && selected != null) {
+			onAddLogEntryRequest.accept(table, selected);
+		}
 	}
 
 	private void selectRowAtEvent(MouseEvent event) {
@@ -769,6 +799,11 @@ public class SarTaskPanel extends JPanel {
 		}
 	}
 
+	/**
+	 * Changes task status without replacing canonical rows with a stale table list.
+	 *
+	 * @param task task whose lifecycle is being edited.
+	 */
 	private void openQuickStatusDialog(SarTaskAssignment task) {
 		if (task == null || !isPlannedOrAssigned(task.getTaskLifecycleStatus())) {
 			return;
@@ -792,15 +827,14 @@ public class SarTaskPanel extends JPanel {
 			return;
 		}
 		if (isAssignedState(previous) && "returned".equalsIgnoreCase(updated.trim())) {
-			promptResourceDispositionOnReturn(task);
+			controller.applyReturnedResourceStatuses(task, promptResourceDispositionOnReturn(task));
 		}
 		AppController.TaskLifecycleChangeResult result = controller.recordTaskLifecycleTransition(task, previous, updated,
 				LocalDateTime.now().withSecond(0).withNano(0));
 		showLifecycleWarning(result);
 		controller.syncIcs204ResourcesFromSarTasks();
-		tableModel.setRows(tableModel.getRows(), controller.getData().getClueLogEntries(),
-				controller.getData().getForm204().getResourcesAssigned());
-		controller.getData().setSarTaskAssignments(tableModel.getRows());
+		tableModel.setRows(controller.getData().getSarTaskAssignments(), controller.getData().getClueLogEntries(),
+				controller.getAssignmentResources());
 		controller.markDirty();
 		rebuildBoardView();
 	}
@@ -825,6 +859,12 @@ public class SarTaskPanel extends JPanel {
 		return tableModel.getRows().get(modelRow);
 	}
 
+	/**
+	 * Opens an editor that must save successfully before closing or navigating.
+	 *
+	 * @param rowIndex task row index.
+	 * @param mode assignment or debrief mode.
+	 */
 	private void editRow(int rowIndex, EditorMode mode) {
 		if (rowIndex < 0 || rowIndex >= tableModel.getRowCount()) {
 			return;
@@ -833,52 +873,63 @@ public class SarTaskPanel extends JPanel {
 			table.getCellEditor().stopCellEditing();
 		}
 		SarTaskAssignment row = tableModel.getRows().get(rowIndex);
-		String previousLifecycleStatus = row.getTaskLifecycleStatus();
 		SarTaskEditor editor = new SarTaskEditor(row, mode, controller.getData().getClueLogEntries(),
 				defaultResourceEditorRowCount(row), handlerName -> controller.findEquipmentForHandler(handlerName),
 				controller.getAvailableResourceNames(), controller.getAvailableTCards(),
 				controller.getOnTaskResourceIds(), controller);
 		JPanel content = sarTaskEditorDialogContent(editor.panel);
+		if (onAddLogEntryRequest != null) {
+			JButton logButton = new JButton("Add log entry…");
+			logButton.addActionListener(event -> onAddLogEntryRequest.accept(content, row));
+			content.add(logButton, BorderLayout.SOUTH);
+		}
 		String title = mode.dialogTitle(row.getAssignmentTeamNumber());
 		Dimension size = mode == EditorMode.ASSIGNMENT ? new Dimension(1100, 680) : new Dimension(1100, 620);
 		while (true) {
 			java.util.List<Object> options = new ArrayList<>();
 			if (mode == EditorMode.ASSIGNMENT && isReadyForDebrief(row)) {
-				options.add("Debrief…");
+				options.add("Save and open debrief…");
 			}
 			if (onEditIcs204AssignmentRequest != null && row.getAssignmentId() != null
 					&& !row.getAssignmentId().isBlank()) {
-				options.add("Open linked ICS 204 assignment…");
+				options.add("Save and open linked ICS 204 assignment…");
 			}
 			int okIndex = options.size();
-			options.add("OK");
+			options.add("Save");
 			int cancelIndex = options.size();
 			options.add("Cancel");
-			int choice = UiSupport.showResizableOptionDialog(this, title, content, size, options.toArray(), "OK");
-			if (choice == okIndex) {
-				break;
-			}
+			int choice = UiSupport.showResizableOptionDialog(this, title, content, size, options.toArray(), "Save");
 			if (choice < 0 || choice == cancelIndex) {
 				return;
 			}
 			Object selected = options.get(choice);
-			if ("Debrief…".equals(selected)) {
+			if (mode == EditorMode.ASSIGNMENT) {
 				List<String> validationErrors = assignmentEditorValidationErrors(editor);
 				if (!validationErrors.isEmpty()) {
 					showValidationErrors(validationErrors);
 					continue;
 				}
-				applyEditorChanges(rowIndex, row, editor, mode, previousLifecycleStatus);
+			}
+			try {
+				saveTaskEditor(rowIndex, row, editor, mode);
+			} catch (RuntimeException exception) {
+				UiSupport.showDocumentMessage(content, exception.getMessage(), "Unable to save assignment",
+						javax.swing.JOptionPane.ERROR_MESSAGE);
+				continue;
+			}
+			if (choice == okIndex) {
+				return;
+			}
+			if ("Save and open debrief…".equals(selected)) {
 				openTaskDebriefDialog(row.getAssignmentId(), row.getAssignmentTeamNumber());
 				return;
 			}
-			if ("Open linked ICS 204 assignment…".equals(selected) && onEditIcs204AssignmentRequest != null
+			if ("Save and open linked ICS 204 assignment…".equals(selected) && onEditIcs204AssignmentRequest != null
 					&& row.getAssignmentId() != null && !row.getAssignmentId().isBlank()) {
 				onEditIcs204AssignmentRequest.accept(row.getAssignmentId());
 				return;
 			}
 		}
-		applyEditorChanges(rowIndex, row, editor, mode, previousLifecycleStatus);
 	}
 
 	/**
@@ -891,34 +942,72 @@ public class SarTaskPanel extends JPanel {
 	 *            task assignment being edited.
 	 * @param editor
 	 *            editor supplying current field values.
-	 * @param mode
-	 *            editor mode.
-	 * @param previousLifecycleStatus
-	 *            lifecycle value before edits started.
+	 * @param mode editor mode.
+	 * @param returnedStatuses statuses collected before the atomic save attempt.
+	 * @return transition feedback, or null when no lifecycle transition occurred.
 	 */
-	private void applyEditorChanges(int rowIndex, SarTaskAssignment row, SarTaskEditor editor, EditorMode mode,
-			String previousLifecycleStatus) {
+	private AppController.TaskLifecycleChangeResult applyEditorChanges(int rowIndex, SarTaskAssignment row,
+			SarTaskEditor editor, EditorMode mode, java.util.Map<String, String> returnedStatuses) {
+		String previousLifecycleStatus = row.getTaskLifecycleStatus();
 		controller.getData().setClueLogEntries(editor.applyTo(row, controller.getData().getClueLogEntries()));
 		String newLifecycleStatus = row.getTaskLifecycleStatus();
+		AppController.TaskLifecycleChangeResult result = null;
 		if (!java.util.Objects.equals(previousLifecycleStatus, newLifecycleStatus)) {
 			if (isAssignedState(previousLifecycleStatus) && "returned".equalsIgnoreCase(newLifecycleStatus.trim())) {
-				promptResourceDispositionOnReturn(row);
+				controller.applyReturnedResourceStatuses(row, returnedStatuses);
 			}
-			showLifecycleWarning(controller.recordTaskLifecycleTransition(row, previousLifecycleStatus, newLifecycleStatus,
-					LocalDateTime.now().withSecond(0).withNano(0)));
+			result = controller.recordTaskLifecycleTransition(row, previousLifecycleStatus, newLifecycleStatus,
+					LocalDateTime.now().withSecond(0).withNano(0));
 		}
 		if (mode == EditorMode.ASSIGNMENT) {
 			updateLinkedResourcePersonCount(row, editor.resourceCount());
 		}
 		controller.syncIcs204ResourcesFromSarTasks();
 		tableModel.setRows(tableModel.getRows(), controller.getData().getClueLogEntries(),
-				controller.getData().getForm204().getResourcesAssigned());
-		controller.getData().setSarTaskAssignments(tableModel.getRows());
-		controller.markDirty();
+				controller.getAssignmentResources());
 		int viewRow = table.convertRowIndexToView(rowIndex);
 		if (viewRow >= 0 && viewRow < table.getRowCount()) {
 			table.setRowSelectionInterval(viewRow, viewRow);
 		}
+		return result;
+	}
+
+	/**
+	 * Collects modal input first, then atomically applies and persists editor fields.
+	 *
+	 * @param rowIndex selected task row.
+	 * @param row live task.
+	 * @param editor entered fields retained on failure.
+	 * @param mode editor mode.
+	 * @throws RuntimeException when persistence fails after restoring model state.
+	 */
+	private void saveTaskEditor(int rowIndex, SarTaskAssignment row, SarTaskEditor editor, EditorMode mode) {
+		java.util.Map<String, String> statuses = java.util.Map.of();
+		if (mode == EditorMode.ASSIGNMENT
+				&& java.util.Objects.equals(editor.initialLifecycleStatus, row.getTaskLifecycleStatus())
+				&& isAssignedState(row.getTaskLifecycleStatus())
+				&& "returned".equalsIgnoreCase(String.valueOf(editor.taskLifecycleField.getSelectedItem()).trim())) {
+			statuses = promptResourceDispositionOnReturn(row);
+		}
+		String lifecycleBaseline = editor.initialLifecycleStatus;
+		Set<String> clueBaseline = new java.util.HashSet<>(editor.initialClueIds);
+		java.util.Map<String, String> followUpBaseline = new java.util.HashMap<>(editor.initialClueFollowUp);
+		java.util.Map<String, String> returnedStatuses = statuses;
+		AppController.TaskLifecycleChangeResult[] feedback = new AppController.TaskLifecycleChangeResult[1];
+		try {
+			controller.persistEditorChanges(() ->
+					feedback[0] = applyEditorChanges(rowIndex, row, editor, mode, returnedStatuses));
+		} catch (RuntimeException exception) {
+			editor.initialLifecycleStatus = lifecycleBaseline;
+			editor.initialClueIds.clear();
+			editor.initialClueIds.addAll(clueBaseline);
+			editor.initialClueFollowUp.clear();
+			editor.initialClueFollowUp.putAll(followUpBaseline);
+			tableModel.setRows(controller.getData().getSarTaskAssignments(), controller.getData().getClueLogEntries(),
+					controller.getAssignmentResources());
+			throw exception;
+		}
+		showLifecycleWarning(feedback[0]);
 	}
 
 	/**
@@ -950,7 +1039,7 @@ public class SarTaskPanel extends JPanel {
 		for (String error : errors) {
 			builder.append("- ").append(error).append('\n');
 		}
-		JOptionPane.showMessageDialog(this, builder.toString(), "Validation required", JOptionPane.WARNING_MESSAGE);
+		UiSupport.showDocumentMessage(this, builder.toString(), "Validation required", JOptionPane.WARNING_MESSAGE);
 	}
 
 	/**
@@ -963,7 +1052,7 @@ public class SarTaskPanel extends JPanel {
 		if (result == null || !result.hasWarning()) {
 			return;
 		}
-		JOptionPane.showMessageDialog(this, result.warningMessage(), "SAR Task Status", JOptionPane.WARNING_MESSAGE);
+		UiSupport.showDocumentMessage(this, result.warningMessage(), "SAR Task Status", JOptionPane.WARNING_MESSAGE);
 	}
 
 	private JPanel sarTaskEditorDialogContent(JPanel editorPanel) {
@@ -975,18 +1064,30 @@ public class SarTaskPanel extends JPanel {
 		return content;
 	}
 
+	/**
+	 * Updates the person count on the backing resource in any assignment form.
+	 *
+	 * @param row edited task.
+	 * @param resourceCount assigned person count.
+	 */
 	private void updateLinkedResourcePersonCount(SarTaskAssignment row, int resourceCount) {
 		ResourceAssignment assignment = SarTaskTableModel.findLinkedAssignment(row,
-				controller.getData().getForm204().getResourcesAssigned());
+				controller.getAssignmentResources());
 		if (assignment != null) {
 			assignment.setNumberOfPersons(resourceCount);
 		}
 	}
 
+	/**
+	 * Determines initial resource rows using the linked assignment's person count.
+	 *
+	 * @param row task being edited.
+	 * @return bounded initial resource row count.
+	 */
 	private int defaultResourceEditorRowCount(SarTaskAssignment row) {
 		int existing = editableResources(row).size();
 		int persons = 0;
-		for (ResourceAssignment assignment : controller.getData().getForm204().getResourcesAssigned()) {
+		for (ResourceAssignment assignment : controller.getAssignmentResources()) {
 			if (assignment == null) {
 				continue;
 			}
@@ -1067,6 +1168,20 @@ public class SarTaskPanel extends JPanel {
 		return area;
 	}
 
+	/**
+	 * Builds resource assignment controls with document-scoped nested pickers.
+	 *
+	 * @param row backing task.
+	 * @param model editable resource rows.
+	 * @param minimumRows minimum initial row count.
+	 * @param availableNames resource autocomplete choices.
+	 * @param canineNamesFirst canine names to place first.
+	 * @param availableTCards available resource cards.
+	 * @param onTaskResourceIds committed card identities.
+	 * @param parentComponent owning assignment editor.
+	 * @param controller resource creation controller.
+	 * @return resource editor panel.
+	 */
 	private static JPanel resourceEditorPanel(SarTaskAssignment row, ResourceEntriesTableModel model, int minimumRows,
 			List<String> availableNames, List<String> canineNamesFirst, List<TCard> availableTCards,
 			Set<String> onTaskResourceIds, java.awt.Component parentComponent, AppController controller) {
@@ -1156,10 +1271,11 @@ public class SarTaskPanel extends JPanel {
 			}
 			SarTaskResource resource = model.getRows().get(selected);
 			String label = resource.getName().isBlank() ? resource.getFunction() : resource.getName();
-			int confirm = JOptionPane.showConfirmDialog(parentComponent,
-					"Remove resource '" + (label.isBlank() ? ("row " + (selected + 1)) : label) + "' from this task?",
-					"Remove Resource", JOptionPane.YES_NO_OPTION);
-			if (confirm == JOptionPane.YES_OPTION) {
+			int confirm = UiSupport.showResizableOptionDialog(parentComponent, "Remove Resource",
+					new JLabel("Remove resource '" + (label.isBlank() ? ("row " + (selected + 1)) : label)
+							+ "' from this task?"),
+					null, new Object[]{"Remove", "Cancel"}, "Cancel");
+			if (confirm == 0) {
 				model.removeRow(selected);
 			}
 		});
@@ -1289,8 +1405,8 @@ public class SarTaskPanel extends JPanel {
 		dialogPanel.add(manualPanel, BorderLayout.SOUTH);
 
 		while (true) {
-			int result = JOptionPane.showOptionDialog(parent, dialogPanel, "Add Resource", JOptionPane.DEFAULT_OPTION,
-					JOptionPane.PLAIN_MESSAGE, null, new Object[]{"Add Selected", "Close"}, "Add Selected");
+			int result = UiSupport.showResizableOptionDialog(parent, "Add Resource", dialogPanel,
+					new Dimension(820, 520), new Object[]{"Add Selected", "Close"}, "Add Selected");
 			if (result != 0 && !addViaDoubleClick.get()) {
 				return null;
 			}
@@ -1332,7 +1448,7 @@ public class SarTaskPanel extends JPanel {
 			if (addViaDoubleClick.get()) {
 				return null;
 			}
-			JOptionPane.showMessageDialog(parent, "Select one or more resources, or enter a manual name.",
+			UiSupport.showDocumentMessage(parent, "Select one or more resources, or enter a manual name.",
 					"Add Resource", JOptionPane.WARNING_MESSAGE);
 		}
 	}
@@ -1853,6 +1969,9 @@ public class SarTaskPanel extends JPanel {
 		private final List<TCard> availableTCards;
 		private final AppController controller;
 		private String debriefingSupervisorResourceId = "";
+		private String initialLifecycleStatus;
+		private final Set<String> initialClueIds = new java.util.HashSet<>();
+		private final java.util.Map<String, String> initialClueFollowUp = new java.util.HashMap<>();
 		/**
 		 * Resource IDs of cards currently committed to an active ("On Task") SAR task.
 		 */
@@ -1860,6 +1979,18 @@ public class SarTaskPanel extends JPanel {
 		/** Pre-built name→TCard lookup used by {@link #resourceCount()}. */
 		private final java.util.Map<String, TCard> tCardByDisplayName;
 
+		/**
+		 * Creates editor fields and captures merge baselines for detached logging.
+		 *
+		 * @param row live assignment.
+		 * @param mode editor mode.
+		 * @param clueLogEntries shared clue log.
+		 * @param resourceRowCount initial resource rows.
+		 * @param canineForHandler canine name lookup.
+		 * @param availableResourceNames resource choices.
+		 * @param availableTCards available cards.
+		 * @param onTaskResourceIds committed resource identities.
+		 */
 		private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries,
 				int resourceRowCount, java.util.function.Function<String, java.util.List<String>> canineForHandler,
 				List<String> availableResourceNames, List<TCard> availableTCards, Set<String> onTaskResourceIds) {
@@ -1867,12 +1998,30 @@ public class SarTaskPanel extends JPanel {
 					onTaskResourceIds, null);
 		}
 
+		/**
+		 * Creates editor fields with controller-backed resource selection.
+		 *
+		 * @param row live assignment.
+		 * @param mode editor mode.
+		 * @param clueLogEntries shared clue log.
+		 * @param resourceRowCount initial resource rows.
+		 * @param canineForHandler canine name lookup.
+		 * @param availableResourceNames resource choices.
+		 * @param availableTCards available cards.
+		 * @param onTaskResourceIds committed resource identities.
+		 * @param controller application controller, or null for standalone editing.
+		 */
 		private SarTaskEditor(SarTaskAssignment row, EditorMode mode, List<ClueLogEntry> clueLogEntries,
 				int resourceRowCount, java.util.function.Function<String, java.util.List<String>> canineForHandler,
 				List<String> availableResourceNames, List<TCard> availableTCards, Set<String> onTaskResourceIds,
 				AppController controller) {
 			this.mode = mode;
 			this.controller = controller;
+			initialLifecycleStatus = row.getTaskLifecycleStatus();
+			for (ClueLogEntry clue : cluesForTask(row, clueLogEntries == null ? List.of() : clueLogEntries)) {
+				initialClueIds.add(clue.getEntryId());
+				initialClueFollowUp.put(clue.getEntryId(), clue.getFollowUp());
+			}
 			this.availableTCards = availableTCards == null ? List.of() : availableTCards;
 			this.onTaskResourceIds = onTaskResourceIds == null ? Set.of() : onTaskResourceIds;
 			java.util.Map<String, TCard> nameMap = new java.util.HashMap<>();
@@ -1929,11 +2078,10 @@ public class SarTaskPanel extends JPanel {
 							return;
 						}
 						// Multiple linked canines: show a chooser.
-						String chosen = (String) JOptionPane.showInputDialog(leaderField,
-								"Select the canine resource for handler " + handler + ":", "Linked canine",
-								JOptionPane.PLAIN_MESSAGE, null, linked.toArray(), linked.get(0));
-						if (chosen != null) {
-							resourceIdentifierField.setText(chosen);
+						JComboBox<String> canineChoices = new JComboBox<>(linked.toArray(String[]::new));
+						if (UiSupport.showResizableConfirmDialog(leaderField,
+								"Select canine for " + handler, canineChoices, new Dimension(420, 140))) {
+							resourceIdentifierField.setText((String) canineChoices.getSelectedItem());
 						}
 					}
 				});
@@ -2103,12 +2251,22 @@ public class SarTaskPanel extends JPanel {
 			return ratings;
 		}
 
+		/**
+		 * Applies edited fields while preserving concurrently logged clues and status.
+		 *
+		 * @param row live assignment.
+		 * @param clueLogEntries current shared clue log.
+		 * @return merged clue log retaining entries added outside this editor.
+		 */
 		private List<ClueLogEntry> applyTo(SarTaskAssignment row, List<ClueLogEntry> clueLogEntries) {
-			row.setAssignmentTeamNumber(assignmentTeamNumberField.getText().trim());
-			row.setResourceType(selectedComboValue(resourceTypeField));
-			row.setTaskType(selectedComboValue(taskTypeField));
 			if (mode == EditorMode.ASSIGNMENT) {
-				row.setTaskLifecycleStatus((String) taskLifecycleField.getSelectedItem());
+				row.setAssignmentTeamNumber(assignmentTeamNumberField.getText().trim());
+				row.setResourceType(selectedComboValue(resourceTypeField));
+				row.setTaskType(selectedComboValue(taskTypeField));
+				if (java.util.Objects.equals(initialLifecycleStatus, row.getTaskLifecycleStatus())) {
+					row.setTaskLifecycleStatus((String) taskLifecycleField.getSelectedItem());
+					initialLifecycleStatus = row.getTaskLifecycleStatus();
+				}
 				row.setResourcesAssigned(resourceValuesFrom(resourceEntryTableModel));
 				row.setAssignment(textAreaFrom(assignmentField).getText().trim());
 				row.setTransportationInstructions(textAreaFrom(transportationField).getText().trim());
@@ -2137,22 +2295,34 @@ public class SarTaskPanel extends JPanel {
 			List<ClueLogEntry> updatedClues = clueLogEntries == null
 					? new ArrayList<>()
 					: new ArrayList<>(clueLogEntries);
-			if (!row.getAssignmentId().isBlank()) {
-				for (Iterator<ClueLogEntry> iterator = updatedClues.iterator(); iterator.hasNext();) {
-					ClueLogEntry clue = iterator.next();
-					if (row.getAssignmentId().equals(clue.getAssignmentId())) {
-						iterator.remove();
+			List<ClueLogEntry> editedClues = clueValuesFrom(clueEntryTableModel.getRows(), row,
+					row.getAssignmentTeamNumber());
+			for (ClueLogEntry edited : editedClues) {
+				boolean externalFollowUp = false;
+				for (ClueLogEntry current : updatedClues) {
+					if (edited.getEntryId().equals(current.getEntryId())) {
+						copyFollowUp(current, edited);
+						if (!java.util.Objects.equals(initialClueFollowUp.get(current.getEntryId()),
+								current.getFollowUp())) {
+							edited.setFollowUp(current.getFollowUp());
+							externalFollowUp = true;
+						}
+						break;
 					}
 				}
-			} else if (!row.getAssignmentTeamNumber().isBlank()) {
-				for (Iterator<ClueLogEntry> iterator = updatedClues.iterator(); iterator.hasNext();) {
-					ClueLogEntry clue = iterator.next();
-					if (row.getAssignmentTeamNumber().equals(clue.getDetectingTask())) {
-						iterator.remove();
-					}
+				if (!externalFollowUp) {
+					initialClueFollowUp.put(edited.getEntryId(), edited.getFollowUp());
+				}
+				initialClueIds.add(edited.getEntryId());
+			}
+			updatedClues.removeIf(clue -> initialClueIds.contains(clue.getEntryId()));
+			Set<String> currentIds = updatedClues.stream().map(ClueLogEntry::getEntryId)
+					.collect(java.util.stream.Collectors.toSet());
+			for (ClueLogEntry edited : editedClues) {
+				if (currentIds.add(edited.getEntryId())) {
+					updatedClues.add(edited);
 				}
 			}
-			updatedClues.addAll(clueValuesFrom(clueEntryTableModel.getRows(), row, row.getAssignmentTeamNumber()));
 			return updatedClues;
 		}
 

@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -43,6 +46,7 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, getFormKey());
 		Files.createDirectories(outputFile.getParent());
 		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
@@ -182,6 +186,18 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		drawDateTimeInitiatedSection(stream, bold, regular, x + widths[0] + widths[1], y, widths[2], height, form);
 	}
 
+	/**
+	 * Draws the initiation date and time in adjacent cells.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width cell width.
+	 * @param height cell height.
+	 * @param form initial briefing.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawDateTimeInitiatedSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
 			float x, float y, float width, float height, Ics201Form form) throws IOException {
 		// Draw two separate sub-cells side by side: 3a Date | 3b Time
@@ -191,18 +207,18 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		float valueY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 16f;
 		// 3a Date
 		drawHeading(stream, bold, x, y + height, "3a. Date Initiated");
-		stream.beginText();
-		stream.setFont(regular, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x + CELL_PADDING, valueY);
-		stream.showText(safe(formatDate(form.getDateInitiated())));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(regular, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x + CELL_PADDING, valueY);
+			stream.showText(PdfText.singleLine(safe(formatDate(form.getDateInitiated()))));
+		}
 		// 3b Time
 		drawHeading(stream, bold, x + halfWidth, y + height, "3b. Time Initiated");
-		stream.beginText();
-		stream.setFont(regular, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x + halfWidth + CELL_PADDING, valueY);
-		stream.showText(safe(formatTime(form.getTimeInitiated())));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(regular, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x + halfWidth + CELL_PADDING, valueY);
+			stream.showText(PdfText.singleLine(safe(formatTime(form.getTimeInitiated()))));
+		}
 	}
 
 	private void drawActionsSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
@@ -310,30 +326,59 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				Math.max(1, (int) ((height - 26f) / LINE_HEIGHT)));
 	}
 
+	/**
+	 * Draws a section heading in a balanced text block.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param x left edge.
+	 * @param topY top edge.
+	 * @param heading section heading.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawHeading(PDPageContentStream stream, PDType1Font bold, float x, float topY, String heading)
 			throws IOException {
-		stream.beginText();
-		stream.setFont(bold, HEADING_FONT_SIZE);
-		stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
-		stream.showText(heading);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, HEADING_FONT_SIZE);
+			stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
+			stream.showText(PdfText.singleLine(heading));
+		}
 	}
 
+	/**
+	 * Draws an inline label and normalized value.
+	 * @param stream page stream.
+	 * @param bold label font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y baseline.
+	 * @param label field label.
+	 * @param value source value.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawInlinePair(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
 			String label, String value) throws IOException {
-		stream.beginText();
-		stream.setFont(bold, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(label + ": ");
-		stream.endText();
-
-		stream.beginText();
-		stream.setFont(regular, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x + 58f, y);
-		stream.showText(safe(value));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(label + ": "));
+		}
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(regular, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x + 58f, y);
+			stream.showText(PdfText.singleLine(safe(value)));
+		}
 	}
 
+	/**
+	 * Writes logical text lines within the available line count.
+	 * @param stream page stream.
+	 * @param font body font.
+	 * @param x left edge.
+	 * @param startY starting baseline.
+	 * @param lines source lines.
+	 * @param maxLines maximum visible lines.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeLines(PDPageContentStream stream, PDType1Font font, float x, float startY, List<String> lines,
 			int maxLines) throws IOException {
 		// Expand any embedded newlines so each physical line is a separate string.
@@ -342,34 +387,43 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			if (line == null) {
 				expanded.add("");
 			} else {
-				for (String part : line.split("\n", -1)) {
+				for (String part : PdfText.normalize(line).split("\n", -1)) {
 					expanded.add(part);
 				}
 			}
 		}
-		stream.beginText();
-		stream.setFont(font, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x, startY);
-		int lineCount = 0;
-		for (String line : expanded) {
-			if (lineCount >= maxLines) {
-				stream.showText("Additional content not shown");
-				break;
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x, startY);
+			int lineCount = 0;
+			for (String line : expanded) {
+				if (lineCount >= maxLines) {
+					stream.showText("Additional content not shown");
+					break;
+				}
+				stream.showText(PdfText.singleLine(safe(line)));
+				stream.newLineAtOffset(0, -LINE_HEIGHT);
+				lineCount++;
 			}
-			stream.showText(safe(line));
-			stream.newLineAtOffset(0, -LINE_HEIGHT);
-			lineCount++;
 		}
-		stream.endText();
 	}
 
+	/**
+	 * Writes normalized inline cell text.
+	 * @param stream page stream.
+	 * @param font body font.
+	 * @param x left edge.
+	 * @param y baseline.
+	 * @param value source value.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeCellText(PDPageContentStream stream, PDType1Font font, float x, float y, String value)
 			throws IOException {
-		stream.beginText();
-		stream.setFont(font, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(safe(value));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(safe(value)));
+		}
 	}
 
 	private void drawCell(PDPageContentStream stream, float x, float y, float width, float height) throws IOException {
@@ -594,13 +648,13 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		String s = safe(text);
 		if (s.isBlank())
 			return;
-		float tw = font.getStringWidth(s) / 1000f * size;
+		float tw = font.getStringWidth(PdfText.singleLine(s)) / 1000f * size;
 		float off = Math.max(0f, (boxWidth - tw) / 2f);
-		stream.beginText();
-		stream.setFont(font, size);
-		stream.newLineAtOffset(boxLeft + off, baselineY);
-		stream.showText(s);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, size);
+			stream.newLineAtOffset(boxLeft + off, baselineY);
+			stream.showText(PdfText.singleLine(s));
+		}
 	}
 
 	/** Draws left-aligned org-chart label text at the given position. */
@@ -609,11 +663,11 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		String s = safe(text);
 		if (s.isBlank())
 			return;
-		stream.beginText();
-		stream.setFont(font, size);
-		stream.newLineAtOffset(x, y);
-		stream.showText(s);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, size);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(s));
+		}
 	}
 
 	private List<String> organizationLines(OrganizationalChart chart) {
@@ -651,10 +705,12 @@ public class Ics201PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return safeValue.length() <= maxLength ? safeValue : safeValue.substring(0, Math.max(0, maxLength - 1)) + "...";
 	}
 
+	/**
+	 * Normalizes layout whitespace without discarding source characters.
+	 * @param value optional text.
+	 * @return normalized text with logical line breaks.
+	 */
 	private String safe(String value) {
-		if (value == null)
-			return "";
-		// PDFBox WinAnsiEncoding cannot encode control characters; strip them.
-		return value.replaceAll("[\\p{Cntrl}]", "");
+		return PdfText.normalize(value);
 	}
 }
