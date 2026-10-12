@@ -7,12 +7,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.MedicalPlan;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics206PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.DefaultCellEditor;
+import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JTable;
 import javax.swing.JTextField;
@@ -72,6 +74,35 @@ class Ics206PanelTest {
 		});
 
 		assertEquals("Fictional County Hospital", data.getMedicalPlan().getHospitals().get(0).getName());
+	}
+
+	@Test
+	void roleSuggestionsReadOrgChartWithoutApplyingNamesOrApproval() {
+		AppData data = new AppData();
+		data.getOrganizationalChart().setSafetyOfficerName("Fictional Safety Officer");
+		OrgChartEntry medicalLeader = new OrgChartEntry();
+		medicalLeader.setTitle("Medical Unit Leader");
+		medicalLeader.setName("Fictional Medical Leader");
+		data.getOrganizationalChart().getAdditionalPositions().add(medicalLeader);
+		data.getMedicalPlan().setSafetyOfficerSignature("Manual signature");
+
+		assertEquals(java.util.List.of("Fictional Medical Leader"), Ics206Panel.roleCandidates(data, true));
+		assertEquals(java.util.List.of("Fictional Safety Officer"),
+				Ics206Panel.roleCandidates(data, false));
+		assertEquals("", data.getMedicalPlan().getReviewedBySafetyOfficer());
+		assertEquals("Manual signature", data.getMedicalPlan().getSafetyOfficerSignature());
+		assertEquals("Not reviewed", data.getMedicalPlan().getReviewStatus());
+	}
+
+	@Test
+	void stagingLocationShortcutOpensTheSharedCanineWorkspace() throws Exception {
+		Ics206Panel panel = new Ics206Panel(controller(new AppData()));
+		java.util.List<String> opened = new java.util.ArrayList<>();
+		panel.setWorkspaceRequest(opened::add);
+
+		SwingUtilities.invokeAndWait(() -> ((JButton) fieldValue(panel, "stagingWorkspace")).doClick());
+
+		assertEquals(java.util.List.of("Canine Medical Plan (ICS 206CANINE, adapted)"), opened);
 	}
 
 	/**

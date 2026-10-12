@@ -4,12 +4,17 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.MedicalPlan;
+import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
+import org.sarmanagement.icsforms.model.OrganizationalChart;
 
 import javax.swing.BorderFactory;
+import javax.swing.JButton;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
@@ -49,6 +54,7 @@ public class Ics206Panel extends JPanel {
 	private final JTextField reviewerSignature = new JTextField();
 	private final JComboBox<String> reviewStatus = new JComboBox<>(
 			new String[] {"Not reviewed", "Reviewed", "Approved"});
+	private final JButton stagingWorkspace = new JButton("Staging/base and veterinary locations…");
 	private final JLabel validation = new JLabel(" ");
 	private final JPanel detailedPanel = new JPanel(new BorderLayout());
 	private final JTabbedPane detailTabs = new JTabbedPane();
@@ -65,6 +71,7 @@ public class Ics206Panel extends JPanel {
 	private final JTable transportTable = new JTable(transportModel);
 	private final JTable hospitalTable = new JTable(hospitalModel);
 	private Consumer<String> exportRequest = ignored -> { };
+	private Consumer<String> workspaceRequest = ignored -> { };
 	private boolean loading;
 	private boolean flushing;
 
@@ -80,6 +87,9 @@ public class Ics206Panel extends JPanel {
 		header.add(active);
 		header.add(new JLabel("Plan detail:"));
 		header.add(mode);
+		header.add(stagingWorkspace);
+		stagingWorkspace.addActionListener(event -> workspaceRequest.accept(
+				"Canine Medical Plan (ICS 206CANINE, adapted)"));
 		JButton export = new JButton("Export ICS 206 PDF");
 		export.addActionListener(event -> {
 			pushToModel();
@@ -100,6 +110,15 @@ public class Ics206Panel extends JPanel {
 	 */
 	public void setExportRequest(Consumer<String> exportRequest) {
 		this.exportRequest = exportRequest == null ? ignored -> { } : exportRequest;
+	}
+
+	/**
+	 * Sets the action for opening the shared staging/base and veterinary directory workspace.
+	 *
+	 * @param workspaceRequest callback receiving the canine workspace title.
+	 */
+	public void setWorkspaceRequest(Consumer<String> workspaceRequest) {
+		this.workspaceRequest = workspaceRequest == null ? ignored -> { } : workspaceRequest;
 	}
 
 	/**
@@ -189,7 +208,7 @@ public class Ics206Panel extends JPanel {
 		roleFields.add(new JLabel("Medical unit role"));
 		roleFields.add(medicalRole);
 		roleFields.add(new JLabel("Assigned person (optional)"));
-		roleFields.add(medicalName);
+		roleFields.add(suggestibleField(medicalName, "Medical Unit Leader", true));
 		roleFields.add(new JLabel("Contact"));
 		roleFields.add(medicalContact);
 		simple.add(roleFields, BorderLayout.NORTH);
@@ -224,18 +243,87 @@ public class Ics206Panel extends JPanel {
 		JPanel panel = new JPanel(new GridLayout(0, 4, 4, 4));
 		panel.setBorder(BorderFactory.createTitledBorder("7. Prepared by / 8. Reviewed by"));
 		panel.add(new JLabel("Medical Unit Leader"));
-		panel.add(preparedBy);
+		panel.add(suggestibleField(preparedBy, "Medical Unit Leader", true));
 		panel.add(new JLabel("Preparer signature"));
 		panel.add(preparerSignature);
 		panel.add(new JLabel("Prepared at (yyyy-MM-ddTHH:mm)"));
 		panel.add(preparedAt);
 		panel.add(new JLabel("Safety Officer"));
-		panel.add(reviewedBy);
+		panel.add(suggestibleField(reviewedBy, "Safety Officer", false));
 		panel.add(new JLabel("Safety Officer signature"));
 		panel.add(reviewerSignature);
 		panel.add(new JLabel("Review status"));
 		panel.add(reviewStatus);
 		return panel;
+	}
+
+	/**
+	 * Creates a field with an optional suggestion action from the shared Org Chart.
+	 *
+	 * @param field target field.
+	 * @param role organizational role name.
+	 * @param medicalUnitLeader true to use custom-position candidates.
+	 * @return field and suggestion button.
+	 */
+	private JPanel suggestibleField(JTextField field, String role, boolean medicalUnitLeader) {
+		JPanel panel = new JPanel(new BorderLayout(4, 0));
+		panel.add(field, BorderLayout.CENTER);
+		JButton suggest = new JButton("Suggest…");
+		suggest.addActionListener(event -> suggestRole(field, role, medicalUnitLeader));
+		panel.add(suggest, BorderLayout.EAST);
+		return panel;
+	}
+
+	/**
+	 * Suggests a role holder without replacing manually entered names or signatures.
+	 *
+	 * @param field name field.
+	 * @param role role title.
+	 * @param medicalUnitLeader true to find matching custom Org Chart roles.
+	 */
+	private void suggestRole(JTextField field, String role, boolean medicalUnitLeader) {
+		if (!field.getText().isBlank()) {
+			validation.setText("Existing " + role + " entry retained; clear it before selecting a suggestion.");
+			return;
+		}
+		List<String> candidates = roleCandidates(controller.getData(), medicalUnitLeader);
+		if (candidates.isEmpty()) {
+			validation.setText("No matching " + role + " is listed in the Org Chart; enter the name manually.");
+			return;
+		}
+		Object selected = JOptionPane.showInputDialog(this, "Select a suggested Org Chart name:",
+				role + " suggestion", JOptionPane.QUESTION_MESSAGE, null, candidates.toArray(), candidates.get(0));
+		if (selected instanceof String name) {
+			field.setText(name);
+		}
+	}
+
+	/**
+	 * Finds candidate role holders in existing Org Chart data without changing it.
+	 *
+	 * @param data incident data.
+	 * @param medicalUnitLeader true to select medical unit positions.
+	 * @return distinct nonblank role-holder names.
+	 */
+	static List<String> roleCandidates(AppData data, boolean medicalUnitLeader) {
+		OrganizationalChart chart = data.getOrganizationalChart();
+		List<String> candidates = new ArrayList<>();
+		if (!medicalUnitLeader && !chart.getSafetyOfficerName().isBlank()) {
+			candidates.add(chart.getSafetyOfficerName().trim());
+		}
+		for (OrgChartEntry entry : chart.getAdditionalPositions()) {
+			if (entry == null || entry.getName().isBlank()) {
+				continue;
+			}
+			String title = entry.getTitle().toLowerCase(java.util.Locale.ROOT);
+			boolean matches = medicalUnitLeader
+					? title.contains("medical unit leader") || title.contains("medical unit")
+					: title.contains("safety officer");
+			if (matches) {
+				candidates.add(entry.getName().trim());
+			}
+		}
+		return candidates.stream().distinct().toList();
 	}
 
 	/**

@@ -44,7 +44,9 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CancellationException;
 import java.util.function.Consumer;
@@ -753,8 +755,31 @@ public class CanineMedicalPanel extends JPanel {
 					}
 					if (JOptionPane.showConfirmDialog(CanineMedicalPanel.this, preview,
 							"Preview regional directory merge", JOptionPane.OK_CANCEL_OPTION)
-							== JOptionPane.OK_OPTION && controller.getData() == incident && isActive(this)) {
-						incident.setVetDirectory(result.directory());
+							!= JOptionPane.OK_OPTION || controller.getData() != incident || !isActive(this)) {
+						return;
+					}
+					Map<String, VetDirectoryFileService.ConflictResolution> choices = new HashMap<>();
+					for (VetDirectoryFileService.ConflictRecord conflict : result.conflictRecords()) {
+						Object[] options = {"Keep both", "Replace existing", "Skip imported", "Cancel merge"};
+						int choice = JOptionPane.showOptionDialog(CanineMedicalPanel.this,
+								"An imported facility reuses an existing ID but has different details.\n"
+										+ "Existing record: " + conflict.existingId() + "\nImported record: "
+										+ conflict.importedName() + " (" + conflict.sourceName() + ")\n"
+										+ "Choose explicitly; Keep both retains both complete records.",
+								"Resolve regional record conflict", JOptionPane.DEFAULT_OPTION,
+								JOptionPane.WARNING_MESSAGE, null, options, options[0]);
+						if (choice < 0 || choice == 3) {
+							return;
+						}
+						VetDirectoryFileService.ConflictResolution resolution = switch (choice) {
+							case 1 -> VetDirectoryFileService.ConflictResolution.REPLACE_EXISTING;
+							case 2 -> VetDirectoryFileService.ConflictResolution.SKIP_IMPORTED;
+							default -> VetDirectoryFileService.ConflictResolution.KEEP_BOTH;
+						};
+						choices.put(conflict.importedId(), resolution);
+					}
+					if (controller.getData() == incident && isActive(this)) {
+						incident.setVetDirectory(fileService.resolveConflicts(result, choices));
 						refreshFromModel();
 						controller.markDirty();
 					}

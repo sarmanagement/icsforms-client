@@ -74,6 +74,7 @@ public class MainFrame extends JFrame {
 	/** Independent regular action tracker tab group. */
 	private static final String ACTION_TRACKER_GROUP = "Open Action Tracker";
 	private static final String CANINE_MEDICAL_GROUP = "Canine Medical";
+	private static final String SAFETY_DASHBOARD_GROUP = "Safety Dashboard";
 	private static final String DASHBOARD_PREFERENCE = "workspace-dashboard";
 	/** Tab group for T-Card (ICS 219) resource status tabs. */
 	private static final String T_CARDS_GROUP = "T-Cards";
@@ -97,6 +98,7 @@ public class MainFrame extends JFrame {
 	private final OpenActionTrackerPanel openActionTrackerPanel;
 	private final TCardPanel tCardPanel;
 	private final SafetyPanel safetyPanel;
+	private final SafetyDashboardPanel safetyDashboardPanel;
 	private final JTabbedPane tabs = new JTabbedPane();
 	private final Preferences userPreferences = Preferences.userNodeForPackage(MainFrame.class);
 	private final Map<Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
@@ -170,8 +172,10 @@ public class MainFrame extends JFrame {
 		this.openActionTrackerPanel = new OpenActionTrackerPanel(controller);
 		this.tCardPanel = new TCardPanel(controller);
 		this.safetyPanel = new SafetyPanel(controller);
+		this.safetyDashboardPanel = new SafetyDashboardPanel(this::openWorkspace);
 		safetyPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		medicalPlanPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
+		medicalPlanPanel.setWorkspaceRequest(this::openWorkspace);
 		canineMedicalPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		controller.setPersonnelCardCreator(tCardPanel::createPersonnelCardFromPicker);
 		ics204Panel.setOn214Request(this::addOrOpenLog214ForResource);
@@ -188,6 +192,7 @@ public class MainFrame extends JFrame {
 		groupVisible.put(T_CARDS_GROUP, true);
 		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		groupVisible.put(CANINE_MEDICAL_GROUP, controller.getData().isCanineMedicalWorkspaceEligible());
+		groupVisible.put(SAFETY_DASHBOARD_GROUP, activeDashboard == Dashboard.SAFETY_OFFICER);
 		registerTab("Shared", incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
 		registerTab("Org Chart", organizationalChartPanel, AppController.LinkSource.ORG_CHART, CORE_GROUP);
 		registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, ICS_201_GROUP);
@@ -197,6 +202,7 @@ public class MainFrame extends JFrame {
 		registerTab("Canine Medical Plan (ICS 206CANINE, adapted)", canineMedicalPanel, AppController.LinkSource.NONE,
 				CANINE_MEDICAL_GROUP);
 		registerTab("Safety", safetyPanel, AppController.LinkSource.NONE, CORE_GROUP);
+		registerTab("Safety Overview", safetyDashboardPanel, AppController.LinkSource.NONE, SAFETY_DASHBOARD_GROUP);
 		registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
 		registerTab("Clue Log", clueLogPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
 		registerTab("Open Action Tracker", openActionTrackerPanel, AppController.LinkSource.NONE, ACTION_TRACKER_GROUP);
@@ -260,6 +266,7 @@ public class MainFrame extends JFrame {
 			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
 			activeDashboard = selected;
 			userPreferences.put(DASHBOARD_PREFERENCE, selected.label());
+			groupVisible.put(SAFETY_DASHBOARD_GROUP, selected == Dashboard.SAFETY_OFFICER);
 			rebuildVisibleTabs();
 		});
 		panel.add(chooser);
@@ -1011,6 +1018,7 @@ public class MainFrame extends JFrame {
 		medicalPlanPanel.refreshFromModel();
 		canineMedicalPanel.refreshFromModel();
 		safetyPanel.refreshFromModel();
+		safetyDashboardPanel.refreshFromModel(controller.getData());
 		ensureLogs(controller.getData());
 		rebuildLogTabs();
 		sarTaskPanel.refreshFromModel();
@@ -1021,6 +1029,7 @@ public class MainFrame extends JFrame {
 		groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
 		groupVisible.put(CANINE_MEDICAL_GROUP,
 				canineMedicalManuallyOpened || controller.getData().isCanineMedicalWorkspaceEligible());
+		groupVisible.put(SAFETY_DASHBOARD_GROUP, activeDashboard == Dashboard.SAFETY_OFFICER);
 		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		// Reset ICS 201 group visibility to the phase-based default only when the phase
 		// changes
@@ -1138,6 +1147,7 @@ public class MainFrame extends JFrame {
 		workspaces.put("Medical Plan (ICS 206)", medicalPlanPanel);
 		workspaces.put("Canine Medical Plan (ICS 206CANINE, adapted)", canineMedicalPanel);
 		workspaces.put("Safety", safetyPanel);
+		workspaces.put("Safety Overview", safetyDashboardPanel);
 		workspaces.put("SAR Tasks", sarTaskPanel);
 		workspaces.put("Open Action Tracker", openActionTrackerPanel);
 		workspaces.put("Clue Log", clueLogPanel);
@@ -1145,6 +1155,7 @@ public class MainFrame extends JFrame {
 		for (Ics214Panel panel : ics214Panels) {
 			workspaces.putIfAbsent("Activity Logs", panel);
 		}
+
 		List<Component> ordered = new ArrayList<>();
 		for (String title : activeDashboard.workspaceTitles()) {
 			if ("Activity Logs".equals(title)) {
@@ -1169,6 +1180,29 @@ public class MainFrame extends JFrame {
 			}
 		}
 		return ordered;
+	}
+
+	/**
+	 * Opens a shared workspace from the safety readiness overview after flushing all editors.
+	 *
+	 * @param title registered workspace title.
+	 */
+	private void openWorkspace(String title) {
+		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		Component target = null;
+		for (Map.Entry<Component, String> entry : tabTitles.entrySet()) {
+			if (entry.getValue().equals(title)) {
+				target = entry.getKey();
+				break;
+			}
+		}
+		if (canineMedicalPanel.equals(target)) {
+			canineMedicalManuallyOpened = true;
+			groupVisible.put(CANINE_MEDICAL_GROUP, true);
+			rebuildVisibleTabs(target, -1);
+		} else if (target != null) {
+			rebuildVisibleTabs(target, -1);
+		}
 	}
 
 	/**
@@ -1879,11 +1913,11 @@ public class MainFrame extends JFrame {
 	/**
 	 * Role-oriented orderings of the same incident workspaces.
 	 */
-	private enum Dashboard {
+	enum Dashboard {
 		IC_ICP("IC/ICP", List.of("Shared", "Org Chart", "ICS 201", "ICS 202", "ICS 204",
 				"Medical Plan (ICS 206)", "Canine Medical Plan (ICS 206CANINE, adapted)", "Safety", "SAR Tasks",
 				"Open Action Tracker", "Activity Logs", "Clue Log", "T-Cards")),
-		SAFETY_OFFICER("Safety Officer", List.of("Safety", "Medical Plan (ICS 206)",
+		SAFETY_OFFICER("Safety Officer", List.of("Safety Overview", "Safety", "Medical Plan (ICS 206)",
 				"Canine Medical Plan (ICS 206CANINE, adapted)", "Org Chart", "Shared", "T-Cards", "ICS 204",
 				"SAR Tasks", "Clue Log", "Activity Logs", "Open Action Tracker", "ICS 202", "ICS 201")),
 		OPERATIONS("Operations", List.of("ICS 204", "SAR Tasks", "T-Cards", "Clue Log", "Activity Logs",

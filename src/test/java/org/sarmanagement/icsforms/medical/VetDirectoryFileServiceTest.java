@@ -12,6 +12,7 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -77,6 +78,51 @@ class VetDirectoryFileServiceTest {
 		assertFalse(merged.directory().getFacilities().get(0).getId()
 				.equals(merged.directory().getFacilities().get(1).getId()));
 		assertEquals("JSON", merged.directory().getSources().get(0).getFormat());
+	}
+
+	@Test
+	void stableIdConflictsSupportExplicitKeepReplaceAndSkipChoices() throws Exception {
+		Path north = tempDirectory.resolve("north-conflict.json");
+		Path south = tempDirectory.resolve("south-conflict.json");
+		service.save(north, directoryEntry("shared-id", "Fictional North Vet", "1 North Road", "+1 555 0101"), false);
+		service.save(south, directoryEntry("shared-id", "Fictional South Vet", "2 South Road", "+1 555 0102"), false);
+		VetDirectoryFileService.ImportResult preview =
+				service.importFiles(List.of(north, south), new VetDirectory());
+		VetDirectoryFileService.ConflictRecord conflict = preview.conflictRecords().get(0);
+
+		VetDirectory both = service.resolveConflicts(preview, Map.of(
+				conflict.importedId(), VetDirectoryFileService.ConflictResolution.KEEP_BOTH));
+		VetDirectory replaced = service.resolveConflicts(preview, Map.of(
+				conflict.importedId(), VetDirectoryFileService.ConflictResolution.REPLACE_EXISTING));
+		VetDirectory skipped = service.resolveConflicts(preview, Map.of(
+				conflict.importedId(), VetDirectoryFileService.ConflictResolution.SKIP_IMPORTED));
+
+		assertEquals(2, both.getFacilities().size());
+		assertEquals(1, replaced.getFacilities().size());
+		assertEquals("shared-id", replaced.getFacilities().get(0).getId());
+		assertEquals("Fictional South Vet", replaced.getFacilities().get(0).getName());
+		assertEquals(1, skipped.getFacilities().size());
+		assertEquals("Fictional North Vet", skipped.getFacilities().get(0).getName());
+		assertEquals(2, preview.directory().getFacilities().size());
+	}
+
+	@Test
+	void replaceChoiceDoesNotDeleteOtherLegacyRowsWithTheSameIdentifier() throws Exception {
+		VetDirectory existing = directoryEntry("shared-id", "First existing", "1 First Road", "+1 555 0101");
+		existing.getFacilities().add(directoryEntry(
+				"shared-id", "Second existing", "2 Second Road", "+1 555 0102").getFacilities().get(0));
+		Path importedFile = tempDirectory.resolve("replacement.json");
+		service.save(importedFile,
+				directoryEntry("shared-id", "Imported replacement", "3 New Road", "+1 555 0103"), false);
+		VetDirectoryFileService.ImportResult preview = service.importFiles(List.of(importedFile), existing);
+		VetDirectoryFileService.ConflictRecord conflict = preview.conflictRecords().get(0);
+
+		VetDirectory resolved = service.resolveConflicts(preview,
+				Map.of(conflict.importedId(), VetDirectoryFileService.ConflictResolution.REPLACE_EXISTING));
+
+		assertEquals(2, resolved.getFacilities().size());
+		assertEquals("Imported replacement", resolved.getFacilities().get(0).getName());
+		assertEquals("Second existing", resolved.getFacilities().get(1).getName());
 	}
 
 	@Test

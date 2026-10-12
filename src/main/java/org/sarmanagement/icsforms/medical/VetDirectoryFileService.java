@@ -57,6 +57,7 @@ public class VetDirectoryFileService {
 		VetDirectory merged = copyDirectory(existing);
 		List<String> errors = new ArrayList<>();
 		List<String> conflicts = new ArrayList<>();
+		List<ConflictRecord> conflictRecords = new ArrayList<>();
 		int duplicates = 0;
 		for (Path file : files == null ? List.<Path>of() : files) {
 			if (file == null) {
@@ -76,6 +77,9 @@ public class VetDirectoryFileService {
 			source.setImportedAt(Instant.now());
 			merged.getSources().add(source);
 			for (VetFacility facility : parsed) {
+				String existingId = merged.getFacilities().stream()
+						.filter(candidate -> candidate.getId().equals(facility.getId()))
+						.map(VetFacility::getId).findFirst().orElse("");
 				facility.setSourceName(file.getFileName().toString());
 				MergeDecision decision = merge(merged, facility);
 				if (decision == MergeDecision.DUPLICATE) {
@@ -83,10 +87,41 @@ public class VetDirectoryFileService {
 				} else if (decision == MergeDecision.CONFLICT) {
 					conflicts.add(file.getFileName() + ": conflicting ID retained with a new ID for "
 							+ facility.getName());
+					conflictRecords.add(new ConflictRecord(existingId, facility.getId(), facility.getName(),
+							file.getFileName().toString()));
 				}
 			}
 		}
-		return new ImportResult(merged, duplicates, conflicts, errors);
+		return new ImportResult(merged, duplicates, conflicts, errors, conflictRecords);
+	}
+
+	/**
+	 * Applies explicit stable-ID conflict choices to an imported directory copy.
+	 *
+	 * @param result merge preview.
+	 * @param choices resolutions keyed by imported record ID; omitted choices keep both.
+	 * @return resolved directory copy.
+	 */
+	public VetDirectory resolveConflicts(ImportResult result, java.util.Map<String, ConflictResolution> choices) {
+		VetDirectory resolved = copyDirectory(result.directory());
+		for (ConflictRecord conflict : result.conflictRecords()) {
+			ConflictResolution choice = choices == null ? null : choices.get(conflict.importedId());
+			if (choice == ConflictResolution.REPLACE_EXISTING) {
+				VetFacility imported = findById(resolved, conflict.importedId());
+				int existingIndex = indexById(resolved, conflict.existingId());
+				int importedIndex = indexById(resolved, conflict.importedId());
+				if (imported != null && existingIndex >= 0 && importedIndex >= 0) {
+					imported.setId(conflict.existingId());
+					resolved.getFacilities().set(existingIndex, imported);
+					if (importedIndex != existingIndex) {
+						resolved.getFacilities().remove(importedIndex);
+					}
+				}
+			} else if (choice == ConflictResolution.SKIP_IMPORTED) {
+				removeById(resolved, conflict.importedId());
+			}
+		}
+		return resolved;
 	}
 
 	/**
@@ -447,6 +482,44 @@ public class VetDirectoryFileService {
 	}
 
 	/**
+	 * Finds a facility by its stable identifier.
+	 *
+	 * @param directory regional directory.
+	 * @param id identifier to find.
+	 * @return matching record or null.
+	 */
+	private VetFacility findById(VetDirectory directory, String id) {
+		return directory.getFacilities().stream().filter(facility -> facility.getId().equals(id))
+				.findFirst().orElse(null);
+	}
+
+	/**
+	 * Finds the first record index for a stable identifier.
+	 *
+	 * @param directory regional directory.
+	 * @param id identifier to find.
+	 * @return first matching index or -1.
+	 */
+	private int indexById(VetDirectory directory, String id) {
+		for (int index = 0; index < directory.getFacilities().size(); index++) {
+			if (directory.getFacilities().get(index).getId().equals(id)) {
+				return index;
+			}
+		}
+		return -1;
+	}
+
+	/**
+	 * Removes a facility by stable identifier.
+	 *
+	 * @param directory regional directory.
+	 * @param id identifier to remove.
+	 */
+	private void removeById(VetDirectory directory, String id) {
+		directory.getFacilities().removeIf(facility -> facility.getId().equals(id));
+	}
+
+	/**
 	 * Moves a completed temporary export into place.
 	 *
 	 * @param source temporary file.
@@ -570,8 +643,30 @@ public class VetDirectoryFileService {
 	 * @param duplicateCount skipped duplicates.
 	 * @param conflicts conflicting IDs retained as new records.
 	 * @param errors partial parse/import errors.
+	 * @param conflictRecords identifiers needed for explicit conflict resolution.
 	 */
-	public record ImportResult(VetDirectory directory, int duplicateCount, List<String> conflicts, List<String> errors) {
+	public record ImportResult(VetDirectory directory, int duplicateCount, List<String> conflicts, List<String> errors,
+			List<ConflictRecord> conflictRecords) {
+	}
+
+	/**
+	 * One stable-ID collision between an existing record and an imported record.
+	 *
+	 * @param existingId retained record identifier.
+	 * @param importedId imported record identifier in the preview.
+	 * @param importedName imported record display name.
+	 * @param sourceName source filename.
+	 */
+	public record ConflictRecord(String existingId, String importedId, String importedName, String sourceName) {
+	}
+
+	/**
+	 * Operator decision for a conflicting stable-ID record.
+	 */
+	public enum ConflictResolution {
+		KEEP_BOTH,
+		REPLACE_EXISTING,
+		SKIP_IMPORTED
 	}
 
 	/**
