@@ -439,10 +439,8 @@ public class Ics204Panel extends JPanel {
 	}
 
 	/**
-	 * Opens a dialog showing named incident staff (from the org chart) to add to
-	 * communications.
+	 * Selects org-chart staff for communications using a document-scoped picker.
 	 */
-	/** Selects org-chart staff for communications using a document-scoped picker. */
 	private void addStaffToComms() {
 		org.sarmanagement.icsforms.model.OrganizationalChart chart = controller.getData().getOrganizationalChart();
 		// Collect all named staff positions as selectable entries.

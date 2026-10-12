@@ -2027,15 +2027,6 @@ public class TCardPanel extends JPanel {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Opens an edit dialog for the given card. A "Card type" combo is shown at the
-	 * top; changing it switches the visible set of type-specific fields. The card
-	 * is updated in-place on confirmation.
-	 *
-	 * @param card
-	 *            card to edit in-place.
-	 * @return {@code true} when the user confirmed.
-	 */
-	/**
 	 * Edits a detached card while allowing contextual logging without closing the editor.
 	 *
 	 * @param card editable card
