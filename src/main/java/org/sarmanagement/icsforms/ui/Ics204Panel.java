@@ -658,11 +658,6 @@ public class Ics204Panel extends JPanel {
 			Dimension preferredSize) {
 		boolean existing = controller.getAssignmentResources().stream()
 				.anyMatch(row -> assignment.getAssignmentId().equals(row.getAssignmentId()));
-		if (existing && onAddLogEntryRequest != null) {
-			JButton logButton = new JButton("Add log entry…");
-			logButton.addActionListener(event -> onAddLogEntryRequest.accept(content, assignment));
-			content.add(logButton, BorderLayout.SOUTH);
-		}
 		while (true) {
 			java.util.List<Object> options = new ArrayList<>();
 			if (onEditSarTaskRequest != null && assignment.getAssignmentId() != null
@@ -671,6 +666,10 @@ public class Ics204Panel extends JPanel {
 			}
 			if (!existing && onAddLogEntryRequest != null) {
 				options.add("Save assignment and add log entry…");
+			} else if (existing && onAddLogEntryRequest != null) {
+				JButton logButton = new JButton("Add log entry…");
+				logButton.addActionListener(event -> onAddLogEntryRequest.accept(content, assignment));
+				options.add(logButton);
 			}
 			int okIndex = options.size();
 			options.add("Save");

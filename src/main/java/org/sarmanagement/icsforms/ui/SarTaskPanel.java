@@ -878,11 +878,6 @@ public class SarTaskPanel extends JPanel {
 				controller.getAvailableResourceNames(), controller.getAvailableTCards(),
 				controller.getOnTaskResourceIds(), controller);
 		JPanel content = sarTaskEditorDialogContent(editor.panel);
-		if (onAddLogEntryRequest != null) {
-			JButton logButton = new JButton("Add log entry…");
-			logButton.addActionListener(event -> onAddLogEntryRequest.accept(content, row));
-			content.add(logButton, BorderLayout.SOUTH);
-		}
 		String title = mode.dialogTitle(row.getAssignmentTeamNumber());
 		Dimension size = mode == EditorMode.ASSIGNMENT ? new Dimension(1100, 680) : new Dimension(1100, 620);
 		while (true) {
@@ -893,6 +888,11 @@ public class SarTaskPanel extends JPanel {
 			if (onEditIcs204AssignmentRequest != null && row.getAssignmentId() != null
 					&& !row.getAssignmentId().isBlank()) {
 				options.add("Save and open linked ICS 204 assignment…");
+			}
+			if (onAddLogEntryRequest != null) {
+				JButton logButton = new JButton("Add log entry…");
+				logButton.addActionListener(event -> onAddLogEntryRequest.accept(content, row));
+				options.add(logButton);
 			}
 			int okIndex = options.size();
 			options.add("Save");

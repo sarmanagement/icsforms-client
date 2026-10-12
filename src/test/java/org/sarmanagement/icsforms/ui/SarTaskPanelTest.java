@@ -773,6 +773,75 @@ class SarTaskPanelTest {
 		return null;
 	}
 
+	private static JButton findButton(Component component, String text) {
+		if (component instanceof JButton button && text.equals(button.getText())) {
+			return button;
+		}
+		if (component instanceof java.awt.Container container) {
+			for (Component child : container.getComponents()) {
+				JButton button = findButton(child, text);
+				if (button != null) {
+					return button;
+				}
+			}
+		}
+		return null;
+	}
+
+	@Test
+	void inlineAddLogEntryButtonInTaskEditor() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		AppController controller = sampleController();
+		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(0);
+		SarTaskPanel panel = new SarTaskPanel(controller);
+		panel.refreshFromModel();
+		var logged = new java.util.concurrent.atomic.AtomicReference<SarTaskAssignment>();
+		panel.setOnAddLogEntryRequest((launching, assignment) -> logged.set(assignment));
+		var buttonFound = new java.util.concurrent.atomic.AtomicBoolean();
+		var buttonInline = new java.util.concurrent.atomic.AtomicBoolean();
+		var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+		SwingUtilities.invokeAndWait(() -> {
+			var main = new javax.swing.JFrame("Main Frame");
+			main.add(panel);
+			main.setSize(800, 600);
+			main.setVisible(true);
+			var timer = new javax.swing.Timer(100, event -> {
+				try {
+					for (java.awt.Window window : java.awt.Window.getWindows()) {
+						if (window instanceof javax.swing.JDialog dialog && dialog.isVisible()
+								&& dialog.getTitle().startsWith("Edit SAR Task")) {
+							JButton logButton = findButton(dialog, "Add log entry…");
+							if (logButton != null) {
+								buttonFound.set(true);
+								JButton saveButton = findButton(dialog, "Save");
+								if (saveButton != null && logButton.getParent() == saveButton.getParent()) {
+									buttonInline.set(true);
+								}
+								logButton.doClick();
+								dialog.dispose();
+								return;
+							}
+						}
+					}
+				} catch (Throwable exception) {
+					failure.set(exception);
+				}
+			});
+			timer.setRepeats(true);
+			timer.start();
+			try {
+				panel.openAssignmentEditorById(task.getAssignmentId());
+			} finally {
+				timer.stop();
+				main.dispose();
+			}
+		});
+		assertNull(failure.get());
+		assertTrue(buttonFound.get(), "Log button should be found in dialog");
+		assertTrue(buttonInline.get(), "Log button should be inline with Save button");
+		assertSame(task, logged.get());
+	}
+
 	private static int gridX(Component component) {
 		return gridBagConstraints(component).gridx;
 	}

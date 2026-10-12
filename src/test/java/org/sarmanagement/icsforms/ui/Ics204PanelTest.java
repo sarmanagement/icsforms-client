@@ -16,19 +16,26 @@ import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
+import java.awt.Component;
+import java.awt.Container;
+import javax.swing.JButton;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class Ics204PanelTest {
 	private static final int COMPONENTS_PER_COMPACT_CONTACT_ROW = 4;
@@ -227,6 +234,81 @@ class Ics204PanelTest {
 		JPanel contactsPanel = (JPanel) fieldValue(panel, "managementContactsPanel");
 
 		assertEquals(2 * COMPONENTS_PER_COMPACT_CONTACT_ROW, contactsPanel.getComponentCount());
+	}
+
+	@Test
+	void inlineAddLogEntryButtonInExistingAssignmentEditor() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		AppController controller = sampleController();
+		Ics204Panel panel = new Ics204Panel(controller);
+		panel.refreshFromModel();
+		ResourceAssignment assignment = controller.getAssignmentResources().get(0);
+		var logged = new java.util.concurrent.atomic.AtomicReference<ResourceAssignment>();
+		panel.setOnAddLogEntryRequest((launching, row) -> logged.set(row));
+		var buttonFound = new java.util.concurrent.atomic.AtomicBoolean();
+		var buttonInline = new java.util.concurrent.atomic.AtomicBoolean();
+		var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+		SwingUtilities.invokeAndWait(() -> {
+			var main = new javax.swing.JFrame("Main Frame");
+			main.add(panel);
+			main.setSize(800, 600);
+			main.setVisible(true);
+			JTable table = (JTable) fieldValue(panel, "resourceTable");
+			table.setRowSelectionInterval(0, 0);
+			var timer = new javax.swing.Timer(100, event -> {
+				try {
+					for (java.awt.Window window : java.awt.Window.getWindows()) {
+						if (window instanceof javax.swing.JDialog dialog && dialog.isVisible()
+								&& dialog.getTitle().startsWith("Edit ")) {
+							JButton logButton = findButton(dialog, "Add log entry…");
+							if (logButton != null) {
+								buttonFound.set(true);
+								JButton saveButton = findButton(dialog, "Save");
+								if (saveButton != null && logButton.getParent() == saveButton.getParent()) {
+									buttonInline.set(true);
+								}
+								logButton.doClick();
+								dialog.dispose();
+								return;
+							}
+						}
+					}
+				} catch (Throwable exception) {
+					failure.set(exception);
+				}
+			});
+			timer.setRepeats(true);
+			timer.start();
+			try {
+				Method openEditor = Ics204Panel.class.getDeclaredMethod("openSelectedResourceEditor");
+				openEditor.setAccessible(true);
+				openEditor.invoke(panel);
+			} catch (Exception ex) {
+				failure.compareAndSet(null, ex);
+			} finally {
+				timer.stop();
+				main.dispose();
+			}
+		});
+		assertNull(failure.get());
+		assertTrue(buttonFound.get(), "Log button should be found in dialog");
+		assertTrue(buttonInline.get(), "Log button should be inline with Save button");
+		assertSame(assignment, logged.get());
+	}
+
+	private static JButton findButton(Component component, String text) {
+		if (component instanceof JButton button && text.equals(button.getText())) {
+			return button;
+		}
+		if (component instanceof Container container) {
+			for (Component child : container.getComponents()) {
+				JButton button = findButton(child, text);
+				if (button != null) {
+					return button;
+				}
+			}
+		}
+		return null;
 	}
 
 	private static Object fieldValue(Object instance, String fieldName) {

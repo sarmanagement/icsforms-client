@@ -2190,7 +2190,7 @@ public class TCardPanel extends JPanel {
 		});
 		JPanel addToAssignRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 2));
 		addToAssignRow.add(addToAssignBtn);
-		JButton addLogBtn = new JButton("Add log entry");
+		JButton addLogBtn = new JButton("Add log entry…");
 		addLogBtn.addActionListener(e -> {
 			TCardType currentType = (TCardType) typeCombo.getSelectedItem();
 			if (currentType != TCardType.HEADER) {

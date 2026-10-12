@@ -13,14 +13,18 @@ import javax.swing.JComponent;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JTable;
+import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
@@ -161,6 +165,57 @@ class TCardPanelContextTest {
 		}
 		assertEquals("Robin", requested.get().resourceId());
 		assertSame(rack, requested.get().source());
+	}
+
+	@Test
+	void editDialogHasInlineAddLogEntryButton() throws Exception {
+		assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		TCard resource = card("Robin");
+		TCardPanel panel = panel(List.of(resource));
+		AtomicReference<LogEntryContext> requested = new AtomicReference<>();
+		panel.setOnAddLogEntryRequest(requested::set);
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		AtomicBoolean buttonFound = new AtomicBoolean();
+		SwingUtilities.invokeAndWait(() -> {
+			javax.swing.JFrame root = new javax.swing.JFrame("Test Frame");
+			root.add(panel);
+			root.setSize(600, 500);
+			root.setVisible(true);
+			javax.swing.Timer timer = new javax.swing.Timer(100, event -> {
+				try {
+					for (java.awt.Window window : java.awt.Window.getWindows()) {
+						if (window instanceof javax.swing.JDialog dialog && dialog.isVisible()
+								&& "Edit T-Card".equals(dialog.getTitle())) {
+							javax.swing.JButton addLogBtn = findButton(dialog, "Add log entry…");
+							if (addLogBtn != null) {
+								buttonFound.set(true);
+								addLogBtn.doClick();
+								dialog.dispose();
+								return;
+							}
+						}
+					}
+				} catch (Throwable ex) {
+					failure.set(ex);
+				}
+			});
+			timer.setRepeats(true);
+			timer.start();
+			try {
+				Method method = TCardPanel.class.getDeclaredMethod("openEditDialog", TCard.class, Component.class);
+				method.setAccessible(true);
+				method.invoke(panel, resource, root);
+			} catch (Throwable ex) {
+				failure.compareAndSet(null, ex);
+			} finally {
+				timer.stop();
+				root.dispose();
+			}
+		});
+		assertNull(failure.get());
+		assertTrue(buttonFound.get(), "Add log entry… button should be found");
+		assertNotNull(requested.get());
+		assertEquals("Robin", requested.get().resourceId());
 	}
 
 	/**
