@@ -37,6 +37,8 @@ class Ics206CaninePdfRendererTest {
 		vet.setCapabilities("Emergency stabilization");
 		vet.setAvailable24Hours(null);
 		data.getCanineMedicalPlan().getSelectedFacilities().add(vet);
+		data.getCanineMedicalPlan().setPreparerSignature("Legacy canine signature");
+		data.getCanineMedicalPlan().setSafetyOfficerSignature("Legacy canine review");
 
 		Path output = tempDirectory.resolve("ics-206canine.pdf");
 		new Ics206CaninePdfRenderer().render(data, output);
@@ -51,6 +53,9 @@ class Ics206CaninePdfRendererTest {
 			assertTrue(text.contains("Fictional Veterinary Hospital"));
 			assertTrue(text.contains("Unknown (not verified)"));
 			assertTrue(text.contains("ICS 206CANINE"));
+			assertTrue(text.contains("Signature: ______________________________________________"));
+			assertTrue(!text.contains("Legacy canine signature"));
+			assertTrue(!text.contains("Legacy canine review"));
 		}
 	}
 

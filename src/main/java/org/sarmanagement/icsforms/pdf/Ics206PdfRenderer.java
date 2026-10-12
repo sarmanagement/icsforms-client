@@ -169,11 +169,11 @@ public class Ics206PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		sections.add(new Section("6. SPECIAL MEDICAL EMERGENCY PROCEDURES", emptyIfNoData(procedures)));
 		sections.add(new Section("7. PREPARED BY (MEDICAL UNIT LEADER)", List.of(
 				"Name: " + plan.getPreparedByMedicalUnitLeader(),
-				"Signature: " + plan.getPreparerSignature(),
+				"Signature: ______________________________________________",
 				"Date/Time: " + formatPdfDateTime(data, plan.getPreparedAt()))));
 		sections.add(new Section("8. APPROVED BY (SAFETY OFFICER)", List.of(
 				"Name: " + plan.getReviewedBySafetyOfficer(),
-				"Signature: " + plan.getSafetyOfficerSignature(),
+				"Signature: ______________________________________________",
 				"Review status: " + plan.getReviewStatus())));
 		return sections;
 	}

@@ -1,5 +1,6 @@
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics202Form;
 
 import javax.swing.BorderFactory;
@@ -89,7 +90,9 @@ public class Ics202Panel extends JPanel {
 		form.setCommandEmphasis(commandEmphasisArea.getText().trim());
 		form.setSituationalAwareness(situationalAwarenessArea.getText().trim());
 		form.setSiteSafetyPlanRequired(siteSafetyPlanRequired.isSelected());
-		form.setIncidentActionPlanAttachments(getIncludedForms());
+		List<String> includedForms = getIncludedForms();
+		form.setIncidentActionPlanAttachments(includedForms);
+		synchronizeMedicalPlanInclusion(controller.getData(), includedForms);
 		form.setApprovedByIncidentCommanderName(approvedByNameField.getText().trim());
 		form.setPreparedByName(preparedByNameField.getText().trim());
 		form.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
@@ -179,6 +182,18 @@ public class Ics202Panel extends JPanel {
 		}
 		items.addAll(lines(additionalFormsArea.getText()));
 		return items;
+	}
+
+	/**
+	 * Keeps legacy active flags aligned with the ICS 202 attachment selections.
+	 *
+	 * @param data incident whose medical plans are being configured.
+	 * @param includedForms selected ICS 202 attachments.
+	 */
+	static void synchronizeMedicalPlanInclusion(AppData data, List<String> includedForms) {
+		data.getMedicalPlan().setActive(includedForms.stream().anyMatch(item -> "ICS 206".equalsIgnoreCase(item)));
+		data.getCanineMedicalPlan().setActive(
+				includedForms.stream().anyMatch(item -> "ICS 206CANINE".equalsIgnoreCase(item)));
 	}
 
 	/**

@@ -31,6 +31,7 @@ import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.JTabbedPane;
 import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
@@ -62,7 +63,6 @@ public class CanineMedicalPanel extends JPanel {
 	private final DrivingRouteProvider routeProvider;
 	private final VetDirectoryFileService fileService = new VetDirectoryFileService();
 	private final VetShortlistSelector shortlistSelector = new VetShortlistSelector();
-	private final JCheckBox active = new JCheckBox("Include active canine medical plan in the IAP");
 	private final JTextField stagingLabel = new JTextField();
 	private final JTextField stagingAddress = new JTextField();
 	private final JTextField stagingLatitude = new JTextField();
@@ -98,15 +98,15 @@ public class CanineMedicalPanel extends JPanel {
 	private final JTextArea procedures = new JTextArea(4, 50);
 	private final JCheckBox aviationUsed = new JCheckBox("Aviation assets are used; coordinate with Air Operations");
 	private final JTextField preparedBy = new JTextField();
-	private final JTextField preparerSignature = new JTextField();
 	private final JTextField preparedAt = new JTextField();
 	private final JTextField safetyOfficer = new JTextField();
-	private final JTextField safetySignature = new JTextField();
 	private final JComboBox<String> reviewStatus = new JComboBox<>(
 			new String[] {"Not reviewed", "Reviewed", "Approved"});
-	private final JLabel status = new JLabel("Vet addresses are sent to the configured geocoding/routing provider.");
+	private final JLabel status = new JLabel(
+			"OpenRouteService is the default provider. Configure its API key in Configuration > Medical Routing.");
 	private final JProgressBar progress = new JProgressBar();
 	private final JButton cancelRequest = new JButton("Cancel request");
+	private final JTabbedPane workspace = new JTabbedPane();
 	private Consumer<String> exportRequest = ignored -> { };
 	private boolean loading;
 	private boolean flushing;
@@ -139,21 +139,29 @@ public class CanineMedicalPanel extends JPanel {
 		this.geocoder = geocoder;
 		this.routeProvider = routeProvider;
 		add(buildTop(), BorderLayout.NORTH);
-		add(buildDirectoryArea(), BorderLayout.CENTER);
+		workspace.addTab("Canine ICS 206CANINE plan", buildPlanFields());
+		workspace.addTab("Veterinary facilities and routes", buildDirectoryArea());
+		add(workspace, BorderLayout.CENTER);
 		progress.setIndeterminate(true);
 		progress.setVisible(false);
-		JPanel bottom = new JPanel(new BorderLayout(6, 4));
-		bottom.add(buildPlanFields(), BorderLayout.CENTER);
 		JPanel footer = new JPanel(new BorderLayout(6, 2));
 		footer.add(progress, BorderLayout.WEST);
 		footer.add(status, BorderLayout.CENTER);
 		cancelRequest.setVisible(false);
 		cancelRequest.addActionListener(event -> cancelWorker());
 		footer.add(cancelRequest, BorderLayout.EAST);
-		bottom.add(footer, BorderLayout.SOUTH);
-		add(bottom, BorderLayout.SOUTH);
+		add(footer, BorderLayout.SOUTH);
 		configureListeners();
 		refreshFromModel();
+	}
+
+	/**
+	 * Returns the plan and veterinary subtabs for focused UI tests.
+	 *
+	 * @return canine workspace tabs.
+	 */
+	JTabbedPane workspaceTabs() {
+		return workspace;
 	}
 
 	/**
@@ -178,7 +186,6 @@ public class CanineMedicalPanel extends JPanel {
 			lastLoadedIncident = data;
 			StagingLocation staging = data.getStagingLocation();
 			CanineMedicalPlan plan = data.getCanineMedicalPlan();
-			active.setSelected(plan.isActive());
 			stagingLabel.setText(staging.getLabel());
 			stagingAddress.setText(staging.getAddress());
 			stagingLatitude.setText(staging.getLatitude() == null ? "" : staging.getLatitude().toString());
@@ -192,10 +199,8 @@ public class CanineMedicalPanel extends JPanel {
 			procedures.setText(plan.getEmergencyProcedures());
 			aviationUsed.setSelected(plan.isAviationAssetsUsed());
 			preparedBy.setText(plan.getPreparedByMedicalUnitLeader());
-			preparerSignature.setText(plan.getPreparerSignature());
 			preparedAt.setText(plan.getPreparedAt() == null ? "" : plan.getPreparedAt().toString());
 			safetyOfficer.setText(plan.getReviewedBySafetyOfficer());
-			safetySignature.setText(plan.getSafetyOfficerSignature());
 			reviewStatus.setSelectedItem(plan.getReviewStatus());
 			loadDirectory(data.getVetDirectory());
 			loadSelection(plan.getSelectedFacilities());
@@ -230,7 +235,6 @@ public class CanineMedicalPanel extends JPanel {
 				staging.setResolution(stagingAddress.getText(), latitude, longitude, "manual",
 						"Operator-entered coordinates", Instant.now());
 			}
-			data.getCanineMedicalPlan().setActive(active.isSelected());
 			data.getCanineMedicalPlan().setAidStationInformation(aidStations.getText());
 			data.getCanineMedicalPlan().setTransportServices(transportServices.getText());
 			data.getCanineMedicalPlan().setPoisonControlContact(poisonContact.getText());
@@ -240,10 +244,8 @@ public class CanineMedicalPanel extends JPanel {
 			data.getCanineMedicalPlan().setEmergencyProcedures(procedures.getText());
 			data.getCanineMedicalPlan().setAviationAssetsUsed(aviationUsed.isSelected());
 			data.getCanineMedicalPlan().setPreparedByMedicalUnitLeader(preparedBy.getText());
-			data.getCanineMedicalPlan().setPreparerSignature(preparerSignature.getText());
 			setPreparedAt(data.getCanineMedicalPlan());
 			data.getCanineMedicalPlan().setReviewedBySafetyOfficer(safetyOfficer.getText());
-			data.getCanineMedicalPlan().setSafetyOfficerSignature(safetySignature.getText());
 			data.getCanineMedicalPlan().setReviewStatus(String.valueOf(reviewStatus.getSelectedItem()));
 			saveDirectory(data.getVetDirectory());
 			saveSelection(data.getCanineMedicalPlan());
@@ -253,29 +255,33 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
-	 * Builds the incident/base controls and local directory workflow.
+	 * Builds the canine export toolbar and IAP inclusion note.
 	 *
 	 * @return top control panel.
 	 */
 	private JPanel buildTop() {
-		JPanel root = new JPanel(new BorderLayout(4, 4));
 		JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT));
-		bar.add(active);
 		JButton export = new JButton("Export ICS 206CANINE PDF");
 		export.addActionListener(event -> {
 			pushToModel();
 			exportRequest.accept("ICS 206CANINE");
 		});
 		bar.add(export);
+		bar.add(new JLabel("IAP inclusion is selected on ICS 202."));
+		return bar;
+	}
+
+	/**
+	 * Builds compact shared staging/base and route controls above the regional directory.
+	 *
+	 * @return staging and routing controls.
+	 */
+	private JPanel buildBaseLocationPanel() {
 		JButton load = new JButton("Load regional JSON/CSV…");
 		load.addActionListener(event -> importFiles());
 		JButton save = new JButton("Save directory JSON/CSV…");
 		save.addActionListener(event -> exportDirectory());
-		bar.add(load);
-		bar.add(save);
-		root.add(bar, BorderLayout.NORTH);
-
-		JPanel base = new JPanel(new GridLayout(0, 6, 4, 4));
+		JPanel base = new JPanel(new GridLayout(0, 6, 4, 3));
 		base.setBorder(BorderFactory.createTitledBorder("Staging / base location"));
 		base.add(new JLabel("Label"));
 		base.add(stagingLabel);
@@ -299,8 +305,11 @@ public class CanineMedicalPanel extends JPanel {
 		JButton propose = new JButton("Preview closest 24-hour vets…");
 		propose.addActionListener(event -> previewSelection());
 		base.add(propose);
+		base.add(load);
+		base.add(save);
+		JPanel root = new JPanel(new BorderLayout(4, 4));
 		root.add(base, BorderLayout.CENTER);
-		JPanel note = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JPanel note = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 		note.add(includeUnknown);
 		note.add(new JLabel("Only confirmed Yes is selected by default. Routing never verifies availability."));
 		root.add(note, BorderLayout.SOUTH);
@@ -315,7 +324,8 @@ public class CanineMedicalPanel extends JPanel {
 	private JPanel buildDirectoryArea() {
 		configureTables();
 		JPanel directory = new JPanel(new BorderLayout(4, 4));
-		directory.setBorder(BorderFactory.createTitledBorder("All regional records (retained in incident)"));
+		directory.setBorder(BorderFactory.createTitledBorder(
+				"Regional veterinary directory — 24-hour availability is explicit and editable"));
 		directory.add(new JScrollPane(directoryTable), BorderLayout.CENTER);
 		JPanel directoryControls = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		JButton add = new JButton("Add facility");
@@ -349,7 +359,8 @@ public class CanineMedicalPanel extends JPanel {
 		selected.add(selectionControls, BorderLayout.SOUTH);
 		JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, directory, selected);
 		split.setResizeWeight(0.55);
-		JPanel area = new JPanel(new BorderLayout());
+		JPanel area = new JPanel(new BorderLayout(4, 4));
+		area.add(buildBaseLocationPanel(), BorderLayout.NORTH);
 		area.add(split, BorderLayout.CENTER);
 		return area;
 	}
@@ -360,14 +371,21 @@ public class CanineMedicalPanel extends JPanel {
 	 * @return canine plan details.
 	 */
 	private JPanel buildPlanFields() {
-		JPanel root = new JPanel(new GridLayout(1, 2, 6, 4));
-		JPanel clinical = new JPanel(new GridLayout(0, 1, 2, 2));
+		JPanel clinical = new JPanel(new GridLayout(0, 2, 6, 4));
 		clinical.setBorder(BorderFactory.createTitledBorder("Adapted canine medical plan"));
-		clinical.add(new JLabel("Medical aid stations: name, location, contacts/frequency, paramedic status"));
+		aidStations.setLineWrap(true);
+		aidStations.setWrapStyleWord(true);
+		transportServices.setLineWrap(true);
+		transportServices.setWrapStyleWord(true);
+		capabilityNotes.setLineWrap(true);
+		capabilityNotes.setWrapStyleWord(true);
+		procedures.setLineWrap(true);
+		procedures.setWrapStyleWord(true);
+		clinical.add(new JLabel("Medical aid stations (name, location, contact/frequency, paramedic status)"));
 		clinical.add(new JScrollPane(aidStations));
-		clinical.add(new JLabel("Canine transport: service, location, contacts, air/ground, canine capability"));
+		clinical.add(new JLabel("Canine transport (service, location, contacts, air/ground, capability)"));
 		clinical.add(new JScrollPane(transportServices));
-		clinical.add(new JLabel("Poison-control contact text (editable)"));
+		clinical.add(new JLabel("Poison-control contact"));
 		clinical.add(poisonContact);
 		clinical.add(new JLabel("Onsite veterinarian"));
 		clinical.add(onsiteVet);
@@ -377,23 +395,22 @@ public class CanineMedicalPanel extends JPanel {
 		clinical.add(new JScrollPane(capabilityNotes));
 		clinical.add(new JLabel("Special emergency procedures"));
 		clinical.add(new JScrollPane(procedures));
-		clinical.add(aviationUsed);
-		JPanel signatures = new JPanel(new GridLayout(0, 2, 4, 4));
-		signatures.setBorder(BorderFactory.createTitledBorder("Preparation / Safety review"));
-		signatures.add(new JLabel("Medical Unit Leader"));
-		signatures.add(preparedBy);
-		signatures.add(new JLabel("Preparer signature"));
-		signatures.add(preparerSignature);
-		signatures.add(new JLabel("Prepared at (yyyy-MM-ddTHH:mm)"));
-		signatures.add(preparedAt);
-		signatures.add(new JLabel("Safety Officer"));
-		signatures.add(safetyOfficer);
-		signatures.add(new JLabel("Safety Officer signature"));
-		signatures.add(safetySignature);
-		signatures.add(new JLabel("Review status"));
-		signatures.add(reviewStatus);
-		root.add(clinical);
-		root.add(signatures);
+		JPanel review = new JPanel(new GridLayout(2, 4, 4, 2));
+		review.setBorder(BorderFactory.createTitledBorder("Preparation / Safety review"));
+		review.add(new JLabel("Medical Unit Leader"));
+		review.add(preparedBy);
+		review.add(new JLabel("Prepared at"));
+		review.add(preparedAt);
+		review.add(new JLabel("Safety Officer"));
+		review.add(safetyOfficer);
+		review.add(new JLabel("Review status"));
+		review.add(reviewStatus);
+		JPanel content = new JPanel(new BorderLayout(4, 4));
+		content.add(aviationUsed, BorderLayout.NORTH);
+		content.add(clinical, BorderLayout.CENTER);
+		content.add(review, BorderLayout.SOUTH);
+		JPanel root = new JPanel(new BorderLayout());
+		root.add(new JScrollPane(content), BorderLayout.CENTER);
 		return root;
 	}
 
@@ -422,12 +439,10 @@ public class CanineMedicalPanel extends JPanel {
 	 * Attaches change listeners and cancels stale network work when data changes.
 	 */
 	private void configureListeners() {
-		active.addActionListener(event -> inputChanged(false));
 		aviationUsed.addActionListener(event -> inputChanged(false));
 		reviewStatus.addActionListener(event -> inputChanged(false));
 		for (JTextField field : List.of(stagingLabel, stagingAddress, stagingLatitude, stagingLongitude,
-				shortlistLimit, poisonContact, onsiteVet, onsiteDvm, preparedBy, preparerSignature, preparedAt,
-				safetyOfficer, safetySignature)) {
+				shortlistLimit, poisonContact, onsiteVet, onsiteDvm, preparedBy, preparedAt, safetyOfficer)) {
 			watch(field, field == stagingAddress || field == stagingLatitude || field == stagingLongitude);
 		}
 		watch(capabilityNotes, false);

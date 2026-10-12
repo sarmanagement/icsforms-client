@@ -180,12 +180,12 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 				new Section("6. SPECIAL MEDICAL EMERGENCY PROCEDURES", procedures),
 				new Section("7. PREPARED BY (MEDICAL UNIT LEADER)", List.of(
 						"Name: " + text(plan.getPreparedByMedicalUnitLeader()),
-						"Signature: " + text(plan.getPreparerSignature()),
+						"Signature: ______________________________________________",
 						"Date/Time: " + (plan.getPreparedAt() == null ? "" : formatPdfDate(data, plan.getPreparedAt())
 								+ " " + formatPdfTime(data, plan.getPreparedAt())))),
 				new Section("8. REVIEWED BY (SAFETY OFFICER)", List.of(
 						"Name: " + text(plan.getReviewedBySafetyOfficer()),
-						"Signature: " + text(plan.getSafetyOfficerSignature()),
+						"Signature: ______________________________________________",
 						"Review status: " + text(plan.getReviewStatus()))));
 	}
 

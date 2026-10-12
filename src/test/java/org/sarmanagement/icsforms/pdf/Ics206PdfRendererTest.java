@@ -30,6 +30,8 @@ class Ics206PdfRendererTest {
 		plan.setActive(true);
 		plan.setPreparedByMedicalUnitLeader("Medical Lead");
 		plan.setReviewedBySafetyOfficer("Safety Reviewer");
+		plan.setPreparerSignature("Legacy signature text");
+		plan.setSafetyOfficerSignature("Legacy reviewer text");
 		plan.setReviewStatus("Reviewed");
 
 		MedicalPlan.AidStation station = new MedicalPlan.AidStation();
@@ -57,6 +59,9 @@ class Ics206PdfRendererTest {
 			assertTrue(text.contains("UNKNOWN"));
 			assertTrue(text.contains("NO"));
 			assertTrue(text.contains("ICS 206"));
+			assertTrue(text.contains("Signature: ______________________________________________"));
+			assertTrue(!text.contains("Legacy signature text"));
+			assertTrue(!text.contains("Legacy reviewer text"));
 			assertEquals(1, pdf.getNumberOfPages());
 		}
 	}

@@ -25,6 +25,7 @@ import javax.swing.table.DefaultTableModel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.time.LocalDateTime;
@@ -37,27 +38,25 @@ import java.util.function.Consumer;
  */
 public class Ics206Panel extends JPanel {
 	private static final String UNKNOWN = "Unknown";
+	private static final String SIMPLE_MODE = "simple";
+	private static final String DETAILED_MODE = "detailed";
 	private final AppController controller;
-	private final JCheckBox active = new JCheckBox("Include active medical plan in the IAP");
 	private final JComboBox<String> mode = new JComboBox<>(new String[] {"Simple", "Detailed"});
 	private final JTextField medicalRole = new JTextField();
 	private final JTextField medicalName = new JTextField();
 	private final JTextField medicalContact = new JTextField();
-	private final JTextArea call911 = new JTextArea(2, 60);
-	private final JTextArea procedures = new JTextArea(5, 60);
+	private final JTextArea call911 = new JTextArea(3, 60);
+	private final JTextArea procedures = new JTextArea(3, 60);
 	private final JTextArea airOperations = new JTextArea(2, 60);
 	private final JCheckBox aviationUsed = new JCheckBox("Aviation assets are used for rescue");
 	private final JTextField preparedBy = new JTextField();
-	private final JTextField preparerSignature = new JTextField();
 	private final JTextField preparedAt = new JTextField();
 	private final JTextField reviewedBy = new JTextField();
-	private final JTextField reviewerSignature = new JTextField();
 	private final JComboBox<String> reviewStatus = new JComboBox<>(
 			new String[] {"Not reviewed", "Reviewed", "Approved"});
-	private final JButton stagingWorkspace = new JButton("Staging/base and veterinary locations…");
 	private final JLabel validation = new JLabel(" ");
-	private final JPanel detailedPanel = new JPanel(new BorderLayout());
 	private final JTabbedPane detailTabs = new JTabbedPane();
+	private final JPanel modeContent = new JPanel(new CardLayout());
 	private final DefaultTableModel aidModel = tableModel(
 			"Name", "Location", "Contact numbers", "Frequency", "Paramedics (Yes/No/Unknown)");
 	private final DefaultTableModel transportModel = tableModel(
@@ -71,7 +70,6 @@ public class Ics206Panel extends JPanel {
 	private final JTable transportTable = new JTable(transportModel);
 	private final JTable hospitalTable = new JTable(hospitalModel);
 	private Consumer<String> exportRequest = ignored -> { };
-	private Consumer<String> workspaceRequest = ignored -> { };
 	private boolean loading;
 	private boolean flushing;
 
@@ -84,12 +82,8 @@ public class Ics206Panel extends JPanel {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
 		JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT));
-		header.add(active);
 		header.add(new JLabel("Plan detail:"));
 		header.add(mode);
-		header.add(stagingWorkspace);
-		stagingWorkspace.addActionListener(event -> workspaceRequest.accept(
-				"Canine Medical Plan (ICS 206CANINE, adapted)"));
 		JButton export = new JButton("Export ICS 206 PDF");
 		export.addActionListener(event -> {
 			pushToModel();
@@ -113,22 +107,12 @@ public class Ics206Panel extends JPanel {
 	}
 
 	/**
-	 * Sets the action for opening the shared staging/base and veterinary directory workspace.
-	 *
-	 * @param workspaceRequest callback receiving the canine workspace title.
-	 */
-	public void setWorkspaceRequest(Consumer<String> workspaceRequest) {
-		this.workspaceRequest = workspaceRequest == null ? ignored -> { } : workspaceRequest;
-	}
-
-	/**
 	 * Refreshes editor controls from the active incident without marking it dirty.
 	 */
 	public void refreshFromModel() {
 		loading = true;
 		try {
 			MedicalPlan plan = controller.getData().getMedicalPlan();
-			active.setSelected(plan.isActive());
 			mode.setSelectedItem(plan.isSimpleMode() ? "Simple" : "Detailed");
 			medicalRole.setText(plan.getDesignatedMedicalUnitRole());
 			medicalName.setText(plan.getDesignatedMedicalUnitName());
@@ -138,15 +122,13 @@ public class Ics206Panel extends JPanel {
 			aviationUsed.setSelected(plan.isAviationAssetsUsed());
 			airOperations.setText(plan.getAirOperationsReminder());
 			preparedBy.setText(plan.getPreparedByMedicalUnitLeader());
-			preparerSignature.setText(plan.getPreparerSignature());
 			preparedAt.setText(plan.getPreparedAt() == null ? "" : plan.getPreparedAt().toString());
 			reviewedBy.setText(plan.getReviewedBySafetyOfficer());
-			reviewerSignature.setText(plan.getSafetyOfficerSignature());
 			reviewStatus.setSelectedItem(plan.getReviewStatus());
 			loadAidStations(plan);
 			loadTransport(plan);
 			loadHospitals(plan);
-			detailTabs.setVisible(!plan.isSimpleMode());
+			showMode(plan.isSimpleMode());
 			validation.setText(" ");
 		} finally {
 			loading = false;
@@ -172,7 +154,6 @@ public class Ics206Panel extends JPanel {
 				hospitalTable.getCellEditor().stopCellEditing();
 			}
 			MedicalPlan plan = controller.getData().getMedicalPlan();
-			plan.setActive(active.isSelected());
 			plan.setSimpleMode("Simple".equals(mode.getSelectedItem()));
 			plan.setDesignatedMedicalUnitRole(medicalRole.getText());
 			plan.setDesignatedMedicalUnitName(medicalName.getText());
@@ -182,9 +163,7 @@ public class Ics206Panel extends JPanel {
 			plan.setAviationAssetsUsed(aviationUsed.isSelected());
 			plan.setAirOperationsReminder(airOperations.getText());
 			plan.setPreparedByMedicalUnitLeader(preparedBy.getText());
-			plan.setPreparerSignature(preparerSignature.getText());
 			plan.setReviewedBySafetyOfficer(reviewedBy.getText());
-			plan.setSafetyOfficerSignature(reviewerSignature.getText());
 			plan.setReviewStatus(String.valueOf(reviewStatus.getSelectedItem()));
 			setPreparedAt(plan);
 			saveAidStations(plan);
@@ -202,8 +181,6 @@ public class Ics206Panel extends JPanel {
 	 */
 	private JPanel buildEditor() {
 		JPanel editor = new JPanel(new BorderLayout(6, 6));
-		JPanel simple = new JPanel(new BorderLayout(4, 4));
-		simple.setBorder(BorderFactory.createTitledBorder("Emergency instruction and designated medical role"));
 		JPanel roleFields = new JPanel(new GridLayout(0, 2, 4, 4));
 		roleFields.add(new JLabel("Medical unit role"));
 		roleFields.add(medicalRole);
@@ -211,16 +188,16 @@ public class Ics206Panel extends JPanel {
 		roleFields.add(suggestibleField(medicalName, "Medical Unit Leader", true));
 		roleFields.add(new JLabel("Contact"));
 		roleFields.add(medicalContact);
-		simple.add(roleFields, BorderLayout.NORTH);
+		editor.add(roleFields, BorderLayout.NORTH);
+
+		JPanel simple = new JPanel(new BorderLayout(4, 4));
+		simple.setBorder(BorderFactory.createTitledBorder("1. Emergency medical instructions"));
 		simple.add(new JScrollPane(call911), BorderLayout.CENTER);
+		modeContent.add(simple, SIMPLE_MODE);
+
 		detailTabs.addTab("3. Aid Stations", tablePanel(aidTable, aidModel));
 		detailTabs.addTab("4. Transportation", tablePanel(transportTable, transportModel));
 		detailTabs.addTab("5. Hospitals", tablePanel(hospitalTable, hospitalModel));
-		detailedPanel.add(detailTabs, BorderLayout.CENTER);
-		detailedPanel.setBorder(BorderFactory.createTitledBorder("Detailed ICS 206 entries"));
-		editor.add(simple, BorderLayout.NORTH);
-		editor.add(detailedPanel, BorderLayout.CENTER);
-		JPanel bottom = new JPanel(new GridLayout(0, 1, 4, 4));
 		JPanel procedurePanel = new JPanel(new BorderLayout(4, 4));
 		procedurePanel.setBorder(BorderFactory.createTitledBorder("6. Special medical emergency procedures"));
 		procedurePanel.add(new JScrollPane(procedures), BorderLayout.CENTER);
@@ -228,9 +205,11 @@ public class Ics206Panel extends JPanel {
 		aviationPanel.add(aviationUsed, BorderLayout.NORTH);
 		aviationPanel.add(new JScrollPane(airOperations), BorderLayout.CENTER);
 		procedurePanel.add(aviationPanel, BorderLayout.SOUTH);
-		bottom.add(procedurePanel);
-		bottom.add(buildApprovalPanel());
-		editor.add(bottom, BorderLayout.SOUTH);
+		detailTabs.addTab("6. Special Procedures", procedurePanel);
+		detailTabs.setBorder(BorderFactory.createTitledBorder("Detailed ICS 206 entries"));
+		modeContent.add(detailTabs, DETAILED_MODE);
+		editor.add(modeContent, BorderLayout.CENTER);
+		editor.add(buildApprovalPanel(), BorderLayout.SOUTH);
 		return editor;
 	}
 
@@ -240,18 +219,14 @@ public class Ics206Panel extends JPanel {
 	 * @return metadata editor.
 	 */
 	private JPanel buildApprovalPanel() {
-		JPanel panel = new JPanel(new GridLayout(0, 4, 4, 4));
+		JPanel panel = new JPanel(new GridLayout(2, 4, 4, 2));
 		panel.setBorder(BorderFactory.createTitledBorder("7. Prepared by / 8. Reviewed by"));
 		panel.add(new JLabel("Medical Unit Leader"));
 		panel.add(suggestibleField(preparedBy, "Medical Unit Leader", true));
-		panel.add(new JLabel("Preparer signature"));
-		panel.add(preparerSignature);
 		panel.add(new JLabel("Prepared at (yyyy-MM-ddTHH:mm)"));
 		panel.add(preparedAt);
 		panel.add(new JLabel("Safety Officer"));
 		panel.add(suggestibleField(reviewedBy, "Safety Officer", false));
-		panel.add(new JLabel("Safety Officer signature"));
-		panel.add(reviewerSignature);
 		panel.add(new JLabel("Review status"));
 		panel.add(reviewStatus);
 		return panel;
@@ -356,10 +331,9 @@ public class Ics206Panel extends JPanel {
 	 * Attaches dirty tracking to controls that can change persisted values.
 	 */
 	private void configureListeners() {
-		active.addActionListener(event -> inputChanged());
 		mode.addActionListener(event -> {
 			if (!loading && !flushing) {
-				detailTabs.setVisible("Detailed".equals(mode.getSelectedItem()));
+				showMode("Simple".equals(mode.getSelectedItem()));
 				inputChanged();
 			}
 		});
@@ -372,13 +346,23 @@ public class Ics206Panel extends JPanel {
 		watch(procedures);
 		watch(airOperations);
 		watch(preparedBy);
-		watch(preparerSignature);
 		watch(preparedAt);
 		watch(reviewedBy);
-		watch(reviewerSignature);
 		aidModel.addTableModelListener(event -> inputChanged());
 		transportModel.addTableModelListener(event -> inputChanged());
 		hospitalModel.addTableModelListener(event -> inputChanged());
+	}
+
+	/**
+	 * Switches between the simple emergency instruction and detailed ICS 206 entries.
+	 *
+	 * @param simpleMode true to display the simple instruction editor.
+	 */
+	private void showMode(boolean simpleMode) {
+		CardLayout layout = (CardLayout) modeContent.getLayout();
+		layout.show(modeContent, simpleMode ? SIMPLE_MODE : DETAILED_MODE);
+		modeContent.revalidate();
+		modeContent.repaint();
 	}
 
 	/**

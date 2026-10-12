@@ -5,7 +5,10 @@ package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
 
+import javax.swing.JMenu;
+import javax.swing.JRadioButtonMenuItem;
 import java.util.List;
+import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,6 +23,20 @@ class MainFrameDashboardTest {
 		assertEquals("ICS 201", titles.get(2));
 		assertEquals("ICS 202", titles.get(3));
 		assertEquals("ICS 204", titles.get(4));
+		assertTrue(titles.contains("Medical"));
+	}
+
+	@Test
+	void dashboardChoicesAreViewMenuRadioItemsWithIcIcpSelectedByDefault() {
+		List<MainFrame.Dashboard> selected = new ArrayList<>();
+
+		JMenu dashboardMenu = MainFrame.createDashboardMenu(MainFrame.Dashboard.IC_ICP, selected::add);
+
+		assertEquals("Dashboard", dashboardMenu.getText());
+		assertEquals(4, dashboardMenu.getItemCount());
+		assertTrue(((JRadioButtonMenuItem) dashboardMenu.getItem(0)).isSelected());
+		dashboardMenu.getItem(2).doClick();
+		assertEquals(List.of(MainFrame.Dashboard.OPERATIONS), selected);
 	}
 
 	@Test
@@ -29,8 +46,8 @@ class MainFrameDashboardTest {
 			List<String> titles = dashboard.workspaceTitles();
 			assertTrue(titles.contains("Safety"));
 			assertTrue(titles.contains("Org Chart"));
-			assertTrue(titles.contains("Medical Plan (ICS 206)"));
-			assertTrue(titles.contains("Canine Medical Plan (ICS 206CANINE, adapted)"));
+			assertTrue(titles.contains("Medical"));
+			assertEquals(1, titles.stream().filter("Medical"::equals).count());
 			assertFalseContainsIcs205(titles);
 		}
 	}
@@ -42,8 +59,7 @@ class MainFrameDashboardTest {
 		assertEquals("Safety Overview", titles.get(0));
 		assertTrue(titles.contains("Safety"));
 		assertTrue(titles.contains("Org Chart"));
-		assertTrue(titles.contains("Medical Plan (ICS 206)"));
-		assertTrue(titles.contains("Canine Medical Plan (ICS 206CANINE, adapted)"));
+		assertTrue(titles.contains("Medical"));
 	}
 
 	/**

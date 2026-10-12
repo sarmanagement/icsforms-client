@@ -14,7 +14,6 @@ import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.DefaultCellEditor;
-import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JTable;
 import javax.swing.JTextField;
@@ -95,14 +94,20 @@ class Ics206PanelTest {
 	}
 
 	@Test
-	void stagingLocationShortcutOpensTheSharedCanineWorkspace() throws Exception {
-		Ics206Panel panel = new Ics206Panel(controller(new AppData()));
-		java.util.List<String> opened = new java.util.ArrayList<>();
-		panel.setWorkspaceRequest(opened::add);
+	void detailedSectionsAreVisibleAndSignatureValuesRemainOnThePdfModel() throws Exception {
+		AppData data = new AppData();
+		data.getMedicalPlan().setPreparerSignature("Previously recorded preparer");
+		data.getMedicalPlan().setSafetyOfficerSignature("Previously recorded reviewer");
+		Ics206Panel panel = new Ics206Panel(controller(data));
 
-		SwingUtilities.invokeAndWait(() -> ((JButton) fieldValue(panel, "stagingWorkspace")).doClick());
+		SwingUtilities.invokeAndWait(() -> {
+			((JComboBox<?>) fieldValue(panel, "mode")).setSelectedItem("Detailed");
+			assertTrue(((javax.swing.JTabbedPane) fieldValue(panel, "detailTabs")).isVisible());
+			panel.pushToModel();
+		});
 
-		assertEquals(java.util.List.of("Canine Medical Plan (ICS 206CANINE, adapted)"), opened);
+		assertEquals("Previously recorded preparer", data.getMedicalPlan().getPreparerSignature());
+		assertEquals("Previously recorded reviewer", data.getMedicalPlan().getSafetyOfficerSignature());
 	}
 
 	/**
