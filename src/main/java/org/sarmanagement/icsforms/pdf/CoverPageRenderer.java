@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -41,6 +44,7 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, "IAP cover");
 		Files.createDirectories(outputFile.getParent());
 		try (PDDocument document = new PDDocument()) {
 			PDPage page = newPage(data);
@@ -87,34 +91,64 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
 		}
 	}
 
+	/**
+	 * Writes normalized text at its calculated centered position.
+	 * @param stream page stream.
+	 * @param font text font.
+	 * @param fontSize text size.
+	 * @param x calculated left position.
+	 * @param y baseline.
+	 * @param value source text.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeCentered(PDPageContentStream stream, PDType1Font font, float fontSize, float x, float y,
 			String value) throws IOException {
-		stream.beginText();
-		stream.setFont(font, fontSize);
-		stream.newLineAtOffset(x, y);
-		stream.showText(value);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, fontSize);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(value));
+		}
 	}
 
+	/**
+	 * Draws an inline label and normalized value.
+	 * @param stream page stream.
+	 * @param bold label font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y baseline.
+	 * @param label field label.
+	 * @param value source value.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawInlinePair(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
 			String label, String value) throws IOException {
-		stream.beginText();
-		stream.setFont(bold, LABEL_FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(label);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, LABEL_FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(label));
+		}
 
-		float labelWidth = bold.getStringWidth(label) / 1000f * LABEL_FONT_SIZE;
-		stream.beginText();
-		stream.setFont(regular, VALUE_FONT_SIZE);
-		stream.newLineAtOffset(x + labelWidth + 8f, y);
-		stream.showText(safe(value));
-		stream.endText();
+		float labelWidth = bold.getStringWidth(PdfText.singleLine(label)) / 1000f * LABEL_FONT_SIZE;
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(regular, VALUE_FONT_SIZE);
+			stream.newLineAtOffset(x + labelWidth + 8f, y);
+			stream.showText(PdfText.singleLine(safe(value)));
+		}
 	}
 
+	/**
+	 * Measures the normalized label and value for cover centering.
+	 * @param bold label font.
+	 * @param regular value font.
+	 * @param label field label.
+	 * @param value source value.
+	 * @return total width including label spacing.
+	 * @throws IOException when font metrics fail.
+	 */
 	private float pairWidth(PDType1Font bold, PDType1Font regular, String label, String value) throws IOException {
-		float labelWidth = bold.getStringWidth(label) / 1000f * LABEL_FONT_SIZE;
-		float valueWidth = regular.getStringWidth(safe(value)) / 1000f * VALUE_FONT_SIZE;
+		float labelWidth = bold.getStringWidth(PdfText.singleLine(label)) / 1000f * LABEL_FONT_SIZE;
+		float valueWidth = regular.getStringWidth(PdfText.singleLine(safe(value))) / 1000f * VALUE_FONT_SIZE;
 		return labelWidth + 8f + valueWidth;
 	}
 
@@ -142,7 +176,12 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return formatPdfDateTime(data, start) + " to " + formatPdfDateTime(data, end);
 	}
 
+	/**
+	 * Normalizes optional layout text without altering the source.
+	 * @param value optional text.
+	 * @return normalized text.
+	 */
 	private String safe(String value) {
-		return value == null ? "" : value;
+		return PdfText.normalize(value);
 	}
 }

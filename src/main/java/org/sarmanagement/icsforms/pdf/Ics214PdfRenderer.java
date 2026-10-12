@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -42,6 +45,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, getFormKey());
 		Files.createDirectories(outputFile.getParent());
 		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
@@ -282,42 +286,72 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return parts.isEmpty() ? "" : String.join(" - ", parts);
 	}
 
+	/**
+	 * Draws a section heading in a balanced text block.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param x left edge.
+	 * @param topY top edge.
+	 * @param heading section heading.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawHeading(PDPageContentStream stream, PDType1Font bold, float x, float topY, String heading)
 			throws IOException {
-		stream.beginText();
-		stream.setFont(bold, HEADING_FONT_SIZE);
-		stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
-		stream.showText(heading);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, HEADING_FONT_SIZE);
+			stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
+			stream.showText(PdfText.singleLine(heading));
+		}
 	}
 
+	/**
+	 * Draws an inline label and normalized value.
+	 * @param stream page stream.
+	 * @param bold label font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y baseline.
+	 * @param label field label.
+	 * @param value source value.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawInlinePair(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
 			String label, String value) throws IOException {
 		String safeLabel = safe(label);
 		if (!safeLabel.isBlank()) {
-			stream.beginText();
-			stream.setFont(bold, BODY_FONT_SIZE);
-			stream.newLineAtOffset(x, y);
-			stream.showText(safeLabel + ":");
-			stream.endText();
+			try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+				stream.setFont(bold, BODY_FONT_SIZE);
+				stream.newLineAtOffset(x, y);
+				stream.showText(PdfText.singleLine(safeLabel + ":"));
+			}
 		}
 
-		stream.beginText();
-		stream.setFont(regular, BODY_FONT_SIZE);
-		stream.newLineAtOffset(
-				x + (safeLabel.isBlank() ? 0f : (bold.getStringWidth(safeLabel + ":") / 1000f * BODY_FONT_SIZE) + 4f),
-				y);
-		stream.showText(safe(value));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(regular, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x + (safeLabel.isBlank() ? 0f
+					: (bold.getStringWidth(PdfText.singleLine(safeLabel + ":")) / 1000f * BODY_FONT_SIZE) + 4f), y);
+			stream.showText(PdfText.singleLine(safe(value)));
+		}
 	}
 
+	/**
+	 * Writes an inline heading and optional footer value.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y baseline.
+	 * @param heading field heading.
+	 * @param value optional value.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeInlineHeadingValue(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, String heading, String value) throws IOException {
-		stream.beginText();
-		stream.setFont(bold, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(heading + (safe(value).isBlank() ? "" : ": " + safe(value)));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(heading + (safe(value).isBlank() ? "" : ": " + safe(value))));
+		}
 	}
 
 	private void writeWrappedCellText(PDPageContentStream stream, PDType1Font font, float x, float bottomY, float width,
@@ -325,6 +359,18 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		writeWrappedCellText(stream, font, x, bottomY, width, height, lines, false);
 	}
 
+	/**
+	 * Draws wrapped cell text with optional strikeout after ending its text block.
+	 * @param stream page stream.
+	 * @param font body font.
+	 * @param x left edge.
+	 * @param bottomY bottom edge.
+	 * @param width cell width.
+	 * @param height cell height.
+	 * @param lines wrapped lines.
+	 * @param struckOut whether to strike through visible text.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeWrappedCellText(PDPageContentStream stream, PDType1Font font, float x, float bottomY, float width,
 			float height, List<String> lines, boolean struckOut) throws IOException {
 		int maxLines = Math.max(1, (int) ((height - (CELL_PADDING * 2)) / LINE_HEIGHT));
@@ -332,23 +378,23 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				? List.of("")
 				: lines.subList(0, Math.min(maxLines, lines.size()));
 		List<Float> strikeYs = new ArrayList<>();
-		stream.beginText();
-		stream.setFont(font, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x + CELL_PADDING, bottomY + height - CELL_PADDING - BODY_FONT_SIZE);
-		for (String line : visible) {
-			stream.showText(safe(line));
-			strikeYs.add(bottomY + height - CELL_PADDING - BODY_FONT_SIZE + (strikeYs.size() * -LINE_HEIGHT)
-					+ (BODY_FONT_SIZE * 0.35f));
-			stream.newLineAtOffset(0, -LINE_HEIGHT);
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x + CELL_PADDING, bottomY + height - CELL_PADDING - BODY_FONT_SIZE);
+			for (String line : visible) {
+				stream.showText(PdfText.singleLine(safe(line)));
+				strikeYs.add(bottomY + height - CELL_PADDING - BODY_FONT_SIZE + (strikeYs.size() * -LINE_HEIGHT)
+						+ (BODY_FONT_SIZE * 0.35f));
+				stream.newLineAtOffset(0, -LINE_HEIGHT);
+			}
 		}
-		stream.endText();
 		if (struckOut) {
 			for (int i = 0; i < visible.size(); i++) {
 				String line = safe(visible.get(i));
 				if (line.isBlank()) {
 					continue;
 				}
-				float lineWidth = font.getStringWidth(line) / 1000f * BODY_FONT_SIZE;
+				float lineWidth = font.getStringWidth(PdfText.singleLine(line)) / 1000f * BODY_FONT_SIZE;
 				stream.moveTo(x + CELL_PADDING, strikeYs.get(i));
 				stream.lineTo(Math.min(x + width - CELL_PADDING, x + CELL_PADDING + lineWidth), strikeYs.get(i));
 				stream.stroke();
@@ -398,16 +444,25 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return null;
 	}
 
+	/**
+	 * Writes already-wrapped lines using balanced text output.
+	 * @param stream page stream.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param startY starting baseline.
+	 * @param lines source lines.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeLines(PDPageContentStream stream, PDType1Font regular, float x, float startY, List<String> lines)
 			throws IOException {
-		stream.beginText();
-		stream.setFont(regular, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x, startY);
-		for (String line : lines) {
-			stream.showText(safe(line));
-			stream.newLineAtOffset(0, -LINE_HEIGHT);
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(regular, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x, startY);
+			for (String line : lines) {
+				stream.showText(PdfText.singleLine(safe(line)));
+				stream.newLineAtOffset(0, -LINE_HEIGHT);
+			}
 		}
-		stream.endText();
 	}
 
 	private void drawCell(PDPageContentStream stream, float x, float y, float width, float height) throws IOException {
@@ -449,7 +504,12 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return formatPdfDateTime(data, value);
 	}
 
+	/**
+	 * Normalizes layout whitespace without altering stored content.
+	 * @param value optional text.
+	 * @return normalized text retaining logical line breaks.
+	 */
 	private String safe(String value) {
-		return value == null ? "" : value;
+		return PdfText.normalize(value);
 	}
 }

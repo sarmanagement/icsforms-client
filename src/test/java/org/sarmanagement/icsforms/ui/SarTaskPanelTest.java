@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
@@ -51,6 +54,327 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SarTaskPanelTest {
+
+	@Test
+	void failedSavePreservesDetachedUpdatesMadeDuringNestedDispositionPrompt() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		AppData data = sampleController().getData();
+		var blockedParent = Files.createTempFile("icsforms-nested-rollback", ".file");
+		AppController controller = new AppController(data,
+				new LocalRepository(blockedParent.resolve("incident.json")),
+				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
+						new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
+		SarTaskPanel panel = new SarTaskPanel(controller);
+		panel.refreshFromModel();
+		SarTaskAssignment task = data.getSarTaskAssignments().get(0);
+		task.setTaskLifecycleStatus("assigned - returning from assignment");
+		var log = new org.sarmanagement.icsforms.model.Ics214Form();
+		var activity = new org.sarmanagement.icsforms.model.ActivityLogEntry();
+		log.setActivityLog(new ArrayList<>());
+		data.setActivityLogs(new ArrayList<>(List.of(log)));
+		data.setClueLogEntries(new ArrayList<>(data.getClueLogEntries()));
+		var clue = new ClueLogEntry();
+		clue.setAssignmentId(task.getAssignmentId());
+		clue.setDescription("Clue logged during disposition");
+		Object editor = createEditor(task, "ASSIGNMENT", 1, List.of(), controller, data.getClueLogEntries());
+		Field lifecycle = editor.getClass().getDeclaredField("taskLifecycleField");
+		lifecycle.setAccessible(true);
+		((JComboBox<?>) lifecycle.get(editor)).setSelectedItem("returned");
+		Class<?> modeClass = Class.forName(SarTaskPanel.class.getName() + "$EditorMode");
+		Method save = SarTaskPanel.class.getDeclaredMethod("saveTaskEditor", int.class, SarTaskAssignment.class,
+				editor.getClass(), modeClass);
+		save.setAccessible(true);
+		var observedPrompt = new java.util.concurrent.atomic.AtomicBoolean();
+		var saveFailure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+		SwingUtilities.invokeAndWait(() -> {
+			var main = new javax.swing.JFrame("Main task document");
+			main.add(panel);
+			main.setSize(500, 300);
+			main.setVisible(true);
+			var outerEditor = new javax.swing.JDialog(main, "Assignment editor",
+					java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
+			outerEditor.setSize(400, 250);
+			var beginSave = new javax.swing.Timer(100, event -> {
+				try {
+					save.invoke(panel, 0, task, editor, enumConstant(modeClass, "ASSIGNMENT"));
+				} catch (ReflectiveOperationException exception) {
+					saveFailure.set(exception);
+				} finally {
+					outerEditor.dispose();
+				}
+			});
+			var logWhilePromptOpen = new javax.swing.Timer(600, event -> {
+				for (java.awt.Window window : java.awt.Window.getWindows()) {
+					if (window instanceof javax.swing.JDialog dialog
+							&& "Set returned resource status".equals(dialog.getTitle()) && dialog.isShowing()) {
+						observedPrompt.set(true);
+						log.getActivityLog().add(activity);
+						data.getClueLogEntries().add(clue);
+						task.setTaskLifecycleStatus("returned");
+						for (Component content : dialog.getContentPane().getComponents()) {
+							if (content instanceof javax.swing.JOptionPane optionPane) {
+								optionPane.setValue(javax.swing.JOptionPane.OK_OPTION);
+							}
+						}
+						dialog.dispose();
+					}
+				}
+				outerEditor.dispose();
+			});
+			beginSave.setRepeats(false);
+			logWhilePromptOpen.setRepeats(false);
+			beginSave.start();
+			logWhilePromptOpen.start();
+			try {
+				outerEditor.setVisible(true);
+			} finally {
+				beginSave.stop();
+				logWhilePromptOpen.stop();
+				outerEditor.dispose();
+				main.dispose();
+			}
+		});
+		assertTrue(observedPrompt.get());
+		assertNotNull(saveFailure.get());
+		assertSame(log, data.getActivityLogs().get(0));
+		assertSame(activity, log.getActivityLog().get(0));
+		assertTrue(data.getClueLogEntries().contains(clue));
+		assertEquals("returned", task.getTaskLifecycleStatus());
+	}
+
+	@Test
+	void failedLifecyclePersistenceRestoresStatusAndExistingLogCollections() throws Exception {
+		AppData data = sampleController().getData();
+		var blockedParent = Files.createTempFile("icsforms-blocked-lifecycle", ".file");
+		AppController controller = new AppController(data,
+				new LocalRepository(blockedParent.resolve("incident.json")),
+				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
+						new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
+		SarTaskAssignment task = data.getSarTaskAssignments().get(0);
+		task.setTaskLifecycleStatus("planned");
+		var logs = new ArrayList<>(data.getActivityLogs());
+		data.setActivityLogs(logs);
+		org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, () ->
+				controller.persistEditorChanges(() -> controller.recordTaskLifecycleTransition(task,
+						"assigned - enroute", LocalDateTime.parse("2026-01-01T02:00:00"))));
+		assertEquals("planned", task.getTaskLifecycleStatus());
+		assertSame(logs, data.getActivityLogs());
+		assertEquals(0, logs.size());
+	}
+
+	@Test
+	void failedDebriefSaveRestoresLiveIdentitiesAndRetainsEnteredText() throws Exception {
+		AppData data = sampleController().getData();
+		var blockedParent = Files.createTempFile("icsforms-blocked-debrief", ".file");
+		AppController controller = new AppController(data,
+				new LocalRepository(blockedParent.resolve("incident.json")),
+				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
+						new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
+		SarTaskPanel panel = new SarTaskPanel(controller);
+		panel.refreshFromModel();
+		SarTaskAssignment task = data.getSarTaskAssignments().get(0);
+		ClueLogEntry concurrent = new ClueLogEntry();
+		concurrent.setAssignmentId(task.getAssignmentId());
+		concurrent.setDescription("Previously logged from detached window");
+		var clues = new ArrayList<>(data.getClueLogEntries());
+		clues.add(concurrent);
+		data.setClueLogEntries(clues);
+		var log = new org.sarmanagement.icsforms.model.Ics214Form();
+		data.setActivityLogs(new ArrayList<>(List.of(log)));
+		Object editor = createEditor(task, "DEBRIEFING", 1, List.of(), controller, clues);
+		Field notesField = editor.getClass().getDeclaredField("debriefNotesField");
+		notesField.setAccessible(true);
+		var notes = (javax.swing.JTextArea) ((JScrollPane) notesField.get(editor)).getViewport().getView();
+		String original = task.getDebriefNotes();
+		notes.setText("Unsaved debrief retained after failure");
+		Class<?> modeClass = Class.forName(SarTaskPanel.class.getName() + "$EditorMode");
+		Method save = SarTaskPanel.class.getDeclaredMethod("saveTaskEditor", int.class, SarTaskAssignment.class,
+				editor.getClass(), modeClass);
+		save.setAccessible(true);
+		org.junit.jupiter.api.Assertions.assertThrows(java.lang.reflect.InvocationTargetException.class,
+				() -> save.invoke(panel, 0, task, editor, enumConstant(modeClass, "DEBRIEFING")));
+		assertSame(data, controller.getData());
+		assertSame(task, data.getSarTaskAssignments().get(0));
+		assertSame(log, data.getActivityLogs().get(0));
+		assertSame(clues, data.getClueLogEntries());
+		assertSame(concurrent, data.getClueLogEntries().get(1));
+		assertEquals(original, task.getDebriefNotes());
+		assertEquals("Unsaved debrief retained after failure", notes.getText());
+		Files.delete(blockedParent);
+		Files.createDirectory(blockedParent);
+		save.invoke(panel, 0, task, editor, enumConstant(modeClass, "DEBRIEFING"));
+		assertEquals("Unsaved debrief retained after failure", task.getDebriefNotes());
+		assertEquals(2, data.getClueLogEntries().size());
+	}
+
+	@Test
+	void nestedResourcePickerUsesDocumentModality() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		Method picker = SarTaskPanel.class.getDeclaredMethod("showResourcePickerDialog", Component.class,
+				List.class, Set.class);
+		picker.setAccessible(true);
+		var modality = new java.util.concurrent.atomic.AtomicReference<java.awt.Dialog.ModalityType>();
+		var correctRoot = new java.util.concurrent.atomic.AtomicBoolean();
+		var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+		SwingUtilities.invokeAndWait(() -> {
+			var main = new javax.swing.JFrame("Main assignment document");
+			var editor = new javax.swing.JDialog(main, "Open assignment editor",
+					java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
+			main.setSize(300, 200);
+			editor.setSize(300, 200);
+			main.setVisible(true);
+			var openPicker = new javax.swing.Timer(100, event -> {
+				try {
+					picker.invoke(null, editor, List.of(), Set.of());
+				} catch (ReflectiveOperationException exception) {
+					failure.set(exception);
+				} finally {
+					editor.dispose();
+				}
+			});
+			var dismissPicker = new javax.swing.Timer(600, event -> {
+				for (java.awt.Window window : java.awt.Window.getWindows()) {
+					if (window instanceof javax.swing.JDialog dialog
+							&& "Add Resource".equals(dialog.getTitle()) && dialog.isShowing()) {
+						modality.set(dialog.getModalityType());
+						correctRoot.set(main == UiSupport.documentRoot(dialog));
+						dialog.dispose();
+					}
+				}
+				editor.dispose();
+			});
+			openPicker.setRepeats(false);
+			dismissPicker.setRepeats(false);
+			openPicker.start();
+			dismissPicker.start();
+			try {
+				editor.setVisible(true);
+			} finally {
+				openPicker.stop();
+				dismissPicker.stop();
+				editor.dispose();
+				main.dispose();
+			}
+		});
+		assertNull(failure.get());
+		assertEquals(java.awt.Dialog.ModalityType.DOCUMENT_MODAL, modality.get());
+		assertTrue(correctRoot.get());
+	}
+
+	@Test
+	void addLogEntryPopupResolvesSortedTaskAndBoardLabelChildren() throws Exception {
+		AppController controller = sampleController();
+		ResourceAssignment second = new ResourceAssignment();
+		second.setAssignmentTeamNumber("Z-2");
+		var resources = new ArrayList<>(controller.getAssignmentResources());
+		resources.add(second);
+		controller.getData().getForm204().setResourcesAssigned(resources);
+		SarTaskPanel panel = new SarTaskPanel(controller);
+		panel.refreshFromModel();
+		Field tableField = SarTaskPanel.class.getDeclaredField("table");
+		tableField.setAccessible(true);
+		JTable table = (JTable) tableField.get(panel);
+		var logged = new java.util.concurrent.atomic.AtomicReference<SarTaskAssignment>();
+		panel.setOnAddLogEntryRequest((launching, assignment) -> logged.set(assignment));
+		table.setAutoCreateRowSorter(true);
+		table.getRowSorter().toggleSortOrder(1);
+		table.getRowSorter().toggleSortOrder(1);
+		table.setSize(900, 300);
+		table.setRowSelectionInterval(1, 1);
+		var popupClick = new java.awt.event.MouseEvent(table, java.awt.event.MouseEvent.MOUSE_PRESSED,
+				System.currentTimeMillis(), 0, 5, 5, 1, true, java.awt.event.MouseEvent.BUTTON3);
+		for (var listener : table.getMouseListeners()) {
+			if (listener.getClass().getEnclosingClass() == SarTaskPanel.class) {
+				listener.mousePressed(popupClick);
+			}
+		}
+		for (Component component : table.getComponentPopupMenu().getComponents()) {
+			if (component instanceof JMenuItem item && "Add log entry…".equals(item.getText())) {
+				item.doClick();
+			}
+		}
+		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(1);
+		assertSame(task, logged.get());
+		Method buildCard = SarTaskPanel.class.getDeclaredMethod("buildBoardTaskCard", SarTaskAssignment.class,
+				java.awt.Color.class);
+		buildCard.setAccessible(true);
+		JPanel card = (JPanel) buildCard.invoke(panel, task, java.awt.Color.GRAY);
+		var label = (javax.swing.JComponent) card.getComponent(0);
+		assertSame(card.getComponentPopupMenu(), label.getComponentPopupMenu());
+		logged.set(null);
+		for (Component component : label.getComponentPopupMenu().getComponents()) {
+			if (component instanceof JMenuItem item && "Add log entry…".equals(item.getText())) {
+				item.doClick();
+			}
+		}
+		assertSame(task, logged.get());
+		table.clearSelection();
+		var click = new java.awt.event.MouseEvent(label, java.awt.event.MouseEvent.MOUSE_CLICKED,
+				System.currentTimeMillis(), 0, 2, 2, 1, false, java.awt.event.MouseEvent.BUTTON1);
+		for (var listener : label.getMouseListeners()) {
+			listener.mouseClicked(click);
+		}
+		assertEquals(0, table.getSelectedRow());
+	}
+
+	@Test
+	void staleAssignmentEditorPreservesExternallyChangedLifecycle() throws Exception {
+		SarTaskAssignment task = sampleTask();
+		task.setTaskLifecycleStatus("Assigned");
+		Object editor = createEditor(task, "ASSIGNMENT", 1);
+		task.setTaskLifecycleStatus("Returned");
+		Method apply = editor.getClass().getDeclaredMethod("applyTo", SarTaskAssignment.class, List.class);
+		apply.setAccessible(true);
+		apply.invoke(editor, task, List.of());
+		assertEquals("returned", task.getTaskLifecycleStatus());
+	}
+
+	@Test
+	void debriefSavePreservesConcurrentClueAndFollowUp() throws Exception {
+		SarTaskAssignment task = sampleTask();
+		ClueLogEntry original = new ClueLogEntry();
+		original.setAssignmentId(task.getAssignmentId());
+		original.setDescription("Original clue");
+		Object editor = createEditor(task, "DEBRIEFING", 1, List.of(), null, List.of(original));
+		original.setFollowUp("Updated externally");
+		ClueLogEntry concurrent = new ClueLogEntry();
+		concurrent.setAssignmentId(task.getAssignmentId());
+		concurrent.setDescription("Logged while debrief open");
+		task.setAssignmentTeamNumber("Externally renamed");
+		Method apply = editor.getClass().getDeclaredMethod("applyTo", SarTaskAssignment.class, List.class);
+		apply.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		List<ClueLogEntry> merged = (List<ClueLogEntry>) apply.invoke(editor, task, List.of(original, concurrent));
+		assertEquals(2, merged.size());
+		assertTrue(merged.contains(concurrent));
+		assertEquals("Updated externally", merged.stream()
+				.filter(clue -> clue.getEntryId().equals(original.getEntryId())).findFirst().orElseThrow().getFollowUp());
+		assertEquals("Externally renamed", task.getAssignmentTeamNumber());
+	}
+
+	@Test
+	void debriefRetryUpdatesItsOwnNewClueWithoutDuplicatingConcurrentEntries() throws Exception {
+		SarTaskAssignment task = sampleTask();
+		Object editor = createEditor(task, "DEBRIEFING", 1);
+		Field modelField = editor.getClass().getDeclaredField("clueEntryTableModel");
+		modelField.setAccessible(true);
+		AbstractTableModel clues = (AbstractTableModel) modelField.get(editor);
+		clues.setValueAt("First attempt", 0, 2);
+		Method apply = editor.getClass().getDeclaredMethod("applyTo", SarTaskAssignment.class, List.class);
+		apply.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		List<ClueLogEntry> first = (List<ClueLogEntry>) apply.invoke(editor, task, List.of());
+		ClueLogEntry concurrent = new ClueLogEntry();
+		concurrent.setAssignmentId(task.getAssignmentId());
+		concurrent.setDescription("Concurrent clue");
+		first.add(concurrent);
+		clues.setValueAt("Corrected after save failure", 0, 2);
+		@SuppressWarnings("unchecked")
+		List<ClueLogEntry> retry = (List<ClueLogEntry>) apply.invoke(editor, task, first);
+		assertEquals(2, retry.size());
+		assertTrue(retry.contains(concurrent));
+		assertTrue(retry.stream().anyMatch(clue -> "Corrected after save failure".equals(clue.getDescription())));
+	}
 
 	@Test
 	void sarTaskEditorMarksRequiredAssignmentFieldAccessibly() throws Exception {
@@ -447,6 +771,75 @@ class SarTaskPanelTest {
 			}
 		}
 		return null;
+	}
+
+	private static JButton findButton(Component component, String text) {
+		if (component instanceof JButton button && text.equals(button.getText())) {
+			return button;
+		}
+		if (component instanceof java.awt.Container container) {
+			for (Component child : container.getComponents()) {
+				JButton button = findButton(child, text);
+				if (button != null) {
+					return button;
+				}
+			}
+		}
+		return null;
+	}
+
+	@Test
+	void inlineAddLogEntryButtonInTaskEditor() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		AppController controller = sampleController();
+		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(0);
+		SarTaskPanel panel = new SarTaskPanel(controller);
+		panel.refreshFromModel();
+		var logged = new java.util.concurrent.atomic.AtomicReference<SarTaskAssignment>();
+		panel.setOnAddLogEntryRequest((launching, assignment) -> logged.set(assignment));
+		var buttonFound = new java.util.concurrent.atomic.AtomicBoolean();
+		var buttonInline = new java.util.concurrent.atomic.AtomicBoolean();
+		var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+		SwingUtilities.invokeAndWait(() -> {
+			var main = new javax.swing.JFrame("Main Frame");
+			main.add(panel);
+			main.setSize(800, 600);
+			main.setVisible(true);
+			var timer = new javax.swing.Timer(100, event -> {
+				try {
+					for (java.awt.Window window : java.awt.Window.getWindows()) {
+						if (window instanceof javax.swing.JDialog dialog && dialog.isVisible()
+								&& dialog.getTitle().startsWith("Edit SAR Task")) {
+							JButton logButton = findButton(dialog, "Add log entry…");
+							if (logButton != null) {
+								buttonFound.set(true);
+								JButton saveButton = findButton(dialog, "Save");
+								if (saveButton != null && logButton.getParent() == saveButton.getParent()) {
+									buttonInline.set(true);
+								}
+								logButton.doClick();
+								dialog.dispose();
+								return;
+							}
+						}
+					}
+				} catch (Throwable exception) {
+					failure.set(exception);
+				}
+			});
+			timer.setRepeats(true);
+			timer.start();
+			try {
+				panel.openAssignmentEditorById(task.getAssignmentId());
+			} finally {
+				timer.stop();
+				main.dispose();
+			}
+		});
+		assertNull(failure.get());
+		assertTrue(buttonFound.get(), "Log button should be found in dialog");
+		assertTrue(buttonInline.get(), "Log button should be inline with Save button");
+		assertSame(task, logged.get());
 	}
 
 	private static int gridX(Component component) {

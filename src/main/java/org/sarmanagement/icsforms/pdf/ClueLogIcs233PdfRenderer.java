@@ -28,6 +28,7 @@ public final class ClueLogIcs233PdfRenderer extends AbstractPdfRenderer implemen
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, getFormKey());
 		AppData source = data == null ? new AppData() : data;
 		List<NumberedClue> clues = new ArrayList<>();
 		if (source.getClueLogEntries() != null) {

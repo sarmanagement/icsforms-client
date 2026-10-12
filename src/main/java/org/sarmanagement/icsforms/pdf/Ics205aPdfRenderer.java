@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -42,6 +45,7 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, getFormKey());
 		Path parent = outputFile.getParent();
 		if (parent != null) {
 			Files.createDirectories(parent);
@@ -194,13 +198,22 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 				lines == null || lines.isEmpty() ? List.of("") : lines);
 	}
 
+	/**
+	 * Draws a section heading in a balanced text block.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param x left edge.
+	 * @param topY top edge.
+	 * @param heading section heading.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawHeading(PDPageContentStream stream, PDType1Font bold, float x, float topY, String heading)
 			throws IOException {
-		stream.beginText();
-		stream.setFont(bold, HEADING_FONT_SIZE);
-		stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
-		stream.showText(heading);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, HEADING_FONT_SIZE);
+			stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
+			stream.showText(PdfText.singleLine(heading));
+		}
 	}
 
 	private void drawInlinePair(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
@@ -208,59 +221,102 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		writeInlineHeadingValue(stream, bold, regular, x, y, label + ":", value);
 	}
 
+	/**
+	 * Draws an inline label and normalized value.
+	 * @param stream page stream.
+	 * @param bold label font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y baseline.
+	 * @param label field label.
+	 * @param value source value.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeInlineHeadingValue(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, String label, String value) throws IOException {
-		stream.beginText();
-		stream.setFont(bold, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(label);
-		float labelWidth = bold.getStringWidth(label) / 1000f * BODY_FONT_SIZE;
-		stream.setFont(regular, BODY_FONT_SIZE);
-		stream.newLineAtOffset(labelWidth + 4f, 0);
-		stream.showText(safe(value));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(label));
+			float labelWidth = bold.getStringWidth(PdfText.singleLine(label)) / 1000f * BODY_FONT_SIZE;
+			stream.setFont(regular, BODY_FONT_SIZE);
+			stream.newLineAtOffset(labelWidth + 4f, 0);
+			stream.showText(PdfText.singleLine(safe(value)));
+		}
 	}
 
+	/**
+	 * Draws an inline field fitted to the available width.
+	 * @param stream page stream.
+	 * @param bold label font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y baseline.
+	 * @param width available width.
+	 * @param label field label.
+	 * @param value source value.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeInlineHeadingValueWithinWidth(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
 			float x, float y, float width, String label, String value) throws IOException {
-		stream.beginText();
-		stream.setFont(bold, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(label);
-		float labelWidth = bold.getStringWidth(label) / 1000f * BODY_FONT_SIZE;
-		stream.setFont(regular, BODY_FONT_SIZE);
-		stream.newLineAtOffset(labelWidth + 4f, 0);
-		stream.showText(fitText(regular, safe(value), Math.max(0f, width - labelWidth - 4f)));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(label));
+			float labelWidth = bold.getStringWidth(PdfText.singleLine(label)) / 1000f * BODY_FONT_SIZE;
+			stream.setFont(regular, BODY_FONT_SIZE);
+			stream.newLineAtOffset(labelWidth + 4f, 0);
+			stream.showText(fitText(regular, value, Math.max(0f, width - labelWidth - 4f)));
+		}
 	}
 
+	/**
+	 * Writes already-wrapped lines using balanced text output.
+	 * @param stream page stream.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y starting baseline.
+	 * @param lines source lines.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeLines(PDPageContentStream stream, PDType1Font regular, float x, float y, List<String> lines)
 			throws IOException {
-		stream.beginText();
-		stream.setFont(regular, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		for (String line : lines) {
-			stream.showText(safe(line));
-			stream.newLineAtOffset(0, -LINE_HEIGHT);
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(regular, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			for (String line : lines) {
+				stream.showText(PdfText.singleLine(safe(line)));
+				stream.newLineAtOffset(0, -LINE_HEIGHT);
+			}
 		}
-		stream.endText();
 	}
 
+	/**
+	 * Writes wrapped lines that fit within a ruled cell.
+	 * @param stream page stream.
+	 * @param font body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width cell width.
+	 * @param height cell height.
+	 * @param lines wrapped content.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeWrappedCellText(PDPageContentStream stream, PDType1Font font, float x, float y, float width,
 			float height, List<String> lines) throws IOException {
 		float top = y + height;
 		float textY = top - CELL_PADDING - BODY_FONT_SIZE;
-		stream.beginText();
-		stream.setFont(font, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x + CELL_PADDING, textY);
-		int maxLines = Math.max(1, (int) ((height - (CELL_PADDING * 2f)) / LINE_HEIGHT));
-		for (int i = 0; i < lines.size() && i < maxLines; i++) {
-			stream.showText(safe(lines.get(i)));
-			if (i < lines.size() - 1 && i + 1 < maxLines) {
-				stream.newLineAtOffset(0, -LINE_HEIGHT);
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x + CELL_PADDING, textY);
+			int maxLines = Math.max(1, (int) ((height - (CELL_PADDING * 2f)) / LINE_HEIGHT));
+			for (int i = 0; i < lines.size() && i < maxLines; i++) {
+				stream.showText(PdfText.singleLine(safe(lines.get(i))));
+				if (i < lines.size() - 1 && i + 1 < maxLines) {
+					stream.newLineAtOffset(0, -LINE_HEIGHT);
+				}
 			}
 		}
-		stream.endText();
 	}
 
 	private float[] columnStarts(float x, float width, float[] widths) {
@@ -290,8 +346,13 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		stream.stroke();
 	}
 
+	/**
+	 * Normalizes layout whitespace before trimming optional values.
+	 * @param value optional text.
+	 * @return normalized trimmed text retaining internal logical line breaks.
+	 */
 	private String safe(String value) {
-		return value == null ? "" : value.trim();
+		return PdfText.normalize(value).trim();
 	}
 
 	private String formatDate(AppData data, LocalDateTime value) {
@@ -302,8 +363,16 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		return formatPdfTime(data, value);
 	}
 
+	/**
+	 * Fits normalized inline text using the existing ellipsis convention.
+	 * @param font measuring font.
+	 * @param value source text.
+	 * @param maxWidth available width.
+	 * @return fitted text or an empty string when no text fits.
+	 * @throws IOException when font metrics fail.
+	 */
 	private String fitText(PDType1Font font, String value, float maxWidth) throws IOException {
-		String normalized = safe(value);
+		String normalized = PdfText.singleLine(value).trim();
 		if (normalized.isBlank() || maxWidth <= 0f) {
 			return "";
 		}

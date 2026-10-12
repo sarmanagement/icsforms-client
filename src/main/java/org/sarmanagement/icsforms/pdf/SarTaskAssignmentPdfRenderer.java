@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -41,6 +44,7 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, getFormKey());
 		Files.createDirectories(outputFile.getParent());
 		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
@@ -322,14 +326,26 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 				formatTime(data, context == null ? null : context.getOperationalPeriodEnd()));
 	}
 
+	/**
+	 * Draws the assignment identifier in a balanced text block.
+	 * @param stream page stream.
+	 * @param bold identifier font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width cell width.
+	 * @param height cell height.
+	 * @param assignmentTeamNumber source identifier.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawAssignmentNumberSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, float width, float height, String assignmentTeamNumber) throws IOException {
 		drawHeading(stream, bold, x, y + height, "3. Assignment/Team Number");
-		stream.beginText();
-		stream.setFont(bold, 16f);
-		stream.newLineAtOffset(x + CELL_PADDING, y + (height / 2f) - 4f);
-		stream.showText(safe(assignmentTeamNumber));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, 16f);
+			stream.newLineAtOffset(x + CELL_PADDING, y + (height / 2f) - 4f);
+			stream.showText(PdfText.singleLine(safe(assignmentTeamNumber)));
+		}
 	}
 
 	private void drawTimeOnAssignmentSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
@@ -346,17 +362,46 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 				formatTime(data, task.getAssignmentEnd()));
 	}
 
+	/**
+	 * Draws the debrief assignment identifier and vehicle miles.
+	 * @param stream page stream.
+	 * @param bold identifier font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width cell width.
+	 * @param height cell height.
+	 * @param task source assignment.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawDebriefHeaderRight(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, float width, float height, SarTaskAssignment task) throws IOException {
 		drawHeading(stream, bold, x, y + height, "14. Assignment/Team Number");
-		stream.beginText();
-		stream.setFont(bold, 14f);
-		stream.newLineAtOffset(x + CELL_PADDING, y + height - 28f);
-		stream.showText(safe(task.getAssignmentTeamNumber()));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, 14f);
+			stream.newLineAtOffset(x + CELL_PADDING, y + height - 28f);
+			stream.showText(PdfText.singleLine(safe(task.getAssignmentTeamNumber())));
+		}
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, y + 16f, "Vehicle Miles", safe(task.getVehicleMiles()));
 	}
 
+	/**
+	 * Draws preparer metadata and the aligned form footer.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width section width.
+	 * @param height section height.
+	 * @param heading section heading.
+	 * @param name preparer name.
+	 * @param title preparer position.
+	 * @param dateTime preparation time.
+	 * @param footerLabel form and page labels.
+	 * @param data incident timezone settings.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, float width, float height, String heading, String name, String title, LocalDateTime dateTime,
 			String footerLabel, AppData data) throws IOException {
@@ -373,33 +418,47 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 		int sepIdx = footerLabel.indexOf(" | ");
 		String leftLabel = sepIdx >= 0 ? footerLabel.substring(0, sepIdx) : footerLabel;
 		String rightLabel = sepIdx >= 0 ? footerLabel.substring(sepIdx + 3) : "";
-		stream.beginText();
-		stream.setFont(regular, 8f);
-		stream.newLineAtOffset(x + CELL_PADDING, y + 3f);
-		stream.showText(leftLabel);
-		stream.endText();
-		if (!rightLabel.isBlank()) {
-			float rightWidth = regular.getStringWidth(rightLabel) / 1000f * 8f;
-			stream.beginText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
 			stream.setFont(regular, 8f);
-			stream.newLineAtOffset(x + width - CELL_PADDING - rightWidth, y + 3f);
-			stream.showText(rightLabel);
-			stream.endText();
+			stream.newLineAtOffset(x + CELL_PADDING, y + 3f);
+			stream.showText(PdfText.singleLine(leftLabel));
+		}
+		if (!rightLabel.isBlank()) {
+			float rightWidth = regular.getStringWidth(PdfText.singleLine(rightLabel)) / 1000f * 8f;
+			try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+				stream.setFont(regular, 8f);
+				stream.newLineAtOffset(x + width - CELL_PADDING - rightWidth, y + 3f);
+				stream.showText(PdfText.singleLine(rightLabel));
+			}
 		}
 	}
 
+	/**
+	 * Draws the debrief summary, reported POD, and associated clues.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width section width.
+	 * @param height section height.
+	 * @param task source assignment.
+	 * @param clues associated clue entries.
+	 * @param data incident document.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawDebriefingSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, float width, float height, SarTaskAssignment task, List<ClueLogEntry> clues, AppData data)
 			throws IOException {
 		drawHeading(stream, bold, x, y + height, "15. Debriefing");
 		if (!safe(task.getReportedPod()).isBlank()) {
 			String podLabel = "REPORTED POD: " + safe(task.getReportedPod()) + "%";
-			float podWidth = bold.getStringWidth(podLabel) / 1000f * BODY_FONT_SIZE;
-			stream.beginText();
-			stream.setFont(bold, BODY_FONT_SIZE);
-			stream.newLineAtOffset(x + width - CELL_PADDING - podWidth, y + height - CELL_PADDING - HEADING_FONT_SIZE);
-			stream.showText(podLabel);
-			stream.endText();
+			float podWidth = bold.getStringWidth(PdfText.singleLine(podLabel)) / 1000f * BODY_FONT_SIZE;
+			try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+				stream.setFont(bold, BODY_FONT_SIZE);
+				stream.newLineAtOffset(x + width - CELL_PADDING - podWidth, y + height - CELL_PADDING - HEADING_FONT_SIZE);
+				stream.showText(PdfText.singleLine(podLabel));
+			}
 		}
 		writeWrappedCellText(stream, regular, x, y, width, height - 20f, debriefSectionLines(task, clues, data));
 	}
@@ -411,45 +470,85 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 				lines == null || lines.isEmpty() ? List.of("") : lines);
 	}
 
+	/**
+	 * Draws a section heading in a balanced text block.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param x left edge.
+	 * @param topY top edge.
+	 * @param heading section heading.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawHeading(PDPageContentStream stream, PDType1Font bold, float x, float topY, String heading)
 			throws IOException {
-		stream.beginText();
-		stream.setFont(bold, HEADING_FONT_SIZE);
-		stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
-		stream.showText(heading);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, HEADING_FONT_SIZE);
+			stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
+			stream.showText(PdfText.singleLine(heading));
+		}
 	}
 
+	/**
+	 * Measures and draws normalized text aligned to the section's right edge.
+	 * @param stream page stream.
+	 * @param font text font.
+	 * @param x left edge.
+	 * @param topY top edge.
+	 * @param width section width.
+	 * @param value source text.
+	 * @throws IOException when measurement or drawing fails.
+	 */
 	private void drawRightAlignedHeadingValue(PDPageContentStream stream, PDType1Font font, float x, float topY,
 			float width, String value) throws IOException {
 		String safeValue = safe(value);
 		if (safeValue.isBlank()) {
 			return;
 		}
-		float textWidth = font.getStringWidth(safeValue) / 1000f * BODY_FONT_SIZE;
-		stream.beginText();
-		stream.setFont(font, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x + width - CELL_PADDING - textWidth, topY - CELL_PADDING - HEADING_FONT_SIZE);
-		stream.showText(safeValue);
-		stream.endText();
+		float textWidth = font.getStringWidth(PdfText.singleLine(safeValue)) / 1000f * BODY_FONT_SIZE;
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x + width - CELL_PADDING - textWidth, topY - CELL_PADDING - HEADING_FONT_SIZE);
+			stream.showText(PdfText.singleLine(safeValue));
+		}
 	}
 
+	/**
+	 * Draws an inline label and normalized value.
+	 * @param stream page stream.
+	 * @param bold label font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y baseline.
+	 * @param label field label.
+	 * @param value source value.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawInlinePair(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
 			String label, String value) throws IOException {
-		float valueOffset = (bold.getStringWidth(label + ": ") / 1000f * BODY_FONT_SIZE) + 2f;
-		stream.beginText();
-		stream.setFont(bold, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(label + ": ");
-		stream.endText();
-
-		stream.beginText();
-		stream.setFont(regular, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x + valueOffset, y);
-		stream.showText(safe(value));
-		stream.endText();
+		float valueOffset = (bold.getStringWidth(PdfText.singleLine(label + ": ")) / 1000f * BODY_FONT_SIZE) + 2f;
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(label + ": "));
+		}
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(regular, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x + valueOffset, y);
+			stream.showText(PdfText.singleLine(safe(value)));
+		}
 	}
 
+	/**
+	 * Writes wrapped lines that fit within a ruled cell.
+	 * @param stream page stream.
+	 * @param font body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width cell width.
+	 * @param height cell height.
+	 * @param lines wrapped content.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeWrappedCellText(PDPageContentStream stream, PDType1Font font, float x, float y, float width,
 			float height, List<String> lines) throws IOException {
 		List<String> normalized = lines == null || lines.isEmpty() ? List.of("") : lines;
@@ -457,17 +556,17 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 		// never below the bottom border (y + 2f floor prevents overlap with separator
 		// lines).
 		float startY = Math.max(y + 2f, y + height - CELL_PADDING - BODY_FONT_SIZE);
-		stream.beginText();
-		stream.setFont(font, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x + CELL_PADDING, startY);
-		int maxLines = Math.max(1, (int) ((height - (CELL_PADDING * 2)) / LINE_HEIGHT));
-		for (int i = 0; i < Math.min(maxLines, normalized.size()); i++) {
-			stream.showText(safe(normalized.get(i)));
-			if (i < maxLines - 1) {
-				stream.newLineAtOffset(0, -LINE_HEIGHT);
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x + CELL_PADDING, startY);
+			int maxLines = Math.max(1, (int) ((height - (CELL_PADDING * 2)) / LINE_HEIGHT));
+			for (int i = 0; i < Math.min(maxLines, normalized.size()); i++) {
+				stream.showText(PdfText.singleLine(safe(normalized.get(i))));
+				if (i < maxLines - 1) {
+					stream.newLineAtOffset(0, -LINE_HEIGHT);
+				}
 			}
 		}
-		stream.endText();
 	}
 
 	private float[] columnStarts(float x, float width, float[] widths) {
@@ -653,8 +752,13 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 		return String.join(" | ", parts);
 	}
 
+	/**
+	 * Normalizes layout whitespace without altering stored content.
+	 * @param value optional text.
+	 * @return normalized text retaining logical line breaks.
+	 */
 	private String safe(String value) {
-		return value == null ? "" : value;
+		return PdfText.normalize(value);
 	}
 
 	private record LabeledValue(String label, String value) {

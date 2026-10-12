@@ -378,9 +378,38 @@ public class ClueLogPanel extends JPanel {
 		tableModel.setRows(controller.getData().getClueLogEntries(), buildTaskLabelMap());
 	}
 
-	/** Saves all clue rows, including follow-up history. */
+	/**
+	 * Commits the active inline cell while preserving newer canonical debrief clues.
+	 * When rows were replaced externally, only the actual edited cell is merged by
+	 * stable clue identity; stale rows and deleted clues are never reinstated.
+	 *
+	 * @throws IllegalStateException when the active cell cannot be committed.
+	 */
 	public void pushToModel() {
-		controller.getData().setClueLogEntries(tableModel.getRows());
+		String editedId = null;
+		int editedColumn = -1;
+		Object editedValue = null;
+		if (table.isEditing() && table.getCellEditor() != null) {
+			int editedRow = table.convertRowIndexToModel(table.getEditingRow());
+			editedColumn = table.convertColumnIndexToModel(table.getEditingColumn());
+			editedId = tableModel.getRows().get(editedRow).getEntryId();
+			if (!table.getCellEditor().stopCellEditing()) {
+				throw new IllegalStateException("Finish editing the selected clue before saving.");
+			}
+			editedValue = tableModel.getValueAt(editedRow, editedColumn);
+		}
+		List<ClueLogEntry> canonical = controller.getData().getClueLogEntries();
+		if (tableModel.getRows() != canonical) {
+			tableModel.setRows(canonical, buildTaskLabelMap());
+			if (editedId != null) {
+				for (int row = 0; row < canonical.size(); row++) {
+					if (editedId.equals(canonical.get(row).getEntryId())) {
+						tableModel.setValueAt(editedValue, row, editedColumn);
+						break;
+					}
+				}
+			}
+		}
 	}
 
 	/**

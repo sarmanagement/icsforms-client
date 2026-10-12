@@ -1,6 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.Ics202Form;
+import org.sarmanagement.icsforms.pdf.PdfText;
 
 import javax.swing.BorderFactory;
 import javax.swing.JPanel;
@@ -8,7 +12,11 @@ import javax.swing.JCheckBox;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.JLabel;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.GridLayout;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +27,8 @@ import java.util.List;
 public class Ics202Panel extends JPanel {
 	private final AppController controller;
 	private final JTextArea objectivesArea = UiSupport.textArea(5);
+	private final JLabel objectiveWarning = new JLabel(" ");
+	private final Color objectiveBackground = objectivesArea.getBackground();
 	private final JTextArea commandEmphasisArea = UiSupport.textArea(3);
 	private final JTextArea situationalAwarenessArea = UiSupport.textArea(3);
 	private final JCheckBox siteSafetyPlanRequired = new JCheckBox("Site safety plan required");
@@ -46,7 +56,7 @@ public class Ics202Panel extends JPanel {
 		this.controller = controller;
 		JPanel form = UiSupport.formPanel();
 		form.setBorder(BorderFactory.createTitledBorder("ICS 202 Incident Objectives"));
-		UiSupport.addRow(form, 0, "Objectives (one per line)", new JScrollPane(objectivesArea));
+		UiSupport.addRow(form, 0, "Objectives (one per line)", objectiveEditor());
 		UiSupport.addRow(form, 1, "Command emphasis", new JScrollPane(commandEmphasisArea));
 		UiSupport.addRow(form, 2, "General situational awareness", new JScrollPane(situationalAwarenessArea));
 		UiSupport.addRow(form, 3, "Safety plan", siteSafetyPlanRequired);
@@ -65,6 +75,61 @@ public class Ics202Panel extends JPanel {
 		add(scrollPane, BorderLayout.CENTER);
 	}
 
+	/**
+	 * Creates the objective editor with a nonblocking, accessible PDF warning.
+	 *
+	 * @return objective text editor and inline warning.
+	 */
+	private JPanel objectiveEditor() {
+		JPanel panel = new JPanel(new BorderLayout(0, 4));
+		panel.setOpaque(false);
+		objectiveWarning.setForeground(new Color(160, 40, 40));
+		objectiveWarning.getAccessibleContext().setAccessibleName("Objective PDF export warning");
+		panel.add(new JScrollPane(objectivesArea), BorderLayout.CENTER);
+		panel.add(objectiveWarning, BorderLayout.SOUTH);
+		objectivesArea.getDocument().addDocumentListener(new DocumentListener() {
+			/** {@inheritDoc} */
+			@Override
+			public void insertUpdate(DocumentEvent event) {
+				updateObjectiveWarning();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void removeUpdate(DocumentEvent event) {
+				updateObjectiveWarning();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void changedUpdate(DocumentEvent event) {
+				updateObjectiveWarning();
+			}
+		});
+		updateObjectiveWarning();
+		return panel;
+	}
+
+	/**
+	 * Updates export guidance without rejecting edits, paste, tab switches, or saves.
+	 */
+	private void updateObjectiveWarning() {
+		try {
+			PdfText.validate(objectivesArea.getText(), "ICS 202", "Objectives");
+			objectiveWarning.setText(" ");
+			objectiveWarning.setToolTipText(null);
+			objectivesArea.setToolTipText(null);
+			objectivesArea.setBackground(objectiveBackground);
+		} catch (IllegalArgumentException exception) {
+			String message = exception.getMessage();
+			int advice = message.indexOf(". Edit this field");
+			objectiveWarning.setText("PDF export warning: " + (advice < 0 ? message : message.substring(0, advice + 1)));
+			objectiveWarning.setToolTipText(message);
+			objectivesArea.setToolTipText(message);
+			objectivesArea.setBackground(new Color(255, 242, 224));
+		}
+	}
+
 	/** Loads values from the model. */
 	public void refreshFromModel() {
 		Ics202Form form = controller.getData().getForm202();
@@ -80,10 +145,13 @@ public class Ics202Panel extends JPanel {
 		iapPageField.setText(nullSafe(form.getIapPage()));
 	}
 
-	/** Applies field values to the model. */
+	/**
+	 * Applies values without discarding objective text or blocking incident saves.
+	 * Unsupported PDF characters remain in the model for export-time diagnostics.
+	 */
 	public void pushToModel() {
 		Ics202Form form = controller.getData().getForm202();
-		form.setObjectives(lines(objectivesArea.getText()));
+		form.setObjectives(objectiveLines(objectivesArea.getText()));
 		form.setCommandEmphasis(commandEmphasisArea.getText().trim());
 		form.setSituationalAwareness(situationalAwarenessArea.getText().trim());
 		form.setSiteSafetyPlanRequired(siteSafetyPlanRequired.isSelected());
@@ -93,6 +161,22 @@ public class Ics202Panel extends JPanel {
 		form.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
 		form.setApprovedDateTime(AppController.toLocalDateTime((java.util.Date) approvedDateTimeField.getValue()));
 		form.setIapPage(iapPageField.getText().trim());
+	}
+
+	/**
+	 * Splits logical objective lines without trimming source characters.
+	 *
+	 * @param value original objective input.
+	 * @return nonempty objectives preserving tabs, spaces, and unwanted controls.
+	 */
+	private List<String> objectiveLines(String value) {
+		List<String> items = new ArrayList<>();
+		for (String line : value.split("\r\n|\r|\n", -1)) {
+			if (!line.matches("[ \t]*")) {
+				items.add(line);
+			}
+		}
+		return items;
 	}
 
 	private JPanel includedFormsPanel() {
@@ -174,7 +258,7 @@ public class Ics202Panel extends JPanel {
 	 */
 	private List<String> lines(String value) {
 		List<String> items = new ArrayList<>();
-		for (String line : value.split("\\R")) {
+		for (String line : PdfText.normalize(value).split("\n")) {
 			if (!line.isBlank()) {
 				items.add(line.trim());
 			}
