@@ -244,6 +244,15 @@ public class Ics214Panel extends JPanel {
 	}
 
 	/**
+	 * Returns the activity log form currently displayed in this editor.
+	 *
+	 * @return current activity log form, or null if none
+	 */
+	public Ics214Form getCurrentForm() {
+		return currentForm;
+	}
+
+	/**
 	 * Loads values from the supplied model.
 	 *
 	 * @param form
@@ -539,16 +548,33 @@ public class Ics214Panel extends JPanel {
 		if (currentForm == null || currentData != controller.getData()) {
 			return;
 		}
-		JFrame existing = POP_OUT_WINDOWS.get(currentForm);
+		saveToModel();
+		openInNewWindow(controller, currentForm, currentData, () -> {
+			if (currentData == controller.getData() && currentForm != null) {
+				refreshActivityEntries();
+			}
+		});
+	}
+	/**
+	 * Opens an ICS 214 form in a separate modeless window.
+	 *
+	 * @param controller application controller
+	 * @param form activity log form
+	 * @param data incident data
+	 * @param onSave callback executed when window saves on close
+	 * @return the opened or focused window, or null if parameters are invalid
+	 */
+	public static JFrame openInNewWindow(AppController controller, Ics214Form form, AppData data, Runnable onSave) {
+		if (form == null || data == null || controller == null || controller.getData() != data) {
+			return null;
+		}
+		JFrame existing = POP_OUT_WINDOWS.get(form);
 		if (existing != null && existing.isDisplayable()) {
 			existing.toFront();
 			existing.requestFocus();
-			return;
+			return existing;
 		}
-		saveToModel();
-		Ics214Form form = currentForm;
-		AppData data = currentData;
-		String title = "ICS 214 – " + (currentForm.getName().isBlank() ? "Activity Log" : currentForm.getName());
+		String title = "ICS 214 – " + (form.getName().isBlank() ? "Activity Log" : form.getName());
 		JFrame frame = new JFrame(title);
 		frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		Ics214Panel popOut = new Ics214Panel(controller);
@@ -556,14 +582,14 @@ public class Ics214Panel extends JPanel {
 
 		// Single Close button — saves changes and closes the window.
 		JButton closeBtn = new JButton("Close");
-		closeBtn.addActionListener(e -> closePopOut(frame, popOut, form, data));
+		closeBtn.addActionListener(e -> closePopOutWindow(frame, popOut, form, data, onSave));
 
 		// Also save when the user dismisses with the OS window-close button.
 		frame.addWindowListener(new WindowAdapter() {
 			/** {@inheritDoc} */
 			@Override
 			public void windowClosing(WindowEvent e) {
-				closePopOut(frame, popOut, form, data);
+				closePopOutWindow(frame, popOut, form, data, onSave);
 			}
 
 			/** {@inheritDoc} */
@@ -583,6 +609,43 @@ public class Ics214Panel extends JPanel {
 		POP_OUT_WINDOWS.put(form, frame);
 		UiSupport.registerIncidentWindow(frame, data);
 		frame.setVisible(true);
+		return frame;
+	}
+
+	/**
+	 * Closes any open pop-out window for a form.
+	 *
+	 * @param form activity log form
+	 */
+	public static void closePopOutWindow(Ics214Form form) {
+		if (form == null) {
+			return;
+		}
+		JFrame frame = POP_OUT_WINDOWS.remove(form);
+		if (frame != null) {
+			frame.dispose();
+		}
+	}
+
+	/**
+	 * Closes a detached editor saving into active incident data.
+	 *
+	 * @param frame detached window
+	 * @param popOut detached editor
+	 * @param form originally edited form
+	 * @param data originally edited incident
+	 * @param onSave callback to run after saving
+	 */
+	private static void closePopOutWindow(JFrame frame, Ics214Panel popOut, Ics214Form form, AppData data,
+			Runnable onSave) {
+		if (popOut.controller.getData() == data) {
+			popOut.saveToModel();
+			popOut.controller.markDirty();
+			if (onSave != null) {
+				onSave.run();
+			}
+		}
+		frame.dispose();
 	}
 
 	/**
@@ -594,14 +657,11 @@ public class Ics214Panel extends JPanel {
 	 * @param data originally edited incident
 	 */
 	private void closePopOut(JFrame frame, Ics214Panel popOut, Ics214Form form, AppData data) {
-		if (controller.getData() == data) {
-			popOut.saveToModel();
-			controller.markDirty();
+		closePopOutWindow(frame, popOut, form, data, () -> {
 			if (currentData == data && currentForm == form) {
 				refreshActivityEntries();
 			}
-		}
-		frame.dispose();
+		});
 	}
 
 	/** Opens the shared entry workflow without saving other pending log edits. */
@@ -1223,6 +1283,19 @@ public class Ics214Panel extends JPanel {
 		 */
 		ActivityEntryEditor(List<ActivityEventType> eventTypes, String defaultResourceIdentifier,
 				List<String> resourcePicklist) {
+			this(eventTypes, defaultResourceIdentifier, resourcePicklist, () -> false);
+		}
+
+		/**
+		 * Builds editable activity fields with dynamic ICP scope detection.
+		 *
+		 * @param eventTypes available event types
+		 * @param defaultResourceIdentifier initial resource
+		 * @param resourcePicklist available resource labels
+		 * @param icpScopeSupplier supplier indicating whether the target destination is an ICP log
+		 */
+		ActivityEntryEditor(List<ActivityEventType> eventTypes, String defaultResourceIdentifier,
+				List<String> resourcePicklist, java.util.function.BooleanSupplier icpScopeSupplier) {
 			ActivityEventType[] typeArray = eventTypes.toArray(new ActivityEventType[0]);
 			eventTypeField = new JComboBox<>(typeArray);
 			eventTypeField.setRenderer(new javax.swing.DefaultListCellRenderer() {
@@ -1232,7 +1305,8 @@ public class Ics214Panel extends JPanel {
 					super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
 					if (value instanceof ActivityEventType t) {
 						if (ActivityEventType.ID_CLUE_DETECTED.equals(t.getId())) {
-							setText("Clue detected by my assignment");
+							boolean isIcp = icpScopeSupplier != null && icpScopeSupplier.getAsBoolean();
+							setText(isIcp ? "Clue detected by this assignment" : "Clue detected by my assignment");
 						} else if (ActivityEventType.ID_CLUE_REPORTED.equals(t.getId())) {
 							setText("Clue reported by another assignment");
 						} else {
@@ -1284,6 +1358,12 @@ public class Ics214Panel extends JPanel {
 			entry.setResourceIdentifier(resourceSelection == null ? "" : resourceSelection.toString().trim());
 			entry.setNotableActivity(notableActivityField.getText().trim());
 			return entry;
+		}
+
+		/** Repaints event type display to reflect destination changes. */
+		void refreshEventTypeDisplay() {
+			eventTypeField.revalidate();
+			eventTypeField.repaint();
 		}
 	}
 

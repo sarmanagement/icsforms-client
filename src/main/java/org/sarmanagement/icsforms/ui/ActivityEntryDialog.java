@@ -126,7 +126,7 @@ final class ActivityEntryDialog {
 		if (controller.getIncidentMode() != IncidentMode.SAR) {
 			types.removeIf(type -> isClueType(type.getId()));
 		}
-		editor = new Ics214Panel.ActivityEntryEditor(types, resource, resources);
+		editor = new Ics214Panel.ActivityEntryEditor(types, resource, resources, this::isIcpDestination);
 		JPanel selectors = UiSupport.formPanel();
 		UiSupport.addRow(selectors, 0, "Destination log", destination);
 		UiSupport.addRow(selectors, 1, "Task / assignment", task);
@@ -134,12 +134,23 @@ final class ActivityEntryDialog {
 		UiSupport.configureDialogComboBox(task, 300);
 		panel.add(selectors, BorderLayout.NORTH);
 		panel.add(editor.panel, BorderLayout.CENTER);
+		destination.addActionListener(event -> editor.refreshEventTypeDisplay());
 		task.addActionListener(event -> {
 			TaskChoice choice = (TaskChoice) task.getSelectedItem();
 			if (choice.assignment() != null || choice.resourceAssignment() != null) {
 				editor.resourceIdentifierField.setSelectedItem(choice.resourceIdentifier());
 			}
 		});
+	}
+
+	/**
+	 * Determines whether the currently selected destination log is scoped to the ICP.
+	 *
+	 * @return true when the selected destination log is an ICP log
+	 */
+	private boolean isIcpDestination() {
+		LogChoice choice = (LogChoice) destination.getSelectedItem();
+		return choice != null && choice.log() != null && choice.log().getLogScope() == ActivityLogScope.ICP;
 	}
 
 	/**
