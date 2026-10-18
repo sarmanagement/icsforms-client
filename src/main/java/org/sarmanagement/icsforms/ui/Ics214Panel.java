@@ -27,6 +27,7 @@ import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.BorderLayout;
@@ -72,6 +73,8 @@ public class Ics214Panel extends JPanel {
 	private final JButton pickPreparerButton = new JButton("Pick preparer from task…");
 	private final JButton pickResourceButton = new JButton("Pick…");
 	private final JButton syncResourcesBtn = new JButton("Sync resources…");
+	private final JButton viewDetailsActivityBtn = new JButton("View Details");
+	private final JButton strikeOutActivityBtn = new JButton("Strike Out Entry");
 	private final ResourcesTableModel resourcesTableModel = new ResourcesTableModel();
 	private final ActivityLogTableModel activityLogTableModel = new ActivityLogTableModel();
 	private final JTable resourcesTable = new JTable(resourcesTableModel);
@@ -158,6 +161,7 @@ public class Ics214Panel extends JPanel {
 		activityPanel.add(activityLogScrollPane, BorderLayout.CENTER);
 		activityPanel.add(activityButtonsPanel(), BorderLayout.SOUTH);
 		installActivityContextMenu();
+		activityLogTable.getSelectionModel().addListSelectionListener(e -> updateActivityButtonsState());
 
 		JPanel tablesPanel = new JPanel(new GridLayout(2, 1, 8, 8));
 		tablesPanel.add(resourcesPanel);
@@ -186,12 +190,8 @@ public class Ics214Panel extends JPanel {
 		javax.swing.JPopupMenu popup = new javax.swing.JPopupMenu();
 		javax.swing.JMenuItem details = new javax.swing.JMenuItem("View details");
 		javax.swing.JMenuItem another = new javax.swing.JMenuItem("Add another entry");
-		details.addActionListener(event -> {
-			ActivityLogEntry entry = selectedActivityEntry();
-			if (entry != null && ActivityEntryDialog.showDetails(activityLogTable, controller, currentForm, entry)) {
-				refreshActivityEntries();
-			}
-		});
+		javax.swing.JMenuItem strikeOut = new javax.swing.JMenuItem("Strike out entry");
+		details.addActionListener(event -> showSelectedActivityDetails());
 		another.addActionListener(event -> {
 			ActivityLogEntry entry = selectedActivityEntry();
 			if (entry != null && new ActivityEntryDialog(controller,
@@ -200,8 +200,32 @@ public class Ics214Panel extends JPanel {
 				refreshActivityEntries();
 			}
 		});
+		strikeOut.addActionListener(event -> {
+			int row = activityLogTable.getSelectedRow();
+			if (row >= 0) {
+				removeSelectedActivityEntry(activityLogTable.convertRowIndexToModel(row));
+			}
+		});
 		popup.add(details);
 		popup.add(another);
+		popup.add(strikeOut);
+		popup.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+			@Override
+			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+				boolean hasSelection = activityLogTable.getSelectedRow() >= 0;
+				details.setEnabled(hasSelection);
+				another.setEnabled(hasSelection);
+				strikeOut.setEnabled(hasSelection);
+			}
+
+			@Override
+			public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+			}
+
+			@Override
+			public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+			}
+		});
 		activityLogTable.setComponentPopupMenu(popup);
 		activityLogTable.addMouseListener(new MouseAdapter() {
 			/** {@inheritDoc} */
@@ -214,6 +238,18 @@ public class Ics214Panel extends JPanel {
 			@Override
 			public void mouseReleased(MouseEvent event) {
 				selectTarget(event);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void mouseClicked(MouseEvent event) {
+				if (event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
+					int row = activityLogTable.rowAtPoint(event.getPoint());
+					if (row >= 0) {
+						activityLogTable.setRowSelectionInterval(row, row);
+						showSelectedActivityDetails();
+					}
+				}
 			}
 
 			/**
@@ -230,6 +266,16 @@ public class Ics214Panel extends JPanel {
 				}
 			}
 		});
+	}
+
+	/**
+	 * Displays the view details dialog for the currently selected activity log entry.
+	 */
+	private void showSelectedActivityDetails() {
+		ActivityLogEntry entry = selectedActivityEntry();
+		if (entry != null && ActivityEntryDialog.showDetails(activityLogTable, controller, currentForm, entry)) {
+			refreshActivityEntries();
+		}
 	}
 
 	/**
@@ -268,6 +314,7 @@ public class Ics214Panel extends JPanel {
 			loadedResources = List.of();
 			clearFields();
 			pickPreparerButton.setEnabled(false);
+			updateActivityButtonsState();
 			return;
 		}
 		nameField.setText(nullSafe(currentForm.getName()));
@@ -279,6 +326,7 @@ public class Ics214Panel extends JPanel {
 		resourcesTableModel.setRows(copyResources(currentForm.getResourcesAssigned()));
 		activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
 		scrollActivityLogToLatestEntry();
+		updateActivityButtonsState();
 		boolean isTask = currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT;
 		pickPreparerButton.setEnabled(isTask && !linkedTaskResources().isEmpty());
 		if (isTask) {
@@ -825,6 +873,18 @@ public class Ics214Panel extends JPanel {
 	}
 
 	/**
+	 * Formats the confirmation prompt for striking out an activity log entry.
+	 *
+	 * @param label human-readable activity entry label
+	 * @return formatted confirmation message
+	 */
+	static String strikeOutConfirmationPrompt(String label) {
+		return label == null || label.isBlank()
+				? "Are you sure you want to strike out this activity entry?"
+				: "Are you sure you want to strike out activity entry '" + label.trim() + "'?";
+	}
+
+	/**
 	 * Confirms strike-out within the initiating document root.
 	 *
 	 * @param row activity row in model coordinates
@@ -838,7 +898,8 @@ public class Ics214Panel extends JPanel {
 				? ""
 				: SarTaskPanel.formatDateTimeValue(entry.getTimestamp()) + " ")
 				+ resolvedEventTypeLabel(entry.getEventTypeId());
-		int confirm = ActivityEntryDialog.showDocumentConfirm(this, "Strike out activity entry '" + label.trim() + "'?",
+		String prompt = strikeOutConfirmationPrompt(label);
+		int confirm = ActivityEntryDialog.showDocumentConfirm(this, prompt,
 				"Strike Out Activity Entry", JOptionPane.YES_NO_OPTION);
 		if (confirm != JOptionPane.YES_OPTION) {
 			return;
@@ -859,9 +920,16 @@ public class Ics214Panel extends JPanel {
 		currentForm.getActivityLog().get(row).setStruckOut(true);
 		activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
 		scrollActivityLogToLatestEntry();
+		updateActivityButtonsState();
 		controller.markDirty();
 	}
 
+	/**
+	 * Resolves the display label for an event type identifier using the currently active types.
+	 *
+	 * @param eventTypeId identifier of the event type
+	 * @return human-readable event type label, or the identifier if unknown
+	 */
 	private String resolvedEventTypeLabel(String eventTypeId) {
 		for (ActivityEventType type : resolvedEventTypes()) {
 			if (type.getId().equals(eventTypeId)) {
@@ -872,6 +940,19 @@ public class Ics214Panel extends JPanel {
 	}
 
 	/**
+	 * Synchronizes the enablement of activity action buttons with the table selection.
+	 */
+	private void updateActivityButtonsState() {
+		boolean hasSelection = activityLogTable != null && activityLogTable.getSelectedRow() >= 0;
+		if (viewDetailsActivityBtn != null) {
+			viewDetailsActivityBtn.setEnabled(hasSelection);
+		}
+		if (strikeOutActivityBtn != null) {
+			strikeOutActivityBtn.setEnabled(hasSelection);
+		}
+	}
+
+	/**
 	 * Creates entry actions using view-to-model conversion for selected rows.
 	 *
 	 * @return activity action buttons
@@ -879,14 +960,17 @@ public class Ics214Panel extends JPanel {
 	private JPanel activityButtonsPanel() {
 		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		JButton add = new JButton("Add Entry");
-		JButton remove = new JButton("Strike Out Entry");
 		add.addActionListener(event -> addActivityEntry());
-		remove.addActionListener(event -> {
+		viewDetailsActivityBtn.addActionListener(event -> showSelectedActivityDetails());
+		strikeOutActivityBtn.addActionListener(event -> {
 			int row = activityLogTable.getSelectedRow();
 			removeSelectedActivityEntry(row < 0 ? -1 : activityLogTable.convertRowIndexToModel(row));
 		});
+		viewDetailsActivityBtn.setEnabled(false);
+		strikeOutActivityBtn.setEnabled(false);
 		panel.add(add);
-		panel.add(remove);
+		panel.add(viewDetailsActivityBtn);
+		panel.add(strikeOutActivityBtn);
 		return panel;
 	}
 

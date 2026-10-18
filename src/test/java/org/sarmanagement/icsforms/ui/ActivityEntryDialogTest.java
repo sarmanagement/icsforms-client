@@ -592,6 +592,28 @@ class ActivityEntryDialogTest {
 		assertEquals("Clue detected by my assignment", label.getText());
 	}
 
+	@Test
+	void viewDetailsDisplaysFriendlyEventTypeLabelInsteadOfJavaConstant() {
+		AppData data = new AppData();
+		ActivityLogEntry entry = new ActivityLogEntry();
+		entry.setEventTypeId(ActivityEventType.ID_FREE_TEXT);
+		entry.setResourceIdentifier("Search Team");
+		entry.setNotableActivity("Test activity notes");
+
+		JPanel panel = ActivityEntryDialog.buildDetailsPanel(data, entry);
+		boolean foundLabel = false;
+		for (java.awt.Component comp : panel.getComponents()) {
+			if (comp instanceof JLabel label && "Note".equals(label.getText())) {
+				foundLabel = true;
+				break;
+			}
+		}
+		assertTrue(foundLabel, "Expected friendly event type label 'Note' in details panel");
+		assertEquals("Note", ActivityEntryDialog.resolvedEventTypeLabel(data, ActivityEventType.ID_FREE_TEXT));
+		assertEquals("Note", ActivityEntryDialog.resolvedEventTypeLabel(data, null));
+		assertEquals("Clue Detected", ActivityEntryDialog.resolvedEventTypeLabel(data, ActivityEventType.ID_CLUE_DETECTED));
+	}
+
 	/**
 	 * Builds a controller backed by the test directory.
 	 *

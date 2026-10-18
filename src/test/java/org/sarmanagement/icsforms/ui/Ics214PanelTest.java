@@ -11,7 +11,10 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
+import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
@@ -246,6 +249,106 @@ class Ics214PanelTest {
 				Ics214Panel.closePopOutWindow(form);
 			}
 		});
+	}
+
+	@Test
+	void activityActionButtonsEnabledOnlyWhenRowSelected() throws Exception {
+		Ics214Panel panel = new Ics214Panel(sampleController());
+		AppData data = sampleDataWithTaskLog(2);
+		Ics214Form form = data.getActivityLogs().get(0);
+		SwingUtilities.invokeAndWait(() -> panel.loadFromModel(form, data));
+
+		JTable table = activityLogTable(panel);
+		JButton viewDetails = viewDetailsButton(panel);
+		JButton strikeOut = strikeOutButton(panel);
+
+		SwingUtilities.invokeAndWait(table::clearSelection);
+		assertFalse(viewDetails.isEnabled());
+		assertFalse(strikeOut.isEnabled());
+
+		SwingUtilities.invokeAndWait(() -> table.setRowSelectionInterval(0, 0));
+		assertTrue(viewDetails.isEnabled());
+		assertTrue(strikeOut.isEnabled());
+
+		SwingUtilities.invokeAndWait(table::clearSelection);
+		assertFalse(viewDetails.isEnabled());
+		assertFalse(strikeOut.isEnabled());
+	}
+
+	@Test
+	void contextMenuEnablesActionsOnlyWhenRowSelected() throws Exception {
+		Ics214Panel panel = new Ics214Panel(sampleController());
+		AppData data = sampleDataWithTaskLog(2);
+		Ics214Form form = data.getActivityLogs().get(0);
+		SwingUtilities.invokeAndWait(() -> panel.loadFromModel(form, data));
+
+		JTable table = activityLogTable(panel);
+		JPopupMenu popup = table.getComponentPopupMenu();
+		assertTrue(popup != null);
+
+		JMenuItem detailsItem = null;
+		JMenuItem strikeOutItem = null;
+		for (Component comp : popup.getComponents()) {
+			if (comp instanceof JMenuItem item) {
+				if ("View details".equals(item.getText())) {
+					detailsItem = item;
+				} else if ("Strike out entry".equals(item.getText())) {
+					strikeOutItem = item;
+				}
+			}
+		}
+		assertTrue(detailsItem != null, "View details menu item should exist");
+		assertTrue(strikeOutItem != null, "Strike out entry menu item should exist");
+
+		SwingUtilities.invokeAndWait(table::clearSelection);
+		for (javax.swing.event.PopupMenuListener listener : popup.getPopupMenuListeners()) {
+			listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(popup));
+		}
+		assertFalse(detailsItem.isEnabled());
+		assertFalse(strikeOutItem.isEnabled());
+
+		SwingUtilities.invokeAndWait(() -> table.setRowSelectionInterval(0, 0));
+		for (javax.swing.event.PopupMenuListener listener : popup.getPopupMenuListeners()) {
+			listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(popup));
+		}
+		assertTrue(detailsItem.isEnabled());
+		assertTrue(strikeOutItem.isEnabled());
+	}
+
+	@Test
+	void strikeOutConfirmationPromptIncludesEntryLabelOrFallback() {
+		assertEquals("Are you sure you want to strike out activity entry '2026-01-01 08:00 Note'?",
+				Ics214Panel.strikeOutConfirmationPrompt("2026-01-01 08:00 Note"));
+		assertEquals("Are you sure you want to strike out this activity entry?",
+				Ics214Panel.strikeOutConfirmationPrompt(""));
+		assertEquals("Are you sure you want to strike out this activity entry?",
+				Ics214Panel.strikeOutConfirmationPrompt(null));
+	}
+
+	/**
+	 * Accesses the view details button fixture.
+	 *
+	 * @param panel tested panel
+	 * @return view details button
+	 * @throws Exception if fixture access fails
+	 */
+	private static JButton viewDetailsButton(Ics214Panel panel) throws Exception {
+		Field field = Ics214Panel.class.getDeclaredField("viewDetailsActivityBtn");
+		field.setAccessible(true);
+		return (JButton) field.get(panel);
+	}
+
+	/**
+	 * Accesses the strike out button fixture.
+	 *
+	 * @param panel tested panel
+	 * @return strike out button
+	 * @throws Exception if fixture access fails
+	 */
+	private static JButton strikeOutButton(Ics214Panel panel) throws Exception {
+		Field field = Ics214Panel.class.getDeclaredField("strikeOutActivityBtn");
+		field.setAccessible(true);
+		return (JButton) field.get(panel);
 	}
 
 	/**

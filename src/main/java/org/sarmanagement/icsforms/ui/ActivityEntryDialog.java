@@ -287,6 +287,47 @@ final class ActivityEntryDialog {
 	}
 
 	/**
+	 * Resolves the display label for an event type identifier.
+	 *
+	 * @param data incident data containing configured event types
+	 * @param eventTypeId event type identifier
+	 * @return human-readable event type label
+	 */
+	static String resolvedEventTypeLabel(AppData data, String eventTypeId) {
+		String id = eventTypeId == null ? ActivityEventType.ID_FREE_TEXT : eventTypeId;
+		List<ActivityEventType> types = data != null && data.getActivityEventTypes() != null
+				&& !data.getActivityEventTypes().isEmpty()
+				? data.getActivityEventTypes()
+				: ActivityEventType.defaultTypes();
+		for (ActivityEventType type : types) {
+			if (type.getId().equals(id)) {
+				return type.getLabel();
+			}
+		}
+		return id;
+	}
+
+	/**
+	 * Builds the details panel displaying the fields of an activity log entry.
+	 *
+	 * @param incident incident data containing configured event types
+	 * @param entry activity log entry to display
+	 * @return panel containing read-only entry details
+	 */
+	static JPanel buildDetailsPanel(AppData incident, ActivityLogEntry entry) {
+		JPanel details = UiSupport.formPanel();
+		UiSupport.addRow(details, 0, "Date/time", new JLabel(String.valueOf(entry.getTimestamp())));
+		UiSupport.addRow(details, 1, "Event type",
+				new JLabel(resolvedEventTypeLabel(incident, entry.getEventTypeId())));
+		UiSupport.addRow(details, 2, "Resource", new JLabel(entry.getResourceIdentifier()));
+		javax.swing.JTextArea text = UiSupport.textArea(6);
+		text.setText(entry.getNotableActivity());
+		text.setEditable(false);
+		UiSupport.addRow(details, 3, "Notable activity", new JScrollPane(text));
+		return details;
+	}
+
+	/**
 	 * Presents an immutable, read-only activity entry with a same-context follow-up action.
 	 *
 	 * @param owner initiating component
@@ -297,14 +338,7 @@ final class ActivityEntryDialog {
 	 */
 	static boolean showDetails(Component owner, AppController controller, Ics214Form log, ActivityLogEntry entry) {
 		AppData incident = controller.getData();
-		JPanel details = UiSupport.formPanel();
-		UiSupport.addRow(details, 0, "Date/time", new JLabel(String.valueOf(entry.getTimestamp())));
-		UiSupport.addRow(details, 1, "Event type", new JLabel(entry.getEventTypeId()));
-		UiSupport.addRow(details, 2, "Resource", new JLabel(entry.getResourceIdentifier()));
-		javax.swing.JTextArea text = UiSupport.textArea(6);
-		text.setText(entry.getNotableActivity());
-		text.setEditable(false);
-		UiSupport.addRow(details, 3, "Notable activity", new JScrollPane(text));
+		JPanel details = buildDetailsPanel(incident, entry);
 		int choice = UiSupport.showResizableOptionDialog(owner, "Activity entry details", new JScrollPane(details),
 				new Dimension(640, 340), new String[]{"Add another entry", "Close"}, "Close");
 		if (choice != 0 || controller.getData() != incident) {
