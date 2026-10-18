@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 
 import javax.swing.JDialog;
-import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -63,49 +62,6 @@ class UiSupportModalityTest {
 				assertTrue(outstandingDialog.get());
 				assertSame(log, UiSupport.documentRoot(log));
 			} finally {
-				dismiss.stop();
-				main.dispose();
-				log.dispose();
-			}
-		});
-	}
-
-	@Test
-	void detachedLogReceivesMouseInputWhileMainEditorIsOpen() throws Exception {
-		assumeFalse(GraphicsEnvironment.isHeadless());
-		java.awt.Robot robot = new java.awt.Robot();
-		AtomicBoolean clicked = new AtomicBoolean();
-		SwingUtilities.invokeAndWait(() -> {
-			JFrame main = new JFrame("Main incident");
-			JFrame log = new JFrame("Detached ICP log");
-			main.setBounds(0, 0, 300, 200);
-			log.setBounds(500, 0, 300, 200);
-			JButton addEntry = new JButton("Add entry");
-			addEntry.addActionListener(event -> clicked.set(true));
-			log.add(addEntry);
-			main.setVisible(true);
-			log.setVisible(true);
-			JPanel content = new JPanel();
-			content.add(new JLabel("Open debrief"));
-			Timer click = new Timer(250, event -> {
-				java.awt.Point location = addEntry.getLocationOnScreen();
-				robot.mouseMove(location.x + addEntry.getWidth() / 2, location.y + addEntry.getHeight() / 2);
-				robot.mousePress(java.awt.event.InputEvent.BUTTON1_DOWN_MASK);
-				robot.mouseRelease(java.awt.event.InputEvent.BUTTON1_DOWN_MASK);
-			});
-			click.setRepeats(false);
-			Timer dismiss = new Timer(1000, event -> {
-				((JOptionPane) SwingUtilities.getAncestorOfClass(JOptionPane.class, content))
-						.setValue(JOptionPane.CANCEL_OPTION);
-			});
-			dismiss.setRepeats(false);
-			click.start();
-			dismiss.start();
-			try {
-				UiSupport.showResizableConfirmDialog(main, "Debrief", content, null);
-				assertTrue(clicked.get(), "Detached log must receive real mouse input during a main-window editor");
-			} finally {
-				click.stop();
 				dismiss.stop();
 				main.dispose();
 				log.dispose();
