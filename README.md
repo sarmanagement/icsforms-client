@@ -127,6 +127,28 @@ All production source lives under `src/main/java/org/sarmanagement/icsforms/`, w
 mvn package
 ```
 
+### Desktop integration test
+
+Normal builds retain the modality and window-ownership assertions in
+`UiSupportModalityTest`, but skip the workstation-dependent native mouse-input
+check. To explicitly enable that check on an unobstructed desktop where Java
+`Robot` can inject mouse input:
+
+```sh
+mvn -Dicsforms.desktopTests=true -Djava.awt.headless=false -Dtest=UiSupportDesktopIntegrationTest test
+```
+
+On Linux, a dedicated virtual display can isolate the test from other windows
+and user input:
+
+```sh
+xvfb-run -a -s '-screen 0 1280x800x24' mvn -Dicsforms.desktopTests=true -Djava.awt.headless=false -Dtest=UiSupportDesktopIntegrationTest test
+```
+
+A headless skipped run does not validate native input. This opt-in test still
+depends on desktop input delivery; it does not resolve the unconfirmed cause of
+workstation-specific failures.
+
 ## Run
 
 ```bash
