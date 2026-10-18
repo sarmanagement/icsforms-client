@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Calculates road routes for confirmed eligible facilities without prefiltering.
+ * Calculates road routes for every directory facility without availability filtering.
  */
 public class VetRoutingService {
 	private final DrivingRouteProvider routeProvider;
@@ -29,23 +29,22 @@ public class VetRoutingService {
 	}
 
 	/**
-	 * Calculates routes for every facility eligible under the selected status policy.
+	 * Calculates or reuses road routes for every facility, regardless of availability status.
 	 *
 	 * <p>
 	 * It sends no clinical information. Existing cached road results for the current
 	 * staging generation are retained unless refresh is requested. Unresolved,
-	 * unconfirmed, unreachable, and errored facilities remain in the directory.
+	 * unreachable, and errored facilities remain in the directory.
 	 * </p>
 	 *
 	 * @param staging incident staging/base location.
 	 * @param directory incident-owned regional directory.
-	 * @param includeUnknown whether unconfirmed 24-hour status may be routed for manual review.
 	 * @param refreshCached whether to force a network refresh of existing route results.
 	 * @return route summary and per-record warnings.
 	 * @throws InterruptedException when cancelled.
 	 */
-	public CalculationReport calculate(StagingLocation staging, VetDirectory directory, boolean includeUnknown,
-			boolean refreshCached) throws InterruptedException {
+	public CalculationReport calculate(StagingLocation staging, VetDirectory directory, boolean refreshCached)
+			throws InterruptedException {
 		if (staging == null || !staging.hasValidCoordinates()) {
 			return new CalculationReport(0, 0, 0, List.of("Staging/base coordinates are unresolved."));
 		}
@@ -55,11 +54,6 @@ public class VetRoutingService {
 		int skipped = 0;
 		List<String> warnings = new ArrayList<>();
 		for (VetFacility facility : directory.getFacilities()) {
-			if (Boolean.FALSE.equals(facility.getAvailable24Hours())
-					|| facility.getAvailable24Hours() == null && !includeUnknown) {
-				skipped++;
-				continue;
-			}
 			if (!refreshCached && facility.hasCurrentDistance(staging.getGeneration())
 					&& "openrouteservice/driving-car".equals(facility.getDistanceMethod())) {
 				cached++;
@@ -98,6 +92,21 @@ public class VetRoutingService {
 			}
 		}
 		return new CalculationReport(calculated, cached, skipped, warnings);
+	}
+
+	/**
+	 * Retains the earlier availability-policy signature while routing every record.
+	 *
+	 * @param staging incident staging/base location.
+	 * @param directory incident-owned regional directory.
+	 * @param includeUnknown ignored; all availability states are routed.
+	 * @param refreshCached whether to force a network refresh of existing route results.
+	 * @return route summary and per-record warnings.
+	 * @throws InterruptedException when cancelled.
+	 */
+	public CalculationReport calculate(StagingLocation staging, VetDirectory directory, boolean includeUnknown,
+			boolean refreshCached) throws InterruptedException {
+		return calculate(staging, directory, refreshCached);
 	}
 
 	/**

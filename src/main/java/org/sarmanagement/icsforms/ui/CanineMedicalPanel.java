@@ -68,7 +68,6 @@ public class CanineMedicalPanel extends JPanel {
 	private final JTextField stagingLatitude = new JTextField();
 	private final JTextField stagingLongitude = new JTextField();
 	private final JTextField shortlistLimit = new JTextField("8", 4);
-	private final JCheckBox includeUnknown = new JCheckBox("Also route unknown 24-hour status (not confirmed)");
 	private final DefaultTableModel directoryModel = new DefaultTableModel(new String[] {
 			"ID", "Name", "Town", "Address", "Contacts (; separated)", "24 Hours", "Availability notes",
 			"Capabilities", "Verified at", "Latitude", "Longitude", "Source", "Record"
@@ -93,7 +92,6 @@ public class CanineMedicalPanel extends JPanel {
 	private final JTextArea aidStations = new JTextArea(2, 40);
 	private final JTextArea transportServices = new JTextArea(2, 40);
 	private final JTextField onsiteVet = new JTextField();
-	private final JTextField onsiteDvm = new JTextField();
 	private final JTextArea capabilityNotes = new JTextArea(3, 50);
 	private final JTextArea procedures = new JTextArea(4, 50);
 	private final JCheckBox aviationUsed = new JCheckBox("Aviation assets are used; coordinate with Air Operations");
@@ -194,13 +192,12 @@ public class CanineMedicalPanel extends JPanel {
 			transportServices.setText(plan.getTransportServices());
 			poisonContact.setText(plan.getPoisonControlContact());
 			onsiteVet.setText(plan.getOnsiteVeterinarian());
-			onsiteDvm.setText(plan.getVeterinarianDvm());
 			capabilityNotes.setText(plan.getVeterinaryCapabilityNotes());
 			procedures.setText(plan.getEmergencyProcedures());
 			aviationUsed.setSelected(plan.isAviationAssetsUsed());
-			preparedBy.setText(plan.getPreparedByMedicalUnitLeader());
+			preparedBy.setText(MedicalRoleSupport.medicalUnitLeaderName(data));
 			preparedAt.setText(plan.getPreparedAt() == null ? "" : plan.getPreparedAt().toString());
-			safetyOfficer.setText(plan.getReviewedBySafetyOfficer());
+			safetyOfficer.setText(MedicalRoleSupport.safetyOfficerName(data));
 			reviewStatus.setSelectedItem(plan.getReviewStatus());
 			loadDirectory(data.getVetDirectory());
 			loadSelection(plan.getSelectedFacilities());
@@ -239,13 +236,12 @@ public class CanineMedicalPanel extends JPanel {
 			data.getCanineMedicalPlan().setTransportServices(transportServices.getText());
 			data.getCanineMedicalPlan().setPoisonControlContact(poisonContact.getText());
 			data.getCanineMedicalPlan().setOnsiteVeterinarian(onsiteVet.getText());
-			data.getCanineMedicalPlan().setVeterinarianDvm(onsiteDvm.getText());
 			data.getCanineMedicalPlan().setVeterinaryCapabilityNotes(capabilityNotes.getText());
 			data.getCanineMedicalPlan().setEmergencyProcedures(procedures.getText());
 			data.getCanineMedicalPlan().setAviationAssetsUsed(aviationUsed.isSelected());
-			data.getCanineMedicalPlan().setPreparedByMedicalUnitLeader(preparedBy.getText());
+			MedicalRoleSupport.setMedicalUnitLeaderName(data, preparedBy.getText());
 			setPreparedAt(data.getCanineMedicalPlan());
-			data.getCanineMedicalPlan().setReviewedBySafetyOfficer(safetyOfficer.getText());
+			MedicalRoleSupport.setSafetyOfficerName(data, safetyOfficer.getText());
 			data.getCanineMedicalPlan().setReviewStatus(String.valueOf(reviewStatus.getSelectedItem()));
 			saveDirectory(data.getVetDirectory());
 			saveSelection(data.getCanineMedicalPlan());
@@ -299,7 +295,7 @@ public class CanineMedicalPanel extends JPanel {
 		base.add(stagingLongitude);
 		base.add(new JLabel("Closest N"));
 		base.add(shortlistLimit);
-		JButton calculate = new JButton("Calculate all eligible driving routes");
+		JButton calculate = new JButton("Calculate routes for all listed facilities");
 		calculate.addActionListener(event -> calculateRoutes());
 		base.add(calculate);
 		JButton propose = new JButton("Preview closest 24-hour vets…");
@@ -310,8 +306,7 @@ public class CanineMedicalPanel extends JPanel {
 		JPanel root = new JPanel(new BorderLayout(4, 4));
 		root.add(base, BorderLayout.CENTER);
 		JPanel note = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-		note.add(includeUnknown);
-		note.add(new JLabel("Only confirmed Yes is selected by default. Routing never verifies availability."));
+		note.add(new JLabel("Availability is shown separately and does not limit route calculations."));
 		root.add(note, BorderLayout.SOUTH);
 		return root;
 	}
@@ -389,8 +384,6 @@ public class CanineMedicalPanel extends JPanel {
 		clinical.add(poisonContact);
 		clinical.add(new JLabel("Onsite veterinarian"));
 		clinical.add(onsiteVet);
-		clinical.add(new JLabel("DVM"));
-		clinical.add(onsiteDvm);
 		clinical.add(new JLabel("Veterinary capability notes / preamble"));
 		clinical.add(new JScrollPane(capabilityNotes));
 		clinical.add(new JLabel("Special emergency procedures"));
@@ -442,9 +435,13 @@ public class CanineMedicalPanel extends JPanel {
 		aviationUsed.addActionListener(event -> inputChanged(false));
 		reviewStatus.addActionListener(event -> inputChanged(false));
 		for (JTextField field : List.of(stagingLabel, stagingAddress, stagingLatitude, stagingLongitude,
-				shortlistLimit, poisonContact, onsiteVet, onsiteDvm, preparedBy, preparedAt, safetyOfficer)) {
+				shortlistLimit, poisonContact, onsiteVet, preparedBy, preparedAt, safetyOfficer)) {
 			watch(field, field == stagingAddress || field == stagingLatitude || field == stagingLongitude);
 		}
+		UiSupport.installNameAutocomplete(preparedBy, controller::getPersonnelNames,
+				name -> MedicalRoleSupport.setMedicalUnitLeaderName(controller.getData(), name));
+		UiSupport.installNameAutocomplete(safetyOfficer, controller::getPersonnelNames,
+				name -> MedicalRoleSupport.setSafetyOfficerName(controller.getData(), name));
 		watch(capabilityNotes, false);
 		watch(procedures, false);
 		watch(aidStations, false);
@@ -961,13 +958,12 @@ public class CanineMedicalPanel extends JPanel {
 		StagingLocation base = copyStaging(incident.getStagingLocation());
 		long baseGeneration = base.getGeneration();
 		VetDirectory snapshot = copyDirectory(incident.getVetDirectory());
-		boolean routeUnknown = includeUnknown.isSelected();
 		int limit = integer(shortlistLimit.getText(), VetShortlistSelector.DEFAULT_LIMIT);
 		startWorker(new SwingWorker<RouteWorkResult, Void>() {
 			@Override
 			protected RouteWorkResult doInBackground() throws Exception {
 				VetRoutingService routing = new VetRoutingService(routeProvider);
-				VetRoutingService.CalculationReport report = routing.calculate(base, snapshot, routeUnknown, false);
+				VetRoutingService.CalculationReport report = routing.calculate(base, snapshot, false);
 				return new RouteWorkResult(snapshot, report, limit);
 			}
 
@@ -983,7 +979,7 @@ public class CanineMedicalPanel extends JPanel {
 					refreshFromModel();
 					controller.markDirty();
 					status.setText("Road routes calculated: " + result.report().calculated() + "; cached: "
-							+ result.report().cached() + "; skipped by availability policy: "
+							+ result.report().cached() + "; skipped: "
 							+ result.report().skipped() + ". " + String.join(" ", result.report().warnings()));
 				} catch (CancellationException exception) {
 					status.setText("Route calculation cancelled.");

@@ -157,8 +157,7 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 		}
 		List<String> procedures = new ArrayList<>();
 		procedures.add("Poison control: " + text(plan.getPoisonControlContact()));
-		procedures.add("Onsite veterinarian: " + text(plan.getOnsiteVeterinarian()) + " | DVM: "
-				+ text(plan.getVeterinarianDvm()));
+		procedures.add("Onsite veterinarian: " + text(plan.getOnsiteVeterinarian()));
 		procedures.add("Veterinary capabilities/preamble: " + text(plan.getVeterinaryCapabilityNotes()));
 		procedures.addAll(paragraphs(plan.getEmergencyProcedures()));
 		procedures.add(plan.isAviationAssetsUsed()

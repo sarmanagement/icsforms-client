@@ -132,6 +132,7 @@ class UiSupportTest {
 		assertEquals("ICS 201 – Incident Briefing", MainFrame.exportFormDisplayLabel("ICS 201"));
 		assertEquals("ICS 205A Communications List", MainFrame.exportFormDisplayLabel("ICS 205A"));
 		assertEquals("ICS 214 – Activity Log", MainFrame.exportFormDisplayLabel("ICS 214"));
+		assertEquals("ICS 206Canine - Canine Medical Plan", MainFrame.exportFormDisplayLabel("ICS 206CANINE"));
 		assertEquals("SAR Task Assignment Forms", MainFrame.exportFormDisplayLabel("SAR Task Assignment"));
 	}
 

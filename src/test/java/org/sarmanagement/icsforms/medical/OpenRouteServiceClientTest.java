@@ -149,7 +149,7 @@ class OpenRouteServiceClientTest {
 	}
 
 	@Test
-	void routingProcessesAllConfirmedFacilitiesAndLeavesUnknownOutByDefault() throws Exception {
+	void routingProcessesFacilitiesRegardlessOfAvailabilityStatus() throws Exception {
 		StagingLocation staging = new StagingLocation();
 		staging.setAddress("Base");
 		staging.setResolution("Confirmed base", 42, -71, "manual", "", null);
@@ -157,6 +157,7 @@ class OpenRouteServiceClientTest {
 		directory.getFacilities().add(coordinateFacility("Confirmed A", true, -72));
 		directory.getFacilities().add(coordinateFacility("Confirmed B", true, -73));
 		directory.getFacilities().add(coordinateFacility("Unknown", null, -74));
+		directory.getFacilities().add(coordinateFacility("Not 24 Hours", false, -75));
 		AtomicInteger routed = new AtomicInteger();
 		VetRoutingService routing = new VetRoutingService((source, destinations) -> {
 			routed.incrementAndGet();
@@ -164,13 +165,14 @@ class OpenRouteServiceClientTest {
 					DrivingRouteProvider.Status.AVAILABLE, ""));
 		});
 
-		VetRoutingService.CalculationReport report = routing.calculate(staging, directory, false, true);
+		VetRoutingService.CalculationReport report = routing.calculate(staging, directory, true);
 
-		assertEquals(2, routed.get());
-		assertEquals(2, report.calculated());
-		assertEquals(1, report.skipped());
-		assertEquals(3, directory.getFacilities().size());
-		assertFalse(directory.getFacilities().get(2).hasCurrentDistance(staging.getGeneration()));
+		assertEquals(4, routed.get());
+		assertEquals(4, report.calculated());
+		assertEquals(0, report.skipped());
+		assertEquals(4, directory.getFacilities().size());
+		assertTrue(directory.getFacilities().get(2).hasCurrentDistance(staging.getGeneration()));
+		assertTrue(directory.getFacilities().get(3).hasCurrentDistance(staging.getGeneration()));
 	}
 
 	@Test

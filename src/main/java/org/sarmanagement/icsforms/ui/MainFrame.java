@@ -672,6 +672,7 @@ public class MainFrame extends JFrame {
 		java.util.LinkedHashMap<String, javax.swing.JCheckBox> selectors = new java.util.LinkedHashMap<>();
 		JPanel checksPanel = new JPanel();
 		checksPanel.setLayout(new javax.swing.BoxLayout(checksPanel, javax.swing.BoxLayout.Y_AXIS));
+		int visibleFormCount = 0;
 		for (String key : formKeys) {
 			if (!isExportFormVisible(key, controller.getData())) {
 				continue;
@@ -685,7 +686,11 @@ public class MainFrame extends JFrame {
 			check.setOpaque(false);
 			selectors.put(key, check);
 			checksPanel.add(check);
+			visibleFormCount++;
 		}
+		checksPanel.setPreferredSize(new Dimension(500, Math.max(28, visibleFormCount * 25)));
+		JScrollPane formList = new JScrollPane(checksPanel);
+		formList.setPreferredSize(new Dimension(520, Math.max(36, visibleFormCount * 25 + 8)));
 		JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 		JButton selectAll = new JButton("Select All");
 		JButton selectNone = new JButton("Select None");
@@ -695,13 +700,12 @@ public class MainFrame extends JFrame {
 		controls.add(selectNone);
 		ExportModeControls exportModeControls = createExportModeControls();
 		PdfPrintOptionsPanel printOptions = new PdfPrintOptionsPanel(formKeys);
-		UiSupport.addRow(form, 0, "Forms", new JScrollPane(checksPanel));
+		UiSupport.addRow(form, 0, "Forms", formList);
 		UiSupport.addRow(form, 1, "", controls);
 		UiSupport.addRow(form, 2, "Output", exportModeControls.panel());
 		UiSupport.addRow(form, 3, "Print options", printOptions);
-		JScrollPane pane = new JScrollPane(form);
-		pane.setBorder(BorderFactory.createEmptyBorder());
-		if (!UiSupport.showResizableConfirmDialog(this, "Export forms as PDF", pane, new Dimension(560, 440))) {
+		if (!UiSupport.showResizableConfirmDialog(this, "Export forms as PDF", form,
+				new Dimension(560, Math.max(440, 340 + visibleFormCount * 25)))) {
 			return;
 		}
 
@@ -916,6 +920,7 @@ public class MainFrame extends JFrame {
 			case "ICS 203" -> "ICS 203 – Organization Assignment List";
 			case "ICS 205A" -> "ICS 205A Communications List";
 			case "ICS 206" -> "ICS 206 – Medical Plan";
+			case "ICS 206CANINE" -> "ICS 206Canine - Canine Medical Plan";
 			case "ICS 204" -> "ICS 204 – Assignment List";
 			case "ICS 207" -> "ICS 207 – Incident Organization Chart";
 			case "ICS 208" -> "ICS 208 – Safety Message / Plan";

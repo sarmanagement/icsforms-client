@@ -365,6 +365,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		addIfNamed(list, "Facilities Unit Ldr", chart.getFacilitiesUnitLeaderName());
 		addIfNamed(list, "Gnd Support Unit Ldr", chart.getGroundSupportUnitLeaderName());
 		addIfNamed(list, "Food Unit Ldr", chart.getFoodUnitLeaderName());
+		addIfNamed(list, "Medical Unit Ldr", chart.getMedicalUnitLeaderName());
 		for (OrgChartEntry e : chart.getAdditionalPositions()) {
 			if (e.getSection() == OrgChartEntry.Section.LOGISTICS) {
 				list.add(new String[]{safe(e.getTitle()), safe(e.getName())});

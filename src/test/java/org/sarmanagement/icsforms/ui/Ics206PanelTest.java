@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.MedicalPlan;
-import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics206PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
@@ -76,21 +75,30 @@ class Ics206PanelTest {
 	}
 
 	@Test
-	void roleSuggestionsReadOrgChartWithoutApplyingNamesOrApproval() {
+	void medicalRolePickerFieldsShareTheOrgChartAssignments() throws Exception {
 		AppData data = new AppData();
+		data.getOrganizationalChart().setMedicalUnitLeaderName("Fictional Medical Leader");
 		data.getOrganizationalChart().setSafetyOfficerName("Fictional Safety Officer");
-		OrgChartEntry medicalLeader = new OrgChartEntry();
-		medicalLeader.setTitle("Medical Unit Leader");
-		medicalLeader.setName("Fictional Medical Leader");
-		data.getOrganizationalChart().getAdditionalPositions().add(medicalLeader);
-		data.getMedicalPlan().setSafetyOfficerSignature("Manual signature");
+		Ics206Panel panel = new Ics206Panel(controller(data));
 
-		assertEquals(java.util.List.of("Fictional Medical Leader"), Ics206Panel.roleCandidates(data, true));
-		assertEquals(java.util.List.of("Fictional Safety Officer"),
-				Ics206Panel.roleCandidates(data, false));
-		assertEquals("", data.getMedicalPlan().getReviewedBySafetyOfficer());
-		assertEquals("Manual signature", data.getMedicalPlan().getSafetyOfficerSignature());
-		assertEquals("Not reviewed", data.getMedicalPlan().getReviewStatus());
+		SwingUtilities.invokeAndWait(() -> {
+			assertEquals("Fictional Medical Leader", ((JTextField) fieldValue(panel, "medicalName")).getText());
+			assertEquals("Fictional Medical Leader", ((JTextField) fieldValue(panel, "preparedBy")).getText());
+			assertEquals("Fictional Safety Officer", ((JTextField) fieldValue(panel, "reviewedBy")).getText());
+			((JTextField) fieldValue(panel, "medicalName")).setText("Selected Medical Leader");
+			((JTextField) fieldValue(panel, "preparedBy")).setText("Selected Medical Leader");
+			((JTextField) fieldValue(panel, "reviewedBy")).setText("Selected Safety Officer");
+			panel.pushToModel();
+		});
+
+		assertEquals("Selected Medical Leader", data.getOrganizationalChart().getMedicalUnitLeaderName());
+		assertEquals("Selected Medical Leader",
+				data.getOrganizationalChart().getAssignmentList().getPosition(
+						org.sarmanagement.icsforms.model.Ics203Form.Position.MEDICAL_UNIT_LEADER));
+		assertEquals("Selected Medical Leader", data.getMedicalPlan().getPreparedByMedicalUnitLeader());
+		assertEquals("Selected Medical Leader", data.getCanineMedicalPlan().getPreparedByMedicalUnitLeader());
+		assertEquals("Selected Safety Officer", data.getOrganizationalChart().getSafetyOfficerName());
+		assertEquals("Selected Safety Officer", data.getCanineMedicalPlan().getReviewedBySafetyOfficer());
 	}
 
 	@Test

@@ -4,17 +4,12 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.MedicalPlan;
-import org.sarmanagement.icsforms.model.AppData;
-import org.sarmanagement.icsforms.model.OrgChartEntry;
-import org.sarmanagement.icsforms.model.OrganizationalChart;
 
 import javax.swing.BorderFactory;
-import javax.swing.JButton;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
@@ -72,6 +67,7 @@ public class Ics206Panel extends JPanel {
 	private Consumer<String> exportRequest = ignored -> { };
 	private boolean loading;
 	private boolean flushing;
+	private JTextField lastEditedMedicalRoleField;
 
 	/**
 	 * Creates the editor and binds it to the active incident's human plan.
@@ -115,15 +111,15 @@ public class Ics206Panel extends JPanel {
 			MedicalPlan plan = controller.getData().getMedicalPlan();
 			mode.setSelectedItem(plan.isSimpleMode() ? "Simple" : "Detailed");
 			medicalRole.setText(plan.getDesignatedMedicalUnitRole());
-			medicalName.setText(plan.getDesignatedMedicalUnitName());
+			medicalName.setText(MedicalRoleSupport.medicalUnitLeaderName(controller.getData()));
 			medicalContact.setText(plan.getDesignatedMedicalUnitContact());
 			call911.setText(plan.getCall911Procedure());
 			procedures.setText(plan.getEmergencyProcedures());
 			aviationUsed.setSelected(plan.isAviationAssetsUsed());
 			airOperations.setText(plan.getAirOperationsReminder());
-			preparedBy.setText(plan.getPreparedByMedicalUnitLeader());
+			preparedBy.setText(MedicalRoleSupport.medicalUnitLeaderName(controller.getData()));
 			preparedAt.setText(plan.getPreparedAt() == null ? "" : plan.getPreparedAt().toString());
-			reviewedBy.setText(plan.getReviewedBySafetyOfficer());
+			reviewedBy.setText(MedicalRoleSupport.safetyOfficerName(controller.getData()));
 			reviewStatus.setSelectedItem(plan.getReviewStatus());
 			loadAidStations(plan);
 			loadTransport(plan);
@@ -156,14 +152,16 @@ public class Ics206Panel extends JPanel {
 			MedicalPlan plan = controller.getData().getMedicalPlan();
 			plan.setSimpleMode("Simple".equals(mode.getSelectedItem()));
 			plan.setDesignatedMedicalUnitRole(medicalRole.getText());
-			plan.setDesignatedMedicalUnitName(medicalName.getText());
 			plan.setDesignatedMedicalUnitContact(medicalContact.getText());
 			plan.setCall911Procedure(call911.getText());
 			plan.setEmergencyProcedures(procedures.getText());
 			plan.setAviationAssetsUsed(aviationUsed.isSelected());
 			plan.setAirOperationsReminder(airOperations.getText());
-			plan.setPreparedByMedicalUnitLeader(preparedBy.getText());
-			plan.setReviewedBySafetyOfficer(reviewedBy.getText());
+			String medicalLeader = lastEditedMedicalRoleField == preparedBy ? preparedBy.getText()
+					: firstNonBlank(medicalName.getText(), preparedBy.getText());
+			MedicalRoleSupport.setMedicalUnitLeaderName(controller.getData(), medicalLeader);
+			lastEditedMedicalRoleField = null;
+			MedicalRoleSupport.setSafetyOfficerName(controller.getData(), reviewedBy.getText());
 			plan.setReviewStatus(String.valueOf(reviewStatus.getSelectedItem()));
 			setPreparedAt(plan);
 			saveAidStations(plan);
@@ -185,7 +183,7 @@ public class Ics206Panel extends JPanel {
 		roleFields.add(new JLabel("Medical unit role"));
 		roleFields.add(medicalRole);
 		roleFields.add(new JLabel("Assigned person (optional)"));
-		roleFields.add(suggestibleField(medicalName, "Medical Unit Leader", true));
+		roleFields.add(medicalName);
 		roleFields.add(new JLabel("Contact"));
 		roleFields.add(medicalContact);
 		editor.add(roleFields, BorderLayout.NORTH);
@@ -222,83 +220,14 @@ public class Ics206Panel extends JPanel {
 		JPanel panel = new JPanel(new GridLayout(2, 4, 4, 2));
 		panel.setBorder(BorderFactory.createTitledBorder("7. Prepared by / 8. Reviewed by"));
 		panel.add(new JLabel("Medical Unit Leader"));
-		panel.add(suggestibleField(preparedBy, "Medical Unit Leader", true));
+		panel.add(preparedBy);
 		panel.add(new JLabel("Prepared at (yyyy-MM-ddTHH:mm)"));
 		panel.add(preparedAt);
 		panel.add(new JLabel("Safety Officer"));
-		panel.add(suggestibleField(reviewedBy, "Safety Officer", false));
+		panel.add(reviewedBy);
 		panel.add(new JLabel("Review status"));
 		panel.add(reviewStatus);
 		return panel;
-	}
-
-	/**
-	 * Creates a field with an optional suggestion action from the shared Org Chart.
-	 *
-	 * @param field target field.
-	 * @param role organizational role name.
-	 * @param medicalUnitLeader true to use custom-position candidates.
-	 * @return field and suggestion button.
-	 */
-	private JPanel suggestibleField(JTextField field, String role, boolean medicalUnitLeader) {
-		JPanel panel = new JPanel(new BorderLayout(4, 0));
-		panel.add(field, BorderLayout.CENTER);
-		JButton suggest = new JButton("Suggest…");
-		suggest.addActionListener(event -> suggestRole(field, role, medicalUnitLeader));
-		panel.add(suggest, BorderLayout.EAST);
-		return panel;
-	}
-
-	/**
-	 * Suggests a role holder without replacing manually entered names or signatures.
-	 *
-	 * @param field name field.
-	 * @param role role title.
-	 * @param medicalUnitLeader true to find matching custom Org Chart roles.
-	 */
-	private void suggestRole(JTextField field, String role, boolean medicalUnitLeader) {
-		if (!field.getText().isBlank()) {
-			validation.setText("Existing " + role + " entry retained; clear it before selecting a suggestion.");
-			return;
-		}
-		List<String> candidates = roleCandidates(controller.getData(), medicalUnitLeader);
-		if (candidates.isEmpty()) {
-			validation.setText("No matching " + role + " is listed in the Org Chart; enter the name manually.");
-			return;
-		}
-		Object selected = JOptionPane.showInputDialog(this, "Select a suggested Org Chart name:",
-				role + " suggestion", JOptionPane.QUESTION_MESSAGE, null, candidates.toArray(), candidates.get(0));
-		if (selected instanceof String name) {
-			field.setText(name);
-		}
-	}
-
-	/**
-	 * Finds candidate role holders in existing Org Chart data without changing it.
-	 *
-	 * @param data incident data.
-	 * @param medicalUnitLeader true to select medical unit positions.
-	 * @return distinct nonblank role-holder names.
-	 */
-	static List<String> roleCandidates(AppData data, boolean medicalUnitLeader) {
-		OrganizationalChart chart = data.getOrganizationalChart();
-		List<String> candidates = new ArrayList<>();
-		if (!medicalUnitLeader && !chart.getSafetyOfficerName().isBlank()) {
-			candidates.add(chart.getSafetyOfficerName().trim());
-		}
-		for (OrgChartEntry entry : chart.getAdditionalPositions()) {
-			if (entry == null || entry.getName().isBlank()) {
-				continue;
-			}
-			String title = entry.getTitle().toLowerCase(java.util.Locale.ROOT);
-			boolean matches = medicalUnitLeader
-					? title.contains("medical unit leader") || title.contains("medical unit")
-					: title.contains("safety officer");
-			if (matches) {
-				candidates.add(entry.getName().trim());
-			}
-		}
-		return candidates.stream().distinct().toList();
 	}
 
 	/**
@@ -340,17 +269,131 @@ public class Ics206Panel extends JPanel {
 		aviationUsed.addActionListener(event -> inputChanged());
 		reviewStatus.addActionListener(event -> inputChanged());
 		watch(medicalRole);
-		watch(medicalName);
+		watchMedicalRole(medicalName, preparedBy, true);
 		watch(medicalContact);
 		watch(call911);
 		watch(procedures);
 		watch(airOperations);
-		watch(preparedBy);
+		watchMedicalRole(preparedBy, medicalName, true);
 		watch(preparedAt);
-		watch(reviewedBy);
+		watchMedicalRole(reviewedBy, null, false);
+		UiSupport.installNameAutocomplete(medicalName, controller::getPersonnelNames,
+				name -> synchronizeMedicalRole(medicalName, preparedBy, name, true));
+		UiSupport.installNameAutocomplete(preparedBy, controller::getPersonnelNames,
+				name -> synchronizeMedicalRole(preparedBy, medicalName, name, true));
+		UiSupport.installNameAutocomplete(reviewedBy, controller::getPersonnelNames,
+				name -> synchronizeMedicalRole(reviewedBy, null, name, false));
 		aidModel.addTableModelListener(event -> inputChanged());
 		transportModel.addTableModelListener(event -> inputChanged());
 		hospitalModel.addTableModelListener(event -> inputChanged());
+	}
+
+	/**
+	 * Watches a role field and keeps its shared medical-plan assignment current.
+	 *
+	 * @param field source role field.
+	 * @param otherField corresponding display field, if any.
+	 * @param medicalLeader true for Medical Unit Leader, false for Safety Officer.
+	 */
+	private void watchMedicalRole(JTextField field, JTextField otherField, boolean medicalLeader) {
+		field.getDocument().addDocumentListener(new DocumentListener() {
+			@Override
+			public void insertUpdate(DocumentEvent event) {
+				roleFieldChanged(field, otherField, medicalLeader);
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent event) {
+				roleFieldChanged(field, otherField, medicalLeader);
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent event) {
+				roleFieldChanged(field, otherField, medicalLeader);
+			}
+		});
+	}
+
+	/**
+	 * Synchronizes a nonblank selected role name across shared form fields and models.
+	 *
+	 * @param source edited role field.
+	 * @param otherField corresponding display field, if any.
+	 * @param medicalLeader true for Medical Unit Leader, false for Safety Officer.
+	 */
+	private void roleFieldChanged(JTextField source, JTextField otherField, boolean medicalLeader) {
+		if (loading || flushing) {
+			return;
+		}
+		String name = source.getText().trim();
+		if (source == medicalName || source == preparedBy) {
+			lastEditedMedicalRoleField = source;
+		}
+		if (!name.isBlank()) {
+			setSharedRole(name, medicalLeader);
+			if (otherField != null) {
+				javax.swing.SwingUtilities.invokeLater(() -> {
+					if (!loading && name.equals(source.getText().trim())) {
+						synchronizeMedicalRole(source, otherField, name, medicalLeader);
+					}
+				});
+			}
+		} else if (medicalLeader) {
+			MedicalRoleSupport.setMedicalUnitLeaderName(controller.getData(), "");
+		}
+		inputChanged();
+	}
+
+	/**
+	 * Applies the selected role name and updates the paired display field.
+	 *
+	 * @param source selected field.
+	 * @param otherField paired display field, if any.
+	 * @param name selected person.
+	 * @param medicalLeader true for Medical Unit Leader, false for Safety Officer.
+	 */
+	private void synchronizeMedicalRole(JTextField source, JTextField otherField, String name,
+			boolean medicalLeader) {
+		loading = true;
+		try {
+			source.setText(name);
+			if (otherField != null) {
+				otherField.setText(name);
+			}
+		} finally {
+			loading = false;
+		}
+		setSharedRole(name, medicalLeader);
+		controller.markDirty();
+	}
+
+	/**
+	 * Writes a selected name to its shared incident role.
+	 *
+	 * @param name selected person.
+	 * @param medicalLeader true for Medical Unit Leader, false for Safety Officer.
+	 */
+	private void setSharedRole(String name, boolean medicalLeader) {
+		if (medicalLeader) {
+			MedicalRoleSupport.setMedicalUnitLeaderName(controller.getData(), name);
+		} else {
+			MedicalRoleSupport.setSafetyOfficerName(controller.getData(), name);
+		}
+	}
+
+	/**
+	 * Returns the first nonblank candidate in display-preference order.
+	 *
+	 * @param values candidate names.
+	 * @return the first nonblank trimmed name, or an empty string.
+	 */
+	private static String firstNonBlank(String... values) {
+		for (String value : values) {
+			if (value != null && !value.isBlank()) {
+				return value.trim();
+			}
+		}
+		return "";
 	}
 
 	/**

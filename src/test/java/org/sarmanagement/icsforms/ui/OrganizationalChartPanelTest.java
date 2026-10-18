@@ -48,6 +48,30 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 /** Workflow coverage for main-tab representatives and supplemental organization assignments. */
 class OrganizationalChartPanelTest {
 	@Test
+	void medicalUnitLeaderIsAvailableBesideFoodAndSynchronizesMedicalPlans() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			try {
+				AppController controller = sampleController();
+				OrganizationalChartPanel panel = new OrganizationalChartPanel(controller);
+				JTextField medicalLeader = (JTextField) field(panel, "medicalUnitLeaderNameField");
+				medicalLeader.setText("Fictional Medical Unit Leader");
+				panel.pushToModel();
+
+				assertTrue(medicalLeader.getClientProperty("uiSupport.namePicker.open")
+						instanceof java.util.function.Consumer<?>);
+				assertEquals("Fictional Medical Unit Leader",
+						controller.getData().getOrganizationalChart().getMedicalUnitLeaderName());
+				assertEquals("Fictional Medical Unit Leader",
+						controller.getData().getMedicalPlan().getDesignatedMedicalUnitName());
+				assertEquals("Fictional Medical Unit Leader",
+						controller.getData().getCanineMedicalPlan().getPreparedByMedicalUnitLeader());
+			} catch (Exception exception) {
+				throw new AssertionError(exception);
+			}
+		});
+	}
+
+	@Test
 	void mainPanelRepresentativesAndContactsSurviveFileStoreSaveAndReload() throws Exception {
 		Path directory = Files.createDirectories(Path.of("target"));
 		Path workspace = Files.createTempDirectory(directory, "org-chart-store-");
