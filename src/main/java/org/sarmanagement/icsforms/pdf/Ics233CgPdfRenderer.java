@@ -25,6 +25,7 @@ public final class Ics233CgPdfRenderer extends AbstractPdfRenderer implements Pd
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, getFormKey());
 		AppData source = data == null ? new AppData() : data;
 		List<List<String>> rows = new ArrayList<>();
 		if (source.getOpenActionItems() != null) {

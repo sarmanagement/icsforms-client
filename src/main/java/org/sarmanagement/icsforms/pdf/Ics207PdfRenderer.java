@@ -55,6 +55,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, getFormKey());
 		Files.createDirectories(outputFile.getParent());
 		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
@@ -416,10 +417,11 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			String title, String name, float x, float y, float width) throws IOException {
 		String label = safe(title);
 		String value = safe(name);
-		float naturalWidth = (bold.getStringWidth(label) + regular.getStringWidth(value)) / 1000f * 7f + 6f;
+		float naturalWidth = (bold.getStringWidth(PdfText.singleLine(label))
+				+ regular.getStringWidth(PdfText.singleLine(value))) / 1000f * 7f + 6f;
 		float size = Math.min(7f, 7f * width / naturalWidth);
 		drawOrgText(stream, bold, size, label, x, y);
-		float nameX = x + bold.getStringWidth(label) / 1000f * size + 6f * size / 7f;
+		float nameX = x + bold.getStringWidth(PdfText.singleLine(label)) / 1000f * size + 6f * size / 7f;
 		drawOrgText(stream, regular, size, value, nameX, y);
 	}
 
@@ -428,78 +430,128 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		stream.stroke();
 	}
 
+	/**
+	 * Draws a section heading in a balanced text block.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param x left edge.
+	 * @param topY top edge.
+	 * @param heading section heading.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawHeading(PDPageContentStream stream, PDType1Font bold, float x, float topY, String heading)
 			throws IOException {
-		stream.beginText();
-		stream.setFont(bold, HEADING_FONT_SIZE);
-		stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
-		stream.showText(heading);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, HEADING_FONT_SIZE);
+			stream.newLineAtOffset(x + CELL_PADDING, topY - CELL_PADDING - HEADING_FONT_SIZE);
+			stream.showText(PdfText.singleLine(heading));
+		}
 	}
 
+	/**
+	 * Writes normalized inline cell text.
+	 * @param stream page stream.
+	 * @param font body font.
+	 * @param x left edge.
+	 * @param y baseline.
+	 * @param value source value.
+	 * @throws IOException when drawing fails.
+	 */
 	private void writeCellText(PDPageContentStream stream, PDType1Font font, float x, float y, String value)
 			throws IOException {
 		String s = safe(value);
 		if (s.isBlank())
 			return;
-		stream.beginText();
-		stream.setFont(font, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(s);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(s));
+		}
 	}
 
+	/**
+	 * Draws an inline label and normalized value.
+	 * @param stream page stream.
+	 * @param bold label font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y baseline.
+	 * @param label field label.
+	 * @param value source value.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawInlinePair(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
 			String label, String value) throws IOException {
-		stream.beginText();
-		stream.setFont(bold, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(label + ": ");
-		stream.endText();
-		stream.beginText();
-		stream.setFont(regular, BODY_FONT_SIZE);
-		stream.newLineAtOffset(x + bold.getStringWidth(label + ": ") / 1000f * BODY_FONT_SIZE, y);
-		stream.showText(safe(value));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(bold, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(label + ": "));
+		}
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(regular, BODY_FONT_SIZE);
+			stream.newLineAtOffset(x + bold.getStringWidth(PdfText.singleLine(label + ": ")) / 1000f * BODY_FONT_SIZE, y);
+			stream.showText(PdfText.singleLine(safe(value)));
+		}
 	}
 
+	/**
+	 * Measures and draws normalized text centered in a chart box.
+	 * @param stream page stream.
+	 * @param font text font.
+	 * @param size font size.
+	 * @param text source text.
+	 * @param boxLeft box left edge.
+	 * @param baselineY baseline.
+	 * @param boxWidth box width.
+	 * @throws IOException when measurement or drawing fails.
+	 */
 	private void drawCentered(PDPageContentStream stream, PDType1Font font, float size, String text, float boxLeft,
 			float baselineY, float boxWidth) throws IOException {
 		String s = safe(text);
 		if (s.isBlank())
 			return;
-		float tw = font.getStringWidth(s) / 1000f * size;
+		float tw = font.getStringWidth(PdfText.singleLine(s)) / 1000f * size;
 		float off = Math.max(0f, (boxWidth - tw) / 2f);
-		stream.beginText();
-		stream.setFont(font, size);
-		stream.newLineAtOffset(boxLeft + off, baselineY);
-		stream.showText(s);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, size);
+			stream.newLineAtOffset(boxLeft + off, baselineY);
+			stream.showText(PdfText.singleLine(s));
+		}
 	}
 
+	/**
+	 * Draws normalized chart text at its calculated position.
+	 * @param stream page stream.
+	 * @param font text font.
+	 * @param size font size.
+	 * @param text source text.
+	 * @param x left edge.
+	 * @param y baseline.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawOrgText(PDPageContentStream stream, PDType1Font font, float size, String text, float x, float y)
 			throws IOException {
 		String s = safe(text);
 		if (s.isBlank())
 			return;
-		stream.beginText();
-		stream.setFont(font, size);
-		stream.newLineAtOffset(x, y);
-		stream.showText(s);
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, size);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(s));
+		}
 	}
 
 	// -----------------------------------------------------------------------
 	// Utility
 	// -----------------------------------------------------------------------
 
+	/**
+	 * Normalizes whitespace without stripping unwanted controls.
+	 * @param v optional text.
+	 * @return normalized text for validation and layout.
+	 */
 	private static String safe(String v) {
-		return v == null ? "" : stripControlChars(v);
-	}
-
-	private static String stripControlChars(String s) {
-		return s.chars().filter(c -> c >= 0x20 || c == '\t')
-				.collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append).toString();
+		return PdfText.normalize(v);
 	}
 
 	private static String truncate(String s, int max) {

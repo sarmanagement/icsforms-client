@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package org.sarmanagement.icsforms.model;
 
 import java.time.LocalDateTime;
@@ -11,6 +12,8 @@ import java.util.UUID;
  * {@link ActivityEventType} held in {@link AppData#getActivityEventTypes()}.
  * This allows operators to configure custom event types without invalidating
  * previously recorded log entries.
+ * Assignment context uses a stable identity independently of the displayed
+ * resource, so follow-up entries retain the same task after reloading.
  * </p>
  */
 public class ActivityLogEntry {
@@ -18,6 +21,7 @@ public class ActivityLogEntry {
 	private LocalDateTime timestamp;
 	private String eventTypeId = ActivityEventType.ID_FREE_TEXT;
 	private String resourceIdentifier = "";
+	private String assignmentId = "";
 	private String notableActivity = "";
 	private boolean struckOut;
 
@@ -42,6 +46,24 @@ public class ActivityLogEntry {
 	 */
 	public void setEntryId(String entryId) {
 		this.entryId = entryId;
+	}
+
+	/**
+	 * Returns the stable task or ICS 204 assignment context for this activity.
+	 *
+	 * @return assignment identifier, or an empty string for legacy or unlinked entries
+	 */
+	public String getAssignmentId() {
+		return assignmentId;
+	}
+
+	/**
+	 * Sets assignment context independently of the activity's displayed resource.
+	 *
+	 * @param assignmentId stable assignment identifier; null clears the context
+	 */
+	public void setAssignmentId(String assignmentId) {
+		this.assignmentId = assignmentId == null ? "" : assignmentId;
 	}
 
 	/**
