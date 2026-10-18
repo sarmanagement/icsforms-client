@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import javax.swing.BorderFactory;
@@ -44,6 +47,7 @@ import java.util.function.Supplier;
 import javax.swing.text.JTextComponent;
 
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.AppData;
 
 /**
  * Shared Swing layout helpers for compact form editing panels.
@@ -52,6 +56,7 @@ final class UiSupport {
 	static final Color REQUIRED_FIELD_BACKGROUND = new Color(255, 248, 225);
 	private static final String FORM_SPACER_PROPERTY = "uiSupport.formSpacer";
 	private static ZoneId dateTimeDisplayZone = ZoneId.systemDefault();
+	private static final java.util.Map<Window, AppData> INCIDENT_WINDOWS = new java.util.WeakHashMap<>();
 
 	private UiSupport() {
 	}
@@ -359,6 +364,7 @@ final class UiSupport {
 		}
 		JOptionPane optionPane = new JOptionPane(component, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
 		JDialog dialog = optionPane.createDialog(parent, title);
+		dialog.setModalityType(java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
 		dialog.setResizable(true);
 		dialog.pack();
 		if (preferredSize != null) {
@@ -372,8 +378,33 @@ final class UiSupport {
 	}
 
 	/**
+	 * Shows operational feedback without blocking independent incident windows.
+	 *
+	 * @param parent initiating component or editor.
+	 * @param message feedback content.
+	 * @param title dialog title.
+	 * @param messageType JOptionPane message severity.
+	 */
+	static void showDocumentMessage(Component parent, Object message, String title, int messageType) {
+		JOptionPane pane = new JOptionPane(message, messageType, JOptionPane.DEFAULT_OPTION);
+		JDialog dialog = pane.createDialog(parent, title);
+		dialog.setModalityType(java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
+		try {
+			dialog.setVisible(true);
+		} finally {
+			dialog.dispose();
+		}
+	}
+
+	/**
 	 * Shows a resizable option dialog with a custom shared button row.
 	 *
+	 * @param parent initiating component or editor.
+	 * @param title dialog title.
+	 * @param component dialog content.
+	 * @param preferredSize minimum dialog size.
+	 * @param options available actions.
+	 * @param initialValue initially selected action.
 	 * @return selected option index, or -1 when dismissed.
 	 */
 	static int showResizableOptionDialog(Component parent, String title, JComponent component, Dimension preferredSize,
@@ -385,6 +416,7 @@ final class UiSupport {
 		optionPane.setOptions(options);
 		optionPane.setInitialValue(initialValue);
 		JDialog dialog = optionPane.createDialog(parent, title);
+		dialog.setModalityType(java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
 		dialog.setResizable(true);
 		dialog.pack();
 		if (preferredSize != null) {
@@ -488,11 +520,17 @@ final class UiSupport {
 	 * item (or pressing Enter when one is selected) fills {@code nameField} and
 	 * fires {@code onSelected}.
 	 * </p>
+	 *
+	 * @param nameField initiating name field.
+	 * @param allNames available personnel names.
+	 * @param onSelected selected-name callback.
+	 * @param onCreate optional personnel creation callback.
+	 * @param initialFilter initial search text.
 	 */
 	private static void openPickerDialog(JTextField nameField, List<String> allNames, Consumer<String> onSelected,
 			java.util.function.Function<String, String> onCreate, String initialFilter) {
 		Window owner = nameField.isShowing() ? (Window) javax.swing.SwingUtilities.getWindowAncestor(nameField) : null;
-		JDialog dialog = new JDialog(owner, "Select person", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+		JDialog dialog = new JDialog(owner, "Select person", java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
 
 		// Filter field
 		JTextField filterField = new JTextField(initialFilter == null ? "" : initialFilter.trim(), 20);
@@ -627,7 +665,7 @@ final class UiSupport {
 	private static void openSelectionPickerDialog(JTextField anchor, String title, String fieldLabel, List<String> allOptions,
 			String selectedValue, Consumer<String> onSelected) {
 		Window owner = anchor.isShowing() ? (Window) javax.swing.SwingUtilities.getWindowAncestor(anchor) : null;
-		JDialog dialog = new JDialog(owner, title, java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+		JDialog dialog = new JDialog(owner, title, java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
 		JTextField filterField = new JTextField(selectedValue == null ? "" : selectedValue.trim(), 24);
 		DefaultListModel<String> listModel = new DefaultListModel<>();
 		JList<String> list = new JList<>(listModel);
@@ -734,6 +772,63 @@ final class UiSupport {
 	private static Component parentFor(Component component) {
 		Window owner = component == null ? null : javax.swing.SwingUtilities.getWindowAncestor(component);
 		return owner == null ? component : owner;
+	}
+
+	/**
+	 * Registers an independent editor window for incident-switch protection.
+	 *
+	 * @param window independent document root.
+	 * @param data incident edited by the window.
+	 */
+	static void registerIncidentWindow(Window window, AppData data) {
+		INCIDENT_WINDOWS.put(window, data);
+	}
+
+	/**
+	 * Lists visible detached roots and operational dialogs editing an incident.
+	 *
+	 * @param mainWindow main incident document root.
+	 * @param data active incident.
+	 * @return windows which must be resolved before switching or closing.
+	 */
+	static List<Window> outstandingIncidentWindows(Window mainWindow, AppData data) {
+		return java.util.Arrays.stream(Window.getWindows())
+				.filter(Window::isShowing)
+				.filter(window -> window != mainWindow)
+				.filter(window -> INCIDENT_WINDOWS.get(window) == data
+						|| window instanceof java.awt.Dialog dialog
+						&& dialog.getModalityType() == java.awt.Dialog.ModalityType.DOCUMENT_MODAL
+						&& (documentRoot(window) == mainWindow
+								|| INCIDENT_WINDOWS.get(documentRoot(window)) == data))
+				.toList();
+	}
+
+	/**
+	 * Resolves the ownership-tree root used by Swing document modality.
+	 *
+	 * @param window window to inspect.
+	 * @return independent document root.
+	 */
+	static Window documentRoot(Window window) {
+		Window root = window;
+		while (root != null && root.getOwner() != null) {
+			root = root.getOwner();
+		}
+		return root;
+	}
+
+	/**
+	 * Disposes an incident's independent windows after explicit discard or close.
+	 *
+	 * @param data incident whose windows must no longer accept edits.
+	 */
+	static void disposeIncidentWindows(AppData data) {
+		for (Window window : new java.util.ArrayList<>(INCIDENT_WINDOWS.keySet())) {
+			if (INCIDENT_WINDOWS.get(window) == data) {
+				window.dispose();
+				INCIDENT_WINDOWS.remove(window);
+			}
+		}
 	}
 
 	/**

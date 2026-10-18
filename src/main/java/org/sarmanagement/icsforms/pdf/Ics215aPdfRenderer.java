@@ -129,6 +129,7 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		PdfText.validateForm(data, getFormKey());
 		Files.createDirectories(outputFile.getParent());
 		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
@@ -369,11 +370,11 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	 */
 	private static void drawLine(PDPageContentStream stream, PDType1Font font, float x, float y, String value)
 			throws IOException {
-		stream.beginText();
-		stream.setFont(font, FONT_SIZE);
-		stream.newLineAtOffset(x, y);
-		stream.showText(safe(value));
-		stream.endText();
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, FONT_SIZE);
+			stream.newLineAtOffset(x, y);
+			stream.showText(PdfText.singleLine(safe(value)));
+		}
 	}
 
 	/**
@@ -385,20 +386,20 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	 */
 	private static List<String> wrapCell(String value, int width) {
 		List<String> result = new ArrayList<>();
-		for (String paragraph : safe(value).split("\\R", -1)) {
+		for (String paragraph : safe(value).split("\n", -1)) {
 			result.addAll(new Ics215aPdfRenderer().wrap(paragraph, width));
 		}
 		return result;
 	}
 
 	/**
-	 * Returns a non-null printable string.
+	 * Normalizes optional layout text without discarding source characters.
 	 *
 	 * @param value source value.
-	 * @return printable ASCII value.
+	 * @return normalized text retaining logical line breaks.
 	 */
 	private static String safe(String value) {
-		return value == null ? "" : value.replaceAll("[^\\x20-\\x7E]", "?");
+		return PdfText.normalize(value);
 	}
 
 }

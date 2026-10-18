@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityEventType;
@@ -26,6 +27,7 @@ import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.BorderLayout;
@@ -36,12 +38,14 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -57,6 +61,7 @@ import java.util.stream.Collectors;
  */
 public class Ics214Panel extends JPanel {
 	private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+	private static final Map<Ics214Form, JFrame> POP_OUT_WINDOWS = new IdentityHashMap<>();
 
 	private final AppController controller;
 	private final JTextField nameField = UiSupport.textField();
@@ -68,6 +73,8 @@ public class Ics214Panel extends JPanel {
 	private final JButton pickPreparerButton = new JButton("Pick preparer from task…");
 	private final JButton pickResourceButton = new JButton("Pick…");
 	private final JButton syncResourcesBtn = new JButton("Sync resources…");
+	private final JButton viewDetailsActivityBtn = new JButton("View Details");
+	private final JButton strikeOutActivityBtn = new JButton("Strike Out Entry");
 	private final ResourcesTableModel resourcesTableModel = new ResourcesTableModel();
 	private final ActivityLogTableModel activityLogTableModel = new ActivityLogTableModel();
 	private final JTable resourcesTable = new JTable(resourcesTableModel);
@@ -75,6 +82,8 @@ public class Ics214Panel extends JPanel {
 	private final JScrollPane activityLogScrollPane = new JScrollPane(activityLogTable);
 	private AppData currentData;
 	private Ics214Form currentForm;
+	private HeaderState loadedHeader;
+	private List<ResourceState> loadedResources = List.of();
 
 	/**
 	 * Creates the ICS 214 editor panel.
@@ -151,6 +160,8 @@ public class Ics214Panel extends JPanel {
 		activityPanel.setBorder(BorderFactory.createTitledBorder("Section 7 - Activity Log"));
 		activityPanel.add(activityLogScrollPane, BorderLayout.CENTER);
 		activityPanel.add(activityButtonsPanel(), BorderLayout.SOUTH);
+		installActivityContextMenu();
+		activityLogTable.getSelectionModel().addListSelectionListener(e -> updateActivityButtonsState());
 
 		JPanel tablesPanel = new JPanel(new GridLayout(2, 1, 8, 8));
 		tablesPanel.add(resourcesPanel);
@@ -174,6 +185,119 @@ public class Ics214Panel extends JPanel {
 		add(tablesPanel, BorderLayout.CENTER);
 	}
 
+	/** Adds row-specific details and follow-up actions to the activity table. */
+	private void installActivityContextMenu() {
+		javax.swing.JPopupMenu popup = new javax.swing.JPopupMenu();
+		javax.swing.JMenuItem details = new javax.swing.JMenuItem("View details");
+		javax.swing.JMenuItem another = new javax.swing.JMenuItem("Add another entry");
+		javax.swing.JMenuItem strikeOut = new javax.swing.JMenuItem("Strike out entry");
+		details.addActionListener(event -> showSelectedActivityDetails());
+		another.addActionListener(event -> {
+			ActivityLogEntry entry = selectedActivityEntry();
+			if (entry != null && new ActivityEntryDialog(controller,
+					ActivityEntryDialog.followUpContext(activityLogTable, currentForm, entry), currentForm)
+							.show(activityLogTable)) {
+				refreshActivityEntries();
+			}
+		});
+		strikeOut.addActionListener(event -> {
+			int row = activityLogTable.getSelectedRow();
+			if (row >= 0) {
+				removeSelectedActivityEntry(activityLogTable.convertRowIndexToModel(row));
+			}
+		});
+		popup.add(details);
+		popup.add(another);
+		popup.add(strikeOut);
+		popup.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+			@Override
+			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+				boolean hasSelection = activityLogTable.getSelectedRow() >= 0;
+				details.setEnabled(hasSelection);
+				another.setEnabled(hasSelection);
+				strikeOut.setEnabled(hasSelection);
+			}
+
+			@Override
+			public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+			}
+
+			@Override
+			public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+			}
+		});
+		activityLogTable.setComponentPopupMenu(popup);
+		activityLogTable.addMouseListener(new MouseAdapter() {
+			/** {@inheritDoc} */
+			@Override
+			public void mousePressed(MouseEvent event) {
+				selectTarget(event);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void mouseReleased(MouseEvent event) {
+				selectTarget(event);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void mouseClicked(MouseEvent event) {
+				if (event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
+					int row = activityLogTable.rowAtPoint(event.getPoint());
+					if (row >= 0) {
+						activityLogTable.setRowSelectionInterval(row, row);
+						showSelectedActivityDetails();
+					}
+				}
+			}
+
+			/**
+			 * Selects the clicked row, clearing stale selections outside rows.
+			 *
+			 * @param event initiating mouse event
+			 */
+			private void selectTarget(MouseEvent event) {
+				int row = activityLogTable.rowAtPoint(event.getPoint());
+				if (row < 0) {
+					activityLogTable.clearSelection();
+				} else {
+					activityLogTable.setRowSelectionInterval(row, row);
+				}
+			}
+		});
+	}
+
+	/**
+	 * Displays the view details dialog for the currently selected activity log entry.
+	 */
+	private void showSelectedActivityDetails() {
+		ActivityLogEntry entry = selectedActivityEntry();
+		if (entry != null && ActivityEntryDialog.showDetails(activityLogTable, controller, currentForm, entry)) {
+			refreshActivityEntries();
+		}
+	}
+
+	/**
+	 * Resolves a sorted activity selection to its model entry.
+	 *
+	 * @return selected entry, or null when no row is selected
+	 */
+	private ActivityLogEntry selectedActivityEntry() {
+		int row = activityLogTable.getSelectedRow();
+		return row < 0 || currentForm == null || currentData != controller.getData() ? null
+				: currentForm.getActivityLog().get(activityLogTable.convertRowIndexToModel(row));
+	}
+
+	/**
+	 * Returns the activity log form currently displayed in this editor.
+	 *
+	 * @return current activity log form, or null if none
+	 */
+	public Ics214Form getCurrentForm() {
+		return currentForm;
+	}
+
 	/**
 	 * Loads values from the supplied model.
 	 *
@@ -186,8 +310,11 @@ public class Ics214Panel extends JPanel {
 		currentForm = form;
 		currentData = data == null ? new AppData() : data;
 		if (currentForm == null) {
+			loadedHeader = null;
+			loadedResources = List.of();
 			clearFields();
 			pickPreparerButton.setEnabled(false);
+			updateActivityButtonsState();
 			return;
 		}
 		nameField.setText(nullSafe(currentForm.getName()));
@@ -196,9 +323,10 @@ public class Ics214Panel extends JPanel {
 		preparedByNameField.setText(nullSafe(currentForm.getPreparedByName()));
 		preparedByPositionField.setText(nullSafe(currentForm.getPreparedByPositionTitle()));
 		preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
-		resourcesTableModel.setRows(currentForm.getResourcesAssigned());
+		resourcesTableModel.setRows(copyResources(currentForm.getResourcesAssigned()));
 		activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
 		scrollActivityLogToLatestEntry();
+		updateActivityButtonsState();
 		boolean isTask = currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT;
 		pickPreparerButton.setEnabled(isTask && !linkedTaskResources().isEmpty());
 		if (isTask) {
@@ -209,21 +337,128 @@ public class Ics214Panel extends JPanel {
 			syncResourcesBtn.setText("Refresh from ICP & 204…");
 			syncResourcesBtn.setToolTipText("Add resources from T-cards at ICP and from 204 assignment forms");
 		}
+		loadedHeader = headerState();
+		loadedResources = resourceStates(resourcesTableModel.getRows());
 	}
 
-	/** Saves current field values into the stored model reference. */
+	/**
+	 * Merges locally edited fields against their loaded baselines and current
+	 * canonical values. Untouched fields adopt external changes; deliberate local
+	 * edits win same-field conflicts. Authoritative activity entries are never replaced.
+	 */
 	public void saveToModel() {
-		if (currentForm == null) {
+		if (currentForm == null || currentData != controller.getData() || loadedHeader == null) {
 			return;
 		}
-		currentForm.setName(nameField.getText().trim());
-		currentForm.setIcsPosition(icsPositionField.getText().trim());
-		currentForm.setHomeAgency(homeAgencyField.getText().trim());
-		currentForm.setPreparedByName(preparedByNameField.getText().trim());
-		currentForm.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
-		currentForm.setPreparedDateTime(AppController.toLocalDateTime((Date) preparedDateTimeField.getValue()));
-		currentForm.setResourcesAssigned(resourcesTableModel.getRows());
-		currentForm.setActivityLog(activityLogTableModel.getRows());
+		mergeTextField(nameField, loadedHeader.name(), currentForm.getName(), currentForm::setName);
+		mergeTextField(icsPositionField, loadedHeader.icsPosition(), currentForm.getIcsPosition(), currentForm::setIcsPosition);
+		mergeTextField(homeAgencyField, loadedHeader.homeAgency(), currentForm.getHomeAgency(), currentForm::setHomeAgency);
+		mergeTextField(preparedByNameField, loadedHeader.preparedByName(), currentForm.getPreparedByName(),
+				currentForm::setPreparedByName);
+		mergeTextField(preparedByPositionField, loadedHeader.preparedByPosition(), currentForm.getPreparedByPositionTitle(),
+				currentForm::setPreparedByPositionTitle);
+		LocalDateTime localDateTime = AppController.toLocalDateTime((Date) preparedDateTimeField.getValue());
+		if (!java.util.Objects.equals(localDateTime, loadedHeader.preparedDateTime())) {
+			currentForm.setPreparedDateTime(localDateTime);
+		} else {
+			preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
+		}
+		if (!resourceStates(resourcesTableModel.getRows()).equals(loadedResources)) {
+			currentForm.setResourcesAssigned(copyResources(resourcesTableModel.getRows()));
+		} else {
+			resourcesTableModel.setRows(copyResources(currentForm.getResourcesAssigned()));
+		}
+		loadedHeader = headerState();
+		loadedResources = resourceStates(resourcesTableModel.getRows());
+	}
+
+	/**
+	 * Applies a local text edit, or refreshes an untouched field from canonical state.
+	 *
+	 * @param field editable local field
+	 * @param baseline field value last loaded or saved
+	 * @param canonical currently stored field value
+	 * @param apply setter for deliberate local changes
+	 */
+	private static void mergeTextField(JTextField field, String baseline, String canonical,
+			java.util.function.Consumer<String> apply) {
+		String local = field.getText().trim();
+		if (!java.util.Objects.equals(local, baseline)) {
+			apply.accept(local);
+		} else {
+			field.setText(canonical == null ? "" : canonical);
+		}
+	}
+
+	/**
+	 * Snapshots displayed header values without retaining mutable Swing state.
+	 *
+	 * @return immutable local header baseline
+	 */
+	private HeaderState headerState() {
+		return new HeaderState(nameField.getText().trim(), icsPositionField.getText().trim(), homeAgencyField.getText().trim(),
+				preparedByNameField.getText().trim(), preparedByPositionField.getText().trim(),
+				AppController.toLocalDateTime((Date) preparedDateTimeField.getValue()));
+	}
+
+	/**
+	 * Snapshots resource values to distinguish local edits from stale resource rows.
+	 *
+	 * @param resources displayed resource rows
+	 * @return immutable resource baseline values
+	 */
+	private static List<ResourceState> resourceStates(List<SarTaskResource> resources) {
+		return resources.stream().map(resource -> new ResourceState(resource.getFunction(), resource.getIcsPosition(),
+				resource.getHomeAgency(), resource.getName(), resource.getCardType(), resource.getResourceId())).toList();
+	}
+
+	/**
+	 * Copies resource rows so external model edits cannot become apparent local edits.
+	 *
+	 * @param resources source resources
+	 * @return detached resource rows preserving stable identities
+	 */
+	private static List<SarTaskResource> copyResources(List<SarTaskResource> resources) {
+		List<SarTaskResource> copies = new ArrayList<>();
+		for (SarTaskResource resource : resources) {
+			SarTaskResource copy = new SarTaskResource();
+			copy.setFunction(resource.getFunction());
+			copy.setIcsPosition(resource.getIcsPosition());
+			copy.setHomeAgency(resource.getHomeAgency());
+			copy.setName(resource.getName());
+			copy.setCardType(resource.getCardType());
+			copy.setResourceId(resource.getResourceId());
+			copies.add(copy);
+		}
+		return copies;
+	}
+
+	/**
+	 * Immutable baseline of editable header fields.
+	 *
+	 * @param name form name
+	 * @param icsPosition ICS position
+	 * @param homeAgency home agency
+	 * @param preparedByName preparer name
+	 * @param preparedByPosition preparer position
+	 * @param preparedDateTime displayed preparation time
+	 */
+	private record HeaderState(String name, String icsPosition, String homeAgency, String preparedByName,
+			String preparedByPosition, LocalDateTime preparedDateTime) {
+	}
+
+	/**
+	 * Immutable baseline of one resource row.
+	 *
+	 * @param function resource function
+	 * @param icsPosition resource position
+	 * @param homeAgency resource agency
+	 * @param name resource name
+	 * @param cardType resource type
+	 * @param resourceId stable resource identity
+	 */
+	private record ResourceState(String function, String icsPosition, String homeAgency, String name,
+			TCardType cardType, String resourceId) {
 	}
 
 	/** Reloads event type labels after the event type list has been modified. */
@@ -254,6 +489,7 @@ public class Ics214Panel extends JPanel {
 				.map(SarTaskAssignment::getResourcesAssigned).orElse(List.of());
 	}
 
+	/** Chooses a linked-task preparer within the initiating document root. */
 	private void pickPreparerFromTask() {
 		List<SarTaskResource> resources = linkedTaskResources();
 		if (resources.isEmpty()) {
@@ -271,7 +507,7 @@ public class Ics214Panel extends JPanel {
 			}
 			return label;
 		});
-		int result = JOptionPane.showConfirmDialog(this, combo, "Pick preparer", JOptionPane.OK_CANCEL_OPTION);
+		int result = ActivityEntryDialog.showDocumentConfirm(this, combo, "Pick preparer", JOptionPane.OK_CANCEL_OPTION);
 		if (result != JOptionPane.OK_OPTION) {
 			return;
 		}
@@ -296,7 +532,7 @@ public class Ics214Panel extends JPanel {
 		}
 		List<Section3Choice> choices = section3Choices();
 		if (choices.isEmpty()) {
-			JOptionPane.showMessageDialog(this, "No T-card resources found.", "Pick Resource",
+			UiSupport.showDocumentMessage(this, "No T-card resources found.", "Pick Resource",
 					JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
@@ -317,7 +553,7 @@ public class Ics214Panel extends JPanel {
 			choices.stream().filter(c -> currentForm.getLinkedResourceId().equals(c.linkedResourceId())).findFirst()
 					.ifPresent(combo::setSelectedItem);
 		}
-		int result = JOptionPane.showConfirmDialog(this, combo, "Link section 3 to resource/location",
+		int result = ActivityEntryDialog.showDocumentConfirm(this, combo, "Link section 3 to resource/location",
 				JOptionPane.OK_CANCEL_OPTION);
 		if (result != JOptionPane.OK_OPTION) {
 			return;
@@ -352,38 +588,62 @@ public class Ics214Panel extends JPanel {
 	/**
 	 * Opens this ICS 214 form in a separate modeless window so the operator can log
 	 * events while navigating other tabs. The window shares the same
-	 * {@link Ics214Form} model object; changes are pushed back via "Save" and will
-	 * be reflected in the main tab on next load.
+	 * {@link Ics214Form} model object. One independent window is permitted per
+	 * form; closing it saves only active-incident edits and refreshes activity rows
+	 * without overwriting pending fields in the embedded editor.
 	 */
 	private void popOutInNewWindow() {
-		if (currentForm == null || currentData == null) {
+		if (currentForm == null || currentData != controller.getData()) {
 			return;
 		}
 		saveToModel();
-		String title = "ICS 214 – " + (currentForm.getName().isBlank() ? "Activity Log" : currentForm.getName());
+		openInNewWindow(controller, currentForm, currentData, () -> {
+			if (currentData == controller.getData() && currentForm != null) {
+				refreshActivityEntries();
+			}
+		});
+	}
+	/**
+	 * Opens an ICS 214 form in a separate modeless window.
+	 *
+	 * @param controller application controller
+	 * @param form activity log form
+	 * @param data incident data
+	 * @param onSave callback executed when window saves on close
+	 * @return the opened or focused window, or null if parameters are invalid
+	 */
+	public static JFrame openInNewWindow(AppController controller, Ics214Form form, AppData data, Runnable onSave) {
+		if (form == null || data == null || controller == null || controller.getData() != data) {
+			return null;
+		}
+		JFrame existing = POP_OUT_WINDOWS.get(form);
+		if (existing != null && existing.isDisplayable()) {
+			existing.toFront();
+			existing.requestFocus();
+			return existing;
+		}
+		String title = "ICS 214 – " + (form.getName().isBlank() ? "Activity Log" : form.getName());
 		JFrame frame = new JFrame(title);
 		frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		Ics214Panel popOut = new Ics214Panel(controller);
-		popOut.loadFromModel(currentForm, currentData);
+		popOut.loadFromModel(form, data);
 
 		// Single Close button — saves changes and closes the window.
 		JButton closeBtn = new JButton("Close");
-		closeBtn.addActionListener(e -> {
-			popOut.saveToModel();
-			controller.markDirty();
-			// Reload the embedded panel so edits from the pop-out are visible.
-			loadFromModel(currentForm, currentData);
-			frame.dispose();
-		});
+		closeBtn.addActionListener(e -> closePopOutWindow(frame, popOut, form, data, onSave));
 
 		// Also save when the user dismisses with the OS window-close button.
 		frame.addWindowListener(new WindowAdapter() {
+			/** {@inheritDoc} */
 			@Override
 			public void windowClosing(WindowEvent e) {
-				popOut.saveToModel();
-				controller.markDirty();
-				loadFromModel(currentForm, currentData);
-				frame.dispose();
+				closePopOutWindow(frame, popOut, form, data, onSave);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void windowClosed(WindowEvent e) {
+				POP_OUT_WINDOWS.remove(form, frame);
 			}
 		});
 
@@ -394,84 +654,81 @@ public class Ics214Panel extends JPanel {
 		frame.getContentPane().add(btnRow, BorderLayout.SOUTH);
 		frame.setSize(900, 700);
 		frame.setLocationByPlatform(true);
+		POP_OUT_WINDOWS.put(form, frame);
+		UiSupport.registerIncidentWindow(frame, data);
 		frame.setVisible(true);
+		return frame;
 	}
 
+	/**
+	 * Closes any open pop-out window for a form.
+	 *
+	 * @param form activity log form
+	 */
+	public static void closePopOutWindow(Ics214Form form) {
+		if (form == null) {
+			return;
+		}
+		JFrame frame = POP_OUT_WINDOWS.remove(form);
+		if (frame != null) {
+			frame.dispose();
+		}
+	}
+
+	/**
+	 * Closes a detached editor saving into active incident data.
+	 *
+	 * @param frame detached window
+	 * @param popOut detached editor
+	 * @param form originally edited form
+	 * @param data originally edited incident
+	 * @param onSave callback to run after saving
+	 */
+	private static void closePopOutWindow(JFrame frame, Ics214Panel popOut, Ics214Form form, AppData data,
+			Runnable onSave) {
+		if (popOut.controller.getData() == data) {
+			popOut.saveToModel();
+			popOut.controller.markDirty();
+			if (onSave != null) {
+				onSave.run();
+			}
+		}
+		frame.dispose();
+	}
+
+	/**
+	 * Closes a detached editor without saving into a switched incident.
+	 *
+	 * @param frame detached window
+	 * @param popOut detached editor
+	 * @param form originally edited form
+	 * @param data originally edited incident
+	 */
+	private void closePopOut(JFrame frame, Ics214Panel popOut, Ics214Form form, AppData data) {
+		closePopOutWindow(frame, popOut, form, data, () -> {
+			if (currentData == data && currentForm == form) {
+				refreshActivityEntries();
+			}
+		});
+	}
+
+	/** Opens the shared entry workflow without saving other pending log edits. */
 	private void addActivityEntry() {
-		if (currentForm == null) {
+		if (currentForm == null || currentData != controller.getData()) {
 			return;
 		}
-		List<ActivityEventType> types = resolvedEventTypes();
+		if (new ActivityEntryDialog(controller,
+				new LogEntryContext(this, "", currentForm.getLinkedSarTaskAssignmentId(), ""), currentForm).show(this)) {
+			refreshActivityEntries();
+		}
+	}
 
-		// Build picklist: SAR task names/numbers first, then personnel resource names.
-		// For ICP-scope logs the default selection is blank; for task-linked logs the
-		// primary/first resource name is pre-selected.
-		List<String> picklist = new ArrayList<>();
-		String defaultResource = "";
-		// 1. Assigned tasks by team number / name.
-		if (currentData != null && currentData.getSarTaskAssignments() != null) {
-			for (SarTaskAssignment t : currentData.getSarTaskAssignments()) {
-				String label = SarTaskSupport.taskResourceDisplayLabel(t);
-				if (!label.isBlank() && !picklist.contains(label)) {
-					picklist.add(label);
-				}
-			}
+	/** Refreshes only activity rows, preserving all other pending form edits. */
+	public void refreshActivityEntries() {
+		if (currentForm != null) {
+			activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
+			scrollActivityLogToLatestEntry();
 		}
-		// 2. Resources assigned to this 214 form.
-		if (currentForm.getResourcesAssigned() != null) {
-			for (SarTaskResource r : currentForm.getResourcesAssigned()) {
-				String n = r.getName();
-				if (n != null && !n.isBlank() && !picklist.contains(n)) {
-					picklist.add(n);
-				}
-			}
-		}
-		// 3. TCard names — personnel first, then other resource types.
-		if (currentData != null) {
-			List<String> otherCardNames = new ArrayList<>();
-			for (org.sarmanagement.icsforms.model.TCard card : currentData.getTCards()) {
-				String n = card.getPersonName().isBlank() ? card.getResourceIdentifier() : card.getPersonName();
-				if (!n.isBlank() && !picklist.contains(n)) {
-					if (card.getCardType() == TCardType.PERSONNEL) {
-						picklist.add(n);
-					} else {
-						otherCardNames.add(n);
-					}
-				}
-			}
-			picklist.addAll(otherCardNames);
-		}
-		if (currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT) {
-			defaultResource = SarTaskSupport.taskResourceDisplayLabel(linkedTask());
-		}
-
-		ActivityEntryEditor editor = new ActivityEntryEditor(types, defaultResource, picklist);
-		JScrollPane scrollPane = new JScrollPane(editor.panel);
-		scrollPane.setBorder(BorderFactory.createEmptyBorder());
-		if (!UiSupport.showResizableConfirmDialog(this, "Add activity entry", scrollPane, new Dimension(640, 320))) {
-			return;
-		}
-		ActivityLogEntry entry = editor.toEntry();
-		normalizeEntryResourceIdentifier(entry);
-		currentForm.getActivityLog().add(entry);
-		activityLogTableModel.setRows(currentForm.getActivityLog(), types);
-		scrollActivityLogToLatestEntry();
-		AppController.TaskLifecycleChangeResult lifecycleResult = controller.applyTaskLifecycleFromLogEntry(currentForm,
-				entry);
-		if (lifecycleResult.hasWarning()) {
-			JOptionPane.showMessageDialog(this, lifecycleResult.warningMessage(), "SAR Task Status",
-					JOptionPane.WARNING_MESSAGE);
-		}
-
-		// For clue-related event types, open the clue capture dialog.
-		String eventTypeId = entry.getEventTypeId();
-		boolean isClueDetected = ActivityEventType.ID_CLUE_DETECTED.equals(eventTypeId);
-		boolean isClueReported = ActivityEventType.ID_CLUE_REPORTED.equals(eventTypeId);
-		if ((isClueDetected || isClueReported) && currentData != null) {
-			captureClue(entry, eventTypeId);
-		}
-
-		controller.markDirty();
 	}
 
 	/**
@@ -482,7 +739,7 @@ public class Ics214Panel extends JPanel {
 	 * Behaviour differs by log type and event type:
 	 * </p>
 	 * <ul>
-	 * <li>Resource 214 (task-linked): detecting resource is fixed to the form name;
+	 * <li>Resource 214 (task-linked): detecting resource is taken from the entry;
 	 * no possible-duplicate checkbox.</li>
 	 * <li>Management 214 (ICP / assignment-list): detecting resource is chosen from
 	 * a picklist of task-linked 214 forms; possible-duplicate checkbox is
@@ -498,8 +755,14 @@ public class Ics214Panel extends JPanel {
 	 * @param eventTypeId
 	 *            the event type identifier ({@code CLUE_DETECTED} or
 	 *            {@code CLUE_REPORTED}).
+	 * @param owner initiating editor component
+	 * @param assignmentId explicitly selected task assignment
+	 * @return true when clue capture was accepted; false on cancellation
 	 */
-	private void captureClue(ActivityLogEntry sourceEntry, String eventTypeId) {
+	boolean captureClue(java.awt.Component owner, ActivityLogEntry sourceEntry, String eventTypeId, String assignmentId) {
+		if (currentForm == null || currentData != controller.getData()) {
+			return false;
+		}
 		boolean isResourceLog = currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT;
 
 		JPanel form = UiSupport.formPanel();
@@ -511,11 +774,14 @@ public class Ics214Panel extends JPanel {
 		JComboBox<String> detectingResourceCombo = null;
 		JLabel detectingResourceLabel = null;
 		if (isResourceLog) {
-			detectingResourceLabel = new JLabel(nullSafe(currentForm.getName()));
+			detectingResourceLabel = new JLabel(sourceEntry.getResourceIdentifier().isBlank()
+					? nullSafe(currentForm.getName()) : sourceEntry.getResourceIdentifier());
 		} else {
 			List<String> resourceNames = taskLinkedFormNames();
 			String[] items = resourceNames.isEmpty() ? new String[]{""} : resourceNames.toArray(new String[0]);
 			detectingResourceCombo = new JComboBox<>(items);
+			detectingResourceCombo.setEditable(true);
+			detectingResourceCombo.setSelectedItem(sourceEntry.getResourceIdentifier());
 		}
 
 		// Possible duplicate: shown only for management 214.
@@ -543,9 +809,12 @@ public class Ics214Panel extends JPanel {
 		JScrollPane scrollPane = new JScrollPane(form);
 		scrollPane.setBorder(BorderFactory.createEmptyBorder());
 		int dialogHeight = 310 + (possibleDuplicateCheck != null ? 30 : 0);
-		if (!UiSupport.showResizableConfirmDialog(this, "Capture clue details", scrollPane,
+		if (!UiSupport.showResizableConfirmDialog(owner, "Capture clue details", scrollPane,
 				new Dimension(640, dialogHeight))) {
-			return;
+			return false;
+		}
+		if (currentData != controller.getData()) {
+			return false;
 		}
 
 		// Resolve detecting-task link and detected-by resource.
@@ -556,8 +825,7 @@ public class Ics214Panel extends JPanel {
 		// detectedBy captures the specific person or resource that found the clue.
 		String detectedBy;
 		if (isResourceLog) {
-			// The form's own name is the resource identifier.
-			detectedBy = currentForm.getName() != null ? currentForm.getName() : "";
+			detectedBy = detectingResourceLabel.getText();
 		} else if (detectingResourceCombo != null && detectingResourceCombo.getSelectedItem() != null) {
 			detectedBy = detectingResourceCombo.getSelectedItem().toString();
 		} else {
@@ -571,11 +839,13 @@ public class Ics214Panel extends JPanel {
 		clue.setDescription(descriptionArea.getText().trim());
 		clue.setImmediateAction(immediateActionArea.getText().trim());
 		clue.setPossibleDuplicate(possibleDuplicateCheck != null && possibleDuplicateCheck.isSelected());
-		String taskId = currentForm.getLinkedSarTaskAssignmentId();
+		String taskId = assignmentId == null || assignmentId.isBlank()
+				? currentForm.getLinkedSarTaskAssignmentId() : assignmentId;
 		if (taskId != null && !taskId.isBlank()) {
 			clue.setAssignmentId(taskId);
 		}
 		currentData.getClueLogEntries().add(clue);
+		return true;
 	}
 
 	/**
@@ -602,6 +872,23 @@ public class Ics214Panel extends JPanel {
 				}).filter(label -> !label.isBlank()).distinct().collect(Collectors.toList());
 	}
 
+	/**
+	 * Formats the confirmation prompt for striking out an activity log entry.
+	 *
+	 * @param label human-readable activity entry label
+	 * @return formatted confirmation message
+	 */
+	static String strikeOutConfirmationPrompt(String label) {
+		return label == null || label.isBlank()
+				? "Are you sure you want to strike out this activity entry?"
+				: "Are you sure you want to strike out activity entry '" + label.trim() + "'?";
+	}
+
+	/**
+	 * Confirms strike-out within the initiating document root.
+	 *
+	 * @param row activity row in model coordinates
+	 */
 	private void removeSelectedActivityEntry(int row) {
 		if (currentForm == null || row < 0 || row >= currentForm.getActivityLog().size()) {
 			return;
@@ -611,7 +898,8 @@ public class Ics214Panel extends JPanel {
 				? ""
 				: SarTaskPanel.formatDateTimeValue(entry.getTimestamp()) + " ")
 				+ resolvedEventTypeLabel(entry.getEventTypeId());
-		int confirm = JOptionPane.showConfirmDialog(this, "Strike out activity entry '" + label.trim() + "'?",
+		String prompt = strikeOutConfirmationPrompt(label);
+		int confirm = ActivityEntryDialog.showDocumentConfirm(this, prompt,
 				"Strike Out Activity Entry", JOptionPane.YES_NO_OPTION);
 		if (confirm != JOptionPane.YES_OPTION) {
 			return;
@@ -632,9 +920,16 @@ public class Ics214Panel extends JPanel {
 		currentForm.getActivityLog().get(row).setStruckOut(true);
 		activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
 		scrollActivityLogToLatestEntry();
+		updateActivityButtonsState();
 		controller.markDirty();
 	}
 
+	/**
+	 * Resolves the display label for an event type identifier using the currently active types.
+	 *
+	 * @param eventTypeId identifier of the event type
+	 * @return human-readable event type label, or the identifier if unknown
+	 */
 	private String resolvedEventTypeLabel(String eventTypeId) {
 		for (ActivityEventType type : resolvedEventTypes()) {
 			if (type.getId().equals(eventTypeId)) {
@@ -644,14 +939,38 @@ public class Ics214Panel extends JPanel {
 		return eventTypeId == null ? "" : eventTypeId;
 	}
 
+	/**
+	 * Synchronizes the enablement of activity action buttons with the table selection.
+	 */
+	private void updateActivityButtonsState() {
+		boolean hasSelection = activityLogTable != null && activityLogTable.getSelectedRow() >= 0;
+		if (viewDetailsActivityBtn != null) {
+			viewDetailsActivityBtn.setEnabled(hasSelection);
+		}
+		if (strikeOutActivityBtn != null) {
+			strikeOutActivityBtn.setEnabled(hasSelection);
+		}
+	}
+
+	/**
+	 * Creates entry actions using view-to-model conversion for selected rows.
+	 *
+	 * @return activity action buttons
+	 */
 	private JPanel activityButtonsPanel() {
 		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		JButton add = new JButton("Add Entry");
-		JButton remove = new JButton("Strike Out Entry");
 		add.addActionListener(event -> addActivityEntry());
-		remove.addActionListener(event -> removeSelectedActivityEntry(activityLogTable.getSelectedRow()));
+		viewDetailsActivityBtn.addActionListener(event -> showSelectedActivityDetails());
+		strikeOutActivityBtn.addActionListener(event -> {
+			int row = activityLogTable.getSelectedRow();
+			removeSelectedActivityEntry(row < 0 ? -1 : activityLogTable.convertRowIndexToModel(row));
+		});
+		viewDetailsActivityBtn.setEnabled(false);
+		strikeOutActivityBtn.setEnabled(false);
 		panel.add(add);
-		panel.add(remove);
+		panel.add(viewDetailsActivityBtn);
+		panel.add(strikeOutActivityBtn);
 		return panel;
 	}
 
@@ -672,7 +991,7 @@ public class Ics214Panel extends JPanel {
 				.filter(c -> !c.getPersonName().isBlank() && c.getPersonName().equalsIgnoreCase(name)).findFirst()
 				.orElse(null);
 		if (tcard == null) {
-			JOptionPane.showMessageDialog(this, "No T-card record found for: " + name, "T-Card",
+			UiSupport.showDocumentMessage(this, "No T-card record found for: " + name, "T-Card",
 					JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
@@ -690,7 +1009,7 @@ public class Ics214Panel extends JPanel {
 		UiSupport.addRow(form, r, "Notes", new JLabel(tcard.getNotes()));
 		JScrollPane scroll = new JScrollPane(form);
 		scroll.setBorder(BorderFactory.createEmptyBorder());
-		JOptionPane.showMessageDialog(this, scroll, "T-Card: " + tcard.getPersonName(), JOptionPane.PLAIN_MESSAGE);
+		UiSupport.showDocumentMessage(this, scroll, "T-Card: " + tcard.getPersonName(), JOptionPane.PLAIN_MESSAGE);
 	}
 
 	/**
@@ -717,20 +1036,20 @@ public class Ics214Panel extends JPanel {
 	private void syncResourcesFromTask() {
 		String taskId = currentForm.getLinkedSarTaskAssignmentId();
 		if (taskId == null || taskId.isBlank()) {
-			JOptionPane.showMessageDialog(this, "This form is not linked to a task assignment.", "Sync from Task",
+			UiSupport.showDocumentMessage(this, "This form is not linked to a task assignment.", "Sync from Task",
 					JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
 		SarTaskAssignment task = currentData.getSarTaskAssignments().stream()
 				.filter(t -> taskId.equals(t.getAssignmentId())).findFirst().orElse(null);
 		if (task == null) {
-			JOptionPane.showMessageDialog(this, "Linked task assignment not found.", "Sync from Task",
+			UiSupport.showDocumentMessage(this, "Linked task assignment not found.", "Sync from Task",
 					JOptionPane.WARNING_MESSAGE);
 			return;
 		}
 		List<SarTaskResource> fromTask = new ArrayList<>(task.getResourcesAssigned());
 		if (fromTask.isEmpty()) {
-			JOptionPane.showMessageDialog(this, "The linked task assignment has no resources.", "Sync from Task",
+			UiSupport.showDocumentMessage(this, "The linked task assignment has no resources.", "Sync from Task",
 					JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
@@ -738,15 +1057,16 @@ public class Ics214Panel extends JPanel {
 				.map(r -> "  \u2022 " + (r.getName().isBlank() ? r.getFunction() : r.getName())
 						+ (r.getIcsPosition().isBlank() ? "" : " (" + r.getIcsPosition() + ")"))
 				.collect(Collectors.joining("\n"));
-		int choice = JOptionPane.showConfirmDialog(this,
+		int choice = ActivityEntryDialog.showDocumentConfirm(this,
 				"Replace the current resource list with the following " + fromTask.size()
 						+ " resource(s) from the task assignment?\n" + summary,
 				"Sync from Task Assignment", JOptionPane.OK_CANCEL_OPTION);
 		if (choice != JOptionPane.OK_OPTION) {
 			return;
 		}
-		resourcesTableModel.setRows(fromTask);
+		resourcesTableModel.setRows(copyResources(fromTask));
 		currentForm.setResourcesAssigned(new ArrayList<>(fromTask));
+		loadedResources = resourceStates(resourcesTableModel.getRows());
 		controller.markDirty();
 	}
 
@@ -784,7 +1104,7 @@ public class Ics214Panel extends JPanel {
 			}
 		}
 		if (toAdd.isEmpty()) {
-			JOptionPane.showMessageDialog(this, "No ICP resources or 204 assignments found to add.",
+			UiSupport.showDocumentMessage(this, "No ICP resources or 204 assignments found to add.",
 					"Refresh Resources", JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
@@ -799,7 +1119,7 @@ public class Ics214Panel extends JPanel {
 			return existing.contains(n.trim().toLowerCase());
 		});
 		if (toAdd.isEmpty()) {
-			JOptionPane.showMessageDialog(this, "All ICP resources are already in the list.", "Refresh Resources",
+			UiSupport.showDocumentMessage(this, "All ICP resources are already in the list.", "Refresh Resources",
 					JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
@@ -807,15 +1127,16 @@ public class Ics214Panel extends JPanel {
 				.map(r -> "  \u2022 " + (r.getName().isBlank() ? r.getFunction() : r.getName())
 						+ (r.getIcsPosition().isBlank() ? "" : " (" + r.getIcsPosition() + ")"))
 				.collect(Collectors.joining("\n"));
-		int choice = JOptionPane.showConfirmDialog(this, "Add the following resources to this form?\n" + summary,
+		int choice = ActivityEntryDialog.showDocumentConfirm(this, "Add the following resources to this form?\n" + summary,
 				"Refresh from ICP & 204", JOptionPane.OK_CANCEL_OPTION);
 		if (choice != JOptionPane.OK_OPTION) {
 			return;
 		}
 		List<SarTaskResource> merged = new ArrayList<>(resourcesTableModel.getRows());
 		merged.addAll(toAdd);
-		resourcesTableModel.setRows(merged);
+		resourcesTableModel.setRows(copyResources(merged));
 		currentForm.setResourcesAssigned(merged);
+		loadedResources = resourceStates(resourcesTableModel.getRows());
 		controller.markDirty();
 	}
 
@@ -1029,15 +1350,36 @@ public class Ics214Panel extends JPanel {
 	// Activity entry editor dialog
 	// -------------------------------------------------------------------------
 
-	private static class ActivityEntryEditor {
-		private final JPanel panel = UiSupport.formPanel();
+	/** Detached fields shared by contextual entry dialogs. */
+	static class ActivityEntryEditor {
+		final JPanel panel = UiSupport.formPanel();
 		private final JSpinner timestampField = UiSupport.dateTimeSpinner();
-		private final JComboBox<ActivityEventType> eventTypeField;
-		private final JComboBox<String> resourceIdentifierField;
+		final JComboBox<ActivityEventType> eventTypeField;
+		final JComboBox<String> resourceIdentifierField;
 		private final JTextArea notableActivityField = UiSupport.textArea(4);
 
-		private ActivityEntryEditor(List<ActivityEventType> eventTypes, String defaultResourceIdentifier,
+		/**
+		 * Builds editable activity fields.
+		 *
+		 * @param eventTypes available event types
+		 * @param defaultResourceIdentifier initial resource
+		 * @param resourcePicklist available resource labels
+		 */
+		ActivityEntryEditor(List<ActivityEventType> eventTypes, String defaultResourceIdentifier,
 				List<String> resourcePicklist) {
+			this(eventTypes, defaultResourceIdentifier, resourcePicklist, () -> false);
+		}
+
+		/**
+		 * Builds editable activity fields with dynamic ICP scope detection.
+		 *
+		 * @param eventTypes available event types
+		 * @param defaultResourceIdentifier initial resource
+		 * @param resourcePicklist available resource labels
+		 * @param icpScopeSupplier supplier indicating whether the target destination is an ICP log
+		 */
+		ActivityEntryEditor(List<ActivityEventType> eventTypes, String defaultResourceIdentifier,
+				List<String> resourcePicklist, java.util.function.BooleanSupplier icpScopeSupplier) {
 			ActivityEventType[] typeArray = eventTypes.toArray(new ActivityEventType[0]);
 			eventTypeField = new JComboBox<>(typeArray);
 			eventTypeField.setRenderer(new javax.swing.DefaultListCellRenderer() {
@@ -1047,7 +1389,8 @@ public class Ics214Panel extends JPanel {
 					super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
 					if (value instanceof ActivityEventType t) {
 						if (ActivityEventType.ID_CLUE_DETECTED.equals(t.getId())) {
-							setText("Clue detected by my assignment");
+							boolean isIcp = icpScopeSupplier != null && icpScopeSupplier.getAsBoolean();
+							setText(isIcp ? "Clue detected by this assignment" : "Clue detected by my assignment");
 						} else if (ActivityEventType.ID_CLUE_REPORTED.equals(t.getId())) {
 							setText("Clue reported by another assignment");
 						} else {
@@ -1085,7 +1428,12 @@ public class Ics214Panel extends JPanel {
 			UiSupport.addRow(panel, 3, "Notable activity", new JScrollPane(notableActivityField));
 		}
 
-		private ActivityLogEntry toEntry() {
+		/**
+		 * Creates a detached entry from the fields.
+		 *
+		 * @return new entry, not yet added to any log
+		 */
+		ActivityLogEntry toEntry() {
 			ActivityLogEntry entry = new ActivityLogEntry();
 			entry.setTimestamp(AppController.toLocalDateTime((Date) timestampField.getValue()));
 			ActivityEventType selected = (ActivityEventType) eventTypeField.getSelectedItem();
@@ -1095,12 +1443,19 @@ public class Ics214Panel extends JPanel {
 			entry.setNotableActivity(notableActivityField.getText().trim());
 			return entry;
 		}
+
+		/** Repaints event type display to reflect destination changes. */
+		void refreshEventTypeDisplay() {
+			eventTypeField.revalidate();
+			eventTypeField.repaint();
+		}
 	}
 
 	// -------------------------------------------------------------------------
 	// Event type manager dialog (invoked from Configuration menu via MainFrame)
 	// -------------------------------------------------------------------------
 
+	/** Manages configurable activity types within the owning document's dialog chain. */
 	static class EventTypeManagerDialog {
 		final JPanel panel = new JPanel(new BorderLayout(4, 4));
 		private final EventTypesTableModel tableModel;
@@ -1124,6 +1479,7 @@ public class Ics214Panel extends JPanel {
 			panel.add(buttons, BorderLayout.SOUTH);
 		}
 
+		/** Adds a validated custom event type using a document-modal picker. */
 		private void addCustomType() {
 			JTextField idField = new JTextField(12);
 			JTextField labelField = new JTextField(20);
@@ -1132,19 +1488,19 @@ public class Ics214Panel extends JPanel {
 			input.add(idField);
 			input.add(new JLabel("Label:"));
 			input.add(labelField);
-			int result = JOptionPane.showConfirmDialog(panel, input, "New Event Type", JOptionPane.OK_CANCEL_OPTION);
+			int result = ActivityEntryDialog.showDocumentConfirm(panel, input, "New Event Type", JOptionPane.OK_CANCEL_OPTION);
 			if (result != JOptionPane.OK_OPTION) {
 				return;
 			}
 			String id = idField.getText().trim().toUpperCase().replace(' ', '_');
 			String label = labelField.getText().trim();
 			if (id.isEmpty() || label.isEmpty()) {
-				JOptionPane.showMessageDialog(panel, "Both ID and Label are required.", "Invalid Event Type",
+				UiSupport.showDocumentMessage(panel, "Both ID and Label are required.", "Invalid Event Type",
 						JOptionPane.ERROR_MESSAGE);
 				return;
 			}
 			if (!id.matches("[A-Z0-9_]+")) {
-				JOptionPane.showMessageDialog(panel,
+				UiSupport.showDocumentMessage(panel,
 						"ID may only contain letters (A-Z), digits (0-9), and underscores.", "Invalid Event Type ID",
 						JOptionPane.ERROR_MESSAGE);
 				return;
@@ -1152,11 +1508,12 @@ public class Ics214Panel extends JPanel {
 			tableModel.addType(new ActivityEventType(id, label, false));
 		}
 
+		/** Confirms removal of a configurable event type within its owner document. */
 		private void removeSelected() {
 			int row = table.getSelectedRow();
 			if (row >= 0) {
 				ActivityEventType type = tableModel.getTypes().get(row);
-				int confirm = JOptionPane.showConfirmDialog(panel,
+				int confirm = ActivityEntryDialog.showDocumentConfirm(panel,
 						"Remove event type '" + type.getLabel() + "' (" + type.getId() + ")?", "Remove Event Type",
 						JOptionPane.YES_NO_OPTION);
 				if (confirm == JOptionPane.YES_OPTION) {

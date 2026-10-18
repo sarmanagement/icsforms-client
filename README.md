@@ -51,6 +51,9 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   - T-Cards
   - Activity Logs (ICS 214)
 - SAR Task Assignment forms with debriefing and POD factoring support.
+- Assignment editors save and establish the linked SAR task before navigating to it. Save failures keep the entered values available for correction or retry.
+- **Add log entry…** is available from assignments, SAR tasks, and T-cards, including their editors. The shared entry dialog defaults to the ICP log and selected resource/task, but lets the operator change that context. New assignments must be saved before logging; cancelling the subsequent entry does not undo that save.
+- Detached ICS 214 windows remain usable while main-window operational editors are open. Incident switching or closing requires resolving outstanding editors; entries already logged are retained.
 - Safety workspace for ICS 215A hazard analysis and editable ICS 208 safety messages/plans. Hazard libraries can be loaded/saved as UTF-8 CSV; imported entries can be stored separately from incident analysis. SAR debrief hazard reports are reviewable from the Safety tab. Safety forms are available for individual export and are excluded from IAP bundles by default until selected.
 - ICS 208 authoring includes Safety Officer and Hazardous Materials Group Supervisor role metadata to support later role-specific workflows, including ICS 208 HM.
 - Local JSON persistence at `~/.icsforms/incidents/<incidentId>.json`.
@@ -62,6 +65,7 @@ File → New always creates a separate incident. File → Duplicate Incident cop
 - Role dashboards reorder the same editors; they do not duplicate incident data. Choose **View > Dashboard** (IC/ICP is the default). ICS 205A remains available. The separate ICS 205 radio communications-plan work tracked by issue #14 is not implemented by the dashboard work.
 - **Export All PDFs** for individual per-form PDF files.
 - **Export IAP Bundle** for a single merged PDF bundle of selected forms with a cover page.
+- PDF export handles multiline text and tabs, and reports unwanted controls or unsupported characters with the affected form/field and correction guidance. Failed renders do not replace existing good PDFs or leave partial bundle files.
 - **ICS 203 – Organization Assignment List** PDF from the Org Chart, alongside the existing ICS 207 chart. Select ICS 203 in **Export forms as PDF…** for an individual PDF or a combined IAP. Its optional **Include ICS 203 in IAP** setting defaults on, but a bundle includes it only when the Org Chart has entries, immediately after ICS 202. Unused positions remain blank labeled rows. When no Operations branches are entered, division/group rows come from ICS 204 and SAR task assignments. Additional entries continue on further pages; paper size, margins, and display timezone follow the shared PDF settings.
 - Validation that blocks export when required fields are missing.
 
@@ -129,6 +133,28 @@ All production source lives under `src/main/java/org/sarmanagement/icsforms/`, w
 ```bash
 mvn package
 ```
+
+### Desktop integration test
+
+Normal builds retain the modality and window-ownership assertions in
+`UiSupportModalityTest`, but skip the workstation-dependent native mouse-input
+check. To explicitly enable that check on an unobstructed desktop where Java
+`Robot` can inject mouse input:
+
+```sh
+mvn -Dicsforms.desktopTests=true -Djava.awt.headless=false -Dtest=UiSupportDesktopIntegrationTest test
+```
+
+On Linux, a dedicated virtual display can isolate the test from other windows
+and user input:
+
+```sh
+xvfb-run -a -s '-screen 0 1280x800x24' mvn -Dicsforms.desktopTests=true -Djava.awt.headless=false -Dtest=UiSupportDesktopIntegrationTest test
+```
+
+A headless skipped run does not validate native input. This opt-in test still
+depends on desktop input delivery; it does not resolve the unconfirmed cause of
+workstation-specific failures.
 
 ## Run
 

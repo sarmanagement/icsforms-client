@@ -15,17 +15,24 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.LinkedHashSet;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Coordinates exporting selected or all supported ICS forms to PDF files.
  */
 public class PdfExportService {
+	private static final Logger LOGGER = Logger.getLogger(PdfExportService.class.getName());
 	private final Map<String, PdfFormRenderer> renderers = new LinkedHashMap<>();
+	private String lastBundleSummary = "";
 
 	/**
 	 * Creates an export service with the supplied form renderers.
@@ -73,8 +80,22 @@ public class PdfExportService {
 			throw new IllegalArgumentException("Unsupported form export: " + formKey);
 		}
 		Path output = outputDirectory.resolve(fileName(formKey));
-		renderer.render(exportData(formKey, data, blankExportPages), output);
-		return output;
+		Path temporary = null;
+		try {
+			Files.createDirectories(outputDirectory);
+			temporary = Files.createTempFile(outputDirectory, ".pdf-export-", ".pdf");
+			renderer.render(exportData(formKey, data, blankExportPages), temporary);
+			replaceFile(temporary, output);
+			return output;
+		} catch (IOException | RuntimeException exception) {
+			LOGGER.log(Level.SEVERE, "PDF export failed for " + formKey, exception);
+			throw new IOException("Failed to export " + formKey + ": " + exception.getMessage()
+					+ "\nThe existing PDF was not changed.", exception);
+		} finally {
+			if (temporary != null) {
+				deleteTemporary(temporary);
+			}
+		}
 	}
 
 	/**
@@ -89,11 +110,159 @@ public class PdfExportService {
 	 *             when any export fails.
 	 */
 	public Map<String, Path> exportAll(AppData data, Path outputDirectory) throws IOException {
-		Map<String, Path> exported = new LinkedHashMap<>();
-		for (String formKey : defaultFormKeys(data)) {
-			exported.put(formKey, exportSelected(formKey, data, outputDirectory));
+		return exportForms(defaultFormKeys(data), data, outputDirectory);
+	}
+
+	/**
+	 * Renders a selection completely before atomically publishing individual PDFs.
+	 *
+	 * @param formKeys selected renderer identifiers.
+	 * @param data incident document.
+	 * @param outputDirectory destination directory.
+	 * @return published files keyed by form.
+	 * @throws IOException when rendering or publication fails.
+	 */
+	public Map<String, Path> exportForms(List<String> formKeys, AppData data, Path outputDirectory) throws IOException {
+		Path staging = null;
+		Map<String, Path> staged = new LinkedHashMap<>();
+		Set<Path> retainedBackups = new LinkedHashSet<>();
+		String current = "output setup";
+		try {
+			Files.createDirectories(outputDirectory);
+			staging = Files.createTempDirectory(outputDirectory, ".pdf-all-");
+			for (String formKey : formKeys) {
+				current = formKey;
+				staged.put(formKey, exportSelected(formKey, data, staging));
+			}
+			return publishAll(staged, outputDirectory, staging, retainedBackups);
+		} catch (IOException | RuntimeException exception) {
+			LOGGER.log(Level.SEVERE, "PDF selection export failed at " + current, exception);
+			throw new IOException("PDF export failed at " + current + ". Rendered: "
+					+ String.join(", ", staged.keySet()) + ".\n" + exception.getMessage(), exception);
+		} finally {
+			if (staging != null) {
+				deleteStaging(staging, retainedBackups);
+			}
 		}
-		return exported;
+	}
+
+	/**
+	 * Returns the most recent bundle's inclusion or failure summary.
+	 *
+	 * @return human-readable summary for the export completion dialog.
+	 */
+	public String getLastBundleSummary() {
+		return lastBundleSummary;
+	}
+
+	/**
+	 * Publishes staged forms, restoring existing outputs if publication fails.
+	 *
+	 * @param staged complete temporary PDFs keyed by form.
+	 * @param directory final output directory.
+	 * @param staging private workspace for backups.
+	 * @param retainedBackups recovery copies that must survive failed rollback.
+	 * @return published paths keyed by form.
+	 * @throws IOException when an atomic replacement fails.
+	 */
+	private Map<String, Path> publishAll(Map<String, Path> staged, Path directory, Path staging,
+			Set<Path> retainedBackups) throws IOException {
+		Map<Path, Path> backups = new LinkedHashMap<>();
+		List<Path> published = new ArrayList<>();
+		Map<String, Path> exported = new LinkedHashMap<>();
+		try {
+			for (Map.Entry<String, Path> entry : staged.entrySet()) {
+				Path destination = directory.resolve(entry.getValue().getFileName());
+				if (Files.exists(destination)) {
+					Path backup = Files.createTempFile(staging, "backup-", ".pdf");
+					Files.copy(destination, backup, StandardCopyOption.REPLACE_EXISTING);
+					backups.put(destination, backup);
+				}
+				replaceFile(entry.getValue(), destination);
+				published.add(destination);
+				exported.put(entry.getKey(), destination);
+			}
+			return exported;
+		} catch (IOException | RuntimeException exception) {
+			List<String> recovery = new ArrayList<>();
+			for (Path destination : published) {
+				Path backup = backups.get(destination);
+				try {
+					if (backup == null) {
+						Files.deleteIfExists(destination);
+					} else {
+						replaceFile(backup, destination);
+					}
+				} catch (IOException | RuntimeException restoreFailure) {
+					exception.addSuppressed(restoreFailure);
+					if (backup != null) {
+						retainedBackups.add(backup);
+						recovery.add(backup.toAbsolutePath() + " -> " + destination.toAbsolutePath());
+					} else {
+						recovery.add("Could not remove newly published file: " + destination.toAbsolutePath());
+					}
+				}
+			}
+			if (!recovery.isEmpty()) {
+				throw new IOException(exception.getMessage()
+						+ "\nRollback was incomplete. Original recovery copies have been retained."
+						+ "\nRecover these files after resolving the filesystem error:\n"
+						+ String.join("\n", recovery), exception);
+			}
+			throw exception;
+		}
+	}
+
+	/**
+	 * Atomically replaces a destination with a complete rendered or recovery PDF.
+	 *
+	 * @param source complete source file.
+	 * @param destination destination to replace.
+	 * @throws IOException when the filesystem cannot complete an atomic replacement.
+	 */
+	protected void replaceFile(Path source, Path destination) throws IOException {
+		Files.move(source, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+	}
+
+	/**
+	 * Removes a temporary file, logging cleanup failures with their full cause.
+	 *
+	 * @param path private temporary path.
+	 */
+	private static void deleteTemporary(Path path) {
+		try {
+			Files.deleteIfExists(path);
+		} catch (IOException exception) {
+			LOGGER.log(Level.WARNING, "Could not remove PDF export temporary file " + path, exception);
+		}
+	}
+
+	/**
+	 * Cleans a private export workspace, including files from a failed render.
+	 *
+	 * @param staging private export workspace.
+	 */
+	private static void deleteStaging(Path staging) {
+		deleteStaging(staging, Set.of());
+	}
+
+	/**
+	 * Cleans temporary components but never removes unrecovered original copies.
+	 *
+	 * @param staging private export workspace.
+	 * @param retainedBackups original copies needed for manual recovery.
+	 */
+	private static void deleteStaging(Path staging, Set<Path> retainedBackups) {
+		try (var files = Files.list(staging)) {
+			files.filter(path -> !retainedBackups.contains(path)).forEach(PdfExportService::deleteTemporary);
+		} catch (IOException exception) {
+			LOGGER.log(Level.WARNING, "Could not list PDF export workspace " + staging, exception);
+		}
+		if (retainedBackups.isEmpty()) {
+			deleteTemporary(staging);
+		} else {
+			LOGGER.warning("PDF recovery copies retained at: " + retainedBackups);
+		}
 	}
 
 	/**
@@ -164,10 +333,10 @@ public class PdfExportService {
 	 * Exports all supported forms and merges them into a single IAP bundle PDF.
 	 *
 	 * <p>
-	 * Individual per-form PDFs are written first and then merged. The merged file
+	 * Individual per-form PDFs are staged privately and then merged. The merged file
 	 * is named using the incident name and operational period start, sanitised for
-	 * filesystem safety. The individual component files are removed after a
-	 * successful merge.
+	 * filesystem safety. Temporary components are removed on success or failure;
+	 * existing individual and bundle PDFs are never used as temporary files.
 	 * </p>
 	 *
 	 * @param data
@@ -197,54 +366,63 @@ public class PdfExportService {
 	 *             when export or merge fails.
 	 */
 	public Path exportIapBundle(AppData data, Path outputDirectory, List<String> selectedFormKeys) throws IOException {
-		Files.createDirectories(outputDirectory);
-		// Skip ICS 201 only when it was never filled in (incident started as a full
-		// operational period with no initial response briefing). When the form contains
-		// content it is always included even if the incident has since moved to
-		// DURING_OP.
-		boolean skipIcs201 = !ics201HasContent(data.getForm201());
-		List<String> includedFormKeys = (selectedFormKeys == null || selectedFormKeys.isEmpty())
-				? defaultFormKeys(data)
-				: new ArrayList<>(selectedFormKeys);
-		includedFormKeys = orderForIapBundle(includedFormKeys);
-		if (!includeIcs203(data)) {
-			includedFormKeys.remove("ICS 203");
-		}
-		CoverPageRenderer coverPageRenderer = new CoverPageRenderer();
-		Path coverPath = Files.createTempFile(outputDirectory, "cover-page-", ".pdf");
-		List<Path> tempFiles = new ArrayList<>();
+		lastBundleSummary = "";
+		Path staging = null;
+		Map<String, Path> parts = new LinkedHashMap<>();
+		String current = "output setup";
 		try {
+			Files.createDirectories(outputDirectory);
+			staging = Files.createTempDirectory(outputDirectory, ".pdf-bundle-");
+			// Filled-in initial response briefings remain included in later periods.
+			boolean skipIcs201 = !ics201HasContent(data.getForm201());
+			List<String> includedFormKeys = (selectedFormKeys == null || selectedFormKeys.isEmpty())
+					? defaultFormKeys(data)
+					: new ArrayList<>(selectedFormKeys);
+			includedFormKeys = orderForIapBundle(includedFormKeys);
+			if (!includeIcs203(data)) {
+				includedFormKeys.remove("ICS 203");
+			}
+			current = "IAP cover";
+			CoverPageRenderer coverPageRenderer = new CoverPageRenderer();
+			Path coverPath = staging.resolve("cover.pdf");
 			coverPageRenderer.render(data, coverPath);
-			tempFiles.add(coverPath);
 			BlankExportPages blankExportPages = assignIapPageNumbers(data, includedFormKeys, skipIcs201);
-			Map<String, Path> parts = new LinkedHashMap<>();
 			for (String formKey : includedFormKeys) {
+				current = formKey;
 				if (!renderers.containsKey(formKey)) {
-					continue;
+					throw new IllegalArgumentException("Unsupported form export: " + formKey);
 				}
 				if (skipIcs201 && "ICS 201".equals(formKey)) {
 					continue;
 				}
-				parts.put(formKey, exportSelected(formKey, data, outputDirectory, blankExportPages));
+				parts.put(formKey, exportSelected(formKey, data, staging, blankExportPages));
 			}
-			tempFiles.addAll(parts.values());
+			current = "bundle merge";
 			String bundleName = iapBundleFileName(data.getIncidentContext());
 			Path bundlePath = outputDirectory.resolve(bundleName);
+			Path temporaryBundle = staging.resolve("merged.pdf");
 			PDFMergerUtility merger = new PDFMergerUtility();
-			merger.setDestinationFileName(bundlePath.toString());
+			merger.setDestinationFileName(temporaryBundle.toString());
 			merger.addSource(coverPath.toFile());
 			for (Path part : parts.values()) {
 				merger.addSource(part.toFile());
 			}
 			merger.mergeDocuments(null); // null = in-memory; suitable for typical IAP sizes (< ~50 pages)
+			replaceFile(temporaryBundle, bundlePath);
+			lastBundleSummary = "IAP bundle exported successfully. Included forms: "
+					+ (parts.isEmpty() ? "none (cover only)" : String.join(", ", parts.keySet())) + ".";
+			LOGGER.info(lastBundleSummary + " Output: " + bundlePath);
 			return bundlePath;
+		} catch (IOException | RuntimeException exception) {
+			String summary = "IAP bundle failed at " + current + ". Successfully rendered: "
+					+ (parts.isEmpty() ? "none" : String.join(", ", parts.keySet()))
+					+ ".\nNo bundle was published; existing PDFs were not changed.\n" + exception.getMessage();
+			lastBundleSummary = summary;
+			LOGGER.log(Level.SEVERE, summary, exception);
+			throw new IOException(summary, exception);
 		} finally {
-			for (Path part : tempFiles) {
-				try {
-					Files.deleteIfExists(part);
-				} catch (IOException ignored) {
-					// Best-effort cleanup; do not fail the export.
-				}
+			if (staging != null) {
+				deleteStaging(staging);
 			}
 		}
 	}

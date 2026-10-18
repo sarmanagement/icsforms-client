@@ -133,6 +133,35 @@ public class TCardPanel extends JPanel {
 	 */
 	private final Map<String, SarTaskAssignment> sarTaskByAssignmentId = new LinkedHashMap<>();
 	private java.util.function.Consumer<String> onEditSarAssignmentRequest;
+	private java.util.function.Consumer<LogEntryContext> onAddLogEntryRequest;
+
+	/**
+	 * Registers the shared contextual entry launcher.
+	 *
+	 * @param handler entry launch callback
+	 */
+	public void setOnAddLogEntryRequest(java.util.function.Consumer<LogEntryContext> handler) {
+		onAddLogEntryRequest = handler;
+	}
+
+	/**
+	 * Launches logging for a specific card rather than a stale table selection.
+	 *
+	 * @param source initiating component
+	 * @param card targeted card
+	 * @param resource current resource display identifier
+	 */
+	private void requestLogEntry(Component source, TCard card, String resource) {
+		if (card != null && card.getCardType() != TCardType.HEADER && onAddLogEntryRequest != null) {
+			String reference = card.getSourceRef();
+			String[] parts = reference.split(":", 3);
+			String assignmentId = reference.startsWith("sar:") && parts.length > 1 ? parts[1] : reference;
+			SarTaskAssignment assignment = sarTaskByAssignmentId.get(assignmentId);
+			onAddLogEntryRequest.accept(new LogEntryContext(source,
+					assignment == null ? "" : assignment.getTaskId(),
+					assignment == null ? "" : assignment.getAssignmentId(), resource));
+		}
+	}
 
 	/** Returns {@code true} when the incident is running in SAR mode. */
 	private boolean isSarMode() {
@@ -305,12 +334,18 @@ public class TCardPanel extends JPanel {
 		JMenuItem addItem = new JMenuItem("Add Card…");
 		JMenuItem editItem = new JMenuItem("Edit Selected…");
 		JMenuItem removeItem = new JMenuItem("Remove Selected");
+		JMenuItem logItem = new JMenuItem("Add log entry");
+		logItem.addActionListener(e -> {
+			TCard card = selectedCard();
+			requestLogEntry(table, card, card == null ? "" : effectiveName(card));
+		});
 		addItem.addActionListener(e -> addCardWithTypeChoice());
 		editItem.addActionListener(e -> editSelectedCard());
 		removeItem.addActionListener(e -> removeSelectedCard());
 		popup.add(addItem);
 		popup.add(editItem);
 		popup.add(removeItem);
+		popup.add(logItem);
 		table.setComponentPopupMenu(popup);
 		table.addMouseListener(new MouseAdapter() {
 			@Override
@@ -330,8 +365,11 @@ public class TCardPanel extends JPanel {
 			}
 			private void selectRowAt(MouseEvent e) {
 				int row = table.rowAtPoint(e.getPoint());
-				if (row >= 0)
+				if (row >= 0) {
 					table.setRowSelectionInterval(row, row);
+				} else {
+					table.clearSelection();
+				}
 			}
 		});
 	}
@@ -1073,6 +1111,14 @@ public class TCardPanel extends JPanel {
 		return buildRackCardWidget(card, true, false);
 	}
 
+	/**
+	 * Builds a card whose child components inherit the card-specific context menu.
+	 *
+	 * @param card represented resource
+	 * @param indented whether the card is nested
+	 * @param showPaperclip whether to show the reference indicator
+	 * @return rack widget
+	 */
 	private JPanel buildRackCardWidget(TCard card, boolean indented, boolean showPaperclip) {
 		JPanel p = new JPanel(new BorderLayout(2, 2));
 		p.setBackground(cardColor(card.getCardType()));
@@ -1127,7 +1173,11 @@ public class TCardPanel extends JPanel {
 		});
 		rackPopup.add(rackEditItem);
 		rackPopup.add(rackRemoveItem);
+		JMenuItem logItem = new JMenuItem("Add log entry");
+		logItem.addActionListener(e -> requestLogEntry(p, card, effectiveName(card)));
+		rackPopup.add(logItem);
 		p.setComponentPopupMenu(rackPopup);
+		inheritCardPopup(p);
 
 		p.addMouseListener(new MouseAdapter() {
 			@Override
@@ -1147,6 +1197,20 @@ public class TCardPanel extends JPanel {
 			}
 		});
 		return p;
+	}
+
+	/**
+	 * Enables a rack card's popup on all nested labels and containers.
+	 *
+	 * @param component root or descendant of the resource card
+	 */
+	private static void inheritCardPopup(javax.swing.JComponent component) {
+		for (Component child : component.getComponents()) {
+			if (child instanceof javax.swing.JComponent nested) {
+				nested.setInheritsPopupMenu(true);
+				inheritCardPopup(nested);
+			}
+		}
 	}
 
 	/** Builds the compound border for a rack card. */
@@ -1180,11 +1244,12 @@ public class TCardPanel extends JPanel {
 		}
 	}
 
+	/** Chooses a new resource type within the initiating document. */
 	private void addCardWithTypeChoice() {
 		JComboBox<TCardType> typeChooser = new JComboBox<>(TCardType.values());
 		typeChooser.setRenderer(tCardTypeRenderer());
 		typeChooser.setSelectedItem(TCardType.PERSONNEL);
-		int result = JOptionPane.showConfirmDialog(this, new Object[]{"Select card type:", typeChooser}, "Add T-Card",
+		int result = ActivityEntryDialog.showDocumentConfirm(this, new Object[]{"Select card type:", typeChooser}, "Add T-Card",
 				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 		if (result != JOptionPane.OK_OPTION) {
 			return;
@@ -1276,6 +1341,7 @@ public class TCardPanel extends JPanel {
 		controller.markDirty();
 	}
 
+	/** Confirms removal of the selected resource without blocking other document roots. */
 	private void removeSelectedCard() {
 		TCard selected = selectedCard();
 		if (selected == null) {
@@ -1286,7 +1352,7 @@ public class TCardPanel extends JPanel {
 			return;
 		}
 		String label = effectiveName(selected);
-		int confirm = JOptionPane.showConfirmDialog(this,
+		int confirm = ActivityEntryDialog.showDocumentConfirm(this,
 				"Remove resource '" + (label.isBlank() ? ("row " + (row + 1)) : label) + "'?", "Remove Resource",
 				JOptionPane.YES_NO_OPTION);
 		if (confirm == JOptionPane.YES_OPTION) {
@@ -1375,14 +1441,14 @@ public class TCardPanel extends JPanel {
 		}
 
 		if (mergedCount == 0) {
-			JOptionPane.showMessageDialog(this, "No duplicate T-cards (by name) found.", "Merge Duplicates",
+			UiSupport.showDocumentMessage(this, "No duplicate T-cards (by name) found.", "Merge Duplicates",
 					JOptionPane.INFORMATION_MESSAGE);
 		} else {
 			pushToModel();
 			controller.deduplicateSarTaskResources();
 			controller.markDirty();
 			refreshFromModel();
-			JOptionPane.showMessageDialog(this, mergedCount + " duplicate pair(s) merged.", "Merge Duplicates",
+			UiSupport.showDocumentMessage(this, mergedCount + " duplicate pair(s) merged.", "Merge Duplicates",
 					JOptionPane.INFORMATION_MESSAGE);
 		}
 	}
@@ -1523,9 +1589,8 @@ public class TCardPanel extends JPanel {
 		scroll.setPreferredSize(new Dimension(720, 360));
 
 		String[] options = {"Merge", "Skip this pair", "Cancel all"};
-		int choice = JOptionPane.showOptionDialog(javax.swing.SwingUtilities.getWindowAncestor(this), scroll,
-				"Merge duplicate T-cards: " + effectiveName(a), JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE,
-				null, options, options[0]);
+		int choice = UiSupport.showResizableOptionDialog(this, "Merge duplicate T-cards: " + effectiveName(a),
+				scroll, new Dimension(720, 360), options, options[0]);
 
 		if (choice == 2) {
 			outcome[0] = 2; // cancel all
@@ -1608,6 +1673,7 @@ public class TCardPanel extends JPanel {
 	// CSV import/export
 	// -------------------------------------------------------------------------
 
+	/** Exports selected resource data with feedback scoped to the initiating document. */
 	public void exportToCsv() {
 		JFileChooser chooser = new JFileChooser();
 		chooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
@@ -1622,10 +1688,10 @@ public class TCardPanel extends JPanel {
 		}
 		try {
 			exportToCsv(file);
-			JOptionPane.showMessageDialog(this, "Exported resources to " + file.getName() + ".", "Export Complete",
+			UiSupport.showDocumentMessage(this, "Exported resources to " + file.getName() + ".", "Export Complete",
 					JOptionPane.INFORMATION_MESSAGE);
 		} catch (IOException ex) {
-			JOptionPane.showMessageDialog(this, "Could not export CSV: " + ex.getMessage(), "Export Error",
+			UiSupport.showDocumentMessage(this, "Could not export CSV: " + ex.getMessage(), "Export Error",
 					JOptionPane.ERROR_MESSAGE);
 		}
 	}
@@ -1669,12 +1735,12 @@ public class TCardPanel extends JPanel {
 		try {
 			rows = parseCsv(file);
 		} catch (IOException ex) {
-			JOptionPane.showMessageDialog(this, "Could not read file: " + ex.getMessage(), "Import Error",
+			UiSupport.showDocumentMessage(this, "Could not read file: " + ex.getMessage(), "Import Error",
 					JOptionPane.ERROR_MESSAGE);
 			return;
 		}
 		if (rows.isEmpty()) {
-			JOptionPane.showMessageDialog(this, "CSV file is empty.", "Import", JOptionPane.INFORMATION_MESSAGE);
+			UiSupport.showDocumentMessage(this, "CSV file is empty.", "Import", JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
 
@@ -1686,7 +1752,7 @@ public class TCardPanel extends JPanel {
 		}
 
 		if (dataStart >= rows.size()) {
-			JOptionPane.showMessageDialog(this, "No data rows found after the header.", "Import",
+			UiSupport.showDocumentMessage(this, "No data rows found after the header.", "Import",
 					JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
@@ -1791,7 +1857,7 @@ public class TCardPanel extends JPanel {
 		content.add(scroll, BorderLayout.CENTER);
 		content.add(statusPanel, BorderLayout.SOUTH);
 
-		int choice = JOptionPane.showConfirmDialog(this, content, "Select resources to import",
+		int choice = ActivityEntryDialog.showDocumentConfirm(this, content, "Select resources to import",
 				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 		if (choice != JOptionPane.OK_OPTION) {
 			return;
@@ -1821,7 +1887,7 @@ public class TCardPanel extends JPanel {
 		if (imported > 0) {
 			controller.markDirty();
 		}
-		JOptionPane.showMessageDialog(this, "Imported " + imported + " T-card(s).", "Import Complete",
+		UiSupport.showDocumentMessage(this, "Imported " + imported + " T-card(s).", "Import Complete",
 				JOptionPane.INFORMATION_MESSAGE);
 	}
 
@@ -1966,15 +2032,23 @@ public class TCardPanel extends JPanel {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Opens an edit dialog for the given card. A "Card type" combo is shown at the
-	 * top; changing it switches the visible set of type-specific fields. The card
-	 * is updated in-place on confirmation.
+	 * Edits a detached card while allowing contextual logging without closing the editor.
 	 *
-	 * @param card
-	 *            card to edit in-place.
-	 * @return {@code true} when the user confirmed.
+	 * @param card editable card
+	 * @return true when card edits were accepted
 	 */
 	private boolean openEditDialog(TCard card) {
+		return openEditDialog(card, this);
+	}
+
+	/**
+	 * Opens a resource editor owned by its initiating editor or panel.
+	 *
+	 * @param card detached editable resource
+	 * @param owner initiating component
+	 * @return true when edits were accepted
+	 */
+	private boolean openEditDialog(TCard card, Component owner) {
 		// ── shared fields ──────────────────────────────────────────────────
 		JComboBox<TCardType> typeCombo = new JComboBox<>(TCardType.values());
 		typeCombo.setRenderer(tCardTypeRenderer());
@@ -2111,16 +2185,26 @@ public class TCardPanel extends JPanel {
 				currentName = resourceResIdField.getText().trim();
 			}
 			if (currentName.isBlank()) {
-				JOptionPane.showMessageDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
+				UiSupport.showDocumentMessage(addToAssignBtn,
 						"Please enter a name or identifier before adding to an assignment.", "Add to Assignment",
 						JOptionPane.WARNING_MESSAGE);
 				return;
 			}
-			showAddToAssignmentDialog(javax.swing.SwingUtilities.getWindowAncestor(this), currentName, currentType,
+			showAddToAssignmentDialog(javax.swing.SwingUtilities.getWindowAncestor(addToAssignBtn), currentName, currentType,
 					card.getResourceId());
 		});
 		JPanel addToAssignRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 2));
 		addToAssignRow.add(addToAssignBtn);
+		JButton addLogBtn = new JButton("Add log entry…");
+		addLogBtn.addActionListener(e -> {
+			TCardType currentType = (TCardType) typeCombo.getSelectedItem();
+			if (currentType != TCardType.HEADER) {
+				String resource = currentType == TCardType.PERSONNEL
+						? personNameField.getText().trim() : resourceResIdField.getText().trim();
+				requestLogEntry(outerPanel, card, resource);
+			}
+		});
+		addToAssignRow.add(addLogBtn);
 
 		JPanel southPanel = new JPanel();
 		southPanel.setLayout(new BoxLayout(southPanel, BoxLayout.Y_AXIS));
@@ -2132,7 +2216,7 @@ public class TCardPanel extends JPanel {
 
 		JScrollPane scroll = new JScrollPane(outerPanel);
 		scroll.setBorder(BorderFactory.createEmptyBorder());
-		if (!UiSupport.showResizableConfirmDialog(javax.swing.SwingUtilities.getWindowAncestor(this), "Edit T-Card",
+		if (!UiSupport.showResizableConfirmDialog(owner, "Edit T-Card",
 				scroll, new Dimension(520, relatedPanel != null ? 540 : 480))) {
 			return false;
 		}
@@ -2229,7 +2313,7 @@ public class TCardPanel extends JPanel {
 		addAsResBtn.addActionListener(e -> {
 			int row = sarTable.getSelectedRow();
 			if (row < 0 || row >= tasks.size()) {
-				JOptionPane.showMessageDialog(parent, "Please select a task.", "Add to Assignment",
+				UiSupport.showDocumentMessage(dlgRef[0], "Please select a task.", "Add to Assignment",
 						JOptionPane.WARNING_MESSAGE);
 				return;
 			}
@@ -2251,7 +2335,7 @@ public class TCardPanel extends JPanel {
 		setAsLeaderBtn.addActionListener(e -> {
 			int row = sarTable.getSelectedRow();
 			if (row < 0 || row >= tasks.size()) {
-				JOptionPane.showMessageDialog(parent, "Please select a task.", "Add to Assignment",
+				UiSupport.showDocumentMessage(dlgRef[0], "Please select a task.", "Add to Assignment",
 						JOptionPane.WARNING_MESSAGE);
 				return;
 			}
@@ -2286,7 +2370,7 @@ public class TCardPanel extends JPanel {
 			assignRoleBtn.addActionListener(e -> {
 				String selectedRole = roleList.getSelectedValue();
 				if (selectedRole == null) {
-					JOptionPane.showMessageDialog(parent, "Please select a role.", "Add to Assignment",
+					UiSupport.showDocumentMessage(dlgRef[0], "Please select a role.", "Add to Assignment",
 							JOptionPane.WARNING_MESSAGE);
 					return;
 				}
@@ -2313,7 +2397,7 @@ public class TCardPanel extends JPanel {
 		}
 
 		javax.swing.JDialog dlg = new javax.swing.JDialog(parent, "Add to Assignment",
-				java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+				java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
 		dlgRef[0] = dlg;
 		dlg.setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
 		JPanel content = new JPanel(new BorderLayout(6, 6));
@@ -2360,6 +2444,9 @@ public class TCardPanel extends JPanel {
 	 * handlerName matches this card's person name. For an EQUIPMENT card, lists the
 	 * PERSONNEL card whose personName matches this card's handlerName. Returns
 	 * {@code null} when no related resources are found.
+	 *
+	 * @param card resource whose related records are shown
+	 * @return related-resource navigation panel, or null when none exist
 	 */
 	private JPanel buildRelatedResourcesPanel(TCard card) {
 		List<TCard> allCards = tableModel.getCards();
@@ -2427,7 +2514,7 @@ public class TCardPanel extends JPanel {
 				int currentIdx = tableModel.getCards().indexOf(relCard);
 				if (currentIdx >= 0) {
 					TCard copy = copyCard(tableModel.getCard(currentIdx));
-					if (openEditDialog(copy)) {
+					if (openEditDialog(copy, rows)) {
 						tableModel.replaceCard(currentIdx, copy);
 						refreshDerivedViewsFromTableModel();
 						controller.markDirty();
