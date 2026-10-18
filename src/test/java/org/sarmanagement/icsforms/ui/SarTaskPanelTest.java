@@ -25,6 +25,7 @@ import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JComboBox;
@@ -47,6 +48,7 @@ import java.util.Set;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -840,6 +842,251 @@ class SarTaskPanelTest {
 		assertTrue(buttonFound.get(), "Log button should be found in dialog");
 		assertTrue(buttonInline.get(), "Log button should be inline with Save button");
 		assertSame(task, logged.get());
+	}
+
+	@Test
+	void existingResourcesOnTaskAndIsCardOnThisTask() throws Exception {
+		SarTaskAssignment task = sampleTask();
+		task.setResourceIdentifier("Primary Team");
+		task.setLeader("Leader Alice");
+
+		Method existingMethod = SarTaskPanel.class.getDeclaredMethod("existingResourcesOnTask",
+				SarTaskAssignment.class,
+				Class.forName("org.sarmanagement.icsforms.ui.SarTaskPanel$ResourceEntriesTableModel"));
+		existingMethod.setAccessible(true);
+
+		@SuppressWarnings("unchecked")
+		List<SarTaskResource> existing = (List<SarTaskResource>) existingMethod.invoke(null, task, null);
+		List<String> names = existing.stream().map(SarTaskResource::getName).toList();
+		assertTrue(names.contains("Primary Team"));
+		assertTrue(names.contains("Leader Alice"));
+
+		Method isCardOnTaskMethod = SarTaskPanel.class.getDeclaredMethod("isCardOnThisTask",
+				TCard.class, Set.class, Set.class);
+		isCardOnTaskMethod.setAccessible(true);
+
+		TCard cardById = new TCard();
+		cardById.setResourceId("id-123");
+		cardById.setPersonName("Someone");
+
+		TCard cardByName = new TCard();
+		cardByName.setResourceId("id-999");
+		cardByName.setPersonName("Leader Alice");
+
+		TCard cardOther = new TCard();
+		cardOther.setResourceId("id-456");
+		cardOther.setPersonName("Bob");
+
+		Set<String> taskIds = Set.of("id-123");
+		Set<String> taskNames = Set.of("leader alice", "primary team");
+
+		assertTrue((Boolean) isCardOnTaskMethod.invoke(null, cardById, taskIds, taskNames));
+		assertTrue((Boolean) isCardOnTaskMethod.invoke(null, cardByName, taskIds, taskNames));
+		assertFalse((Boolean) isCardOnTaskMethod.invoke(null, cardOther, taskIds, taskNames));
+	}
+
+	@Test
+	void resourceEntriesTableModelPreventsDuplicateRows() throws Exception {
+		Object editor = createEditor(sampleTask(), "ASSIGNMENT", 1);
+		Field modelField = editor.getClass().getDeclaredField("resourceEntryTableModel");
+		modelField.setAccessible(true);
+		Object model = modelField.get(editor);
+
+		Method addRow = model.getClass().getDeclaredMethod("addRow", SarTaskResource.class);
+		addRow.setAccessible(true);
+		Method getRows = model.getClass().getDeclaredMethod("getRows");
+		getRows.setAccessible(true);
+
+		SarTaskResource res1 = new SarTaskResource();
+		res1.setResourceId("res-1");
+		res1.setName("Alice");
+		res1.setFunction("Searcher");
+
+		SarTaskResource dupById = new SarTaskResource();
+		dupById.setResourceId("res-1");
+		dupById.setName("Alice Clone");
+		dupById.setFunction("Other");
+
+		SarTaskResource dupByName = new SarTaskResource();
+		dupByName.setResourceId("res-2");
+		dupByName.setName("Alice");
+		dupByName.setFunction("Other");
+
+		SarTaskResource res2 = new SarTaskResource();
+		res2.setResourceId("res-3");
+		res2.setName("Bob");
+		res2.setFunction("Tracker");
+
+		addRow.invoke(model, res1);
+		addRow.invoke(model, dupById);
+		addRow.invoke(model, dupByName);
+		addRow.invoke(model, res2);
+
+		@SuppressWarnings("unchecked")
+		List<SarTaskResource> rows = (List<SarTaskResource>) getRows.invoke(model);
+		long aliceCount = rows.stream().filter(r -> "Alice".equalsIgnoreCase(r.getName())).count();
+		long bobCount = rows.stream().filter(r -> "Bob".equalsIgnoreCase(r.getName())).count();
+		assertEquals(1, aliceCount, "Alice should only appear once");
+		assertEquals(1, bobCount, "Bob should appear once");
+	}
+
+	@Test
+	void assignmentValidationErrorsDetectsDuplicates() throws Exception {
+		SarTaskAssignment task = sampleTask();
+		Object editor = createEditor(task, "ASSIGNMENT", 1);
+		Field modelField = editor.getClass().getDeclaredField("resourceEntryTableModel");
+		modelField.setAccessible(true);
+		Object model = modelField.get(editor);
+
+		Field rowsField = model.getClass().getDeclaredField("rows");
+		rowsField.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		List<SarTaskResource> rows = (List<SarTaskResource>) rowsField.get(model);
+		rows.clear();
+
+		SarTaskResource res1 = new SarTaskResource();
+		res1.setResourceId("id-dup");
+		res1.setName("Duplicate Person");
+		SarTaskResource res2 = new SarTaskResource();
+		res2.setResourceId("id-dup");
+		res2.setName("Duplicate Person");
+		rows.add(res1);
+		rows.add(res2);
+
+		Method validationErrors = editor.getClass().getDeclaredMethod("assignmentValidationErrors");
+		validationErrors.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		List<String> errors = (List<String>) validationErrors.invoke(editor);
+		assertTrue(errors.stream().anyMatch(e -> e.contains("Duplicate resource assigned to this task")),
+				"Expected duplicate validation error");
+	}
+
+	@Test
+	void resourcePickerDialogExcludesAndDisallowsDuplicatesOnThisTask() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		Method pickerMethod = SarTaskPanel.class.getDeclaredMethod("showResourcePickerDialog", Component.class,
+				List.class, Set.class, List.class);
+		pickerMethod.setAccessible(true);
+
+		TCard cardOnThisTask = new TCard();
+		cardOnThisTask.setResourceId("card-this-task");
+		cardOnThisTask.setCardType(TCardType.PERSONNEL);
+		cardOnThisTask.setPersonName("Member On Task");
+
+		TCard cardOnOtherTask = new TCard();
+		cardOnOtherTask.setResourceId("card-other-task");
+		cardOnOtherTask.setCardType(TCardType.PERSONNEL);
+		cardOnOtherTask.setPersonName("Member Other Task");
+
+		TCard cardAvailable = new TCard();
+		cardAvailable.setResourceId("card-available");
+		cardAvailable.setCardType(TCardType.PERSONNEL);
+		cardAvailable.setPersonName("Available Member");
+
+		List<TCard> allCards = List.of(cardOnThisTask, cardOnOtherTask, cardAvailable);
+		Set<String> onOtherTaskIds = Set.of("card-other-task");
+		SarTaskResource existingOnTask = new SarTaskResource();
+		existingOnTask.setResourceId("card-this-task");
+		existingOnTask.setName("Member On Task");
+		List<SarTaskResource> existingTaskResources = List.of(existingOnTask);
+
+		var defaultRowCount = new java.util.concurrent.atomic.AtomicInteger();
+		var showAllRowCount = new java.util.concurrent.atomic.AtomicInteger();
+		var taskRowSelectable = new java.util.concurrent.atomic.AtomicBoolean();
+		var otherTaskRowSelectable = new java.util.concurrent.atomic.AtomicBoolean();
+		var finished = new java.util.concurrent.atomic.AtomicBoolean();
+		var latch = new java.util.concurrent.CountDownLatch(1);
+
+		SwingUtilities.invokeAndWait(() -> {
+			var main = new javax.swing.JFrame("Test Parent");
+			main.setSize(400, 300);
+			main.setVisible(true);
+
+			var openPicker = new javax.swing.Timer(100, event -> {
+				try {
+					pickerMethod.invoke(null, main, allCards, onOtherTaskIds, existingTaskResources);
+				} catch (ReflectiveOperationException exception) {
+					// Disposed
+				} finally {
+					finished.set(true);
+				}
+			});
+			openPicker.setRepeats(false);
+
+			var inspectAndDismiss = new javax.swing.Timer(500, event -> {
+				try {
+					for (java.awt.Window window : java.awt.Window.getWindows()) {
+						if (window instanceof javax.swing.JDialog dialog
+								&& "Add Resource".equals(dialog.getTitle()) && dialog.isShowing()) {
+							JTable table = findComponent(dialog, JTable.class);
+							JCheckBox showAll = findComponent(dialog, JCheckBox.class);
+							if (table != null && showAll != null) {
+								defaultRowCount.set(table.getRowCount());
+								showAll.doClick();
+								showAllRowCount.set(table.getRowCount());
+
+								// Locate rows in show-all view
+								int thisTaskRow = -1;
+								int otherTaskRow = -1;
+								for (int r = 0; r < table.getRowCount(); r++) {
+									String val = String.valueOf(table.getValueAt(r, 1));
+									if ("Member On Task".equals(val)) {
+										thisTaskRow = r;
+									} else if ("Member Other Task".equals(val)) {
+										otherTaskRow = r;
+									}
+								}
+								if (thisTaskRow >= 0) {
+									table.setRowSelectionInterval(thisTaskRow, thisTaskRow);
+									taskRowSelectable.set(table.isRowSelected(thisTaskRow));
+								}
+								if (otherTaskRow >= 0) {
+									table.setRowSelectionInterval(otherTaskRow, otherTaskRow);
+									otherTaskRowSelectable.set(table.isRowSelected(otherTaskRow));
+								}
+							}
+							dialog.dispose();
+						}
+					}
+					main.dispose();
+				} finally {
+					latch.countDown();
+				}
+			});
+			inspectAndDismiss.setRepeats(false);
+
+			openPicker.start();
+			inspectAndDismiss.start();
+		});
+
+		assertTrue(latch.await(5, java.util.concurrent.TimeUnit.SECONDS), "Picker test timed out");
+		assertEquals(1, defaultRowCount.get(), "Default view should only show available card");
+		assertEquals(3, showAllRowCount.get(), "Show all view should show all 3 cards");
+		assertFalse(taskRowSelectable.get(), "Card on this task should not be selectable");
+		assertTrue(otherTaskRowSelectable.get(), "Card on other task should be selectable");
+	}
+
+	/**
+	 * Finds a component of the specified class within a container hierarchy.
+	 *
+	 * @param <T> component type.
+	 * @param component root component to search.
+	 * @param targetClass target component class.
+	 * @return matching component, or {@code null} if not found.
+	 */
+	private static <T extends Component> T findComponent(Component component, Class<T> targetClass) {
+		if (targetClass.isInstance(component)) {
+			return targetClass.cast(component);
+		}
+		if (component instanceof java.awt.Container container) {
+			for (Component child : container.getComponents()) {
+				T found = findComponent(child, targetClass);
+				if (found != null) {
+					return found;
+				}
+			}
+		}
+		return null;
 	}
 
 	private static int gridX(Component component) {

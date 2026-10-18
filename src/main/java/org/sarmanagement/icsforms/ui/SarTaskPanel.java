@@ -14,6 +14,7 @@ import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListSelectionModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -55,6 +56,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.EventObject;
 import java.util.Set;
@@ -1249,8 +1251,9 @@ public class SarTaskPanel extends JPanel {
 			if (table.isEditing() && table.getCellEditor() != null) {
 				table.getCellEditor().stopCellEditing();
 			}
+			List<SarTaskResource> existingOnTask = existingResourcesOnTask(row, model);
 			List<SarTaskResource> picked = showResourcePickerDialog(parentComponent, availableTCards,
-					onTaskResourceIds);
+					onTaskResourceIds, existingOnTask);
 			if (picked != null) {
 				for (SarTaskResource res : picked) {
 					model.addRow(res);
@@ -1293,6 +1296,86 @@ public class SarTaskPanel extends JPanel {
 	}
 
 	/**
+	 * Collects resources currently assigned to the task, including in-progress editor
+	 * rows, the task leader, and the primary task resource identifier.
+	 *
+	 * @param row task being edited, or {@code null}.
+	 * @param model live table model containing edited resources, or {@code null}.
+	 * @return list of existing assigned resources; never {@code null}.
+	 */
+	private static List<SarTaskResource> existingResourcesOnTask(SarTaskAssignment row,
+			ResourceEntriesTableModel model) {
+		List<SarTaskResource> list = new ArrayList<>();
+		if (model != null) {
+			for (SarTaskResource res : model.getRows()) {
+				if (res != null) {
+					String rid = res.getResourceId();
+					String name = res.getName();
+					if ((rid != null && !rid.isBlank()) || (name != null && !name.isBlank())) {
+						list.add(res);
+					}
+				}
+			}
+		}
+		if (row != null) {
+			String resId = row.getResourceIdentifier();
+			if (resId != null && !resId.isBlank()) {
+				SarTaskResource primary = new SarTaskResource();
+				primary.setName(resId.trim());
+				list.add(primary);
+			}
+			String leader = row.getLeader();
+			if (leader != null && !leader.isBlank()) {
+				SarTaskResource leaderRes = new SarTaskResource();
+				leaderRes.setName(leader.trim());
+				list.add(leaderRes);
+			}
+		}
+		return list;
+	}
+
+	/**
+	 * Checks whether a T-card matches any resource already on the task.
+	 *
+	 * @param card card to test.
+	 * @param taskResourceIds set of resource IDs already on the task.
+	 * @param taskResourceNames set of lowercase resource names already on the task.
+	 * @return {@code true} if the card is already on this task.
+	 */
+	private static boolean isCardOnThisTask(TCard card, Set<String> taskResourceIds,
+			Set<String> taskResourceNames) {
+		if (card == null) {
+			return false;
+		}
+		String cardId = card.getResourceId();
+		if (cardId != null && !cardId.isBlank() && taskResourceIds != null
+				&& taskResourceIds.contains(cardId.trim())) {
+			return true;
+		}
+		if (taskResourceNames == null || taskResourceNames.isEmpty()) {
+			return false;
+		}
+		String personName = card.getPersonName();
+		if (personName != null && !personName.isBlank()
+				&& taskResourceNames.contains(personName.trim().toLowerCase(java.util.Locale.ROOT))) {
+			return true;
+		}
+		String resourceIdentifier = card.getResourceIdentifier();
+		if (resourceIdentifier != null && !resourceIdentifier.isBlank()
+				&& taskResourceNames.contains(resourceIdentifier.trim().toLowerCase(java.util.Locale.ROOT))) {
+			return true;
+		}
+		String effectiveName = card.getCardType() != TCardType.PERSONNEL
+				? (resourceIdentifier == null ? "" : resourceIdentifier.trim())
+				: (personName == null ? "" : personName.trim());
+		if (!effectiveName.isBlank()
+				&& taskResourceNames.contains(effectiveName.toLowerCase(java.util.Locale.ROOT))) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
 	 * Opens a dialog to pick one or more T-card resources or manually enter a new
 	 * one.
 	 *
@@ -1316,8 +1399,51 @@ public class SarTaskPanel extends JPanel {
 	 */
 	private static List<SarTaskResource> showResourcePickerDialog(java.awt.Component parent,
 			List<TCard> availableTCards, Set<String> onTaskResourceIds) {
+		return showResourcePickerDialog(parent, availableTCards, onTaskResourceIds, List.of());
+	}
+
+	/**
+	 * Opens a dialog to pick one or more T-card resources or manually enter a new
+	 * one, excluding resources already assigned to this task.
+	 *
+	 * <p>
+	 * Resources already on this task are hidden in the default view and disabled when
+	 * showing all resources to prevent duplicate assignments on the same task.
+	 * </p>
+	 *
+	 * @param parent
+	 *            parent component for the dialog.
+	 * @param availableTCards
+	 *            full list of T-cards (filtered internally based on the checkbox).
+	 * @param onTaskResourceIds
+	 *            set of resource IDs currently committed to an active task; cards
+	 *            with these IDs are hidden in the default (non-show-all) view.
+	 * @param existingTaskResources
+	 *            resources already assigned to this task that must not be duplicated.
+	 * @return a non-empty list of populated {@link SarTaskResource} objects, or
+	 *         {@code null} if the user cancelled or made no valid selection.
+	 */
+	private static List<SarTaskResource> showResourcePickerDialog(java.awt.Component parent,
+			List<TCard> availableTCards, Set<String> onTaskResourceIds,
+			List<SarTaskResource> existingTaskResources) {
 		List<TCard> allCards = availableTCards == null ? List.<TCard>of() : availableTCards;
 		Set<String> busyIds = onTaskResourceIds == null ? Set.of() : onTaskResourceIds;
+		Set<String> taskResourceIds = new HashSet<>();
+		Set<String> taskResourceNames = new HashSet<>();
+		if (existingTaskResources != null) {
+			for (SarTaskResource res : existingTaskResources) {
+				if (res != null) {
+					String rid = res.getResourceId();
+					if (rid != null && !rid.isBlank()) {
+						taskResourceIds.add(rid.trim());
+					}
+					String name = res.getName();
+					if (name != null && !name.isBlank()) {
+						taskResourceNames.add(name.trim().toLowerCase(java.util.Locale.ROOT));
+					}
+				}
+			}
+		}
 
 		// Build a table model for the T-card picker.
 		String[] cols = {"Type", "Name / Identifier", "Agency", "Location", "Status"};
@@ -1337,24 +1463,94 @@ public class SarTaskPanel extends JPanel {
 			pickerModel.setRowCount(0);
 			List<TCard> filtered = showAll
 					? new ArrayList<>(allCards)
-					: allCards.stream().filter(c -> c.getResourceId().isBlank() || !busyIds.contains(c.getResourceId()))
-							.collect(java.util.stream.Collectors.toList());
+					: allCards.stream().filter(c -> {
+						if (isCardOnThisTask(c, taskResourceIds, taskResourceNames)) {
+							return false;
+						}
+						return c.getResourceId().isBlank() || !busyIds.contains(c.getResourceId());
+					}).collect(java.util.stream.Collectors.toList());
 			currentCardList.set(filtered);
 			for (TCard card : filtered) {
 				String effectiveName = card.getCardType() != TCardType.PERSONNEL
 						? card.getResourceIdentifier().trim()
 						: card.getPersonName().trim();
+				boolean onThisTask = isCardOnThisTask(card, taskResourceIds, taskResourceNames);
+				String status = card.getStatus() == null ? "" : card.getStatus().trim();
+				if (onThisTask) {
+					status = status.isEmpty() ? "On this task" : status + " (on this task)";
+				}
 				pickerModel.addRow(new Object[]{
 						card.getCardType() == null ? TCardType.PERSONNEL.getLabel() : card.getCardType().getLabel(),
 						effectiveName, card.getHomeAgency() == null ? "" : card.getHomeAgency().trim(),
 						card.getLocation() == null ? "" : card.getLocation().trim(),
-						card.getStatus() == null ? "" : card.getStatus().trim()});
+						status});
 			}
 		};
 		rebuildModel.accept(false);
 
-		JTable pickerTable = new JTable(pickerModel);
-		pickerTable.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+		java.util.function.Predicate<Integer> isRowOnThisTask = (rowIdx) -> {
+			List<TCard> list = currentCardList.get();
+			if (rowIdx < 0 || rowIdx >= list.size()) {
+				return false;
+			}
+			return isCardOnThisTask(list.get(rowIdx), taskResourceIds, taskResourceNames);
+		};
+
+		DefaultListSelectionModel selectionModel = new DefaultListSelectionModel() {
+			@Override
+			public void setSelectionInterval(int index0, int index1) {
+				int min = Math.min(index0, index1);
+				int max = Math.max(index0, index1);
+				clearSelection();
+				for (int i = min; i <= max; i++) {
+					if (!isRowOnThisTask.test(i)) {
+						super.addSelectionInterval(i, i);
+					}
+				}
+			}
+
+			@Override
+			public void addSelectionInterval(int index0, int index1) {
+				int min = Math.min(index0, index1);
+				int max = Math.max(index0, index1);
+				for (int i = min; i <= max; i++) {
+					if (!isRowOnThisTask.test(i)) {
+						super.addSelectionInterval(i, i);
+					}
+				}
+			}
+		};
+		selectionModel.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+
+		JTable pickerTable = new JTable(pickerModel) {
+			@Override
+			public void changeSelection(int rowIndex, int columnIndex, boolean toggle, boolean extend) {
+				if (isRowOnThisTask.test(rowIndex)) {
+					return;
+				}
+				super.changeSelection(rowIndex, columnIndex, toggle, extend);
+			}
+
+			@Override
+			public Component prepareRenderer(javax.swing.table.TableCellRenderer renderer, int row, int column) {
+				Component c = super.prepareRenderer(renderer, row, column);
+				if (isRowOnThisTask.test(row)) {
+					c.setForeground(java.awt.Color.GRAY);
+					if (c instanceof JComponent jc) {
+						jc.setToolTipText("Already assigned to this task");
+					}
+				} else {
+					if (!isRowSelected(row)) {
+						c.setForeground(getForeground());
+					}
+					if (c instanceof JComponent jc) {
+						jc.setToolTipText(null);
+					}
+				}
+				return c;
+			}
+		};
+		pickerTable.setSelectionModel(selectionModel);
 		pickerTable.getTableHeader().setReorderingAllowed(false);
 		java.util.concurrent.atomic.AtomicBoolean addViaDoubleClick = new java.util.concurrent.atomic.AtomicBoolean(
 				false);
@@ -1362,10 +1558,19 @@ public class SarTaskPanel extends JPanel {
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
-					addViaDoubleClick.set(true);
-					Window window = SwingUtilities.getWindowAncestor(pickerTable);
-					if (window != null) {
-						window.dispose();
+					int row = pickerTable.rowAtPoint(e.getPoint());
+					if (row >= 0 && isRowOnThisTask.test(row)) {
+						return;
+					}
+					if (row >= 0 && !pickerTable.isRowSelected(row)) {
+						pickerTable.setRowSelectionInterval(row, row);
+					}
+					if (pickerTable.getSelectedRowCount() > 0) {
+						addViaDoubleClick.set(true);
+						Window window = SwingUtilities.getWindowAncestor(pickerTable);
+						if (window != null) {
+							window.dispose();
+						}
 					}
 				}
 			}
@@ -1377,7 +1582,10 @@ public class SarTaskPanel extends JPanel {
 		hint.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 2, 0));
 
 		JCheckBox showAllCheckBox = new JCheckBox("Show all resources (including those currently on task)");
-		showAllCheckBox.addActionListener(e -> rebuildModel.accept(showAllCheckBox.isSelected()));
+		showAllCheckBox.addActionListener(e -> {
+			pickerTable.clearSelection();
+			rebuildModel.accept(showAllCheckBox.isSelected());
+		});
 
 		JPanel topPanel = new JPanel(new BorderLayout(0, 2));
 		topPanel.add(hint, BorderLayout.NORTH);
@@ -1421,6 +1629,9 @@ public class SarTaskPanel extends JPanel {
 						continue;
 					}
 					TCard card = cardList.get(selectedRow);
+					if (isCardOnThisTask(card, taskResourceIds, taskResourceNames)) {
+						continue;
+					}
 					SarTaskResource res = new SarTaskResource();
 					res.setCardType(card.getCardType());
 					res.setResourceId(card.getResourceId());
@@ -1438,6 +1649,13 @@ public class SarTaskPanel extends JPanel {
 			// Otherwise use the manual entry fields.
 			String manualName = manualNameField.getText().trim();
 			if (!manualName.isBlank()) {
+				String lowerManual = manualName.toLowerCase(java.util.Locale.ROOT);
+				if (taskResourceNames.contains(lowerManual)) {
+					UiSupport.showDocumentMessage(parent,
+							"Resource '" + manualName + "' is already assigned to this task.",
+							"Duplicate Resource", JOptionPane.WARNING_MESSAGE);
+					continue;
+				}
 				SarTaskResource res = new SarTaskResource();
 				res.setName(manualName);
 				res.setFunction(manualFunctionField.getText().trim());
@@ -1446,6 +1664,7 @@ public class SarTaskPanel extends JPanel {
 			}
 
 			if (addViaDoubleClick.get()) {
+				addViaDoubleClick.set(false);
 				return null;
 			}
 			UiSupport.showDocumentMessage(parent, "Select one or more resources, or enter a manual name.",
@@ -1817,12 +2036,56 @@ public class SarTaskPanel extends JPanel {
 		private final String[] columns = {"Type", "Function", "Name"};
 		private final List<SarTaskResource> rows = new ArrayList<>();
 
+		/**
+		 * Checks whether a candidate resource matches any existing resource entry in this model.
+		 *
+		 * @param resource resource to check.
+		 * @return {@code true} if a duplicate resource already exists.
+		 */
+		private boolean isDuplicateResource(SarTaskResource resource) {
+			if (resource == null) {
+				return false;
+			}
+			String rid = resource.getResourceId();
+			boolean hasRid = rid != null && !rid.isBlank();
+			String name = resource.getName();
+			boolean hasName = name != null && !name.isBlank();
+			if (!hasRid && !hasName) {
+				return false;
+			}
+			for (SarTaskResource existing : rows) {
+				if (existing == null) {
+					continue;
+				}
+				String exRid = existing.getResourceId();
+				if (hasRid && exRid != null && !exRid.isBlank() && rid.trim().equalsIgnoreCase(exRid.trim())) {
+					return true;
+				}
+				String exName = existing.getName();
+				if (hasName && exName != null && !exName.isBlank()
+						&& name.trim().equalsIgnoreCase(exName.trim())) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/**
+		 * Populates the table model from a list of resources up to the maximum row count,
+		 * ignoring duplicates.
+		 *
+		 * @param resources initial resources to populate.
+		 * @param minimumRows minimum number of rows to maintain.
+		 */
 		private void setRows(List<SarTaskResource> resources, int minimumRows) {
 			rows.clear();
 			if (resources != null) {
 				for (SarTaskResource resource : resources) {
 					if (rows.size() >= MAX_RESOURCE_ROWS) {
 						break;
+					}
+					if (isDuplicateResource(resource)) {
+						continue;
 					}
 					SarTaskResource copy = new SarTaskResource();
 					copy.setFunction(resource.getFunction());
@@ -1838,18 +2101,47 @@ public class SarTaskPanel extends JPanel {
 			fireTableDataChanged();
 		}
 
+		/**
+		 * Returns the list of rows in this model.
+		 *
+		 * @return live list of resource entries.
+		 */
 		private List<SarTaskResource> getRows() {
 			return rows;
 		}
 
+		/**
+		 * Appends a resource to the table model or replaces an empty placeholder row,
+		 * unless it is a duplicate.
+		 *
+		 * @param resource resource to add.
+		 */
 		private void addRow(SarTaskResource resource) {
 			if (rows.size() >= MAX_RESOURCE_ROWS) {
 				return;
+			}
+			if (isDuplicateResource(resource)) {
+				return;
+			}
+			for (int i = 0; i < rows.size(); i++) {
+				SarTaskResource r = rows.get(i);
+				if (r != null && (r.getName() == null || r.getName().isBlank())
+						&& (r.getFunction() == null || r.getFunction().isBlank())
+						&& (r.getResourceId() == null || r.getResourceId().isBlank())) {
+					rows.set(i, resource);
+					fireTableRowsUpdated(i, i);
+					return;
+				}
 			}
 			rows.add(resource);
 			fireTableRowsInserted(rows.size() - 1, rows.size() - 1);
 		}
 
+		/**
+		 * Removes the row at the given index.
+		 *
+		 * @param rowIndex index of the row to remove.
+		 */
 		private void removeRow(int rowIndex) {
 			if (rowIndex < 0 || rowIndex >= rows.size()) {
 				return;
@@ -2509,9 +2801,33 @@ public class SarTaskPanel extends JPanel {
 			if (assignmentTeamNumberField.getText().trim().isBlank()) {
 				errors.add("Assignment/Team # is required.");
 			}
+			Set<String> seenResourceIds = new HashSet<>();
+			Set<String> seenResourceNames = new HashSet<>();
+			for (SarTaskResource res : resourceValuesFrom(resourceEntryTableModel)) {
+				String rid = res.getResourceId();
+				if (rid != null && !rid.isBlank()) {
+					if (!seenResourceIds.add(rid.trim())) {
+						String label = res.getName() != null && !res.getName().isBlank() ? res.getName().trim() : rid.trim();
+						errors.add("Duplicate resource assigned to this task: " + label);
+						continue;
+					}
+				}
+				String name = res.getName();
+				if (name != null && !name.isBlank()) {
+					String norm = name.trim().toLowerCase(java.util.Locale.ROOT);
+					if (!seenResourceNames.add(norm)) {
+						errors.add("Duplicate resource assigned to this task: " + name.trim());
+					}
+				}
+			}
 			return errors;
 		}
 
+		/**
+		 * Calculates the total number of persons represented by resources assigned to this task.
+		 *
+		 * @return total person count.
+		 */
 		private int resourceCount() {
 			// Sum personCount() contributions from matched T-cards.
 			// PERSONNEL: 1 each; CREW: numberOfPersons (default 1); others: 0.
