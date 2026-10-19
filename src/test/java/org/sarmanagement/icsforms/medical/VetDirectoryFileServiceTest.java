@@ -36,8 +36,11 @@ class VetDirectoryFileServiceTest {
 		facility.setId("regional-vet-1");
 		facility.setName("Clinique \"Étoile\"");
 		facility.setTown("Rivière, Québec");
+		facility.setState("QC");
+		facility.setPostalCode("G1R 4P5");
 		facility.setAddress("1 Example Road");
 		facility.setContactNumbers(List.of("+1 555 0100", "front desk, line 2"));
+		facility.setFax("+1 555 0101");
 		facility.setAvailable24Hours(null);
 		facility.setAvailabilityNotes("Call to confirm,\nnight hours are unverified.");
 		facility.setCapabilities("Small-animal emergency");
@@ -53,12 +56,47 @@ class VetDirectoryFileServiceTest {
 		VetFacility result = imported.getFacilities().get(0);
 		assertEquals("Clinique \"Étoile\"", result.getName());
 		assertEquals("Rivière, Québec", result.getTown());
+		assertEquals("QC", result.getState());
+		assertEquals("G1R 4P5", result.getPostalCode());
+		assertEquals("+1 555 0101", result.getFax());
 		assertEquals(facility.getContactNumbers(), result.getContactNumbers());
 		assertNull(result.getAvailable24Hours());
 		assertEquals(facility.getAvailabilityNotes(), result.getAvailabilityNotes());
 		assertEquals(46.8, result.getLatitude());
 		assertEquals("region.csv", result.getSourceName());
 		assertEquals("CSV", imported.getSources().get(0).getFormat());
+	}
+
+	@Test
+	void importsMinimalHospitalCsvWithCaseAndWhitespaceInsensitiveHeaders() throws Exception {
+		Path csv = tempDirectory.resolve("hospitals.csv");
+		Files.writeString(csv, "\" Hospital NAME \",\" ADDRESS \",\" City \",\"STATE\",\" Zip \","
+				+ "\"Contact Number\",\"Fax\",\"Notes\"\r\n"
+				+ "\"Angell Animal Medical Center\",\"350 South Huntington Avenue\",\"Boston\",\"MA\","
+				+ "\"02130\",\"617-522-7282\",\"617-522-4885\","
+				+ "\"24/7/365 ECC in house; Radiology; Operating Suites/Surgeons; CT; MRI\"\r\n"
+				+ "\"Boston Road Animal Hospital\",\"1235 Boston Road\",\"Springfield\",\"MA\",\"01119\","
+				+ "\"413-783-1203\",\"413-783-4590\",\"24/7/365 ECC in house; Radiology; CT\"\r\n");
+
+		VetDirectory imported = service.importFiles(List.of(csv), new VetDirectory()).directory();
+
+		assertEquals(2, imported.getFacilities().size());
+		VetFacility angell = imported.getFacilities().get(0);
+		assertEquals("Angell Animal Medical Center", angell.getName());
+		assertEquals("350 South Huntington Avenue", angell.getAddress());
+		assertEquals("Boston", angell.getTown());
+		assertEquals("MA", angell.getState());
+		assertEquals("02130", angell.getPostalCode());
+		assertEquals(List.of("617-522-7282"), angell.getContactNumbers());
+		assertEquals("617-522-4885", angell.getFax());
+		assertEquals("24/7/365 ECC in house; Radiology; Operating Suites/Surgeons; CT; MRI",
+				angell.getCapabilities());
+		assertNull(angell.getAvailable24Hours());
+		assertFalse(imported.getFacilities().get(1).getId().isBlank());
+		VetFacility copied = angell.copy();
+		assertEquals("MA", copied.getState());
+		assertEquals("02130", copied.getPostalCode());
+		assertEquals("617-522-4885", copied.getFax());
 	}
 
 	@Test

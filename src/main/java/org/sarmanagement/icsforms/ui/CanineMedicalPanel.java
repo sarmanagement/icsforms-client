@@ -72,20 +72,21 @@ public class CanineMedicalPanel extends JPanel {
 	private final JTextField shortlistLimit = new JTextField("8", 4);
 	private final DefaultTableModel directoryModel = new DefaultTableModel(new String[] {
 			"ID", "Name", "Town", "Address", "Contacts (; separated)", "24 Hours", "Availability notes",
-			"Capabilities", "Verified at", "Latitude", "Longitude", "Source", "Record"
+			"Capabilities / notes", "Verified at", "Latitude", "Longitude", "Source", "State", "ZIP", "Fax",
+			"Record"
 	}, 0) {
 		@Override
 		public boolean isCellEditable(int row, int column) {
-			return column > 0 && column < 12;
+			return column > 0 && column < 15;
 		}
 	};
 	private final DefaultTableModel selectionModel = new DefaultTableModel(new String[] {
-			"Name", "Town", "Address", "Contact numbers", "24 Hours", "Distance m", "Duration s", "Method",
-			"Capabilities / notes", "ID", "Record"
+			"Name", "Town", "State", "ZIP", "Address", "Contact numbers", "Fax", "24 Hours", "Distance m",
+			"Duration s", "Method", "Capabilities / notes", "ID", "Record"
 	}, 0) {
 		@Override
 		public boolean isCellEditable(int row, int column) {
-			return column <= 4 || column == 8;
+			return column <= 7 || column == 11;
 		}
 	};
 	private final JTable directoryTable = new JTable(directoryModel);
@@ -591,18 +592,18 @@ public class CanineMedicalPanel extends JPanel {
 	private void configureTables() {
 		directoryTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 		selectionTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-		directoryTable.getColumnModel().getColumn(12).setMinWidth(0);
-		directoryTable.getColumnModel().getColumn(12).setMaxWidth(0);
-		directoryTable.getColumnModel().getColumn(12).setWidth(0);
-		selectionTable.getColumnModel().getColumn(9).setMinWidth(0);
-		selectionTable.getColumnModel().getColumn(9).setMaxWidth(0);
-		selectionTable.getColumnModel().getColumn(9).setWidth(0);
-		selectionTable.getColumnModel().getColumn(10).setMinWidth(0);
-		selectionTable.getColumnModel().getColumn(10).setMaxWidth(0);
-		selectionTable.getColumnModel().getColumn(10).setWidth(0);
+		directoryTable.getColumnModel().getColumn(15).setMinWidth(0);
+		directoryTable.getColumnModel().getColumn(15).setMaxWidth(0);
+		directoryTable.getColumnModel().getColumn(15).setWidth(0);
+		selectionTable.getColumnModel().getColumn(12).setMinWidth(0);
+		selectionTable.getColumnModel().getColumn(12).setMaxWidth(0);
+		selectionTable.getColumnModel().getColumn(12).setWidth(0);
+		selectionTable.getColumnModel().getColumn(13).setMinWidth(0);
+		selectionTable.getColumnModel().getColumn(13).setMaxWidth(0);
+		selectionTable.getColumnModel().getColumn(13).setWidth(0);
 		directoryTable.getColumnModel().getColumn(5).setCellEditor(
 				new DefaultCellEditor(new JComboBox<>(new String[] {"Yes", "No", UNKNOWN})));
-		selectionTable.getColumnModel().getColumn(4).setCellEditor(
+		selectionTable.getColumnModel().getColumn(7).setCellEditor(
 				new DefaultCellEditor(new JComboBox<>(new String[] {"Yes", "No", UNKNOWN})));
 	}
 
@@ -726,18 +727,20 @@ public class CanineMedicalPanel extends JPanel {
 	private void saveDirectory(VetDirectory directory) {
 		List<VetFacility> facilities = new ArrayList<>();
 		for (int row = 0; row < directoryModel.getRowCount(); row++) {
-			VetFacility facility = record(directoryModel.getValueAt(row, 12));
-			String oldAddress = facility.getAddress();
+			VetFacility facility = record(directoryModel.getValueAt(row, 15));
+			String oldAddress = geocodingAddress(facility);
 			facility.setName(cell(directoryModel, row, 1));
 			facility.setTown(cell(directoryModel, row, 2));
 			facility.setAddress(cell(directoryModel, row, 3));
+			facility.setState(cell(directoryModel, row, 12));
+			facility.setPostalCode(cell(directoryModel, row, 13));
 			facility.setContactNumbers(contacts(cell(directoryModel, row, 4)));
 			facility.setAvailable24Hours(parseBoolean(cell(directoryModel, row, 5)));
 			facility.setAvailabilityNotes(cell(directoryModel, row, 6));
 			facility.setCapabilities(cell(directoryModel, row, 7));
 			Double latitude = coordinate(cell(directoryModel, row, 9), -90, 90);
 			Double longitude = coordinate(cell(directoryModel, row, 10), -180, 180);
-			if (!oldAddress.equals(facility.getAddress())) {
+			if (!oldAddress.equals(geocodingAddress(facility))) {
 				directoryModel.setValueAt("", row, 9);
 				directoryModel.setValueAt("", row, 10);
 			} else if (latitude != null && longitude != null
@@ -745,7 +748,8 @@ public class CanineMedicalPanel extends JPanel {
 				facility.setCoordinates(latitude, longitude, "manual", "Operator-entered coordinates");
 			}
 			facility.setSourceName(cell(directoryModel, row, 11));
-			directoryModel.setValueAt(facility.copy(), row, 12);
+			facility.setFax(cell(directoryModel, row, 14));
+			directoryModel.setValueAt(facility.copy(), row, 15);
 			facilities.add(facility);
 		}
 		directory.setFacilities(facilities);
@@ -759,21 +763,24 @@ public class CanineMedicalPanel extends JPanel {
 	private void saveSelection(CanineMedicalPlan plan) {
 		List<VetFacility> facilities = new ArrayList<>();
 		for (int row = 0; row < selectionModel.getRowCount(); row++) {
-			VetFacility facility = record(selectionModel.getValueAt(row, 10));
+			VetFacility facility = record(selectionModel.getValueAt(row, 13));
 			facility.setName(cell(selectionModel, row, 0));
 			facility.setTown(cell(selectionModel, row, 1));
-			String previousAddress = facility.getAddress();
-			facility.setAddress(cell(selectionModel, row, 2));
-			facility.setContactNumbers(contacts(cell(selectionModel, row, 3)));
-			facility.setAvailable24Hours(parseBoolean(cell(selectionModel, row, 4)));
-			if (!previousAddress.equals(facility.getAddress())) {
+			facility.setState(cell(selectionModel, row, 2));
+			facility.setPostalCode(cell(selectionModel, row, 3));
+			String previousAddress = geocodingAddress(facility);
+			facility.setAddress(cell(selectionModel, row, 4));
+			facility.setContactNumbers(contacts(cell(selectionModel, row, 5)));
+			facility.setFax(cell(selectionModel, row, 6));
+			facility.setAvailable24Hours(parseBoolean(cell(selectionModel, row, 7)));
+			if (!previousAddress.equals(geocodingAddress(facility))) {
 				facility.clearDistance();
-				selectionModel.setValueAt("", row, 5);
-				selectionModel.setValueAt("", row, 6);
-				selectionModel.setValueAt("", row, 7);
+				selectionModel.setValueAt("", row, 8);
+				selectionModel.setValueAt("", row, 9);
+				selectionModel.setValueAt("", row, 10);
 			}
-			facility.setCapabilities(cell(selectionModel, row, 8));
-			selectionModel.setValueAt(facility.copy(), row, 10);
+			facility.setCapabilities(cell(selectionModel, row, 11));
+			selectionModel.setValueAt(facility.copy(), row, 13);
 			facilities.add(facility);
 		}
 		plan.setSelectedFacilities(facilities);
@@ -790,7 +797,8 @@ public class CanineMedicalPanel extends JPanel {
 				String.join(";", facility.getContactNumbers()), availability(facility.getAvailable24Hours()),
 				facility.getAvailabilityNotes(), facility.getCapabilities(),
 				facility.getVerifiedAt() == null ? "" : facility.getVerifiedAt().toString(),
-				value(facility.getLatitude()), value(facility.getLongitude()), facility.getSourceName(), facility.copy()};
+				value(facility.getLatitude()), value(facility.getLongitude()), facility.getSourceName(),
+				facility.getState(), facility.getPostalCode(), facility.getFax(), facility.copy()};
 	}
 
 	/**
@@ -800,10 +808,10 @@ public class CanineMedicalPanel extends JPanel {
 	 * @return display cells plus stable ID and record.
 	 */
 	private Object[] selectionRow(VetFacility facility) {
-		return new Object[] {facility.getName(), facility.getTown(), facility.getAddress(),
-				String.join("; ", facility.getContactNumbers()), availability(facility.getAvailable24Hours()),
-				distance(facility), duration(facility), facility.getDistanceMethod(), facility.getCapabilities(),
-				facility.getId(), facility.copy()};
+		return new Object[] {facility.getName(), facility.getTown(), facility.getState(), facility.getPostalCode(),
+				facility.getAddress(), String.join("; ", facility.getContactNumbers()), facility.getFax(),
+				availability(facility.getAvailable24Hours()), distance(facility), duration(facility),
+				facility.getDistanceMethod(), facility.getCapabilities(), facility.getId(), facility.copy()};
 	}
 
 	/**
@@ -859,7 +867,7 @@ public class CanineMedicalPanel extends JPanel {
 		int exceptions = 0;
 		for (int viewRow : selected) {
 			int row = directoryTable.convertRowIndexToModel(viewRow);
-			VetFacility facility = record(directoryModel.getValueAt(row, 12));
+			VetFacility facility = record(directoryModel.getValueAt(row, 15));
 			if (!Boolean.TRUE.equals(facility.getAvailable24Hours())) {
 				exceptions++;
 			}
@@ -871,7 +879,7 @@ public class CanineMedicalPanel extends JPanel {
 		}
 		for (int viewRow : selected) {
 			int row = directoryTable.convertRowIndexToModel(viewRow);
-			addSnapshot(record(directoryModel.getValueAt(row, 12)));
+			addSnapshot(record(directoryModel.getValueAt(row, 15)));
 		}
 	}
 
@@ -1101,9 +1109,9 @@ public class CanineMedicalPanel extends JPanel {
 		pushToModel();
 		AppData incident = controller.getData();
 		int row = directoryTable.convertRowIndexToModel(viewRow);
-		VetFacility facility = record(directoryModel.getValueAt(row, 12));
+		VetFacility facility = record(directoryModel.getValueAt(row, 15));
 		String id = facility.getId();
-		String address = facility.getAddress();
+		String address = geocodingAddress(facility);
 		long baseGeneration = incident.getStagingLocation().getGeneration();
 		startWorker(new SwingWorker<List<AddressGeocoder.Candidate>, Void>() {
 			@Override
@@ -1253,6 +1261,18 @@ public class CanineMedicalPanel extends JPanel {
 				"Choose geocoding result", JOptionPane.QUESTION_MESSAGE, null,
 				candidates.toArray(), candidates.get(0));
 		return selected instanceof AddressGeocoder.Candidate candidate ? candidate : null;
+	}
+
+	/**
+	 * Combines separately stored address fields into a complete geocoder query.
+	 *
+	 * @param facility veterinary facility.
+	 * @return street, city, state, and postal code query.
+	 */
+	private String geocodingAddress(VetFacility facility) {
+		return java.util.stream.Stream.of(facility.getAddress(), facility.getTown(), facility.getState(),
+				facility.getPostalCode()).filter(value -> value != null && !value.isBlank())
+				.collect(java.util.stream.Collectors.joining(", "));
 	}
 
 	/**

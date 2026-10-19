@@ -30,8 +30,9 @@ import java.util.UUID;
 public class VetDirectoryFileService {
 	/** Version of the portable regional JSON document. */
 	public static final int JSON_SCHEMA_VERSION = 1;
-	private static final List<String> CSV_HEADERS = List.of("id", "name", "town", "address", "contactNumbers",
-			"available24Hours", "availabilityNotes", "capabilities", "verifiedAt", "latitude", "longitude");
+	private static final List<String> CSV_HEADERS = List.of("id", "name", "town", "state", "postalCode", "address",
+			"contactNumbers", "fax", "available24Hours", "availabilityNotes", "capabilities", "verifiedAt",
+			"latitude", "longitude");
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -196,21 +197,17 @@ public class VetDirectoryFileService {
 		if (rows.isEmpty()) {
 			return new ArrayList<>();
 		}
-		List<String> header = rows.get(0).stream().map(VetDirectoryFileService::normalizeHeader).toList();
-		List<String> expectedHeaders = CSV_HEADERS.stream().map(VetDirectoryFileService::normalizeHeader).toList();
-		if (!header.equals(expectedHeaders)) {
-			throw new IllegalArgumentException("CSV header must be: " + String.join(",", CSV_HEADERS));
-		}
+		List<CsvField> fields = csvFields(rows.get(0));
 		List<VetFacility> facilities = new ArrayList<>();
 		for (int rowIndex = 1; rowIndex < rows.size(); rowIndex++) {
 			List<String> row = rows.get(rowIndex);
-			if (row.size() != CSV_HEADERS.size()) {
+			if (row.size() != fields.size()) {
 				errors.add(file.getFileName() + ": row " + (rowIndex + 1) + " has " + row.size()
-						+ " fields; expected " + CSV_HEADERS.size());
+						+ " fields; expected " + fields.size());
 				continue;
 			}
 			try {
-				facilities.add(csvFacility(row));
+				facilities.add(csvFacility(row, fields));
 			} catch (IllegalArgumentException exception) {
 				errors.add(file.getFileName() + ": row " + (rowIndex + 1) + ": " + safeMessage(exception));
 			}
@@ -221,28 +218,46 @@ public class VetDirectoryFileService {
 	/**
 	 * Converts one parsed CSV row into a validated regional entry.
 	 *
-	 * @param row CSV cells in documented order.
+	 * @param row CSV cells.
+	 * @param fields field mapping for the imported header.
 	 * @return parsed facility.
 	 */
-	private VetFacility csvFacility(List<String> row) {
+	private VetFacility csvFacility(List<String> row, List<CsvField> fields) {
+		java.util.EnumMap<CsvField, String> values = new java.util.EnumMap<>(CsvField.class);
+		for (int index = 0; index < fields.size(); index++) {
+			CsvField field = fields.get(index);
+			if (field != null) {
+				String value = row.get(index).trim();
+				if (field == CsvField.CAPABILITIES && values.containsKey(field) && !value.isBlank()) {
+					String existing = values.get(field);
+					values.put(field, existing.isBlank() ? value : existing + "; " + value);
+				} else if (!values.containsKey(field) || values.get(field).isBlank()) {
+					values.put(field, value);
+				}
+			}
+		}
 		VetFacility facility = new VetFacility();
-		facility.setId(row.get(0));
-		facility.setName(row.get(1));
-		facility.setTown(row.get(2));
-		facility.setAddress(row.get(3));
-		facility.setContactNumbers(parseContacts(row.get(4)));
-		facility.setAvailable24Hours(parseAvailability(row.get(5)));
-		facility.setAvailabilityNotes(row.get(6));
-		facility.setCapabilities(row.get(7));
-		if (!row.get(8).isBlank()) {
+		facility.setId(values.get(CsvField.ID));
+		facility.setName(values.get(CsvField.NAME));
+		facility.setTown(values.get(CsvField.TOWN));
+		facility.setState(values.get(CsvField.STATE));
+		facility.setPostalCode(values.get(CsvField.POSTAL_CODE));
+		facility.setAddress(values.get(CsvField.ADDRESS));
+		facility.setContactNumbers(parseContacts(value(values.get(CsvField.CONTACT_NUMBERS))));
+		facility.setFax(value(values.get(CsvField.FAX)));
+		facility.setAvailable24Hours(parseAvailability(value(values.get(CsvField.AVAILABLE_24_HOURS))));
+		facility.setAvailabilityNotes(value(values.get(CsvField.AVAILABILITY_NOTES)));
+		facility.setCapabilities(value(values.get(CsvField.CAPABILITIES)));
+		String verifiedAt = value(values.get(CsvField.VERIFIED_AT));
+		if (!verifiedAt.isBlank()) {
 			try {
-				facility.setVerifiedAt(Instant.parse(row.get(8)));
+				facility.setVerifiedAt(Instant.parse(verifiedAt));
 			} catch (RuntimeException exception) {
 				throw new IllegalArgumentException("verifiedAt must be ISO-8601", exception);
 			}
 		}
-		Double latitude = optionalNumber(row.get(9), "latitude");
-		Double longitude = optionalNumber(row.get(10), "longitude");
+		Double latitude = optionalNumber(value(values.get(CsvField.LATITUDE)), "latitude");
+		Double longitude = optionalNumber(value(values.get(CsvField.LONGITUDE)), "longitude");
 		if (latitude != null && longitude != null) {
 			StagingLocation.validateCoordinates(latitude, longitude);
 			facility.setCoordinates(latitude, longitude, "imported", "CSV coordinates");
@@ -277,7 +292,8 @@ public class VetDirectoryFileService {
 		if (directory != null) {
 			for (VetFacility facility : directory.getFacilities()) {
 				appendCsvRow(csv, List.of(facility.getId(), facility.getName(), facility.getTown(),
-						facility.getAddress(), String.join(";", facility.getContactNumbers()),
+						facility.getState(), facility.getPostalCode(), facility.getAddress(),
+						String.join(";", facility.getContactNumbers()), facility.getFax(),
 						availabilityText(facility.getAvailable24Hours()), facility.getAvailabilityNotes(),
 						facility.getCapabilities(), facility.getVerifiedAt() == null ? "" : facility.getVerifiedAt().toString(),
 						facility.getLatitude() == null ? "" : facility.getLatitude().toString(),
@@ -390,7 +406,7 @@ public class VetDirectoryFileService {
 	 */
 	private boolean sameFacility(VetFacility first, VetFacility second) {
 		return normalize(first.getName()).equals(normalize(second.getName()))
-				&& normalize(first.getAddress()).equals(normalize(second.getAddress()))
+				&& normalize(fullAddress(first)).equals(normalize(fullAddress(second)))
 				&& new HashSet<>(normalizeContacts(first.getContactNumbers()))
 						.equals(new HashSet<>(normalizeContacts(second.getContactNumbers())));
 	}
@@ -405,9 +421,21 @@ public class VetDirectoryFileService {
 	private boolean sameAddressAndContact(VetFacility first, VetFacility second) {
 		List<String> firstContacts = normalizeContacts(first.getContactNumbers());
 		List<String> secondContacts = normalizeContacts(second.getContactNumbers());
-		return !normalize(first.getAddress()).isBlank()
-				&& normalize(first.getAddress()).equals(normalize(second.getAddress()))
+		return !normalize(fullAddress(first)).isBlank()
+				&& normalize(fullAddress(first)).equals(normalize(fullAddress(second)))
 				&& !firstContacts.isEmpty() && firstContacts.equals(secondContacts);
+	}
+
+	/**
+	 * Combines separate address fields for geocoding and cautious duplicate matching.
+	 *
+	 * @param facility veterinary facility.
+	 * @return street, city, state, and postal code joined as one query string.
+	 */
+	private static String fullAddress(VetFacility facility) {
+		return java.util.stream.Stream.of(facility.getAddress(), facility.getTown(), facility.getState(),
+				facility.getPostalCode()).filter(value -> value != null && !value.isBlank())
+				.collect(java.util.stream.Collectors.joining(", "));
 	}
 
 	/**
@@ -465,8 +493,11 @@ public class VetDirectoryFileService {
 		copy.setId(source.getId());
 		copy.setName(source.getName());
 		copy.setTown(source.getTown());
+		copy.setState(source.getState());
+		copy.setPostalCode(source.getPostalCode());
 		copy.setAddress(source.getAddress());
 		copy.setContactNumbers(new ArrayList<>(source.getContactNumbers()));
+		copy.setFax(source.getFax());
 		copy.setAvailable24Hours(source.getAvailable24Hours());
 		copy.setAvailabilityNotes(source.getAvailabilityNotes());
 		copy.setCapabilities(source.getCapabilities());
@@ -561,7 +592,66 @@ public class VetDirectoryFileService {
 	 * @return normalized header.
 	 */
 	private static String normalizeHeader(String header) {
-		return header == null ? "" : header.trim().replace("\uFEFF", "").toLowerCase(Locale.ROOT);
+		return header == null ? "" : header.replace("\uFEFF", "").toLowerCase(Locale.ROOT)
+				.replaceAll("[^a-z0-9]", "");
+	}
+
+	/**
+	 * Maps case- and spacing-insensitive supported CSV column names to facility fields.
+	 *
+	 * @param headers source CSV header row.
+	 * @return ordered field mapping.
+	 */
+	private static List<CsvField> csvFields(List<String> headers) {
+		List<CsvField> fields = new ArrayList<>();
+		boolean hasName = false;
+		boolean hasAddress = false;
+		for (String header : headers) {
+			String normalized = normalizeHeader(header);
+			CsvField field = switch (normalized) {
+				case "id", "facilityid" -> CsvField.ID;
+				case "name", "hospitalname", "facilityname" -> CsvField.NAME;
+				case "town", "city", "municipality" -> CsvField.TOWN;
+				case "state", "province" -> CsvField.STATE;
+				case "zip", "zipcode", "postalcode", "postal" -> CsvField.POSTAL_CODE;
+				case "address", "streetaddress" -> CsvField.ADDRESS;
+				case "contactnumbers", "contactnumber", "phone", "phonenumber", "telephone" ->
+					CsvField.CONTACT_NUMBERS;
+				case "fax", "faxnumber" -> CsvField.FAX;
+				case "available24hours", "24hours", "open24hours" -> CsvField.AVAILABLE_24_HOURS;
+				case "availabilitynotes" -> CsvField.AVAILABILITY_NOTES;
+				case "capabilities", "notes" -> CsvField.CAPABILITIES;
+				case "verifiedat" -> CsvField.VERIFIED_AT;
+				case "latitude", "lat" -> CsvField.LATITUDE;
+				case "longitude", "lon", "lng" -> CsvField.LONGITUDE;
+				default -> null;
+			};
+			fields.add(field);
+			hasName |= field == CsvField.NAME;
+			hasAddress |= field == CsvField.ADDRESS;
+		}
+		if (!hasName || !hasAddress) {
+			throw new IllegalArgumentException("CSV must include Hospital Name/Name and Address columns");
+		}
+		return fields;
+	}
+
+	/**
+	 * Replaces a missing CSV field value with empty text.
+	 *
+	 * @param value source cell.
+	 * @return non-null cell text.
+	 */
+	private static String value(String value) {
+		return value == null ? "" : value;
+	}
+
+	/**
+	 * Supported imported CSV facility columns.
+	 */
+	private enum CsvField {
+		ID, NAME, TOWN, STATE, POSTAL_CODE, ADDRESS, CONTACT_NUMBERS, FAX, AVAILABLE_24_HOURS,
+		AVAILABILITY_NOTES, CAPABILITIES, VERIFIED_AT, LATITUDE, LONGITUDE
 	}
 
 	/**

@@ -148,10 +148,11 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 			String distance = facility.hasCurrentDistance(base.getGeneration())
 					? formatDistance(facility.getDistanceMeters()) + " (" + text(facility.getDistanceMethod()) + ")"
 					: "Not calculated";
-			facilities.add("Name: " + text(facility.getName()) + " | Town: " + text(facility.getTown())
+			facilities.add("Name: " + text(facility.getName()) + " | City: " + text(facility.getTown())
+					+ " | State: " + text(facility.getState()) + " | ZIP: " + text(facility.getPostalCode())
 					+ " | Distance from base: " + distance);
 			facilities.add("Address: " + text(facility.getAddress()) + " | Contacts: "
-					+ String.join("; ", facility.getContactNumbers()));
+					+ String.join("; ", facility.getContactNumbers()) + " | Fax: " + text(facility.getFax()));
 			facilities.add("24 hours: " + availability(facility.getAvailable24Hours()) + " | Capabilities/notes: "
 					+ text(facility.getCapabilities()) + " " + text(facility.getAvailabilityNotes()));
 		}

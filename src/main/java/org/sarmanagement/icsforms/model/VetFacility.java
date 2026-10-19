@@ -18,8 +18,11 @@ public class VetFacility {
 	private String id = UUID.randomUUID().toString();
 	private String name = "";
 	private String town = "";
+	private String state = "";
+	private String postalCode = "";
 	private String address = "";
 	private List<String> contactNumbers = new ArrayList<>();
+	private String fax = "";
 	private Boolean available24Hours;
 	private String availabilityNotes = "";
 	private String capabilities = "";
@@ -70,7 +73,39 @@ public class VetFacility {
 
 	/** @param town town or municipality. */
 	public void setTown(String town) {
-		this.town = safe(town);
+		String next = safe(town);
+		if (!this.town.equals(next)) {
+			this.town = next;
+			invalidateLocationResolution();
+		}
+	}
+
+	/** @return state or province. */
+	public String getState() {
+		return state;
+	}
+
+	/** @param state state or province. */
+	public void setState(String state) {
+		String next = safe(state);
+		if (!this.state.equals(next)) {
+			this.state = next;
+			invalidateLocationResolution();
+		}
+	}
+
+	/** @return postal or ZIP code. */
+	public String getPostalCode() {
+		return postalCode;
+	}
+
+	/** @param postalCode postal or ZIP code. */
+	public void setPostalCode(String postalCode) {
+		String next = safe(postalCode);
+		if (!this.postalCode.equals(next)) {
+			this.postalCode = next;
+			invalidateLocationResolution();
+		}
 	}
 
 	/** @return physical address. */
@@ -87,11 +122,7 @@ public class VetFacility {
 		String next = safe(address);
 		if (!this.address.equals(next)) {
 			this.address = next;
-			latitude = null;
-			longitude = null;
-			geocodingProvider = "";
-			geocodingProvenance = "";
-			clearDistance();
+			invalidateLocationResolution();
 		}
 	}
 
@@ -103,6 +134,16 @@ public class VetFacility {
 	/** @param contactNumbers contact numbers; null becomes empty. */
 	public void setContactNumbers(List<String> contactNumbers) {
 		this.contactNumbers = contactNumbers == null ? new ArrayList<>() : contactNumbers;
+	}
+
+	/** @return fax number. */
+	public String getFax() {
+		return fax;
+	}
+
+	/** @param fax fax number. */
+	public void setFax(String fax) {
+		this.fax = safe(fax);
 	}
 
 	/**
@@ -282,8 +323,11 @@ public class VetFacility {
 		copy.setId(getId());
 		copy.setName(name);
 		copy.setTown(town);
+		copy.setState(state);
+		copy.setPostalCode(postalCode);
 		copy.setAddress(address);
 		copy.setContactNumbers(new ArrayList<>(contactNumbers));
+		copy.setFax(fax);
 		copy.setAvailable24Hours(available24Hours);
 		copy.setAvailabilityNotes(availabilityNotes);
 		copy.setCapabilities(capabilities);
@@ -295,6 +339,17 @@ public class VetFacility {
 				stagingGeneration);
 		copy.setSourceName(sourceName);
 		return copy;
+	}
+
+	/**
+	 * Clears coordinates and route results after any address component changes.
+	 */
+	private void invalidateLocationResolution() {
+		latitude = null;
+		longitude = null;
+		geocodingProvider = "";
+		geocodingProvenance = "";
+		clearDistance();
 	}
 
 	/**
