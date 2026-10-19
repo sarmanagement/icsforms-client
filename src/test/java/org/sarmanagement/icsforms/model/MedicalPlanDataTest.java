@@ -38,6 +38,12 @@ class MedicalPlanDataTest {
 		CanineMedicalPlan caninePlan = data.getCanineMedicalPlan();
 		caninePlan.setAidStationInformation("Fictional base | paramedics unknown");
 		caninePlan.setTransportServices("Fictional canine-capable ground service");
+		IncidentLocation base = new IncidentLocation();
+		base.setType("Base");
+		base.setName("Fictional Incident Base");
+		base.setAddress("10 Fictional Base Road");
+		data.getIncidentLocations().add(base);
+		data.setCanineRoutingBaseLocationId(base.getId());
 		VetFacility selectedVet = new VetFacility();
 		selectedVet.setName("Fictional 24-hour Vet");
 		selectedVet.setAvailable24Hours(true);
@@ -55,6 +61,19 @@ class MedicalPlanDataTest {
 				reloaded.getCanineMedicalPlan().getTransportServices());
 		assertEquals("Fictional 24-hour Vet",
 				reloaded.getCanineMedicalPlan().getSelectedFacilities().get(0).getName());
+		assertEquals(base.getId(), reloaded.getIncidentLocations().get(0).getId());
+		assertEquals("Fictional Incident Base", reloaded.getIncidentLocations().get(0).getName());
+		assertEquals("10 Fictional Base Road", reloaded.getIncidentLocations().get(0).getAddress());
+		assertEquals(base.getId(), reloaded.getCanineRoutingBaseLocationId());
+	}
+
+	@Test
+	void olderIncidentDocumentsDefaultToAnEmptyLocationListAndManualRoutingBase() throws Exception {
+		AppData migrated = mapper.readValue("{\"schemaVersion\":9}", AppData.class);
+
+		assertEquals(9, migrated.getSchemaVersion());
+		assertTrue(migrated.getIncidentLocations().isEmpty());
+		assertEquals("", migrated.getCanineRoutingBaseLocationId());
 	}
 
 	@Test
@@ -120,6 +139,12 @@ class MedicalPlanDataTest {
 		data.getCanineMedicalPlan().setPoisonControlContact("Local contact on file");
 		data.getVetDirectory().getFacilities().add(new VetFacility());
 		data.getStagingLocation().setAddress("Incident staging address");
+		IncidentLocation base = new IncidentLocation();
+		base.setType("Base");
+		base.setName("Incident Base");
+		base.setAddress("Incident base address");
+		data.getIncidentLocations().add(base);
+		data.setCanineRoutingBaseLocationId(base.getId());
 
 		data.advanceToNewOperationalPeriod();
 
@@ -132,5 +157,7 @@ class MedicalPlanDataTest {
 		assertFalse(data.getCanineMedicalPlan().isActive());
 		assertEquals(1, data.getVetDirectory().getFacilities().size());
 		assertEquals("Incident staging address", data.getStagingLocation().getAddress());
+		assertEquals(1, data.getIncidentLocations().size());
+		assertEquals(base.getId(), data.getCanineRoutingBaseLocationId());
 	}
 }

@@ -194,15 +194,19 @@ public class Ics206Panel extends JPanel {
 		modeContent.add(simple, SIMPLE_MODE);
 
 		detailTabs.addTab("3. Aid Stations", tablePanel(aidTable, aidModel));
-		detailTabs.addTab("4. Transportation", tablePanel(transportTable, transportModel));
+		JPanel transportation = new JPanel(new BorderLayout(4, 4));
+		transportation.add(tablePanel(transportTable, transportModel), BorderLayout.CENTER);
+		JPanel aviationPanel = new JPanel(new BorderLayout(4, 4));
+		aviationPanel.setBorder(BorderFactory.createTitledBorder("Aviation coordination"));
+		aviationUsed.setText("Aviation assets are used for rescue; coordinate with Air Operations Branch");
+		aviationPanel.add(aviationUsed, BorderLayout.NORTH);
+		aviationPanel.add(new JScrollPane(airOperations), BorderLayout.CENTER);
+		transportation.add(aviationPanel, BorderLayout.SOUTH);
+		detailTabs.addTab("4. Transportation", transportation);
 		detailTabs.addTab("5. Hospitals", tablePanel(hospitalTable, hospitalModel));
 		JPanel procedurePanel = new JPanel(new BorderLayout(4, 4));
 		procedurePanel.setBorder(BorderFactory.createTitledBorder("6. Special medical emergency procedures"));
 		procedurePanel.add(new JScrollPane(procedures), BorderLayout.CENTER);
-		JPanel aviationPanel = new JPanel(new BorderLayout(4, 4));
-		aviationPanel.add(aviationUsed, BorderLayout.NORTH);
-		aviationPanel.add(new JScrollPane(airOperations), BorderLayout.CENTER);
-		procedurePanel.add(aviationPanel, BorderLayout.SOUTH);
 		detailTabs.addTab("6. Special Procedures", procedurePanel);
 		detailTabs.setBorder(BorderFactory.createTitledBorder("Detailed ICS 206 entries"));
 		modeContent.add(detailTabs, DETAILED_MODE);

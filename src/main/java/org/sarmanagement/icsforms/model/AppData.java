@@ -19,7 +19,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 9;
+	public static final int CURRENT_SCHEMA_VERSION = 10;
 
 	/**
 	 * A lightweight snapshot of the shared context at the end of one operational
@@ -165,6 +165,8 @@ public class AppData {
 	private CanineMedicalPlan canineMedicalPlan = new CanineMedicalPlan();
 	private VetDirectory vetDirectory = new VetDirectory();
 	private StagingLocation stagingLocation = new StagingLocation();
+	private List<IncidentLocation> incidentLocations = new ArrayList<>();
+	private String canineRoutingBaseLocationId = "";
 
 	/**
 	 * Creates an empty incident document.
@@ -1042,6 +1044,45 @@ public class AppData {
 	 */
 	public void setStagingLocation(StagingLocation stagingLocation) {
 		this.stagingLocation = stagingLocation == null ? new StagingLocation() : stagingLocation;
+	}
+
+	/**
+	 * Returns the incident-owned ICP, staging, base, and other location records.
+	 *
+	 * @return mutable location list, never null.
+	 */
+	public List<IncidentLocation> getIncidentLocations() {
+		if (incidentLocations == null) {
+			incidentLocations = new ArrayList<>();
+		}
+		return incidentLocations;
+	}
+
+	/**
+	 * Replaces incident-owned operational locations.
+	 *
+	 * @param incidentLocations location list; null becomes empty.
+	 */
+	public void setIncidentLocations(List<IncidentLocation> incidentLocations) {
+		this.incidentLocations = incidentLocations == null ? new ArrayList<>() : incidentLocations;
+	}
+
+	/**
+	 * Returns the incident location selected as the canine routing origin.
+	 *
+	 * @return selected location identifier, or blank for the shared manual base.
+	 */
+	public String getCanineRoutingBaseLocationId() {
+		return canineRoutingBaseLocationId == null ? "" : canineRoutingBaseLocationId;
+	}
+
+	/**
+	 * Selects an incident location as the canine routing origin.
+	 *
+	 * @param canineRoutingBaseLocationId location identifier, or blank for a manual base.
+	 */
+	public void setCanineRoutingBaseLocationId(String canineRoutingBaseLocationId) {
+		this.canineRoutingBaseLocationId = canineRoutingBaseLocationId == null ? "" : canineRoutingBaseLocationId;
 	}
 
 	/**

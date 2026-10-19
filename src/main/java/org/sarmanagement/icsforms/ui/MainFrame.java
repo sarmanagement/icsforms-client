@@ -113,6 +113,7 @@ public class MainFrame extends JFrame {
 	private int lastSelectedTabIndex = -1;
 	private boolean rebuildingTabs;
 	private boolean canineMedicalManuallyOpened;
+	private boolean safetyDashboardManuallyVisible;
 	private IapPhase lastKnownPhase;
 	private AppData lastRefreshedIncident;
 	private Dashboard activeDashboard = Dashboard.from(
@@ -206,7 +207,8 @@ public class MainFrame extends JFrame {
 		groupVisible.put(T_CARDS_GROUP, true);
 		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		medicalWorkspacePanel.setCanineVisible(controller.getData().isCanineMedicalWorkspaceEligible());
-		groupVisible.put(SAFETY_DASHBOARD_GROUP, activeDashboard == Dashboard.SAFETY_OFFICER);
+		groupVisible.put(SAFETY_DASHBOARD_GROUP,
+				safetyDashboardVisible(activeDashboard, safetyDashboardManuallyVisible));
 		registerTab("Shared", incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
 		registerTab("Org Chart", organizationalChartPanel, AppController.LinkSource.ORG_CHART, CORE_GROUP);
 		registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, ICS_201_GROUP);
@@ -278,6 +280,17 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
+	 * Determines whether the Safety Overview remains available in the current view.
+	 *
+	 * @param dashboard active role dashboard.
+	 * @param manuallyVisible whether the operator opened the overview from View.
+	 * @return true for the Safety Officer dashboard or explicit operator visibility.
+	 */
+	static boolean safetyDashboardVisible(Dashboard dashboard, boolean manuallyVisible) {
+		return manuallyVisible || dashboard == Dashboard.SAFETY_OFFICER;
+	}
+
+	/**
 	 * Applies a dashboard choice while retaining all shared editor instances.
 	 *
 	 * @param selected dashboard chosen in View > Dashboard.
@@ -289,7 +302,8 @@ public class MainFrame extends JFrame {
 		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
 		activeDashboard = selected;
 		userPreferences.put(DASHBOARD_PREFERENCE, selected.label());
-		groupVisible.put(SAFETY_DASHBOARD_GROUP, selected == Dashboard.SAFETY_OFFICER);
+		groupVisible.put(SAFETY_DASHBOARD_GROUP,
+				safetyDashboardVisible(activeDashboard, safetyDashboardManuallyVisible));
 		rebuildVisibleTabs();
 	}
 
@@ -445,6 +459,9 @@ public class MainFrame extends JFrame {
 			JCheckBoxMenuItem item = new JCheckBoxMenuItem(entry.getKey(), entry.getValue());
 			item.addActionListener(event -> {
 				groupVisible.put(entry.getKey(), item.isSelected());
+				if (SAFETY_DASHBOARD_GROUP.equals(entry.getKey())) {
+					safetyDashboardManuallyVisible = item.isSelected();
+				}
 				rebuildVisibleTabs();
 				refreshStatus();
 			});
@@ -1115,7 +1132,8 @@ public class MainFrame extends JFrame {
 		tCardPanel.refreshFromModel();
 		// Keep SAR-only tabs visible only in SAR mode.
 		groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
-		groupVisible.put(SAFETY_DASHBOARD_GROUP, activeDashboard == Dashboard.SAFETY_OFFICER);
+		groupVisible.put(SAFETY_DASHBOARD_GROUP,
+				safetyDashboardVisible(activeDashboard, safetyDashboardManuallyVisible));
 		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		// Reset ICS 201 group visibility to the phase-based default only when the phase
 		// changes

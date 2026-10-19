@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.medical.VetRoutingService;
 import org.sarmanagement.icsforms.medical.VetShortlistSelector;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.CanineMedicalPlan;
+import org.sarmanagement.icsforms.model.IncidentLocation;
 import org.sarmanagement.icsforms.model.StagingLocation;
 import org.sarmanagement.icsforms.model.VetDirectory;
 import org.sarmanagement.icsforms.model.VetFacility;
@@ -26,8 +27,8 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
+import javax.swing.JTabbedPane;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -67,6 +68,7 @@ public class CanineMedicalPanel extends JPanel {
 	private final JTextField stagingAddress = new JTextField();
 	private final JTextField stagingLatitude = new JTextField();
 	private final JTextField stagingLongitude = new JTextField();
+	private final JComboBox<RoutingBaseChoice> routingBaseLocations = new JComboBox<>();
 	private final JTextField shortlistLimit = new JTextField("8", 4);
 	private final DefaultTableModel directoryModel = new DefaultTableModel(new String[] {
 			"ID", "Name", "Town", "Address", "Contacts (; separated)", "24 Hours", "Availability notes",
@@ -105,11 +107,79 @@ public class CanineMedicalPanel extends JPanel {
 	private final JProgressBar progress = new JProgressBar();
 	private final JButton cancelRequest = new JButton("Cancel request");
 	private final JTabbedPane workspace = new JTabbedPane();
+	private final JTabbedPane planSections = new JTabbedPane();
 	private Consumer<String> exportRequest = ignored -> { };
 	private boolean loading;
 	private boolean flushing;
 	private AppData lastLoadedIncident;
 	private SwingWorker<?, ?> activeWorker;
+
+	/**
+	 * Selectable view of an incident-owned address for canine routing.
+	 */
+	private static final class RoutingBaseChoice {
+		private final String locationId;
+		private final String label;
+		private final String locationName;
+		private final String address;
+
+		/**
+		 * Creates one selectable shared incident location.
+		 *
+		 * @param locationId location identifier, blank for the manual base.
+		 * @param label visible choice label.
+		 * @param locationName name copied into the routing origin.
+		 * @param address location address.
+		 */
+		private RoutingBaseChoice(String locationId, String label, String locationName, String address) {
+			this.locationId = locationId;
+			this.label = label;
+			this.locationName = locationName;
+			this.address = address;
+		}
+
+		/**
+		 * Returns the stable incident-location identifier.
+		 *
+		 * @return location identifier or blank for manual entry.
+		 */
+		private String locationId() {
+			return locationId;
+		}
+
+		/**
+		 * Returns the shared location label.
+		 *
+		 * @return visible location name.
+		 */
+		private String label() {
+			return label;
+		}
+
+		/**
+		 * Returns the incident location name used on the routing origin.
+		 *
+		 * @return location name.
+		 */
+		private String locationName() {
+			return locationName;
+		}
+
+		/**
+		 * Returns the shared location address.
+		 *
+		 * @return location address.
+		 */
+		private String address() {
+			return address;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public String toString() {
+			return label;
+		}
+	}
 
 	/**
 	 * Creates the canine medical workspace using OpenRouteService as the road provider.
@@ -184,6 +254,12 @@ public class CanineMedicalPanel extends JPanel {
 			lastLoadedIncident = data;
 			StagingLocation staging = data.getStagingLocation();
 			CanineMedicalPlan plan = data.getCanineMedicalPlan();
+			loadRoutingBaseChoices(data);
+			RoutingBaseChoice selectedBase = (RoutingBaseChoice) routingBaseLocations.getSelectedItem();
+			if (selectedBase != null && !selectedBase.locationId().isBlank()) {
+				staging.setLabel(selectedBase.locationName());
+				staging.setAddress(selectedBase.address());
+			}
 			stagingLabel.setText(staging.getLabel());
 			stagingAddress.setText(staging.getAddress());
 			stagingLatitude.setText(staging.getLatitude() == null ? "" : staging.getLatitude().toString());
@@ -222,6 +298,12 @@ public class CanineMedicalPanel extends JPanel {
 			String previousBaseAddress = staging.getAddress();
 			staging.setLabel(stagingLabel.getText());
 			staging.setAddress(stagingAddress.getText());
+			String selectedLocationId = data.getCanineRoutingBaseLocationId();
+			if (!selectedLocationId.isBlank() && data.getIncidentLocations().stream().noneMatch(location ->
+					location != null && selectedLocationId.equals(location.getId())
+							&& location.getAddress().equals(staging.getAddress()))) {
+				data.setCanineRoutingBaseLocationId("");
+			}
 			Double latitude = coordinate(stagingLatitude.getText(), -90, 90);
 			Double longitude = coordinate(stagingLongitude.getText(), -180, 180);
 			if (!previousBaseAddress.equals(staging.getAddress())) {
@@ -279,6 +361,12 @@ public class CanineMedicalPanel extends JPanel {
 		save.addActionListener(event -> exportDirectory());
 		JPanel base = new JPanel(new GridLayout(0, 6, 4, 3));
 		base.setBorder(BorderFactory.createTitledBorder("Staging / base location"));
+		base.add(new JLabel("Incident location"));
+		base.add(routingBaseLocations);
+		base.add(new JLabel(""));
+		base.add(new JLabel(""));
+		base.add(new JLabel(""));
+		base.add(new JLabel(""));
 		base.add(new JLabel("Label"));
 		base.add(stagingLabel);
 		base.add(new JLabel("Full address"));
@@ -312,6 +400,58 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
+	 * Rebuilds the routing-origin choices from incident-owned location snapshots.
+	 *
+	 * @param data active incident.
+	 */
+	private void loadRoutingBaseChoices(AppData data) {
+		String selectedId = data.getCanineRoutingBaseLocationId();
+		routingBaseLocations.removeAllItems();
+		routingBaseLocations.addItem(new RoutingBaseChoice("", "Manual / existing staging base", "", ""));
+		int selectedIndex = 0;
+		for (IncidentLocation location : data.getIncidentLocations()) {
+			if (location == null) {
+				continue;
+			}
+			String name = location.getName().isBlank() ? location.getType() : location.getName();
+			String display = location.getType().isBlank() ? name : location.getType() + " — " + name;
+			routingBaseLocations.addItem(new RoutingBaseChoice(location.getId(), display, name,
+					location.getAddress()));
+			if (location.getId().equals(selectedId)) {
+				selectedIndex = routingBaseLocations.getItemCount() - 1;
+			}
+		}
+		routingBaseLocations.setSelectedIndex(selectedIndex);
+	}
+
+	/**
+	 * Copies a selected shared incident location into the routing origin.
+	 */
+	private void applyRoutingBaseChoice() {
+		if (loading || !(routingBaseLocations.getSelectedItem() instanceof RoutingBaseChoice choice)) {
+			return;
+		}
+		AppData data = controller.getData();
+		data.setCanineRoutingBaseLocationId(choice.locationId());
+		if (!choice.locationId().isBlank()) {
+			loading = true;
+			try {
+				StagingLocation staging = data.getStagingLocation();
+				staging.clearResolution();
+				staging.setLabel(choice.locationName());
+				staging.setAddress(choice.address());
+				stagingLabel.setText(choice.locationName());
+				stagingAddress.setText(choice.address());
+				stagingLatitude.setText("");
+				stagingLongitude.setText("");
+			} finally {
+				loading = false;
+			}
+		}
+		inputChanged(true);
+	}
+
+	/**
 	 * Builds the directory and accepted-plan tables without truncating source data.
 	 *
 	 * @return table area.
@@ -334,29 +474,12 @@ public class CanineMedicalPanel extends JPanel {
 		directoryControls.add(geocodeVet);
 		directory.add(directoryControls, BorderLayout.SOUTH);
 
-		JPanel selected = new JPanel(new BorderLayout(4, 4));
-		selected.setBorder(BorderFactory.createTitledBorder(
-				"Accepted plan snapshots (manual include/exclude/edit/reorder; directory stays intact)"));
-		selected.add(new JScrollPane(selectionTable), BorderLayout.CENTER);
-		JPanel selectionControls = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		JButton includeSelected = new JButton("Include selected directory rows");
 		includeSelected.addActionListener(event -> addSelectedFacilities());
-		JButton excludeSelected = new JButton("Exclude selected plan rows");
-		excludeSelected.addActionListener(event -> removeSelectionRows());
-		JButton up = new JButton("Move up");
-		up.addActionListener(event -> moveSelection(-1));
-		JButton down = new JButton("Move down");
-		down.addActionListener(event -> moveSelection(1));
-		selectionControls.add(includeSelected);
-		selectionControls.add(excludeSelected);
-		selectionControls.add(up);
-		selectionControls.add(down);
-		selected.add(selectionControls, BorderLayout.SOUTH);
-		JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, directory, selected);
-		split.setResizeWeight(0.55);
+		directoryControls.add(includeSelected);
 		JPanel area = new JPanel(new BorderLayout(4, 4));
 		area.add(buildBaseLocationPanel(), BorderLayout.NORTH);
-		area.add(split, BorderLayout.CENTER);
+		area.add(directory, BorderLayout.CENTER);
 		return area;
 	}
 
@@ -366,8 +489,6 @@ public class CanineMedicalPanel extends JPanel {
 	 * @return canine plan details.
 	 */
 	private JPanel buildPlanFields() {
-		JPanel clinical = new JPanel(new GridLayout(0, 2, 6, 4));
-		clinical.setBorder(BorderFactory.createTitledBorder("Adapted canine medical plan"));
 		aidStations.setLineWrap(true);
 		aidStations.setWrapStyleWord(true);
 		transportServices.setLineWrap(true);
@@ -376,18 +497,23 @@ public class CanineMedicalPanel extends JPanel {
 		capabilityNotes.setWrapStyleWord(true);
 		procedures.setLineWrap(true);
 		procedures.setWrapStyleWord(true);
-		clinical.add(new JLabel("Medical aid stations (name, location, contact/frequency, paramedic status)"));
-		clinical.add(new JScrollPane(aidStations));
-		clinical.add(new JLabel("Canine transport (service, location, contacts, air/ground, capability)"));
-		clinical.add(new JScrollPane(transportServices));
-		clinical.add(new JLabel("Poison-control contact"));
-		clinical.add(poisonContact);
-		clinical.add(new JLabel("Onsite veterinarian"));
-		clinical.add(onsiteVet);
-		clinical.add(new JLabel("Veterinary capability notes / preamble"));
-		clinical.add(new JScrollPane(capabilityNotes));
-		clinical.add(new JLabel("Special emergency procedures"));
-		clinical.add(new JScrollPane(procedures));
+		JPanel aidPanel = labeledTextArea("Medical aid stations", aidStations);
+		planSections.addTab("3. Aid Stations", aidPanel);
+		JPanel transportation = labeledTextArea("Canine transportation services", transportServices);
+		JPanel aviationPanel = new JPanel(new BorderLayout(4, 4));
+		aviationPanel.setBorder(BorderFactory.createTitledBorder("Aviation coordination"));
+		aviationUsed.setText("Aviation assets are used for rescue; coordinate with Air Operations Branch");
+		aviationPanel.add(aviationUsed, BorderLayout.NORTH);
+		transportation.add(aviationPanel, BorderLayout.SOUTH);
+		planSections.addTab("4. Transportation", transportation);
+		planSections.addTab("5. Veterinary Hospitals", buildVeterinaryHospitalArea());
+		JPanel special = new JPanel(new GridLayout(0, 2, 6, 4));
+		special.setBorder(BorderFactory.createTitledBorder("6. Special medical emergency procedures"));
+		special.add(new JLabel("Poison-control contact"));
+		special.add(poisonContact);
+		special.add(new JLabel("Special emergency procedures"));
+		special.add(new JScrollPane(procedures));
+		planSections.addTab("6. Special Procedures", special);
 		JPanel review = new JPanel(new GridLayout(2, 4, 4, 2));
 		review.setBorder(BorderFactory.createTitledBorder("Preparation / Safety review"));
 		review.add(new JLabel("Medical Unit Leader"));
@@ -398,13 +524,65 @@ public class CanineMedicalPanel extends JPanel {
 		review.add(safetyOfficer);
 		review.add(new JLabel("Review status"));
 		review.add(reviewStatus);
-		JPanel content = new JPanel(new BorderLayout(4, 4));
-		content.add(aviationUsed, BorderLayout.NORTH);
-		content.add(clinical, BorderLayout.CENTER);
-		content.add(review, BorderLayout.SOUTH);
 		JPanel root = new JPanel(new BorderLayout());
-		root.add(new JScrollPane(content), BorderLayout.CENTER);
+		root.add(planSections, BorderLayout.CENTER);
+		root.add(review, BorderLayout.SOUTH);
 		return root;
+	}
+
+	/**
+	 * Builds the accepted veterinary hospital snapshot table and its plan controls.
+	 *
+	 * @return veterinary hospital section.
+	 */
+	private JPanel buildVeterinaryHospitalArea() {
+		JPanel hospitals = new JPanel(new BorderLayout(4, 4));
+		JPanel details = new JPanel(new GridLayout(0, 2, 6, 4));
+		details.add(new JLabel("Onsite veterinarian"));
+		details.add(onsiteVet);
+		details.add(new JLabel("Veterinary capabilities / notes"));
+		details.add(new JScrollPane(capabilityNotes));
+		hospitals.add(details, BorderLayout.NORTH);
+		JPanel snapshots = new JPanel(new BorderLayout(4, 4));
+		snapshots.setBorder(BorderFactory.createTitledBorder(
+				"Accepted veterinary hospital snapshots (directory records remain intact)"));
+		snapshots.add(new JScrollPane(selectionTable), BorderLayout.CENTER);
+		JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JButton excludeSelected = new JButton("Exclude selected");
+		excludeSelected.addActionListener(event -> removeSelectionRows());
+		JButton up = new JButton("Move up");
+		up.addActionListener(event -> moveSelection(-1));
+		JButton down = new JButton("Move down");
+		down.addActionListener(event -> moveSelection(1));
+		controls.add(excludeSelected);
+		controls.add(up);
+		controls.add(down);
+		snapshots.add(controls, BorderLayout.SOUTH);
+		hospitals.add(snapshots, BorderLayout.CENTER);
+		return hospitals;
+	}
+
+	/**
+	 * Creates a titled multiline editor used by a canine medical-plan section.
+	 *
+	 * @param title section label.
+	 * @param area editable text area.
+	 * @return titled text editor.
+	 */
+	private JPanel labeledTextArea(String title, JTextArea area) {
+		JPanel panel = new JPanel(new BorderLayout(4, 4));
+		panel.setBorder(BorderFactory.createTitledBorder(title));
+		panel.add(new JScrollPane(area), BorderLayout.CENTER);
+		return panel;
+	}
+
+	/**
+	 * Returns the parallel canine medical-plan section tabs for focused tests.
+	 *
+	 * @return canine medical-plan sections.
+	 */
+	JTabbedPane planSectionTabs() {
+		return planSections;
 	}
 
 	/**
@@ -434,6 +612,7 @@ public class CanineMedicalPanel extends JPanel {
 	private void configureListeners() {
 		aviationUsed.addActionListener(event -> inputChanged(false));
 		reviewStatus.addActionListener(event -> inputChanged(false));
+		routingBaseLocations.addActionListener(event -> applyRoutingBaseChoice());
 		for (JTextField field : List.of(stagingLabel, stagingAddress, stagingLatitude, stagingLongitude,
 				shortlistLimit, poisonContact, onsiteVet, preparedBy, preparedAt, safetyOfficer)) {
 			watch(field, field == stagingAddress || field == stagingLatitude || field == stagingLongitude);

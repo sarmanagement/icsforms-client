@@ -5,6 +5,7 @@ package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.VetFacility;
 
 import javax.swing.JButton;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SafetyDashboardPanelTest {
@@ -40,6 +42,52 @@ class SafetyDashboardPanelTest {
 		assertTrue(summary.contains("1 without a current-base distance"));
 		assertTrue(summary.contains("Routing does not verify either"));
 		assertFalse(summary.toLowerCase().contains("clinically sufficient"));
+	}
+
+	@Test
+	void summaryIncludesSharedMedicalRolesAndAidStationDetails() {
+		AppData data = new AppData();
+		data.getOrganizationalChart().setSafetyOfficerName("Fictional Safety Officer");
+		data.getOrganizationalChart().setMedicalUnitLeaderName("Fictional Medical Leader");
+		MedicalPlan.AidStation station = new MedicalPlan.AidStation();
+		station.setName("Fictional Aid Station");
+		station.setLocation("Fictional Base");
+		data.getMedicalPlan().getAidStations().add(station);
+		data.getCanineMedicalPlan().setAidStationInformation("Fictional canine aid station");
+
+		String summary = SafetyDashboardPanel.summaryText(data);
+
+		assertTrue(summary.contains("Safety Officer: Fictional Safety Officer"));
+		assertTrue(summary.contains("Medical Unit Leader: Fictional Medical Leader"));
+		assertTrue(summary.contains("Medical aid stations: Fictional Aid Station — Fictional Base"));
+		assertTrue(summary.contains("Canine medical aid stations: Fictional canine aid station"));
+	}
+
+	@Test
+	void overviewContainsPreviewTabsForTheThreeRequestedForms() throws Exception {
+		SafetyDashboardPanel[] panel = new SafetyDashboardPanel[1];
+		SwingUtilities.invokeAndWait(() -> {
+			panel[0] = new SafetyDashboardPanel(ignored -> { });
+			panel[0].refreshFromModel(new AppData());
+		});
+
+		assertEquals("Readiness Summary", panel[0].overviewTabs().getTitleAt(0));
+		assertEquals("ICS 208 Safety Message", panel[0].overviewTabs().getTitleAt(1));
+		assertEquals("ICS 206 Medical Plan", panel[0].overviewTabs().getTitleAt(2));
+		assertEquals("ICS 206CANINE (adapted)", panel[0].overviewTabs().getTitleAt(3));
+		SwingUtilities.invokeAndWait(() -> {
+			for (int index = 1; index < panel[0].overviewTabs().getTabCount(); index++) {
+				panel[0].overviewTabs().setSelectedIndex(index);
+				assertTrue(containsText(panel[0].overviewTabs().getComponentAt(index), "page(s) — preview only"));
+			}
+		});
+	}
+
+	@Test
+	void safetyOverviewVisibilitySurvivesManualOpeningOutsideItsRoleDashboard() {
+		assertFalse(MainFrame.safetyDashboardVisible(MainFrame.Dashboard.IC_ICP, false));
+		assertTrue(MainFrame.safetyDashboardVisible(MainFrame.Dashboard.IC_ICP, true));
+		assertTrue(MainFrame.safetyDashboardVisible(MainFrame.Dashboard.SAFETY_OFFICER, false));
 	}
 
 	@Test
@@ -88,5 +136,27 @@ class SafetyDashboardPanelTest {
 			}
 		}
 		return result;
+	}
+
+	/**
+	 * Checks whether a nested component tree contains a label with the given text.
+	 *
+	 * @param component component tree root.
+	 * @param text expected text fragment.
+	 * @return true when a label includes the text fragment.
+	 */
+	private static boolean containsText(Component component, String text) {
+		if (component instanceof javax.swing.JLabel label && label.getText() != null
+				&& label.getText().contains(text)) {
+			return true;
+		}
+		if (component instanceof java.awt.Container container) {
+			for (Component child : container.getComponents()) {
+				if (containsText(child, text)) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 }

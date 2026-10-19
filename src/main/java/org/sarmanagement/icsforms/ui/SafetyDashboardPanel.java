@@ -8,12 +8,16 @@ import org.sarmanagement.icsforms.model.CanineMedicalPlan;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.StagingLocation;
 import org.sarmanagement.icsforms.model.VetFacility;
+import org.sarmanagement.icsforms.pdf.Ics206CaninePdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics206PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics208PdfRenderer;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
@@ -27,6 +31,11 @@ import java.util.function.Consumer;
 public class SafetyDashboardPanel extends JPanel {
 	private final JTextArea summary = new JTextArea();
 	private final Consumer<String> workspaceOpener;
+	private final JTabbedPane views = new JTabbedPane();
+	private final FormPreviewPanel safetyPreview = new FormPreviewPanel(new Ics208PdfRenderer());
+	private final FormPreviewPanel medicalPreview = new FormPreviewPanel(new Ics206PdfRenderer());
+	private final FormPreviewPanel caninePreview = new FormPreviewPanel(new Ics206CaninePdfRenderer());
+	private AppData previewData;
 
 	/**
 	 * Creates a read-only medical/safety summary with shortcuts to shared workspaces.
@@ -42,7 +51,12 @@ public class SafetyDashboardPanel extends JPanel {
 		summary.setEditable(false);
 		summary.setLineWrap(true);
 		summary.setWrapStyleWord(true);
-		add(new JScrollPane(summary), BorderLayout.CENTER);
+		views.addTab("Readiness Summary", new JScrollPane(summary));
+		views.addTab("ICS 208 Safety Message", safetyPreview);
+		views.addTab("ICS 206 Medical Plan", medicalPreview);
+		views.addTab("ICS 206CANINE (adapted)", caninePreview);
+		views.addChangeListener(event -> refreshSelectedPreview());
+		add(views, BorderLayout.CENTER);
 		JPanel shortcuts = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		addShortcut(shortcuts, "Safety message / hazards", "Safety");
 		addShortcut(shortcuts, "Medical Plan (ICS 206)", "Medical Plan (ICS 206)");
@@ -58,8 +72,35 @@ public class SafetyDashboardPanel extends JPanel {
 	 * @param data current incident.
 	 */
 	public void refreshFromModel(AppData data) {
+		previewData = data;
 		summary.setText(summaryText(data));
 		summary.setCaretPosition(0);
+		refreshSelectedPreview();
+	}
+
+	/**
+	 * Returns the summary and shared form preview tabs for workspace tests.
+	 *
+	 * @return safety overview tabs.
+	 */
+	JTabbedPane overviewTabs() {
+		return views;
+	}
+
+	/**
+	 * Renders only the selected form preview to avoid unnecessary PDF work on navigation.
+	 */
+	private void refreshSelectedPreview() {
+		if (previewData == null) {
+			return;
+		}
+		switch (views.getSelectedIndex()) {
+			case 1 -> safetyPreview.refreshFromModel(previewData);
+			case 2 -> medicalPreview.refreshFromModel(previewData);
+			case 3 -> caninePreview.refreshFromModel(previewData);
+			default -> {
+			}
+		}
 	}
 
 	/**
@@ -71,6 +112,9 @@ public class SafetyDashboardPanel extends JPanel {
 	static String summaryText(AppData data) {
 		List<String> lines = new ArrayList<>();
 		lines.add("Incident: " + data.getIncidentContext().getIncidentName());
+		lines.add("Safety Officer: " + text(MedicalRoleSupport.safetyOfficerName(data)));
+		lines.add("Medical Unit Leader: " + text(MedicalRoleSupport.medicalUnitLeaderName(data)));
+		lines.add("Medical aid stations: " + aidStationNames(data.getMedicalPlan()));
 		lines.add("Standard ICS 206: " + planStatus(data.getMedicalPlan().isActive(),
 				data.getMedicalPlan().getReviewStatus()));
 		MedicalPlan medical = data.getMedicalPlan();
@@ -80,6 +124,7 @@ public class SafetyDashboardPanel extends JPanel {
 			lines.add("Emergency procedures: " + text(medical.getEmergencyProcedures()));
 		}
 		CanineMedicalPlan canine = data.getCanineMedicalPlan();
+		lines.add("Canine medical aid stations: " + text(canine.getAidStationInformation()));
 		lines.add("Adapted canine ICS 206CANINE: "
 				+ planStatus(canine.isActive(), canine.getReviewStatus()));
 		StagingLocation base = data.getStagingLocation();
@@ -109,6 +154,25 @@ public class SafetyDashboardPanel extends JPanel {
 				+ " straight-line estimates, " + unresolved + " without a current-base distance.");
 		lines.add("Verify facility availability and capability directly. Routing does not verify either.");
 		return String.join("\n", lines);
+	}
+
+	/**
+	 * Formats names and locations of recorded human medical aid stations.
+	 *
+	 * @param plan standard medical plan.
+	 * @return aid station details or a neutral empty marker.
+	 */
+	private static String aidStationNames(MedicalPlan plan) {
+		List<String> stations = new ArrayList<>();
+		for (MedicalPlan.AidStation station : plan.getAidStations()) {
+			String name = text(station.getName()).trim();
+			String location = text(station.getLocation()).trim();
+			String value = name.isBlank() ? location : name + (location.isBlank() ? "" : " — " + location);
+			if (!value.isBlank()) {
+				stations.add(value);
+			}
+		}
+		return stations.isEmpty() ? "none listed" : String.join("; ", stations);
 	}
 
 	/**

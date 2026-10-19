@@ -18,6 +18,7 @@ import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
+import java.awt.Component;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
 
@@ -111,11 +112,35 @@ class Ics206PanelTest {
 		SwingUtilities.invokeAndWait(() -> {
 			((JComboBox<?>) fieldValue(panel, "mode")).setSelectedItem("Detailed");
 			assertTrue(((javax.swing.JTabbedPane) fieldValue(panel, "detailTabs")).isVisible());
+			javax.swing.JTabbedPane details = (javax.swing.JTabbedPane) fieldValue(panel, "detailTabs");
+			assertTrue(contains(details.getComponentAt(1), (Component) fieldValue(panel, "aviationUsed")));
+			assertFalse(contains(details.getComponentAt(3), (Component) fieldValue(panel, "aviationUsed")));
 			panel.pushToModel();
 		});
 
 		assertEquals("Previously recorded preparer", data.getMedicalPlan().getPreparerSignature());
 		assertEquals("Previously recorded reviewer", data.getMedicalPlan().getSafetyOfficerSignature());
+	}
+
+	/**
+	 * Searches a nested component tree for a specific editor component.
+	 *
+	 * @param parent root component.
+	 * @param target component to find.
+	 * @return true when the target is a descendant of the root.
+	 */
+	private static boolean contains(Component parent, Component target) {
+		if (parent == target) {
+			return true;
+		}
+		if (parent instanceof java.awt.Container container) {
+			for (Component child : container.getComponents()) {
+				if (contains(child, target)) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**
