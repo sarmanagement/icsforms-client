@@ -687,9 +687,7 @@ public class MainFrame extends JFrame {
 		}
 		JPanel form = UiSupport.formPanel();
 		java.util.LinkedHashMap<String, javax.swing.JCheckBox> selectors = new java.util.LinkedHashMap<>();
-		JPanel checksPanel = new JPanel();
-		checksPanel.setLayout(new javax.swing.BoxLayout(checksPanel, javax.swing.BoxLayout.Y_AXIS));
-		int visibleFormCount = 0;
+		List<javax.swing.JCheckBox> formChecks = new ArrayList<>();
 		for (String key : formKeys) {
 			if (!isExportFormVisible(key, controller.getData())) {
 				continue;
@@ -702,11 +700,9 @@ public class MainFrame extends JFrame {
 			}
 			check.setOpaque(false);
 			selectors.put(key, check);
-			checksPanel.add(check);
-			visibleFormCount++;
+			formChecks.add(check);
 		}
-		checksPanel.setPreferredSize(new Dimension(500, Math.max(28, visibleFormCount * 25)));
-		JScrollPane formList = createExportFormList(checksPanel, visibleFormCount);
+		JPanel checksPanel = createExportFormChoicesPanel(formChecks);
 		JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 		JButton selectAll = new JButton("Select All");
 		JButton selectNone = new JButton("Select None");
@@ -716,12 +712,11 @@ public class MainFrame extends JFrame {
 		controls.add(selectNone);
 		ExportModeControls exportModeControls = createExportModeControls();
 		PdfPrintOptionsPanel printOptions = new PdfPrintOptionsPanel(formKeys);
-		UiSupport.addWideRow(form, 0, formList);
+		UiSupport.addWideRow(form, 0, checksPanel);
 		UiSupport.addRow(form, 1, "", controls);
 		UiSupport.addRow(form, 2, "Output", exportModeControls.panel());
 		UiSupport.addRow(form, 3, "Print options", printOptions);
-		if (!UiSupport.showResizableConfirmDialog(this, "Export forms as PDF", form,
-				new Dimension(720, Math.max(500, Math.min(700, 340 + visibleFormCount * 25))))) {
+		if (!UiSupport.showResizableConfirmDialog(this, "Export forms as PDF", form, null)) {
 			return;
 		}
 
@@ -765,18 +760,17 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Creates a width-fitting, vertically scrollable list for the export form choices.
+	 * Creates a full-height, non-scrolling list for the export form choices.
 	 *
-	 * @param checksPanel panel containing one checkbox per available form.
-	 * @param visibleFormCount number of visible choices.
-	 * @return constrained export-form viewport.
+	 * @param checkboxes one checkbox per available form.
+	 * @return panel containing every form choice.
 	 */
-	static JScrollPane createExportFormList(JPanel checksPanel, int visibleFormCount) {
-		JScrollPane formList = new JScrollPane(checksPanel);
-		formList.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-		formList.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-		formList.setPreferredSize(new Dimension(520, Math.min(240, Math.max(60, visibleFormCount * 25 + 8))));
-		return formList;
+	static JPanel createExportFormChoicesPanel(List<javax.swing.JCheckBox> checkboxes) {
+		JPanel checksPanel = new JPanel();
+		checksPanel.setLayout(new javax.swing.BoxLayout(checksPanel, javax.swing.BoxLayout.Y_AXIS));
+		checkboxes.forEach(checksPanel::add);
+		checksPanel.setPreferredSize(new Dimension(600, Math.max(28, checkboxes.size() * 25)));
+		return checksPanel;
 	}
 
 	/**

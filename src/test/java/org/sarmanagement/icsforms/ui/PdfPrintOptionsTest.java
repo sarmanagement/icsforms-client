@@ -82,14 +82,17 @@ class PdfPrintOptionsTest {
 	}
 
 	@Test
-	void exportFormListUsesVerticalScrollingWithinAConstrainedViewport() {
-		JPanel choices = new JPanel();
-		JScrollPane list = MainFrame.createExportFormList(choices, 24);
+	void exportFormChoicesAreAllAddedWithoutAScrollPane() {
+		List<JCheckBox> choices = new ArrayList<>();
+		for (int index = 0; index < 24; index++) {
+			choices.add(new JCheckBox("Form " + index));
+		}
 
-		assertSame(choices, list.getViewport().getView());
-		assertEquals(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER, list.getHorizontalScrollBarPolicy());
-		assertEquals(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, list.getVerticalScrollBarPolicy());
-		assertEquals(new Dimension(520, 240), list.getPreferredSize());
+		JPanel panel = MainFrame.createExportFormChoicesPanel(choices);
+
+		assertEquals(24, panel.getComponentCount());
+		assertEquals(new Dimension(600, 600), panel.getPreferredSize());
+		assertTrue(java.util.Arrays.stream(panel.getComponents()).allMatch(JCheckBox.class::isInstance));
 	}
 
 	@Test
@@ -138,17 +141,10 @@ class PdfPrintOptionsTest {
 										.allMatch(JCheckBox::isSelected));
 								assertFalse(selectors.stream().anyMatch(check -> check.getText().equals(
 										"Clue Log – Adapted ICS 233-CG")));
-								JScrollPane formList = components(dialog, JScrollPane.class).stream()
-										.filter(scroll -> components(scroll, JCheckBox.class).stream()
-												.anyMatch(check -> check.getText().equals("Clue Log")))
-										.findFirst().orElseThrow();
-								assertEquals(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER,
-										formList.getHorizontalScrollBarPolicy());
-								assertEquals(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-										formList.getVerticalScrollBarPolicy());
-								assertTrue(formList.getPreferredSize().height <= 240);
-								assertTrue(components(formList, JCheckBox.class).stream()
-										.anyMatch(check -> check.getText().equals("Clue Log") && check.isShowing()));
+								assertTrue(components(dialog, JScrollPane.class).stream()
+										.noneMatch(scroll -> components(scroll, JCheckBox.class).size() > 1));
+								assertTrue(selectors.stream().filter(check -> !check.getText().startsWith("Export SAR"))
+										.allMatch(JCheckBox::isShowing));
 							} catch (Throwable failure) {
 								dialogFailure.set(failure);
 							} finally {
