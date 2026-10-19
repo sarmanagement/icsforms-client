@@ -25,6 +25,7 @@ import java.awt.Component;
 import java.awt.Container;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -204,6 +205,114 @@ class CanineMedicalPanelTest {
 			assertTrue(hasText(panel, "1. Load regional JSON/CSV…"));
 			assertTrue(hasText(panel, "openrouteservice by HeiGIT | Data from"));
 		});
+	}
+
+	@Test
+	void directoryHidesInternalIdAndSortsByReadableRoadDistanceAndDriveTime() throws Exception {
+		AppData data = new AppData();
+		VetFacility farther = facility("Farther", 3218.688, 1200);
+		VetFacility nearer = facility("Nearer", 1609.344, 360);
+		data.getVetDirectory().getFacilities().addAll(List.of(farther, nearer));
+		AppController controller = new AppController(data,
+				new LocalRepository(tempDirectory.resolve("incident.json")),
+				new PdfExportService(), new IncidentValidator());
+		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
+		JTable directory = (JTable) fieldValue(panel, "directoryTable");
+
+		SwingUtilities.invokeAndWait(() -> {
+			assertEquals(0, directory.getColumnModel().getColumn(0).getWidth());
+			assertEquals("Road distance (mi)", directory.getModel().getColumnName(16));
+			assertEquals("Drive time (min)", directory.getModel().getColumnName(17));
+			directory.getRowSorter().setSortKeys(List.of(
+					new javax.swing.RowSorter.SortKey(16, javax.swing.SortOrder.ASCENDING)));
+		});
+
+		assertEquals("Nearer", directory.getValueAt(0, 1));
+		assertEquals("1.0", directory.getValueAt(0, 16));
+		assertEquals("6.0", directory.getValueAt(0, 17));
+		assertEquals("Farther", directory.getValueAt(1, 1));
+		assertEquals("2.0", directory.getValueAt(1, 16));
+		assertEquals("20.0", directory.getValueAt(1, 17));
+	}
+
+	@Test
+	void addingShortlistFacilitiesPreservesExistingRowsAndSkipsDuplicateIds() throws Exception {
+		AppData data = new AppData();
+		AppController controller = new AppController(data,
+				new LocalRepository(tempDirectory.resolve("incident.json")),
+				new PdfExportService(), new IncidentValidator());
+		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
+		VetFacility first = new VetFacility();
+		first.setName("First");
+		VetFacility second = new VetFacility();
+		second.setName("Second");
+		int[] added = new int[1];
+
+		SwingUtilities.invokeAndWait(() -> {
+			added[0] = panel.addSnapshots(List.of(first, first.copy(), second, first.copy()));
+			panel.pushToModel();
+		});
+
+		assertEquals(2, added[0]);
+		assertEquals(2, data.getCanineMedicalPlan().getSelectedFacilities().size());
+		assertEquals("First", data.getCanineMedicalPlan().getSelectedFacilities().get(0).getName());
+		assertEquals("Second", data.getCanineMedicalPlan().getSelectedFacilities().get(1).getName());
+	}
+
+	@Test
+	void directoryContextMenuOffersLookupEditAndIncludeActions() throws Exception {
+		CanineMedicalPanel panel = new CanineMedicalPanel(
+				new AppController(new AppData(), new LocalRepository(tempDirectory.resolve("incident.json")),
+						new PdfExportService(), new IncidentValidator()),
+				tempDirectory);
+		JTable directory = (JTable) fieldValue(panel, "directoryTable");
+
+		assertEquals(3, directory.getComponentPopupMenu().getComponentCount());
+		assertEquals("Lookup coordinates from address…",
+				((javax.swing.JMenuItem) directory.getComponentPopupMenu().getComponent(0)).getText());
+		assertEquals("Edit details…",
+				((javax.swing.JMenuItem) directory.getComponentPopupMenu().getComponent(1)).getText());
+		assertEquals("Include in plan",
+				((javax.swing.JMenuItem) directory.getComponentPopupMenu().getComponent(2)).getText());
+	}
+
+	@Test
+	void bulkGeocodingButtonEnablesWhenMultipleUnresolvedFacilitiesAreSelected() throws Exception {
+		AppData data = new AppData();
+		VetFacility first = new VetFacility();
+		first.setName("First");
+		first.setAddress("1 Fictional Road");
+		VetFacility second = new VetFacility();
+		second.setName("Second");
+		second.setAddress("2 Fictional Road");
+		data.getVetDirectory().getFacilities().addAll(List.of(first, second));
+		CanineMedicalPanel panel = new CanineMedicalPanel(
+				new AppController(data, new LocalRepository(tempDirectory.resolve("incident.json")),
+						new PdfExportService(), new IncidentValidator()),
+				tempDirectory);
+		JTable directory = (JTable) fieldValue(panel, "directoryTable");
+		JButton lookup = (JButton) fieldValue(panel, "geocodeVetButton");
+
+		SwingUtilities.invokeAndWait(() -> {
+			directory.setRowSelectionInterval(0, 1);
+			assertTrue(lookup.isEnabled());
+			assertEquals(2, directory.getSelectedRowCount());
+		});
+	}
+
+	/**
+	 * Creates a facility carrying a current road distance and duration.
+	 *
+	 * @param name facility display name.
+	 * @param distanceMeters road distance in meters.
+	 * @param durationSeconds provider-supplied drive duration.
+	 * @return routed facility.
+	 */
+	private static VetFacility facility(String name, double distanceMeters, double durationSeconds) {
+		VetFacility facility = new VetFacility();
+		facility.setName(name);
+		facility.setDistance(distanceMeters, durationSeconds, "openrouteservice/driving-car", "test", null, 0);
+		return facility;
 	}
 
 	/**

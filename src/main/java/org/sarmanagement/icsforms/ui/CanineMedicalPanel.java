@@ -34,6 +34,8 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingWorker;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.event.HyperlinkEvent;
@@ -43,6 +45,8 @@ import java.awt.BorderLayout;
 import java.awt.Desktop;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
@@ -77,12 +81,12 @@ public class CanineMedicalPanel extends JPanel {
 	private final JButton setBaseCoordinatesButton = new JButton("Set coordinates");
 	private final JButton calculateRoutesButton = new JButton("3. Calculate routes");
 	private final JButton previewSelectionButton = new JButton("4. Review closest 24-hour vets…");
-	private final JButton geocodeVetButton = new JButton("2. Look up selected address…");
+	private final JButton geocodeVetButton = new JButton("2. Look up selected address(es)…");
 	private final JButton includeSelectedButton = new JButton("Include selected directory rows");
 	private final DefaultTableModel directoryModel = new DefaultTableModel(new String[] {
 			"ID", "Name", "Town", "Address", "Contacts (; separated)", "24 Hours", "Availability notes",
 			"Capabilities / notes", "Verified at", "Latitude", "Longitude", "Source", "State", "ZIP", "Fax",
-			"Record"
+			"Record", "Road distance (mi)", "Drive time (min)"
 	}, 0) {
 		@Override
 		public boolean isCellEditable(int row, int column) {
@@ -90,8 +94,8 @@ public class CanineMedicalPanel extends JPanel {
 		}
 	};
 	private final DefaultTableModel selectionModel = new DefaultTableModel(new String[] {
-			"Name", "Town", "State", "ZIP", "Address", "Contact numbers", "Fax", "24 Hours", "Distance m",
-			"Duration s", "Method", "Capabilities / notes", "ID", "Record"
+			"Name", "Town", "State", "ZIP", "Address", "Contact numbers", "Fax", "24 Hours", "Road distance (mi)",
+			"Drive time (min)", "Method", "Capabilities / notes", "ID", "Record"
 	}, 0) {
 		@Override
 		public boolean isCellEditable(int row, int column) {
@@ -100,6 +104,7 @@ public class CanineMedicalPanel extends JPanel {
 	};
 	private final JTable directoryTable = new JTable(directoryModel);
 	private final JTable selectionTable = new JTable(selectionModel);
+	private final JPopupMenu directoryPopupMenu = new JPopupMenu();
 	private final JTextField poisonContact = new JTextField();
 	private final JTextArea aidStations = new JTextArea(2, 40);
 	private final JTextArea transportServices = new JTextArea(2, 40);
@@ -466,6 +471,21 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
+	 * Finds a facility's current model row after table sorting or editor commits.
+	 *
+	 * @param facilityId stable facility identifier.
+	 * @return model row, or -1 if removed.
+	 */
+	private int directoryModelRow(String facilityId) {
+		for (int row = 0; row < directoryModel.getRowCount(); row++) {
+			if (facilityId.equals(record(directoryModel.getValueAt(row, 15)).getId())) {
+				return row;
+			}
+		}
+		return -1;
+	}
+
+	/**
 	 * Builds the directory and accepted-plan tables without truncating source data.
 	 *
 	 * @return table area.
@@ -603,9 +623,19 @@ public class CanineMedicalPanel extends JPanel {
 	private void configureTables() {
 		directoryTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 		selectionTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+		directoryTable.setAutoCreateRowSorter(true);
+		directoryTable.getColumnModel().getColumn(0).setMinWidth(0);
+		directoryTable.getColumnModel().getColumn(0).setMaxWidth(0);
+		directoryTable.getColumnModel().getColumn(0).setWidth(0);
 		directoryTable.getColumnModel().getColumn(15).setMinWidth(0);
 		directoryTable.getColumnModel().getColumn(15).setMaxWidth(0);
 		directoryTable.getColumnModel().getColumn(15).setWidth(0);
+		if (directoryTable.getRowSorter() instanceof javax.swing.table.TableRowSorter<?> sorter) {
+			sorter.setComparator(16, (first, second) ->
+					Double.compare(sortValue(first), sortValue(second)));
+			sorter.setComparator(17, (first, second) ->
+					Double.compare(sortValue(first), sortValue(second)));
+		}
 		selectionTable.getColumnModel().getColumn(12).setMinWidth(0);
 		selectionTable.getColumnModel().getColumn(12).setMaxWidth(0);
 		selectionTable.getColumnModel().getColumn(12).setWidth(0);
@@ -616,6 +646,55 @@ public class CanineMedicalPanel extends JPanel {
 				new DefaultCellEditor(new JComboBox<>(new String[] {"Yes", "No", UNKNOWN})));
 		selectionTable.getColumnModel().getColumn(7).setCellEditor(
 				new DefaultCellEditor(new JComboBox<>(new String[] {"Yes", "No", UNKNOWN})));
+		installDirectoryContextMenu();
+	}
+
+	/**
+	 * Installs row-specific lookup, edit, and plan actions on the regional directory.
+	 */
+	private void installDirectoryContextMenu() {
+		JMenuItem lookup = new JMenuItem("Lookup coordinates from address…");
+		lookup.addActionListener(event -> geocodeSelectedVet());
+		directoryPopupMenu.add(lookup);
+		JMenuItem edit = new JMenuItem("Edit details…");
+		edit.addActionListener(event -> {
+			int row = directoryTable.getSelectedRow();
+			if (row >= 0) {
+				editFacilityDetails(row);
+			}
+		});
+		directoryPopupMenu.add(edit);
+		JMenuItem include = new JMenuItem("Include in plan");
+		include.addActionListener(event -> addSelectedFacilities());
+		directoryPopupMenu.add(include);
+		directoryTable.setComponentPopupMenu(directoryPopupMenu);
+		directoryTable.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent event) {
+				selectContextRow(event);
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent event) {
+				selectContextRow(event);
+			}
+		});
+	}
+
+	/**
+	 * Selects the context-clicked row before the table displays its action menu.
+	 *
+	 * @param event mouse event.
+	 */
+	private void selectContextRow(MouseEvent event) {
+		if (!event.isPopupTrigger()) {
+			return;
+		}
+		int viewRow = directoryTable.rowAtPoint(event.getPoint());
+		if (viewRow < 0) {
+			return;
+		}
+		directoryTable.setRowSelectionInterval(viewRow, viewRow);
 	}
 
 	/**
@@ -721,16 +800,20 @@ public class CanineMedicalPanel extends JPanel {
 		setBaseCoordinatesButton.setEnabled(!working && !stagingAddress.getText().isBlank()
 				&& coordinate(stagingLatitude.getText(), -90, 90) != null
 				&& coordinate(stagingLongitude.getText(), -180, 180) != null);
-		int selectedViewRow = directoryTable.getSelectedRow();
 		boolean selectedAddressNeedsCoordinates = false;
-		if (selectedViewRow >= 0 && selectedViewRow < directoryTable.getRowCount()) {
+		int validSelectedRows = 0;
+		for (int selectedViewRow : directoryTable.getSelectedRows()) {
 			int selectedRow = directoryTable.convertRowIndexToModel(selectedViewRow);
+			if (selectedRow < 0 || selectedRow >= directoryModel.getRowCount()) {
+				continue;
+			}
+			validSelectedRows++;
 			VetFacility selected = record(directoryModel.getValueAt(selectedRow, 15));
-			selectedAddressNeedsCoordinates = !geocodingAddress(selected).isBlank()
+			selectedAddressNeedsCoordinates |= !geocodingAddress(selected).isBlank()
 					&& !hasValidCoordinates(selected);
 		}
 		geocodeVetButton.setEnabled(!working && selectedAddressNeedsCoordinates);
-		includeSelectedButton.setEnabled(!working && directoryTable.getSelectedRowCount() > 0);
+		includeSelectedButton.setEnabled(!working && validSelectedRows > 0);
 		boolean hasRoutableFacility = data.getVetDirectory().getFacilities().stream()
 				.anyMatch(CanineMedicalPanel::hasValidCoordinates);
 		calculateRoutesButton.setEnabled(!working && data.getStagingLocation().hasValidCoordinates()
@@ -835,6 +918,8 @@ public class CanineMedicalPanel extends JPanel {
 			facility.setSourceName(cell(directoryModel, row, 11));
 			facility.setFax(cell(directoryModel, row, 14));
 			directoryModel.setValueAt(facility.copy(), row, 15);
+			directoryModel.setValueAt(distanceMiles(facility), row, 16);
+			directoryModel.setValueAt(durationMinutes(facility), row, 17);
 			facilities.add(facility);
 		}
 		directory.setFacilities(facilities);
@@ -883,7 +968,8 @@ public class CanineMedicalPanel extends JPanel {
 				facility.getAvailabilityNotes(), facility.getCapabilities(),
 				facility.getVerifiedAt() == null ? "" : facility.getVerifiedAt().toString(),
 				value(facility.getLatitude()), value(facility.getLongitude()), facility.getSourceName(),
-				facility.getState(), facility.getPostalCode(), facility.getFax(), facility.copy()};
+				facility.getState(), facility.getPostalCode(), facility.getFax(), facility.copy(),
+				distanceMiles(facility), durationMinutes(facility)};
 	}
 
 	/**
@@ -895,7 +981,7 @@ public class CanineMedicalPanel extends JPanel {
 	private Object[] selectionRow(VetFacility facility) {
 		return new Object[] {facility.getName(), facility.getTown(), facility.getState(), facility.getPostalCode(),
 				facility.getAddress(), String.join("; ", facility.getContactNumbers()), facility.getFax(),
-				availability(facility.getAvailable24Hours()), distance(facility), duration(facility),
+				availability(facility.getAvailable24Hours()), distanceMiles(facility), durationMinutes(facility),
 				facility.getDistanceMethod(), facility.getCapabilities(), facility.getId(), facility.copy()};
 	}
 
@@ -945,6 +1031,7 @@ public class CanineMedicalPanel extends JPanel {
 	 * Manually adds selected facilities as plan snapshots, including explicit exceptions.
 	 */
 	private void addSelectedFacilities() {
+		pushToModel();
 		int[] selected = directoryTable.getSelectedRows();
 		if (selected.length == 0) {
 			return;
@@ -969,17 +1056,116 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
+	 * Opens an editable details form for one regional directory entry.
+	 *
+	 * @param viewRow selected JTable view row.
+	 */
+	private void editFacilityDetails(int viewRow) {
+		if (viewRow < 0 || viewRow >= directoryTable.getRowCount()) {
+			return;
+		}
+		String facilityId = record(directoryModel.getValueAt(
+				directoryTable.convertRowIndexToModel(viewRow), 15)).getId();
+		pushToModel();
+		int row = directoryModelRow(facilityId);
+		if (row < 0 || row >= directoryModel.getRowCount()) {
+			return;
+		}
+		JTextField name = new JTextField(cell(directoryModel, row, 1), 32);
+		JTextField address = new JTextField(cell(directoryModel, row, 3), 32);
+		JTextField town = new JTextField(cell(directoryModel, row, 2), 24);
+		JTextField state = new JTextField(cell(directoryModel, row, 12), 8);
+		JTextField postalCode = new JTextField(cell(directoryModel, row, 13), 10);
+		JTextField contacts = new JTextField(cell(directoryModel, row, 4), 24);
+		JTextField fax = new JTextField(cell(directoryModel, row, 14), 20);
+		JComboBox<String> availability = new JComboBox<>(new String[] {"Yes", "No", UNKNOWN});
+		availability.setSelectedItem(cell(directoryModel, row, 5));
+		JTextArea availabilityNotes = new JTextArea(cell(directoryModel, row, 6), 3, 32);
+		JTextArea capabilities = new JTextArea(cell(directoryModel, row, 7), 4, 32);
+		JTextField verifiedAt = new JTextField(cell(directoryModel, row, 8), 24);
+		JTextField source = new JTextField(cell(directoryModel, row, 11), 24);
+		JPanel fields = new JPanel(new GridLayout(0, 2, 6, 4));
+		addDetailField(fields, "Hospital name", name);
+		addDetailField(fields, "Street address", address);
+		addDetailField(fields, "City / town", town);
+		addDetailField(fields, "State", state);
+		addDetailField(fields, "ZIP / postal code", postalCode);
+		addDetailField(fields, "Contact numbers (; separated)", contacts);
+		addDetailField(fields, "Fax", fax);
+		addDetailField(fields, "Confirmed 24-hour availability", availability);
+		addDetailField(fields, "Availability notes", new JScrollPane(availabilityNotes));
+		addDetailField(fields, "Capabilities / notes", new JScrollPane(capabilities));
+		addDetailField(fields, "Verified at", verifiedAt);
+		addDetailField(fields, "Source", source);
+		JScrollPane content = new JScrollPane(fields);
+		content.setPreferredSize(new java.awt.Dimension(720, 480));
+		if (JOptionPane.showConfirmDialog(this, content, "Edit veterinary facility details",
+				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
+			return;
+		}
+		loading = true;
+		try {
+			directoryModel.setValueAt(name.getText(), row, 1);
+			directoryModel.setValueAt(town.getText(), row, 2);
+			directoryModel.setValueAt(address.getText(), row, 3);
+			directoryModel.setValueAt(contacts.getText(), row, 4);
+			directoryModel.setValueAt(availability.getSelectedItem(), row, 5);
+			directoryModel.setValueAt(availabilityNotes.getText(), row, 6);
+			directoryModel.setValueAt(capabilities.getText(), row, 7);
+			directoryModel.setValueAt(verifiedAt.getText(), row, 8);
+			directoryModel.setValueAt(source.getText(), row, 11);
+			directoryModel.setValueAt(state.getText(), row, 12);
+			directoryModel.setValueAt(postalCode.getText(), row, 13);
+			directoryModel.setValueAt(fax.getText(), row, 14);
+		} finally {
+			loading = false;
+		}
+		inputChanged(true);
+	}
+
+	/**
+	 * Adds one labeled field to the veterinary details form.
+	 *
+	 * @param fields form panel.
+	 * @param label field label.
+	 * @param component editor component.
+	 */
+	private void addDetailField(JPanel fields, String label, java.awt.Component component) {
+		fields.add(new JLabel(label));
+		fields.add(component);
+	}
+
+	/**
 	 * Adds one independent plan snapshot unless already present by stable ID.
 	 *
 	 * @param source source facility.
+	 * @return true if a new plan snapshot was added.
 	 */
-	private void addSnapshot(VetFacility source) {
+	private boolean addSnapshot(VetFacility source) {
 		for (int row = 0; row < selectionModel.getRowCount(); row++) {
-			if (source.getId().equals(cell(selectionModel, row, 9))) {
-				return;
+			VetFacility existing = record(selectionModel.getValueAt(row, 13));
+			if (source.getId().equals(existing.getId())) {
+				return false;
 			}
 		}
 		selectionModel.addRow(selectionRow(source.copy()));
+		return true;
+	}
+
+	/**
+	 * Adds unique facility snapshots and keeps all existing plan entries.
+	 *
+	 * @param facilities proposed facilities.
+	 * @return number of new snapshots added.
+	 */
+	int addSnapshots(List<VetFacility> facilities) {
+		int added = 0;
+		for (VetFacility facility : facilities) {
+			if (addSnapshot(facility)) {
+				added++;
+			}
+		}
+		return added;
 	}
 
 	/**
@@ -1184,37 +1370,69 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
-	 * Geocodes a selected facility's address off the EDT.
+	 * Geocodes selected facilities without coordinates and confirms each result on the EDT.
 	 */
 	private void geocodeSelectedVet() {
-		int viewRow = directoryTable.getSelectedRow();
-		if (viewRow < 0) {
+		pushToModel();
+		int[] selectedRows = directoryTable.getSelectedRows();
+		if (selectedRows.length == 0) {
 			return;
 		}
-		pushToModel();
 		AppData incident = controller.getData();
-		int row = directoryTable.convertRowIndexToModel(viewRow);
-		VetFacility facility = record(directoryModel.getValueAt(row, 15));
-		String id = facility.getId();
-		String address = geocodingAddress(facility);
+		List<FacilityAddress> addresses = new ArrayList<>();
+		for (int viewRow : selectedRows) {
+			int row = directoryTable.convertRowIndexToModel(viewRow);
+			VetFacility facility = record(directoryModel.getValueAt(row, 15));
+			String address = geocodingAddress(facility);
+			if (!address.isBlank() && !hasValidCoordinates(facility)) {
+				addresses.add(new FacilityAddress(facility.getId(), address));
+			}
+		}
+		if (addresses.isEmpty()) {
+			status.setText("Select at least one facility with an address and no coordinates.");
+			return;
+		}
 		long baseGeneration = incident.getStagingLocation().getGeneration();
-		startWorker(new SwingWorker<List<AddressGeocoder.Candidate>, Void>() {
+		startWorker(new SwingWorker<List<FacilityGeocodeResult>, Void>() {
 			@Override
-			protected List<AddressGeocoder.Candidate> doInBackground() throws Exception {
-				return geocoder.geocode(address);
+			protected List<FacilityGeocodeResult> doInBackground() throws Exception {
+				List<FacilityGeocodeResult> results = new ArrayList<>();
+				for (FacilityAddress address : addresses) {
+					if (isCancelled() || Thread.currentThread().isInterrupted()) {
+						throw new InterruptedException("Geocoding cancelled");
+					}
+					try {
+						results.add(new FacilityGeocodeResult(address,
+								geocoder.geocode(address.fullAddress()), ""));
+					} catch (IOException exception) {
+						results.add(new FacilityGeocodeResult(address, List.of(), "Lookup failed"));
+					}
+				}
+				return results;
 			}
 
 			@Override
 			protected void done() {
 				try {
-					List<AddressGeocoder.Candidate> candidates = get();
+					List<FacilityGeocodeResult> results = get();
 					if (!isCurrent(incident, baseGeneration) || !isActive(this)) {
 						return;
 					}
-					AddressGeocoder.Candidate candidate = confirmCandidate(candidates);
-					if (candidate != null && applyGeocodedVetCandidate(incident, id, address, candidate)) {
-						status.setText("Confirmed coordinates for the selected veterinary facility.");
+					int confirmed = 0;
+					int failed = 0;
+					for (FacilityGeocodeResult result : results) {
+						if (!result.error().isBlank()) {
+							failed++;
+							continue;
+						}
+						AddressGeocoder.Candidate candidate = confirmCandidate(result.candidates());
+						if (candidate != null && applyGeocodedVetCandidate(incident, result.address().facilityId(),
+								result.address().fullAddress(), candidate)) {
+							confirmed++;
+						}
 					}
+					status.setText("Confirmed coordinates for " + confirmed + " of " + results.size()
+							+ " selected facilities." + (failed == 0 ? "" : " " + failed + " lookups failed."));
 				} catch (CancellationException exception) {
 					status.setText("Geocoding request cancelled.");
 				} catch (InterruptedException exception) {
@@ -1251,6 +1469,26 @@ public class CanineMedicalPanel extends JPanel {
 		refreshFromModel();
 		controller.markDirty();
 		return true;
+	}
+
+	/**
+	 * Captures the facility identity and full address for a geocoding request.
+	 *
+	 * @param facilityId stable incident-directory identifier.
+	 * @param fullAddress complete address query.
+	 */
+	private record FacilityAddress(String facilityId, String fullAddress) {
+	}
+
+	/**
+	 * Stores geocoding results or a sanitized failure for one selected directory row.
+	 *
+	 * @param address captured facility identity and query.
+	 * @param candidates provider-ordered candidates.
+	 * @param error sanitized failure summary, or blank on success.
+	 */
+	private record FacilityGeocodeResult(FacilityAddress address, List<AddressGeocoder.Candidate> candidates,
+			String error) {
 	}
 
 	/**
@@ -1314,22 +1552,38 @@ public class CanineMedicalPanel extends JPanel {
 			return;
 		}
 		DefaultTableModel preview = new DefaultTableModel(
-				new String[] {"Name", "Town", "Address", "24 Hours", "Road distance (m)", "Drive duration (s)"}, 0);
+				new String[] {"Name", "Town", "Address", "24 Hours", "Road distance (mi)", "Drive time (min)"}, 0);
 		for (VetFacility facility : proposal) {
 			preview.addRow(new Object[] {facility.getName(), facility.getTown(), facility.getAddress(),
-					availability(facility.getAvailable24Hours()), distance(facility), duration(facility)});
+					availability(facility.getAvailable24Hours()), distanceMiles(facility),
+					durationMinutes(facility)});
 		}
-		if (JOptionPane.showConfirmDialog(this, new JScrollPane(new JTable(preview)),
-				"Review nearest confirmed 24-hour road routes before replacing the plan",
-				JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) {
+		JTable previewTable = new JTable(preview);
+		previewTable.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+		Object[] options = {"Add selected to plan", "Add all to plan", "Cancel"};
+		int choice = JOptionPane.showOptionDialog(this, new JScrollPane(previewTable),
+				"Review nearest confirmed 24-hour road routes", JOptionPane.DEFAULT_OPTION,
+				JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
+		if (choice < 0 || choice == 2) {
 			return;
 		}
-		selectionModel.setRowCount(0);
-		for (VetFacility facility : proposal) {
-			selectionModel.addRow(selectionRow(facility));
+		List<VetFacility> additions = new ArrayList<>();
+		if (choice == 1) {
+			additions.addAll(proposal);
+		} else {
+			for (int viewRow : previewTable.getSelectedRows()) {
+				additions.add(proposal.get(viewRow));
+			}
+			if (additions.isEmpty()) {
+				JOptionPane.showMessageDialog(this, "Select one or more facilities, or choose Add all to plan.",
+						"No facilities selected", JOptionPane.INFORMATION_MESSAGE);
+				return;
+			}
 		}
+		int added = addSnapshots(additions);
 		pushToModel();
 		controller.markDirty();
+		status.setText("Added " + added + " facility/facilities; existing plan entries and duplicates were preserved.");
 	}
 
 	/**
@@ -1658,27 +1912,41 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
-	 * Returns a road distance or the explicit offline-estimate label.
+	 * Formats a road distance in miles.
 	 *
 	 * @param facility route record.
-	 * @return distance text.
+	 * @return miles to one decimal place, or blank when unavailable.
 	 */
-	private static String distance(VetFacility facility) {
+	private static String distanceMiles(VetFacility facility) {
 		return Double.isFinite(facility.getDistanceMeters())
-				? String.format(java.util.Locale.ROOT, "%.0f", facility.getDistanceMeters())
+				? String.format(java.util.Locale.ROOT, "%.1f", facility.getDistanceMeters() / 1609.344)
 				: "";
 	}
 
 	/**
-	 * Returns a route duration only when the provider supplied one.
+	 * Formats a provider-supplied route duration in minutes.
 	 *
 	 * @param facility route record.
-	 * @return duration text.
+	 * @return minutes to one decimal place, or blank when unavailable.
 	 */
-	private static String duration(VetFacility facility) {
+	private static String durationMinutes(VetFacility facility) {
 		return Double.isFinite(facility.getDurationSeconds())
-				? String.format(java.util.Locale.ROOT, "%.0f", facility.getDurationSeconds())
+				? String.format(java.util.Locale.ROOT, "%.1f", facility.getDurationSeconds() / 60)
 				: "";
+	}
+
+	/**
+	 * Converts a sortable display value to a number, placing unavailable values last.
+	 *
+	 * @param value displayed numeric value.
+	 * @return parsed number or NaN when blank/invalid.
+	 */
+	private static double sortValue(Object value) {
+		try {
+			return Double.parseDouble(String.valueOf(value));
+		} catch (NumberFormatException exception) {
+			return Double.NaN;
+		}
 	}
 
 	/**
