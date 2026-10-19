@@ -7,11 +7,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentLocation;
+import org.sarmanagement.icsforms.model.VetFacility;
+import org.sarmanagement.icsforms.medical.AddressGeocoder;
+import org.sarmanagement.icsforms.medical.GeoPoint;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JLabel;
+import javax.swing.JButton;
+import javax.swing.AbstractButton;
+import javax.swing.JEditorPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
@@ -102,6 +108,104 @@ class CanineMedicalPanelTest {
 		assertEquals(0, ((JTable) fieldValue(panel[0], "directoryTable")).getRowCount());
 	}
 
+	@Test
+	void confirmedFacilityGeocodePersistsForStreetCityStateAndZipAddress() throws Exception {
+		AppData data = new AppData();
+		VetFacility facility = new VetFacility();
+		facility.setName("Fictional Veterinary Hospital");
+		facility.setAddress("350 South Huntington Avenue");
+		facility.setTown("Boston");
+		facility.setState("MA");
+		facility.setPostalCode("02130");
+		data.getVetDirectory().getFacilities().add(facility);
+		AppController controller = new AppController(data,
+				new LocalRepository(tempDirectory.resolve("incident.json")),
+				new PdfExportService(), new IncidentValidator());
+		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
+		AddressGeocoder.Candidate candidate = new AddressGeocoder.Candidate(
+				"350 South Huntington Avenue, Boston, MA", new GeoPoint(42.3, -71.1), 0.9);
+		String address = "350 South Huntington Avenue, Boston, MA, 02130";
+
+		boolean[] applied = new boolean[1];
+		SwingUtilities.invokeAndWait(() ->
+				applied[0] = panel.applyGeocodedVetCandidate(data, facility.getId(), address, candidate));
+
+		assertTrue(applied[0]);
+		assertEquals(42.3, data.getVetDirectory().getFacilities().get(0).getLatitude());
+		assertEquals(-71.1, data.getVetDirectory().getFacilities().get(0).getLongitude());
+		assertEquals("openrouteservice-geocoder",
+				data.getVetDirectory().getFacilities().get(0).getGeocodingProvider());
+	}
+
+	@Test
+	void routingActionsRequireCoordinatesAndAConfirmedCurrentRoute() throws Exception {
+		AppData data = new AppData();
+		data.getStagingLocation().setAddress("1 Fictional Base Road");
+		data.getStagingLocation().setResolution("Confirmed base", 42.0, -71.0, "manual", "test", null);
+		VetFacility facility = new VetFacility();
+		facility.setAddress("2 Fictional Vet Road");
+		facility.setAvailable24Hours(true);
+		facility.setCoordinates(42.1, -71.1, "manual", "test");
+		data.getVetDirectory().getFacilities().add(facility);
+		AppController controller = new AppController(data,
+				new LocalRepository(tempDirectory.resolve("incident.json")),
+				new PdfExportService(), new IncidentValidator());
+		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
+
+		SwingUtilities.invokeAndWait(() -> {
+			JButton calculate = (JButton) fieldValue(panel, "calculateRoutesButton");
+			JButton preview = (JButton) fieldValue(panel, "previewSelectionButton");
+			assertTrue(calculate.isEnabled());
+			assertFalse(preview.isEnabled());
+			facility.setDistance(1500, 300, "openrouteservice/driving-car", "test", null,
+					data.getStagingLocation().getGeneration());
+			panel.refreshFromModel();
+			assertTrue(preview.isEnabled());
+			facility.setAvailable24Hours(false);
+			panel.refreshFromModel();
+			assertFalse(preview.isEnabled());
+		});
+	}
+
+	@Test
+	void selectedFacilityGeocodingIsEnabledOnlyForAnAddressWithoutCoordinates() throws Exception {
+		AppData data = new AppData();
+		VetFacility facility = new VetFacility();
+		facility.setAddress("2 Fictional Vet Road");
+		data.getVetDirectory().getFacilities().add(facility);
+		AppController controller = new AppController(data,
+				new LocalRepository(tempDirectory.resolve("incident.json")),
+				new PdfExportService(), new IncidentValidator());
+		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
+		JButton geocode = (JButton) fieldValue(panel, "geocodeVetButton");
+		JTable directory = (JTable) fieldValue(panel, "directoryTable");
+
+		SwingUtilities.invokeAndWait(() -> {
+			assertFalse(geocode.isEnabled());
+			directory.setRowSelectionInterval(0, 0);
+			assertTrue(geocode.isEnabled());
+			facility.setCoordinates(42.1, -71.1, "manual", "test");
+			panel.refreshFromModel();
+			assertFalse(geocode.isEnabled());
+		});
+	}
+
+	@Test
+	void routeCalculationIsDisabledUntilBaseAndFacilityCoordinatesExist() throws Exception {
+		AppData data = new AppData();
+		AppController controller = new AppController(data,
+				new LocalRepository(tempDirectory.resolve("incident.json")),
+				new PdfExportService(), new IncidentValidator());
+		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
+
+		SwingUtilities.invokeAndWait(() -> {
+			assertFalse(((JButton) fieldValue(panel, "calculateRoutesButton")).isEnabled());
+			assertFalse(((JButton) fieldValue(panel, "previewSelectionButton")).isEnabled());
+			assertTrue(hasText(panel, "1. Load regional JSON/CSV…"));
+			assertTrue(hasText(panel, "openrouteservice by HeiGIT | Data from"));
+		});
+	}
+
 	/**
 	 * Reads an arbitrary private canine-panel field for focused component tests.
 	 *
@@ -150,6 +254,33 @@ class CanineMedicalPanelTest {
 		if (component instanceof Container container) {
 			for (Component child : container.getComponents()) {
 				if (hasLabel(child, label)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Finds text in visible labels and embedded HTML attribution.
+	 *
+	 * @param component root component.
+	 * @param text expected text fragment.
+	 * @return true when the fragment appears in the visible component tree.
+	 */
+	private static boolean hasText(Component component, String text) {
+		if (component instanceof JLabel candidate && candidate.getText().contains(text)) {
+			return true;
+		}
+		if (component instanceof AbstractButton candidate && candidate.getText().contains(text)) {
+			return true;
+		}
+		if (component instanceof JEditorPane candidate && candidate.getText().contains(text)) {
+			return true;
+		}
+		if (component instanceof Container container) {
+			for (Component child : container.getComponents()) {
+				if (hasText(child, text)) {
 					return true;
 				}
 			}

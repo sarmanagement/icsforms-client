@@ -19,11 +19,13 @@ import java.util.List;
 import java.util.function.Supplier;
 
 /**
- * ORS driving-car matrix client. It sends one destination per request to avoid
- * relying on inaccessible public-service matrix-size quotas.
+ * HeiGIT-hosted openrouteservice driving-car matrix client. It sends one
+ * destination per request to avoid relying on inaccessible public-service
+ * matrix-size quotas. OpenStreetMap data attribution is © openrouteservice by HeiGIT.
  */
 public class OpenRouteServiceDrivingRouter implements DrivingRouteProvider {
-	private static final URI DEFAULT_ENDPOINT = URI.create("https://api.openrouteservice.org/v2/matrix/driving-car");
+	static final URI DEFAULT_ENDPOINT = URI.create(
+			"https://api.heigit.org/openrouteservice/v2/matrix/driving-car");
 	private static final String METHOD = "openrouteservice/driving-car";
 	private static final int MAX_RETRIES = 2;
 	private static final long MAX_RETRY_DELAY_MILLIS = 1500;

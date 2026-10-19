@@ -22,26 +22,29 @@ import javax.swing.DefaultCellEditor;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JEditorPane;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
-import javax.swing.JTabbedPane;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingWorker;
-import javax.swing.filechooser.FileNameExtensionFilter;
-import javax.swing.table.DefaultTableModel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.event.HyperlinkEvent;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
+import java.awt.Desktop;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -49,8 +52,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 /**
@@ -70,6 +73,12 @@ public class CanineMedicalPanel extends JPanel {
 	private final JTextField stagingLongitude = new JTextField();
 	private final JComboBox<RoutingBaseChoice> routingBaseLocations = new JComboBox<>();
 	private final JTextField shortlistLimit = new JTextField("8", 4);
+	private final JButton geocodeBaseButton = new JButton("Look up address…");
+	private final JButton setBaseCoordinatesButton = new JButton("Set coordinates");
+	private final JButton calculateRoutesButton = new JButton("3. Calculate routes");
+	private final JButton previewSelectionButton = new JButton("4. Review closest 24-hour vets…");
+	private final JButton geocodeVetButton = new JButton("2. Look up selected address…");
+	private final JButton includeSelectedButton = new JButton("Include selected directory rows");
 	private final DefaultTableModel directoryModel = new DefaultTableModel(new String[] {
 			"ID", "Name", "Town", "Address", "Contacts (; separated)", "24 Hours", "Availability notes",
 			"Capabilities / notes", "Verified at", "Latitude", "Longitude", "Source", "State", "ZIP", "Fax",
@@ -281,6 +290,7 @@ public class CanineMedicalPanel extends JPanel {
 		} finally {
 			loading = false;
 		}
+		refreshWorkflowControls();
 	}
 
 	/**
@@ -356,7 +366,7 @@ public class CanineMedicalPanel extends JPanel {
 	 * @return staging and routing controls.
 	 */
 	private JPanel buildBaseLocationPanel() {
-		JButton load = new JButton("Load regional JSON/CSV…");
+		JButton load = new JButton("1. Load regional JSON/CSV…");
 		load.addActionListener(event -> importFiles());
 		JButton save = new JButton("Save directory JSON/CSV…");
 		save.addActionListener(event -> exportDirectory());
@@ -372,30 +382,33 @@ public class CanineMedicalPanel extends JPanel {
 		base.add(stagingLabel);
 		base.add(new JLabel("Full address"));
 		base.add(stagingAddress);
-		JButton geocodeBase = new JButton("Look up address…");
-		geocodeBase.addActionListener(event -> geocodeBase());
-		base.add(geocodeBase);
-		JButton manualCoordinates = new JButton("Set coordinates");
-		manualCoordinates.addActionListener(event -> setManualBaseCoordinates());
-		base.add(manualCoordinates);
+		geocodeBaseButton.setText("2. Look up base address…");
+		geocodeBaseButton.addActionListener(event -> geocodeBase());
+		base.add(geocodeBaseButton);
+		setBaseCoordinatesButton.setText("2. Set coordinates");
+		setBaseCoordinatesButton.addActionListener(event -> setManualBaseCoordinates());
+		base.add(setBaseCoordinatesButton);
 		base.add(new JLabel("Latitude"));
 		base.add(stagingLatitude);
 		base.add(new JLabel("Longitude"));
 		base.add(stagingLongitude);
 		base.add(new JLabel("Closest N"));
 		base.add(shortlistLimit);
-		JButton calculate = new JButton("Calculate routes for all listed facilities");
-		calculate.addActionListener(event -> calculateRoutes());
-		base.add(calculate);
-		JButton propose = new JButton("Preview closest 24-hour vets…");
-		propose.addActionListener(event -> previewSelection());
-		base.add(propose);
+		calculateRoutesButton.addActionListener(event -> calculateRoutes());
+		base.add(calculateRoutesButton);
+		previewSelectionButton.addActionListener(event -> previewSelection());
+		base.add(previewSelectionButton);
 		base.add(load);
 		base.add(save);
 		JPanel root = new JPanel(new BorderLayout(4, 4));
 		root.add(base, BorderLayout.CENTER);
-		JPanel note = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-		note.add(new JLabel("Availability is shown separately and does not limit route calculations."));
+		JPanel note = new JPanel(new GridLayout(0, 1, 2, 2));
+		note.add(new JLabel("<html><b>Workflow:</b> 1. Load a regional JSON/CSV directory. "
+				+ "2. Resolve the base coordinates and select facilities without coordinates to look up/confirm "
+				+ "each address. 3. Calculate road routes for facilities with coordinates. "
+				+ "4. Review the closest confirmed 24-hour facilities sorted by road distance and add the "
+				+ "selected results to the plan. Availability does not limit route calculations.</html>"));
+		note.add(createAttribution());
 		root.add(note, BorderLayout.SOUTH);
 		return root;
 	}
@@ -468,16 +481,14 @@ public class CanineMedicalPanel extends JPanel {
 		add.addActionListener(event -> addFacility());
 		JButton remove = new JButton("Remove selected");
 		remove.addActionListener(event -> removeDirectoryRows());
-		JButton geocodeVet = new JButton("Look up selected address…");
-		geocodeVet.addActionListener(event -> geocodeSelectedVet());
 		directoryControls.add(add);
 		directoryControls.add(remove);
-		directoryControls.add(geocodeVet);
+		geocodeVetButton.addActionListener(event -> geocodeSelectedVet());
+		directoryControls.add(geocodeVetButton);
 		directory.add(directoryControls, BorderLayout.SOUTH);
 
-		JButton includeSelected = new JButton("Include selected directory rows");
-		includeSelected.addActionListener(event -> addSelectedFacilities());
-		directoryControls.add(includeSelected);
+		includeSelectedButton.addActionListener(event -> addSelectedFacilities());
+		directoryControls.add(includeSelectedButton);
 		JPanel area = new JPanel(new BorderLayout(4, 4));
 		area.add(buildBaseLocationPanel(), BorderLayout.NORTH);
 		area.add(directory, BorderLayout.CENTER);
@@ -628,6 +639,7 @@ public class CanineMedicalPanel extends JPanel {
 		watch(transportServices, false);
 		directoryModel.addTableModelListener(event -> inputChanged(true));
 		selectionModel.addTableModelListener(event -> inputChanged(false));
+		directoryTable.getSelectionModel().addListSelectionListener(event -> refreshWorkflowControls());
 	}
 
 	/**
@@ -692,7 +704,80 @@ public class CanineMedicalPanel extends JPanel {
 			}
 			pushToModel();
 			controller.markDirty();
+			refreshWorkflowControls();
 		}
+	}
+
+	/**
+	 * Enables each veterinary workflow action only when its inputs are available.
+	 */
+	private void refreshWorkflowControls() {
+		if (loading || flushing) {
+			return;
+		}
+		AppData data = controller.getData();
+		boolean working = activeWorker != null && !activeWorker.isDone();
+		geocodeBaseButton.setEnabled(!working && !stagingAddress.getText().isBlank());
+		setBaseCoordinatesButton.setEnabled(!working && !stagingAddress.getText().isBlank()
+				&& coordinate(stagingLatitude.getText(), -90, 90) != null
+				&& coordinate(stagingLongitude.getText(), -180, 180) != null);
+		int selectedViewRow = directoryTable.getSelectedRow();
+		boolean selectedAddressNeedsCoordinates = false;
+		if (selectedViewRow >= 0 && selectedViewRow < directoryTable.getRowCount()) {
+			int selectedRow = directoryTable.convertRowIndexToModel(selectedViewRow);
+			VetFacility selected = record(directoryModel.getValueAt(selectedRow, 15));
+			selectedAddressNeedsCoordinates = !geocodingAddress(selected).isBlank()
+					&& !hasValidCoordinates(selected);
+		}
+		geocodeVetButton.setEnabled(!working && selectedAddressNeedsCoordinates);
+		includeSelectedButton.setEnabled(!working && directoryTable.getSelectedRowCount() > 0);
+		boolean hasRoutableFacility = data.getVetDirectory().getFacilities().stream()
+				.anyMatch(CanineMedicalPanel::hasValidCoordinates);
+		calculateRoutesButton.setEnabled(!working && data.getStagingLocation().hasValidCoordinates()
+				&& hasRoutableFacility);
+		boolean hasShortlistCandidate = !shortlistSelector.propose(data.getVetDirectory().getFacilities(),
+				integer(shortlistLimit.getText(), VetShortlistSelector.DEFAULT_LIMIT),
+				data.getStagingLocation().getGeneration()).isEmpty();
+		previewSelectionButton.setEnabled(!working && hasShortlistCandidate);
+	}
+
+	/**
+	 * Returns whether a facility has a valid latitude/longitude pair.
+	 *
+	 * @param facility veterinary facility.
+	 * @return true when both coordinates are in geographic range.
+	 */
+	private static boolean hasValidCoordinates(VetFacility facility) {
+		return facility.getLatitude() != null && facility.getLongitude() != null
+				&& Double.isFinite(facility.getLatitude()) && facility.getLatitude() >= -90
+				&& facility.getLatitude() <= 90 && Double.isFinite(facility.getLongitude())
+				&& facility.getLongitude() >= -180 && facility.getLongitude() <= 180;
+	}
+
+	/**
+	 * Creates visible HeiGIT/OpenStreetMap attribution with a clickable copyright link.
+	 *
+	 * @return attributed service label.
+	 */
+	private JEditorPane createAttribution() {
+		JEditorPane attribution = new JEditorPane("text/html",
+				"<html>© openrouteservice by HeiGIT | Data from "
+						+ "<a href=\"https://openstreetmap.org/copyright\">OpenStreetMap</a></html>");
+		attribution.setEditable(false);
+		attribution.setOpaque(false);
+		attribution.setBorder(null);
+		attribution.addHyperlinkListener(event -> {
+			if (event.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
+				try {
+					if (Desktop.isDesktopSupported()) {
+						Desktop.getDesktop().browse(URI.create(event.getURL().toString()));
+					}
+				} catch (IOException | UnsupportedOperationException exception) {
+					status.setText("Could not open the OpenStreetMap copyright page.");
+				}
+			}
+		});
+		return attribution;
 	}
 
 	/**
@@ -1127,14 +1212,8 @@ public class CanineMedicalPanel extends JPanel {
 						return;
 					}
 					AddressGeocoder.Candidate candidate = confirmCandidate(candidates);
-					if (candidate != null) {
-						VetFacility current = findFacility(incident, id);
-						if (current != null && current.getAddress().equals(address)) {
-							current.setCoordinates(candidate.point().latitude(), candidate.point().longitude(),
-									"openrouteservice-geocoder", "Operator-confirmed: " + candidate.label());
-							refreshFromModel();
-							controller.markDirty();
-						}
+					if (candidate != null && applyGeocodedVetCandidate(incident, id, address, candidate)) {
+						status.setText("Confirmed coordinates for the selected veterinary facility.");
 					}
 				} catch (CancellationException exception) {
 					status.setText("Geocoding request cancelled.");
@@ -1147,6 +1226,31 @@ public class CanineMedicalPanel extends JPanel {
 				}
 			}
 		});
+	}
+
+	/**
+	 * Applies a confirmed candidate only when the facility still has the queried full address.
+	 *
+	 * @param incident incident captured by the geocoding request.
+	 * @param facilityId stable directory facility identifier.
+	 * @param requestedAddress complete address sent to the geocoder.
+	 * @param candidate operator-confirmed geocoding candidate.
+	 * @return true when the candidate was applied to the current incident.
+	 */
+	boolean applyGeocodedVetCandidate(AppData incident, String facilityId, String requestedAddress,
+			AddressGeocoder.Candidate candidate) {
+		if (controller.getData() != incident) {
+			return false;
+		}
+		VetFacility current = findFacility(incident, facilityId);
+		if (current == null || !geocodingAddress(current).equals(requestedAddress)) {
+			return false;
+		}
+		current.setCoordinates(candidate.point().latitude(), candidate.point().longitude(),
+				"openrouteservice-geocoder", "Operator-confirmed: " + candidate.label());
+		refreshFromModel();
+		controller.markDirty();
+		return true;
 	}
 
 	/**
@@ -1286,6 +1390,7 @@ public class CanineMedicalPanel extends JPanel {
 		progress.setVisible(true);
 		cancelRequest.setVisible(true);
 		status.setText("Working with the selected address/route provider.");
+		refreshWorkflowControls();
 		worker.execute();
 	}
 
@@ -1299,6 +1404,7 @@ public class CanineMedicalPanel extends JPanel {
 		activeWorker = null;
 		progress.setVisible(false);
 		cancelRequest.setVisible(false);
+		refreshWorkflowControls();
 	}
 
 	/**
@@ -1309,6 +1415,7 @@ public class CanineMedicalPanel extends JPanel {
 			activeWorker = null;
 			progress.setVisible(false);
 			cancelRequest.setVisible(false);
+			refreshWorkflowControls();
 		}
 	}
 

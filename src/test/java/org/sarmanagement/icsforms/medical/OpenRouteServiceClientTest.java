@@ -36,6 +36,14 @@ class OpenRouteServiceClientTest {
 	Path tempDirectory;
 
 	@Test
+	void defaultEndpointsUseCurrentHeiGITServicePaths() {
+		assertEquals("https://api.heigit.org/pelias/v1/search",
+				OpenRouteServiceGeocoder.DEFAULT_ENDPOINT.toString());
+		assertEquals("https://api.heigit.org/openrouteservice/v2/matrix/driving-car",
+				OpenRouteServiceDrivingRouter.DEFAULT_ENDPOINT.toString());
+	}
+
+	@Test
 	void matrixUsesLongitudeLatitudeAndCalculatesEveryDestinationInInputOrder() throws Exception {
 		AtomicReference<String> firstBody = new AtomicReference<>();
 		AtomicInteger requests = new AtomicInteger();
@@ -66,7 +74,7 @@ class OpenRouteServiceClientTest {
 
 	@Test
 	void geocoderReturnsCandidatesForExplicitOperatorConfirmation() throws Exception {
-		HttpServer server = server("/geocode/search", exchange -> {
+		HttpServer server = server("/pelias/v1/search", exchange -> {
 			assertEquals("text=100+Fictional+Road", exchange.getRequestURI().getRawQuery());
 			assertEquals("test-key", exchange.getRequestHeaders().getFirst("Authorization"));
 			reply(exchange, 200, "{\"features\":[{\"geometry\":{\"coordinates\":[-71.5,42.5]},"
@@ -74,7 +82,7 @@ class OpenRouteServiceClientTest {
 		});
 		try {
 			OpenRouteServiceGeocoder geocoder = new OpenRouteServiceGeocoder(HttpClient.newHttpClient(),
-					endpoint(server, "/geocode/search"), () -> "test-key", Duration.ofSeconds(2));
+					endpoint(server, "/pelias/v1/search"), () -> "test-key", Duration.ofSeconds(2));
 			List<AddressGeocoder.Candidate> candidates = geocoder.geocode("100 Fictional Road");
 			assertEquals(1, candidates.size());
 			assertEquals("100 Fictional Road, Test Town", candidates.get(0).label());

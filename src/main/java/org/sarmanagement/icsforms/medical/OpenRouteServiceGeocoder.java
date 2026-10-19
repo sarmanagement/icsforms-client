@@ -18,10 +18,11 @@ import java.util.List;
 import java.util.function.Supplier;
 
 /**
- * ORS public Pelias forward geocoder, independent of the routing provider.
+ * HeiGIT-hosted openrouteservice Pelias forward geocoder, independent of the routing provider.
+ * OpenStreetMap data attribution is © openrouteservice by HeiGIT.
  */
 public class OpenRouteServiceGeocoder implements AddressGeocoder {
-	private static final URI DEFAULT_ENDPOINT = URI.create("https://api.openrouteservice.org/geocode/search");
+	static final URI DEFAULT_ENDPOINT = URI.create("https://api.heigit.org/pelias/v1/search");
 	private static final ObjectMapper MAPPER = new ObjectMapper();
 	private final HttpClient client;
 	private final URI endpoint;
