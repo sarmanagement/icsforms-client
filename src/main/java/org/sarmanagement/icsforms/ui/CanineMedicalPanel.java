@@ -667,7 +667,6 @@ public class CanineMedicalPanel extends JPanel {
 		JMenuItem include = new JMenuItem("Include in plan");
 		include.addActionListener(event -> addSelectedFacilities());
 		directoryPopupMenu.add(include);
-		directoryTable.setComponentPopupMenu(directoryPopupMenu);
 		directoryTable.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent event) {
@@ -682,7 +681,7 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
-	 * Selects the context-clicked row before the table displays its action menu.
+	 * Selects the context-clicked row before displaying its action menu.
 	 *
 	 * @param event mouse event.
 	 */
@@ -695,6 +694,7 @@ public class CanineMedicalPanel extends JPanel {
 			return;
 		}
 		directoryTable.setRowSelectionInterval(viewRow, viewRow);
+		directoryPopupMenu.show(directoryTable, event.getX(), event.getY());
 	}
 
 	/**

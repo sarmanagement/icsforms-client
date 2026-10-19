@@ -265,15 +265,15 @@ class CanineMedicalPanelTest {
 				new AppController(new AppData(), new LocalRepository(tempDirectory.resolve("incident.json")),
 						new PdfExportService(), new IncidentValidator()),
 				tempDirectory);
-		JTable directory = (JTable) fieldValue(panel, "directoryTable");
+		javax.swing.JPopupMenu menu = (javax.swing.JPopupMenu) fieldValue(panel, "directoryPopupMenu");
 
-		assertEquals(3, directory.getComponentPopupMenu().getComponentCount());
+		assertEquals(3, menu.getComponentCount());
 		assertEquals("Lookup coordinates from address…",
-				((javax.swing.JMenuItem) directory.getComponentPopupMenu().getComponent(0)).getText());
+				((javax.swing.JMenuItem) menu.getComponent(0)).getText());
 		assertEquals("Edit details…",
-				((javax.swing.JMenuItem) directory.getComponentPopupMenu().getComponent(1)).getText());
+				((javax.swing.JMenuItem) menu.getComponent(1)).getText());
 		assertEquals("Include in plan",
-				((javax.swing.JMenuItem) directory.getComponentPopupMenu().getComponent(2)).getText());
+				((javax.swing.JMenuItem) menu.getComponent(2)).getText());
 	}
 
 	@Test
