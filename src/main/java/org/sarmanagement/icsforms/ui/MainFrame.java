@@ -706,8 +706,7 @@ public class MainFrame extends JFrame {
 			visibleFormCount++;
 		}
 		checksPanel.setPreferredSize(new Dimension(500, Math.max(28, visibleFormCount * 25)));
-		JScrollPane formList = new JScrollPane(checksPanel);
-		formList.setPreferredSize(new Dimension(520, Math.max(36, visibleFormCount * 25 + 8)));
+		JScrollPane formList = createExportFormList(checksPanel, visibleFormCount);
 		JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 		JButton selectAll = new JButton("Select All");
 		JButton selectNone = new JButton("Select None");
@@ -717,12 +716,12 @@ public class MainFrame extends JFrame {
 		controls.add(selectNone);
 		ExportModeControls exportModeControls = createExportModeControls();
 		PdfPrintOptionsPanel printOptions = new PdfPrintOptionsPanel(formKeys);
-		UiSupport.addRow(form, 0, "Forms", formList);
+		UiSupport.addWideRow(form, 0, formList);
 		UiSupport.addRow(form, 1, "", controls);
 		UiSupport.addRow(form, 2, "Output", exportModeControls.panel());
 		UiSupport.addRow(form, 3, "Print options", printOptions);
 		if (!UiSupport.showResizableConfirmDialog(this, "Export forms as PDF", form,
-				new Dimension(560, Math.max(440, 340 + visibleFormCount * 25)))) {
+				new Dimension(720, Math.max(500, Math.min(700, 340 + visibleFormCount * 25))))) {
 			return;
 		}
 
@@ -763,6 +762,21 @@ public class MainFrame extends JFrame {
 				showPdfExportError("Failed to export PDFs", exception);
 			}
 		});
+	}
+
+	/**
+	 * Creates a width-fitting, vertically scrollable list for the export form choices.
+	 *
+	 * @param checksPanel panel containing one checkbox per available form.
+	 * @param visibleFormCount number of visible choices.
+	 * @return constrained export-form viewport.
+	 */
+	static JScrollPane createExportFormList(JPanel checksPanel, int visibleFormCount) {
+		JScrollPane formList = new JScrollPane(checksPanel);
+		formList.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		formList.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+		formList.setPreferredSize(new Dimension(520, Math.min(240, Math.max(60, visibleFormCount * 25 + 8))));
+		return formList;
 	}
 
 	/**

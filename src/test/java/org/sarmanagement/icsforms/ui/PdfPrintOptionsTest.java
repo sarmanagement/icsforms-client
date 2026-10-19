@@ -26,12 +26,15 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
+import javax.swing.JPanel;
 import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.GraphicsEnvironment;
+import java.awt.Dimension;
 import java.awt.Window;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -76,6 +79,17 @@ class PdfPrintOptionsTest {
 			adapt.setSelected(true);
 			assertEquals(List.of("Clue Log"), panel.selectedFormKeys(List.of("Clue Log")));
 		}
+	}
+
+	@Test
+	void exportFormListUsesVerticalScrollingWithinAConstrainedViewport() {
+		JPanel choices = new JPanel();
+		JScrollPane list = MainFrame.createExportFormList(choices, 24);
+
+		assertSame(choices, list.getViewport().getView());
+		assertEquals(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER, list.getHorizontalScrollBarPolicy());
+		assertEquals(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, list.getVerticalScrollBarPolicy());
+		assertEquals(new Dimension(520, 240), list.getPreferredSize());
 	}
 
 	@Test
@@ -124,6 +138,17 @@ class PdfPrintOptionsTest {
 										.allMatch(JCheckBox::isSelected));
 								assertFalse(selectors.stream().anyMatch(check -> check.getText().equals(
 										"Clue Log – Adapted ICS 233-CG")));
+								JScrollPane formList = components(dialog, JScrollPane.class).stream()
+										.filter(scroll -> components(scroll, JCheckBox.class).stream()
+												.anyMatch(check -> check.getText().equals("Clue Log")))
+										.findFirst().orElseThrow();
+								assertEquals(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER,
+										formList.getHorizontalScrollBarPolicy());
+								assertEquals(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+										formList.getVerticalScrollBarPolicy());
+								assertTrue(formList.getPreferredSize().height <= 240);
+								assertTrue(components(formList, JCheckBox.class).stream()
+										.anyMatch(check -> check.getText().equals("Clue Log") && check.isShowing()));
 							} catch (Throwable failure) {
 								dialogFailure.set(failure);
 							} finally {
