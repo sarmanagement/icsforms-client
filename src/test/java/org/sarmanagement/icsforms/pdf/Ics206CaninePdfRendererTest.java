@@ -48,8 +48,12 @@ class Ics206CaninePdfRendererTest {
 			String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
 			for (String block : new String[] {"1. INCIDENT NAME", "2. OPERATIONAL PERIOD",
 					"3. MEDICAL AID STATIONS", "4. TRANSPORTATION", "5. VETERINARY HOSPITALS",
-					"6. SPECIAL MEDICAL EMERGENCY PROCEDURES", "7. PREPARED BY", "8. REVIEWED BY"}) {
+					"6. SPECIAL MEDICAL EMERGENCY PROCEDURES", "7. PREPARED BY", "8. APPROVED BY"}) {
 				assertTrue(text.contains(block), block);
+			}
+			for (String column : new String[] {"Hospital Name", "Town", "Address", "Contact Number(s)",
+					"24 Hours", "Notes"}) {
+				assertTrue(text.contains(column), column);
 			}
 			assertTrue(text.contains("Fictional Veterinary Hospital"));
 			assertTrue(text.contains("Unknown (not verified)"));
@@ -76,11 +80,35 @@ class Ics206CaninePdfRendererTest {
 		new Ics206CaninePdfRenderer().render(data, output);
 
 		try (PDDocument pdf = Loader.loadPDF(output.toFile())) {
-			String text = new PDFTextStripper().getText(pdf);
+			String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
 			assertTrue(pdf.getNumberOfPages() > 1);
 			assertEquals(Ics206CaninePdfRenderer.pageCount(data), pdf.getNumberOfPages());
 			assertTrue(text.contains("END_OF_VETERINARY_NOTES"));
 			assertTrue(text.contains("CONTINUED"));
+		}
+	}
+
+	@Test
+	void compactCanineFormUsesTheAdaptedTitleAndKeepsAllBlocksOnOnePageWhenTheyFit() throws Exception {
+		AppData data = new AppData();
+		data.getIncidentContext().setIncidentName("Fictional Incident");
+		VetFacility vet = new VetFacility();
+		vet.setName("Fictional Veterinary Hospital");
+		vet.setTown("Sampletown");
+		vet.setAddress("1 Example Road");
+		vet.setAvailable24Hours(true);
+		data.getCanineMedicalPlan().getSelectedFacilities().add(vet);
+
+		Path output = tempDirectory.resolve("ics-206canine-compact.pdf");
+		new Ics206CaninePdfRenderer().render(data, output);
+
+		try (PDDocument pdf = Loader.loadPDF(output.toFile())) {
+			String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
+			assertEquals(1, pdf.getNumberOfPages());
+			assertEquals(Ics206CaninePdfRenderer.pageCount(data), pdf.getNumberOfPages());
+			assertTrue(text.contains("CANINE MEDICAL PLAN (ADAPTED)"));
+			assertTrue(text.contains("Fictional Veterinary Hospital"));
+			assertTrue(text.contains("8. APPROVED BY"));
 		}
 	}
 }

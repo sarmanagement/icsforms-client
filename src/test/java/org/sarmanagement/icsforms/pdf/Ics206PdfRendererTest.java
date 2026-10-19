@@ -56,6 +56,10 @@ class Ics206PdfRendererTest {
 					"6. SPECIAL MEDICAL EMERGENCY PROCEDURES", "7. PREPARED BY", "8. APPROVED BY"}) {
 				assertTrue(text.contains(block), block);
 			}
+			for (String column : new String[] {"Aid Station", "Location", "Contact Number(s) / Frequency",
+					"Paramedics On Site", "Service", "Hospital", "Travel Time (Air / Ground)"}) {
+				assertTrue(text.contains(column), column);
+			}
 			assertTrue(text.contains("UNKNOWN"));
 			assertTrue(text.contains("NO"));
 			assertTrue(text.contains("ICS 206"));
