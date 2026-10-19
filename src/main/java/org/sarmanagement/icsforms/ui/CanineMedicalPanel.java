@@ -830,8 +830,21 @@ public class CanineMedicalPanel extends JPanel {
 				"Remove regional records", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
 			return;
 		}
-		for (int index = selected.length - 1; index >= 0; index--) {
-			directoryModel.removeRow(directoryTable.convertRowIndexToModel(selected[index]));
+		removeDirectoryRows(selected);
+	}
+
+	/**
+	 * Removes selected table rows after resolving any active editor before structural changes.
+	 *
+	 * @param selectedViewRows selected JTable view row indexes.
+	 */
+	void removeDirectoryRows(int[] selectedViewRows) {
+		stopEditing(directoryTable);
+		for (int index = selectedViewRows.length - 1; index >= 0; index--) {
+			int viewRow = selectedViewRows[index];
+			if (viewRow >= 0 && viewRow < directoryTable.getRowCount()) {
+				directoryModel.removeRow(directoryTable.convertRowIndexToModel(viewRow));
+			}
 		}
 	}
 
@@ -1410,7 +1423,9 @@ public class CanineMedicalPanel extends JPanel {
 	 */
 	private void stopEditing(JTable table) {
 		if (table.isEditing()) {
-			table.getCellEditor().stopCellEditing();
+			if (!table.getCellEditor().stopCellEditing()) {
+				table.getCellEditor().cancelCellEditing();
+			}
 		}
 	}
 

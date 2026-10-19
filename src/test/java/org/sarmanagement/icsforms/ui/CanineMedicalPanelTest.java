@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JLabel;
+import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
@@ -76,6 +77,29 @@ class CanineMedicalPanelTest {
 		assertEquals(base.getId(), data.getCanineRoutingBaseLocationId());
 		assertEquals("Fictional Base", data.getStagingLocation().getLabel());
 		assertEquals("1 Fictional Road", data.getStagingLocation().getAddress());
+	}
+
+	@Test
+	void removingFacilityWhileItsDirectoryCellIsBeingEditedDoesNotWriteToDeletedRow() throws Exception {
+		AppData data = new AppData();
+		data.getVetDirectory().getFacilities().add(new org.sarmanagement.icsforms.model.VetFacility());
+		AppController controller = new AppController(data,
+				new LocalRepository(tempDirectory.resolve("incident.json")),
+				new PdfExportService(), new IncidentValidator());
+		CanineMedicalPanel[] panel = new CanineMedicalPanel[1];
+
+		SwingUtilities.invokeAndWait(() -> {
+			panel[0] = new CanineMedicalPanel(controller, tempDirectory);
+			JTable table = (JTable) fieldValue(panel[0], "directoryTable");
+			assertTrue(table.editCellAt(0, 1));
+			((JTextField) table.getEditorComponent()).setText("Incomplete facility");
+			table.setRowSelectionInterval(0, 0);
+
+			panel[0].removeDirectoryRows(new int[]{0});
+		});
+
+		assertEquals(0, data.getVetDirectory().getFacilities().size());
+		assertEquals(0, ((JTable) fieldValue(panel[0], "directoryTable")).getRowCount());
 	}
 
 	/**
