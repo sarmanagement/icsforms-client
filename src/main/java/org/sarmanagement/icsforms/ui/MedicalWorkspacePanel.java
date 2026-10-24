@@ -125,13 +125,13 @@ public class MedicalWorkspacePanel extends JPanel {
 		/** {@inheritDoc} */
 		@Override
 		public int getIconWidth() {
-			return WIDTH;
+			return  canine ? 27 : WIDTH;
 		}
 
 		/** {@inheritDoc} */
 		@Override
 		public int getIconHeight() {
-			return HEIGHT;
+			return canine ? 24 : HEIGHT;
 		}
 
 		/** {@inheritDoc} */
@@ -164,26 +164,97 @@ public class MedicalWorkspacePanel extends JPanel {
 		}
 
 		/**
-		 * Paints a side-profile canine head with a projecting muzzle and nose.
+		 * Paints a generic canine silhouette with head, body, legs, and tail.
 		 *
 		 * @param drawing icon graphics.
 		 * @param x icon horizontal origin.
 		 * @param y icon vertical origin.
 		 */
 		private void paintCanine(Graphics2D drawing, int x, int y) {
-			Path2D profile = new Path2D.Double();
-			profile.moveTo(x + 3, y + 19);
-			profile.curveTo(x + 4, y + 16, x + 4, y + 12, x + 6, y + 9);
-			profile.curveTo(x + 7, y + 6, x + 10, y + 4, x + 13, y + 5);
-			profile.curveTo(x + 14, y + 2, x + 16, y + 2, x + 16, y + 7);
-			profile.curveTo(x + 17, y + 8, x + 17, y + 9, x + 18, y + 9);
-			profile.lineTo(x + 20, y + 10);
-			profile.curveTo(x + 20, y + 11, x + 19, y + 13, x + 18, y + 13);
-			profile.lineTo(x + 16, y + 13);
-			profile.curveTo(x + 15, y + 16, x + 12, y + 17, x + 9, y + 16);
-			profile.lineTo(x + 8, y + 19);
-			profile.closePath();
-			drawing.fill(profile);
+			Graphics2D g = (Graphics2D) drawing.create();
+			try {
+				g.translate(x, y);
+		
+				// Far-side legs (slightly offset) to suggest depth.
+				Path2D farLegs = new Path2D.Double();
+				farLegs.moveTo(8, 13);
+				farLegs.lineTo(11, 14);
+				farLegs.lineTo(10, 17);
+				farLegs.lineTo(11, 20);
+				farLegs.lineTo(12, 21);
+				farLegs.lineTo(9.5, 21);
+				farLegs.lineTo(8, 17);
+				farLegs.closePath();
+		
+				farLegs.moveTo(14, 13);
+				farLegs.lineTo(16, 13);
+				farLegs.lineTo(15, 20);
+				farLegs.lineTo(16, 21);
+				farLegs.lineTo(13.5, 21);
+				farLegs.closePath();
+				g.fill(farLegs);
+		
+				Path2D dog = new Path2D.Double();
+		
+				// Back and shoulder.
+				dog.moveTo(5, 10);
+				dog.curveTo(7, 9, 10, 9.5, 13, 9.5);
+		
+				// ---- Head/neck tuned: shorter, thicker muzzle ----
+				dog.curveTo(14, 9.6, 14.8, 9.0, 15.8, 8.2);
+		
+				// Ear.
+				dog.lineTo(16.0, 6.4);
+				dog.lineTo(16.8, 4.2);
+				dog.lineTo(18.1, 6.2);
+		
+				// Crown + forehead stop.
+				dog.lineTo(19.0, 6.7);
+				dog.lineTo(19.4, 7.8);
+		
+				// Muzzle top (shorter than prior version).
+				dog.lineTo(22.8, 7.7);
+		
+				// Nose point.
+				dog.lineTo(23.2, 8.7);
+				dog.lineTo(22.6, 9.8);
+		
+				// Lower muzzle/jaw return (lower for thicker muzzle).
+				dog.lineTo(20.2, 10.1);
+				dog.lineTo(19.1, 9.3);
+		
+				// Short throat into chest.
+				dog.curveTo(19.0, 10.9, 18.8, 12.4, 18.0, 14.0);
+				dog.lineTo(17.5, 15.0);
+		
+				// Near foreleg + paw.
+				dog.lineTo(17.5, 21);
+				dog.lineTo(19, 22);
+				dog.lineTo(16, 22);
+				dog.lineTo(15.5, 14.5);
+		
+				// Belly.
+				dog.curveTo(14, 14.5, 12, 14.5, 10, 14);
+		
+				// Hind leg + paw.
+				dog.lineTo(9, 17);
+				dog.lineTo(7.5, 20.5);
+				dog.lineTo(9, 22);
+				dog.lineTo(6, 22);
+				dog.lineTo(6, 19.5);
+				dog.lineTo(7, 16);
+				dog.curveTo(5.5, 15, 5, 13.5, 5, 12);
+		
+				// Lowered feathered tail.
+				dog.curveTo(4.5, 14, 4, 16, 2, 18);
+				dog.lineTo(1, 17);
+				dog.curveTo(2.5, 14.5, 2.5, 11, 5, 10);
+		
+				dog.closePath();
+				g.fill(dog);
+			} finally {
+				g.dispose();
+			}
 		}
 	}
 }
