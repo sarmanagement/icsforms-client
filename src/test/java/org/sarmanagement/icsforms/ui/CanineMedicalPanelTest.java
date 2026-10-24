@@ -69,15 +69,19 @@ class CanineMedicalPanelTest {
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
 
 		SwingUtilities.invokeAndWait(() -> {
-			assertEquals("3. Aid Stations", panel.planSectionTabs().getTitleAt(0));
-			assertEquals("4. Transportation", panel.planSectionTabs().getTitleAt(1));
-			assertEquals("5. Veterinary Hospitals", panel.planSectionTabs().getTitleAt(2));
-			assertEquals("6. Special Procedures", panel.planSectionTabs().getTitleAt(3));
+			assertEquals(3, panel.planSectionTabs().getTabCount());
+			assertEquals("Aid Stations & Special Procedures", panel.planSectionTabs().getTitleAt(0));
+			assertEquals("Transportation", panel.planSectionTabs().getTitleAt(1));
+			assertEquals("Veterinary Hospitals", panel.planSectionTabs().getTitleAt(2));
+			Component aidAndProcedures = panel.planSectionTabs().getComponentAt(0);
+			assertTrue(containsComponent(aidAndProcedures, (javax.swing.JTextArea) fieldValue(panel, "aidStations")));
+			assertTrue(containsComponent(aidAndProcedures, (javax.swing.JTextArea) fieldValue(panel, "procedures")));
+			assertTrue(containsComponent(aidAndProcedures, (JTextField) fieldValue(panel, "poisonContact")));
 			assertTrue(containsComponent(panel.planSectionTabs().getComponentAt(1),
 					(javax.swing.JTextArea) fieldValue(panel, "transportServices")));
 			javax.swing.JCheckBox aviation = (javax.swing.JCheckBox) fieldValue(panel, "aviationUsed");
 			assertTrue(containsComponent(panel.planSectionTabs().getComponentAt(1), aviation));
-			assertFalse(containsComponent(panel.planSectionTabs().getComponentAt(3), aviation));
+			assertFalse(containsComponent(aidAndProcedures, aviation));
 			@SuppressWarnings("unchecked")
 			javax.swing.JComboBox<Object> choices =
 					(javax.swing.JComboBox<Object>) fieldValue(panel, "routingBaseLocations");

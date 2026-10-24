@@ -116,11 +116,11 @@ public class CanineMedicalPanel extends JPanel {
 	private final JTable transportTable = new JTable(transportModel);
 	private final JPopupMenu directoryPopupMenu = new JPopupMenu();
 	private final JTextField poisonContact = new JTextField();
-	private final JTextArea aidStations = new JTextArea(2, 40);
+	private final JTextArea aidStations = new JTextArea(2, 70);
 	private final JTextArea transportServices = new JTextArea(2, 40);
 	private final JTextField onsiteVet = new JTextField();
 	private final JTextArea capabilityNotes = new JTextArea(3, 50);
-	private final JTextArea procedures = new JTextArea(4, 50);
+	private final JTextArea procedures = new JTextArea(2, 70);
 	private final JCheckBox aviationUsed = new JCheckBox("Aviation assets are used; coordinate with Air Operations");
 	private final JTextField preparedBy = new JTextField();
 	private final JTextField preparedAt = new JTextField();
@@ -539,17 +539,9 @@ public class CanineMedicalPanel extends JPanel {
 		capabilityNotes.setWrapStyleWord(true);
 		procedures.setLineWrap(true);
 		procedures.setWrapStyleWord(true);
-		JPanel aidPanel = labeledTextArea("Medical aid stations", aidStations);
-		planSections.addTab("3. Aid Stations", aidPanel);
-		planSections.addTab("4. Transportation", buildTransportArea());
-		planSections.addTab("5. Veterinary Hospitals", buildVeterinaryHospitalArea());
-		JPanel special = new JPanel(new GridLayout(0, 2, 6, 4));
-		special.setBorder(BorderFactory.createTitledBorder("6. Special medical emergency procedures"));
-		special.add(new JLabel("Poison-control contact"));
-		special.add(poisonContact);
-		special.add(new JLabel("Special emergency procedures"));
-		special.add(new JScrollPane(procedures));
-		planSections.addTab("6. Special Procedures", special);
+		planSections.addTab("Aid Stations & Special Procedures", buildAidAndProceduresArea());
+		planSections.addTab("Transportation", buildTransportArea());
+		planSections.addTab("Veterinary Hospitals", buildVeterinaryHospitalArea());
 		JPanel review = new JPanel(new GridLayout(2, 4, 4, 2));
 		review.setBorder(BorderFactory.createTitledBorder("Preparation / Safety review"));
 		review.add(new JLabel("Medical Unit Leader"));
@@ -564,6 +556,41 @@ public class CanineMedicalPanel extends JPanel {
 		root.add(planSections, BorderLayout.CENTER);
 		root.add(review, BorderLayout.SOUTH);
 		return root;
+	}
+
+	/**
+	 * Builds a compact, wide aid-station and special-procedures editor with unused space below.
+	 *
+	 * @return combined aid-station and special-procedures section.
+	 */
+	private JPanel buildAidAndProceduresArea() {
+		JPanel fields = new JPanel(new java.awt.GridBagLayout());
+		fields.setBorder(BorderFactory.createTitledBorder("Medical aid stations and special procedures"));
+		java.awt.GridBagConstraints constraints = new java.awt.GridBagConstraints();
+		constraints.gridx = 0;
+		constraints.gridwidth = java.awt.GridBagConstraints.REMAINDER;
+		constraints.weightx = 1;
+		constraints.fill = java.awt.GridBagConstraints.HORIZONTAL;
+		constraints.anchor = java.awt.GridBagConstraints.WEST;
+		constraints.insets = new java.awt.Insets(2, 4, 2, 4);
+
+		constraints.gridy = 0;
+		fields.add(new JLabel("Medical aid stations"), constraints);
+		constraints.gridy = 1;
+		fields.add(new JScrollPane(aidStations), constraints);
+		constraints.gridy = 2;
+		fields.add(new JLabel("Poison-control contact"), constraints);
+		constraints.gridy = 3;
+		fields.add(poisonContact, constraints);
+		constraints.gridy = 4;
+		fields.add(new JLabel("Special medical emergency procedures"), constraints);
+		constraints.gridy = 5;
+		fields.add(new JScrollPane(procedures), constraints);
+		constraints.gridy = 6;
+		constraints.weighty = 1;
+		constraints.fill = java.awt.GridBagConstraints.BOTH;
+		fields.add(new JPanel(), constraints);
+		return fields;
 	}
 
 	/**
