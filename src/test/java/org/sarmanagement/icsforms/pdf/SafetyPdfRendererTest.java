@@ -109,6 +109,7 @@ class SafetyPdfRendererTest {
 			assertTrue(text.contains("ICS 208"));
 			assertTrue(text.contains("IAP Page"));
 			assertTrue(text.contains("Date/Time"));
+			assertFalse(text.contains("ICS 208 - Page 1"));
 			assertTrue(text.contains("Terrain, Dense Brush, Trip Hazards"));
 			assertTrue(text.contains("Avoid steep drops and cliffs."));
 			assertTrue(text.contains("Hazard: Terrain, Dense Brush, Trip Hazards"));
@@ -196,6 +197,9 @@ class SafetyPdfRendererTest {
 			assertEquals(Ics208PdfRenderer.pageCount(data), pdf.getNumberOfPages());
 			String text = new PDFTextStripper().getText(pdf);
 			assertTrue(text.contains("ICS 208 - Page 2"));
+			assertFalse(text.contains("ICS 208 - Page 1"));
+			assertTrue(text.contains("ICS 208"));
+			assertTrue(text.contains("IAP Page"));
 			PDFTextStripper pageTwo = new PDFTextStripper();
 			pageTwo.setStartPage(2);
 			pageTwo.setEndPage(2);

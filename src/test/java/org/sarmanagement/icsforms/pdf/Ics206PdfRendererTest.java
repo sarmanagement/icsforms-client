@@ -4,7 +4,10 @@
 package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSNumber;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdfparser.PDFStreamParser;
+import org.apache.pdfbox.contentstream.operator.Operator;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -12,9 +15,11 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -99,5 +104,36 @@ class Ics206PdfRendererTest {
 			lastPage.setEndPage(pdf.getNumberOfPages());
 			assertTrue(lastPage.getText(pdf).contains("7. PREPARED BY"));
 		}
+	}
+
+	@Test
+	void metadataBlockDoesNotDrawAnExtraFullWidthBottomSeparator() throws Exception {
+		AppData data = new AppData();
+		Ics206PdfRenderer renderer = new Ics206PdfRenderer();
+		Path output = tempDirectory.resolve("ics-206-footer.pdf");
+
+		renderer.render(data, output);
+
+		try (PDDocument pdf = Loader.loadPDF(output.toFile())) {
+			AbstractPdfRenderer.FormLayout layout = renderer.formLayout(renderer.newPage(data), data);
+			float[] metadataRectangle = {layout.x(), layout.y() + 34f, layout.width(), 48f};
+			List<Object> tokens = new PDFStreamParser(pdf.getPage(0)).parse();
+			for (int index = 4; index < tokens.size(); index++) {
+				if (tokens.get(index) instanceof Operator operator && "re".equals(operator.getName())
+						&& tokens.get(index - 4) instanceof COSNumber x
+						&& tokens.get(index - 3) instanceof COSNumber y
+						&& tokens.get(index - 2) instanceof COSNumber width
+						&& tokens.get(index - 1) instanceof COSNumber height) {
+					assertFalse(closeTo(x.floatValue(), metadataRectangle[0])
+							&& closeTo(y.floatValue(), metadataRectangle[1])
+							&& closeTo(width.floatValue(), metadataRectangle[2])
+							&& closeTo(height.floatValue(), metadataRectangle[3]));
+				}
+			}
+		}
+	}
+
+	private boolean closeTo(float actual, float expected) {
+		return Math.abs(actual - expected) < 0.2f;
 	}
 }

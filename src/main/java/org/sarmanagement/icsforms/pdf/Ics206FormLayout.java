@@ -248,7 +248,10 @@ final class Ics206FormLayout {
 		float bottom = layout.y() + FOOTER_HEIGHT;
 		float middle = bottom + METADATA_HEIGHT / 2f;
 		float top = bottom + METADATA_HEIGHT;
-		stream.addRect(x, bottom, width, METADATA_HEIGHT);
+		stream.moveTo(x, bottom);
+		stream.lineTo(x, top);
+		stream.lineTo(x + width, top);
+		stream.lineTo(x + width, bottom);
 		stream.moveTo(x, middle);
 		stream.lineTo(x + width, middle);
 		stream.stroke();

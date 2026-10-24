@@ -234,7 +234,9 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				drawMessageLine(stream, regular, bold, left + BLOCK_PADDING, y, lines.get(index));
 				y -= LINE_HEIGHT;
 			}
-			drawPageLabel(stream, regular, layout, pageNumber, form.getIapPage());
+			if (continuation) {
+				drawPageLabel(stream, regular, layout, pageNumber, form.getIapPage());
+			}
 			return end;
 		}
 	}
@@ -353,6 +355,33 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	/**
+	 * Draws local and IAP page labels on continuation pages, which do not repeat the metadata block.
+	 *
+	 * @param stream page stream.
+	 * @param font regular font.
+	 * @param layout page layout.
+	 * @param pageNumber local page number.
+	 * @param iapFirstPage first IAP page.
+	 * @throws IOException when drawing fails.
+	 */
+	private static void drawPageLabel(PDPageContentStream stream, PDType1Font font, FormLayout layout, int pageNumber,
+			String iapFirstPage) throws IOException {
+		String label = "ICS 208 - Page " + pageNumber;
+		if (iapFirstPage != null && !iapFirstPage.isBlank()) {
+			try {
+				label += " | IAP Page " + (Integer.parseInt(iapFirstPage) + pageNumber - 1);
+			} catch (NumberFormatException exception) {
+				label += " | IAP Page " + iapFirstPage;
+			}
+		}
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, 8f);
+			stream.newLineAtOffset(layout.x() + BLOCK_PADDING, layout.y() + 8f);
+			stream.showText(PdfText.singleLine(safe(label)));
+		}
+	}
+
+	/**
 	 * Draws one line of text at its baseline.
 	 *
 	 * @param stream page stream.
@@ -420,30 +449,4 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return PdfText.normalize(value);
 	}
 
-	/**
-	 * Draws local and IAP page labels.
-	 *
-	 * @param stream page stream.
-	 * @param font regular font.
-	 * @param layout page layout.
-	 * @param pageNumber local page number.
-	 * @param iapFirstPage first IAP page.
-	 * @throws IOException when drawing fails.
-	 */
-	private static void drawPageLabel(PDPageContentStream stream, PDType1Font font, FormLayout layout, int pageNumber,
-			String iapFirstPage) throws IOException {
-		String label = "ICS 208 - Page " + pageNumber;
-		if (iapFirstPage != null && !iapFirstPage.isBlank()) {
-			try {
-				label += " | IAP Page " + (Integer.parseInt(iapFirstPage) + pageNumber - 1);
-			} catch (NumberFormatException exception) {
-				label += " | IAP Page " + iapFirstPage;
-			}
-		}
-		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
-			stream.setFont(font, 8f);
-			stream.newLineAtOffset(layout.x() + BLOCK_PADDING, layout.y() + 8f);
-			stream.showText(PdfText.singleLine(safe(label)));
-		}
-	}
 }
