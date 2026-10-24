@@ -1392,13 +1392,6 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Records an editor's title, synchronization source, and visibility group.
-	 * @param title tab title
-	 * @param component editor component
-	 * @param source synchronization source
-	 * @param group visibility group
-	 */
-	/**
 	 * Registers one top-level workspace and its presentation metadata.
 	 *
 	 * @param id stable workspace identifier.
