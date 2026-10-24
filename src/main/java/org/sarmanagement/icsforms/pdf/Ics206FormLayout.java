@@ -29,6 +29,7 @@ final class Ics206FormLayout {
 	private static final float TABLE_HEADER_HEIGHT = 24f;
 	private static final float CONTEXT_HEIGHT = 38f;
 	private static final float FOOTER_HEIGHT = 34f;
+	private static final float METADATA_HEIGHT = 48f;
 	private static final float SECTION_GAP = 2f;
 
 	/**
@@ -48,18 +49,21 @@ final class Ics206FormLayout {
 	 * @param iapPage IAP page text.
 	 * @param preparedAt preparation timestamp.
 	 * @param sections ordered numbered form sections.
+	 * @param metadata preparer and reviewer footer data.
 	 * @throws IOException when PDF output fails.
 	 */
 	static void render(AbstractPdfRenderer renderer, AppData data, Path outputFile, String formKey, String title,
-			String iapPage, LocalDateTime preparedAt, List<Section> sections) throws IOException {
+			String iapPage, LocalDateTime preparedAt, List<Section> sections, FooterMetadata metadata)
+			throws IOException {
 		AppData safeData = data == null ? new AppData() : data;
 		PdfText.validateForm(safeData, formKey);
 		if (outputFile.getParent() != null) {
 			Files.createDirectories(outputFile.getParent());
 		}
 		try (PDDocument document = new PDDocument()) {
-			int totalPages = paginate(renderer, safeData, formKey, title, iapPage, preparedAt, sections, null, 1);
-			paginate(renderer, safeData, formKey, title, iapPage, preparedAt, sections, document, totalPages);
+			int totalPages = paginate(renderer, safeData, formKey, title, iapPage, preparedAt, sections, metadata,
+					null, 1);
+			paginate(renderer, safeData, formKey, title, iapPage, preparedAt, sections, metadata, document, totalPages);
 			document.save(outputFile.toFile());
 		}
 	}
@@ -74,13 +78,14 @@ final class Ics206FormLayout {
 	 * @param iapPage IAP page text.
 	 * @param preparedAt preparation timestamp.
 	 * @param sections ordered numbered form sections.
+	 * @param metadata preparer and reviewer footer data.
 	 * @return page count, at least one.
 	 */
 	static int pageCount(AbstractPdfRenderer renderer, AppData data, String formKey, String title, String iapPage,
-			LocalDateTime preparedAt, List<Section> sections) {
+			LocalDateTime preparedAt, List<Section> sections, FooterMetadata metadata) {
 		try {
 			return paginate(renderer, data == null ? new AppData() : data, formKey, title, iapPage, preparedAt, sections,
-					null, 1);
+					metadata, null, 1);
 		} catch (IOException exception) {
 			throw new IllegalStateException("Cannot measure " + formKey + " layout", exception);
 		}
@@ -96,14 +101,15 @@ final class Ics206FormLayout {
 	 * @param iapPage IAP page text.
 	 * @param preparedAt preparation timestamp.
 	 * @param sections ordered numbered form sections.
+	 * @param metadata preparer and reviewer footer data.
 	 * @param document output document, or null for page counting.
 	 * @param totalPages total page count when drawing.
 	 * @return number of pages.
 	 * @throws IOException when PDF drawing fails.
 	 */
 	private static int paginate(AbstractPdfRenderer renderer, AppData data, String formKey, String title,
-			String iapPage, LocalDateTime preparedAt, List<Section> sections, PDDocument document, int totalPages)
-			throws IOException {
+			String iapPage, LocalDateTime preparedAt, List<Section> sections, FooterMetadata metadata,
+			PDDocument document, int totalPages) throws IOException {
 		PDPage samplePage = renderer.newPage(data);
 		AbstractPdfRenderer.FormLayout layout = renderer.formLayout(samplePage, data);
 		PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
@@ -119,10 +125,10 @@ final class Ics206FormLayout {
 				page = renderer.newPage(data);
 				document.addPage(page);
 				drawPage(renderer, document, page, data, layout, regular, bold, formKey, title, iapPage, preparedAt,
-						pageCount, totalPages);
+						metadata, pageCount, totalPages);
 			}
 			float y = layout.top() - CONTEXT_HEIGHT - SECTION_GAP;
-			float bottom = layout.y() + FOOTER_HEIGHT + SECTION_GAP;
+			float bottom = layout.y() + FOOTER_HEIGHT + METADATA_HEIGHT + SECTION_GAP;
 			while (sectionIndex < sections.size()) {
 				Section section = sections.get(sectionIndex);
 				boolean continued = rowIndex > 0 || lineOffset > 0;
@@ -197,22 +203,78 @@ final class Ics206FormLayout {
 	 * @param title human-readable form title.
 	 * @param iapPage IAP page text.
 	 * @param preparedAt preparation timestamp.
+	 * @param metadata preparer and reviewer footer data.
 	 * @param pageNumber one-based page number.
 	 * @param totalPages total page count.
 	 * @throws IOException when drawing fails.
 	 */
 	private static void drawPage(AbstractPdfRenderer renderer, PDDocument document, PDPage page, AppData data,
 			AbstractPdfRenderer.FormLayout layout, PDType1Font regular, PDType1Font bold, String formKey, String title,
-			String iapPage, LocalDateTime preparedAt, int pageNumber, int totalPages) throws IOException {
+			String iapPage, LocalDateTime preparedAt, FooterMetadata metadata, int pageNumber, int totalPages)
+			throws IOException {
 		try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
 			renderer.drawFormHeader(stream, bold, layout, formKey,
 					title + (pageNumber == 1 ? "" : " (CONTINUED)"));
 			renderer.drawFormFrame(stream, layout);
 			drawContext(renderer, stream, regular, bold, layout, data);
+			if (pageNumber == totalPages) {
+				drawFooterMetadata(stream, bold, regular, layout, formKey, metadata);
+			}
 			renderer.drawFormFooterBand(stream, bold, regular, FONT_SIZE, CELL_PADDING, layout.x(), layout.y(),
 					layout.width(), FOOTER_HEIGHT, 0.68f, renderer.formPageLabel(formKey, pageNumber, totalPages),
 					renderer.addPageOffset(iapPage, pageNumber - 1), renderer.formatPdfDateTime(data, preparedAt));
 		}
+	}
+
+	/**
+	 * Draws preparer and reviewer blocks immediately above the shared form footer.
+	 *
+	 * @param stream page content stream.
+	 * @param bold bold font.
+	 * @param regular regular font.
+	 * @param layout printable form bounds.
+	 * @param formKey form identifier for validation diagnostics.
+	 * @param metadata preparer and reviewer values.
+	 * @throws IOException when drawing fails.
+	 */
+	private static void drawFooterMetadata(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+			AbstractPdfRenderer.FormLayout layout, String formKey, FooterMetadata metadata) throws IOException {
+		String preparer = safe(metadata.preparedByName());
+		String reviewer = safe(metadata.reviewedByName());
+		PdfText.validate(preparer, formKey, "7. Prepared By");
+		PdfText.validate(reviewer, formKey, "8. Approved By");
+		float x = layout.x();
+		float width = layout.width();
+		float bottom = layout.y() + FOOTER_HEIGHT;
+		float middle = bottom + METADATA_HEIGHT / 2f;
+		float top = bottom + METADATA_HEIGHT;
+		stream.addRect(x, bottom, width, METADATA_HEIGHT);
+		stream.moveTo(x, middle);
+		stream.lineTo(x + width, middle);
+		stream.stroke();
+		write(stream, bold, FONT_SIZE, x + CELL_PADDING, top - 10f,
+				"7. PREPARED BY (MEDICAL UNIT LEADER)");
+		writeSignatureLine(stream, regular, x, middle + 5f, width, preparer);
+		write(stream, bold, FONT_SIZE, x + CELL_PADDING, middle - 10f, "8. APPROVED BY (SAFETY OFFICER)");
+		writeSignatureLine(stream, regular, x, bottom + 5f, width, reviewer);
+	}
+
+	/**
+	 * Draws a name field and a printed signature line within one metadata row.
+	 *
+	 * @param stream page content stream.
+	 * @param font regular font.
+	 * @param x row left edge.
+	 * @param y text baseline.
+	 * @param width row width.
+	 * @param name entered person name.
+	 * @throws IOException when drawing fails.
+	 */
+	private static void writeSignatureLine(PDPageContentStream stream, PDType1Font font, float x, float y, float width,
+			String name) throws IOException {
+		float signatureX = x + width * 0.56f;
+		write(stream, font, FONT_SIZE, x + CELL_PADDING, y, "Name: " + name);
+		write(stream, font, FONT_SIZE, signatureX, y, "Signature: ______________________________");
 	}
 
 	/**
@@ -434,6 +496,16 @@ final class Ics206FormLayout {
 	}
 
 	/**
+	 * Replaces nullable form text with an empty string.
+	 *
+	 * @param value source text.
+	 * @return non-null text.
+	 */
+	private static String safe(String value) {
+		return value == null ? "" : value;
+	}
+
+	/**
 	 * Defines one numbered block and its optional table.
 	 *
 	 * @param title section number and label.
@@ -454,6 +526,25 @@ final class Ics206FormLayout {
 			widths = widths.clone();
 			headers = List.copyOf(headers);
 			rows = rows.stream().map(List::copyOf).toList();
+		}
+	}
+
+	/**
+	 * Footer values for the preparer and reviewer blocks.
+	 *
+	 * @param preparedByName preparer name.
+	 * @param reviewedByName reviewer name.
+	 */
+	record FooterMetadata(String preparedByName, String reviewedByName) {
+		/**
+		 * Creates footer metadata with non-null values.
+		 *
+		 * @param preparedByName preparer name.
+		 * @param reviewedByName reviewer name.
+		 */
+		FooterMetadata {
+			preparedByName = preparedByName == null ? "" : preparedByName;
+			reviewedByName = reviewedByName == null ? "" : reviewedByName;
 		}
 	}
 

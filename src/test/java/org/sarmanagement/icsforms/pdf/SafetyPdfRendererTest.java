@@ -81,6 +81,10 @@ class SafetyPdfRendererTest {
 		data.getForm208().setSiteSafetyPlanRequired(Boolean.TRUE);
 		data.getForm208().setGeneralRequirements("Monitor weather. Maintain radio contact.");
 		data.getForm208().setPreparedDateTime(LocalDateTime.of(2026, 10, 10, 7, 30));
+		data.getForm208().setPreparedByName("Safety Officer");
+		data.getForm208().setPreparedByPositionTitle("Safety Officer");
+		data.getForm208().setPreparedBySignature("Signed");
+		data.getForm208().setIapPage("12");
 		SafetyMessageBlock block = new SafetyMessageBlock();
 		block.setIncidentArea("All");
 		block.setHazard("Terrain, Dense Brush, Trip Hazards");
@@ -98,7 +102,13 @@ class SafetyPdfRendererTest {
 			assertTrue(text.contains("3. Safety Message"));
 			assertTrue(text.contains("4. Site Safety Plan Required?"));
 			assertTrue(text.contains("5. Approved Site Safety Plan(s) Located At"));
-			assertTrue(text.contains("Prepared by"));
+			assertTrue(text.contains("6. Prepared by"));
+			assertTrue(text.contains("Name: Safety Officer"));
+			assertTrue(text.contains("Position/Title: Safety Officer"));
+			assertTrue(text.contains("Signature: Signed"));
+			assertTrue(text.contains("ICS 208"));
+			assertTrue(text.contains("IAP Page"));
+			assertTrue(text.contains("Date/Time"));
 			assertTrue(text.contains("Terrain, Dense Brush, Trip Hazards"));
 			assertTrue(text.contains("Avoid steep drops and cliffs."));
 			assertTrue(text.contains("Hazard: Terrain, Dense Brush, Trip Hazards"));

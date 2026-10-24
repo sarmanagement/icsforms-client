@@ -38,7 +38,7 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 		Ics206CaninePdfRenderer renderer = new Ics206CaninePdfRenderer();
 		CanineMedicalPlan plan = safeData.getCanineMedicalPlan();
 		return Ics206FormLayout.pageCount(renderer, safeData, FORM_KEY, TITLE, plan.getIapPage(), plan.getPreparedAt(),
-				renderer.sections(safeData));
+				renderer.sections(safeData), renderer.footerMetadata(safeData));
 	}
 
 	/** {@inheritDoc} */
@@ -47,7 +47,7 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 		AppData safeData = data == null ? new AppData() : data;
 		CanineMedicalPlan plan = safeData.getCanineMedicalPlan();
 		Ics206FormLayout.render(this, safeData, outputFile, FORM_KEY, TITLE, plan.getIapPage(), plan.getPreparedAt(),
-				sections(safeData));
+				sections(safeData), footerMetadata(safeData));
 	}
 
 	/**
@@ -59,7 +59,18 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 	private List<Ics206FormLayout.Section> sections(AppData data) {
 		CanineMedicalPlan plan = data.getCanineMedicalPlan();
 		return List.of(aidStations(plan), transportation(plan), veterinaryHospitals(data),
-				procedures(plan), preparedBy(plan, data.getMedicalUnitLeaderAssignment().getName()), reviewedBy(plan));
+				procedures(plan));
+	}
+
+	/**
+	 * Builds preparer and reviewer values for the fixed bottom metadata block.
+	 *
+	 * @param data incident document.
+	 * @return bottom metadata values.
+	 */
+	private Ics206FormLayout.FooterMetadata footerMetadata(AppData data) {
+		return new Ics206FormLayout.FooterMetadata(data.getMedicalUnitLeaderAssignment().getName(),
+				data.getCanineMedicalPlan().getReviewedBySafetyOfficer());
 	}
 
 	/**
@@ -144,35 +155,6 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 		}
 		return new Ics206FormLayout.Section("6. SPECIAL MEDICAL EMERGENCY PROCEDURES", new float[] {1f},
 				List.of(), rows);
-	}
-
-	/**
-	 * Creates block 7 with a printed signature line and preparation date.
-	 *
-	 * @param plan canine medical plan.
-	 * @param data incident data for timezone formatting.
-	 * @param medicalUnitLeaderName authoritative shared role name.
-	 * @return numbered prepared-by section.
-	 */
-	private Ics206FormLayout.Section preparedBy(CanineMedicalPlan plan, String medicalUnitLeaderName) {
-		return new Ics206FormLayout.Section("7. PREPARED BY (MEDICAL UNIT LEADER)",
-				new float[] {0.53f, 0.47f}, List.of(),
-				List.of(List.of("Name: " + safe(medicalUnitLeaderName),
-						"Signature: ______________________________________________")));
-	}
-
-	/**
-	 * Creates block 8 with review information and a printed signature line.
-	 *
-	 * @param plan canine medical plan.
-	 * @return numbered reviewed-by section.
-	 */
-	private Ics206FormLayout.Section reviewedBy(CanineMedicalPlan plan) {
-		return new Ics206FormLayout.Section("8. APPROVED BY (SAFETY OFFICER)",
-				new float[] {0.53f, 0.47f}, List.of(),
-				List.of(List.of("Name: " + safe(plan.getReviewedBySafetyOfficer()),
-						"Signature: ______________________________________________"),
-						List.of("Review status: " + safe(plan.getReviewStatus()), "")));
 	}
 
 	/**

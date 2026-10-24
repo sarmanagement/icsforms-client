@@ -6,6 +6,7 @@ package org.sarmanagement.icsforms.pdf;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
@@ -27,6 +28,7 @@ class Ics206CaninePdfRendererTest {
 	void adaptedFormIncludesCanineBlocksAndExplicitUnknownAvailability() throws Exception {
 		AppData data = new AppData();
 		data.getIncidentContext().setIncidentName("Fictional Incident");
+		data.getMedicalUnitLeaderAssignment().setName("Medical Lead");
 		StagingLocation base = data.getStagingLocation();
 		base.setLabel("Fictional Base");
 		base.setAddress("1 Fictional Road");
@@ -40,6 +42,7 @@ class Ics206CaninePdfRendererTest {
 		data.getCanineMedicalPlan().setVeterinarianDvm("Legacy DVM value");
 		data.getCanineMedicalPlan().setPreparerSignature("Legacy canine signature");
 		data.getCanineMedicalPlan().setSafetyOfficerSignature("Legacy canine review");
+		data.getCanineMedicalPlan().setReviewedBySafetyOfficer("Safety Reviewer");
 
 		Path output = tempDirectory.resolve("ics-206canine.pdf");
 		new Ics206CaninePdfRenderer().render(data, output);
@@ -60,7 +63,10 @@ class Ics206CaninePdfRendererTest {
 			assertTrue(text.contains("ICS 206CANINE"));
 			assertTrue(!text.contains("DVM:"));
 			assertTrue(!text.contains("Legacy DVM value"));
-			assertTrue(text.contains("Signature: ______________________________________________"));
+			assertTrue(text.contains("Name: Medical Lead"));
+			assertTrue(text.contains("Name: Safety Reviewer"));
+			assertTrue(text.contains("Signature: ______________________________"));
+			assertTrue(text.contains("Date/Time:"));
 			assertTrue(!text.contains("Legacy canine signature"));
 			assertTrue(!text.contains("Legacy canine review"));
 		}
@@ -85,6 +91,14 @@ class Ics206CaninePdfRendererTest {
 			assertEquals(Ics206CaninePdfRenderer.pageCount(data), pdf.getNumberOfPages());
 			assertTrue(text.contains("END_OF_VETERINARY_NOTES"));
 			assertTrue(text.contains("CONTINUED"));
+			PDFTextStripper firstPage = new PDFTextStripper();
+			firstPage.setStartPage(1);
+			firstPage.setEndPage(1);
+			assertTrue(!firstPage.getText(pdf).contains("7. PREPARED BY"));
+			PDFTextStripper lastPage = new PDFTextStripper();
+			lastPage.setStartPage(pdf.getNumberOfPages());
+			lastPage.setEndPage(pdf.getNumberOfPages());
+			assertTrue(lastPage.getText(pdf).contains("7. PREPARED BY"));
 		}
 	}
 

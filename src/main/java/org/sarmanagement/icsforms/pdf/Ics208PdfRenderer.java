@@ -318,7 +318,7 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		drawTextLine(stream, regular, left + BLOCK_PADDING, block5Bottom + 7f,
 				safe(form.getSiteSafetyPlan().getLocatedAt()));
 		drawPreparedByMetadataSection(stream, bold, regular, FONT_SIZE, 8f, BLOCK_PADDING, left,
-				bottom, layout.width(), block5Bottom - bottom, 22f, 8f, "Prepared by", form.getPreparedByName(),
+				bottom, layout.width(), block5Bottom - bottom, 22f, 8f, "6. Prepared by", form.getPreparedByName(),
 				form.getPreparedByPositionTitle(), form.getPreparedBySignature(), "ICS 208", form.getIapPage(),
 				formatPdfDateTime(data, form.getPreparedDateTime()));
 	}

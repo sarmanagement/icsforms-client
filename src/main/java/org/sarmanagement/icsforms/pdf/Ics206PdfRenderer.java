@@ -35,7 +35,7 @@ public class Ics206PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		Ics206PdfRenderer renderer = new Ics206PdfRenderer();
 		MedicalPlan plan = safeData.getMedicalPlan();
 		return Ics206FormLayout.pageCount(renderer, safeData, FORM_KEY, TITLE, plan.getIapPage(),
-				plan.getPreparedAt(), renderer.sections(safeData));
+				plan.getPreparedAt(), renderer.sections(safeData), renderer.footerMetadata(safeData));
 	}
 
 	/** {@inheritDoc} */
@@ -44,7 +44,7 @@ public class Ics206PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		AppData safeData = data == null ? new AppData() : data;
 		MedicalPlan plan = safeData.getMedicalPlan();
 		Ics206FormLayout.render(this, safeData, outputFile, FORM_KEY, TITLE, plan.getIapPage(), plan.getPreparedAt(),
-				sections(safeData));
+				sections(safeData), footerMetadata(safeData));
 	}
 
 	/**
@@ -60,9 +60,18 @@ public class Ics206PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		sections.add(transportation(plan));
 		sections.add(hospitals(plan));
 		sections.add(procedures(plan));
-		sections.add(preparedBy(plan, data.getMedicalUnitLeaderAssignment().getName()));
-		sections.add(approvedBy(plan));
 		return sections;
+	}
+
+	/**
+	 * Builds preparer and reviewer values for the fixed bottom metadata block.
+	 *
+	 * @param data incident document.
+	 * @return bottom metadata values.
+	 */
+	private Ics206FormLayout.FooterMetadata footerMetadata(AppData data) {
+		return new Ics206FormLayout.FooterMetadata(data.getMedicalUnitLeaderAssignment().getName(),
+				data.getMedicalPlan().getReviewedBySafetyOfficer());
 	}
 
 	/**
@@ -165,34 +174,6 @@ public class Ics206PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		}
 		return new Ics206FormLayout.Section("6. SPECIAL MEDICAL EMERGENCY PROCEDURES", new float[] {1f},
 				List.of(), rows);
-	}
-
-	/**
-	 * Creates block 7 with a printed signature line rather than a signature value.
-	 *
-	 * @param plan human medical plan.
-	 * @param medicalUnitLeaderName authoritative shared role name.
-	 * @return numbered prepared-by section.
-	 */
-	private Ics206FormLayout.Section preparedBy(MedicalPlan plan, String medicalUnitLeaderName) {
-		return new Ics206FormLayout.Section("7. PREPARED BY (MEDICAL UNIT LEADER)",
-				new float[] {0.53f, 0.47f}, List.of(),
-				List.of(List.of("Name: " + safe(medicalUnitLeaderName),
-						"Signature: ______________________________________________")));
-	}
-
-	/**
-	 * Creates block 8 with review details and a printed signature line.
-	 *
-	 * @param plan human medical plan.
-	 * @return numbered approved-by section.
-	 */
-	private Ics206FormLayout.Section approvedBy(MedicalPlan plan) {
-		return new Ics206FormLayout.Section("8. APPROVED BY (SAFETY OFFICER)",
-				new float[] {0.53f, 0.47f}, List.of(),
-				List.of(List.of("Name: " + safe(plan.getReviewedBySafetyOfficer()),
-						"Signature: ______________________________________________"),
-						List.of("Review status: " + safe(plan.getReviewStatus()), "")));
 	}
 
 	/**

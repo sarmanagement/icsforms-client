@@ -26,6 +26,7 @@ class Ics206PdfRendererTest {
 	void standardFormRendersNumberedBlocksAndKeepsUnknownDistinctFromNo() throws Exception {
 		AppData data = new AppData();
 		data.getIncidentContext().setIncidentName("Fictional Incident");
+		data.getMedicalUnitLeaderAssignment().setName("Medical Lead");
 		MedicalPlan plan = data.getMedicalPlan();
 		plan.setActive(true);
 		plan.setPreparedByMedicalUnitLeader("Medical Lead");
@@ -63,7 +64,10 @@ class Ics206PdfRendererTest {
 			assertTrue(text.contains("UNKNOWN"));
 			assertTrue(text.contains("NO"));
 			assertTrue(text.contains("ICS 206"));
-			assertTrue(text.contains("Signature: ______________________________________________"));
+			assertTrue(text.contains("Name: Medical Lead"));
+			assertTrue(text.contains("Name: Safety Reviewer"));
+			assertTrue(text.contains("Signature: ______________________________"));
+			assertTrue(text.contains("Date/Time:"));
 			assertTrue(!text.contains("Legacy signature text"));
 			assertTrue(!text.contains("Legacy reviewer text"));
 			assertEquals(1, pdf.getNumberOfPages());
@@ -86,6 +90,14 @@ class Ics206PdfRendererTest {
 			assertEquals(Ics206PdfRenderer.pageCount(data), pdf.getNumberOfPages());
 			assertTrue(text.contains("END_OF_PROCEDURES"));
 			assertTrue(text.contains("CONTINUED"));
+			PDFTextStripper firstPage = new PDFTextStripper();
+			firstPage.setStartPage(1);
+			firstPage.setEndPage(1);
+			assertTrue(!firstPage.getText(pdf).contains("7. PREPARED BY"));
+			PDFTextStripper lastPage = new PDFTextStripper();
+			lastPage.setStartPage(pdf.getNumberOfPages());
+			lastPage.setEndPage(pdf.getNumberOfPages());
+			assertTrue(lastPage.getText(pdf).contains("7. PREPARED BY"));
 		}
 	}
 }
