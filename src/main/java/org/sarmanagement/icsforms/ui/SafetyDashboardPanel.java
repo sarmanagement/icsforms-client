@@ -30,7 +30,7 @@ import java.util.function.Consumer;
  */
 public class SafetyDashboardPanel extends JPanel {
 	private final JTextArea summary = new JTextArea();
-	private final Consumer<String> workspaceOpener;
+	private final Consumer<WorkspaceDestination> workspaceOpener;
 	private final JTabbedPane views = new JTabbedPane();
 	private final FormPreviewPanel safetyPreview = new FormPreviewPanel(new Ics208PdfRenderer());
 	private final FormPreviewPanel medicalPreview = new FormPreviewPanel(new Ics206PdfRenderer());
@@ -40,9 +40,9 @@ public class SafetyDashboardPanel extends JPanel {
 	/**
 	 * Creates a read-only medical/safety summary with shortcuts to shared workspaces.
 	 *
-	 * @param workspaceOpener callback receiving a shared workspace title.
+	 * @param workspaceOpener callback opening a stable workspace destination.
 	 */
-	public SafetyDashboardPanel(Consumer<String> workspaceOpener) {
+	public SafetyDashboardPanel(Consumer<WorkspaceDestination> workspaceOpener) {
 		super(new BorderLayout(8, 8));
 		this.workspaceOpener = workspaceOpener;
 		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
@@ -58,11 +58,11 @@ public class SafetyDashboardPanel extends JPanel {
 		views.addChangeListener(event -> refreshSelectedPreview());
 		add(views, BorderLayout.CENTER);
 		JPanel shortcuts = new JPanel(new FlowLayout(FlowLayout.LEFT));
-		addShortcut(shortcuts, "Safety message / hazards", "Safety");
-		addShortcut(shortcuts, "Medical Plan (ICS 206)", "Medical Plan (ICS 206)");
-		addShortcut(shortcuts, "Canine Medical Plan (adapted)", "Canine Medical Plan (ICS 206CANINE, adapted)");
-		addShortcut(shortcuts, "Org Chart", "Org Chart");
-		addShortcut(shortcuts, "Resources / T-Cards", "T-Cards");
+		addShortcut(shortcuts, "Safety message / hazards", WorkspaceDestination.of(WorkspaceId.SAFETY));
+		addShortcut(shortcuts, "Medical Plan (ICS 206)", WorkspaceDestination.humanMedicalPlan());
+		addShortcut(shortcuts, "Canine Medical Plan (adapted)", WorkspaceDestination.canineMedicalPlan());
+		addShortcut(shortcuts, "Org Chart", WorkspaceDestination.of(WorkspaceId.ORG_CHART));
+		addShortcut(shortcuts, "Resources / T-Cards", WorkspaceDestination.of(WorkspaceId.TCARDS));
 		add(shortcuts, BorderLayout.SOUTH);
 	}
 
@@ -180,11 +180,11 @@ public class SafetyDashboardPanel extends JPanel {
 	 *
 	 * @param panel button container.
 	 * @param label visible button text.
-	 * @param workspace shared editor title.
+	 * @param destination stable editor destination.
 	 */
-	private void addShortcut(JPanel panel, String label, String workspace) {
+	private void addShortcut(JPanel panel, String label, WorkspaceDestination destination) {
 		JButton button = new JButton(label);
-		button.addActionListener(event -> workspaceOpener.accept(workspace));
+		button.addActionListener(event -> workspaceOpener.accept(destination));
 		panel.add(button);
 	}
 

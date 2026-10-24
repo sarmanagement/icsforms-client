@@ -12,8 +12,6 @@ import java.awt.Component;
  * Shared Medical workspace containing the human and adapted canine medical plans.
  */
 public class MedicalWorkspacePanel extends JPanel {
-	private static final String HUMAN_TITLE = "Medical Plan (ICS 206)";
-	private static final String CANINE_TITLE = "Canine Medical Plan (ICS 206CANINE, adapted)";
 	private final Ics206Panel humanPanel;
 	private final CanineMedicalPanel caninePanel;
 	private final JTabbedPane plans = new JTabbedPane();
@@ -30,7 +28,7 @@ public class MedicalWorkspacePanel extends JPanel {
 		super(new BorderLayout());
 		this.humanPanel = humanPanel;
 		this.caninePanel = caninePanel;
-		plans.addTab(HUMAN_TITLE, humanPanel);
+		plans.addTab(WorkspaceId.HUMAN_MEDICAL_PLAN.displayLabel(), humanPanel);
 		lastSelectedPlan = humanPanel;
 		plans.addChangeListener(event -> flushPreviousPlan());
 		add(plans, BorderLayout.CENTER);
@@ -48,7 +46,7 @@ public class MedicalWorkspacePanel extends JPanel {
 		canineVisible = visible;
 		int canineIndex = plans.indexOfComponent(caninePanel);
 		if (visible && canineIndex < 0) {
-			plans.addTab(CANINE_TITLE, caninePanel);
+			plans.addTab(WorkspaceId.CANINE_MEDICAL_PLAN.displayLabel(), caninePanel);
 		} else if (!visible && canineIndex >= 0) {
 			boolean selectedCanine = plans.getSelectedComponent() == caninePanel;
 			plans.removeTabAt(canineIndex);

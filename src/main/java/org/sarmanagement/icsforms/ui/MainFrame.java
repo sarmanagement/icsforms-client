@@ -58,6 +58,7 @@ import java.nio.file.Path;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -66,6 +67,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Main Swing frame for editing shared incident data, ICS 202, ICS 204, and SAR
@@ -106,9 +108,12 @@ public class MainFrame extends JFrame {
 	private final SafetyDashboardPanel safetyDashboardPanel;
 	private final JTabbedPane tabs = new JTabbedPane();
 	private final Preferences userPreferences = Preferences.userNodeForPackage(MainFrame.class);
-	private final Map<Component, AppController.LinkSource> tabSources = new IdentityHashMap<>();
-	private final Map<Component, String> tabGroups = new IdentityHashMap<>();
-	private final Map<Component, String> tabTitles = new IdentityHashMap<>();
+	private final Map<WorkspaceId, WorkspaceDefinition> workspaces = new EnumMap<>(WorkspaceId.class);
+	private final Map<Component, WorkspaceDefinition> tabWorkspaces = new IdentityHashMap<>();
+	private final List<WorkspaceId> registeredWorkspaceIds = new ArrayList<>();
+	private final IdentityHashMap<Ics214Form, String> activityLogInstanceIds = new IdentityHashMap<>();
+	private final Map<String, Ics214Form> activityLogFormsById = new LinkedHashMap<>();
+	private final Map<String, Ics214Panel> activityLogPanelsById = new LinkedHashMap<>();
 	private final Map<String, Boolean> groupVisible = new LinkedHashMap<>();
 	private int lastSelectedTabIndex = -1;
 	private boolean rebuildingTabs;
@@ -209,18 +214,23 @@ public class MainFrame extends JFrame {
 		medicalWorkspacePanel.setCanineVisible(controller.getData().isCanineMedicalWorkspaceEligible());
 		groupVisible.put(SAFETY_DASHBOARD_GROUP,
 				safetyDashboardVisible(activeDashboard, safetyDashboardManuallyVisible));
-		registerTab("Shared", incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
-		registerTab("Org Chart", organizationalChartPanel, AppController.LinkSource.ORG_CHART, CORE_GROUP);
-		registerTab("ICS 201", ics201Panel, AppController.LinkSource.NONE, ICS_201_GROUP);
-		registerTab("ICS 202", ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
-		registerTab("ICS 204", ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
-		registerTab("Medical", medicalWorkspacePanel, AppController.LinkSource.NONE, CORE_GROUP);
-		registerTab("Safety", safetyPanel, AppController.LinkSource.NONE, CORE_GROUP);
-		registerTab("Safety Overview", safetyDashboardPanel, AppController.LinkSource.NONE, SAFETY_DASHBOARD_GROUP);
-		registerTab("SAR Tasks", sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
-		registerTab("Clue Log", clueLogPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
-		registerTab("Open Action Tracker", openActionTrackerPanel, AppController.LinkSource.NONE, ACTION_TRACKER_GROUP);
-		registerTab("T-Cards", tCardPanel, AppController.LinkSource.NONE, T_CARDS_GROUP);
+		registerWorkspace(WorkspaceId.SHARED, incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
+		registerWorkspace(WorkspaceId.ORG_CHART, organizationalChartPanel, AppController.LinkSource.ORG_CHART,
+				CORE_GROUP);
+		registerWorkspace(WorkspaceId.ICS_201, ics201Panel, AppController.LinkSource.NONE, ICS_201_GROUP);
+		registerWorkspace(WorkspaceId.ICS_202, ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
+		registerWorkspace(WorkspaceId.ICS_204, ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
+		registerWorkspace(WorkspaceId.MEDICAL, medicalWorkspacePanel, AppController.LinkSource.NONE, CORE_GROUP);
+		registerNestedWorkspace(WorkspaceId.HUMAN_MEDICAL_PLAN, medicalWorkspacePanel);
+		registerNestedWorkspace(WorkspaceId.CANINE_MEDICAL_PLAN, medicalWorkspacePanel);
+		registerWorkspace(WorkspaceId.SAFETY, safetyPanel, AppController.LinkSource.NONE, CORE_GROUP);
+		registerWorkspace(WorkspaceId.SAFETY_OVERVIEW, safetyDashboardPanel, AppController.LinkSource.NONE,
+				SAFETY_DASHBOARD_GROUP);
+		registerWorkspace(WorkspaceId.SAR_TASKS, sarTaskPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
+		registerWorkspace(WorkspaceId.CLUE_LOG, clueLogPanel, AppController.LinkSource.NONE, SAR_ONLY_GROUP);
+		registerWorkspace(WorkspaceId.OPEN_ACTION_TRACKER, openActionTrackerPanel, AppController.LinkSource.NONE,
+				ACTION_TRACKER_GROUP);
+		registerWorkspace(WorkspaceId.TCARDS, tCardPanel, AppController.LinkSource.NONE, T_CARDS_GROUP);
 		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		addWindowListener(new java.awt.event.WindowAdapter() {
 			@Override
@@ -462,19 +472,18 @@ public class MainFrame extends JFrame {
 				if (SAFETY_DASHBOARD_GROUP.equals(entry.getKey())) {
 					safetyDashboardManuallyVisible = item.isSelected();
 				}
-				rebuildVisibleTabs();
+				if (SAFETY_DASHBOARD_GROUP.equals(entry.getKey()) && item.isSelected()) {
+					openWorkspace(WorkspaceDestination.of(WorkspaceId.SAFETY_OVERVIEW));
+				} else {
+					rebuildVisibleTabs();
+				}
 				refreshStatus();
 			});
 			viewMenu.add(item);
 		}
 		JMenuItem openCaninePlanItem = new JMenuItem("Open Canine Medical Plan (saved workspace)");
-		openCaninePlanItem.addActionListener(event -> {
-			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
-			canineMedicalManuallyOpened = true;
-			medicalWorkspacePanel.openCaninePlan();
-			rebuildVisibleTabs(medicalWorkspacePanel, -1);
-			refreshStatus();
-		});
+		openCaninePlanItem.addActionListener(
+				event -> openWorkspace(WorkspaceDestination.canineMedicalPlan()));
 		viewMenu.add(openCaninePlanItem);
 
 		JMenuItem exportFormsPdfItem = new JMenuItem("Export forms as PDF…");
@@ -1074,20 +1083,23 @@ public class MainFrame extends JFrame {
 		try {
 			for (Ics214Panel panel : new ArrayList<>(ics214Panels)) {
 				tabs.remove(panel);
-				tabSources.remove(panel);
-				tabGroups.remove(panel);
-				tabTitles.remove(panel);
+				tabWorkspaces.remove(panel);
 			}
 			ics214Panels.clear();
+			activityLogPanelsById.clear();
 			AppData data = controller.getData();
+			activityLogInstanceIds.keySet().retainAll(data.getActivityLogs());
+			activityLogFormsById.entrySet().removeIf(entry -> !data.getActivityLogs().contains(entry.getValue()));
 			for (Ics214Form form : data.getActivityLogs()) {
+				String instanceId = activityLogInstanceId(form);
 				if (closedLogForms.contains(form)) {
 					continue;
 				}
 				Ics214Panel panel = new Ics214Panel(controller);
 				panel.loadFromModel(form, data);
 				ics214Panels.add(panel);
-				registerTab(shortLogTabTitle(form, data), panel, AppController.LinkSource.ICS214, ACTIVITY_LOGS_GROUP);
+				registerActivityLogTab(panel, shortLogTabTitle(form, data), AppController.LinkSource.ICS214,
+						ACTIVITY_LOGS_GROUP, instanceId);
 			}
 		} finally {
 			rebuildingTabs = false;
@@ -1128,6 +1140,9 @@ public class MainFrame extends JFrame {
 		safetyDashboardPanel.refreshFromModel(controller.getData());
 		if (lastData != controller.getData()) {
 			closedLogForms.clear();
+			activityLogInstanceIds.clear();
+			activityLogFormsById.clear();
+			activityLogPanelsById.clear();
 			lastData = controller.getData();
 		} else {
 			closedLogForms.retainAll(controller.getData().getActivityLogs());
@@ -1250,37 +1265,22 @@ public class MainFrame extends JFrame {
 	 * @return ordered shared workspaces and current activity logs.
 	 */
 	private List<Component> dashboardWorkspaces() {
-		Map<String, Component> workspaces = new LinkedHashMap<>();
-		workspaces.put("Shared", incidentContextPanel);
-		workspaces.put("Org Chart", organizationalChartPanel);
-		workspaces.put("ICS 201", ics201Panel);
-		workspaces.put("ICS 202", ics202Panel);
-		workspaces.put("ICS 204", ics204Panel);
-		workspaces.put("Medical", medicalWorkspacePanel);
-		workspaces.put("Safety", safetyPanel);
-		workspaces.put("Safety Overview", safetyDashboardPanel);
-		workspaces.put("SAR Tasks", sarTaskPanel);
-		workspaces.put("Open Action Tracker", openActionTrackerPanel);
-		workspaces.put("Clue Log", clueLogPanel);
-		workspaces.put("T-Cards", tCardPanel);
-		for (Ics214Panel panel : ics214Panels) {
-			workspaces.putIfAbsent("Activity Logs", panel);
-		}
-
 		List<Component> ordered = new ArrayList<>();
-		for (String title : activeDashboard.workspaceTitles()) {
-			if ("Activity Logs".equals(title)) {
+		for (WorkspaceId id : activeDashboard.workspaceIds()) {
+			if (id == WorkspaceId.ACTIVITY_LOG) {
 				if (isGroupVisible(ACTIVITY_LOGS_GROUP)) {
 					ordered.addAll(ics214Panels);
 				}
 				continue;
 			}
-			Component component = workspaces.get(title);
+			WorkspaceDefinition definition = workspaces.get(id);
+			Component component = definition == null ? null : definition.component();
 			if (component != null && !ordered.contains(component)) {
 				ordered.add(component);
 			}
 		}
-		for (Component component : workspaces.values()) {
+		for (WorkspaceId id : registeredWorkspaceIds) {
+			Component component = workspaces.get(id).component();
 			if (!ordered.contains(component)) {
 				ordered.add(component);
 			}
@@ -1294,36 +1294,62 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Opens a shared workspace from the safety readiness overview after flushing all editors.
+	 * Opens an existing workspace destination after flushing the current editor state.
 	 *
-	 * @param title registered workspace title.
+	 * @param destination typed workspace navigation target.
 	 */
-	private void openWorkspace(String title) {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
-		boolean canine = "Canine Medical Plan (ICS 206CANINE, adapted)".equals(title);
-		boolean medical = canine || "Medical Plan (ICS 206)".equals(title) || "Medical".equals(title);
-		Component target = null;
-		if (medical) {
-			target = medicalWorkspacePanel;
-		} else {
-			for (Map.Entry<Component, String> entry : tabTitles.entrySet()) {
-				if (entry.getValue().equals(title)) {
-					target = entry.getKey();
-					break;
-				}
-			}
+	public void openWorkspace(WorkspaceDestination destination) {
+		if (destination == null) {
+			return;
 		}
-		if (canine) {
+		try {
+			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		} catch (RuntimeException exception) {
+			showSaveError(exception);
+			return;
+		}
+
+		if (destination.workspaceId() == WorkspaceId.ACTIVITY_LOG) {
+			openActivityLog(destination.instanceId());
+			return;
+		}
+
+		WorkspaceDefinition definition = workspaces.get(destination.workspaceId());
+		if (definition == null) {
+			return;
+		}
+		if (destination.workspaceId() == WorkspaceId.HUMAN_MEDICAL_PLAN) {
+			medicalWorkspacePanel.selectHumanPlan();
+		} else if (destination.workspaceId() == WorkspaceId.CANINE_MEDICAL_PLAN) {
 			canineMedicalManuallyOpened = true;
 			medicalWorkspacePanel.openCaninePlan();
-			rebuildVisibleTabs(medicalWorkspacePanel, -1);
-		} else if (medical) {
-			if ("Medical Plan (ICS 206)".equals(title)) {
-				medicalWorkspacePanel.selectHumanPlan();
-			}
-			rebuildVisibleTabs(medicalWorkspacePanel, -1);
-		} else if (target != null) {
-			rebuildVisibleTabs(target, -1);
+		} else if (destination.workspaceId() == WorkspaceId.SAFETY_OVERVIEW) {
+			safetyDashboardManuallyVisible = true;
+			groupVisible.put(SAFETY_DASHBOARD_GROUP, true);
+		}
+		rebuildVisibleTabs(definition.component(), -1);
+		refreshStatus();
+	}
+
+	/**
+	 * Opens the activity-log editor identified by its per-incident runtime ID.
+	 *
+	 * @param instanceId requested activity-log identifier.
+	 */
+	private void openActivityLog(String instanceId) {
+		Ics214Form form = activityLogFormsById.get(instanceId);
+		if (form == null || !controller.getData().getActivityLogs().contains(form)) {
+			return;
+		}
+		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
+		if (closedLogForms.remove(form)) {
+			rebuildLogTabs();
+		}
+		Ics214Panel panel = activityLogPanelsById.get(instanceId);
+		if (panel != null) {
+			int logIndex = ics214Panels.indexOf(panel);
+			rebuildVisibleTabs(panel, logIndex);
+			refreshStatus();
 		}
 	}
 
@@ -1348,11 +1374,12 @@ public class MainFrame extends JFrame {
 	 * @param component registered editor
 	 */
 	private void addVisibleTab(Component component) {
-		String group = tabGroups.getOrDefault(component, CORE_GROUP);
-		if (!CORE_GROUP.equals(group) && !isGroupVisible(group)) {
+		WorkspaceDefinition definition = tabWorkspaces.get(component);
+		if (definition == null || (!CORE_GROUP.equals(definition.group())
+				&& !isGroupVisible(definition.group()))) {
 			return;
 		}
-		tabs.addTab(tabTitles.getOrDefault(component, ""), component);
+		tabs.addTab(definition.displayLabel(), component);
 	}
 
 	/**
@@ -1371,10 +1398,71 @@ public class MainFrame extends JFrame {
 	 * @param source synchronization source
 	 * @param group visibility group
 	 */
-	private void registerTab(String title, Component component, AppController.LinkSource source, String group) {
-		tabSources.put(component, source);
-		tabGroups.put(component, group);
-		tabTitles.put(component, title);
+	/**
+	 * Registers one top-level workspace and its presentation metadata.
+	 *
+	 * @param id stable workspace identifier.
+	 * @param component existing shared editor instance.
+	 * @param source linked-data synchronization source.
+	 * @param group tab visibility group.
+	 */
+	private void registerWorkspace(WorkspaceId id, Component component, AppController.LinkSource source,
+			String group) {
+		WorkspaceDefinition definition = new WorkspaceDefinition(id, id.displayLabel(), component, source, group);
+		workspaces.put(id, definition);
+		tabWorkspaces.put(component, definition);
+		registeredWorkspaceIds.add(id);
+	}
+
+	/**
+	 * Registers a nested destination that selects within an existing workspace.
+	 *
+	 * @param id nested destination identifier.
+	 * @param component containing workspace component.
+	 */
+	private void registerNestedWorkspace(WorkspaceId id, Component component) {
+		workspaces.put(id, new WorkspaceDefinition(id, id.displayLabel(), component,
+				AppController.LinkSource.NONE, CORE_GROUP));
+	}
+
+	/**
+	 * Returns the stable runtime identifier assigned to one activity-log form instance.
+	 *
+	 * @param form activity-log form.
+	 * @return unique runtime instance identifier.
+	 */
+	private String activityLogInstanceId(Ics214Form form) {
+		String instanceId = activityLogInstanceIds.computeIfAbsent(form, ignored -> UUID.randomUUID().toString());
+		activityLogFormsById.put(instanceId, form);
+		return instanceId;
+	}
+
+	/**
+	 * Opens the registered tab for one component while preserving its label mapping.
+	 *
+	 * @param component existing workspace component.
+	 * @param title display label for this particular tab instance.
+	 * @param source linked-data synchronization source.
+	 * @param group tab visibility group.
+	 * @param instanceId unique activity-log identifier, or null for a base workspace.
+	 */
+	private void registerActivityLogTab(Ics214Panel component, String title, AppController.LinkSource source,
+			String group, String instanceId) {
+		tabWorkspaces.put(component, new WorkspaceDefinition(WorkspaceId.ACTIVITY_LOG, title, component, source, group));
+		activityLogPanelsById.put(instanceId, component);
+	}
+
+	/**
+	 * Immutable navigation mapping from an identifier to its existing workspace component.
+	 *
+	 * @param id stable navigation identifier.
+	 * @param displayLabel user-facing label.
+	 * @param component shared existing editor component.
+	 * @param source linked-data synchronization source.
+	 * @param group tab visibility group.
+	 */
+	private record WorkspaceDefinition(WorkspaceId id, String displayLabel, Component component,
+			AppController.LinkSource source, String group) {
 	}
 
 	/**
@@ -1386,7 +1474,8 @@ public class MainFrame extends JFrame {
 		if (tabIndex < 0 || tabIndex >= tabs.getTabCount()) {
 			return AppController.LinkSource.NONE;
 		}
-		return tabSources.getOrDefault(tabs.getComponentAt(tabIndex), AppController.LinkSource.NONE);
+		WorkspaceDefinition definition = tabWorkspaces.get(tabs.getComponentAt(tabIndex));
+		return definition == null ? AppController.LinkSource.NONE : definition.source();
 	}
 
 	/**
@@ -1622,19 +1711,7 @@ public class MainFrame extends JFrame {
 		for (int i = 0; i < data.getActivityLogs().size(); i++) {
 			Ics214Form existing = data.getActivityLogs().get(i);
 			if (assignmentId.equals(existing.getLinkedSarTaskAssignmentId())) {
-				groupVisible.put(ACTIVITY_LOGS_GROUP, true);
-				if (closedLogForms.remove(existing)) {
-					rebuildLogTabs();
-				}
-				for (int j = 0; j < ics214Panels.size(); j++) {
-					if (ics214Panels.get(j).getCurrentForm() == existing) {
-						rebuildVisibleTabs(ics214Panels.get(j), j);
-						if (tabs.indexOfComponent(ics214Panels.get(j)) >= 0) {
-							tabs.setSelectedComponent(ics214Panels.get(j));
-						}
-						break;
-					}
-				}
+				openWorkspace(WorkspaceDestination.activityLog(activityLogInstanceId(existing)));
 				return;
 			}
 		}
@@ -1649,13 +1726,7 @@ public class MainFrame extends JFrame {
 		data.getActivityLogs().add(form);
 		controller.markDirty(AppController.LinkSource.ICS214);
 		rebuildLogTabs();
-		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
-		int newIndex = ics214Panels.size() - 1;
-		rebuildVisibleTabs(newIndex >= 0 ? ics214Panels.get(newIndex) : null, newIndex);
-		if (newIndex >= 0 && tabs.indexOfComponent(ics214Panels.get(newIndex)) >= 0) {
-			tabs.setSelectedComponent(ics214Panels.get(newIndex));
-		}
-		refreshStatus();
+		openWorkspace(WorkspaceDestination.activityLog(activityLogInstanceId(form)));
 	}
 
 	/**
@@ -1669,19 +1740,7 @@ public class MainFrame extends JFrame {
 		for (int i = 0; i < data.getActivityLogs().size(); i++) {
 			Ics214Form existing = data.getActivityLogs().get(i);
 			if (assignmentId.equals(existing.getLinkedSarTaskAssignmentId())) {
-				groupVisible.put(ACTIVITY_LOGS_GROUP, true);
-				if (closedLogForms.remove(existing)) {
-					rebuildLogTabs();
-				}
-				for (int j = 0; j < ics214Panels.size(); j++) {
-					if (ics214Panels.get(j).getCurrentForm() == existing) {
-						rebuildVisibleTabs(ics214Panels.get(j), j);
-						if (tabs.indexOfComponent(ics214Panels.get(j)) >= 0) {
-							tabs.setSelectedComponent(ics214Panels.get(j));
-						}
-						break;
-					}
-				}
+				openWorkspace(WorkspaceDestination.activityLog(activityLogInstanceId(existing)));
 				return;
 			}
 		}
@@ -1703,13 +1762,7 @@ public class MainFrame extends JFrame {
 		data.getActivityLogs().add(form);
 		controller.markDirty(AppController.LinkSource.ICS214);
 		rebuildLogTabs();
-		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
-		int newIndex = ics214Panels.size() - 1;
-		rebuildVisibleTabs(newIndex >= 0 ? ics214Panels.get(newIndex) : null, newIndex);
-		if (newIndex >= 0 && tabs.indexOfComponent(ics214Panels.get(newIndex)) >= 0) {
-			tabs.setSelectedComponent(ics214Panels.get(newIndex));
-		}
-		refreshStatus();
+		openWorkspace(WorkspaceDestination.activityLog(activityLogInstanceId(form)));
 	}
 
 	/**
@@ -1954,21 +2007,8 @@ public class MainFrame extends JFrame {
 		List<Ics214Form> logs = controller.getData().getActivityLogs();
 		for (Ics214Form log : logs) {
 			JRadioButtonMenuItem item = new JRadioButtonMenuItem(logMenuLabel(log), log == activeForm);
-			item.addActionListener(event -> {
-				groupVisible.put(ACTIVITY_LOGS_GROUP, true);
-				if (closedLogForms.remove(log)) {
-					rebuildLogTabs();
-				}
-				for (int j = 0; j < ics214Panels.size(); j++) {
-					if (ics214Panels.get(j).getCurrentForm() == log) {
-						rebuildVisibleTabs(ics214Panels.get(j), j);
-						if (tabs.indexOfComponent(ics214Panels.get(j)) >= 0) {
-							tabs.setSelectedComponent(ics214Panels.get(j));
-						}
-						break;
-					}
-				}
-			});
+			item.addActionListener(event -> openWorkspace(
+					WorkspaceDestination.activityLog(activityLogInstanceId(log))));
 			group.add(item);
 			logsListMenu.add(item);
 		}
@@ -2215,31 +2255,35 @@ public class MainFrame extends JFrame {
 	 * Role-oriented orderings of the same incident workspaces.
 	 */
 	enum Dashboard {
-		IC_ICP("IC/ICP", List.of("Shared", "Org Chart", "ICS 201", "ICS 202", "ICS 204",
-				"Medical", "Safety", "SAR Tasks",
-				"Open Action Tracker", "Activity Logs", "Clue Log", "T-Cards")),
-		SAFETY_OFFICER("Safety Officer", List.of("Safety Overview", "Safety", "Medical",
-				"Org Chart", "Shared", "T-Cards", "ICS 204",
-				"SAR Tasks", "Clue Log", "Activity Logs", "Open Action Tracker", "ICS 202", "ICS 201")),
-		OPERATIONS("Operations", List.of("ICS 204", "SAR Tasks", "T-Cards", "Clue Log", "Activity Logs",
-				"Safety", "Org Chart", "Medical",
-				"Shared", "ICS 202", "ICS 201", "Open Action Tracker")),
-		COMMUNICATIONS("Communications", List.of("Safety", "Org Chart", "Medical",
-				"T-Cards", "Activity Logs", "Clue Log", "ICS 204",
-				"SAR Tasks", "Shared", "ICS 202", "ICS 201", "Open Action Tracker"));
+		IC_ICP("IC/ICP", List.of(WorkspaceId.SHARED, WorkspaceId.ORG_CHART, WorkspaceId.ICS_201,
+				WorkspaceId.ICS_202, WorkspaceId.ICS_204, WorkspaceId.MEDICAL, WorkspaceId.SAFETY,
+				WorkspaceId.SAR_TASKS, WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ACTIVITY_LOG,
+				WorkspaceId.CLUE_LOG, WorkspaceId.TCARDS)),
+		SAFETY_OFFICER("Safety Officer", List.of(WorkspaceId.SAFETY_OVERVIEW, WorkspaceId.SAFETY,
+				WorkspaceId.MEDICAL, WorkspaceId.ORG_CHART, WorkspaceId.SHARED, WorkspaceId.TCARDS,
+				WorkspaceId.ICS_204, WorkspaceId.SAR_TASKS, WorkspaceId.CLUE_LOG, WorkspaceId.ACTIVITY_LOG,
+				WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ICS_202, WorkspaceId.ICS_201)),
+		OPERATIONS("Operations", List.of(WorkspaceId.ICS_204, WorkspaceId.SAR_TASKS, WorkspaceId.TCARDS,
+				WorkspaceId.CLUE_LOG, WorkspaceId.ACTIVITY_LOG, WorkspaceId.SAFETY, WorkspaceId.ORG_CHART,
+				WorkspaceId.MEDICAL, WorkspaceId.SHARED, WorkspaceId.ICS_202, WorkspaceId.ICS_201,
+				WorkspaceId.OPEN_ACTION_TRACKER)),
+		COMMUNICATIONS("Communications", List.of(WorkspaceId.SAFETY, WorkspaceId.ORG_CHART, WorkspaceId.MEDICAL,
+				WorkspaceId.TCARDS, WorkspaceId.ACTIVITY_LOG, WorkspaceId.CLUE_LOG, WorkspaceId.ICS_204,
+				WorkspaceId.SAR_TASKS, WorkspaceId.SHARED, WorkspaceId.ICS_202, WorkspaceId.ICS_201,
+				WorkspaceId.OPEN_ACTION_TRACKER));
 
 		private final String label;
-		private final List<String> workspaceTitles;
+		private final List<WorkspaceId> workspaceIds;
 
 		/**
 		 * Creates one role-specific ordering for the shared workspaces.
 		 *
 		 * @param label display label.
-		 * @param workspaceTitles ordered workspace titles.
+		 * @param workspaceIds ordered stable workspace identifiers.
 		 */
-		Dashboard(String label, List<String> workspaceTitles) {
+		Dashboard(String label, List<WorkspaceId> workspaceIds) {
 			this.label = label;
-			this.workspaceTitles = workspaceTitles;
+			this.workspaceIds = workspaceIds;
 		}
 
 		/**
@@ -2252,12 +2296,12 @@ public class MainFrame extends JFrame {
 		}
 
 		/**
-		 * Returns this dashboard's order of shared editors.
+		 * Returns this dashboard's order of shared editor identifiers.
 		 *
-		 * @return ordered workspace titles.
+		 * @return ordered workspace IDs.
 		 */
-		public List<String> workspaceTitles() {
-			return workspaceTitles;
+		public List<WorkspaceId> workspaceIds() {
+			return workspaceIds;
 		}
 
 		/** {@inheritDoc} */

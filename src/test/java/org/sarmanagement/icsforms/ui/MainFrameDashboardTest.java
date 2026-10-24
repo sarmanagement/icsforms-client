@@ -11,19 +11,20 @@ import java.util.List;
 import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MainFrameDashboardTest {
 	@Test
 	void defaultDashboardPreservesLegacyWorkspaceOrder() {
-		List<String> titles = MainFrame.Dashboard.IC_ICP.workspaceTitles();
+		List<WorkspaceId> workspaces = MainFrame.Dashboard.IC_ICP.workspaceIds();
 
-		assertEquals("Shared", titles.get(0));
-		assertEquals("Org Chart", titles.get(1));
-		assertEquals("ICS 201", titles.get(2));
-		assertEquals("ICS 202", titles.get(3));
-		assertEquals("ICS 204", titles.get(4));
-		assertTrue(titles.contains("Medical"));
+		assertEquals(WorkspaceId.SHARED, workspaces.get(0));
+		assertEquals(WorkspaceId.ORG_CHART, workspaces.get(1));
+		assertEquals(WorkspaceId.ICS_201, workspaces.get(2));
+		assertEquals(WorkspaceId.ICS_202, workspaces.get(3));
+		assertEquals(WorkspaceId.ICS_204, workspaces.get(4));
+		assertTrue(workspaces.contains(WorkspaceId.MEDICAL));
 	}
 
 	@Test
@@ -43,23 +44,44 @@ class MainFrameDashboardTest {
 	void operationsAndCommunicationsExposeSharedSafetyOrgAndMedicalEditorsWithoutIcs205() {
 		for (MainFrame.Dashboard dashboard :
 				List.of(MainFrame.Dashboard.OPERATIONS, MainFrame.Dashboard.COMMUNICATIONS)) {
-			List<String> titles = dashboard.workspaceTitles();
-			assertTrue(titles.contains("Safety"));
-			assertTrue(titles.contains("Org Chart"));
-			assertTrue(titles.contains("Medical"));
-			assertEquals(1, titles.stream().filter("Medical"::equals).count());
-			assertFalseContainsIcs205(titles);
+			List<WorkspaceId> workspaces = dashboard.workspaceIds();
+			assertTrue(workspaces.contains(WorkspaceId.SAFETY));
+			assertTrue(workspaces.contains(WorkspaceId.ORG_CHART));
+			assertTrue(workspaces.contains(WorkspaceId.MEDICAL));
+			assertEquals(1, workspaces.stream().filter(WorkspaceId.MEDICAL::equals).count());
+			assertFalseContainsIcs205(workspaces);
 		}
 	}
 
 	@Test
 	void safetyDashboardIncludesReadinessOverviewAndLinksToCommonSafetyWorkspaces() {
-		List<String> titles = MainFrame.Dashboard.SAFETY_OFFICER.workspaceTitles();
+		List<WorkspaceId> workspaces = MainFrame.Dashboard.SAFETY_OFFICER.workspaceIds();
 
-		assertEquals("Safety Overview", titles.get(0));
-		assertTrue(titles.contains("Safety"));
-		assertTrue(titles.contains("Org Chart"));
-		assertTrue(titles.contains("Medical"));
+		assertEquals(WorkspaceId.SAFETY_OVERVIEW, workspaces.get(0));
+		assertTrue(workspaces.contains(WorkspaceId.SAFETY));
+		assertTrue(workspaces.contains(WorkspaceId.ORG_CHART));
+		assertTrue(workspaces.contains(WorkspaceId.MEDICAL));
+	}
+
+	@Test
+	void workspaceDestinationsSeparateStableIdsFromDisplayLabelsAndTargetNestedPlans() {
+		assertEquals(WorkspaceId.HUMAN_MEDICAL_PLAN, WorkspaceDestination.humanMedicalPlan().workspaceId());
+		assertEquals(WorkspaceId.CANINE_MEDICAL_PLAN, WorkspaceDestination.canineMedicalPlan().workspaceId());
+		assertEquals(WorkspaceId.SAFETY_OVERVIEW,
+				WorkspaceDestination.of(WorkspaceId.SAFETY_OVERVIEW).workspaceId());
+		assertEquals("Safety Overview", WorkspaceId.SAFETY_OVERVIEW.displayLabel());
+		assertThrows(IllegalArgumentException.class, () -> WorkspaceDestination.of(WorkspaceId.ACTIVITY_LOG));
+		assertThrows(IllegalArgumentException.class, () -> WorkspaceDestination.activityLog(""));
+	}
+
+	@Test
+	void activityLogDestinationsRequireAnInstanceIdentifier() {
+		WorkspaceDestination first = WorkspaceDestination.activityLog("log-instance-one");
+		WorkspaceDestination second = WorkspaceDestination.activityLog("log-instance-two");
+
+		assertEquals(WorkspaceId.ACTIVITY_LOG, first.workspaceId());
+		assertTrue(!first.equals(second));
+		assertEquals("log-instance-one", first.instanceId());
 	}
 
 	/**
@@ -67,7 +89,8 @@ class MainFrameDashboardTest {
 	 *
 	 * @param titles dashboard workspace titles.
 	 */
-	private void assertFalseContainsIcs205(List<String> titles) {
-		assertTrue(titles.stream().noneMatch(title -> title.equals("ICS 205") || title.equals("ICS 205A")));
+	private void assertFalseContainsIcs205(List<WorkspaceId> workspaces) {
+		assertTrue(workspaces.stream().noneMatch(id -> id.displayLabel().equals("ICS 205")
+				|| id.displayLabel().equals("ICS 205A")));
 	}
 }

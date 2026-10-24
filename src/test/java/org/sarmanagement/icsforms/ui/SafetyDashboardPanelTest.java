@@ -101,7 +101,7 @@ class SafetyDashboardPanelTest {
 
 	@Test
 	void readinessShortcutsNavigateToSharedEditors() throws Exception {
-		List<String> opened = new ArrayList<>();
+		List<WorkspaceDestination> opened = new ArrayList<>();
 		SafetyDashboardPanel[] panel = new SafetyDashboardPanel[1];
 		SwingUtilities.invokeAndWait(() -> {
 			panel[0] = new SafetyDashboardPanel(opened::add);
@@ -110,11 +110,11 @@ class SafetyDashboardPanelTest {
 			}
 		});
 
-		assertTrue(opened.contains("Safety"));
-		assertTrue(opened.contains("Medical Plan (ICS 206)"));
-		assertTrue(opened.contains("Canine Medical Plan (ICS 206CANINE, adapted)"));
-		assertTrue(opened.contains("Org Chart"));
-		assertTrue(opened.contains("T-Cards"));
+		assertTrue(opened.contains(WorkspaceDestination.of(WorkspaceId.SAFETY)));
+		assertTrue(opened.contains(WorkspaceDestination.humanMedicalPlan()));
+		assertTrue(opened.contains(WorkspaceDestination.canineMedicalPlan()));
+		assertTrue(opened.contains(WorkspaceDestination.of(WorkspaceId.ORG_CHART)));
+		assertTrue(opened.contains(WorkspaceDestination.of(WorkspaceId.TCARDS)));
 	}
 
 	/**
