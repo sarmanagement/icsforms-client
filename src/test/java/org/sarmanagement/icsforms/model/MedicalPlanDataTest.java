@@ -7,8 +7,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -131,12 +136,50 @@ class MedicalPlanDataTest {
 	}
 
 	@Test
-	void rolloverArchivesMedicalSnapshotsAndKeepsReusableDirectoryAndBase() {
+	void rolloverCarriesForwardIndependentMedicalPlansAndKeepsReusableDirectoryAndBase() {
 		AppData data = new AppData();
-		data.getMedicalPlan().setActive(true);
-		data.getMedicalPlan().setCall911Procedure("Use local emergency dispatch");
-		data.getCanineMedicalPlan().setActive(true);
-		data.getCanineMedicalPlan().setPoisonControlContact("Local contact on file");
+		MedicalPlan medicalPlan = data.getMedicalPlan();
+		medicalPlan.setActive(true);
+		medicalPlan.setSimpleMode(false);
+		medicalPlan.setCall911Procedure("Use local emergency dispatch");
+		medicalPlan.setEmergencyProcedures("Notify command after dispatch.");
+		medicalPlan.setPreparedByMedicalUnitLeader("Medical Unit Leader");
+		medicalPlan.setPreparerSignature("Prepared signature");
+		medicalPlan.setPreparedAt(LocalDateTime.of(2026, 10, 24, 12, 0));
+		medicalPlan.setReviewedBySafetyOfficer("Prior Safety Officer");
+		medicalPlan.setSafetyOfficerSignature("Prior review signature");
+		medicalPlan.setReviewStatus("Reviewed");
+		MedicalPlan.AidStation aidStation = new MedicalPlan.AidStation();
+		aidStation.setName("Incident aid station");
+		aidStation.setLocation("Incident base");
+		medicalPlan.getAidStations().add(aidStation);
+		MedicalPlan.TransportService transport = new MedicalPlan.TransportService();
+		transport.setService("Incident ambulance");
+		transport.setAirOrGround("Ground");
+		medicalPlan.getTransportServices().add(transport);
+		MedicalPlan.Hospital hospital = new MedicalPlan.Hospital();
+		hospital.setName("Incident hospital");
+		hospital.setTraumaCenter(true);
+		medicalPlan.getHospitals().add(hospital);
+
+		CanineMedicalPlan caninePlan = data.getCanineMedicalPlan();
+		caninePlan.setActive(true);
+		caninePlan.setPoisonControlContact("Local contact on file");
+		caninePlan.setAidStationInformation("Canine aid station");
+		caninePlan.setTransportServices("Canine ground transport");
+		caninePlan.setEmergencyProcedures("Provide canine first aid.");
+		caninePlan.setAviationAssetsUsed(true);
+		caninePlan.setPreparedByMedicalUnitLeader("Medical Unit Leader");
+		caninePlan.setPreparerSignature("Canine prepared signature");
+		caninePlan.setPreparedAt(LocalDateTime.of(2026, 10, 24, 12, 30));
+		caninePlan.setReviewedBySafetyOfficer("Prior Canine Safety Officer");
+		caninePlan.setSafetyOfficerSignature("Prior canine review signature");
+		caninePlan.setReviewStatus("Reviewed");
+		VetFacility selectedFacility = new VetFacility();
+		selectedFacility.setName("Selected canine hospital");
+		selectedFacility.setContactNumbers(new ArrayList<>(List.of("555-0100")));
+		selectedFacility.setCapabilities("Emergency care");
+		caninePlan.getSelectedFacilities().add(selectedFacility);
 		data.getVetDirectory().getFacilities().add(new VetFacility());
 		data.getStagingLocation().setAddress("Incident staging address");
 		IncidentLocation base = new IncidentLocation();
@@ -152,9 +195,60 @@ class MedicalPlanDataTest {
 		assertTrue(data.getOperationalPeriodHistory().get(0).getMedicalPlan().isActive());
 		assertEquals("Use local emergency dispatch",
 				data.getOperationalPeriodHistory().get(0).getMedicalPlan().getCall911Procedure());
+		assertEquals("Notify command after dispatch.", data.getMedicalPlan().getEmergencyProcedures());
+		assertTrue(data.getMedicalPlan().isActive());
+		assertFalse(data.getMedicalPlan().isSimpleMode());
+		assertEquals("Medical Unit Leader", data.getMedicalPlan().getPreparedByMedicalUnitLeader());
+		assertEquals("Prepared signature", data.getMedicalPlan().getPreparerSignature());
+		assertEquals(LocalDateTime.of(2026, 10, 24, 12, 0), data.getMedicalPlan().getPreparedAt());
+		assertEquals("Not reviewed", data.getMedicalPlan().getReviewStatus());
+		assertEquals("", data.getMedicalPlan().getReviewedBySafetyOfficer());
+		assertEquals("", data.getMedicalPlan().getSafetyOfficerSignature());
+		assertEquals("Incident aid station", data.getMedicalPlan().getAidStations().get(0).getName());
+		assertEquals("Incident ambulance", data.getMedicalPlan().getTransportServices().get(0).getService());
+		assertEquals("Incident hospital", data.getMedicalPlan().getHospitals().get(0).getName());
 		assertTrue(data.getOperationalPeriodHistory().get(0).getCanineMedicalPlan().isActive());
-		assertFalse(data.getMedicalPlan().isActive());
-		assertFalse(data.getCanineMedicalPlan().isActive());
+		assertTrue(data.getCanineMedicalPlan().isActive());
+		assertEquals("Canine aid station", data.getCanineMedicalPlan().getAidStationInformation());
+		assertEquals("Canine ground transport", data.getCanineMedicalPlan().getTransportServices());
+		assertTrue(data.getCanineMedicalPlan().isAviationAssetsUsed());
+		assertEquals("Medical Unit Leader", data.getCanineMedicalPlan().getPreparedByMedicalUnitLeader());
+		assertEquals("Canine prepared signature", data.getCanineMedicalPlan().getPreparerSignature());
+		assertEquals(LocalDateTime.of(2026, 10, 24, 12, 30), data.getCanineMedicalPlan().getPreparedAt());
+		assertEquals("Not reviewed", data.getCanineMedicalPlan().getReviewStatus());
+		assertEquals("", data.getCanineMedicalPlan().getReviewedBySafetyOfficer());
+		assertEquals("", data.getCanineMedicalPlan().getSafetyOfficerSignature());
+		assertEquals("Selected canine hospital",
+				data.getCanineMedicalPlan().getSelectedFacilities().get(0).getName());
+		assertEquals("555-0100",
+				data.getCanineMedicalPlan().getSelectedFacilities().get(0).getContactNumbers().get(0));
+		assertEquals("Emergency care",
+				data.getCanineMedicalPlan().getSelectedFacilities().get(0).getCapabilities());
+		assertEquals("Prior Safety Officer",
+				data.getOperationalPeriodHistory().get(0).getMedicalPlan().getReviewedBySafetyOfficer());
+		assertEquals("Prior review signature",
+				data.getOperationalPeriodHistory().get(0).getMedicalPlan().getSafetyOfficerSignature());
+		assertEquals("Reviewed", data.getOperationalPeriodHistory().get(0).getMedicalPlan().getReviewStatus());
+		assertEquals("Prior Canine Safety Officer",
+				data.getOperationalPeriodHistory().get(0).getCanineMedicalPlan().getReviewedBySafetyOfficer());
+		assertEquals("Prior canine review signature",
+				data.getOperationalPeriodHistory().get(0).getCanineMedicalPlan().getSafetyOfficerSignature());
+		assertEquals("Reviewed",
+				data.getOperationalPeriodHistory().get(0).getCanineMedicalPlan().getReviewStatus());
+		assertNotSame(data.getOperationalPeriodHistory().get(0).getMedicalPlan(), data.getMedicalPlan());
+		assertNotSame(data.getOperationalPeriodHistory().get(0).getMedicalPlan().getAidStations().get(0),
+				data.getMedicalPlan().getAidStations().get(0));
+		assertNotSame(data.getOperationalPeriodHistory().get(0).getCanineMedicalPlan()
+				.getSelectedFacilities().get(0), data.getCanineMedicalPlan().getSelectedFacilities().get(0));
+		assertNotSame(data.getOperationalPeriodHistory().get(0).getCanineMedicalPlan()
+				.getSelectedFacilities().get(0).getContactNumbers(),
+				data.getCanineMedicalPlan().getSelectedFacilities().get(0).getContactNumbers());
+		data.getMedicalPlan().getAidStations().get(0).setName("Next period edit");
+		data.getCanineMedicalPlan().getSelectedFacilities().get(0).setName("Next period hospital");
+		assertEquals("Incident aid station",
+				data.getOperationalPeriodHistory().get(0).getMedicalPlan().getAidStations().get(0).getName());
+		assertEquals("Selected canine hospital", data.getOperationalPeriodHistory().get(0).getCanineMedicalPlan()
+				.getSelectedFacilities().get(0).getName());
 		assertEquals(1, data.getVetDirectory().getFacilities().size());
 		assertEquals("Incident staging address", data.getStagingLocation().getAddress());
 		assertEquals(1, data.getIncidentLocations().size());

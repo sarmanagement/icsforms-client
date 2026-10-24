@@ -204,6 +204,16 @@ public class CanineMedicalPlan {
 		this.reviewStatus = reviewStatus == null || reviewStatus.isBlank() ? "Not reviewed" : reviewStatus;
 	}
 
+	/**
+	 * Clears prior-period reviewer, signature, status, and review timestamp metadata without changing
+	 * plan content or preparer details. Any future review timestamp fields should also be cleared here.
+	 */
+	public void resetReviewState() {
+		reviewedBySafetyOfficer = "";
+		safetyOfficerSignature = "";
+		reviewStatus = "Not reviewed";
+	}
+
 	/** @return IAP page text. */
 	public String getIapPage() {
 		return iapPage;

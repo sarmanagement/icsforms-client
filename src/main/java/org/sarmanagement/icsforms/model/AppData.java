@@ -4,6 +4,9 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -20,6 +23,8 @@ import java.util.UUID;
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
 	public static final int CURRENT_SCHEMA_VERSION = 11;
+	private static final ObjectMapper MEDICAL_PLAN_COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
+			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
 	/**
 	 * A lightweight snapshot of the shared context at the end of one operational
@@ -280,6 +285,7 @@ public class AppData {
 	 * activity logs are cleared so that the new period starts fresh. The IAP phase
 	 * is set to {@link IapPhase#DURING_OP}. The incident context, incident mode,
 	 * and activity event types are retained.
+	 * Medical plan content is copied forward with its review workflow reset.
 	 * Incident-level open action items and tracker/export preferences are also
 	 * retained so unfinished IC/UC work carries into the next operational period.
 	 * </p>
@@ -294,8 +300,8 @@ public class AppData {
 		if (organizationalChart != null) {
 			record.setIncidentCommanders(new ArrayList<>(organizationalChart.getIncidentCommanders()));
 		}
-		record.setMedicalPlan(medicalPlan);
-		record.setCanineMedicalPlan(canineMedicalPlan);
+		record.setMedicalPlan(copyMedicalPlan(getMedicalPlan()));
+		record.setCanineMedicalPlan(copyCanineMedicalPlan(getCanineMedicalPlan()));
 		operationalPeriodHistory.add(record);
 		getArchivedSafetyHazardReports().addAll(archiveSafetyHazardReports(sarTaskAssignments,
 				record.getPeriodStart(), record.getPeriodEnd()));
@@ -309,8 +315,30 @@ public class AppData {
 		this.clueLogEntries = new ArrayList<>();
 		this.tCards = new ArrayList<>();
 		this.activityLogs = new ArrayList<>();
-		this.medicalPlan = new MedicalPlan();
-		this.canineMedicalPlan = new CanineMedicalPlan();
+		this.medicalPlan = copyMedicalPlan(record.getMedicalPlan());
+		this.medicalPlan.resetReviewState();
+		this.canineMedicalPlan = copyCanineMedicalPlan(record.getCanineMedicalPlan());
+		this.canineMedicalPlan.resetReviewState();
+	}
+
+	/**
+	 * Creates a deep copy of a human medical plan, including its nested entries.
+	 *
+	 * @param plan source plan.
+	 * @return independent plan copy.
+	 */
+	private static MedicalPlan copyMedicalPlan(MedicalPlan plan) {
+		return MEDICAL_PLAN_COPIER.convertValue(plan, MedicalPlan.class);
+	}
+
+	/**
+	 * Creates a deep copy of a canine medical plan, including facility snapshots.
+	 *
+	 * @param plan source plan.
+	 * @return independent plan copy.
+	 */
+	private static CanineMedicalPlan copyCanineMedicalPlan(CanineMedicalPlan plan) {
+		return MEDICAL_PLAN_COPIER.convertValue(plan, CanineMedicalPlan.class);
 	}
 
 	/**

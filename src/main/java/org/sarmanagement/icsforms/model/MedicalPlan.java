@@ -365,6 +365,16 @@ public class MedicalPlan {
 	}
 
 	/**
+	 * Clears prior-period reviewer, signature, status, and review timestamp metadata without changing
+	 * plan content or preparer details. Any future review timestamp fields should also be cleared here.
+	 */
+	public void resetReviewState() {
+		reviewedBySafetyOfficer = "";
+		safetyOfficerSignature = "";
+		reviewStatus = "Not reviewed";
+	}
+
+	/**
 	 * Returns the IAP page entry.
 	 *
 	 * @return IAP page text.
