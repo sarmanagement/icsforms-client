@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.VetDirectory;
 import org.sarmanagement.icsforms.model.VetFacility;
+import org.sarmanagement.icsforms.model.MedicalPlan;
 
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -65,6 +66,30 @@ class VetDirectoryFileServiceTest {
 		assertEquals(46.8, result.getLatitude());
 		assertEquals("region.csv", result.getSourceName());
 		assertEquals("CSV", imported.getSources().get(0).getFormat());
+	}
+
+	@Test
+	void separateTransportCsvRoundTripPreservesStructuredCanineServiceFields() throws Exception {
+		MedicalPlan.TransportService ambulance = new MedicalPlan.TransportService();
+		ambulance.setService("Regional Ambulance");
+		ambulance.setLocation("Incident base");
+		ambulance.setContactNumbers("555-0100");
+		ambulance.setFrequency("155.160");
+		ambulance.setAirOrGround("Ground");
+		ambulance.setLevelOfService("BLS; confirm canine capability");
+		Path csv = tempDirectory.resolve("canine-transport.csv");
+
+		assertTrue(service.saveTransportCsv(csv, List.of(ambulance), false));
+		List<MedicalPlan.TransportService> imported = service.importTransportCsv(csv);
+
+		assertEquals(1, imported.size());
+		assertEquals("Regional Ambulance", imported.get(0).getService());
+		assertEquals("Incident base", imported.get(0).getLocation());
+		assertEquals("555-0100", imported.get(0).getContactNumbers());
+		assertEquals("155.160", imported.get(0).getFrequency());
+		assertEquals("Ground", imported.get(0).getAirOrGround());
+		assertEquals("BLS; confirm canine capability", imported.get(0).getLevelOfService());
+		assertThrows(FileAlreadyExistsException.class, () -> service.saveTransportCsv(csv, List.of(), false));
 	}
 
 	@Test

@@ -13,6 +13,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * Renders ICS 206CANINE as an adapted canine medical plan, not an official FEMA variant.
@@ -94,8 +96,28 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 	 * @return numbered transportation section.
 	 */
 	private Ics206FormLayout.Section transportation(CanineMedicalPlan plan) {
-		return textSection("4. TRANSPORTATION (AIR OR GROUND)", plan.getTransportServices(),
-				"No canine transport information entered.");
+		List<List<String>> rows = new ArrayList<>();
+		for (org.sarmanagement.icsforms.model.MedicalPlan.TransportService service
+				: plan.getTransportServiceEntries()) {
+			if (service != null) {
+				String name = safe(service.getService());
+				String mode = safe(service.getAirOrGround());
+				rows.add(List.of(join(name, mode.isBlank() ? "" : "(" + mode + ")"),
+						safe(service.getLocation()),
+						join(safe(service.getContactNumbers()), safe(service.getFrequency())),
+						safe(service.getLevelOfService())));
+			}
+		}
+		if (plan.getTransportServices() != null && !plan.getTransportServices().isBlank()) {
+			rows.add(List.of("Additional notes", "", "", plan.getTransportServices()));
+		}
+		if (rows.isEmpty()) {
+			rows.add(List.of("No canine transport services entered.", "", "", ""));
+		}
+		return new Ics206FormLayout.Section("4. TRANSPORTATION (indicate air or ground)",
+				new float[] {0.27f, 0.24f, 0.27f, 0.22f},
+				List.of("Service (Air / Ground)", "Location", "Contact Number(s) / Frequency", "Level of Service"),
+				rows);
 	}
 
 	/**
@@ -108,11 +130,13 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 		CanineMedicalPlan plan = data.getCanineMedicalPlan();
 		StagingLocation base = data.getStagingLocation();
 		List<List<String>> rows = new ArrayList<>();
+		Set<Integer> redContactRows = new LinkedHashSet<>();
 		if (plan.getSelectedFacilities().isEmpty()) {
 			rows.add(List.of("No veterinary facilities selected.", "", "", "", "", ""));
 		} else {
 			for (VetFacility facility : plan.getSelectedFacilities()) {
 				if (facility != null) {
+					int rowIndex = rows.size();
 					String routeOrigin = base.getLabel().isBlank() ? "staging/base" : base.getLabel();
 					routeOrigin = join(routeOrigin, safe(base.getAddress()));
 					String route = facility.hasCurrentDistance(base.getGeneration())
@@ -123,19 +147,23 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 							: "Distance not calculated from " + routeOrigin;
 					String notes = join(safe(facility.getCapabilities()), safe(facility.getAvailabilityNotes()));
 					notes = join(notes, route);
+					notes = join(notes, safe(facility.getFax()).isBlank() ? "" : "Fax: " + safe(facility.getFax()));
 					rows.add(List.of(safe(facility.getName()), join(safe(facility.getTown()), safe(facility.getState())),
 							join(safe(facility.getAddress()), safe(facility.getPostalCode())),
-							join(facility.getContactNumbers() == null ? "" : String.join("; ",
+							facility.getContactNumbers() == null ? "" : String.join("; ",
 									facility.getContactNumbers()),
-									safe(facility.getFax()).isBlank() ? "" : "Fax: " + safe(facility.getFax())),
 							availability(facility.getAvailable24Hours()),
 							notes));
+					if (Boolean.TRUE.equals(facility.getAvailable24Hours())) {
+						redContactRows.add(rowIndex);
+					}
 				}
 			}
 		}
 		return new Ics206FormLayout.Section("5. VETERINARY HOSPITALS",
 				new float[] {0.16f, 0.12f, 0.20f, 0.17f, 0.09f, 0.26f},
-				List.of("Hospital Name", "Town", "Address", "Contact Number(s)", "24 Hours", "Notes"), rows);
+				List.of("Hospital Name", "Town", "Address", "Contact Number(s)", "24 Hours", "Notes"), rows, 3,
+				redContactRows);
 	}
 
 	/**

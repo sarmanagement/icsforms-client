@@ -167,6 +167,10 @@ class MedicalPlanDataTest {
 		caninePlan.setPoisonControlContact("Local contact on file");
 		caninePlan.setAidStationInformation("Canine aid station");
 		caninePlan.setTransportServices("Canine ground transport");
+		MedicalPlan.TransportService canineAmbulance = new MedicalPlan.TransportService();
+		canineAmbulance.setService("Ambulance");
+		canineAmbulance.setLevelOfService("Canine-capable");
+		caninePlan.getTransportServiceEntries().add(canineAmbulance);
 		caninePlan.setEmergencyProcedures("Provide canine first aid.");
 		caninePlan.setAviationAssetsUsed(true);
 		caninePlan.setPreparedByMedicalUnitLeader("Medical Unit Leader");
@@ -211,6 +215,12 @@ class MedicalPlanDataTest {
 		assertTrue(data.getCanineMedicalPlan().isActive());
 		assertEquals("Canine aid station", data.getCanineMedicalPlan().getAidStationInformation());
 		assertEquals("Canine ground transport", data.getCanineMedicalPlan().getTransportServices());
+		assertEquals("Ambulance",
+				data.getCanineMedicalPlan().getTransportServiceEntries().get(0).getService());
+		assertEquals("Ambulance", data.getOperationalPeriodHistory().get(0).getCanineMedicalPlan()
+				.getTransportServiceEntries().get(0).getService());
+		assertFalse(data.getOperationalPeriodHistory().get(0).getCanineMedicalPlan()
+				.getTransportServiceEntries().get(0) == data.getCanineMedicalPlan().getTransportServiceEntries().get(0));
 		assertTrue(data.getCanineMedicalPlan().isAviationAssetsUsed());
 		assertEquals("Medical Unit Leader", data.getCanineMedicalPlan().getPreparedByMedicalUnitLeader());
 		assertEquals("Canine prepared signature", data.getCanineMedicalPlan().getPreparerSignature());

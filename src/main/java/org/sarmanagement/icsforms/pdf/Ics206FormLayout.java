@@ -14,11 +14,13 @@ import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 
 import java.io.IOException;
+import java.awt.Color;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Shared numbered-block and table layout for standard and adapted ICS 206 forms.
@@ -145,9 +147,9 @@ final class Ics206FormLayout {
 				y -= SECTION_HEIGHT;
 				if (!section.headers().isEmpty()) {
 					if (document != null) {
-						drawRow(document, page, layout, bold, y, TABLE_HEADER_HEIGHT, section.widths(),
+						drawRow(document, page, layout, bold, bold, y, TABLE_HEADER_HEIGHT, section.widths(),
 								wrapCells(section.headers(), section.widths(), layout.width(), bold, formKey,
-										section.title()), 0);
+										section.title()), 0, -1, false);
 					}
 					y -= TABLE_HEADER_HEIGHT;
 				}
@@ -163,7 +165,8 @@ final class Ics206FormLayout {
 					int count = Math.min(capacity, rowLineCount - lineOffset);
 					float height = count * LINE_HEIGHT + CELL_PADDING * 2f;
 					if (document != null) {
-						drawRow(document, page, layout, regular, y, height, section.widths(), lines, lineOffset);
+						drawRow(document, page, layout, regular, bold, y, height, section.widths(), lines, lineOffset,
+								section.emphasisColumn(), section.emphasizedRows().contains(rowIndex));
 					}
 					y -= height;
 					lineOffset += count;
@@ -431,13 +434,16 @@ final class Ics206FormLayout {
 	 * @param top row top coordinate.
 	 * @param height row height.
 	 * @param widths relative column widths.
+	 * @param emphasisFont bold font used for emphasized cells.
 	 * @param cells wrapped cell lines.
 	 * @param lineOffset first line displayed for this row segment.
+	 * @param emphasisColumn zero-based column to emphasize, or -1.
+	 * @param emphasize whether this row should use the emphasis style.
 	 * @throws IOException when drawing fails.
 	 */
 	private static void drawRow(PDDocument document, PDPage page, AbstractPdfRenderer.FormLayout layout,
-			PDType1Font font, float top, float height, float[] widths, List<List<String>> cells, int lineOffset)
-			throws IOException {
+			PDType1Font font, PDType1Font emphasisFont, float top, float height, float[] widths,
+			List<List<String>> cells, int lineOffset, int emphasisColumn, boolean emphasize) throws IOException {
 		float bottom = top - height;
 		try (PDPageContentStream stream = append(document, page)) {
 			stream.addRect(layout.x(), bottom, layout.width(), height);
@@ -450,9 +456,11 @@ final class Ics206FormLayout {
 				stream.stroke();
 			}
 			x = layout.x();
-			PDType1Font activeFont = font;
 			for (int column = 0; column < widths.length; column++) {
 				List<String> lines = cells.get(column);
+				boolean highlighted = emphasize && column == emphasisColumn;
+				PDType1Font activeFont = highlighted ? emphasisFont : font;
+				stream.setNonStrokingColor(highlighted ? Color.RED : Color.BLACK);
 				int end = Math.min(lines.size(), lineOffset + (int) Math.floor((height - CELL_PADDING * 2f)
 						/ LINE_HEIGHT));
 				float textY = top - CELL_PADDING - FONT_SIZE;
@@ -586,8 +594,23 @@ final class Ics206FormLayout {
 	 * @param widths relative column widths, summing to one.
 	 * @param headers optional table header labels.
 	 * @param rows ordered table or paragraph rows.
+	 * @param emphasisColumn zero-based column to emphasize, or -1.
+	 * @param emphasizedRows zero-based rows using the emphasis style.
 	 */
-	record Section(String title, float[] widths, List<String> headers, List<List<String>> rows) {
+	record Section(String title, float[] widths, List<String> headers, List<List<String>> rows,
+			int emphasisColumn, Set<Integer> emphasizedRows) {
+		/**
+		 * Creates a section without specially styled data cells.
+		 *
+		 * @param title section number and label.
+		 * @param widths relative column widths.
+		 * @param headers optional table header labels.
+		 * @param rows ordered table or paragraph rows.
+		 */
+		Section(String title, float[] widths, List<String> headers, List<List<String>> rows) {
+			this(title, widths, headers, rows, -1, Set.of());
+		}
+
 		/**
 		 * Creates a form section with a defensive copy of its layout lists.
 		 *
@@ -595,11 +618,14 @@ final class Ics206FormLayout {
 		 * @param widths relative column widths.
 		 * @param headers optional table header labels.
 		 * @param rows ordered table or paragraph rows.
+		 * @param emphasisColumn zero-based column to emphasize, or -1.
+		 * @param emphasizedRows zero-based rows using the emphasis style.
 		 */
 		Section {
 			widths = widths.clone();
 			headers = List.copyOf(headers);
 			rows = rows.stream().map(List::copyOf).toList();
+			emphasizedRows = Set.copyOf(emphasizedRows);
 		}
 	}
 

@@ -17,6 +17,7 @@ public class CanineMedicalPlan {
 	private boolean active;
 	private String aidStationInformation = "";
 	private String transportServices = "";
+	private List<MedicalPlan.TransportService> transportServiceEntries = new ArrayList<>();
 	private String poisonControlContact = "";
 	private String onsiteVeterinarian = "";
 	private String veterinarianDvm = "";
@@ -64,6 +65,25 @@ public class CanineMedicalPlan {
 	/** @param transportServices editable canine transport services and capability notes. */
 	public void setTransportServices(String transportServices) {
 		this.transportServices = safe(transportServices);
+	}
+
+	/**
+	 * Returns structured canine-capable transportation service entries.
+	 *
+	 * @return transport service entries.
+	 */
+	public List<MedicalPlan.TransportService> getTransportServiceEntries() {
+		return transportServiceEntries;
+	}
+
+	/**
+	 * Replaces structured canine-capable transportation service entries.
+	 *
+	 * @param transportServiceEntries service entries; null becomes empty.
+	 */
+	public void setTransportServiceEntries(List<MedicalPlan.TransportService> transportServiceEntries) {
+		this.transportServiceEntries = transportServiceEntries == null
+				? new ArrayList<>() : transportServiceEntries;
 	}
 
 	/** @return editable poison-control contact text. */

@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.medical.VetShortlistSelector;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.CanineMedicalPlan;
 import org.sarmanagement.icsforms.model.IncidentLocation;
+import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.StagingLocation;
 import org.sarmanagement.icsforms.model.VetDirectory;
 import org.sarmanagement.icsforms.model.VetFacility;
@@ -102,8 +103,17 @@ public class CanineMedicalPanel extends JPanel {
 			return column <= 7 || column == 11;
 		}
 	};
+	private final DefaultTableModel transportModel = new DefaultTableModel(new String[] {
+			"Service", "Location", "Contact numbers", "Frequency", "Air or ground", "Level of service"
+	}, 0) {
+		@Override
+		public boolean isCellEditable(int row, int column) {
+			return true;
+		}
+	};
 	private final JTable directoryTable = new JTable(directoryModel);
 	private final JTable selectionTable = new JTable(selectionModel);
+	private final JTable transportTable = new JTable(transportModel);
 	private final JPopupMenu directoryPopupMenu = new JPopupMenu();
 	private final JTextField poisonContact = new JTextField();
 	private final JTextArea aidStations = new JTextArea(2, 40);
@@ -281,6 +291,7 @@ public class CanineMedicalPanel extends JPanel {
 			stagingLongitude.setText(staging.getLongitude() == null ? "" : staging.getLongitude().toString());
 			aidStations.setText(plan.getAidStationInformation());
 			transportServices.setText(plan.getTransportServices());
+			loadTransport(plan.getTransportServiceEntries());
 			poisonContact.setText(plan.getPoisonControlContact());
 			onsiteVet.setText(plan.getOnsiteVeterinarian());
 			capabilityNotes.setText(plan.getVeterinaryCapabilityNotes());
@@ -309,6 +320,7 @@ public class CanineMedicalPanel extends JPanel {
 		try {
 			stopEditing(directoryTable);
 			stopEditing(selectionTable);
+			stopEditing(transportTable);
 			AppData data = controller.getData();
 			StagingLocation staging = data.getStagingLocation();
 			String previousBaseAddress = staging.getAddress();
@@ -332,6 +344,7 @@ public class CanineMedicalPanel extends JPanel {
 			}
 			data.getCanineMedicalPlan().setAidStationInformation(aidStations.getText());
 			data.getCanineMedicalPlan().setTransportServices(transportServices.getText());
+			saveTransport(data.getCanineMedicalPlan());
 			data.getCanineMedicalPlan().setPoisonControlContact(poisonContact.getText());
 			data.getCanineMedicalPlan().setOnsiteVeterinarian(onsiteVet.getText());
 			data.getCanineMedicalPlan().setVeterinaryCapabilityNotes(capabilityNotes.getText());
@@ -522,21 +535,13 @@ public class CanineMedicalPanel extends JPanel {
 	private JPanel buildPlanFields() {
 		aidStations.setLineWrap(true);
 		aidStations.setWrapStyleWord(true);
-		transportServices.setLineWrap(true);
-		transportServices.setWrapStyleWord(true);
 		capabilityNotes.setLineWrap(true);
 		capabilityNotes.setWrapStyleWord(true);
 		procedures.setLineWrap(true);
 		procedures.setWrapStyleWord(true);
 		JPanel aidPanel = labeledTextArea("Medical aid stations", aidStations);
 		planSections.addTab("3. Aid Stations", aidPanel);
-		JPanel transportation = labeledTextArea("Canine transportation services", transportServices);
-		JPanel aviationPanel = new JPanel(new BorderLayout(4, 4));
-		aviationPanel.setBorder(BorderFactory.createTitledBorder("Aviation coordination"));
-		aviationUsed.setText("Aviation assets are used for rescue; coordinate with Air Operations Branch");
-		aviationPanel.add(aviationUsed, BorderLayout.NORTH);
-		transportation.add(aviationPanel, BorderLayout.SOUTH);
-		planSections.addTab("4. Transportation", transportation);
+		planSections.addTab("4. Transportation", buildTransportArea());
 		planSections.addTab("5. Veterinary Hospitals", buildVeterinaryHospitalArea());
 		JPanel special = new JPanel(new GridLayout(0, 2, 6, 4));
 		special.setBorder(BorderFactory.createTitledBorder("6. Special medical emergency procedures"));
@@ -559,6 +564,46 @@ public class CanineMedicalPanel extends JPanel {
 		root.add(planSections, BorderLayout.CENTER);
 		root.add(review, BorderLayout.SOUTH);
 		return root;
+	}
+
+	/**
+	 * Builds structured canine transportation rows with optional notes and shared ambulance import.
+	 *
+	 * @return transportation editor.
+	 */
+	private JPanel buildTransportArea() {
+		JPanel panel = new JPanel(new BorderLayout(4, 4));
+		panel.setBorder(BorderFactory.createTitledBorder("Canine transportation services"));
+		JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JButton add = new JButton("Add service");
+		add.addActionListener(event -> transportModel.addRow(new Object[] {"", "", "", "", "", ""}));
+		JButton remove = new JButton("Remove selected");
+		remove.addActionListener(event -> removeTransportRows());
+		JButton importCsv = new JButton("Import transport CSV…");
+		importCsv.addActionListener(event -> importTransportCsv());
+		JButton exportCsv = new JButton("Export transport CSV…");
+		exportCsv.addActionListener(event -> exportTransportCsv());
+		JButton copyAmbulance = new JButton("Copy ambulance services from Medical Plan");
+		copyAmbulance.addActionListener(event -> copyMedicalAmbulanceServices());
+		for (JButton button : List.of(add, remove, importCsv, exportCsv, copyAmbulance)) {
+			controls.add(button);
+		}
+		panel.add(controls, BorderLayout.NORTH);
+		panel.add(new JScrollPane(transportTable), BorderLayout.CENTER);
+		JPanel notes = new JPanel(new BorderLayout(4, 4));
+		transportServices.setLineWrap(true);
+		transportServices.setWrapStyleWord(true);
+		notes.setBorder(BorderFactory.createTitledBorder("Additional canine transport notes"));
+		notes.add(new JScrollPane(transportServices), BorderLayout.CENTER);
+		JPanel lower = new JPanel(new BorderLayout(4, 4));
+		lower.add(notes, BorderLayout.CENTER);
+		JPanel aviationPanel = new JPanel(new BorderLayout(4, 4));
+		aviationPanel.setBorder(BorderFactory.createTitledBorder("Aviation coordination"));
+		aviationUsed.setText("Aviation assets are used for rescue; coordinate with Air Operations Branch");
+		aviationPanel.add(aviationUsed, BorderLayout.CENTER);
+		lower.add(aviationPanel, BorderLayout.SOUTH);
+		panel.add(lower, BorderLayout.SOUTH);
+		return panel;
 	}
 
 	/**
@@ -718,6 +763,7 @@ public class CanineMedicalPanel extends JPanel {
 		watch(transportServices, false);
 		directoryModel.addTableModelListener(event -> inputChanged(true));
 		selectionModel.addTableModelListener(event -> inputChanged(false));
+		transportModel.addTableModelListener(event -> inputChanged(false));
 		directoryTable.getSelectionModel().addListSelectionListener(event -> refreshWorkflowControls());
 	}
 
@@ -920,6 +966,20 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
+	 * Loads structured transport records into the canine plan table.
+	 *
+	 * @param services canine transport records.
+	 */
+	private void loadTransport(List<MedicalPlan.TransportService> services) {
+		transportModel.setRowCount(0);
+		for (MedicalPlan.TransportService service : services) {
+			if (service != null) {
+				transportModel.addRow(transportRow(service));
+			}
+		}
+	}
+
+	/**
 	 * Saves every directory table row without replacing the accepted shortlist.
 	 *
 	 * @param directory destination directory.
@@ -986,6 +1046,37 @@ public class CanineMedicalPanel extends JPanel {
 			facilities.add(facility);
 		}
 		plan.setSelectedFacilities(facilities);
+	}
+
+	/**
+	 * Saves every structured canine transportation table row to the plan.
+	 *
+	 * @param plan canine medical plan.
+	 */
+	private void saveTransport(CanineMedicalPlan plan) {
+		List<MedicalPlan.TransportService> services = new ArrayList<>();
+		for (int row = 0; row < transportModel.getRowCount(); row++) {
+			MedicalPlan.TransportService service = new MedicalPlan.TransportService();
+			service.setService(cell(transportModel, row, 0));
+			service.setLocation(cell(transportModel, row, 1));
+			service.setContactNumbers(cell(transportModel, row, 2));
+			service.setFrequency(cell(transportModel, row, 3));
+			service.setAirOrGround(cell(transportModel, row, 4));
+			service.setLevelOfService(cell(transportModel, row, 5));
+			services.add(service);
+		}
+		plan.setTransportServiceEntries(services);
+	}
+
+	/**
+	 * Creates one editable table row from a structured transport service.
+	 *
+	 * @param service source transport service.
+	 * @return row cells.
+	 */
+	private Object[] transportRow(MedicalPlan.TransportService service) {
+		return new Object[] {service.getService(), service.getLocation(), service.getContactNumbers(),
+				service.getFrequency(), service.getAirOrGround(), service.getLevelOfService()};
 	}
 
 	/**
@@ -1356,6 +1447,176 @@ public class CanineMedicalPanel extends JPanel {
 				}
 			}
 		});
+	}
+
+	/**
+	 * Imports ambulance rows from the human medical plan without assuming canine capability.
+	 */
+	private void copyMedicalAmbulanceServices() {
+		pushToModel();
+		int added = addAmbulanceServicesFromMedicalPlan();
+		if (added > 0) {
+			pushToModel();
+			controller.markDirty();
+			status.setText(added + " ambulance service(s) copied. Confirm canine transport capability.");
+		} else {
+			status.setText("No new ambulance services found in the human Medical Plan.");
+		}
+	}
+
+	/**
+	 * Copies unique ambulance records from the incident's human medical plan.
+	 *
+	 * @return number of new canine transport rows.
+	 */
+	int addAmbulanceServicesFromMedicalPlan() {
+		List<MedicalPlan.TransportService> ambulanceServices = controller.getData().getMedicalPlan()
+				.getTransportServices().stream()
+				.filter(service -> service != null
+						&& service.getService().toLowerCase(java.util.Locale.ROOT).contains("ambulance"))
+				.toList();
+		int added = 0;
+		loading = true;
+		try {
+			for (MedicalPlan.TransportService source : ambulanceServices) {
+				if (!hasTransportService(source)) {
+					transportModel.addRow(transportRow(copyTransportService(source)));
+					added++;
+				}
+			}
+		} finally {
+			loading = false;
+		}
+		return added;
+	}
+
+	/**
+	 * Opens and merges a separate structured transport CSV into the canine plan.
+	 */
+	private void importTransportCsv() {
+		JFileChooser chooser = new JFileChooser(defaultDirectory.toFile());
+		chooser.setFileFilter(new FileNameExtensionFilter("Canine transport services (*.csv)", "csv"));
+		if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+			return;
+		}
+		pushToModel();
+		try {
+			int added = appendTransportServices(fileService.importTransportCsv(chooser.getSelectedFile().toPath()));
+			pushToModel();
+			controller.markDirty();
+			status.setText(added + " transport service(s) imported.");
+		} catch (IOException | IllegalArgumentException exception) {
+			showFileError(exception);
+		}
+	}
+
+	/**
+	 * Appends imported transport records without duplicating existing service details.
+	 *
+	 * @param services imported structured records.
+	 * @return number of new rows appended.
+	 */
+	int appendTransportServices(List<MedicalPlan.TransportService> services) {
+		int added = 0;
+		loading = true;
+		try {
+			for (MedicalPlan.TransportService service : services) {
+				if (service != null && !hasTransportService(service)) {
+					transportModel.addRow(transportRow(copyTransportService(service)));
+					added++;
+				}
+			}
+		} finally {
+			loading = false;
+		}
+		return added;
+	}
+
+	/**
+	 * Explicitly exports structured canine transportation services to CSV.
+	 */
+	private void exportTransportCsv() {
+		pushToModel();
+		JFileChooser chooser = new JFileChooser(defaultDirectory.toFile());
+		chooser.setFileFilter(new FileNameExtensionFilter("Canine transport services (*.csv)", "csv"));
+		if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+			return;
+		}
+		Path target = chooser.getSelectedFile().toPath();
+		boolean overwrite = false;
+		if (java.nio.file.Files.exists(target)) {
+			if (JOptionPane.showConfirmDialog(this, "Replace " + target.getFileName() + "?",
+					"Confirm overwrite", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+				return;
+			}
+			overwrite = true;
+		}
+		try {
+			fileService.saveTransportCsv(target, controller.getData().getCanineMedicalPlan()
+					.getTransportServiceEntries(), overwrite);
+			status.setText("Canine transport services explicitly saved to " + target.getFileName());
+		} catch (IOException exception) {
+			showFileError(exception);
+		}
+	}
+
+	/**
+	 * Removes selected transport table rows after committing any active cell edit.
+	 */
+	private void removeTransportRows() {
+		stopEditing(transportTable);
+		int[] selected = transportTable.getSelectedRows();
+		for (int index = selected.length - 1; index >= 0; index--) {
+			transportModel.removeRow(transportTable.convertRowIndexToModel(selected[index]));
+		}
+	}
+
+	/**
+	 * Checks whether all displayed fields of a transport entry already exist in the editor.
+	 *
+	 * @param candidate transport entry to compare.
+	 * @return true when an equivalent row exists.
+	 */
+	private boolean hasTransportService(MedicalPlan.TransportService candidate) {
+		for (int row = 0; row < transportModel.getRowCount(); row++) {
+			if (sameText(cell(transportModel, row, 0), candidate.getService())
+					&& sameText(cell(transportModel, row, 1), candidate.getLocation())
+					&& sameText(cell(transportModel, row, 2), candidate.getContactNumbers())
+					&& sameText(cell(transportModel, row, 3), candidate.getFrequency())
+					&& sameText(cell(transportModel, row, 4), candidate.getAirOrGround())
+					&& sameText(cell(transportModel, row, 5), candidate.getLevelOfService())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Compares editable service text without case or surrounding whitespace differences.
+	 *
+	 * @param first first text value.
+	 * @param second second text value.
+	 * @return true when normalized values match.
+	 */
+	private boolean sameText(String first, String second) {
+		return first.trim().equalsIgnoreCase(second == null ? "" : second.trim());
+	}
+
+	/**
+	 * Copies all human medical transport fields into an independent record.
+	 *
+	 * @param source source human transport record.
+	 * @return independent transport service.
+	 */
+	private MedicalPlan.TransportService copyTransportService(MedicalPlan.TransportService source) {
+		MedicalPlan.TransportService copy = new MedicalPlan.TransportService();
+		copy.setService(source.getService());
+		copy.setLocation(source.getLocation());
+		copy.setContactNumbers(source.getContactNumbers());
+		copy.setFrequency(source.getFrequency());
+		copy.setAirOrGround(source.getAirOrGround());
+		copy.setLevelOfService(source.getLevelOfService());
+		return copy;
 	}
 
 	/**

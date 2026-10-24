@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentLocation;
+import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.VetFacility;
 import org.sarmanagement.icsforms.medical.AddressGeocoder;
 import org.sarmanagement.icsforms.medical.GeoPoint;
@@ -72,6 +73,8 @@ class CanineMedicalPanelTest {
 			assertEquals("4. Transportation", panel.planSectionTabs().getTitleAt(1));
 			assertEquals("5. Veterinary Hospitals", panel.planSectionTabs().getTitleAt(2));
 			assertEquals("6. Special Procedures", panel.planSectionTabs().getTitleAt(3));
+			assertTrue(containsComponent(panel.planSectionTabs().getComponentAt(1),
+					(javax.swing.JTextArea) fieldValue(panel, "transportServices")));
 			javax.swing.JCheckBox aviation = (javax.swing.JCheckBox) fieldValue(panel, "aviationUsed");
 			assertTrue(containsComponent(panel.planSectionTabs().getComponentAt(1), aviation));
 			assertFalse(containsComponent(panel.planSectionTabs().getComponentAt(3), aviation));
@@ -84,6 +87,37 @@ class CanineMedicalPanelTest {
 		assertEquals(base.getId(), data.getCanineRoutingBaseLocationId());
 		assertEquals("Fictional Base", data.getStagingLocation().getLabel());
 		assertEquals("1 Fictional Road", data.getStagingLocation().getAddress());
+	}
+
+	@Test
+	void canineTransportEditorCopiesAmbulanceRecordsFromHumanPlanWithoutDuplicates() throws Exception {
+		AppData data = new AppData();
+		MedicalPlan.TransportService ambulance = new MedicalPlan.TransportService();
+		ambulance.setService("Regional Ambulance");
+		ambulance.setLocation("Incident base");
+		ambulance.setContactNumbers("555-0100");
+		ambulance.setLevelOfService("BLS");
+		data.getMedicalPlan().getTransportServices().add(ambulance);
+		MedicalPlan.TransportService other = new MedicalPlan.TransportService();
+		other.setService("Air Support");
+		data.getMedicalPlan().getTransportServices().add(other);
+		CanineMedicalPanel panel = new CanineMedicalPanel(
+				new AppController(data, new LocalRepository(tempDirectory.resolve("incident.json")),
+						new PdfExportService(), new IncidentValidator()),
+				tempDirectory);
+
+		SwingUtilities.invokeAndWait(() -> {
+			assertEquals(1, panel.addAmbulanceServicesFromMedicalPlan());
+			assertEquals(0, panel.addAmbulanceServicesFromMedicalPlan());
+			panel.pushToModel();
+		});
+
+		MedicalPlan.TransportService copied = data.getCanineMedicalPlan().getTransportServiceEntries().get(0);
+		assertEquals("Regional Ambulance", copied.getService());
+		assertEquals("Incident base", copied.getLocation());
+		assertEquals("555-0100", copied.getContactNumbers());
+		assertEquals("BLS", copied.getLevelOfService());
+		assertEquals(1, ((JTable) fieldValue(panel, "transportTable")).getRowCount());
 	}
 
 	@Test

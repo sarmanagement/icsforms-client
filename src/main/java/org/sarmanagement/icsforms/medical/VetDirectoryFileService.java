@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.StagingLocation;
+import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.VetDirectory;
 import org.sarmanagement.icsforms.model.VetFacility;
 
@@ -33,6 +34,8 @@ public class VetDirectoryFileService {
 	private static final List<String> CSV_HEADERS = List.of("id", "name", "town", "state", "postalCode", "address",
 			"contactNumbers", "fax", "available24Hours", "availabilityNotes", "capabilities", "verifiedAt",
 			"latitude", "longitude");
+	private static final List<String> TRANSPORT_CSV_HEADERS = List.of("service", "location", "contactNumbers",
+			"frequency", "airOrGround", "levelOfService");
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -138,6 +141,89 @@ public class VetDirectoryFileService {
 		if (target == null) {
 			return false;
 		}
+		String content = "json".equals(format(target.toAbsolutePath())) ? jsonContent(directory) : csvContent(directory);
+		return writeContent(target, content, overwrite);
+	}
+
+	/**
+	 * Imports structured canine transportation services from a separate CSV file.
+	 *
+	 * @param file input transport CSV path.
+	 * @return structured transport services in source order.
+	 * @throws IOException when the file or CSV is invalid.
+	 */
+	public List<MedicalPlan.TransportService> importTransportCsv(Path file) throws IOException {
+		List<List<String>> rows = parseCsv(Files.readString(file, java.nio.charset.StandardCharsets.UTF_8));
+		if (rows.isEmpty()) {
+			return List.of();
+		}
+		List<TransportCsvField> fields = transportCsvFields(rows.get(0));
+		List<MedicalPlan.TransportService> services = new ArrayList<>();
+		for (int rowIndex = 1; rowIndex < rows.size(); rowIndex++) {
+			List<String> row = rows.get(rowIndex);
+			if (row.size() != fields.size()) {
+				throw new IOException("Transport CSV row " + (rowIndex + 1) + " has " + row.size()
+						+ " fields; expected " + fields.size());
+			}
+			java.util.EnumMap<TransportCsvField, String> values = new java.util.EnumMap<>(TransportCsvField.class);
+			for (int index = 0; index < fields.size(); index++) {
+				TransportCsvField field = fields.get(index);
+				if (field != null && !values.containsKey(field)) {
+					values.put(field, row.get(index).trim());
+				}
+			}
+			MedicalPlan.TransportService service = new MedicalPlan.TransportService();
+			service.setService(value(values.get(TransportCsvField.SERVICE)));
+			service.setLocation(value(values.get(TransportCsvField.LOCATION)));
+			service.setContactNumbers(value(values.get(TransportCsvField.CONTACT_NUMBERS)));
+			service.setFrequency(value(values.get(TransportCsvField.FREQUENCY)));
+			service.setAirOrGround(value(values.get(TransportCsvField.AIR_OR_GROUND)));
+			service.setLevelOfService(value(values.get(TransportCsvField.LEVEL_OF_SERVICE)));
+			if (service.getService().isBlank() && service.getLocation().isBlank()
+					&& service.getContactNumbers().isBlank() && service.getFrequency().isBlank()
+					&& service.getAirOrGround().isBlank() && service.getLevelOfService().isBlank()) {
+				continue;
+			}
+			services.add(service);
+		}
+		return services;
+	}
+
+	/**
+	 * Explicitly saves canine transportation services as a CSV file.
+	 *
+	 * @param target destination path; null represents a cancelled chooser.
+	 * @param services structured transport entries.
+	 * @param overwrite whether an existing destination may be replaced.
+	 * @return true when written, false when cancelled.
+	 * @throws IOException when export fails or overwrite was not confirmed.
+	 */
+	public boolean saveTransportCsv(Path target, List<MedicalPlan.TransportService> services, boolean overwrite)
+			throws IOException {
+		if (target == null) {
+			return false;
+		}
+		StringBuilder csv = new StringBuilder();
+		appendCsvRow(csv, TRANSPORT_CSV_HEADERS);
+		if (services != null) {
+			for (MedicalPlan.TransportService service : services) {
+				appendCsvRow(csv, List.of(service.getService(), service.getLocation(), service.getContactNumbers(),
+						service.getFrequency(), service.getAirOrGround(), service.getLevelOfService()));
+			}
+		}
+		return writeContent(target, csv.toString(), overwrite);
+	}
+
+	/**
+	 * Writes content through a temporary file before replacing the requested destination.
+	 *
+	 * @param target destination path.
+	 * @param content complete file content.
+	 * @param overwrite whether an existing destination may be replaced.
+	 * @return true when written.
+	 * @throws IOException when writing fails or replacement was not confirmed.
+	 */
+	private boolean writeContent(Path target, String content, boolean overwrite) throws IOException {
 		Path absolute = target.toAbsolutePath();
 		if (Files.exists(absolute) && !overwrite) {
 			throw new java.nio.file.FileAlreadyExistsException(absolute.toString());
@@ -146,7 +232,6 @@ public class VetDirectoryFileService {
 		if (parent != null) {
 			Files.createDirectories(parent);
 		}
-		String content = "json".equals(format(absolute)) ? jsonContent(directory) : csvContent(directory);
 		Path temporary = Files.createTempFile(parent, absolute.getFileName().toString(), ".tmp");
 		try {
 			Files.writeString(temporary, content, java.nio.charset.StandardCharsets.UTF_8);
@@ -637,6 +722,37 @@ public class VetDirectoryFileService {
 	}
 
 	/**
+	 * Maps normalized transport CSV headings to structured service fields.
+	 *
+	 * @param headers source CSV header row.
+	 * @return ordered field mapping.
+	 * @throws IOException when no service column is present.
+	 */
+	private static List<TransportCsvField> transportCsvFields(List<String> headers) throws IOException {
+		List<TransportCsvField> fields = new ArrayList<>();
+		boolean hasService = false;
+		for (String header : headers) {
+			String normalized = normalizeHeader(header);
+			TransportCsvField field = switch (normalized) {
+				case "service", "servicename", "transportservice" -> TransportCsvField.SERVICE;
+				case "location", "address" -> TransportCsvField.LOCATION;
+				case "contactnumbers", "contactnumber", "phone", "phonenumber" ->
+					TransportCsvField.CONTACT_NUMBERS;
+				case "frequency", "radiofrequency" -> TransportCsvField.FREQUENCY;
+				case "airorground", "airground", "transportmode" -> TransportCsvField.AIR_OR_GROUND;
+				case "levelofservice", "servicelevel", "capability" -> TransportCsvField.LEVEL_OF_SERVICE;
+				default -> null;
+			};
+			fields.add(field);
+			hasService |= field == TransportCsvField.SERVICE;
+		}
+		if (!hasService) {
+			throw new IOException("Transport CSV must include a Service column");
+		}
+		return fields;
+	}
+
+	/**
 	 * Replaces a missing CSV field value with empty text.
 	 *
 	 * @param value source cell.
@@ -652,6 +768,13 @@ public class VetDirectoryFileService {
 	private enum CsvField {
 		ID, NAME, TOWN, STATE, POSTAL_CODE, ADDRESS, CONTACT_NUMBERS, FAX, AVAILABLE_24_HOURS,
 		AVAILABILITY_NOTES, CAPABILITIES, VERIFIED_AT, LATITUDE, LONGITUDE
+	}
+
+	/**
+	 * Supported structured transportation CSV columns.
+	 */
+	private enum TransportCsvField {
+		SERVICE, LOCATION, CONTACT_NUMBERS, FREQUENCY, AIR_OR_GROUND, LEVEL_OF_SERVICE
 	}
 
 	/**

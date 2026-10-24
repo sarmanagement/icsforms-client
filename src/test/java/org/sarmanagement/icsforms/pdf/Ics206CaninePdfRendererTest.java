@@ -5,10 +5,13 @@ package org.sarmanagement.icsforms.pdf;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdfparser.PDFStreamParser;
+import org.apache.pdfbox.text.TextPosition;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.StagingLocation;
 import org.sarmanagement.icsforms.model.VetFacility;
 
@@ -40,6 +43,19 @@ class Ics206CaninePdfRendererTest {
 		vet.setCapabilities("Emergency stabilization");
 		vet.setAvailable24Hours(null);
 		data.getCanineMedicalPlan().getSelectedFacilities().add(vet);
+		VetFacility confirmedVet = new VetFacility();
+		confirmedVet.setName("Confirmed 24-hour Hospital");
+		confirmedVet.setContactNumbers(java.util.List.of("555-0199"));
+		confirmedVet.setAvailable24Hours(true);
+		data.getCanineMedicalPlan().getSelectedFacilities().add(confirmedVet);
+		MedicalPlan.TransportService transport = new MedicalPlan.TransportService();
+		transport.setService("Regional Ambulance");
+		transport.setLocation("Fictional Base");
+		transport.setContactNumbers("555-0123");
+		transport.setFrequency("155.160");
+		transport.setAirOrGround("Ground");
+		transport.setLevelOfService("BLS; canine-capable confirmed");
+		data.getCanineMedicalPlan().getTransportServiceEntries().add(transport);
 		data.getCanineMedicalPlan().setVeterinarianDvm("Legacy DVM value");
 		data.getCanineMedicalPlan().setPreparerSignature("Legacy canine signature");
 		data.getCanineMedicalPlan().setSafetyOfficerSignature("Legacy canine review");
@@ -62,6 +78,12 @@ class Ics206CaninePdfRendererTest {
 			}
 			assertTrue(text.contains("Fictional Veterinary Hospital"));
 			assertTrue(text.contains("Unknown (not verified)"));
+			assertTrue(text.contains("Confirmed 24-hour Hospital"));
+			assertTrue(text.contains("555-0199"));
+			assertTrue(text.contains("Service (Air / Ground)"));
+			assertTrue(text.contains("Regional Ambulance"));
+			assertTrue(text.contains("555-0123"));
+			assertTrue(text.contains("canine-capable confirmed"));
 			assertTrue(text.contains("ICS 206CANINE"));
 			assertTrue(text.contains("CANINE MEDICAL PLAN (ICS 206CANINE)"));
 			assertTrue(!text.contains("CANINE MEDICAL PLAN (ADAPTED)"));
@@ -73,6 +95,33 @@ class Ics206CaninePdfRendererTest {
 			assertTrue(text.contains("Date/Time:"));
 			assertTrue(!text.contains("Legacy canine signature"));
 			assertTrue(!text.contains("Legacy canine review"));
+			PDFStreamParser parser = new PDFStreamParser(pdf.getPage(0));
+			java.util.List<Object> tokens = parser.parse();
+			String content = tokens.stream().map(Object::toString)
+					.collect(java.util.stream.Collectors.joining(" "));
+			assertTrue(content.contains("COSInt{1} COSInt{0} COSInt{0} PDFOperator{sc}"));
+			java.util.List<TextPosition> positions = new java.util.ArrayList<>();
+			PDFTextStripper fontStripper = new PDFTextStripper() {
+				@Override
+				protected void processTextPosition(TextPosition position) {
+					positions.add(position);
+					super.processTextPosition(position);
+				}
+			};
+			fontStripper.getText(pdf);
+			String positionedText = positions.stream().map(TextPosition::getUnicode)
+					.collect(java.util.stream.Collectors.joining());
+			int phoneStart = positionedText.indexOf("555-0199");
+			assertTrue(phoneStart >= 0);
+			int phoneEnd = phoneStart + "555-0199".length();
+			int positionOffset = 0;
+			for (TextPosition position : positions) {
+				int positionEnd = positionOffset + position.getUnicode().length();
+				if (positionOffset < phoneEnd && positionEnd > phoneStart) {
+					assertTrue(position.getFont().getName().contains("Bold"));
+				}
+				positionOffset = positionEnd;
+			}
 		}
 	}
 
