@@ -6,7 +6,6 @@ package org.sarmanagement.icsforms.ui;
 import javax.swing.JTabbedPane;
 import javax.swing.JPanel;
 import javax.swing.Icon;
-import javax.swing.UIManager;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Color;
@@ -165,25 +164,23 @@ public class MedicalWorkspacePanel extends JPanel {
 		}
 
 		/**
-		 * Paints a simple canine head with ears and muzzle.
+		 * Paints a side-profile canine head with a projecting muzzle and nose.
 		 *
 		 * @param drawing icon graphics.
 		 * @param x icon horizontal origin.
 		 * @param y icon vertical origin.
 		 */
 		private void paintCanine(Graphics2D drawing, int x, int y) {
-			drawing.fillPolygon(new Polygon(new int[] {x + 3, x + 4, x + 8},
-					new int[] {y + 3, y + 11, y + 7}, 3));
-			drawing.fillPolygon(new Polygon(new int[] {x + 17, x + 16, x + 12},
-					new int[] {y + 3, y + 11, y + 7}, 3));
-			drawing.fillRoundRect(x + 4, y + 4, 12, 12, 5, 5);
-			drawing.fillOval(x + 7, y + 10, 9, 7);
-			drawing.setColor(UIManager.getColor("TabbedPane.background") == null
-					? Color.WHITE : UIManager.getColor("TabbedPane.background"));
-			drawing.fillOval(x + 7, y + 8, 2, 2);
-			drawing.fillOval(x + 12, y + 8, 2, 2);
+			drawing.fillOval(x + 4, y + 4, 11, 12);
+			drawing.fillPolygon(new Polygon(new int[] {x + 6, x + 2, x + 4, x + 9},
+					new int[] {y + 5, y + 7, y + 13, y + 10}, 4));
+			drawing.fillPolygon(new Polygon(new int[] {x + 7, x + 14, x + 13, x + 7},
+					new int[] {y + 13, y + 13, y + 19, y + 19}, 4));
+			drawing.fillRoundRect(x + 11, y + 9, 7, 5, 3, 3);
 			drawing.setColor(PLAN_ICON_COLOR);
-			drawing.fillOval(x + 10, y + 11, 3, 2);
+			drawing.fillOval(x + 17, y + 9, 3, 3);
+			drawing.setColor(Color.WHITE);
+			drawing.fillOval(x + 11, y + 7, 2, 2);
 		}
 	}
 }

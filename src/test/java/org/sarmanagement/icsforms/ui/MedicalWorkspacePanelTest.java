@@ -13,11 +13,14 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JTabbedPane;
 import javax.swing.DefaultCellEditor;
+import javax.swing.Icon;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
 import java.nio.file.Path;
+import java.awt.image.BufferedImage;
+import java.awt.Graphics;
 import java.util.List;
 import java.lang.reflect.Field;
 
@@ -52,6 +55,24 @@ class MedicalWorkspacePanelTest {
 		assertEquals(1, panel.planTabs().getTabCount());
 		assertEquals(0, panel.planTabs().getSelectedIndex());
 		assertEquals("Preserve this saved procedure.", data.getCanineMedicalPlan().getEmergencyProcedures());
+	}
+
+	@Test
+	void caninePlanIconUsesSideProfileFacingRight() throws Exception {
+		MedicalWorkspacePanel panel = medicalWorkspace(new AppData());
+		panel.setCanineVisible(true);
+		Icon canineIcon = panel.planTabs().getIconAt(1);
+		BufferedImage image = new BufferedImage(canineIcon.getIconWidth(), canineIcon.getIconHeight(),
+				BufferedImage.TYPE_INT_ARGB);
+		Graphics graphics = image.createGraphics();
+		try {
+			canineIcon.paintIcon(panel, graphics, 0, 0);
+		} finally {
+			graphics.dispose();
+		}
+
+		assertTrue((image.getRGB(18, 10) >>> 24) > 0);
+		assertEquals(0, image.getRGB(1, 10) >>> 24);
 	}
 
 	@Test
