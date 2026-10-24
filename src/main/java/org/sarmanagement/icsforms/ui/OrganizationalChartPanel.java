@@ -59,6 +59,7 @@ import java.text.ParseException;
  */
 public class OrganizationalChartPanel extends JPanel {
 	private final AppController controller;
+	private boolean loading;
 	private final JPanel incidentCommanderRowsPanel = new JPanel(new GridBagLayout());
 	private final JButton addIncidentCommanderButton = new JButton("Add");
 	private final JLabel incidentCommanderModeLabel = new JLabel("Incident Commander");
@@ -294,7 +295,8 @@ public class OrganizationalChartPanel extends JPanel {
 				groundSupportUnitLeaderPhoneField);
 		installPersonAutocomplete(foodUnitLeaderNameField, foodUnitLeaderRadioField, foodUnitLeaderPhoneField);
 		installPersonAutocomplete(medicalUnitLeaderNameField, medicalUnitLeaderRadioField, medicalUnitLeaderPhoneField,
-				name -> MedicalRoleSupport.setMedicalUnitLeaderName(controller.getData(), name));
+				name -> updateMedicalUnitLeaderAssignment());
+		watchMedicalUnitLeaderFields();
 		installPersonAutocomplete(timeUnitLeaderNameField, timeUnitLeaderRadioField, timeUnitLeaderPhoneField);
 		installPersonAutocomplete(procurementUnitLeaderNameField, procurementUnitLeaderRadioField,
 				procurementUnitLeaderPhoneField);
@@ -800,6 +802,42 @@ public class OrganizationalChartPanel extends JPanel {
 		}, proposedName -> createPersonnelFromPicker(proposedName, radioField, phoneField));
 	}
 
+	/**
+	 * Binds the Medical Unit Leader's editable name and contact fields to the canonical assignment.
+	 */
+	private void watchMedicalUnitLeaderFields() {
+		for (JTextField field : List.of(medicalUnitLeaderNameField, medicalUnitLeaderRadioField,
+				medicalUnitLeaderPhoneField)) {
+			field.getDocument().addDocumentListener(new DocumentListener() {
+				@Override
+				public void insertUpdate(DocumentEvent event) {
+					updateMedicalUnitLeaderAssignment();
+				}
+
+				@Override
+				public void removeUpdate(DocumentEvent event) {
+					updateMedicalUnitLeaderAssignment();
+				}
+
+				@Override
+				public void changedUpdate(DocumentEvent event) {
+					updateMedicalUnitLeaderAssignment();
+				}
+			});
+		}
+	}
+
+	/**
+	 * Saves the live Org Chart role edit before any later panel flush.
+	 */
+	private void updateMedicalUnitLeaderAssignment() {
+		if (!loading) {
+			MedicalRoleSupport.setMedicalUnitLeader(controller.getData(), medicalUnitLeaderNameField.getText(),
+					medicalUnitLeaderRadioField.getText(), medicalUnitLeaderPhoneField.getText());
+			controller.markDirty();
+		}
+	}
+
 	/** Shows contact (radio/phone) fields only when the name field is non-blank. */
 	private static void updateContactVisibility(JTextField nameField, JTextField radioField, JTextField phoneField) {
 		boolean visible = !nameField.getText().isBlank();
@@ -816,6 +854,8 @@ public class OrganizationalChartPanel extends JPanel {
 	 * Loads field values and agency representatives from the model, discarding stale table edits.
 	 */
 	public void refreshFromModel() {
+		loading = true;
+		try {
 		OrganizationalChart chart = controller.getData().getOrganizationalChart();
 		agencyRepresentatives.setEntries(chart.getAssignmentList().getAgencyRepresentatives());
 		incidentCommanderRows.clear();
@@ -909,8 +949,8 @@ public class OrganizationalChartPanel extends JPanel {
 		foodUnitLeaderPhoneField.setText(safe(chart.getFoodUnitLeaderPhone()));
 
 		medicalUnitLeaderNameField.setText(MedicalRoleSupport.medicalUnitLeaderName(controller.getData()));
-		medicalUnitLeaderRadioField.setText(safe(chart.getMedicalUnitLeaderRadio()));
-		medicalUnitLeaderPhoneField.setText(safe(chart.getMedicalUnitLeaderPhone()));
+		medicalUnitLeaderRadioField.setText(controller.getData().getMedicalUnitLeaderAssignment().getRadioChannel());
+		medicalUnitLeaderPhoneField.setText(controller.getData().getMedicalUnitLeaderAssignment().getPhoneNumber());
 
 		timeUnitLeaderNameField.setText(safe(chart.getTimeUnitLeaderName()));
 		timeUnitLeaderRadioField.setText(safe(chart.getTimeUnitLeaderRadio()));
@@ -941,6 +981,9 @@ public class OrganizationalChartPanel extends JPanel {
 		ics207PreparedByNameField.setText(safe(form207.getPreparedByName()));
 		ics207PreparedByPositionTitleField.setText(safe(form207.getPreparedByPositionTitle()));
 		ics207PreparedDateTimeSpinner.setValue(AppController.toDate(form207.getPreparedDateTime()));
+		} finally {
+			loading = false;
+		}
 	}
 
 	/**
@@ -1060,11 +1103,6 @@ public class OrganizationalChartPanel extends JPanel {
 		chart.setFoodUnitLeaderName(foodUnitLeaderNameField.getText().trim());
 		chart.setFoodUnitLeaderRadio(foodUnitLeaderRadioField.getText().trim());
 		chart.setFoodUnitLeaderPhone(foodUnitLeaderPhoneField.getText().trim());
-
-		chart.setMedicalUnitLeaderName(medicalUnitLeaderNameField.getText().trim());
-		chart.setMedicalUnitLeaderRadio(medicalUnitLeaderRadioField.getText().trim());
-		chart.setMedicalUnitLeaderPhone(medicalUnitLeaderPhoneField.getText().trim());
-		MedicalRoleSupport.setMedicalUnitLeaderName(controller.getData(), medicalUnitLeaderNameField.getText());
 
 		chart.setTimeUnitLeaderName(timeUnitLeaderNameField.getText().trim());
 		chart.setTimeUnitLeaderRadio(timeUnitLeaderRadioField.getText().trim());

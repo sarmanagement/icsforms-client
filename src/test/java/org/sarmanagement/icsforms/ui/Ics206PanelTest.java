@@ -76,7 +76,7 @@ class Ics206PanelTest {
 	}
 
 	@Test
-	void medicalRolePickerFieldsShareTheOrgChartAssignments() throws Exception {
+	void medicalRolePickerFieldsEditTheSharedRoleWithoutRewritingLegacyCopies() throws Exception {
 		AppData data = new AppData();
 		data.getOrganizationalChart().setMedicalUnitLeaderName("Fictional Medical Leader");
 		data.getOrganizationalChart().setSafetyOfficerName("Fictional Safety Officer");
@@ -92,12 +92,12 @@ class Ics206PanelTest {
 			panel.pushToModel();
 		});
 
-		assertEquals("Selected Medical Leader", data.getOrganizationalChart().getMedicalUnitLeaderName());
-		assertEquals("Selected Medical Leader",
-				data.getOrganizationalChart().getAssignmentList().getPosition(
-						org.sarmanagement.icsforms.model.Ics203Form.Position.MEDICAL_UNIT_LEADER));
-		assertEquals("Selected Medical Leader", data.getMedicalPlan().getPreparedByMedicalUnitLeader());
-		assertEquals("Selected Medical Leader", data.getCanineMedicalPlan().getPreparedByMedicalUnitLeader());
+		assertEquals("Selected Medical Leader", data.getMedicalUnitLeaderAssignment().getName());
+		assertEquals("Fictional Medical Leader", data.getOrganizationalChart().getMedicalUnitLeaderName());
+		assertEquals("", data.getOrganizationalChart().getAssignmentList().getPosition(
+				org.sarmanagement.icsforms.model.Ics203Form.Position.MEDICAL_UNIT_LEADER));
+		assertEquals("", data.getMedicalPlan().getPreparedByMedicalUnitLeader());
+		assertEquals("", data.getCanineMedicalPlan().getPreparedByMedicalUnitLeader());
 		assertEquals("Selected Safety Officer", data.getOrganizationalChart().getSafetyOfficerName());
 		assertEquals("Selected Safety Officer", data.getCanineMedicalPlan().getReviewedBySafetyOfficer());
 	}

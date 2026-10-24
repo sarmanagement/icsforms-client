@@ -60,7 +60,7 @@ public class Ics206PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		sections.add(transportation(plan));
 		sections.add(hospitals(plan));
 		sections.add(procedures(plan));
-		sections.add(preparedBy(plan));
+		sections.add(preparedBy(plan, data.getMedicalUnitLeaderAssignment().getName()));
 		sections.add(approvedBy(plan));
 		return sections;
 	}
@@ -171,12 +171,13 @@ public class Ics206PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * Creates block 7 with a printed signature line rather than a signature value.
 	 *
 	 * @param plan human medical plan.
+	 * @param medicalUnitLeaderName authoritative shared role name.
 	 * @return numbered prepared-by section.
 	 */
-	private Ics206FormLayout.Section preparedBy(MedicalPlan plan) {
+	private Ics206FormLayout.Section preparedBy(MedicalPlan plan, String medicalUnitLeaderName) {
 		return new Ics206FormLayout.Section("7. PREPARED BY (MEDICAL UNIT LEADER)",
 				new float[] {0.53f, 0.47f}, List.of(),
-				List.of(List.of("Name: " + safe(plan.getPreparedByMedicalUnitLeader()),
+				List.of(List.of("Name: " + safe(medicalUnitLeaderName),
 						"Signature: ______________________________________________")));
 	}
 

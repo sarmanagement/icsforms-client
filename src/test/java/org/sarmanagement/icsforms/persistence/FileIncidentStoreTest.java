@@ -85,7 +85,8 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		Path directory = tempDir.resolve("incidents");
 		Files.createDirectories(directory);
 		Path document = directory.resolve(id.value() + ".json");
-		String original = "{\"schemaVersion\":11,\"incidentId\":\"" + id.value()
+		String original = "{\"schemaVersion\":" + (AppData.CURRENT_SCHEMA_VERSION + 1) + ",\"incidentId\":\""
+				+ id.value()
 				+ "\",\"futurePlan\":{\"mustKeep\":true}}";
 		Files.writeString(document, original);
 

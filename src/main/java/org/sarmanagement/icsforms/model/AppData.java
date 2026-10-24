@@ -19,7 +19,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 10;
+	public static final int CURRENT_SCHEMA_VERSION = 11;
 
 	/**
 	 * A lightweight snapshot of the shared context at the end of one operational
@@ -141,6 +141,7 @@ public class AppData {
 	private List<OperationalPeriodRecord> operationalPeriodHistory = new ArrayList<>();
 	private IncidentContext incidentContext = new IncidentContext();
 	private OrganizationalChart organizationalChart = new OrganizationalChart();
+	private MedicalUnitLeaderAssignment medicalUnitLeaderAssignment;
 	private Ics201Form form201 = new Ics201Form();
 	private Ics202Form form202 = new Ics202Form();
 	private Ics215aForm form215a = new Ics215aForm();
@@ -562,6 +563,112 @@ public class AppData {
 	 */
 	public OrganizationalChart getOrganizationalChart() {
 		return organizationalChart;
+	}
+
+	/**
+	 * Returns the authoritative Medical Unit Leader assignment, reconciling legacy
+	 * duplicate fields the first time it is accessed.
+	 *
+	 * <p>For files predating the shared assignment, the migration prefers the Org
+	 * Chart role name, then the supplemental ICS 203 role, then the human plan's
+	 * preparer field, and finally the canine plan's preparer field. Conflicting
+	 * legacy names remain in their original fields and are also recorded on the
+	 * shared assignment for review. The designated medical service/person field is
+	 * intentionally not treated as a Medical Unit Leader assignment.</p>
+	 *
+	 * @return canonical Medical Unit Leader assignment.
+	 */
+	public MedicalUnitLeaderAssignment getMedicalUnitLeaderAssignment() {
+		if (medicalUnitLeaderAssignment == null) {
+			reconcileMedicalUnitLeaderAssignment();
+		}
+		return medicalUnitLeaderAssignment;
+	}
+
+	/**
+	 * Sets the authoritative Medical Unit Leader assignment.
+	 *
+	 * @param medicalUnitLeaderAssignment shared assignment; null triggers legacy reconciliation.
+	 */
+	public void setMedicalUnitLeaderAssignment(MedicalUnitLeaderAssignment medicalUnitLeaderAssignment) {
+		this.medicalUnitLeaderAssignment = medicalUnitLeaderAssignment;
+		if (this.medicalUnitLeaderAssignment != null) {
+			preserveMedicalUnitLeaderLegacyConflicts();
+		}
+	}
+
+	/**
+	 * Migrates legacy role copies without erasing any of their values.
+	 */
+	public void reconcileMedicalUnitLeaderAssignment() {
+		if (medicalUnitLeaderAssignment == null) {
+			medicalUnitLeaderAssignment = new MedicalUnitLeaderAssignment();
+			String legacyName = firstNonBlank(
+					organizationalChart == null ? "" : organizationalChart.getMedicalUnitLeaderName(),
+					legacyIcs203MedicalUnitLeader(),
+					medicalPlan == null ? "" : medicalPlan.getPreparedByMedicalUnitLeader(),
+					canineMedicalPlan == null ? "" : canineMedicalPlan.getPreparedByMedicalUnitLeader());
+			medicalUnitLeaderAssignment.setName(legacyName);
+			if (organizationalChart != null) {
+				medicalUnitLeaderAssignment.setRadioChannel(organizationalChart.getMedicalUnitLeaderRadio());
+				medicalUnitLeaderAssignment.setPhoneNumber(organizationalChart.getMedicalUnitLeaderPhone());
+			}
+		}
+		preserveMedicalUnitLeaderLegacyConflicts();
+	}
+
+	/**
+	 * Records legacy role values that disagree with the canonical assignment.
+	 */
+	private void preserveMedicalUnitLeaderLegacyConflicts() {
+		String canonicalName = medicalUnitLeaderAssignment.getName().trim();
+		preserveIfConflicting("organizationalChart.medicalUnitLeaderName",
+				organizationalChart == null ? "" : organizationalChart.getMedicalUnitLeaderName(), canonicalName);
+		preserveIfConflicting("organizationalChart.assignmentList.medicalUnitLeader",
+				legacyIcs203MedicalUnitLeader(), canonicalName);
+		preserveIfConflicting("medicalPlan.preparedByMedicalUnitLeader",
+				medicalPlan == null ? "" : medicalPlan.getPreparedByMedicalUnitLeader(), canonicalName);
+		preserveIfConflicting("canineMedicalPlan.preparedByMedicalUnitLeader",
+				canineMedicalPlan == null ? "" : canineMedicalPlan.getPreparedByMedicalUnitLeader(), canonicalName);
+	}
+
+	/**
+	 * Retains a nonblank legacy value that differs from the canonical role name.
+	 *
+	 * @param source legacy field path.
+	 * @param value original value.
+	 * @param canonicalName authoritative value.
+	 */
+	private void preserveIfConflicting(String source, String value, String canonicalName) {
+		if (value != null && !value.isBlank() && !value.trim().equals(canonicalName)) {
+			medicalUnitLeaderAssignment.preserveLegacyConflict(source, value);
+		}
+	}
+
+	/**
+	 * Reads the legacy Medical Unit Leader entry from the supplemental ICS 203 form.
+	 *
+	 * @return legacy assigned name, or blank when unavailable.
+	 */
+	private String legacyIcs203MedicalUnitLeader() {
+		return organizationalChart == null || organizationalChart.getAssignmentList() == null
+				? "" : organizationalChart.getAssignmentList()
+						.getPosition(Ics203Form.Position.MEDICAL_UNIT_LEADER);
+	}
+
+	/**
+	 * Returns the first nonblank legacy value in migration-priority order.
+	 *
+	 * @param values ordered candidate names.
+	 * @return trimmed first nonblank name or blank.
+	 */
+	private String firstNonBlank(String... values) {
+		for (String value : values) {
+			if (value != null && !value.isBlank()) {
+				return value.trim();
+			}
+		}
+		return "";
 	}
 
 	/**

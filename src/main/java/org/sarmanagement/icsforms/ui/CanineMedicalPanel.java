@@ -337,7 +337,6 @@ public class CanineMedicalPanel extends JPanel {
 			data.getCanineMedicalPlan().setVeterinaryCapabilityNotes(capabilityNotes.getText());
 			data.getCanineMedicalPlan().setEmergencyProcedures(procedures.getText());
 			data.getCanineMedicalPlan().setAviationAssetsUsed(aviationUsed.isSelected());
-			MedicalRoleSupport.setMedicalUnitLeaderName(data, preparedBy.getText());
 			setPreparedAt(data.getCanineMedicalPlan());
 			MedicalRoleSupport.setSafetyOfficerName(data, safetyOfficer.getText());
 			data.getCanineMedicalPlan().setReviewStatus(String.valueOf(reviewStatus.getSelectedItem()));
@@ -705,9 +704,10 @@ public class CanineMedicalPanel extends JPanel {
 		reviewStatus.addActionListener(event -> inputChanged(false));
 		routingBaseLocations.addActionListener(event -> applyRoutingBaseChoice());
 		for (JTextField field : List.of(stagingLabel, stagingAddress, stagingLatitude, stagingLongitude,
-				shortlistLimit, poisonContact, onsiteVet, preparedBy, preparedAt, safetyOfficer)) {
+				shortlistLimit, poisonContact, onsiteVet, preparedAt, safetyOfficer)) {
 			watch(field, field == stagingAddress || field == stagingLatitude || field == stagingLongitude);
 		}
+		watchMedicalUnitLeader();
 		UiSupport.installNameAutocomplete(preparedBy, controller::getPersonnelNames,
 				name -> MedicalRoleSupport.setMedicalUnitLeaderName(controller.getData(), name));
 		UiSupport.installNameAutocomplete(safetyOfficer, controller::getPersonnelNames,
@@ -719,6 +719,38 @@ public class CanineMedicalPanel extends JPanel {
 		directoryModel.addTableModelListener(event -> inputChanged(true));
 		selectionModel.addTableModelListener(event -> inputChanged(false));
 		directoryTable.getSelectionModel().addListSelectionListener(event -> refreshWorkflowControls());
+	}
+
+	/**
+	 * Binds typed edits and explicit clearing directly to the shared role assignment.
+	 */
+	private void watchMedicalUnitLeader() {
+		preparedBy.getDocument().addDocumentListener(new DocumentListener() {
+			@Override
+			public void insertUpdate(DocumentEvent event) {
+				medicalUnitLeaderChanged();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent event) {
+				medicalUnitLeaderChanged();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent event) {
+				medicalUnitLeaderChanged();
+			}
+		});
+	}
+
+	/**
+	 * Saves the live Medical Unit Leader edit before any panel state flush occurs.
+	 */
+	private void medicalUnitLeaderChanged() {
+		if (!loading && !flushing) {
+			MedicalRoleSupport.setMedicalUnitLeaderName(controller.getData(), preparedBy.getText());
+			inputChanged(false);
+		}
 	}
 
 	/**

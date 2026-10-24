@@ -248,9 +248,7 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		logistics.header("Service Branch");
 		logistics.add("Director", form.getPosition(Position.SERVICE_BRANCH_DIRECTOR));
 		logistics.add("Communications Unit Leader", chart.getCommunicationsUnitLeaderName());
-		String medicalUnitLeader = chart.getMedicalUnitLeaderName().isBlank()
-				? form.getPosition(Position.MEDICAL_UNIT_LEADER) : chart.getMedicalUnitLeaderName();
-		logistics.add("Medical Unit Leader", medicalUnitLeader);
+		logistics.add("Medical Unit Leader", data.getMedicalUnitLeaderAssignment().getName());
 		logistics.add("Food Unit Leader", chart.getFoodUnitLeaderName());
 		logistics.add("Communications Technician", chart.getCommunicationsTechnicianName());
 		logistics.fix();

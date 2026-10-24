@@ -67,7 +67,6 @@ public class Ics206Panel extends JPanel {
 	private Consumer<String> exportRequest = ignored -> { };
 	private boolean loading;
 	private boolean flushing;
-	private JTextField lastEditedMedicalRoleField;
 
 	/**
 	 * Creates the editor and binds it to the active incident's human plan.
@@ -157,10 +156,6 @@ public class Ics206Panel extends JPanel {
 			plan.setEmergencyProcedures(procedures.getText());
 			plan.setAviationAssetsUsed(aviationUsed.isSelected());
 			plan.setAirOperationsReminder(airOperations.getText());
-			String medicalLeader = lastEditedMedicalRoleField == preparedBy ? preparedBy.getText()
-					: firstNonBlank(medicalName.getText(), preparedBy.getText());
-			MedicalRoleSupport.setMedicalUnitLeaderName(controller.getData(), medicalLeader);
-			lastEditedMedicalRoleField = null;
 			MedicalRoleSupport.setSafetyOfficerName(controller.getData(), reviewedBy.getText());
 			plan.setReviewStatus(String.valueOf(reviewStatus.getSelectedItem()));
 			setPreparedAt(plan);
@@ -330,9 +325,6 @@ public class Ics206Panel extends JPanel {
 			return;
 		}
 		String name = source.getText().trim();
-		if (source == medicalName || source == preparedBy) {
-			lastEditedMedicalRoleField = source;
-		}
 		if (!name.isBlank()) {
 			setSharedRole(name, medicalLeader);
 			if (otherField != null) {
@@ -383,21 +375,6 @@ public class Ics206Panel extends JPanel {
 		} else {
 			MedicalRoleSupport.setSafetyOfficerName(controller.getData(), name);
 		}
-	}
-
-	/**
-	 * Returns the first nonblank candidate in display-preference order.
-	 *
-	 * @param values candidate names.
-	 * @return the first nonblank trimmed name, or an empty string.
-	 */
-	private static String firstNonBlank(String... values) {
-		for (String value : values) {
-			if (value != null && !value.isBlank()) {
-				return value.trim();
-			}
-		}
-		return "";
 	}
 
 	/**

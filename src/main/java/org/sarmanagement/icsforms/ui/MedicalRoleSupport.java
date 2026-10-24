@@ -4,7 +4,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.AppData;
-import org.sarmanagement.icsforms.model.Ics203Form;
+import org.sarmanagement.icsforms.model.MedicalUnitLeaderAssignment;
 
 /**
  * Synchronizes medical-plan role names with their shared organizational-chart assignments.
@@ -17,34 +17,58 @@ final class MedicalRoleSupport {
 	}
 
 	/**
-	 * Resolves the shared Medical Unit Leader name, including legacy ICS 203 data.
+	 * Returns the authoritative Medical Unit Leader name.
 	 *
 	 * @param data incident data.
-	 * @return the first assigned Medical Unit Leader name.
+	 * @return assigned Medical Unit Leader name.
 	 */
 	static String medicalUnitLeaderName(AppData data) {
-		return firstNonBlank(data.getOrganizationalChart().getMedicalUnitLeaderName(),
-				data.getOrganizationalChart().getAssignmentList()
-						.getPosition(Ics203Form.Position.MEDICAL_UNIT_LEADER),
-				data.getMedicalPlan().getDesignatedMedicalUnitName(),
-				data.getMedicalPlan().getPreparedByMedicalUnitLeader(),
-				data.getCanineMedicalPlan().getPreparedByMedicalUnitLeader());
+		return data.getMedicalUnitLeaderAssignment().getName();
 	}
 
 	/**
-	 * Updates every shared Medical Unit Leader display location.
+	 * Updates the authoritative Medical Unit Leader name without changing contact data.
 	 *
 	 * @param data incident data.
-	 * @param name selected Medical Unit Leader name.
+	 * @param name assigned Medical Unit Leader name.
 	 */
 	static void setMedicalUnitLeaderName(AppData data, String name) {
-		String value = safe(name);
-		data.getOrganizationalChart().setMedicalUnitLeaderName(value);
-		data.getOrganizationalChart().getAssignmentList()
-				.setPosition(Ics203Form.Position.MEDICAL_UNIT_LEADER, value);
-		data.getMedicalPlan().setDesignatedMedicalUnitName(value);
-		data.getMedicalPlan().setPreparedByMedicalUnitLeader(value);
-		data.getCanineMedicalPlan().setPreparedByMedicalUnitLeader(value);
+		data.getMedicalUnitLeaderAssignment().setName(name);
+	}
+
+	/**
+	 * Updates the authoritative role name and contacts from the Org Chart editor.
+	 *
+	 * @param data incident data.
+	 * @param name assigned Medical Unit Leader.
+	 * @param radioChannel role radio channel.
+	 * @param phoneNumber role phone number.
+	 */
+	static void setMedicalUnitLeader(AppData data, String name, String radioChannel, String phoneNumber) {
+		MedicalUnitLeaderAssignment assignment = data.getMedicalUnitLeaderAssignment();
+		assignment.setName(name);
+		assignment.setRadioChannel(radioChannel);
+		assignment.setPhoneNumber(phoneNumber);
+	}
+
+	/**
+	 * Updates only the Medical Unit Leader radio contact.
+	 *
+	 * @param data incident data.
+	 * @param radioChannel role radio channel.
+	 */
+	static void setMedicalUnitLeaderRadio(AppData data, String radioChannel) {
+		data.getMedicalUnitLeaderAssignment().setRadioChannel(radioChannel);
+	}
+
+	/**
+	 * Updates only the Medical Unit Leader phone contact.
+	 *
+	 * @param data incident data.
+	 * @param phoneNumber role phone number.
+	 */
+	static void setMedicalUnitLeaderPhone(AppData data, String phoneNumber) {
+		data.getMedicalUnitLeaderAssignment().setPhoneNumber(phoneNumber);
 	}
 
 	/**
@@ -73,10 +97,10 @@ final class MedicalRoleSupport {
 	}
 
 	/**
-	 * Returns the first nonblank value in the given ordered list.
+	 * Returns the first nonblank value in the ordered candidates.
 	 *
 	 * @param values candidate values.
-	 * @return trimmed first nonblank value, or an empty string.
+	 * @return trimmed first nonblank value, or blank.
 	 */
 	private static String firstNonBlank(String... values) {
 		for (String value : values) {
@@ -88,10 +112,10 @@ final class MedicalRoleSupport {
 	}
 
 	/**
-	 * Converts a nullable name into safe text.
+	 * Converts nullable names to trimmed, non-null text.
 	 *
-	 * @param value source text.
-	 * @return non-null text.
+	 * @param value source name.
+	 * @return trimmed name or blank.
 	 */
 	private static String safe(String value) {
 		return value == null ? "" : value.trim();

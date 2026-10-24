@@ -59,7 +59,7 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 	private List<Ics206FormLayout.Section> sections(AppData data) {
 		CanineMedicalPlan plan = data.getCanineMedicalPlan();
 		return List.of(aidStations(plan), transportation(plan), veterinaryHospitals(data),
-				procedures(plan), preparedBy(plan), reviewedBy(plan));
+				procedures(plan), preparedBy(plan, data.getMedicalUnitLeaderAssignment().getName()), reviewedBy(plan));
 	}
 
 	/**
@@ -151,12 +151,13 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 	 *
 	 * @param plan canine medical plan.
 	 * @param data incident data for timezone formatting.
+	 * @param medicalUnitLeaderName authoritative shared role name.
 	 * @return numbered prepared-by section.
 	 */
-	private Ics206FormLayout.Section preparedBy(CanineMedicalPlan plan) {
+	private Ics206FormLayout.Section preparedBy(CanineMedicalPlan plan, String medicalUnitLeaderName) {
 		return new Ics206FormLayout.Section("7. PREPARED BY (MEDICAL UNIT LEADER)",
 				new float[] {0.53f, 0.47f}, List.of(),
-				List.of(List.of("Name: " + safe(plan.getPreparedByMedicalUnitLeader()),
+				List.of(List.of("Name: " + safe(medicalUnitLeaderName),
 						"Signature: ______________________________________________")));
 	}
 

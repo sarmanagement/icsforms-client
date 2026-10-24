@@ -404,6 +404,7 @@ public class FileIncidentStore implements IncidentStore {
 	 *            file's assigned identity.
 	 */
 	private void upgrade(AppData data, IncidentId id) {
+		data.reconcileMedicalUnitLeaderAssignment();
 		if (data.getIncidentId() == null) {
 			data.setIncidentId(id.value());
 			data.setRevision(0);

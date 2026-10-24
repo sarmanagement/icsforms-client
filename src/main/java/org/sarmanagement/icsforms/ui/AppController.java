@@ -153,6 +153,7 @@ public class AppController {
 			PdfExportService exportService, IncidentValidator validator) {
 		this.data = data == null ? createDefaultData() : data;
 		ensureDefaults(this.data);
+		this.data.reconcileMedicalUnitLeaderAssignment();
 		this.repository = repository;
 		this.store = store;
 		this.activeIncidentId = incidentId;

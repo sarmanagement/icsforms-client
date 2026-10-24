@@ -48,7 +48,7 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 /** Workflow coverage for main-tab representatives and supplemental organization assignments. */
 class OrganizationalChartPanelTest {
 	@Test
-	void medicalUnitLeaderIsAvailableBesideFoodAndSynchronizesMedicalPlans() throws Exception {
+	void medicalUnitLeaderIsAvailableBesideFoodAndUpdatesTheSharedAssignment() throws Exception {
 		SwingUtilities.invokeAndWait(() -> {
 			try {
 				AppController controller = sampleController();
@@ -60,11 +60,63 @@ class OrganizationalChartPanelTest {
 				assertTrue(medicalLeader.getClientProperty("uiSupport.namePicker.open")
 						instanceof java.util.function.Consumer<?>);
 				assertEquals("Fictional Medical Unit Leader",
-						controller.getData().getOrganizationalChart().getMedicalUnitLeaderName());
-				assertEquals("Fictional Medical Unit Leader",
-						controller.getData().getMedicalPlan().getDesignatedMedicalUnitName());
-				assertEquals("Fictional Medical Unit Leader",
-						controller.getData().getCanineMedicalPlan().getPreparedByMedicalUnitLeader());
+						controller.getData().getMedicalUnitLeaderAssignment().getName());
+				assertEquals("", controller.getData().getMedicalPlan().getDesignatedMedicalUnitName());
+				assertEquals("", controller.getData().getCanineMedicalPlan().getPreparedByMedicalUnitLeader());
+			} catch (Exception exception) {
+				throw new AssertionError(exception);
+			}
+		});
+	}
+
+	@Test
+	void allMedicalEditorsUpdateOneAssignmentAndStalePanelFlushesCannotRestoreOldNames() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			try {
+				AppController controller = sampleController();
+				controller.getData().getMedicalUnitLeaderAssignment().setName("Initial Medical Leader");
+				OrganizationalChartPanel orgChart = new OrganizationalChartPanel(controller);
+				Ics206Panel humanPlan = new Ics206Panel(controller);
+				CanineMedicalPanel caninePlan = new CanineMedicalPanel(controller, Path.of("target"));
+				JTextField orgName = (JTextField) field(orgChart, "medicalUnitLeaderNameField");
+				JTextField orgRadio = (JTextField) field(orgChart, "medicalUnitLeaderRadioField");
+				JTextField orgPhone = (JTextField) field(orgChart, "medicalUnitLeaderPhoneField");
+				JTextField humanName = (JTextField) field(humanPlan, "medicalName");
+				JTextField canineName = (JTextField) field(caninePlan, "preparedBy");
+
+				orgName.setText("Org Chart Edit");
+				orgRadio.setText("Medical 4");
+				orgPhone.setText("555-0110");
+				assertEquals("Org Chart Edit", controller.getData().getMedicalUnitLeaderAssignment().getName());
+				assertEquals("Medical 4", controller.getData().getMedicalUnitLeaderAssignment().getRadioChannel());
+				assertEquals("555-0110", controller.getData().getMedicalUnitLeaderAssignment().getPhoneNumber());
+				humanPlan.pushToModel();
+				caninePlan.pushToModel();
+				assertEquals("Org Chart Edit", controller.getData().getMedicalUnitLeaderAssignment().getName());
+
+				humanName.setText("Human Plan Edit");
+				assertEquals("Human Plan Edit", controller.getData().getMedicalUnitLeaderAssignment().getName());
+				orgChart.pushToModel();
+				caninePlan.pushToModel();
+				assertEquals("Human Plan Edit", controller.getData().getMedicalUnitLeaderAssignment().getName());
+
+				canineName.setText("Canine Plan Edit");
+				assertEquals("Canine Plan Edit", controller.getData().getMedicalUnitLeaderAssignment().getName());
+				orgChart.pushToModel();
+				humanPlan.pushToModel();
+				assertEquals("Canine Plan Edit", controller.getData().getMedicalUnitLeaderAssignment().getName());
+
+				humanName.setText("");
+				assertEquals("", controller.getData().getMedicalUnitLeaderAssignment().getName());
+				orgChart.pushToModel();
+				caninePlan.pushToModel();
+				assertEquals("", controller.getData().getMedicalUnitLeaderAssignment().getName());
+				orgChart.refreshFromModel();
+				humanPlan.refreshFromModel();
+				caninePlan.refreshFromModel();
+				assertEquals("", orgName.getText());
+				assertEquals("", humanName.getText());
+				assertEquals("", canineName.getText());
 			} catch (Exception exception) {
 				throw new AssertionError(exception);
 			}
