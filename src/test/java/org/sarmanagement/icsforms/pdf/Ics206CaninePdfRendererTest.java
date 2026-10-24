@@ -6,7 +6,6 @@ package org.sarmanagement.icsforms.pdf;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
@@ -29,6 +28,8 @@ class Ics206CaninePdfRendererTest {
 		AppData data = new AppData();
 		data.getIncidentContext().setIncidentName("Fictional Incident");
 		data.getMedicalUnitLeaderAssignment().setName("Medical Lead");
+		data.getOrganizationalChart().setIncidentCommanders(java.util.List.of("Medical Lead"));
+		data.getOrganizationalChart().setOperationsSectionChiefName("Safety Reviewer");
 		StagingLocation base = data.getStagingLocation();
 		base.setLabel("Fictional Base");
 		base.setAddress("1 Fictional Road");
@@ -51,7 +52,8 @@ class Ics206CaninePdfRendererTest {
 			String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
 			for (String block : new String[] {"1. INCIDENT NAME", "2. OPERATIONAL PERIOD",
 					"3. MEDICAL AID STATIONS", "4. TRANSPORTATION", "5. VETERINARY HOSPITALS",
-					"6. SPECIAL MEDICAL EMERGENCY PROCEDURES", "7. PREPARED BY", "8. APPROVED BY"}) {
+					"6. SPECIAL MEDICAL EMERGENCY PROCEDURES", "7. Prepared by (Incident Commander)",
+					"8. Approved by (Operations Section Chief)"}) {
 				assertTrue(text.contains(block), block);
 			}
 			for (String column : new String[] {"Hospital Name", "Town", "Address", "Contact Number(s)",
@@ -61,6 +63,8 @@ class Ics206CaninePdfRendererTest {
 			assertTrue(text.contains("Fictional Veterinary Hospital"));
 			assertTrue(text.contains("Unknown (not verified)"));
 			assertTrue(text.contains("ICS 206CANINE"));
+			assertTrue(text.contains("CANINE MEDICAL PLAN (ICS 206CANINE)"));
+			assertTrue(!text.contains("CANINE MEDICAL PLAN (ADAPTED)"));
 			assertTrue(!text.contains("DVM:"));
 			assertTrue(!text.contains("Legacy DVM value"));
 			assertTrue(text.contains("Name: Medical Lead"));
@@ -94,16 +98,16 @@ class Ics206CaninePdfRendererTest {
 			PDFTextStripper firstPage = new PDFTextStripper();
 			firstPage.setStartPage(1);
 			firstPage.setEndPage(1);
-			assertTrue(!firstPage.getText(pdf).contains("7. PREPARED BY"));
+			assertTrue(!firstPage.getText(pdf).contains("7. Prepared by"));
 			PDFTextStripper lastPage = new PDFTextStripper();
 			lastPage.setStartPage(pdf.getNumberOfPages());
 			lastPage.setEndPage(pdf.getNumberOfPages());
-			assertTrue(lastPage.getText(pdf).contains("7. PREPARED BY"));
+			assertTrue(lastPage.getText(pdf).contains("7. Prepared by"));
 		}
 	}
 
 	@Test
-	void compactCanineFormUsesTheAdaptedTitleAndKeepsAllBlocksOnOnePageWhenTheyFit() throws Exception {
+	void compactCanineFormUsesTheExpectedTitleAndKeepsAllBlocksOnOnePageWhenTheyFit() throws Exception {
 		AppData data = new AppData();
 		data.getIncidentContext().setIncidentName("Fictional Incident");
 		VetFacility vet = new VetFacility();
@@ -120,9 +124,9 @@ class Ics206CaninePdfRendererTest {
 			String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
 			assertEquals(1, pdf.getNumberOfPages());
 			assertEquals(Ics206CaninePdfRenderer.pageCount(data), pdf.getNumberOfPages());
-			assertTrue(text.contains("CANINE MEDICAL PLAN (ADAPTED)"));
+			assertTrue(text.contains("CANINE MEDICAL PLAN (ICS 206CANINE)"));
 			assertTrue(text.contains("Fictional Veterinary Hospital"));
-			assertTrue(text.contains("8. APPROVED BY"));
+			assertTrue(text.contains("8. Approved by (Safety Officer)"));
 		}
 	}
 }

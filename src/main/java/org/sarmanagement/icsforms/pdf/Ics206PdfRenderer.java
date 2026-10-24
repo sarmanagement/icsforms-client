@@ -70,8 +70,11 @@ public class Ics206PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @return bottom metadata values.
 	 */
 	private Ics206FormLayout.FooterMetadata footerMetadata(AppData data) {
-		return new Ics206FormLayout.FooterMetadata(data.getMedicalUnitLeaderAssignment().getName(),
-				data.getMedicalPlan().getReviewedBySafetyOfficer());
+		String preparedBy = data.getMedicalUnitLeaderAssignment().getName();
+		String reviewedBy = data.getMedicalPlan().getReviewedBySafetyOfficer();
+		return new Ics206FormLayout.FooterMetadata(preparedBy,
+				Ics206FormLayout.positionTitle(data, preparedBy, "Medical Unit Leader"), reviewedBy,
+				Ics206FormLayout.positionTitle(data, reviewedBy, "Safety Officer"));
 	}
 
 	/**

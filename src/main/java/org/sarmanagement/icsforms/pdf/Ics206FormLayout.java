@@ -10,6 +10,8 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
+import org.sarmanagement.icsforms.model.OrganizationalChart;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -256,10 +258,79 @@ final class Ics206FormLayout {
 		stream.lineTo(x + width, middle);
 		stream.stroke();
 		write(stream, bold, FONT_SIZE, x + CELL_PADDING, top - 10f,
-				"7. PREPARED BY (MEDICAL UNIT LEADER)");
+				"7. Prepared by (" + safe(metadata.preparedByPositionTitle()) + ")");
 		writeSignatureLine(stream, regular, x, middle + 5f, width, preparer);
-		write(stream, bold, FONT_SIZE, x + CELL_PADDING, middle - 10f, "8. APPROVED BY (SAFETY OFFICER)");
+		write(stream, bold, FONT_SIZE, x + CELL_PADDING, middle - 10f,
+				"8. Approved by (" + safe(metadata.reviewedByPositionTitle()) + ")");
 		writeSignatureLine(stream, regular, x, bottom + 5f, width, reviewer);
+	}
+
+	/**
+	 * Resolves a person's displayed ICS position, falling back to the expected role when unassigned.
+	 *
+	 * @param data incident document.
+	 * @param name person whose position is displayed.
+	 * @param defaultTitle expected form role.
+	 * @return matching position title or the expected form role.
+	 */
+	static String positionTitle(AppData data, String name, String defaultTitle) {
+		if (name == null || name.isBlank()) {
+			return defaultTitle;
+		}
+		OrganizationalChart chart = data.getOrganizationalChart();
+		for (String commander : chart.getIncidentCommanders()) {
+			if (samePerson(name, commander)) {
+				return "Incident Commander";
+			}
+		}
+		for (OrgChartEntry commander : chart.getIncidentCommanderEntries()) {
+			if (commander != null && samePerson(name, commander.getName())) {
+				return "Incident Commander";
+			}
+		}
+		String[] assignedNames = {chart.getSafetyOfficerName(), chart.getPublicInformationOfficerName(),
+				chart.getLiaisonOfficerName(), chart.getOperationsSectionChiefName(),
+				chart.getPlanningSectionChiefName(), chart.getLogisticsSectionChiefName(),
+				chart.getFinanceAdminSectionChiefName(), chart.getDocumentationUnitLeaderName(),
+				chart.getResourcesUnitLeaderName(), chart.getSituationUnitLeaderName(),
+				chart.getDemobilizationUnitLeaderName(), chart.getStagingAreaManagerName(),
+				chart.getCommunicationsUnitLeaderName(), chart.getCommunicationsTechnicianName(),
+				chart.getSupplyUnitLeaderName(), chart.getFacilitiesUnitLeaderName(),
+				chart.getGroundSupportUnitLeaderName(), chart.getFoodUnitLeaderName(),
+				chart.getMedicalUnitLeaderName(), chart.getTimeUnitLeaderName(),
+				chart.getProcurementUnitLeaderName(), chart.getCompClaimsUnitLeaderName(),
+				chart.getCostUnitLeaderName()};
+		String[] positionTitles = {"Safety Officer", "Public Information Officer", "Liaison Officer",
+				"Operations Section Chief", "Planning Section Chief", "Logistics Section Chief",
+				"Finance/Administration Section Chief", "Documentation Unit Leader", "Resources Unit Leader",
+				"Situation Unit Leader", "Demobilization Unit Leader", "Staging Area Manager",
+				"Communications Unit Leader", "Communications Technician", "Supply Unit Leader",
+				"Facilities Unit Leader", "Ground Support Unit Leader", "Food Unit Leader",
+				"Medical Unit Leader", "Time Unit Leader", "Procurement Unit Leader",
+				"Compensation/Claims Unit Leader", "Cost Unit Leader"};
+		for (int i = 0; i < assignedNames.length; i++) {
+			if (samePerson(name, assignedNames[i])) {
+				return positionTitles[i];
+			}
+		}
+		for (OrgChartEntry entry : chart.getAdditionalPositions()) {
+			if (entry != null && samePerson(name, entry.getName()) && entry.getTitle() != null
+					&& !entry.getTitle().isBlank()) {
+				return entry.getTitle();
+			}
+		}
+		return defaultTitle;
+	}
+
+	/**
+	 * Compares names without regard to surrounding whitespace or letter case.
+	 *
+	 * @param first first name.
+	 * @param second second name.
+	 * @return true when both names identify the same displayed person.
+	 */
+	private static boolean samePerson(String first, String second) {
+		return first != null && second != null && first.trim().equalsIgnoreCase(second.trim());
 	}
 
 	/**
@@ -536,18 +607,25 @@ final class Ics206FormLayout {
 	 * Footer values for the preparer and reviewer blocks.
 	 *
 	 * @param preparedByName preparer name.
+	 * @param preparedByPositionTitle preparer position.
 	 * @param reviewedByName reviewer name.
+	 * @param reviewedByPositionTitle reviewer position.
 	 */
-	record FooterMetadata(String preparedByName, String reviewedByName) {
+	record FooterMetadata(String preparedByName, String preparedByPositionTitle, String reviewedByName,
+			String reviewedByPositionTitle) {
 		/**
 		 * Creates footer metadata with non-null values.
 		 *
 		 * @param preparedByName preparer name.
+		 * @param preparedByPositionTitle preparer position.
 		 * @param reviewedByName reviewer name.
+		 * @param reviewedByPositionTitle reviewer position.
 		 */
 		FooterMetadata {
 			preparedByName = preparedByName == null ? "" : preparedByName;
+			preparedByPositionTitle = preparedByPositionTitle == null ? "" : preparedByPositionTitle;
 			reviewedByName = reviewedByName == null ? "" : reviewedByName;
+			reviewedByPositionTitle = reviewedByPositionTitle == null ? "" : reviewedByPositionTitle;
 		}
 	}
 

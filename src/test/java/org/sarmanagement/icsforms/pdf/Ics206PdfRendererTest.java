@@ -59,7 +59,8 @@ class Ics206PdfRendererTest {
 			String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
 			for (String block : new String[] {"1. INCIDENT NAME", "2. OPERATIONAL PERIOD",
 					"3. MEDICAL AID STATIONS", "4. TRANSPORTATION", "5. HOSPITALS",
-					"6. SPECIAL MEDICAL EMERGENCY PROCEDURES", "7. PREPARED BY", "8. APPROVED BY"}) {
+					"6. SPECIAL MEDICAL EMERGENCY PROCEDURES", "7. Prepared by (Medical Unit Leader)",
+					"8. Approved by (Safety Officer)"}) {
 				assertTrue(text.contains(block), block);
 			}
 			for (String column : new String[] {"Aid Station", "Location", "Contact Number(s) / Frequency",
@@ -71,6 +72,8 @@ class Ics206PdfRendererTest {
 			assertTrue(text.contains("ICS 206"));
 			assertTrue(text.contains("Name: Medical Lead"));
 			assertTrue(text.contains("Name: Safety Reviewer"));
+			assertTrue(text.contains("7. Prepared by (Medical Unit Leader)"));
+			assertTrue(text.contains("8. Approved by (Safety Officer)"));
 			assertTrue(text.contains("Signature: ______________________________"));
 			assertTrue(text.contains("Date/Time:"));
 			assertTrue(!text.contains("Legacy signature text"));
@@ -98,11 +101,11 @@ class Ics206PdfRendererTest {
 			PDFTextStripper firstPage = new PDFTextStripper();
 			firstPage.setStartPage(1);
 			firstPage.setEndPage(1);
-			assertTrue(!firstPage.getText(pdf).contains("7. PREPARED BY"));
+			assertTrue(!firstPage.getText(pdf).contains("7. Prepared by"));
 			PDFTextStripper lastPage = new PDFTextStripper();
 			lastPage.setStartPage(pdf.getNumberOfPages());
 			lastPage.setEndPage(pdf.getNumberOfPages());
-			assertTrue(lastPage.getText(pdf).contains("7. PREPARED BY"));
+			assertTrue(lastPage.getText(pdf).contains("7. Prepared by"));
 		}
 	}
 

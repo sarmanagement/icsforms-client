@@ -19,7 +19,7 @@ import java.util.Locale;
  */
 public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfFormRenderer {
 	private static final String FORM_KEY = "ICS 206CANINE";
-	private static final String TITLE = "CANINE MEDICAL PLAN (ADAPTED)";
+	private static final String TITLE = "CANINE MEDICAL PLAN";
 
 	/** {@inheritDoc} */
 	@Override
@@ -69,8 +69,11 @@ public class Ics206CaninePdfRenderer extends AbstractPdfRenderer implements PdfF
 	 * @return bottom metadata values.
 	 */
 	private Ics206FormLayout.FooterMetadata footerMetadata(AppData data) {
-		return new Ics206FormLayout.FooterMetadata(data.getMedicalUnitLeaderAssignment().getName(),
-				data.getCanineMedicalPlan().getReviewedBySafetyOfficer());
+		String preparedBy = data.getMedicalUnitLeaderAssignment().getName();
+		String reviewedBy = data.getCanineMedicalPlan().getReviewedBySafetyOfficer();
+		return new Ics206FormLayout.FooterMetadata(preparedBy,
+				Ics206FormLayout.positionTitle(data, preparedBy, "Medical Unit Leader"), reviewedBy,
+				Ics206FormLayout.positionTitle(data, reviewedBy, "Safety Officer"));
 	}
 
 	/**
