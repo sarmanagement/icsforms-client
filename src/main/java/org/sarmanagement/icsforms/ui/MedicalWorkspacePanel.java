@@ -11,8 +11,8 @@ import java.awt.Component;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.Polygon;
 import java.awt.RenderingHints;
+import java.awt.geom.Path2D;
 
 /**
  * Shared Medical workspace containing the human and adapted canine medical plans.
@@ -171,16 +171,19 @@ public class MedicalWorkspacePanel extends JPanel {
 		 * @param y icon vertical origin.
 		 */
 		private void paintCanine(Graphics2D drawing, int x, int y) {
-			drawing.fillOval(x + 4, y + 4, 11, 12);
-			drawing.fillPolygon(new Polygon(new int[] {x + 6, x + 2, x + 4, x + 9},
-					new int[] {y + 5, y + 7, y + 13, y + 10}, 4));
-			drawing.fillPolygon(new Polygon(new int[] {x + 7, x + 14, x + 13, x + 7},
-					new int[] {y + 13, y + 13, y + 19, y + 19}, 4));
-			drawing.fillRoundRect(x + 11, y + 9, 7, 5, 3, 3);
-			drawing.setColor(PLAN_ICON_COLOR);
-			drawing.fillOval(x + 17, y + 9, 3, 3);
-			drawing.setColor(Color.WHITE);
-			drawing.fillOval(x + 11, y + 7, 2, 2);
+			Path2D profile = new Path2D.Double();
+			profile.moveTo(x + 3, y + 19);
+			profile.curveTo(x + 4, y + 16, x + 4, y + 12, x + 6, y + 9);
+			profile.curveTo(x + 7, y + 6, x + 10, y + 4, x + 13, y + 5);
+			profile.curveTo(x + 14, y + 2, x + 16, y + 2, x + 16, y + 7);
+			profile.curveTo(x + 17, y + 8, x + 17, y + 9, x + 18, y + 9);
+			profile.lineTo(x + 20, y + 10);
+			profile.curveTo(x + 20, y + 11, x + 19, y + 13, x + 18, y + 13);
+			profile.lineTo(x + 16, y + 13);
+			profile.curveTo(x + 15, y + 16, x + 12, y + 17, x + 9, y + 16);
+			profile.lineTo(x + 8, y + 19);
+			profile.closePath();
+			drawing.fill(profile);
 		}
 	}
 }

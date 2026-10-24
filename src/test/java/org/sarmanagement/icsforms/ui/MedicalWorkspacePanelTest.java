@@ -58,7 +58,7 @@ class MedicalWorkspacePanelTest {
 	}
 
 	@Test
-	void caninePlanIconUsesSideProfileFacingRight() throws Exception {
+	void caninePlanIconUsesSimpleSingleColorSideProfileFacingRight() throws Exception {
 		MedicalWorkspacePanel panel = medicalWorkspace(new AppData());
 		panel.setCanineVisible(true);
 		Icon canineIcon = panel.planTabs().getIconAt(1);
@@ -73,6 +73,16 @@ class MedicalWorkspacePanelTest {
 
 		assertTrue((image.getRGB(18, 10) >>> 24) > 0);
 		assertEquals(0, image.getRGB(1, 10) >>> 24);
+		for (int row = 0; row < image.getHeight(); row++) {
+			for (int column = 0; column < image.getWidth(); column++) {
+				int pixel = image.getRGB(column, row);
+				if ((pixel >>> 24) > 0) {
+					assertTrue(((pixel >> 16) & 0xff) < 120);
+					assertTrue(((pixel >> 8) & 0xff) < 120);
+					assertTrue((pixel & 0xff) < 120);
+				}
+			}
+		}
 	}
 
 	@Test
