@@ -308,6 +308,12 @@ public class PdfExportService {
 		if (data == null || !isIapAttachmentSelected(data, "ICS 208")) {
 			keys.remove("ICS 208");
 		}
+		if (data == null || !isIapAttachmentSelected(data, "ICS 206")) {
+			keys.remove("ICS 206");
+		}
+		if (data == null || !isIapAttachmentSelected(data, "ICS 206CANINE")) {
+			keys.remove("ICS 206CANINE");
+		}
 		return FormOrder.sort(keys);
 	}
 
@@ -455,6 +461,8 @@ public class PdfExportService {
 				: new java.util.LinkedHashSet<>(includedFormKeys);
 		data.getForm201().setIapPage("");
 		data.getForm202().setIapPage("");
+		data.getMedicalPlan().setIapPage("");
+		data.getCanineMedicalPlan().setIapPage("");
 		data.setForm205aIapPage("");
 		data.getForm215a().setIapPage("");
 		data.getForm208().setIapPage("");
@@ -491,6 +499,22 @@ public class PdfExportService {
 						for (Ics204Form form : data.getAdditionalForms204()) {
 							form.setIapPage(String.valueOf(page++));
 						}
+					}
+				}
+				case "ICS 206" -> {
+					if (included == null
+							? isIapAttachmentSelected(data, formKey)
+							: included.contains(formKey)) {
+						data.getMedicalPlan().setIapPage(String.valueOf(page));
+						page += Ics206PdfRenderer.pageCount(data);
+					}
+				}
+				case "ICS 206CANINE" -> {
+					if (included == null
+							? isIapAttachmentSelected(data, formKey)
+							: included.contains(formKey)) {
+						data.getCanineMedicalPlan().setIapPage(String.valueOf(page));
+						page += Ics206CaninePdfRenderer.pageCount(data);
 					}
 				}
 				case "SAR Task Assignment" -> {
@@ -627,6 +651,10 @@ public class PdfExportService {
 		copy.setForm208(data.getForm208());
 		copy.setForm205aIapPage(data.getForm205aIapPage());
 		copy.setForm207(data.getForm207());
+		copy.setMedicalPlan(data.getMedicalPlan());
+		copy.setCanineMedicalPlan(data.getCanineMedicalPlan());
+		copy.setVetDirectory(data.getVetDirectory());
+		copy.setStagingLocation(data.getStagingLocation());
 		copy.setForm204(data.getForm204());
 		copy.setAdditionalForms204(data.getAdditionalForms204());
 		copy.setActivityLogs(data.getActivityLogs());

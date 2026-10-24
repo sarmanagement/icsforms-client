@@ -4,6 +4,9 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -19,7 +22,9 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 8;
+	public static final int CURRENT_SCHEMA_VERSION = 11;
+	private static final ObjectMapper MEDICAL_PLAN_COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
+			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
 	/**
 	 * A lightweight snapshot of the shared context at the end of one operational
@@ -30,6 +35,8 @@ public class AppData {
 		private LocalDateTime periodStart;
 		private LocalDateTime periodEnd;
 		private List<String> incidentCommanders = new ArrayList<>();
+		private MedicalPlan medicalPlan;
+		private CanineMedicalPlan canineMedicalPlan;
 
 		/** Creates an empty record. */
 		public OperationalPeriodRecord() {
@@ -88,6 +95,42 @@ public class AppData {
 		public void setIncidentCommanders(List<String> incidentCommanders) {
 			this.incidentCommanders = incidentCommanders == null ? new ArrayList<>() : incidentCommanders;
 		}
+
+		/**
+		 * Returns the archived standard medical plan for this period.
+		 *
+		 * @return archived plan, or null when no plan existed.
+		 */
+		public MedicalPlan getMedicalPlan() {
+			return medicalPlan;
+		}
+
+		/**
+		 * Sets the archived standard medical plan.
+		 *
+		 * @param medicalPlan archived plan.
+		 */
+		public void setMedicalPlan(MedicalPlan medicalPlan) {
+			this.medicalPlan = medicalPlan;
+		}
+
+		/**
+		 * Returns the archived canine medical plan for this period.
+		 *
+		 * @return archived plan, or null when no plan existed.
+		 */
+		public CanineMedicalPlan getCanineMedicalPlan() {
+			return canineMedicalPlan;
+		}
+
+		/**
+		 * Sets the archived canine medical plan.
+		 *
+		 * @param canineMedicalPlan archived plan.
+		 */
+		public void setCanineMedicalPlan(CanineMedicalPlan canineMedicalPlan) {
+			this.canineMedicalPlan = canineMedicalPlan;
+		}
 	}
 
 	private int schemaVersion = CURRENT_SCHEMA_VERSION;
@@ -103,6 +146,7 @@ public class AppData {
 	private List<OperationalPeriodRecord> operationalPeriodHistory = new ArrayList<>();
 	private IncidentContext incidentContext = new IncidentContext();
 	private OrganizationalChart organizationalChart = new OrganizationalChart();
+	private MedicalUnitLeaderAssignment medicalUnitLeaderAssignment;
 	private Ics201Form form201 = new Ics201Form();
 	private Ics202Form form202 = new Ics202Form();
 	private Ics215aForm form215a = new Ics215aForm();
@@ -123,6 +167,12 @@ public class AppData {
 	private boolean clueLogIcs233Enabled;
 	private List<TCard> tCards = new ArrayList<>();
 	private PdfLayoutSettings pdfLayoutSettings = new PdfLayoutSettings();
+	private MedicalPlan medicalPlan = new MedicalPlan();
+	private CanineMedicalPlan canineMedicalPlan = new CanineMedicalPlan();
+	private VetDirectory vetDirectory = new VetDirectory();
+	private StagingLocation stagingLocation = new StagingLocation();
+	private List<IncidentLocation> incidentLocations = new ArrayList<>();
+	private String canineRoutingBaseLocationId = "";
 
 	/**
 	 * Creates an empty incident document.
@@ -235,6 +285,7 @@ public class AppData {
 	 * activity logs are cleared so that the new period starts fresh. The IAP phase
 	 * is set to {@link IapPhase#DURING_OP}. The incident context, incident mode,
 	 * and activity event types are retained.
+	 * Medical plan content is copied forward with its review workflow reset.
 	 * Incident-level open action items and tracker/export preferences are also
 	 * retained so unfinished IC/UC work carries into the next operational period.
 	 * </p>
@@ -249,6 +300,8 @@ public class AppData {
 		if (organizationalChart != null) {
 			record.setIncidentCommanders(new ArrayList<>(organizationalChart.getIncidentCommanders()));
 		}
+		record.setMedicalPlan(copyMedicalPlan(getMedicalPlan()));
+		record.setCanineMedicalPlan(copyCanineMedicalPlan(getCanineMedicalPlan()));
 		operationalPeriodHistory.add(record);
 		getArchivedSafetyHazardReports().addAll(archiveSafetyHazardReports(sarTaskAssignments,
 				record.getPeriodStart(), record.getPeriodEnd()));
@@ -262,6 +315,30 @@ public class AppData {
 		this.clueLogEntries = new ArrayList<>();
 		this.tCards = new ArrayList<>();
 		this.activityLogs = new ArrayList<>();
+		this.medicalPlan = copyMedicalPlan(record.getMedicalPlan());
+		this.medicalPlan.resetReviewState();
+		this.canineMedicalPlan = copyCanineMedicalPlan(record.getCanineMedicalPlan());
+		this.canineMedicalPlan.resetReviewState();
+	}
+
+	/**
+	 * Creates a deep copy of a human medical plan, including its nested entries.
+	 *
+	 * @param plan source plan.
+	 * @return independent plan copy.
+	 */
+	private static MedicalPlan copyMedicalPlan(MedicalPlan plan) {
+		return MEDICAL_PLAN_COPIER.convertValue(plan, MedicalPlan.class);
+	}
+
+	/**
+	 * Creates a deep copy of a canine medical plan, including facility snapshots.
+	 *
+	 * @param plan source plan.
+	 * @return independent plan copy.
+	 */
+	private static CanineMedicalPlan copyCanineMedicalPlan(CanineMedicalPlan plan) {
+		return MEDICAL_PLAN_COPIER.convertValue(plan, CanineMedicalPlan.class);
 	}
 
 	/**
@@ -514,6 +591,112 @@ public class AppData {
 	 */
 	public OrganizationalChart getOrganizationalChart() {
 		return organizationalChart;
+	}
+
+	/**
+	 * Returns the authoritative Medical Unit Leader assignment, reconciling legacy
+	 * duplicate fields the first time it is accessed.
+	 *
+	 * <p>For files predating the shared assignment, the migration prefers the Org
+	 * Chart role name, then the supplemental ICS 203 role, then the human plan's
+	 * preparer field, and finally the canine plan's preparer field. Conflicting
+	 * legacy names remain in their original fields and are also recorded on the
+	 * shared assignment for review. The designated medical service/person field is
+	 * intentionally not treated as a Medical Unit Leader assignment.</p>
+	 *
+	 * @return canonical Medical Unit Leader assignment.
+	 */
+	public MedicalUnitLeaderAssignment getMedicalUnitLeaderAssignment() {
+		if (medicalUnitLeaderAssignment == null) {
+			reconcileMedicalUnitLeaderAssignment();
+		}
+		return medicalUnitLeaderAssignment;
+	}
+
+	/**
+	 * Sets the authoritative Medical Unit Leader assignment.
+	 *
+	 * @param medicalUnitLeaderAssignment shared assignment; null triggers legacy reconciliation.
+	 */
+	public void setMedicalUnitLeaderAssignment(MedicalUnitLeaderAssignment medicalUnitLeaderAssignment) {
+		this.medicalUnitLeaderAssignment = medicalUnitLeaderAssignment;
+		if (this.medicalUnitLeaderAssignment != null) {
+			preserveMedicalUnitLeaderLegacyConflicts();
+		}
+	}
+
+	/**
+	 * Migrates legacy role copies without erasing any of their values.
+	 */
+	public void reconcileMedicalUnitLeaderAssignment() {
+		if (medicalUnitLeaderAssignment == null) {
+			medicalUnitLeaderAssignment = new MedicalUnitLeaderAssignment();
+			String legacyName = firstNonBlank(
+					organizationalChart == null ? "" : organizationalChart.getMedicalUnitLeaderName(),
+					legacyIcs203MedicalUnitLeader(),
+					medicalPlan == null ? "" : medicalPlan.getPreparedByMedicalUnitLeader(),
+					canineMedicalPlan == null ? "" : canineMedicalPlan.getPreparedByMedicalUnitLeader());
+			medicalUnitLeaderAssignment.setName(legacyName);
+			if (organizationalChart != null) {
+				medicalUnitLeaderAssignment.setRadioChannel(organizationalChart.getMedicalUnitLeaderRadio());
+				medicalUnitLeaderAssignment.setPhoneNumber(organizationalChart.getMedicalUnitLeaderPhone());
+			}
+		}
+		preserveMedicalUnitLeaderLegacyConflicts();
+	}
+
+	/**
+	 * Records legacy role values that disagree with the canonical assignment.
+	 */
+	private void preserveMedicalUnitLeaderLegacyConflicts() {
+		String canonicalName = medicalUnitLeaderAssignment.getName().trim();
+		preserveIfConflicting("organizationalChart.medicalUnitLeaderName",
+				organizationalChart == null ? "" : organizationalChart.getMedicalUnitLeaderName(), canonicalName);
+		preserveIfConflicting("organizationalChart.assignmentList.medicalUnitLeader",
+				legacyIcs203MedicalUnitLeader(), canonicalName);
+		preserveIfConflicting("medicalPlan.preparedByMedicalUnitLeader",
+				medicalPlan == null ? "" : medicalPlan.getPreparedByMedicalUnitLeader(), canonicalName);
+		preserveIfConflicting("canineMedicalPlan.preparedByMedicalUnitLeader",
+				canineMedicalPlan == null ? "" : canineMedicalPlan.getPreparedByMedicalUnitLeader(), canonicalName);
+	}
+
+	/**
+	 * Retains a nonblank legacy value that differs from the canonical role name.
+	 *
+	 * @param source legacy field path.
+	 * @param value original value.
+	 * @param canonicalName authoritative value.
+	 */
+	private void preserveIfConflicting(String source, String value, String canonicalName) {
+		if (value != null && !value.isBlank() && !value.trim().equals(canonicalName)) {
+			medicalUnitLeaderAssignment.preserveLegacyConflict(source, value);
+		}
+	}
+
+	/**
+	 * Reads the legacy Medical Unit Leader entry from the supplemental ICS 203 form.
+	 *
+	 * @return legacy assigned name, or blank when unavailable.
+	 */
+	private String legacyIcs203MedicalUnitLeader() {
+		return organizationalChart == null || organizationalChart.getAssignmentList() == null
+				? "" : organizationalChart.getAssignmentList()
+						.getPosition(Ics203Form.Position.MEDICAL_UNIT_LEADER);
+	}
+
+	/**
+	 * Returns the first nonblank legacy value in migration-priority order.
+	 *
+	 * @param values ordered candidate names.
+	 * @return trimmed first nonblank name or blank.
+	 */
+	private String firstNonBlank(String... values) {
+		for (String value : values) {
+			if (value != null && !value.isBlank()) {
+				return value.trim();
+			}
+		}
+		return "";
 	}
 
 	/**
@@ -912,6 +1095,141 @@ public class AppData {
 	 */
 	public void setTCards(List<TCard> tCards) {
 		this.tCards = tCards == null ? new ArrayList<>() : tCards;
+	}
+
+	/**
+	 * Returns the current period's standard medical plan.
+	 *
+	 * @return standard medical plan, never null.
+	 */
+	public MedicalPlan getMedicalPlan() {
+		if (medicalPlan == null) {
+			medicalPlan = new MedicalPlan();
+		}
+		return medicalPlan;
+	}
+
+	/**
+	 * Sets the current period's standard medical plan.
+	 *
+	 * @param medicalPlan plan; null becomes inactive and empty.
+	 */
+	public void setMedicalPlan(MedicalPlan medicalPlan) {
+		this.medicalPlan = medicalPlan == null ? new MedicalPlan() : medicalPlan;
+	}
+
+	/**
+	 * Returns the independent current period's canine medical plan.
+	 *
+	 * @return canine medical plan, never null.
+	 */
+	public CanineMedicalPlan getCanineMedicalPlan() {
+		if (canineMedicalPlan == null) {
+			canineMedicalPlan = new CanineMedicalPlan();
+		}
+		return canineMedicalPlan;
+	}
+
+	/**
+	 * Sets the independent current period's canine medical plan.
+	 *
+	 * @param canineMedicalPlan plan; null becomes inactive and empty.
+	 */
+	public void setCanineMedicalPlan(CanineMedicalPlan canineMedicalPlan) {
+		this.canineMedicalPlan = canineMedicalPlan == null ? new CanineMedicalPlan() : canineMedicalPlan;
+	}
+
+	/**
+	 * Returns incident-owned copies of imported regional veterinarian records.
+	 *
+	 * @return reusable directory, never null.
+	 */
+	public VetDirectory getVetDirectory() {
+		if (vetDirectory == null) {
+			vetDirectory = new VetDirectory();
+		}
+		return vetDirectory;
+	}
+
+	/**
+	 * Replaces the incident-owned regional directory.
+	 *
+	 * @param vetDirectory directory; null becomes empty.
+	 */
+	public void setVetDirectory(VetDirectory vetDirectory) {
+		this.vetDirectory = vetDirectory == null ? new VetDirectory() : vetDirectory;
+	}
+
+	/**
+	 * Returns the shared incident staging/base location.
+	 *
+	 * @return staging/base location, never null.
+	 */
+	public StagingLocation getStagingLocation() {
+		if (stagingLocation == null) {
+			stagingLocation = new StagingLocation();
+		}
+		return stagingLocation;
+	}
+
+	/**
+	 * Sets the shared incident staging/base location.
+	 *
+	 * @param stagingLocation location; null becomes empty.
+	 */
+	public void setStagingLocation(StagingLocation stagingLocation) {
+		this.stagingLocation = stagingLocation == null ? new StagingLocation() : stagingLocation;
+	}
+
+	/**
+	 * Returns the incident-owned ICP, staging, base, and other location records.
+	 *
+	 * @return mutable location list, never null.
+	 */
+	public List<IncidentLocation> getIncidentLocations() {
+		if (incidentLocations == null) {
+			incidentLocations = new ArrayList<>();
+		}
+		return incidentLocations;
+	}
+
+	/**
+	 * Replaces incident-owned operational locations.
+	 *
+	 * @param incidentLocations location list; null becomes empty.
+	 */
+	public void setIncidentLocations(List<IncidentLocation> incidentLocations) {
+		this.incidentLocations = incidentLocations == null ? new ArrayList<>() : incidentLocations;
+	}
+
+	/**
+	 * Returns the incident location selected as the canine routing origin.
+	 *
+	 * @return selected location identifier, or blank for the shared manual base.
+	 */
+	public String getCanineRoutingBaseLocationId() {
+		return canineRoutingBaseLocationId == null ? "" : canineRoutingBaseLocationId;
+	}
+
+	/**
+	 * Selects an incident location as the canine routing origin.
+	 *
+	 * @param canineRoutingBaseLocationId location identifier, or blank for a manual base.
+	 */
+	public void setCanineRoutingBaseLocationId(String canineRoutingBaseLocationId) {
+		this.canineRoutingBaseLocationId = canineRoutingBaseLocationId == null ? "" : canineRoutingBaseLocationId;
+	}
+
+	/**
+	 * Determines canine workspace eligibility without regard to card status.
+	 *
+	 * @return true for SAR mode or when any card identifies a canine resource.
+	 */
+	public boolean isCanineMedicalWorkspaceEligible() {
+		if (getIncidentMode() == IncidentMode.SAR) {
+			return true;
+		}
+		return getTCards().stream().anyMatch(TCard::isCanineResourceCard);
 	}
 
 	/**

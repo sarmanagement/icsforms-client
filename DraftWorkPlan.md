@@ -211,3 +211,23 @@ Build or integrate a mobile client against the versioned API, with offline-first
 - Make authority, sync status, role, and data freshness visible to users.
 - Test with fixture incidents and realistic field constraints; do not use real sensitive incident data in public test fixtures.
 - Revisit estimates and assumptions after each stage and field exercise. Defer work that is not necessary to prove the current stage's exit criteria.
+
+## Issue #17 — Medical plans and role-oriented workspaces
+
+Issue #17 is a separate, seven-phase desktop workflow. It adds a standard human ICS 206 and an explicitly adapted canine ICS 206CANINE, plus role-oriented views over shared incident editors. The canine tab is normally eligible when the incident is SAR mode **or** at least one canine T-card exists; hiding it must not remove its saved data. A saved canine workspace must remain openable from View navigation even when normal eligibility is false.
+
+The canine directory is stored as an incident-owned copy. One or more reusable regional JSON/CSV files may be merged into an incident, edited there, and explicitly exported later. The accepted shortlist is a separate snapshot, so saving eight selected vets must not truncate the regional directory or require source files to remain present. Do not write edits to source files implicitly.
+
+Address geocoding and driving routing are independent provider interfaces. ORS is the default: resolve address candidates for operator confirmation, then calculate ground driving distance from the staging/base to every eligible resolved facility before ranking. Use distance as the primary order and display route duration only when provided by the routing service. A straight-line fallback is an explicitly labeled estimate, not road distance or travel time. Do not imply that routing verifies a facility's availability or capability. ORS receives addresses/coordinates; never send clinical or personal details, and do not store the key in incident data. OSRM is a possible route alternative, but requires a separate geocoder and coordinates. Check the providers' current terms, quotas, and request limits before production use.
+
+These seven implementation phases are tracked in one pull request, not seven separate PRs:
+
+- [ ] **Phase 1 —** Additive plan/directory/base models, migrations, safe legacy defaults, and period rollover archives.
+- [ ] **Phase 2 —** Standard ICS 206 numbered blocks, shared PDF frame/footer, measured pagination, and regression tests.
+- [ ] **Phase 3 —** Human plan editor, simple/detailed retention, role suggestions, dirty-state/lifecycle behavior.
+- [ ] **Phase 4 —** Local JSON/CSV directory merge/export, address geocoding, default ORS routes, provenance, offline/error handling.
+- [ ] **Phase 5 —** Independent canine editor and adapted PDF, nearest-vet proposal review, dynamic eligibility, saved-data access.
+- [ ] **Phase 6 —** IC/ICP, Safety Officer, Operations, and Communications dashboards over shared editors; show safety, org chart, and medical workspaces to Operations and Communications.
+- [ ] **Phase 7 —** IAP attachment/page-number integration, documentation, full tests, and migration/export regression evidence.
+
+Issue #14 remains separate: it owns the ICS 205 model/editor, radio plan, frequency-file import, landscape PDF, and radio-to-resource linking. This issue provides a Communications dashboard using existing contacts/resources/logs and a future extension point only; it does not implement ICS 205 or invent an ICS 205A editor.

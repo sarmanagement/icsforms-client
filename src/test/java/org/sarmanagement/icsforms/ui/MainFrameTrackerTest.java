@@ -30,7 +30,54 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Display-backed smoke coverage for independent tracker tab visibility. */
 class MainFrameTrackerTest {
 	@Test
-	void trackerSurvivesSarGenericDisableAndPersistence() throws Exception {
+void typedWorkspaceApiOpensNestedMedicalPlansAndSafetyOverview() throws Exception {
+	Assumptions.assumeFalse(GraphicsEnvironment.isHeadless());
+	Path path = Path.of("target/main-frame-workspace-navigation-store");
+	AppData data = new AppData();
+	data.setIncidentMode(IncidentMode.GENERIC);
+	data.getCanineMedicalPlan().setAidStationInformation("Saved canine aid station");
+	try (FileIncidentStore store = new FileIncidentStore(path)) {
+		IncidentId id = store.create(data);
+		SwingUtilities.invokeAndWait(() -> {
+			MainFrame frame = new MainFrame(data, store, id,
+					new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
+							new SarTaskAssignmentPdfRenderer()),
+					new IncidentValidator(), Path.of("target"));
+			try {
+				frame.openWorkspace(WorkspaceDestination.humanMedicalPlan());
+				MedicalWorkspacePanel medical = (MedicalWorkspacePanel) field(frame, "medicalWorkspacePanel");
+				JTabbedPane tabs = (JTabbedPane) field(frame, "tabs");
+				assertEquals(medical, tabs.getSelectedComponent());
+				assertEquals("Medical Plan (ICS 206)", medical.planTabs().getTitleAt(0));
+				assertEquals(0, medical.planTabs().getSelectedIndex());
+
+				frame.openWorkspace(WorkspaceDestination.canineMedicalPlan());
+				assertEquals(medical, tabs.getSelectedComponent());
+				assertEquals(2, medical.planTabs().getTabCount());
+				assertEquals(WorkspaceId.CANINE_MEDICAL_PLAN.displayLabel(),
+						medical.planTabs().getTitleAt(medical.planTabs().getSelectedIndex()));
+				assertEquals("Saved canine aid station",
+						data.getCanineMedicalPlan().getAidStationInformation());
+
+				frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.SAFETY_OVERVIEW));
+				assertEquals("Safety Overview", tabs.getTitleAt(tabs.getSelectedIndex()));
+				var refresh = MainFrame.class.getDeclaredMethod("refreshFromModel");
+				refresh.setAccessible(true);
+				refresh.invoke(frame);
+				assertEquals("Safety Overview", tabs.getTitleAt(tabs.getSelectedIndex()));
+			} catch (Throwable exception) {
+				throw new AssertionError(exception);
+			} finally {
+				frame.dispose();
+			}
+		});
+	} finally {
+		deleteTree(path);
+	}
+}
+
+@Test
+void trackerSurvivesSarGenericDisableAndPersistence() throws Exception {
 		Assumptions.assumeFalse(GraphicsEnvironment.isHeadless());
 		Path path = Path.of("target/main-frame-tracker-store");
 		AppData data = new AppData();
@@ -156,6 +203,12 @@ class MainFrameTrackerTest {
 					// Re-selecting via Go to Log restores the log
 					goToLog.getItem(0).doClick();
 					assertFalse(closedLogs.contains(icpLog));
+					JTabbedPane tabs = (JTabbedPane) field(frame, "tabs");
+					assertEquals(icpLog, ((Ics214Panel) tabs.getSelectedComponent()).getCurrentForm());
+					goToLog.getItem(1).doClick();
+					assertEquals(taskLog, ((Ics214Panel) tabs.getSelectedComponent()).getCurrentForm());
+					goToLog.getItem(0).doClick();
+					assertEquals(icpLog, ((Ics214Panel) tabs.getSelectedComponent()).getCurrentForm());
 				} catch (Throwable exception) {
 					throw new AssertionError(exception);
 				} finally {
@@ -163,11 +216,35 @@ class MainFrameTrackerTest {
 				}
 			});
 		} finally {
-			if (Files.exists(path)) {
-				try (var files = Files.walk(path)) {
-					for (Path file : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
-						Files.deleteIfExists(file);
-					}
+			deleteTree(path);
+		}
+	}
+
+	/**
+	 * Reads a private MainFrame component for display-backed navigation assertions.
+	 *
+	 * @param frame application frame.
+	 * @param fieldName component field.
+	 * @return field value.
+	 * @throws ReflectiveOperationException when the field is unavailable.
+	 */
+	private static Object field(MainFrame frame, String fieldName) throws ReflectiveOperationException {
+		Field field = MainFrame.class.getDeclaredField(fieldName);
+		field.setAccessible(true);
+		return field.get(frame);
+	}
+
+	/**
+	 * Removes a temporary test store and all of its contents.
+	 *
+	 * @param path root path to remove.
+	 * @throws Exception when cleanup fails.
+	 */
+	private static void deleteTree(Path path) throws Exception {
+		if (Files.exists(path)) {
+			try (var paths = Files.walk(path)) {
+				for (Path file : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(file);
 				}
 			}
 		}

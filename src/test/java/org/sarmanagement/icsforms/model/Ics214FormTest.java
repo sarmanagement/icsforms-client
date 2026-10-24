@@ -75,11 +75,11 @@ class Ics214FormTest {
 	}
 
 	@Test
-	void appDataSchemaVersionIsNowEight() {
+	void appDataSchemaVersionIsNowEleven() {
 		AppData data = new AppData();
 
-		assertEquals(8, AppData.CURRENT_SCHEMA_VERSION);
-		assertEquals(8, data.getSchemaVersion());
+		assertEquals(11, AppData.CURRENT_SCHEMA_VERSION);
+		assertEquals(11, data.getSchemaVersion());
 	}
 
 	// --- ActivityEventType configurable behaviour ----------------------------
