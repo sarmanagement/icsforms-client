@@ -39,8 +39,12 @@ class MedicalWorkspacePanelTest {
 		MedicalWorkspacePanel panel = medicalWorkspace(data);
 
 		assertEquals(1, panel.planTabs().getTabCount());
+		assertTrue(panel.planTabs().getIconAt(0) != null);
+		assertEquals("Human medical plan", panel.planTabs().getToolTipTextAt(0));
 		panel.setCanineVisible(true);
 		assertEquals(2, panel.planTabs().getTabCount());
+		assertTrue(panel.planTabs().getIconAt(1) != null);
+		assertEquals("Canine medical plan", panel.planTabs().getToolTipTextAt(1));
 		panel.openCaninePlan();
 		assertEquals(1, panel.planTabs().getSelectedIndex());
 		panel.setCanineVisible(false);
