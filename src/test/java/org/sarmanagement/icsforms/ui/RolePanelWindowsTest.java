@@ -12,12 +12,14 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
+import java.awt.GraphicsEnvironment;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /** Exercises visible role-window wiring and incident-switch registration under Xvfb. */
 class RolePanelWindowsTest {
@@ -26,6 +28,7 @@ class RolePanelWindowsTest {
 
 	@Test
 	void opensFocusedRoleWindowsAndRegistersThemAsIncidentEditors() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless(), "Role windows require a display");
 		AppData data = new AppData();
 		data.getIncidentContext().setIncidentName("Window exercise");
 		AppController controller = new AppController(data,
