@@ -288,7 +288,8 @@ public class MainFrame extends JFrame {
 		JMenu menu = new JMenu("Dashboard");
 		ButtonGroup group = new ButtonGroup();
 		for (Dashboard dashboard : Dashboard.values()) {
-			JRadioButtonMenuItem item = new JRadioButtonMenuItem(dashboard.label(), dashboard == selected);
+			String label = dashboard == Dashboard.IC_ICP ? dashboard.label() + " (default)" : dashboard.label();
+			JRadioButtonMenuItem item = new JRadioButtonMenuItem(label, dashboard == selected);
 			item.addActionListener(event -> selector.accept(dashboard));
 			group.add(item);
 			menu.add(item);
@@ -347,8 +348,6 @@ public class MainFrame extends JFrame {
 		configMenu.setMnemonic(KeyEvent.VK_C);
 		JMenu logsListMenu = new JMenu("Go to Log");
 		logsListMenu.setMnemonic(KeyEvent.VK_G);
-		viewMenu.add(createDashboardMenu(activeDashboard, this::selectDashboard));
-		viewMenu.addSeparator();
 		JMenu rolePanelsMenu = new JMenu("Role Panels");
 		JMenuItem safetyRolePanel = new JMenuItem("Safety Officer");
 		safetyRolePanel.addActionListener(
@@ -380,6 +379,7 @@ public class MainFrame extends JFrame {
 				event -> CanineMedicalReferenceWindow.open(this, controller, this::openWorkspace));
 		viewMenu.add(humanMedicalReference);
 		viewMenu.add(canineMedicalReference);
+		viewMenu.add(createDashboardMenu(activeDashboard, this::selectDashboard));
 		viewMenu.addSeparator();
 		JMenu openLogInNewWindowMenu = new JMenu("Open Log in New Window");
 		openLogInNewWindowMenu.setMnemonic(KeyEvent.VK_O);

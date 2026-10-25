@@ -59,6 +59,9 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   to multiple ICS 204 assignments. Deleting a linked objective requires an explicit unlink or
   replacement choice. Incident Command approval is bound to the current objective wording and
   order, so subsequent changes display the approval as stale rather than silently retaining it.
+  Edit objective wording directly in the ICS 202 table; use the objective editor for assessment
+  and notes. **Apply to assignments…** selects supporting assignments grouped by branch/division/group.
+  Assignment dialogs keep **Supporting Incident Objective(s)** at the bottom, empty until linked.
 - Safety, human medical, canine medical, and communications reviews are independent assertions
   over substantive content. Generated page numbers do not invalidate review, but relevant plan
   changes do.
@@ -85,6 +88,8 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   Safety and Medical Unit Leader use the shared role assignments and review records. Recorded
   resource status is displayed as recorded and is not treated as a readiness or radio-check
   certification.
+  The IC resource overview can break down recorded statuses by resource type. Plan-state badges
+  distinguish recorded content from explicit review/approval; counts are not sufficiency scores.
 - **Export All PDFs** for individual per-form PDF files.
 - **Export IAP Bundle** for a single merged PDF bundle of selected forms with a cover page.
 - PDF export handles multiline text and tabs, and reports unwanted controls or unsupported characters with the affected form/field and correction guidance. Failed renders do not replace existing good PDFs or leave partial bundle files.

@@ -8,6 +8,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
@@ -39,6 +40,246 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class Ics204PanelTest {
 	private static final int COMPONENTS_PER_COMPACT_CONTACT_ROW = 4;
+
+	@Test
+	void supportingObjectivesAreBlankUnlessLinkedAndAppearLastWithExplicitActions() throws Exception {
+		AppController controller = sampleController();
+		IncidentObjective objective = new IncidentObjective("Support this", 0);
+		controller.getData().getForm202().setStructuredObjectives(List.of(objective));
+		ResourceAssignment assignment = controller.getAssignmentResources().get(0);
+		Object editor = assignmentEditor(assignment, controller);
+		var list = (javax.swing.JList<?>) fieldValue(editor, "objectivesField");
+		assertEquals(0, list.getModel().getSize());
+		JPanel panel = (JPanel) fieldValue(editor, "panel");
+		assertNotNull(findButton(panel, "Add from list…"));
+		assertNotNull(findButton(panel, "Remove"));
+		var layout = (java.awt.GridBagLayout) panel.getLayout();
+		int lastRow = java.util.Arrays.stream(panel.getComponents())
+				.filter(component -> component instanceof javax.swing.JLabel)
+				.mapToInt(component -> layout.getConstraints(component).gridy).max().orElseThrow();
+		assertTrue(java.util.Arrays.stream(panel.getComponents())
+				.anyMatch(component -> component instanceof javax.swing.JLabel label
+						&& "Supporting Incident Objective(s)".equals(label.getText())
+						&& layout.getConstraints(component).gridy == lastRow));
+		assignment.setObjectiveIds(List.of(objective.getObjectiveId()));
+		editor = assignmentEditor(assignment, controller);
+		list = (javax.swing.JList<?>) fieldValue(editor, "objectivesField");
+		assertEquals(1, list.getModel().getSize());
+		assertTrue(list.getModel().getElementAt(0).toString().contains("Support this"));
+	}
+
+	@Test
+	void objectiveDraftSupportsZeroManyDuplicatePreventionAndRemoveWithoutMutatingUntilSave() throws Exception {
+		AppController controller = sampleController();
+		IncidentObjective first = new IncidentObjective("First", 0);
+		IncidentObjective second = new IncidentObjective("Second", 1);
+		controller.getData().getForm202().setStructuredObjectives(List.of(first, second));
+		ResourceAssignment assignment = controller.getAssignmentResources().get(0);
+		Object editor = assignmentEditor(assignment, controller);
+		var add = editor.getClass().getDeclaredMethod("addObjectives", List.class);
+		add.setAccessible(true);
+		add.invoke(editor, List.of());
+		add.invoke(editor, List.of(first, second, first));
+		assertTrue(assignment.getObjectiveIds().isEmpty());
+		var list = (javax.swing.JList<?>) fieldValue(editor, "objectivesField");
+		assertEquals(2, list.getModel().getSize());
+		saveEditor(new Ics204Panel(controller), assignment, editor);
+		assertEquals(List.of(first.getObjectiveId(), second.getObjectiveId()), assignment.getObjectiveIds());
+		list.setSelectionInterval(0, 1);
+		var remove = editor.getClass().getDeclaredMethod("removeSelectedObjectives");
+		remove.setAccessible(true);
+		remove.invoke(editor);
+		assertEquals(2, assignment.getObjectiveIds().size(), "Removing from a canceled draft cannot alter links");
+		saveEditor(new Ics204Panel(controller), assignment, editor);
+		assertTrue(assignment.getObjectiveIds().isEmpty());
+	}
+
+	@Test
+	void assignmentSaveKeepsStableObjectiveLinksAcrossReorderAndDoesNotResurrectDeletedLinks() throws Exception {
+		AppController controller = sampleController();
+		IncidentObjective first = new IncidentObjective("First", 0);
+		IncidentObjective second = new IncidentObjective("Second", 1);
+		controller.getData().getForm202().setStructuredObjectives(List.of(first, second));
+		ResourceAssignment assignment = controller.getAssignmentResources().get(0);
+		assignment.setObjectiveIds(List.of(first.getObjectiveId(), second.getObjectiveId()));
+		Object editor = assignmentEditor(assignment, controller);
+		controller.getData().getForm202().setStructuredObjectives(List.of(second, first));
+		saveEditor(new Ics204Panel(controller), assignment, editor);
+		assertEquals(List.of(first.getObjectiveId(), second.getObjectiveId()), assignment.getObjectiveIds());
+		controller.getData().removeObjective(first.getObjectiveId(), "", true);
+		saveEditor(new Ics204Panel(controller), assignment, editor);
+		assertEquals(List.of(second.getObjectiveId()), assignment.getObjectiveIds());
+	}
+
+	@Test
+	void staleAssignmentEditorCannotSaveIntoAnotherIncident() throws Exception {
+		AppController controller = sampleController();
+		ResourceAssignment assignment = controller.getAssignmentResources().get(0);
+		Object editor = assignmentEditor(assignment, controller);
+		((javax.swing.JTextField) fieldValue(editor, "assignmentTeamNumberField")).setText("Stale edit");
+		controller.setData(new AppData());
+		assertThrows(java.lang.reflect.InvocationTargetException.class,
+				() -> saveEditor(new Ics204Panel(controller), assignment, editor));
+		assertEquals("A-1", assignment.getAssignmentTeamNumber());
+		assertTrue(controller.getAssignmentResources().isEmpty());
+	}
+
+	@Test
+	void supportingObjectivePickerCancelAddAndStaleGuard() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		AppController controller = sampleController();
+		controller.getData().getForm202().setObjectives(List.of("First", "Second"));
+		ResourceAssignment assignment = controller.getAssignmentResources().get(0);
+		SwingUtilities.invokeAndWait(() -> {
+			try {
+				Object editor = assignmentEditor(assignment, controller);
+				var panel = (JPanel) fieldValue(editor, "panel");
+				runObjectivePicker(panel, dialog -> {
+					findList(dialog).setSelectionInterval(0, 1);
+					findButton(dialog, "Cancel").doClick();
+				});
+				var linked = (javax.swing.JList<?>) fieldValue(editor, "objectivesField");
+				assertEquals(0, linked.getModel().getSize());
+				runObjectivePicker(panel, dialog -> {
+					findList(dialog).setSelectionInterval(0, 1);
+					findButton(dialog, "Add").doClick();
+				});
+				assertEquals(2, linked.getModel().getSize());
+				assertTrue(assignment.getObjectiveIds().isEmpty());
+				linked.setSelectionInterval(0, 1);
+				findButton(panel, "Remove").doClick();
+				assertEquals(0, linked.getModel().getSize());
+				runObjectivePicker(panel, dialog -> {
+					findList(dialog).setSelectionInterval(0, 1);
+					controller.setData(new AppData());
+					findButton(dialog, "Add").doClick();
+				});
+				assertEquals(0, linked.getModel().getSize());
+				assertTrue(assignment.getObjectiveIds().isEmpty());
+			} catch (ReflectiveOperationException exception) {
+				throw new AssertionError(exception);
+			}
+		});
+	}
+
+	@Test
+	void actualSortedAssignmentEditorCancelPreservesLinksAndSavePersistsMultiplePickerSelections() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		AppController controller = sampleController();
+		IncidentObjective first = new IncidentObjective("First", 0);
+		IncidentObjective second = new IncidentObjective("Second", 1);
+		IncidentObjective third = new IncidentObjective("Third", 2);
+		controller.getData().getForm202().setStructuredObjectives(List.of(first, second, third));
+		ResourceAssignment original = controller.getAssignmentResources().get(0);
+		ResourceAssignment target = new ResourceAssignment();
+		target.setAssignmentTeamNumber("Z-2");
+		target.setObjectiveIds(List.of(first.getObjectiveId()));
+		controller.getData().getForm204().setResourcesAssigned(new java.util.ArrayList<>(List.of(original, target)));
+		SwingUtilities.invokeAndWait(() -> {
+			Ics204Panel panel = new Ics204Panel(controller);
+			panel.refreshFromModel();
+			JTable table = (JTable) fieldValue(panel, "resourceTable");
+			table.setAutoCreateRowSorter(true);
+			table.getRowSorter().toggleSortOrder(0);
+			table.getRowSorter().toggleSortOrder(0);
+			assertEquals("Z-2", table.getValueAt(0, 0));
+			table.setRowSelectionInterval(0, 0);
+			Runnable launch = () -> ((JMenuItem) table.getComponentPopupMenu().getComponent(1)).doClick();
+			runDialog(launch, "Edit assignment Z-2", dialog -> {
+				javax.swing.JList<?> linked = findList(dialog);
+				assertEquals(1, linked.getModel().getSize());
+				linked.setSelectedIndex(0);
+				findButton(dialog, "Remove").doClick();
+				runObjectivePicker(dialog, picker -> {
+					findList(picker).setSelectionInterval(1, 2);
+					findButton(picker, "Add").doClick();
+				});
+				assertEquals(2, linked.getModel().getSize());
+				assertEquals(List.of(first.getObjectiveId()), target.getObjectiveIds());
+				findButton(dialog, "Cancel").doClick();
+			});
+			assertEquals(List.of(first.getObjectiveId()), target.getObjectiveIds());
+			assertTrue(original.getObjectiveIds().isEmpty());
+			runDialog(launch, "Edit assignment Z-2", dialog -> {
+				javax.swing.JList<?> linked = findList(dialog);
+				linked.setSelectedIndex(0);
+				findButton(dialog, "Remove").doClick();
+				runObjectivePicker(dialog, picker -> {
+					findList(picker).setSelectionInterval(1, 2);
+					findButton(picker, "Add").doClick();
+				});
+				findButton(dialog, "Save").doClick();
+			});
+			assertEquals(List.of(second.getObjectiveId(), third.getObjectiveId()), target.getObjectiveIds());
+			assertTrue(original.getObjectiveIds().isEmpty());
+		});
+	}
+
+	private static Object assignmentEditor(ResourceAssignment row, AppController controller)
+			throws ReflectiveOperationException {
+		Class<?> type = Class.forName(Ics204Panel.class.getName() + "$ResourceAssignmentEditor");
+		var constructor = type.getDeclaredConstructor(ResourceAssignment.class, AppController.class);
+		constructor.setAccessible(true);
+		return constructor.newInstance(row, controller);
+	}
+
+	private static void saveEditor(Ics204Panel panel, ResourceAssignment row, Object editor)
+			throws ReflectiveOperationException {
+		var save = Ics204Panel.class.getDeclaredMethod("saveAssignmentEditor", ResourceAssignment.class,
+				editor.getClass());
+		save.setAccessible(true);
+		save.invoke(panel, row, editor);
+	}
+
+	private static void runObjectivePicker(Component panel, java.util.function.Consumer<javax.swing.JDialog> action) {
+		runDialog(() -> findButton(panel, "Add from list…").doClick(), "Add supporting incident objectives", action);
+	}
+
+	private static void runDialog(Runnable launch, String title,
+			java.util.function.Consumer<javax.swing.JDialog> action) {
+		var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+		var found = new java.util.concurrent.atomic.AtomicBoolean();
+		var timer = new javax.swing.Timer(80, event -> {
+			for (java.awt.Window window : java.awt.Window.getWindows()) {
+				if (window instanceof javax.swing.JDialog dialog && dialog.isVisible()
+						&& title.equals(dialog.getTitle())) {
+					((javax.swing.Timer) event.getSource()).stop();
+					found.set(true);
+					try {
+						action.accept(dialog);
+					} catch (Throwable exception) {
+						failure.set(exception);
+						dialog.dispose();
+					}
+				}
+			}
+		});
+		timer.start();
+		try {
+			launch.run();
+		} finally {
+			timer.stop();
+		}
+		assertTrue(found.get());
+		if (failure.get() != null) {
+			throw new AssertionError(failure.get());
+		}
+	}
+
+	private static javax.swing.JList<?> findList(Component component) {
+		if (component instanceof javax.swing.JList<?> list) {
+			return list;
+		}
+		if (component instanceof Container container) {
+			for (Component child : container.getComponents()) {
+				var list = findList(child);
+				if (list != null) {
+					return list;
+				}
+			}
+		}
+		return null;
+	}
 
 	@Test
 	void staleSarPushPreservesNewLoggedTaskIdentityStatusTimeAndInlineEdits() throws Exception {

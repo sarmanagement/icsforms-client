@@ -4,15 +4,25 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
+import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.pdf.PdfExportService;
+import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JMenu;
+import javax.swing.JMenuItem;
 import javax.swing.JRadioButtonMenuItem;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import java.awt.GraphicsEnvironment;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 class MainFrameDashboardTest {
 	@Test
@@ -35,9 +45,36 @@ class MainFrameDashboardTest {
 
 		assertEquals("Dashboard", dashboardMenu.getText());
 		assertEquals(4, dashboardMenu.getItemCount());
+		assertEquals("IC/ICP (default)", dashboardMenu.getItem(0).getText());
+		assertEquals("IC/ICP", MainFrame.Dashboard.IC_ICP.label());
 		assertTrue(((JRadioButtonMenuItem) dashboardMenu.getItem(0)).isSelected());
 		dashboardMenu.getItem(2).doClick();
 		assertEquals(List.of(MainFrame.Dashboard.OPERATIONS), selected);
+	}
+
+	@Test
+	void dashboardMenuImmediatelyFollowsCanineReferenceWithoutChangingSavedDefault() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		var directory = Files.createTempDirectory("icsforms-dashboard-menu");
+		SwingUtilities.invokeAndWait(() -> {
+			MainFrame frame = new MainFrame(new AppData(), new LocalRepository(directory.resolve("incident.json")),
+					new PdfExportService(), new IncidentValidator(), directory);
+			try {
+				JMenu view = frame.getJMenuBar().getMenu(1);
+				List<String> labels = new ArrayList<>();
+				for (int index = 0; index < view.getItemCount(); index++) {
+					JMenuItem item = view.getItem(index);
+					labels.add(item == null ? "" : item.getText());
+				}
+				int reference = labels.indexOf("Canine Medical Reference — adapted ICS 206CANINE");
+				assertTrue(reference >= 0);
+				assertEquals("Dashboard", labels.get(reference + 1));
+			} finally {
+				AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
+				((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
+				frame.dispose();
+			}
+		});
 	}
 
 	@Test
