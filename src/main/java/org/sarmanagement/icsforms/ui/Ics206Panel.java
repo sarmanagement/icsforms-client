@@ -158,7 +158,6 @@ public class Ics206Panel extends JPanel {
 			plan.setEmergencyProcedures(procedures.getText());
 			plan.setAviationAssetsUsed(aviationUsed.isSelected());
 			plan.setAirOperationsReminder(airOperations.getText());
-			MedicalRoleSupport.setSafetyOfficerName(controller.getData(), reviewedBy.getText());
 			plan.setReviewStatus(String.valueOf(reviewStatus.getSelectedItem()));
 			setPreparedAt(plan);
 			saveAidStations(plan);
@@ -316,7 +315,7 @@ public class Ics206Panel extends JPanel {
 	}
 
 	/**
-	 * Synchronizes a nonblank selected role name across shared form fields and models.
+	 * Synchronizes a selected role name or explicit clearing across shared form fields and models.
 	 *
 	 * @param source edited role field.
 	 * @param otherField corresponding display field, if any.
@@ -336,8 +335,8 @@ public class Ics206Panel extends JPanel {
 					}
 				});
 			}
-		} else if (medicalLeader) {
-			MedicalRoleSupport.setMedicalUnitLeaderName(controller.getData(), "");
+		} else {
+			setSharedRole("", medicalLeader);
 		}
 		inputChanged();
 	}

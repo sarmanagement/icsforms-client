@@ -48,6 +48,121 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 /** Workflow coverage for main-tab representatives and supplemental organization assignments. */
 class OrganizationalChartPanelTest {
 	@Test
+	void safetyOfficerEditsSurviveStalePanelFlushesAndExplicitClearing() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			try {
+				AppController controller = sampleController();
+				OrganizationalChartPanel orgChart = new OrganizationalChartPanel(controller);
+				Ics206Panel humanPlan = new Ics206Panel(controller);
+				CanineMedicalPanel caninePlan = new CanineMedicalPanel(controller, Path.of("target"));
+				JTextField orgName = (JTextField) field(orgChart, "safetyOfficerNameField");
+				JTextField humanName = (JTextField) field(humanPlan, "reviewedBy");
+				JTextField canineName = (JTextField) field(caninePlan, "safetyOfficer");
+				for (JTextField editor : List.of(orgName, humanName, canineName)) {
+					for (String name : List.of("Assigned Safety Officer", "")) {
+						editor.setText(name);
+						orgChart.pushToModel();
+						humanPlan.pushToModel();
+						caninePlan.pushToModel();
+						assertEquals(name, controller.getData().getOrganizationalChart().getSafetyOfficerName());
+						assertEquals(name, controller.getData().getMedicalPlan().getReviewedBySafetyOfficer());
+						assertEquals(name, controller.getData().getCanineMedicalPlan().getReviewedBySafetyOfficer());
+						orgChart.refreshFromModel();
+						humanPlan.refreshFromModel();
+						caninePlan.refreshFromModel();
+						assertEquals(name, orgName.getText());
+						assertEquals(name, humanName.getText());
+						assertEquals(name, canineName.getText());
+					}
+				}
+			} catch (Exception exception) {
+				throw new AssertionError(exception);
+			}
+		});
+	}
+
+	@Test
+	void safetyOfficerPickedFromTCardSurvivesNavigationAndFileStoreReload() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		Path workspace = Files.createTempDirectory(Files.createDirectories(Path.of("target")), "safety-officer-");
+		try (FileIncidentStore store = new FileIncidentStore(workspace)) {
+			AppData data = new AppData();
+			var card = new org.sarmanagement.icsforms.model.TCard();
+			card.setCardType(org.sarmanagement.icsforms.model.TCardType.PERSONNEL);
+			card.setPersonName("Fictional Safety Officer");
+			card.setRadioChannel("Command 1");
+			card.setPhoneNumber("555-0142");
+			data.getTCards().add(card);
+			IncidentId id = store.create(data);
+			SwingUtilities.invokeAndWait(() -> {
+				MainFrame frame = new MainFrame(data, store, id, new PdfExportService(),
+						new IncidentValidator(), workspace);
+				try {
+					frame.setVisible(true);
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ORG_CHART));
+					OrganizationalChartPanel orgChart = (OrganizationalChartPanel) field(frame, "organizationalChartPanel");
+					JTextField name = (JTextField) field(orgChart, "safetyOfficerNameField");
+					Timer selectPerson = new Timer(200, event -> {
+						for (Window window : Window.getWindows()) {
+							if (window instanceof JDialog dialog && dialog.isShowing()
+									&& dialog.getTitle().equals("Select person")) {
+								button(dialog, "Select").doClick();
+							}
+						}
+					});
+					selectPerson.setRepeats(false);
+					Timer timeout = new Timer(5000, event -> {
+						for (Window window : Window.getWindows()) {
+							if (window instanceof JDialog dialog && dialog.getTitle().equals("Select person")) {
+								dialog.dispose();
+							}
+						}
+					});
+					timeout.setRepeats(false);
+					try {
+						selectPerson.start();
+						timeout.start();
+						UiSupport.openInstalledNamePicker(name);
+					} finally {
+						selectPerson.stop();
+						timeout.stop();
+					}
+					assertEquals(card.getPersonName(), name.getText());
+					assertEquals(card.getRadioChannel(), ((JTextField) field(orgChart, "safetyOfficerRadioField")).getText());
+					assertEquals(card.getPhoneNumber(), ((JTextField) field(orgChart, "safetyOfficerPhoneField")).getText());
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_205));
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ORG_CHART));
+					assertEquals(card.getPersonName(), name.getText());
+					store.save(id, data);
+					AppData reloaded = store.load(id);
+					assertEquals(card.getPersonName(), reloaded.getOrganizationalChart().getSafetyOfficerName());
+					assertEquals(card.getRadioChannel(), reloaded.getOrganizationalChart().getSafetyOfficerRadio());
+					assertEquals(card.getPhoneNumber(), reloaded.getOrganizationalChart().getSafetyOfficerPhone());
+					assertEquals(card.getPersonName(), reloaded.getMedicalPlan().getReviewedBySafetyOfficer());
+					assertEquals(card.getPersonName(), reloaded.getCanineMedicalPlan().getReviewedBySafetyOfficer());
+				} catch (Exception exception) {
+					throw new AssertionError(exception);
+				} finally {
+					try {
+						AppController controller = (AppController) field(frame, "controller");
+						((Timer) field(controller, "autosaveTimer")).stop();
+					} catch (Exception exception) {
+						throw new AssertionError(exception);
+					} finally {
+						frame.dispose();
+					}
+				}
+			});
+		} finally {
+			try (var files = Files.walk(workspace)) {
+				for (Path path : files.sorted(Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(path);
+				}
+			}
+		}
+	}
+
+	@Test
 	void medicalUnitLeaderIsAvailableBesideFoodAndUpdatesTheSharedAssignment() throws Exception {
 		SwingUtilities.invokeAndWait(() -> {
 			try {

@@ -298,7 +298,14 @@ public class OrganizationalChartPanel extends JPanel {
 		installPersonAutocomplete(foodUnitLeaderNameField, foodUnitLeaderRadioField, foodUnitLeaderPhoneField);
 		installPersonAutocomplete(medicalUnitLeaderNameField, medicalUnitLeaderRadioField, medicalUnitLeaderPhoneField,
 				name -> updateMedicalUnitLeaderAssignment());
-		watchMedicalUnitLeaderFields();
+		watchRoleFields(List.of(medicalUnitLeaderNameField, medicalUnitLeaderRadioField,
+				medicalUnitLeaderPhoneField), this::updateMedicalUnitLeaderAssignment);
+		watchRoleFields(List.of(safetyOfficerNameField), () -> {
+			if (!loading) {
+				MedicalRoleSupport.setSafetyOfficerName(controller.getData(), safetyOfficerNameField.getText());
+				controller.markDirty();
+			}
+		});
 		installPersonAutocomplete(timeUnitLeaderNameField, timeUnitLeaderRadioField, timeUnitLeaderPhoneField);
 		installPersonAutocomplete(procurementUnitLeaderNameField, procurementUnitLeaderRadioField,
 				procurementUnitLeaderPhoneField);
@@ -808,25 +815,27 @@ public class OrganizationalChartPanel extends JPanel {
 	}
 
 	/**
-	 * Binds the Medical Unit Leader's editable name and contact fields to the canonical assignment.
+	 * Binds editable shared-role fields to their canonical assignment.
+	 *
+	 * @param fields role fields to watch.
+	 * @param update callback that saves a live edit outside model refreshes.
 	 */
-	private void watchMedicalUnitLeaderFields() {
-		for (JTextField field : List.of(medicalUnitLeaderNameField, medicalUnitLeaderRadioField,
-				medicalUnitLeaderPhoneField)) {
+	private void watchRoleFields(List<JTextField> fields, Runnable update) {
+		for (JTextField field : fields) {
 			field.getDocument().addDocumentListener(new DocumentListener() {
 				@Override
 				public void insertUpdate(DocumentEvent event) {
-					updateMedicalUnitLeaderAssignment();
+					update.run();
 				}
 
 				@Override
 				public void removeUpdate(DocumentEvent event) {
-					updateMedicalUnitLeaderAssignment();
+					update.run();
 				}
 
 				@Override
 				public void changedUpdate(DocumentEvent event) {
-					updateMedicalUnitLeaderAssignment();
+					update.run();
 				}
 			});
 		}
@@ -1036,10 +1045,8 @@ public class OrganizationalChartPanel extends JPanel {
 		chart.setIncidentCommanderRadio(propagatedRadio);
 		chart.setIncidentCommanderPhone(propagatedPhone);
 
-		chart.setSafetyOfficerName(safetyOfficerNameField.getText().trim());
 		chart.setSafetyOfficerRadio(safetyOfficerRadioField.getText().trim());
 		chart.setSafetyOfficerPhone(safetyOfficerPhoneField.getText().trim());
-		MedicalRoleSupport.setSafetyOfficerName(controller.getData(), safetyOfficerNameField.getText());
 
 		chart.setPublicInformationOfficerName(pioNameField.getText().trim());
 		chart.setPublicInformationOfficerRadio(pioRadioField.getText().trim());
