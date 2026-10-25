@@ -349,6 +349,17 @@ public class MainFrame extends JFrame {
 		logsListMenu.setMnemonic(KeyEvent.VK_G);
 		viewMenu.add(createDashboardMenu(activeDashboard, this::selectDashboard));
 		viewMenu.addSeparator();
+		JMenu rolePanelsMenu = new JMenu("Role Panels");
+		JMenuItem safetyRolePanel = new JMenuItem("Safety Officer");
+		safetyRolePanel.addActionListener(
+				event -> RolePanelWindows.openSafety(this, controller, this::openWorkspace));
+		JMenuItem medicalRolePanel = new JMenuItem("Medical Unit Leader");
+		medicalRolePanel.addActionListener(
+				event -> RolePanelWindows.openMedicalUnitLeader(this, controller, this::openWorkspace));
+		rolePanelsMenu.add(safetyRolePanel);
+		rolePanelsMenu.add(medicalRolePanel);
+		viewMenu.add(rolePanelsMenu);
+		viewMenu.addSeparator();
 		JMenuItem humanMedicalReference = new JMenuItem("Human Medical Reference — ICS 206");
 		humanMedicalReference.setMnemonic(KeyEvent.VK_H);
 		humanMedicalReference.addActionListener(
