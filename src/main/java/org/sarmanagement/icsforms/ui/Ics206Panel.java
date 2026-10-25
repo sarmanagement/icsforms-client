@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.MedicalPlan;
+import org.sarmanagement.icsforms.model.PlanReviewArea;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -87,6 +88,7 @@ public class Ics206Panel extends JPanel {
 			exportRequest.accept("ICS 206");
 		});
 		header.add(export);
+		header.add(new PlanReviewStrip(controller, PlanReviewArea.HUMAN_MEDICAL, this::pushToModel));
 		add(header, BorderLayout.NORTH);
 		add(buildEditor(), BorderLayout.CENTER);
 		add(validation, BorderLayout.SOUTH);

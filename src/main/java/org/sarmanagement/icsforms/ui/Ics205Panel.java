@@ -109,7 +109,12 @@ public final class Ics205Panel extends JPanel {
 			menu.add(action);
 		}
 		table.setComponentPopupMenu(menu);
-		add(buildToolbar(), BorderLayout.NORTH);
+		JPanel heading = new JPanel(new BorderLayout());
+		heading.add(buildToolbar(), BorderLayout.NORTH);
+		heading.add(new PlanReviewStrip(controller,
+				org.sarmanagement.icsforms.model.PlanReviewArea.COMMUNICATIONS, this::pushToModel),
+				BorderLayout.SOUTH);
+		add(heading, BorderLayout.NORTH);
 		add(new JScrollPane(table), BorderLayout.CENTER);
 		JPanel footer = new JPanel(new BorderLayout(4, 4));
 		footer.add(buildPreparationEditor(), BorderLayout.CENTER);

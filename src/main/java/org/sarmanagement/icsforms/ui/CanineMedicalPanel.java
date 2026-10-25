@@ -232,7 +232,12 @@ public class CanineMedicalPanel extends JPanel {
 		this.defaultDirectory = defaultDirectory;
 		this.geocoder = geocoder;
 		this.routeProvider = routeProvider;
-		add(buildTop(), BorderLayout.NORTH);
+		JPanel heading = new JPanel(new BorderLayout());
+		heading.add(buildTop(), BorderLayout.NORTH);
+		heading.add(new PlanReviewStrip(controller,
+				org.sarmanagement.icsforms.model.PlanReviewArea.CANINE_MEDICAL, this::pushToModel),
+				BorderLayout.SOUTH);
+		add(heading, BorderLayout.NORTH);
 		workspace.addTab("Canine ICS 206CANINE plan", buildPlanFields());
 		workspace.addTab("Veterinary facilities and routes", buildDirectoryArea());
 		add(workspace, BorderLayout.CENTER);

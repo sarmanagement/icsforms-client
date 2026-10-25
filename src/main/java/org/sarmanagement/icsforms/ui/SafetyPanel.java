@@ -122,6 +122,8 @@ public class SafetyPanel extends JPanel {
 		sections.addTab("Reported SAR Hazards", reportedHazardsPanel);
 		sections.addTab("ICS 208 Message / Plan", messagePanel);
 		configureReportedHazardsTab(controller.getIncidentMode() == IncidentMode.SAR);
+		add(new PlanReviewStrip(controller, org.sarmanagement.icsforms.model.PlanReviewArea.SAFETY,
+				this::pushToModel), BorderLayout.NORTH);
 		add(sections, BorderLayout.CENTER);
 	}
 

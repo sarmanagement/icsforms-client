@@ -42,6 +42,10 @@ public class AppData {
 		private Ics202Form form202;
 		private List<Ics204Form> forms204 = new ArrayList<>();
 		private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
+		private PlanReviewAssertion safetyReview;
+		private PlanReviewAssertion humanMedicalReview;
+		private PlanReviewAssertion canineMedicalReview;
+		private PlanReviewAssertion communicationsReview;
 
 		/** Creates an empty record. */
 		public OperationalPeriodRecord() {
@@ -182,6 +186,46 @@ public class AppData {
 		public void setSarTaskAssignments(List<SarTaskAssignment> sarTaskAssignments) {
 			this.sarTaskAssignments = sarTaskAssignments == null ? new ArrayList<>() : sarTaskAssignments;
 		}
+
+		/** @return archived safety review assertion, or null for legacy records. */
+		public PlanReviewAssertion getSafetyReview() {
+			return safetyReview;
+		}
+
+		/** @param safetyReview archived safety review assertion. */
+		public void setSafetyReview(PlanReviewAssertion safetyReview) {
+			this.safetyReview = safetyReview;
+		}
+
+		/** @return archived human medical review assertion, or null for legacy records. */
+		public PlanReviewAssertion getHumanMedicalReview() {
+			return humanMedicalReview;
+		}
+
+		/** @param humanMedicalReview archived human medical review assertion. */
+		public void setHumanMedicalReview(PlanReviewAssertion humanMedicalReview) {
+			this.humanMedicalReview = humanMedicalReview;
+		}
+
+		/** @return archived canine medical review assertion, or null for legacy records. */
+		public PlanReviewAssertion getCanineMedicalReview() {
+			return canineMedicalReview;
+		}
+
+		/** @param canineMedicalReview archived canine medical review assertion. */
+		public void setCanineMedicalReview(PlanReviewAssertion canineMedicalReview) {
+			this.canineMedicalReview = canineMedicalReview;
+		}
+
+		/** @return archived communications review assertion, or null for legacy records. */
+		public PlanReviewAssertion getCommunicationsReview() {
+			return communicationsReview;
+		}
+
+		/** @param communicationsReview archived communications review assertion. */
+		public void setCommunicationsReview(PlanReviewAssertion communicationsReview) {
+			this.communicationsReview = communicationsReview;
+		}
 	}
 
 	private int schemaVersion = CURRENT_SCHEMA_VERSION;
@@ -226,6 +270,10 @@ public class AppData {
 	private StagingLocation stagingLocation = new StagingLocation();
 	private List<IncidentLocation> incidentLocations = new ArrayList<>();
 	private String canineRoutingBaseLocationId = "";
+	private PlanReviewAssertion safetyReview = new PlanReviewAssertion();
+	private PlanReviewAssertion humanMedicalReview = new PlanReviewAssertion();
+	private PlanReviewAssertion canineMedicalReview = new PlanReviewAssertion();
+	private PlanReviewAssertion communicationsReview = new PlanReviewAssertion();
 
 	/**
 	 * Creates an empty incident document.
@@ -379,6 +427,10 @@ public class AppData {
 		record.setForms204(archivedForms204);
 		record.setSarTaskAssignments(MEDICAL_PLAN_COPIER.convertValue(getSarTaskAssignments(),
 				MEDICAL_PLAN_COPIER.getTypeFactory().constructCollectionType(List.class, SarTaskAssignment.class)));
+		record.setSafetyReview(copyReview(getReviewAssertion(PlanReviewArea.SAFETY)));
+		record.setHumanMedicalReview(copyReview(getReviewAssertion(PlanReviewArea.HUMAN_MEDICAL)));
+		record.setCanineMedicalReview(copyReview(getReviewAssertion(PlanReviewArea.CANINE_MEDICAL)));
+		record.setCommunicationsReview(copyReview(getReviewAssertion(PlanReviewArea.COMMUNICATIONS)));
 		operationalPeriodHistory.add(record);
 		getArchivedSafetyHazardReports().addAll(archiveSafetyHazardReports(sarTaskAssignments,
 				record.getPeriodStart(), record.getPeriodEnd()));
@@ -397,6 +449,10 @@ public class AppData {
 		this.medicalPlan.resetReviewState();
 		this.canineMedicalPlan = copyCanineMedicalPlan(record.getCanineMedicalPlan());
 		this.canineMedicalPlan.resetReviewState();
+		this.safetyReview = new PlanReviewAssertion();
+		this.humanMedicalReview = new PlanReviewAssertion();
+		this.canineMedicalReview = new PlanReviewAssertion();
+		this.communicationsReview = new PlanReviewAssertion();
 	}
 
 	/**
@@ -417,6 +473,16 @@ public class AppData {
 	 */
 	private static CanineMedicalPlan copyCanineMedicalPlan(CanineMedicalPlan plan) {
 		return MEDICAL_PLAN_COPIER.convertValue(plan, CanineMedicalPlan.class);
+	}
+
+	/**
+	 * Creates an independent review assertion copy.
+	 *
+	 * @param review source assertion.
+	 * @return independent assertion.
+	 */
+	private static PlanReviewAssertion copyReview(PlanReviewAssertion review) {
+		return MEDICAL_PLAN_COPIER.convertValue(review, PlanReviewAssertion.class);
 	}
 
 	/**
@@ -1399,6 +1465,116 @@ public class AppData {
 	 */
 	public void setPdfLayoutSettings(PdfLayoutSettings pdfLayoutSettings) {
 		this.pdfLayoutSettings = pdfLayoutSettings == null ? new PdfLayoutSettings() : pdfLayoutSettings;
+	}
+
+	/**
+	 * Returns the persisted assertion for one review area.
+	 *
+	 * @param area review area.
+	 * @return mutable assertion, never null.
+	 */
+	public PlanReviewAssertion getReviewAssertion(PlanReviewArea area) {
+		return switch (area) {
+			case SAFETY -> safetyReview == null ? safetyReview = new PlanReviewAssertion() : safetyReview;
+			case HUMAN_MEDICAL ->
+				humanMedicalReview == null ? humanMedicalReview = new PlanReviewAssertion() : humanMedicalReview;
+			case CANINE_MEDICAL ->
+				canineMedicalReview == null ? canineMedicalReview = new PlanReviewAssertion() : canineMedicalReview;
+			case COMMUNICATIONS ->
+				communicationsReview == null ? communicationsReview = new PlanReviewAssertion() : communicationsReview;
+		};
+	}
+
+	/** @return persisted safety review assertion. */
+	public PlanReviewAssertion getSafetyReview() {
+		return getReviewAssertion(PlanReviewArea.SAFETY);
+	}
+
+	/** @param safetyReview persisted safety review assertion. */
+	public void setSafetyReview(PlanReviewAssertion safetyReview) {
+		this.safetyReview = safetyReview;
+	}
+
+	/** @return persisted human medical review assertion. */
+	public PlanReviewAssertion getHumanMedicalReview() {
+		return getReviewAssertion(PlanReviewArea.HUMAN_MEDICAL);
+	}
+
+	/** @param humanMedicalReview persisted human medical review assertion. */
+	public void setHumanMedicalReview(PlanReviewAssertion humanMedicalReview) {
+		this.humanMedicalReview = humanMedicalReview;
+	}
+
+	/** @return persisted canine medical review assertion. */
+	public PlanReviewAssertion getCanineMedicalReview() {
+		return getReviewAssertion(PlanReviewArea.CANINE_MEDICAL);
+	}
+
+	/** @param canineMedicalReview persisted canine medical review assertion. */
+	public void setCanineMedicalReview(PlanReviewAssertion canineMedicalReview) {
+		this.canineMedicalReview = canineMedicalReview;
+	}
+
+	/** @return persisted communications review assertion. */
+	public PlanReviewAssertion getCommunicationsReview() {
+		return getReviewAssertion(PlanReviewArea.COMMUNICATIONS);
+	}
+
+	/** @param communicationsReview persisted communications review assertion. */
+	public void setCommunicationsReview(PlanReviewAssertion communicationsReview) {
+		this.communicationsReview = communicationsReview;
+	}
+
+	/**
+	 * Replaces the persisted assertion for one review area.
+	 *
+	 * @param area review area.
+	 * @param assertion assertion; null becomes not yet reviewed.
+	 */
+	public void setReviewAssertion(PlanReviewArea area, PlanReviewAssertion assertion) {
+		PlanReviewAssertion value = assertion == null ? new PlanReviewAssertion() : assertion;
+		switch (area) {
+			case SAFETY -> safetyReview = value;
+			case HUMAN_MEDICAL -> humanMedicalReview = value;
+			case CANINE_MEDICAL -> canineMedicalReview = value;
+			case COMMUNICATIONS -> communicationsReview = value;
+			default -> throw new IllegalArgumentException("Unsupported review area: " + area);
+		}
+	}
+
+	/**
+	 * Records an explicit human assertion about the current substantive plan content.
+	 *
+	 * @param area review area.
+	 * @param person person making the assertion.
+	 * @param reviewedAt assertion time.
+	 * @throws IllegalArgumentException when the person is blank.
+	 */
+	public void recordPlanReview(PlanReviewArea area, String person, LocalDateTime reviewedAt) {
+		if (person == null || person.isBlank()) {
+			throw new IllegalArgumentException("Reviewer name is required.");
+		}
+		PlanReviewAssertion assertion = getReviewAssertion(area);
+		assertion.setReviewedBy(person.trim());
+		assertion.setReviewedAt(reviewedAt == null ? LocalDateTime.now().withSecond(0).withNano(0) : reviewedAt);
+		assertion.setReviewedContentDigest(PlanReviewSupport.contentDigest(this, area));
+	}
+
+	/**
+	 * Calculates current review state while retaining prior assertion metadata.
+	 *
+	 * @param area review area.
+	 * @return current review status.
+	 */
+	@JsonIgnore
+	public PlanReviewStatus getPlanReviewStatus(PlanReviewArea area) {
+		PlanReviewAssertion assertion = getReviewAssertion(area);
+		if (!assertion.isRecorded()) {
+			return PlanReviewStatus.NOT_YET_REVIEWED;
+		}
+		return assertion.getReviewedContentDigest().equals(PlanReviewSupport.contentDigest(this, area))
+				? PlanReviewStatus.REVIEWED_APPROVED
+				: PlanReviewStatus.CHANGED_SINCE_REVIEW;
 	}
 
 	/**
