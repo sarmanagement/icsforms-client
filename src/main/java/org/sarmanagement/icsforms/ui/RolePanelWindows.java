@@ -4,6 +4,8 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import javax.swing.JFrame;
 import java.awt.Window;
@@ -17,6 +19,7 @@ import java.util.function.Consumer;
 final class RolePanelWindows {
 	private static final Map<AppData, JFrame> SAFETY_WINDOWS = new IdentityHashMap<>();
 	private static final Map<AppData, JFrame> MEDICAL_WINDOWS = new IdentityHashMap<>();
+	private static final Map<AppData, JFrame> OPERATIONS_WINDOWS = new IdentityHashMap<>();
 
 	/** Prevents utility construction. */
 	private RolePanelWindows() {
@@ -81,6 +84,48 @@ final class RolePanelWindows {
 		});
 		UiSupport.registerIncidentWindow(frame, incident);
 		MEDICAL_WINDOWS.put(incident, frame);
+		frame.setVisible(true);
+		return frame;
+	}
+
+	/**
+	 * Opens or focuses the Operations panel.
+	 *
+	 * @param owner parent window.
+	 * @param controller incident controller.
+	 * @param newAssignment established assignment workflow.
+	 * @param editTask established task edit workflow.
+	 * @param changeStatus established lifecycle workflow.
+	 * @param addLog established activity-entry workflow.
+	 * @param recordClue established clue workflow.
+	 * @param debrief established debrief workflow.
+	 * @param humanReference human reference action.
+	 * @param canineReference canine reference action.
+	 * @return role window.
+	 */
+	static JFrame openOperations(Window owner, AppController controller,
+			java.util.function.Supplier<ResourceAssignment> newAssignment, Consumer<String> editTask,
+			Consumer<String> changeStatus, Consumer<SarTaskAssignment> addLog, Runnable recordClue,
+			Consumer<String> debrief, Runnable humanReference, Runnable canineReference) {
+		AppData incident = controller.getData();
+		JFrame existing = OPERATIONS_WINDOWS.get(incident);
+		if (existing != null && existing.isDisplayable()) {
+			existing.toFront();
+			return existing;
+		}
+		OperationsRolePanel panel = new OperationsRolePanel(controller, newAssignment, editTask, changeStatus, addLog,
+				recordClue, debrief, humanReference, canineReference);
+		JFrame frame = createFrame("Operations — " + incident.getIncidentContext().getIncidentName(), panel);
+		frame.addWindowListener(new java.awt.event.WindowAdapter() {
+			/** {@inheritDoc} */
+			@Override
+			public void windowClosed(java.awt.event.WindowEvent event) {
+				panel.dispose();
+				OPERATIONS_WINDOWS.remove(incident);
+			}
+		});
+		UiSupport.registerIncidentWindow(frame, incident);
+		OPERATIONS_WINDOWS.put(incident, frame);
 		frame.setVisible(true);
 		return frame;
 	}

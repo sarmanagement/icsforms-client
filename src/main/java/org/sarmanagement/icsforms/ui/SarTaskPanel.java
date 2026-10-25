@@ -773,6 +773,11 @@ public class SarTaskPanel extends JPanel {
 		openQuickStatusDialog(task);
 	}
 
+	/**
+	 * Opens the established status workflow for a linked assignment.
+	 *
+	 * @param assignmentId stable assignment identifier.
+	 */
 	public void openTaskStatusDialogByAssignmentId(String assignmentId) {
 		if (assignmentId == null || assignmentId.isBlank()) {
 			return;
@@ -793,9 +798,25 @@ public class SarTaskPanel extends JPanel {
 				editRow(i, EditorMode.DEBRIEFING);
 				return;
 			}
+
 			if ((assignmentId == null || assignmentId.isBlank()) && assignmentTeamNumber != null
 					&& assignmentTeamNumber.equals(task.getAssignmentTeamNumber())) {
 				editRow(i, EditorMode.DEBRIEFING);
+				return;
+			}
+		}
+
+	}
+
+	/**
+	 * Opens the established debrief workflow for a linked assignment.
+	 *
+	 * @param assignmentId stable assignment identifier.
+	 */
+	public void openDebriefByAssignmentId(String assignmentId) {
+		for (SarTaskAssignment task : tableModel.getRows()) {
+			if (assignmentId != null && assignmentId.equals(task.getAssignmentId())) {
+				openTaskDebriefDialog(task.getAssignmentId(), task.getAssignmentTeamNumber());
 				return;
 			}
 		}

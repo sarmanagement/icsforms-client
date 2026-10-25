@@ -356,8 +356,11 @@ public class MainFrame extends JFrame {
 		JMenuItem medicalRolePanel = new JMenuItem("Medical Unit Leader");
 		medicalRolePanel.addActionListener(
 				event -> RolePanelWindows.openMedicalUnitLeader(this, controller, this::openWorkspace));
+		JMenuItem operationsRolePanel = new JMenuItem("Operations");
+		operationsRolePanel.addActionListener(event -> openOperationsRolePanel());
 		rolePanelsMenu.add(safetyRolePanel);
 		rolePanelsMenu.add(medicalRolePanel);
+		rolePanelsMenu.add(operationsRolePanel);
 		viewMenu.add(rolePanelsMenu);
 		viewMenu.addSeparator();
 		JMenuItem humanMedicalReference = new JMenuItem("Human Medical Reference — ICS 206");
@@ -722,6 +725,17 @@ public class MainFrame extends JFrame {
 		bar.add(logsMenu);
 		bar.add(configMenu);
 		return bar;
+	}
+
+	/** Opens Operations while delegating every direct action to established editors. */
+	private void openOperationsRolePanel() {
+		RolePanelWindows.openOperations(this, controller, ics204Panel::openNewAssignmentEditor,
+				sarTaskPanel::openAssignmentEditorById, sarTaskPanel::openTaskStatusDialogByAssignmentId,
+				task -> showAddLogEntry(new LogEntryContext(sarTaskPanel, task.getTaskId(), task.getAssignmentId(),
+						org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(task))),
+				clueLogPanel::openAddClueDialog, sarTaskPanel::openDebriefByAssignmentId,
+				() -> HumanMedicalReferenceWindow.open(this, controller, this::openWorkspace),
+				() -> CanineMedicalReferenceWindow.open(this, controller, this::openWorkspace));
 	}
 
 	/**

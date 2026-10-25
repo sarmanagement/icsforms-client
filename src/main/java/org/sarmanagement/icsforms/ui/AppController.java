@@ -2569,6 +2569,39 @@ public class AppController {
 		markDirty();
 	}
 
+	/**
+	 * Adds operator-selected recorded resources to a normal linked SAR task.
+	 *
+	 * @param assignmentId stable assignment identifier.
+	 * @param resourceIds stable T-card identifiers selected by the operator.
+	 */
+	public void assignRecordedResources(String assignmentId, List<String> resourceIds) {
+		if (assignmentId == null || assignmentId.isBlank() || resourceIds == null || resourceIds.isEmpty()) {
+			return;
+		}
+		SarTaskAssignment task = data.getSarTaskAssignments().stream()
+				.filter(candidate -> assignmentId.equals(candidate.getAssignmentId())).findFirst().orElse(null);
+		if (task == null) {
+			return;
+		}
+		Set<String> existing = task.getResourcesAssigned().stream().map(SarTaskResource::getResourceId)
+				.filter(id -> id != null && !id.isBlank()).collect(java.util.stream.Collectors.toSet());
+		for (String resourceId : resourceIds) {
+			TCard card = data.getTCards().stream().filter(candidate -> resourceId != null
+					&& resourceId.equals(candidate.peekResourceId())).findFirst().orElse(null);
+			if (card == null || !existing.add(resourceId)) {
+				continue;
+			}
+			SarTaskResource resource = new SarTaskResource();
+			resource.setResourceId(resourceId);
+			resource.setName(card.getDisplayLabel());
+			resource.setFunction(card.getCardType() == TCardType.PERSONNEL ? "Team member" : "Resource");
+			resource.setHomeAgency(card.getHomeAgency());
+			task.getResourcesAssigned().add(resource);
+		}
+		markDirty();
+	}
+
 	private void addOrgCard(Map<String, TCard> wanted, Map<String, TCard> existing, Map<String, TCard> byName,
 			String ref, String name, String radio, String phone, String roleLabel) {
 		String safeName = safe(name);
