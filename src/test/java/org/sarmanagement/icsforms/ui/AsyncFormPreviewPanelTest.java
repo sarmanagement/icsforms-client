@@ -86,6 +86,45 @@ class AsyncFormPreviewPanelTest {
 	}
 
 	@Test
+	void contentChangeInvalidatesFirstPreviewStillRendering() throws Exception {
+		CountDownLatch renderStarted = new CountDownLatch(1);
+		CountDownLatch renderCompleted = new CountDownLatch(1);
+		AsyncFormPreviewPanel panel = new AsyncFormPreviewPanel(new PdfFormRenderer() {
+			@Override
+			public String getFormKey() {
+				return "In-flight invalidation test";
+			}
+
+			@Override
+			public void render(AppData data, Path outputFile) throws IOException {
+				renderStarted.countDown();
+				try {
+					Thread.sleep(250);
+				} catch (InterruptedException ignored) {
+					// Deliberately emulate a renderer that finishes after cancellation.
+				}
+				try (PDDocument document = new PDDocument()) {
+					document.addPage(new PDPage());
+					document.save(outputFile.toFile());
+				} finally {
+					renderCompleted.countDown();
+				}
+			}
+		});
+		SwingUtilities.invokeAndWait(() -> panel.requestPreview(new AppData(), "in-flight-old-content"));
+		assertTrue(renderStarted.await(2, TimeUnit.SECONDS));
+
+		SwingUtilities.invokeAndWait(panel::markOutOfDate);
+		assertTrue(renderCompleted.await(2, TimeUnit.SECONDS));
+		SwingUtilities.invokeAndWait(() -> {
+		});
+
+		assertEquals(0, panel.displayedPageCount());
+		assertTrue(panel.previewStateText().contains("Structured information changed"));
+		SwingUtilities.invokeAndWait(panel::cancel);
+	}
+
+	@Test
 	void rendersUsingSystemTemporaryStorage() throws Exception {
 		AtomicReference<Path> output = new AtomicReference<>();
 		AsyncFormPreviewPanel panel = new AsyncFormPreviewPanel(new PdfFormRenderer() {

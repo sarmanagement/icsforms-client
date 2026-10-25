@@ -70,8 +70,11 @@ public class AsyncFormPreviewPanel extends JPanel {
 	 * Marks a displayed preview older than the latest structured reference.
 	 */
 	public void markOutOfDate() {
+		cancel();
 		if (pages.getComponentCount() > 0) {
 			state.setText("Structured information changed — displayed preview is older.");
+		} else {
+			state.setText("Structured information changed — request a new preview.");
 		}
 	}
 
