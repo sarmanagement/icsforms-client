@@ -458,6 +458,46 @@ class Ics205PanelTest {
 	}
 
 	@Test
+	void planOnlyFilterKeepsRowActionsBoundToVisibleChannelsAndDoesNotChangeThePlan() throws Exception {
+		AppData data = new AppData();
+		RadioChannel hidden = channel("Reusable only");
+		hidden.setIncludeOnForm(false);
+		RadioChannel first = channel("Plan one");
+		RadioChannel second = channel("Plan two");
+		data.getForm205().getChannels().addAll(List.of(hidden, first, second));
+		AppController controller = controller(data);
+		SwingUtilities.invokeAndWait(() -> {
+			Ics205Panel panel = new Ics205Panel(controller);
+			JTable table = (JTable) field(panel, "table");
+			assertEquals("Included in plan", table.getColumnName(0));
+			for (int column = 0; column < table.getColumnCount(); column++) {
+				assertNotEquals("Channel ID", table.getColumnName(column));
+				assertTrue(table.getColumnModel().getColumn(column).getPreferredWidth() <= 150);
+			}
+			java.awt.Color excludedColor = table.prepareRenderer(table.getCellRenderer(0, 0), 0, 0).getBackground();
+			java.awt.Color includedColor = table.prepareRenderer(table.getCellRenderer(1, 0), 1, 0).getBackground();
+			assertNotEquals(excludedColor, includedColor);
+			javax.swing.JComboBox<?> filter = (javax.swing.JComboBox<?>) field(panel, "channelVisibility");
+			filter.setSelectedIndex(1);
+			assertEquals(2, table.getRowCount());
+			assertEquals(3, data.getForm205().getChannels().size());
+			assertFalse(controller.isDirty());
+			table.setRowSelectionInterval(0, 0);
+			button(panel, "Down").doClick();
+			assertEquals(List.of(hidden, second, first), data.getForm205().getChannels());
+			assertEquals(1, table.getSelectedRow());
+			button(panel, "Duplicate").doClick();
+			assertEquals("Plan one", data.getForm205().getChannels().get(3).getChannelName());
+			table.setRowSelectionInterval(0, 0);
+			button(panel, "Remove").doClick();
+			assertFalse(data.getForm205().getChannels().contains(second));
+			assertSame(hidden, data.getForm205().getChannels().get(0));
+			filter.setSelectedIndex(0);
+			assertEquals(3, table.getRowCount());
+		});
+	}
+
+	@Test
 	void leftDoubleClickOpensEditorForClickedChannelAndCancellationPreservesIt() throws Exception {
 		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
 		AppData data = new AppData();

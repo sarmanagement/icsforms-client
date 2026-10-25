@@ -125,6 +125,13 @@ The preparer area shows the selected person's known role and offers the
 Communications Unit Leader shortcut only when that position is assigned.
 Use the main PDF export dialog to print ICS 205.
 The channel editor keeps RX and TX frequencies, bandwidths, and tones/NAC separate.
+Its compact RX, simplex/duplex, and TX columns support explicit simplex copying
+and duplex frequency/offset entry with exact decimal arithmetic. Unknown transmit
+settings remain unknown until explicitly supplied. Bandwidth and mode choices
+use readable labels while retaining the native N/W and A/D/M codes.
+**Included in plan** controls whether a channel prints. Included rows are green
+and excluded rows gray; choose **Included in plan only** to hide reusable channels
+without deleting them. The compact table omits internal channel IDs.
 Channel numbers and functions allow free text. Digital protocol is separate from
 the form's A/D/M mode; a generic D or M is not a programming specification.
 Trunked system information is not a conventional transmit frequency.

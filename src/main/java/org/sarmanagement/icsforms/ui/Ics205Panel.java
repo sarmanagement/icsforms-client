@@ -16,6 +16,10 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
+import javax.swing.JComboBox;
+import javax.swing.RowFilter;
+import javax.swing.table.TableRowSorter;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.table.AbstractTableModel;
@@ -37,6 +41,8 @@ public final class Ics205Panel extends JPanel {
 	private final AppController controller;
 	private final ChannelTableModel tableModel = new ChannelTableModel();
 	private final JTable table = new JTable(tableModel);
+	private final TableRowSorter<ChannelTableModel> channelSorter = new TableRowSorter<>(tableModel);
+	private final JComboBox<String> channelVisibility = new JComboBox<>(new String[]{"Show all channels", "Included in plan only"});
 	private final JTextArea instructions = new JTextArea(4, 45);
 	private final JTextField preparedBy = new JTextField(24);
 	private final JCheckBox preparedDatePresent = new JCheckBox("Preparation date/time recorded");
@@ -45,10 +51,10 @@ public final class Ics205Panel extends JPanel {
 	private final JLabel preparerRole = new JLabel();
 	private final JButton useLeader = new JButton("Use Communications Unit Leader");
 	private final Action edit = channelAction("Edit…", () -> editChannel(false));
-	private final Action duplicate = channelAction("Duplicate", () -> duplicateChannel(table.getSelectedRow()));
-	private final Action remove = channelAction("Remove", () -> removeChannel(table.getSelectedRow()));
-	private final Action up = channelAction("Up", () -> moveChannel(table.getSelectedRow(), -1));
-	private final Action down = channelAction("Down", () -> moveChannel(table.getSelectedRow(), 1));
+	private final Action duplicate = channelAction("Duplicate", () -> duplicateChannel(selectedChannelIndex()));
+	private final Action remove = channelAction("Remove", () -> removeChannel(selectedChannelIndex()));
+	private final Action up = channelAction("Up", () -> moveSelectedChannel(-1));
+	private final Action down = channelAction("Down", () -> moveSelectedChannel(1));
 	private boolean loading;
 
 	/**
@@ -60,10 +66,17 @@ public final class Ics205Panel extends JPanel {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+		table.setRowSorter(channelSorter);
+		for (int index = 0; index < table.getColumnCount(); index++) {
+			channelSorter.setSortable(index, false);
+		}
+		table.setDefaultRenderer(Object.class, new ChannelCellRenderer());
+		table.setToolTipText("Included channels are green; channels outside the plan are gray. Double-click to edit.");
 		table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
 		table.getAccessibleContext().setAccessibleName("Communications plan channels");
+		int[] widths = {105, 70, 55, 90, 130, 100, 100, 65, 135, 65, 65, 90, 90, 90, 110, 150};
 		for (int index = 0; index < table.getColumnCount(); index++) {
-			table.getColumnModel().getColumn(index).setPreferredWidth(145);
+			table.getColumnModel().getColumn(index).setPreferredWidth(widths[index]);
 		}
 		table.addMouseListener(new java.awt.event.MouseAdapter() {
 			/** {@inheritDoc} */
@@ -284,7 +297,10 @@ public final class Ics205Panel extends JPanel {
 		Collections.swap(channels, index, destination);
 		controller.markDirty();
 		tableModel.fireTableDataChanged();
-		table.setRowSelectionInterval(destination, destination);
+		int view = table.convertRowIndexToView(destination);
+		if (view >= 0) {
+			table.setRowSelectionInterval(view, view);
+		}
 	}
 
 	/**
@@ -315,7 +331,47 @@ public final class Ics205Panel extends JPanel {
 		addButton(panel, "Import CSV…", () -> new RadioChannelCsvDialogs(this, controller).importCsv());
 		addButton(panel, "Export CSV…", () -> new RadioChannelCsvDialogs(this, controller).exportCsv(false));
 		addButton(panel, "Export CHIRP…", () -> new RadioChannelCsvDialogs(this, controller).exportCsv(true));
+		channelVisibility.addActionListener(event -> {
+			channelSorter.setRowFilter(channelVisibility.getSelectedIndex() == 0 ? null : new RowFilter<>() {
+				/** {@inheritDoc} */
+				@Override
+				public boolean include(Entry<? extends ChannelTableModel, ? extends Integer> entry) {
+					return controller.getData().getForm205().getChannels().get(entry.getIdentifier()).isIncludeOnForm();
+				}
+			});
+			updateChannelActions();
+		});
+		panel.add(channelVisibility);
 		return panel;
+	}
+
+	/**
+	 * Resolves the selected visible row to the persisted channel order.
+	 *
+	 * @return model index, or -1 when no row is selected.
+	 */
+	private int selectedChannelIndex() {
+		return table.getSelectedRow() < 0 ? -1 : table.convertRowIndexToModel(table.getSelectedRow());
+	}
+
+	/**
+	 * Reorders adjacent visible channels without targeting a hidden row by mistake.
+	 *
+	 * @param delta signed movement in the visible list.
+	 */
+	private void moveSelectedChannel(int delta) {
+		int view = table.getSelectedRow();
+		int destination = view + delta;
+		if (view < 0 || destination < 0 || destination >= table.getRowCount()) {
+			return;
+		}
+		int sourceIndex = table.convertRowIndexToModel(view);
+		int targetIndex = table.convertRowIndexToModel(destination);
+		Collections.swap(controller.getData().getForm205().getChannels(), sourceIndex, targetIndex);
+		controller.markDirty();
+		tableModel.fireTableDataChanged();
+		int selected = table.convertRowIndexToView(targetIndex);
+		table.setRowSelectionInterval(selected, selected);
 	}
 
 	/**
@@ -467,7 +523,7 @@ public final class Ics205Panel extends JPanel {
 	 * @param create whether to create a new channel.
 	 */
 	private void editChannel(boolean create) {
-		int index = create ? -1 : table.getSelectedRow();
+		int index = create ? -1 : selectedChannelIndex();
 		if (!create && index < 0) {
 			return;
 		}
@@ -478,7 +534,7 @@ public final class Ics205Panel extends JPanel {
 		}
 		RadioChannelEditorPanel editor = new RadioChannelEditorPanel(source, RadioChannelPicker.legacyLabels(controller));
 		while (UiSupport.showResizableConfirmDialog(this, create ? "Add radio channel" : "Edit radio channel",
-				editor, new Dimension(820, 700))) {
+				editor, new Dimension(960, 620))) {
 			try {
 				applyChannel(index, editor.editedChannel());
 				return;
@@ -528,6 +584,16 @@ public final class Ics205Panel extends JPanel {
 
 	/** Read-only overview; the detailed editor exposes long values without truncation. */
 	private final class ChannelTableModel extends AbstractTableModel {
+		private final RadioChannelEditorPanel.Field[] columns = {
+				RadioChannelEditorPanel.Field.ZONE, RadioChannelEditorPanel.Field.NUMBER,
+				RadioChannelEditorPanel.Field.FUNCTION, RadioChannelEditorPanel.Field.NAME,
+				RadioChannelEditorPanel.Field.RX_FREQUENCY, RadioChannelEditorPanel.Field.TX_FREQUENCY,
+				RadioChannelEditorPanel.Field.MODE, RadioChannelEditorPanel.Field.ASSIGNMENT,
+				RadioChannelEditorPanel.Field.RX_BANDWIDTH, RadioChannelEditorPanel.Field.TX_BANDWIDTH,
+				RadioChannelEditorPanel.Field.RX_TONE, RadioChannelEditorPanel.Field.TX_TONE,
+				RadioChannelEditorPanel.Field.PROTOCOL, RadioChannelEditorPanel.Field.SYSTEM,
+				RadioChannelEditorPanel.Field.REMARKS
+		};
 		/** {@inheritDoc} */
 		@Override
 		public int getRowCount() {
@@ -537,25 +603,48 @@ public final class Ics205Panel extends JPanel {
 		/** {@inheritDoc} */
 		@Override
 		public int getColumnCount() {
-			return RadioChannelEditorPanel.Field.values().length + 3;
+			return columns.length + 1;
 		}
 
 		/** {@inheritDoc} */
 		@Override
 		public String getColumnName(int column) {
-			int fields = RadioChannelEditorPanel.Field.values().length;
-			return column < fields ? RadioChannelEditorPanel.Field.values()[column].label
-					: column == fields ? "Transmit policy" : column == fields + 1 ? "Include on form" : "Programming metadata";
+			return column == 0 ? "Included in plan" : columns[column - 1].label;
 		}
 
 		/** {@inheritDoc} */
 		@Override
 		public Object getValueAt(int row, int column) {
 			RadioChannel channel = controller.getData().getForm205().getChannels().get(row);
-			int fields = RadioChannelEditorPanel.Field.values().length;
-			return column < fields ? RadioChannelEditorPanel.Field.values()[column].getter.apply(channel)
-					: column == fields ? channel.getTxPolicy()
-					: column == fields + 1 ? channel.isIncludeOnForm() : channel.getProgrammingMetadata();
+			if (column == 0) {
+				return channel.isIncludeOnForm() ? "Yes" : "No";
+			}
+			RadioChannelEditorPanel.Field field = columns[column - 1];
+			String value = field.getter.apply(channel);
+			return field == RadioChannelEditorPanel.Field.MODE ? switch (value) {
+				case "A" -> "Analog";
+				case "D" -> "Digital";
+				case "M" -> "Mixed";
+				default -> value;
+			} : value;
+		}
+	}
+
+	/** Distinguishes plan inclusion without overriding the look-and-feel selection colors. */
+	private final class ChannelCellRenderer extends DefaultTableCellRenderer {
+		/** {@inheritDoc} */
+		@Override
+		public java.awt.Component getTableCellRendererComponent(JTable source, Object value, boolean selected,
+				boolean focused, int row, int column) {
+			super.getTableCellRendererComponent(source, value, selected, focused, row, column);
+			boolean included = controller.getData().getForm205().getChannels()
+					.get(source.convertRowIndexToModel(row)).isIncludeOnForm();
+			if (!selected) {
+				setBackground(included ? new java.awt.Color(232, 245, 233) : new java.awt.Color(240, 240, 240));
+				setForeground(java.awt.Color.BLACK);
+			}
+			setToolTipText((included ? "Included in plan" : "Not included in plan") + ": " + Objects.toString(value, ""));
+			return this;
 		}
 	}
 }
