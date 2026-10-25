@@ -24,6 +24,7 @@ import java.awt.FlowLayout;
 import java.text.ParseException;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -36,12 +37,8 @@ public final class Ics205Panel extends JPanel {
 	private final JTable table = new JTable(tableModel);
 	private final JTextArea instructions = new JTextArea(4, 45);
 	private final JTextField preparedBy = new JTextField(24);
-	private final JTextField signature = new JTextField(24);
 	private final JCheckBox preparedDatePresent = new JCheckBox("Preparation date/time recorded");
 	private final JSpinner preparedDate = UiSupport.dateTimeSpinner();
-	private final JCheckBox datePreparedPresent = new JCheckBox("Form date prepared recorded");
-	private final JSpinner datePrepared = UiSupport.dateTimeSpinner();
-	private final JTextField iapPage = new JTextField(8);
 	private final JLabel validation = new JLabel(" ");
 	private Consumer<String> exportRequest = ignored -> { };
 	private boolean loading;
@@ -96,13 +93,14 @@ public final class Ics205Panel extends JPanel {
 			}
 		};
 		for (javax.swing.text.JTextComponent field : new javax.swing.text.JTextComponent[]{
-				instructions, preparedBy, signature, iapPage}) {
+				instructions, preparedBy}) {
 			field.getDocument().addDocumentListener(listener);
 		}
 		preparedDatePresent.addActionListener(event -> changed());
-		preparedDate.addChangeListener(event -> changed());
-		datePreparedPresent.addActionListener(event -> changed());
-		datePrepared.addChangeListener(event -> changed());
+		preparedDate.addChangeListener(event -> {
+			((JSpinner.DateEditor) preparedDate.getEditor()).getTextField().setValue(preparedDate.getValue());
+			changed();
+		});
 		UiSupport.installNameAutocomplete(preparedBy, controller::getPersonnelNames,
 				name -> preparedBy.setText(name));
 	}
@@ -125,18 +123,12 @@ public final class Ics205Panel extends JPanel {
 			preparedBy.setText(plan.getPreparedByName());
 			preparedBy.setToolTipText("Suggested Communications Unit Leader: "
 					+ controller.getData().getOrganizationalChart().getCommunicationsUnitLeaderName());
-			signature.setText(plan.getPreparedBySignature());
-			preparedDatePresent.setSelected(plan.getPreparedDateTime() != null);
-			if (plan.getPreparedDateTime() != null) {
-				preparedDate.setValue(AppController.toDate(plan.getPreparedDateTime()));
+			LocalDateTime preparation = preparationDate(plan);
+			preparedDatePresent.setSelected(preparation != null);
+			if (preparation != null) {
+				preparedDate.setValue(AppController.toDate(preparation));
 			}
 			preparedDate.setEnabled(preparedDatePresent.isSelected());
-			datePreparedPresent.setSelected(plan.getDatePrepared() != null);
-			if (plan.getDatePrepared() != null) {
-				datePrepared.setValue(AppController.toDate(plan.getDatePrepared()));
-			}
-			datePrepared.setEnabled(datePreparedPresent.isSelected());
-			iapPage.setText(plan.getIapPage());
 			tableModel.fireTableDataChanged();
 			updateWarnings();
 		} finally {
@@ -144,7 +136,7 @@ public final class Ics205Panel extends JPanel {
 		}
 	}
 
-	/** Flushes preparation fields, leaving an unrecorded date and signature blank. */
+	/** Flushes preparation fields without modifying saved signature or pagination data. */
 	public void pushToModel() {
 		if (loading) {
 			return;
@@ -153,16 +145,15 @@ public final class Ics205Panel extends JPanel {
 	}
 
 	/**
-	 * Validates both optional dates before applying any metadata from this edit.
+	 * Validates the optional date before applying metadata. An explicit date change updates
+	 * both printed date blocks; unrelated edits preserve distinct legacy dates.
 	 *
 	 * @return whether all preparation input was applied.
 	 */
 	private boolean applyPreparationFields() {
 		LocalDateTime preparation;
-		LocalDateTime formDate;
 		try {
 			preparation = enteredDate(preparedDate, preparedDatePresent);
-			formDate = enteredDate(datePrepared, datePreparedPresent);
 		} catch (ParseException exception) {
 			validation.setText("Invalid preparation date/time. Metadata was not saved; use yyyy-MM-dd HH:mm.");
 			return false;
@@ -170,16 +161,26 @@ public final class Ics205Panel extends JPanel {
 		Ics205Form plan = controller.getData().getForm205();
 		plan.setSpecialInstructions(instructions.getText());
 		plan.setPreparedByName(preparedBy.getText());
-		plan.setPreparedBySignature(signature.getText());
-		plan.setPreparedDateTime(preparation);
-		plan.setDatePrepared(formDate);
-		plan.setIapPage(iapPage.getText());
+		if (!Objects.equals(preparation, preparationDate(plan))) {
+			plan.setPreparedDateTime(preparation);
+			plan.setDatePrepared(preparation);
+		}
 		updateWarnings();
 		return true;
 	}
 
 	/**
-	 * Parses visible spinner text in its configured display timezone without committing either editor.
+	 * Selects the preparation timestamp, falling back to the legacy form date.
+	 *
+	 * @param plan saved communications plan.
+	 * @return preparation timestamp, or null when neither date was recorded.
+	 */
+	private static LocalDateTime preparationDate(Ics205Form plan) {
+		return plan.getPreparedDateTime() != null ? plan.getPreparedDateTime() : plan.getDatePrepared();
+	}
+
+	/**
+	 * Parses visible spinner text in its configured display timezone without committing the editor.
 	 * An unchanged display retains stored seconds rather than silently truncating them.
 	 *
 	 * @param spinner date editor.
@@ -310,23 +311,16 @@ public final class Ics205Panel extends JPanel {
 		instructions.setWrapStyleWord(true);
 		instructions.getAccessibleContext().setAccessibleName("Special instructions");
 		preparedBy.getAccessibleContext().setAccessibleName("Prepared by name");
-		signature.getAccessibleContext().setAccessibleName("Prepared by signature");
 		UiSupport.addRow(form, 0, "Special instructions", new JScrollPane(instructions));
 		JPanel preparer = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		preparer.add(preparedBy);
 		addButton(preparer, "Use Communications Unit Leader", () -> preparedBy.setText(
 				controller.getData().getOrganizationalChart().getCommunicationsUnitLeaderName()));
 		UiSupport.addRow(form, 1, "Prepared by (override allowed)", preparer);
-		UiSupport.addRow(form, 2, "Signature (only if supplied)", signature);
 		JPanel date = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		date.add(preparedDatePresent);
 		date.add(preparedDate);
-		UiSupport.addRow(form, 3, "Preparation date/time", date);
-		JPanel formDate = new JPanel(new FlowLayout(FlowLayout.LEFT));
-		formDate.add(datePreparedPresent);
-		formDate.add(datePrepared);
-		UiSupport.addRow(form, 4, "2. Date Prepared", formDate);
-		UiSupport.addRow(form, 5, "IAP page", iapPage);
+		UiSupport.addRow(form, 2, "Preparation date/time", date);
 		return form;
 	}
 
@@ -374,7 +368,6 @@ public final class Ics205Panel extends JPanel {
 	private void changed() {
 		if (!loading) {
 			preparedDate.setEnabled(preparedDatePresent.isSelected());
-			datePrepared.setEnabled(datePreparedPresent.isSelected());
 			if (applyPreparationFields()) {
 				controller.markDirty();
 			}

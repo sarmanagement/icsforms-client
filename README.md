@@ -106,6 +106,10 @@ for the operational period. The Communications Unit Leader prepares it for the
 IAP; use the relevant assignments on ICS 204. Incident name and operational period
 come from **Shared**. Review all imported or carried-forward settings before use.
 Selecting or suggesting a preparer's name is not a signature.
+The tab has one optional preparation date/time control for both printed date
+blocks. Editing that control updates both dates; unrelated edits retain any
+distinct dates in older plans. Signature lines and IAP pagination belong to the
+PDF, not the tab; previously saved signature and page data are retained.
 
 The optional communications-plan workspace is available in both incident modes;
 show or hide it under **View → Communications Plan (ICS 205)**. The Communications

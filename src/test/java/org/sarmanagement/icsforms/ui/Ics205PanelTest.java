@@ -61,7 +61,7 @@ class Ics205PanelTest {
 			button(panel, "Use Communications Unit Leader").doClick();
 			assertEquals("Comms leader", data.getForm205().getPreparedByName());
 			((JTextField) field(panel, "preparedBy")).setText("Explicit override");
-			((JTextField) field(panel, "signature")).setText("Supplied signature");
+			data.getForm205().setPreparedBySignature("Supplied signature");
 			panel.refreshFromModel();
 			panel.pushToModel();
 			assertEquals("Explicit override", data.getForm205().getPreparedByName());
@@ -87,7 +87,6 @@ class Ics205PanelTest {
 				assertEquals(utc, data.getForm205().getPreparedDateTime());
 				assertEquals(utc.minusHours(1), data.getForm205().getDatePrepared());
 				((JCheckBox) field(panel, "preparedDatePresent")).doClick();
-				((JCheckBox) field(panel, "datePreparedPresent")).doClick();
 				assertNull(data.getForm205().getPreparedDateTime());
 				assertNull(data.getForm205().getDatePrepared());
 			});
@@ -97,7 +96,7 @@ class Ics205PanelTest {
 	}
 
 	@Test
-	void invalidDateTextRejectsAllMetadataUntilBothDatesAreValid() throws Exception {
+	void invalidDateTextRejectsAllMetadataUntilPreparationDateIsValid() throws Exception {
 		AppData data = new AppData();
 		LocalDateTime timestamp = LocalDateTime.of(2026, 10, 24, 12, 30, 17);
 		data.getForm205().setPreparedDateTime(timestamp);
@@ -108,10 +107,9 @@ class Ics205PanelTest {
 		AppController controller = controller(data);
 		SwingUtilities.invokeAndWait(() -> {
 			Ics205Panel panel = new Ics205Panel(controller);
-			JSpinner date = (JSpinner) field(panel, "datePrepared");
+			JSpinner date = (JSpinner) field(panel, "preparedDate");
 			((JSpinner.DateEditor) date.getEditor()).getTextField().setText("2026-02-31 12:30");
 			((JTextField) field(panel, "preparedBy")).setText("Edited preparer");
-			((JTextField) field(panel, "signature")).setText("Edited signature");
 			((JTextArea) field(panel, "instructions")).setText("Edited instructions");
 			panel.pushToModel();
 			assertEquals("Original preparer", data.getForm205().getPreparedByName());
@@ -124,13 +122,50 @@ class Ics205PanelTest {
 			panel.pushToModel();
 			assertEquals("Original preparer", data.getForm205().getPreparedByName());
 			((JSpinner.DateEditor) date.getEditor()).getTextField().setText(
-					((JSpinner.DateEditor) date.getEditor()).getFormat().format(AppController.toDate(timestamp.minusHours(1))));
+					((JSpinner.DateEditor) date.getEditor()).getFormat().format(AppController.toDate(timestamp)));
 			panel.pushToModel();
 			assertEquals("Edited preparer", data.getForm205().getPreparedByName());
-			assertEquals("Edited signature", data.getForm205().getPreparedBySignature());
+			assertEquals("Original signature", data.getForm205().getPreparedBySignature());
 			assertEquals("Edited instructions", data.getForm205().getSpecialInstructions());
 			assertEquals(timestamp, data.getForm205().getPreparedDateTime());
 			assertEquals(timestamp.minusHours(1), data.getForm205().getDatePrepared());
+		});
+	}
+
+	@Test
+	void singlePreparationControlUpdatesBothPrintedDatesWithoutEditingPaperworkFields() throws Exception {
+		AppData data = new AppData();
+		LocalDateTime timestamp = LocalDateTime.of(2026, 10, 25, 12, 30, 17);
+		data.getForm205().setDatePrepared(timestamp);
+		data.getForm205().setPreparedBySignature("Saved signature");
+		data.getForm205().setIapPage("9");
+		AppController controller = controller(data);
+		SwingUtilities.invokeAndWait(() -> {
+			Ics205Panel panel = new Ics205Panel(controller);
+			List<JSpinner> spinners = new ArrayList<>();
+			collectComponents(panel, JSpinner.class, spinners);
+			assertEquals(1, spinners.size());
+			List<JTextField> textFields = new ArrayList<>();
+			collectComponents(panel, JTextField.class, textFields);
+			assertFalse(textFields.stream().anyMatch(input ->
+					"Saved signature".equals(input.getText()) || "9".equals(input.getText())));
+			JSpinner date = (JSpinner) field(panel, "preparedDate");
+			assertEquals(AppController.toDate(timestamp), date.getValue());
+			panel.pushToModel();
+			assertNull(data.getForm205().getPreparedDateTime());
+			assertEquals(timestamp, data.getForm205().getDatePrepared());
+			LocalDateTime changed = timestamp.plusHours(1);
+			date.setValue(AppController.toDate(changed));
+			assertEquals(changed, data.getForm205().getPreparedDateTime());
+			assertEquals(changed, data.getForm205().getDatePrepared());
+			assertEquals("Saved signature", data.getForm205().getPreparedBySignature());
+			assertEquals("9", data.getForm205().getIapPage());
+			((JCheckBox) field(panel, "preparedDatePresent")).doClick();
+			assertNull(data.getForm205().getPreparedDateTime());
+			assertNull(data.getForm205().getDatePrepared());
+			((JCheckBox) field(panel, "preparedDatePresent")).doClick();
+			assertEquals(changed, data.getForm205().getPreparedDateTime());
+			assertEquals(changed, data.getForm205().getDatePrepared());
 		});
 	}
 
@@ -544,6 +579,25 @@ class Ics205PanelTest {
 			return field.get(target);
 		} catch (ReflectiveOperationException exception) {
 			throw new AssertionError(exception);
+		}
+	}
+
+	/**
+	 * Collects controls of a given type from the visible editor hierarchy.
+	 *
+	 * @param root component hierarchy.
+	 * @param type control type.
+	 * @param matches collected controls.
+	 * @param <T> control type.
+	 */
+	private static <T extends Component> void collectComponents(Component root, Class<T> type, List<T> matches) {
+		if (type.isInstance(root)) {
+			matches.add(type.cast(root));
+		}
+		if (root instanceof Container container) {
+			for (Component child : container.getComponents()) {
+				collectComponents(child, type, matches);
+			}
 		}
 	}
 
