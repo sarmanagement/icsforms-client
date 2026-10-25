@@ -160,16 +160,14 @@ public class AsyncFormPreviewPanel extends JPanel {
 	}
 
 	/**
-	 * Renders a detached snapshot using project-local scratch storage.
+	 * Renders a detached snapshot using operating-system temporary storage.
 	 *
 	 * @param snapshot detached incident snapshot.
 	 * @return rendered pages.
 	 * @throws IOException when PDF generation or loading fails.
 	 */
 	private List<BufferedImage> render(AppData snapshot) throws IOException {
-		Path directory = Path.of("target", "role-panel-preview");
-		Files.createDirectories(directory);
-		Path pdf = Files.createTempFile(directory, "preview-", ".pdf");
+		Path pdf = Files.createTempFile("icsforms-preview-", ".pdf");
 		try {
 			renderer.render(snapshot, pdf);
 			try (PDDocument document = Loader.loadPDF(pdf.toFile())) {

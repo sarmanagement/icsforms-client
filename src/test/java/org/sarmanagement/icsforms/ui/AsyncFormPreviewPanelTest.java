@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -81,6 +82,33 @@ class AsyncFormPreviewPanelTest {
 		waitFor(() -> panel.displayedPageCount() == 2);
 
 		assertEquals(2, panel.displayedPageCount());
+		SwingUtilities.invokeAndWait(panel::cancel);
+	}
+
+	@Test
+	void rendersUsingSystemTemporaryStorage() throws Exception {
+		AtomicReference<Path> output = new AtomicReference<>();
+		AsyncFormPreviewPanel panel = new AsyncFormPreviewPanel(new PdfFormRenderer() {
+			@Override
+			public String getFormKey() {
+				return "Temporary storage test";
+			}
+
+			@Override
+			public void render(AppData data, Path outputFile) throws IOException {
+				output.set(outputFile);
+				try (PDDocument document = new PDDocument()) {
+					document.addPage(new PDPage());
+					document.save(outputFile.toFile());
+				}
+			}
+		});
+
+		SwingUtilities.invokeAndWait(() -> panel.requestPreview(new AppData(), "temporary-storage"));
+		waitFor(() -> panel.displayedPageCount() == 1);
+
+		assertEquals(Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize(),
+				output.get().getParent().toAbsolutePath().normalize());
 		SwingUtilities.invokeAndWait(panel::cancel);
 	}
 
