@@ -562,6 +562,9 @@ public class MainFrame extends JFrame {
 		JMenuItem importChannels = new JMenuItem("Import communications plan CSV…");
 		importChannels.addActionListener(event -> new RadioChannelCsvDialogs(ics205Panel, controller).importCsv());
 		importMenu.add(importChannels);
+		JMenuItem importChirp = new JMenuItem("Import communications plan CHIRP CSV…");
+		importChirp.addActionListener(event -> new RadioChannelCsvDialogs(ics205Panel, controller).importCsv(true));
+		importMenu.add(importChirp);
 		logsMenu.add(logsListMenu);
 		logsMenu.add(openLogInNewWindowMenu);
 		logsMenu.addSeparator();

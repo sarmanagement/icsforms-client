@@ -173,6 +173,45 @@ class RadioChannelCsvDialogsTest {
 	}
 
 	@Test
+	void explicitChirpImportRequestsChirpAndPreservesPlanUntilPreviewIsAccepted() throws Exception {
+		Path input = directory.resolve("chirp-explicit.csv");
+		Files.writeString(input, "Location,Name,Frequency,Duplex,Offset,Mode\n1,Imported,155.500,,0,FM\n");
+		dialogs.source = new RadioChannelCsvDialogs.ImportSource(input, true);
+		Ics205Form before = data.getForm205();
+		SwingUtilities.invokeAndWait(() -> {
+			assertNotNull(Ics205PanelTest.button(panel, "Import CHIRP CSV…"));
+			new RadioChannelCsvDialogs(panel, controller, dialogs).importCsv(true);
+		});
+		assertTrue(dialogs.preferChirp);
+		assertTrue(dialogs.previewed);
+		assertSame(before, data.getForm205());
+		assertFalse(controller.isDirty());
+		dialogs.selection = new RadioChannelCsvDialogs.ImportSelection(List.of(0), ChannelImportService.Mode.APPEND, false);
+		SwingUtilities.invokeAndWait(() -> new RadioChannelCsvDialogs(panel, controller, dialogs).importCsv(true));
+		assertEquals(List.of("Existing", "Imported"), names());
+		assertTrue(controller.isDirty());
+		assertNull(dialogs.error);
+	}
+
+	@Test
+	void explicitChirpFileCancellationAndParseFailureLeavePlanUntouched() throws Exception {
+		Ics205Form before = data.getForm205();
+		SwingUtilities.invokeAndWait(() -> new RadioChannelCsvDialogs(panel, controller, dialogs).importCsv(true));
+		assertTrue(dialogs.preferChirp);
+		assertSame(before, data.getForm205());
+		assertFalse(dialogs.previewed);
+		assertNull(dialogs.error);
+		Path input = directory.resolve("invalid-chirp.csv");
+		Files.writeString(input, "invalid,header\n");
+		dialogs.source = new RadioChannelCsvDialogs.ImportSource(input, true);
+		SwingUtilities.invokeAndWait(() -> new RadioChannelCsvDialogs(panel, controller, dialogs).importCsv(true));
+		assertSame(before, data.getForm205());
+		assertFalse(dialogs.previewed);
+		assertNotNull(dialogs.error);
+		assertFalse(controller.isDirty());
+	}
+
+	@Test
 	void nativeExportIncludesHiddenRowsAndDoesNotChangePrintSelection() throws Exception {
 		RadioChannel channel = data.getForm205().getChannels().get(0);
 		channel.setIncludeOnForm(false);
@@ -318,6 +357,7 @@ class RadioChannelCsvDialogsTest {
 		private ChirpCsvService.ExportReport report;
 		private Path destination;
 		private boolean previewed;
+		private boolean preferChirp;
 		private boolean acceptProjection;
 		private boolean acceptOverwrite;
 		private String error;
@@ -326,6 +366,13 @@ class RadioChannelCsvDialogsTest {
 		@Override
 		public RadioChannelCsvDialogs.ImportSource chooseImport(Component parent) {
 			return source;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public RadioChannelCsvDialogs.ImportSource chooseImport(Component parent, boolean chirp) {
+			preferChirp = chirp;
+			return chooseImport(parent);
 		}
 
 		/** {@inheritDoc} */

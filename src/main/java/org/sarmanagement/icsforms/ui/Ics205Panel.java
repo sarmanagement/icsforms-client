@@ -329,6 +329,7 @@ public final class Ics205Panel extends JPanel {
 			panel.add(new JButton(action));
 		}
 		addButton(panel, "Import CSV…", () -> new RadioChannelCsvDialogs(this, controller).importCsv());
+		addButton(panel, "Import CHIRP CSV…", () -> new RadioChannelCsvDialogs(this, controller).importCsv(true));
 		addButton(panel, "Export CSV…", () -> new RadioChannelCsvDialogs(this, controller).exportCsv(false));
 		addButton(panel, "Export CHIRP…", () -> new RadioChannelCsvDialogs(this, controller).exportCsv(true));
 		channelVisibility.addActionListener(event -> {

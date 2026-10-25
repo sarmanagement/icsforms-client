@@ -64,8 +64,17 @@ final class RadioChannelCsvDialogs {
 
 	/** Parses and previews the entire input before replacing any live incident data. */
 	void importCsv() {
+		importCsv(false);
+	}
+
+	/**
+	 * Opens import with an explicit initial format and previews before changing live data.
+	 *
+	 * @param chirp whether to initially select CHIRP generic CSV.
+	 */
+	void importCsv(boolean chirp) {
 		try {
-			ImportSource source = dialogs.chooseImport(parent);
+			ImportSource source = dialogs.chooseImport(parent, chirp);
 			if (source == null) {
 				return;
 			}
@@ -155,6 +164,17 @@ final class RadioChannelCsvDialogs {
 		ImportSource chooseImport(Component parent);
 
 		/**
+		 * Chooses an import source with a preferred initial format.
+		 *
+		 * @param parent owning editor.
+		 * @param chirp whether to initially select CHIRP generic CSV.
+		 * @return source or null.
+		 */
+		default ImportSource chooseImport(Component parent, boolean chirp) {
+			return chooseImport(parent);
+		}
+
+		/**
 		 * Previews parsed channels without modifying the live plan.
 		 *
 		 * @param parent owning editor.
@@ -204,8 +224,15 @@ final class RadioChannelCsvDialogs {
 		/** {@inheritDoc} */
 		@Override
 		public ImportSource chooseImport(Component parent) {
+			return chooseImport(parent, false);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public ImportSource chooseImport(Component parent, boolean chirp) {
 			JFileChooser chooser = fileChooser("Import communications plan CSV");
 			JComboBox<String> format = new JComboBox<>(new String[]{"Native ICS 205 CSV (lossless)", "CHIRP generic CSV"});
+			format.setSelectedIndex(chirp ? 1 : 0);
 			JPanel accessory = new JPanel(new BorderLayout(4, 4));
 			accessory.add(new JLabel("Input format (explicit):"), BorderLayout.NORTH);
 			accessory.add(format, BorderLayout.CENTER);

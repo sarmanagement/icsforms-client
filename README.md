@@ -118,7 +118,10 @@ The optional communications-plan workspace is available in both incident modes;
 show or hide it under **View → Communications Plan (ICS 205)**. The Communications
 dashboard places it first. Hiding it does not delete the plan or prevent
 explicitly selecting its PDF. CSV actions are also available from the main
-Import/Export menus.
+Import/Export menus. To import CHIRP's generic CSV, use **Import CHIRP CSV…** on
+the tab or **Import → Import communications plan CHIRP CSV…**. This preselects
+the CHIRP input format; review and select rows in the preview before accepting.
+The general **Import CSV…** action also supports CHIRP through its input-format selector.
 Double-click a channel to edit it, or right-click for channel actions. Row actions
 are enabled only for a selected channel; movement also respects list boundaries.
 The preparer area shows the selected person's known role and offers the
