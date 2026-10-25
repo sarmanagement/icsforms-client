@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.OpenActionItem;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.pdf.ClueLogIcs233PdfRenderer;
@@ -22,12 +23,14 @@ import org.sarmanagement.icsforms.pdf.Ics207PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics233CgPdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.pdf.PdfFormRenderer;
+import org.sarmanagement.icsforms.pdf.PdfOrientation;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
@@ -51,19 +54,75 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Verifies transient print options, real PDF layouts, and incident isolation. */
 class PdfPrintOptionsTest {
 	@Test
+	void briefingDefaultsExcludeSharedMetadataAndEmptyRowsButIncludeEnteredContent() {
+		AppData data = new AppData();
+		assertFalse(MainFrame.isExportFormSelectedByDefault("ICS 201", data));
+		data.getIncidentContext().setIncidentName("Shared incident");
+		Ics201Form empty = new Ics201Form();
+		empty.setIncidentName("Shared incident");
+		empty.setDateInitiated(java.time.LocalDate.of(2026, 10, 25));
+		empty.setTimeInitiated(java.time.LocalTime.NOON);
+		empty.setPreparedDateTime(java.time.LocalDateTime.of(2026, 10, 25, 12, 0));
+		empty.setPreparedByName("Default user");
+		empty.setPreparedByPositionTitle("Default position");
+		empty.setCurrentObjectives(List.of("  "));
+		empty.setCurrentActions(List.of(new Ics201Form.ActionEntry()));
+		empty.setResources(List.of(new Ics201Form.ResourceSummaryEntry()));
+		data.setForm201(empty);
+		assertFalse(MainFrame.isExportFormSelectedByDefault("ICS 201", data));
+		List<java.util.function.Consumer<Ics201Form>> edits = List.of(
+				form -> form.setIncidentNumber("123"),
+				form -> form.setMapSketch("Map reference"),
+				form -> form.setSituationSummary("Briefing summary"),
+				form -> form.setPreparedBySignature("Supplied signature"),
+				form -> form.setCurrentObjectives(List.of("Locate missing person")),
+				form -> {
+					var row = new Ics201Form.ActionEntry();
+					row.setActions("Establish command");
+					form.setCurrentActions(List.of(row));
+				},
+				form -> {
+					var row = new Ics201Form.ResourceSummaryEntry();
+					row.setResourceIdentifier("Team 1");
+					form.setResources(List.of(row));
+				});
+		for (var edit : edits) {
+			Ics201Form form = new Ics201Form();
+			edit.accept(form);
+			data.setForm201(form);
+			assertTrue(MainFrame.isExportFormSelectedByDefault("ICS 201", data));
+		}
+	}
+
+	@Test
 	void radioOrientationDefaultsToPortraitFitAndRemainsIndependentOf233() {
 		PdfPrintOptionsPanel panel = new PdfPrintOptionsPanel(List.of("ICS 205", "ICS 233-CG"));
 		assertFalse(panel.isIcs205NativeLandscape());
 		List<JComboBox> choices = components(panel, JComboBox.class);
-		choices.get(1).setSelectedItem("Native landscape");
-		assertTrue(panel.isIcs205NativeLandscape());
-		assertTrue(panel.isPortrait());
+		assertEquals(2, choices.size());
+		for (JComboBox choice : choices) {
+			assertEquals(3, choice.getItemCount());
+			assertEquals("Portrait", choice.getItemAt(0));
+			assertEquals("Landscape", choice.getItemAt(1));
+			assertEquals("Portrait-fit", choice.getItemAt(2));
+		}
+		assertEquals(List.of("ICS 205 orientation", "ICS 233 orientation", ""),
+				components(panel, JLabel.class).stream().map(JLabel::getText).toList());
 		choices.get(0).setSelectedItem("Landscape");
 		assertTrue(panel.isIcs205NativeLandscape());
+		assertTrue(panel.isPortrait());
+		choices.get(1).setSelectedItem("Landscape");
+		assertTrue(panel.isIcs205NativeLandscape());
 		assertFalse(panel.isPortrait());
+		for (PdfOrientation value : PdfOrientation.values()) {
+			choices.get(0).setSelectedIndex(value.ordinal());
+			choices.get(1).setSelectedIndex(value.ordinal());
+			assertEquals(value, panel.ics205Orientation());
+			assertEquals(value, panel.ics233Orientation());
+		}
 		assertFalse(new PdfPrintOptionsPanel(List.of("ICS 205")).isIcs205NativeLandscape());
 		PdfPrintOptionsPanel unavailable = new PdfPrintOptionsPanel(List.of("ICS 233-CG"));
-		components(unavailable, JComboBox.class).get(1).setSelectedItem("Native landscape");
+		components(unavailable, JComboBox.class).get(0).setSelectedItem("Landscape");
 		assertFalse(unavailable.isIcs205NativeLandscape());
 	}
 
@@ -131,7 +190,7 @@ class PdfPrintOptionsTest {
 				panel.selectedFormKeys(List.of("Clue Log", PdfPrintOptionsPanel.ADAPTED_CLUE_LOG, "ICS 233-CG")));
 		assertEquals(List.of("ICS 233-CG"), panel.selectedFormKeys(List.of("ICS 233-CG")));
 		assertTrue(panel.selectedFormKeys(List.of()).isEmpty());
-		components(panel, JComboBox.class).get(0).setSelectedItem("Landscape");
+		components(panel, JComboBox.class).get(1).setSelectedItem("Landscape");
 		assertFalse(panel.isPortrait());
 		PdfPrintOptionsPanel reopened = new PdfPrintOptionsPanel(List.of("Clue Log",
 				PdfPrintOptionsPanel.ADAPTED_CLUE_LOG));
@@ -206,8 +265,10 @@ class PdfPrintOptionsTest {
 								JCheckBox adapt = components(options, JCheckBox.class).get(0);
 								assertFalse(adapt.isSelected());
 								adapt.setSelected(true);
-								components(options, JComboBox.class).get(0).setSelectedItem("Landscape");
+								components(options, JComboBox.class).get(1).setSelectedItem("Landscape");
 								List<JCheckBox> selectors = components(dialog, JCheckBox.class);
+								assertFalse(selectors.stream().filter(check -> check.getText().startsWith("ICS 201"))
+										.findFirst().orElseThrow().isSelected());
 								assertEquals(1, selectors.stream().filter(check -> check.getText().equals("Clue Log")).count());
 								assertTrue(selectors.stream().filter(check -> check.getText().equals("Clue Log"))
 										.allMatch(JCheckBox::isSelected));

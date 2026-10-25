@@ -22,7 +22,6 @@ import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.TCard;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;

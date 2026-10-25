@@ -3,6 +3,8 @@
  */
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.pdf.PdfOrientation;
+
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JPanel;
@@ -12,9 +14,9 @@ import java.util.List;
 /** Per-export radio-plan and ICS 233 layout choices that never change incident preferences. */
 class PdfPrintOptionsPanel extends JPanel {
 	static final String ADAPTED_CLUE_LOG = "Clue Log (ICS 233-CG adapted)";
-	private final JComboBox<String> orientation = new JComboBox<>(new String[]{"Landscape", "Portrait"});
-	private final JComboBox<String> radioOrientation = new JComboBox<>(
-			new String[]{"Portrait-fit (IAP default)", "Native landscape"});
+	private static final String[] ORIENTATIONS = {"Portrait", "Landscape", "Portrait-fit"};
+	private final JComboBox<String> orientation = new JComboBox<>(ORIENTATIONS);
+	private final JComboBox<String> radioOrientation = new JComboBox<>(ORIENTATIONS);
 	private final JCheckBox adaptedClues = new JCheckBox("Export SAR clue log as adapted ICS 233");
 
 	/**
@@ -25,31 +27,53 @@ class PdfPrintOptionsPanel extends JPanel {
 	PdfPrintOptionsPanel(List<String> formKeys) {
 		super(new BorderLayout());
 		JPanel form = UiSupport.formPanel();
-		orientation.setSelectedItem("Portrait");
+		radioOrientation.setSelectedItem("Portrait-fit");
 		adaptedClues.setEnabled(formKeys.contains("Clue Log") && formKeys.contains(ADAPTED_CLUE_LOG));
-		UiSupport.addRow(form, 0, "ICS 233 orientation", orientation);
-		UiSupport.addRow(form, 1, "", adaptedClues);
 		radioOrientation.setEnabled(formKeys.contains("ICS 205"));
-		UiSupport.addRow(form, 2, "ICS 205 in IAP", radioOrientation);
+		String fitDescription = "Portrait-fit: landscape form rotated 90° counterclockwise on portrait paper.";
+		orientation.setToolTipText(fitDescription);
+		radioOrientation.setToolTipText(fitDescription);
+		UiSupport.addRow(form, 0, "ICS 205 orientation", radioOrientation);
+		UiSupport.addRow(form, 1, "ICS 233 orientation", orientation);
+		UiSupport.addRow(form, 2, "", adaptedClues);
 		add(form, BorderLayout.CENTER);
 	}
 
 	/**
 	 * Returns the orientation chosen for this export.
 	 *
-	 * @return true for portrait, false for landscape
+	 * @return true for portrait layout, false otherwise
 	 */
 	boolean isPortrait() {
-		return orientation.getSelectedIndex() == 1;
+		return ics233Orientation() == PdfOrientation.PORTRAIT;
 	}
 
 	/**
-	 * Returns the transient ICS 205 orientation choice for combined IAP exports.
+	 * Returns whether this export uses native landscape ICS 205 pages.
 	 *
 	 * @return true for native landscape sheets, false for portrait-fit sheets
 	 */
 	boolean isIcs205NativeLandscape() {
-		return radioOrientation.isEnabled() && radioOrientation.getSelectedIndex() == 1;
+		return ics205Orientation() == PdfOrientation.LANDSCAPE;
+	}
+
+	/**
+	 * Returns the ICS 205 layout for this export only.
+	 *
+	 * @return selected layout, defaulting to portrait-fit when unavailable.
+	 */
+	PdfOrientation ics205Orientation() {
+		return radioOrientation.isEnabled() ? PdfOrientation.values()[radioOrientation.getSelectedIndex()]
+				: PdfOrientation.PORTRAIT_FIT;
+	}
+
+	/**
+	 * Returns the ICS 233 layout for this export only.
+	 *
+	 * @return selected layout for the tracker and adapted clue log.
+	 */
+	PdfOrientation ics233Orientation() {
+		return PdfOrientation.values()[orientation.getSelectedIndex()];
 	}
 
 	/**

@@ -7,6 +7,7 @@ import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IapPhase;
 import org.sarmanagement.icsforms.model.IncidentMode;
@@ -715,6 +716,7 @@ public class MainFrame extends JFrame {
 	 * @param requestedFormKey form key to add to the default selections.
 	 */
 	private void openFormsExportDialog(Path defaultDirectory, String requestedFormKey) {
+		ics201Panel.pushToModel();
 		List<String> formKeys = sortExportFormKeys(controller.exportableFormKeys());
 		if (formKeys.isEmpty()) {
 			JOptionPane.showMessageDialog(this, "No PDF forms are available to export.", "Export forms as PDF",
@@ -773,7 +775,7 @@ public class MainFrame extends JFrame {
 				addSelectedFormsToIcs202Attachments(selected);
 				if (exportModeControls.combined().isSelected()) {
 					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source,
-							printOptions.isPortrait(), printOptions.isIcs205NativeLandscape());
+							printOptions.ics205Orientation(), printOptions.ics233Orientation());
 					JPanel completion = new JPanel(new BorderLayout(0, 8));
 					JTextArea summary = new JTextArea(controller.getLastPdfBundleSummary(), 3, 50);
 					summary.setEditable(false);
@@ -785,7 +787,7 @@ public class MainFrame extends JFrame {
 							JOptionPane.INFORMATION_MESSAGE);
 				} else {
 					Map<String, Path> exported = controller.exportSelectedForms(selected, directory, source,
-							printOptions.isPortrait());
+							printOptions.ics205Orientation(), printOptions.ics233Orientation());
 					JOptionPane.showMessageDialog(this, createExportCompletePanel(new ArrayList<>(exported.values())), "Export complete",
 							JOptionPane.INFORMATION_MESSAGE);
 				}
@@ -910,6 +912,7 @@ public class MainFrame extends JFrame {
 	 */
 	static boolean isExportFormSelectedByDefault(String formKey, AppData data) {
 		return switch (formKey) {
+			case "ICS 201" -> hasBriefingContent(data.getForm201());
 			case "ICS 205" -> data.isIcs205Enabled();
 			case "ICS 233-CG" -> data.isOpenActionTrackerEnabled();
 			case "Clue Log (ICS 233-CG adapted)" -> false;
@@ -917,6 +920,27 @@ public class MainFrame extends JFrame {
 					.anyMatch(item -> formKey.equalsIgnoreCase(item));
 			default -> true;
 		};
+	}
+
+	/**
+	 * Checks for entered briefing content rather than shared incident identity or
+	 * automatically populated preparation names and dates. Empty table rows do not count.
+	 *
+	 * @param form incident briefing, possibly absent in an older document.
+	 * @return true when briefing-specific content was entered.
+	 */
+	private static boolean hasBriefingContent(Ics201Form form) {
+		return form != null && (!form.getIncidentNumber().isBlank()
+				|| !form.getMapSketch().isBlank()
+				|| !form.getSituationSummary().isBlank()
+				|| !form.getPreparedBySignature().isBlank()
+				|| form.getCurrentObjectives().stream().anyMatch(value -> value != null && !value.isBlank())
+				|| form.getCurrentActions().stream().anyMatch(row -> row != null
+						&& (!row.getTime().isBlank() || !row.getActions().isBlank()))
+				|| form.getResources().stream().anyMatch(row -> row != null
+						&& (!row.getResource().isBlank() || !row.getResourceIdentifier().isBlank()
+						|| row.getDateTimeOrdered() != null || row.getEta() != null || row.isArrived()
+						|| !row.getNotes().isBlank())));
 	}
 
 	/**

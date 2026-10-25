@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Renders the landscape ICS 205 radio plan with lossless, measured continuation pages.
+ * Renders the ICS 205 radio plan with lossless, orientation-aware continuation pages.
  */
 public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRenderer {
 	private static final float FONT_SIZE = 8f;
@@ -61,15 +61,28 @@ public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @throws IOException when output fails
 	 */
 	void render(AppData data, Path outputFile, boolean portraitFit) throws IOException {
+		render(data, outputFile, portraitFit ? PdfOrientation.PORTRAIT_FIT : PdfOrientation.LANDSCAPE);
+	}
+
+	/**
+	 * Renders using an export-only physical media and content orientation.
+	 *
+	 * @param data source incident
+	 * @param outputFile destination PDF
+	 * @param orientation requested media and content orientation
+	 * @throws IOException when output fails
+	 */
+	public void render(AppData data, Path outputFile, PdfOrientation orientation) throws IOException {
+		java.util.Objects.requireNonNull(orientation, "orientation");
 		AppData source = data == null ? new AppData() : data;
 		PdfText.validateForm(source, getFormKey());
 		if (outputFile.getParent() != null) {
 			Files.createDirectories(outputFile.getParent());
 		}
 		try (PDDocument document = new PDDocument()) {
-			Plan plan = plan(source);
+			Plan plan = plan(source, orientation);
 			for (int i = 0; i < plan.pages().size(); i++) {
-				drawPage(document, source, plan, i, portraitFit);
+				drawPage(document, source, plan, i, orientation);
 			}
 			document.save(outputFile.toFile());
 		}
@@ -82,8 +95,19 @@ public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @return number of landscape pages, including text continuations
 	 */
 	static int pageCount(AppData data) {
+		return pageCount(data, PdfOrientation.LANDSCAPE);
+	}
+
+	/**
+	 * Counts pages using the exact layout selected for the export.
+	 *
+	 * @param data incident and paper settings
+	 * @param orientation requested layout
+	 * @return measured continuation page count
+	 */
+	static int pageCount(AppData data, PdfOrientation orientation) {
 		try {
-			return new Ics205PdfRenderer().plan(data == null ? new AppData() : data).pages().size();
+			return new Ics205PdfRenderer().plan(data == null ? new AppData() : data, orientation).pages().size();
 		} catch (IOException exception) {
 			throw new IllegalArgumentException("Cannot measure ICS 205 text", exception);
 		}
@@ -102,12 +126,16 @@ public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 	/**
 	 * Reserves an upright portrait footer without scaling text or violating print margins.
-	 * Symmetric side clearances also keep native landscape and portrait pagination identical.
+	 * Symmetric side clearances keep landscape and portrait-fit pagination identical.
 	 *
 	 * @param data paper and minimum-margin preferences
-	 * @return shared landscape body bounds for both export orientations
+	 * @param orientation requested layout
+	 * @return body bounds for the selected export orientation
 	 */
-	private FormLayout radioLayout(AppData data) {
+	private FormLayout radioLayout(AppData data, PdfOrientation orientation) {
+		if (orientation == PdfOrientation.PORTRAIT) {
+			return formLayout(newPage(data), data);
+		}
 		FormLayout layout = formLayout(landscapePage(data), data);
 		return new FormLayout(layout.x() + PORTRAIT_FOOTER_CLEARANCE, layout.y(),
 				layout.width() - 2 * PORTRAIT_FOOTER_CLEARANCE, layout.height(), layout.headerBaseline(),
@@ -118,12 +146,13 @@ public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * Measures and paginates all printable values without changing the incident.
 	 *
 	 * @param data incident document
+	 * @param orientation requested layout
 	 * @return immutable layout plan
 	 * @throws IOException when font metrics fail
 	 */
-	private Plan plan(AppData data) throws IOException {
+	private Plan plan(AppData data, PdfOrientation orientation) throws IOException {
 		PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-		FormLayout layout = radioLayout(data);
+		FormLayout layout = radioLayout(data, orientation);
 		Ics205Form form = data.getForm205();
 		float[] widths = columnWidths(layout.width());
 		PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
@@ -253,21 +282,21 @@ public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @param data source document
 	 * @param plan measured layout
 	 * @param index zero-based page index
-	 * @param portraitFit whether the landscape body is placed on a portrait sheet
+	 * @param orientation requested media and content orientation
 	 * @throws IOException when PDF output fails
 	 */
-	private void drawPage(PDDocument document, AppData data, Plan plan, int index, boolean portraitFit)
+	private void drawPage(PDDocument document, AppData data, Plan plan, int index, PdfOrientation orientation)
 			throws IOException {
-		PDPage page = portraitFit ? newPage(data) : landscapePage(data);
+		PDPage page = orientation == PdfOrientation.LANDSCAPE ? landscapePage(data) : newPage(data);
 		page.setCropBox(new PDRectangle(page.getMediaBox().getWidth(), page.getMediaBox().getHeight()));
 		document.addPage(page);
-		FormLayout layout = radioLayout(data);
+		FormLayout layout = radioLayout(data, orientation);
 		PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
 		PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 		Sheet sheet = plan.pages().get(index);
 		try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
 			stream.saveGraphicsState();
-			if (portraitFit) {
+			if (orientation == PdfOrientation.PORTRAIT_FIT) {
 				stream.transform(new Matrix(0, 1, -1, 0, page.getMediaBox().getWidth(), 0));
 			}
 			drawFormHeader(stream, bold, layout, "ICS 205",

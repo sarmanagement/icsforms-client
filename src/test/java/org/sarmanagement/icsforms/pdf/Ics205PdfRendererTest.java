@@ -33,6 +33,74 @@ class Ics205PdfRendererTest {
 	Path directory;
 
 	@Test
+	void everyExplicitOrientationPreservesTextAndUsesItsMeasuredPagination() throws Exception {
+		AppData data = incident();
+		RadioChannel channel = channel(1);
+		channel.setRemarks("Long measured radio remark ".repeat(180) + "RadioTail");
+		data.getForm205().getChannels().add(channel);
+		data.getForm205().setSpecialInstructions("Instruction ".repeat(500) + "InstructionTail");
+		for (PdfOrientation orientation : PdfOrientation.values()) {
+			Path file = directory.resolve("explicit-" + orientation + ".pdf");
+			new Ics205PdfRenderer().render(data, file, orientation);
+			try (PDDocument pdf = Loader.loadPDF(file.toFile())) {
+				assertEquals(Ics205PdfRenderer.pageCount(data, orientation), pdf.getNumberOfPages());
+				String compact = new PDFTextStripper().getText(pdf).replaceAll("\\s", "");
+				assertTrue(compact.contains("RadioTail"));
+				assertTrue(compact.contains("InstructionTail"));
+				for (int page = 1; page <= pdf.getNumberOfPages(); page++) {
+					assertBoxes(pdf.getPage(page - 1), PDRectangle.LETTER, orientation != PdfOrientation.LANDSCAPE);
+					assertRotationMatrix(pdf.getPage(page - 1), orientation == PdfOrientation.PORTRAIT_FIT,
+							PDRectangle.LETTER.getWidth());
+					assertBodyDirection(pdf, page, orientation == PdfOrientation.PORTRAIT_FIT);
+					assertUprightIapNumber(pdf, page, 44);
+				}
+				assertGeometry(pdf, 36);
+			}
+		}
+		assertNotEquals(Ics205PdfRenderer.pageCount(data, PdfOrientation.PORTRAIT),
+				Ics205PdfRenderer.pageCount(data, PdfOrientation.LANDSCAPE),
+				"The fixture must exercise orientation-dependent page counts");
+	}
+
+	@Test
+	void portraitBundleNumbersFollowingFormsFromActualRadioPageCount() throws Exception {
+		AppData data = incident();
+		RadioChannel channel = channel(1);
+		channel.setRemarks("Long measured radio remark ".repeat(180) + "RadioTail");
+		data.getForm205().getChannels().add(channel);
+		PdfExportService service = new PdfExportService(new Ics205PdfRenderer(), new Ics205aPdfRenderer());
+		int radioPages = Ics205PdfRenderer.pageCount(data, PdfOrientation.PORTRAIT);
+		Path file = service.exportIapBundle(data, directory, List.of("ICS 205A", "ICS 205"),
+				PdfOrientation.PORTRAIT, PdfOrientation.PORTRAIT_FIT);
+		try (PDDocument pdf = Loader.loadPDF(file.toFile())) {
+			assertEquals(radioPages + 2, pdf.getNumberOfPages());
+			assertEquals("1", data.getForm205().getIapPage());
+			assertEquals(Integer.toString(radioPages + 1), data.getForm205aIapPage());
+			assertTrue(pageText(pdf, pdf.getNumberOfPages()).matches(
+					"(?s).*IAP Page\\s+" + (radioPages + 1) + "\\b.*"));
+		}
+	}
+
+	@Test
+	void nativePortraitUsesA4AndConfiguredMarginsWithoutRotatingItsBody() throws Exception {
+		AppData data = incident();
+		data.getPdfLayoutSettings().setPaperSize(PdfLayoutSettings.PaperSize.A4);
+		data.getForm205().getChannels().add(channel(1));
+		for (float margin : new float[]{54, 100}) {
+			data.getPdfLayoutSettings().setPageMarginPoints(margin);
+			Path file = directory.resolve("portrait-a4-" + margin + ".pdf");
+			new Ics205PdfRenderer().render(data, file, PdfOrientation.PORTRAIT);
+			try (PDDocument pdf = Loader.loadPDF(file.toFile())) {
+				assertBoxes(pdf.getPage(0), PDRectangle.A4, true);
+				assertRotationMatrix(pdf.getPage(0), false, PDRectangle.A4.getWidth());
+				assertBodyDirection(pdf, 1, false);
+				assertGeometry(pdf, margin);
+				assertUprightIapNumber(pdf, 1, margin + 8);
+			}
+		}
+	}
+
+	@Test
 	void blankReferenceIsLandscapeWithEightRuledBodyRowsAndNoPageRotation() throws Exception {
 		AppData data = new AppData();
 		Path file = directory.resolve("blank.pdf");
@@ -442,13 +510,14 @@ class Ics205PdfRendererTest {
 				}
 			}
 			if (radioPage) {
-				boolean portrait = box.getWidth() < box.getHeight();
-				assertCellContents(positions, box, portrait);
+				boolean rotated = positions.runs.stream().flatMap(run -> run.positions().stream())
+						.anyMatch(glyph -> glyph.getDir() == 90);
+				assertCellContents(positions, box, rotated);
 				for (float[] rect : operations(pdf.getPage(i - 1), "re", 4)) {
-					float minX = portrait ? box.getWidth() - rect[1] - rect[3] : rect[0];
-					float minY = portrait ? rect[0] : rect[1];
-					float maxX = portrait ? box.getWidth() - rect[1] : rect[0] + rect[2];
-					float maxY = portrait ? rect[0] + rect[2] : rect[1] + rect[3];
+					float minX = rotated ? box.getWidth() - rect[1] - rect[3] : rect[0];
+					float minY = rotated ? rect[0] : rect[1];
+					float maxX = rotated ? box.getWidth() - rect[1] : rect[0] + rect[2];
+					float maxY = rotated ? rect[0] + rect[2] : rect[1] + rect[3];
 					assertTrue(minX >= margin - 0.1 && maxX <= box.getWidth() - margin + 0.1,
 							"Transformed cell horizontal bounds inside sheet");
 					assertTrue(minY >= margin - 0.1 && maxY <= box.getHeight() - margin + 0.1,

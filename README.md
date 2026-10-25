@@ -92,12 +92,15 @@ for a table containing every clue, ordered open, assigned, then followed
 up on. Its Item column uses Description, Location, and Found by headings, and its
 POC column includes assignment history. The regular tracker prints only the current POC.
 
-ICS 233-CG output supports portrait (default) or landscape on the configured paper
-size. Choose **ICS 233 orientation** in the PDF generation dialog for either
+ICS 233-CG output supports **Portrait** (default), **Landscape**, or **Portrait-fit**
+on the configured paper size. Choose **ICS 233 orientation** in the PDF generation dialog for either
 individual PDFs or the combined IAP bundle. Each dialog starts with portrait and
 standard clue output, regardless of legacy saved export flags. These print-time
 choices are not saved with the incident. Uncheck **Clue Log** to omit clues
 entirely; the enabled incident tracker remains a separate export selection.
+ICS 201 starts unchecked unless it contains briefing-specific content, such as an
+incident number, map, summary, objectives, actions, or resources. Shared incident
+identity and automatically populated names/dates alone do not select the briefing.
 
 ### Radio communications plan (ICS 205; issue #14)
 
@@ -140,10 +143,14 @@ instructions. Otherwise the new plan starts empty. The previous plan is archived
 with its period context. Copies have independent mutable data, and preparation
 times, signature, and IAP page are cleared for the new period.
 
-Standalone ICS 205 PDFs default to native landscape. In a combined IAP, the
-default fits rotated landscape **content** inside portrait-sized pages, with
-upright bundle page numbers. The export dialog also offers native landscape for
-ICS 205; that choice is independent of ICS 233 orientation. Long content continues
+Direct standalone ICS 205 exports default to native landscape. The PDF generation
+dialog offers matching **Portrait**, **Landscape**, and **Portrait-fit** options
+for ICS 205 and ICS 233, in that order before the adapted clue-log checkbox.
+ICS 205 defaults to **Portrait-fit**, which rotates landscape **content** 90 degrees
+counterclockwise inside portrait-sized pages, with upright bundle page numbers.
+**Portrait** uses an upright portrait layout; **Landscape** uses landscape paper.
+Both choices apply to individual PDFs and IAP bundles and remain independent
+between the two forms. Long content continues
 on additional pages with identifying context rather than being silently dropped.
 Configured paper size and minimum margins apply.
 
