@@ -18,6 +18,7 @@ import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.IncidentLocation;
+import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.RadioChannel;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
@@ -220,6 +221,7 @@ class MainFrameDataRetentionTest {
 		data.getIncidentContext().setOperationalPeriodEnd(LocalDateTime.of(2026, 10, 25, 20, 0));
 		data.getForm201().getCurrentActions().add(new Ics201Form.ActionEntry());
 		data.getForm201().getResources().add(new Ics201Form.ResourceSummaryEntry());
+		data.getForm202().setStructuredObjectives(List.of(new IncidentObjective("Retain objective", 0)));
 		data.getMedicalPlan().getAidStations().add(new MedicalPlan.AidStation());
 		data.getMedicalPlan().getTransportServices().add(new MedicalPlan.TransportService());
 		data.getMedicalPlan().getHospitals().add(new MedicalPlan.Hospital());
@@ -294,7 +296,7 @@ class MainFrameDataRetentionTest {
 				new EditorCase("ics201Panel", WorkspaceDestination.of(WorkspaceId.ICS_201),
 						List.of("incidentNumberField", "mapSketchArea", "situationSummaryArea", "objectivesArea")),
 				new EditorCase("ics202Panel", WorkspaceDestination.of(WorkspaceId.ICS_202),
-						List.of("objectivesArea", "commandEmphasisArea", "situationalAwarenessArea", "additionalFormsArea")),
+						List.of("objectiveTextArea", "commandEmphasisArea", "situationalAwarenessArea", "additionalFormsArea")),
 				new EditorCase("ics204Panel", WorkspaceDestination.of(WorkspaceId.ICS_204),
 						List.of("sharedAssignmentArea", "specialInstructionsArea")),
 				new EditorCase("ics205Panel", WorkspaceDestination.of(WorkspaceId.ICS_205),
