@@ -36,6 +36,7 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
 
 import javax.swing.Timer;
+import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.ZoneOffset;
@@ -50,6 +51,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Coordinates UI edits, autosave, validation, and linked SAR task
@@ -70,6 +73,10 @@ public class AppController {
 	private boolean dirty;
 	private LinkSource activeLinkSource = LinkSource.NONE;
 	private PersonnelCardCreator personnelCardCreator;
+	private final List<IncidentChangeListener> incidentChangeListeners = new CopyOnWriteArrayList<>();
+	private long incidentGeneration = 1;
+	private long changeSequence;
+	private boolean suppressChangeNotifications;
 	private java.util.function.Consumer<RuntimeException> autosaveErrorHandler = exception -> {
 		throw exception;
 	};
@@ -84,6 +91,56 @@ public class AppController {
 	 */
 	public enum LinkSource {
 		NONE, SHARED, ORG_CHART, ICS202, ICS204, ICS214
+	}
+
+	/**
+	 * Describes why live incident views should update.
+	 */
+	public enum IncidentChangeKind {
+		MODEL_COMMITTED, INCIDENT_REPLACED, OPERATIONAL_PERIOD_CHANGED
+	}
+
+	/**
+	 * Immutable identity token used by detached editors and asynchronous work.
+	 *
+	 * @param dataIdentity incident model identity.
+	 * @param generation controller incident generation.
+	 */
+	public record IncidentBinding(AppData dataIdentity, long generation) {
+	}
+
+	/**
+	 * Immutable notification delivered after a shared-model commit.
+	 *
+	 * @param binding identity of the incident to which the change belongs.
+	 * @param sequence monotonically increasing controller-local change sequence.
+	 * @param kind change category.
+	 */
+	public record IncidentChange(IncidentBinding binding, long sequence, IncidentChangeKind kind) {
+	}
+
+	/**
+	 * Receives shared incident changes on the Swing event dispatch thread.
+	 */
+	@FunctionalInterface
+	public interface IncidentChangeListener {
+		/**
+		 * Handles one committed shared-model change.
+		 *
+		 * @param change immutable change notification.
+		 */
+		void incidentChanged(IncidentChange change);
+	}
+
+	/**
+	 * Idempotent listener registration returned to live views.
+	 */
+	public interface IncidentChangeSubscription extends AutoCloseable {
+		/**
+		 * Removes the registered listener.
+		 */
+		@Override
+		void close();
 	}
 
 	/**
@@ -237,6 +294,66 @@ public class AppController {
 	}
 
 	/**
+	 * Captures the active incident identity for a detached editor or asynchronous
+	 * operation.
+	 *
+	 * @return current incident binding.
+	 */
+	public IncidentBinding captureIncidentBinding() {
+		return new IncidentBinding(data, incidentGeneration);
+	}
+
+	/**
+	 * Tests whether a captured binding still names the active incident and period.
+	 *
+	 * @param binding binding to test.
+	 * @return true only while the exact incident generation remains active.
+	 */
+	public boolean isCurrent(IncidentBinding binding) {
+		return binding != null && binding.dataIdentity() == data && binding.generation() == incidentGeneration;
+	}
+
+	/**
+	 * Applies a synchronous shared-model edit only while its originating incident
+	 * binding remains current.
+	 *
+	 * @param binding originating incident binding.
+	 * @param edit synchronous edit that must not display a modal dialog.
+	 * @return true when the edit was applied; false when the incident or period changed.
+	 */
+	public boolean commitIfCurrent(IncidentBinding binding, Runnable edit) {
+		java.util.Objects.requireNonNull(edit, "edit");
+		if (!isCurrent(binding)) {
+			return false;
+		}
+		edit.run();
+		markDirty();
+		return true;
+	}
+
+	/**
+	 * Registers a listener for committed local model changes.
+	 *
+	 * <p>
+	 * Registration does not emit an initial event. The owner must close the returned
+	 * subscription when its window is disposed.
+	 * </p>
+	 *
+	 * @param listener listener to invoke on the Swing event dispatch thread.
+	 * @return idempotent subscription.
+	 */
+	public IncidentChangeSubscription addIncidentChangeListener(IncidentChangeListener listener) {
+		java.util.Objects.requireNonNull(listener, "listener");
+		incidentChangeListeners.add(listener);
+		AtomicBoolean closed = new AtomicBoolean();
+		return () -> {
+			if (closed.compareAndSet(false, true)) {
+				incidentChangeListeners.remove(listener);
+			}
+		};
+	}
+
+	/**
 	 * Returns the ICS 201 incident briefing data.
 	 *
 	 * @return ICS 201 form data.
@@ -345,6 +462,8 @@ public class AppController {
 		syncSarTasks();
 		dirty = false;
 		activeLinkSource = LinkSource.NONE;
+		incidentGeneration++;
+		publishIncidentChange(IncidentChangeKind.INCIDENT_REPLACED);
 	}
 
 	/**
@@ -369,6 +488,7 @@ public class AppController {
 		syncSarTasks();
 		syncTCards();
 		autosaveTimer.restart();
+		publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
 	}
 
 	/**
@@ -391,11 +511,16 @@ public class AppController {
 		boolean previousDirty = dirty;
 		LinkSource previousSource = activeLinkSource;
 		boolean pendingAutosave = autosaveTimer.isRunning();
+		boolean previousSuppression = suppressChangeNotifications;
 		try {
+			suppressChangeNotifications = true;
 			edits.run();
 			markDirty();
 			save();
+			suppressChangeNotifications = previousSuppression;
+			publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
 		} catch (RuntimeException exception) {
+			suppressChangeNotifications = previousSuppression;
 			autosaveTimer.stop();
 			snapshot.restore();
 			dirty = previousDirty;
@@ -404,6 +529,28 @@ public class AppController {
 				autosaveTimer.restart();
 			}
 			throw exception;
+		}
+	}
+
+	/**
+	 * Publishes a live-view notification without asking full editors to reload.
+	 *
+	 * @param kind category of committed model change.
+	 */
+	private void publishIncidentChange(IncidentChangeKind kind) {
+		if (suppressChangeNotifications || incidentChangeListeners.isEmpty()) {
+			return;
+		}
+		IncidentChange change = new IncidentChange(captureIncidentBinding(), ++changeSequence, kind);
+		Runnable delivery = () -> {
+			for (IncidentChangeListener listener : incidentChangeListeners) {
+				listener.incidentChanged(change);
+			}
+		};
+		if (SwingUtilities.isEventDispatchThread()) {
+			delivery.run();
+		} else {
+			SwingUtilities.invokeLater(delivery);
 		}
 	}
 
@@ -750,6 +897,8 @@ public class AppController {
 		dirty = true;
 		activeLinkSource = LinkSource.NONE;
 		autosaveTimer.restart();
+		incidentGeneration++;
+		publishIncidentChange(IncidentChangeKind.OPERATIONAL_PERIOD_CHANGED);
 	}
 
 	/**
