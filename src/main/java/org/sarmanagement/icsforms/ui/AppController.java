@@ -2803,11 +2803,15 @@ public class AppController {
 		if (data.getForm202() == null) {
 			data.setForm202(new org.sarmanagement.icsforms.model.Ics202Form());
 		}
+		data.getForm202().normalizeObjectives();
 		if (data.getForm204() == null) {
 			data.setForm204(new Ics204Form());
 		}
 		if (data.getAdditionalForms204() == null) {
 			data.setAdditionalForms204(new ArrayList<>());
+		}
+		for (ResourceAssignment assignment : data.getAllAssignmentResources()) {
+			assignment.setObjectiveIds(assignment.getObjectiveIds());
 		}
 		if (data.getActivityLogs() == null) {
 			data.setActivityLogs(new ArrayList<>());

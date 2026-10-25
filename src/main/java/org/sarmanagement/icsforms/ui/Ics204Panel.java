@@ -5,6 +5,7 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 
@@ -12,6 +13,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
@@ -248,7 +250,20 @@ public class Ics204Panel extends JPanel {
 	 *         off to another editor.
 	 */
 	public ResourceAssignment openNewAssignmentEditor() {
+		return openNewAssignmentEditorForObjective("");
+	}
+
+	/**
+	 * Opens a normal new-assignment editor with one objective preselected.
+	 *
+	 * @param objectiveId stable objective identifier, or blank for no preselection.
+	 * @return saved assignment, or null when cancelled or handed off.
+	 */
+	public ResourceAssignment openNewAssignmentEditorForObjective(String objectiveId) {
 		ResourceAssignment row = new ResourceAssignment();
+		if (objectiveId != null && !objectiveId.isBlank()) {
+			row.setObjectiveIds(List.of(objectiveId));
+		}
 		ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
 		JPanel content = resourceAssignmentEditorDialogContent(row, editor);
 		if (confirmResourceAssignmentDialog("Create ICS 204 Assignment", row, editor, content,
@@ -999,6 +1014,7 @@ public class Ics204Panel extends JPanel {
 		private final JScrollPane remarksField;
 		private final JScrollPane notesField;
 		private final JScrollPane assignmentField;
+		private final JList<IncidentObjective> objectivesField;
 		private final String initialAssignment;
 		private final String initialEquipment;
 
@@ -1045,6 +1061,14 @@ public class Ics204Panel extends JPanel {
 			remarksField = textArea(row.getRemarks(), 2);
 			notesField = textArea(row.getNotes(), 2);
 			assignmentField = textArea(row.getAssignment(), 4);
+			objectivesField = new JList<>(
+					controller.getData().getForm202().getStructuredObjectives().toArray(IncidentObjective[]::new));
+			List<IncidentObjective> objectiveRows = controller.getData().getForm202().getStructuredObjectives();
+			int[] selectedObjectives = java.util.stream.IntStream.range(0, objectiveRows.size())
+					.filter(index -> row.getObjectiveIds().contains(objectiveRows.get(index).getObjectiveId())).toArray();
+			objectivesField.setSelectedIndices(selectedObjectives);
+			objectivesField.setVisibleRowCount(Math.min(4, Math.max(1, objectivesField.getModel().getSize())));
+			objectivesField.getAccessibleContext().setAccessibleName("Linked incident objectives");
 
 			// Autocomplete on leader field: selecting a known name auto-fills contact.
 			UiSupport.installNameAutocomplete(leaderField, controller::getPersonnelNames, selectedName -> {
@@ -1081,6 +1105,7 @@ public class Ics204Panel extends JPanel {
 			UiSupport.addRow(panel, rowIndex++, "Leadership", inlineFieldPanel(
 					new LabeledComponent("Leader role", leaderRoleField), new LabeledComponent("Leader", leaderField)));
 			UiSupport.addRow(panel, rowIndex++, "Reporting location", reportingField);
+			UiSupport.addRow(panel, rowIndex++, "Objectives (zero or more)", new JScrollPane(objectivesField));
 			UiSupport.addRow(panel, rowIndex++, "Special equipment", equipmentField);
 			UiSupport.addRow(panel, rowIndex++, "Supplies", suppliesField);
 			UiSupport.addRow(panel, rowIndex++, "Remarks", remarksField);
@@ -1113,6 +1138,8 @@ public class Ics204Panel extends JPanel {
 			row.setRemarks(textAreaFrom(remarksField).getText().trim());
 			row.setNotes(textAreaFrom(notesField).getText().trim());
 			row.setAssignment(textAreaFrom(assignmentField).getText().trim());
+			row.setObjectiveIds(objectivesField.getSelectedValuesList().stream().map(IncidentObjective::getObjectiveId)
+					.toList());
 		}
 
 		private static String selectedComboValue(JComboBox<String> comboBox) {

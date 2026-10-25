@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
 
 import java.time.LocalDateTime;
@@ -10,6 +13,7 @@ import java.util.List;
  */
 public class Ics202Form {
 	private List<String> objectives = new ArrayList<>();
+	private List<IncidentObjective> structuredObjectives = new ArrayList<>();
 	private String commandEmphasis = "";
 	private String situationalAwareness = "";
 	private boolean siteSafetyPlanRequired;
@@ -29,6 +33,7 @@ public class Ics202Form {
 	 * @return objectives list.
 	 */
 	public List<String> getObjectives() {
+		normalizeObjectives();
 		return objectives;
 	}
 
@@ -39,7 +44,75 @@ public class Ics202Form {
 	 *            objectives list.
 	 */
 	public void setObjectives(List<String> objectives) {
-		this.objectives = objectives == null ? new ArrayList<>() : objectives;
+		List<String> values = objectives == null ? new ArrayList<>() : new ArrayList<>(objectives);
+		normalizeObjectives();
+		for (int index = 0; index < values.size(); index++) {
+			if (index < structuredObjectives.size()) {
+				structuredObjectives.get(index).setText(values.get(index));
+			} else {
+				structuredObjectives.add(new IncidentObjective(values.get(index), index));
+			}
+		}
+		while (structuredObjectives.size() > values.size()) {
+			structuredObjectives.remove(structuredObjectives.size() - 1);
+		}
+		normalizeObjectiveOrder();
+	}
+
+	/**
+	 * Returns stable objective entities, migrating legacy objective strings without
+	 * guessing assignment links.
+	 *
+	 * @return mutable ordered objective list.
+	 */
+	public List<IncidentObjective> getStructuredObjectives() {
+		normalizeObjectives();
+		return structuredObjectives;
+	}
+
+	/**
+	 * Replaces stable objective entities and normalizes their display order.
+	 *
+	 * @param structuredObjectives objective entities; null becomes empty.
+	 */
+	public void setStructuredObjectives(List<IncidentObjective> structuredObjectives) {
+		this.structuredObjectives = structuredObjectives == null ? new ArrayList<>() : structuredObjectives;
+		normalizeObjectiveOrder();
+	}
+
+	/**
+	 * Migrates legacy strings and keeps the legacy PDF projection synchronized.
+	 */
+	public void normalizeObjectives() {
+		if (structuredObjectives == null) {
+			structuredObjectives = new ArrayList<>();
+		}
+		if (structuredObjectives.isEmpty() && objectives != null) {
+			for (int index = 0; index < objectives.size(); index++) {
+				structuredObjectives.add(new IncidentObjective(objectives.get(index), index));
+			}
+		}
+		normalizeObjectiveOrder();
+	}
+
+	/**
+	 * Applies list order and rebuilds the backward-compatible text projection.
+	 */
+	private void normalizeObjectiveOrder() {
+		if (structuredObjectives == null) {
+			structuredObjectives = new ArrayList<>();
+		}
+		objectives = new ArrayList<>();
+		for (int index = 0; index < structuredObjectives.size(); index++) {
+			IncidentObjective objective = structuredObjectives.get(index);
+			if (objective == null) {
+				objective = new IncidentObjective("", index);
+				structuredObjectives.set(index, objective);
+			}
+			objective.getObjectiveId();
+			objective.setDisplayOrder(index);
+			objectives.add(objective.getText());
+		}
 	}
 
 	/**

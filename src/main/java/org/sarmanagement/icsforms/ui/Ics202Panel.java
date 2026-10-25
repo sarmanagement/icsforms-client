@@ -5,11 +5,18 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics202Form;
+import org.sarmanagement.icsforms.model.IncidentObjective;
+import org.sarmanagement.icsforms.model.ObjectiveAssessment;
 import org.sarmanagement.icsforms.pdf.PdfText;
 
 import javax.swing.BorderFactory;
 import javax.swing.JPanel;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.DefaultListModel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -27,9 +34,13 @@ import java.util.List;
  */
 public class Ics202Panel extends JPanel {
 	private final AppController controller;
-	private final JTextArea objectivesArea = UiSupport.textArea(5);
+	private final DefaultListModel<IncidentObjective> objectivesModel = new DefaultListModel<>();
+	private final JList<IncidentObjective> objectivesList = new JList<>(objectivesModel);
+	private final JTextArea objectiveTextArea = UiSupport.textArea(4);
+	private final JComboBox<ObjectiveAssessment> objectiveAssessment = new JComboBox<>(ObjectiveAssessment.values());
+	private final JTextArea objectiveAssessmentNote = UiSupport.textArea(2);
 	private final JLabel objectiveWarning = new JLabel(" ");
-	private final Color objectiveBackground = objectivesArea.getBackground();
+	private final Color objectiveBackground = objectiveTextArea.getBackground();
 	private final JTextArea commandEmphasisArea = UiSupport.textArea(3);
 	private final JTextArea situationalAwarenessArea = UiSupport.textArea(3);
 	private final JCheckBox siteSafetyPlanRequired = new JCheckBox("Site safety plan required");
@@ -48,6 +59,7 @@ public class Ics202Panel extends JPanel {
 	private final JTextField approvedByNameField = UiSupport.textField();
 	private final javax.swing.JSpinner approvedDateTimeField = UiSupport.dateTimeSpinner();
 	private final JTextField iapPageField = UiSupport.textField();
+	private boolean loadingObjectives;
 
 	/**
 	 * Creates the ICS 202 editor panel.
@@ -60,7 +72,7 @@ public class Ics202Panel extends JPanel {
 		this.controller = controller;
 		JPanel form = UiSupport.formPanel();
 		form.setBorder(BorderFactory.createTitledBorder("ICS 202 Incident Objectives"));
-		UiSupport.addRow(form, 0, "Objectives (one per line)", objectiveEditor());
+		UiSupport.addRow(form, 0, "Ordered objectives", objectiveEditor());
 		UiSupport.addRow(form, 1, "Command emphasis", new JScrollPane(commandEmphasisArea));
 		UiSupport.addRow(form, 2, "General situational awareness", new JScrollPane(situationalAwarenessArea));
 		UiSupport.addRow(form, 3, "Safety plan", siteSafetyPlanRequired);
@@ -89,9 +101,40 @@ public class Ics202Panel extends JPanel {
 		panel.setOpaque(false);
 		objectiveWarning.setForeground(new Color(160, 40, 40));
 		objectiveWarning.getAccessibleContext().setAccessibleName("Objective PDF export warning");
-		panel.add(new JScrollPane(objectivesArea), BorderLayout.CENTER);
+		objectivesList.setVisibleRowCount(6);
+		objectivesList.getAccessibleContext().setAccessibleName("Incident objectives");
+		objectivesList.addListSelectionListener(event -> {
+			if (!event.getValueIsAdjusting()) {
+				loadSelectedObjective();
+			}
+		});
+		JPanel detail = UiSupport.formPanel();
+		UiSupport.addRow(detail, 0, "Objective text", new JScrollPane(objectiveTextArea));
+		UiSupport.addRow(detail, 1, "Assessment", objectiveAssessment);
+		UiSupport.addRow(detail, 2, "Assessment note", new JScrollPane(objectiveAssessmentNote));
+		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
+		JButton add = new JButton("Add objective");
+		JButton apply = new JButton("Apply objective");
+		JButton up = new JButton("Move up");
+		JButton down = new JButton("Move down");
+		JButton remove = new JButton("Remove…");
+		add.addActionListener(event -> addObjective());
+		apply.addActionListener(event -> applySelectedObjective());
+		up.addActionListener(event -> moveSelectedObjective(-1));
+		down.addActionListener(event -> moveSelectedObjective(1));
+		remove.addActionListener(event -> removeSelectedObjective());
+		actions.add(add);
+		actions.add(apply);
+		actions.add(up);
+		actions.add(down);
+		actions.add(remove);
+		JPanel editor = new JPanel(new GridLayout(1, 2, 8, 0));
+		editor.add(new JScrollPane(objectivesList));
+		editor.add(detail);
+		panel.add(editor, BorderLayout.CENTER);
+		panel.add(actions, BorderLayout.NORTH);
 		panel.add(objectiveWarning, BorderLayout.SOUTH);
-		objectivesArea.getDocument().addDocumentListener(new DocumentListener() {
+		objectiveTextArea.getDocument().addDocumentListener(new DocumentListener() {
 			/** {@inheritDoc} */
 			@Override
 			public void insertUpdate(DocumentEvent event) {
@@ -119,25 +162,152 @@ public class Ics202Panel extends JPanel {
 	 */
 	private void updateObjectiveWarning() {
 		try {
-			PdfText.validate(objectivesArea.getText(), "ICS 202", "Objectives");
+			PdfText.validate(objectiveTextArea.getText(), "ICS 202", "Objectives");
 			objectiveWarning.setText(" ");
 			objectiveWarning.setToolTipText(null);
-			objectivesArea.setToolTipText(null);
-			objectivesArea.setBackground(objectiveBackground);
+			objectiveTextArea.setToolTipText(null);
+			objectiveTextArea.setBackground(objectiveBackground);
 		} catch (IllegalArgumentException exception) {
 			String message = exception.getMessage();
 			int advice = message.indexOf(". Edit this field");
 			objectiveWarning.setText("PDF export warning: " + (advice < 0 ? message : message.substring(0, advice + 1)));
 			objectiveWarning.setToolTipText(message);
-			objectivesArea.setToolTipText(message);
-			objectivesArea.setBackground(new Color(255, 242, 224));
+			objectiveTextArea.setToolTipText(message);
+			objectiveTextArea.setBackground(new Color(255, 242, 224));
+		}
+	}
+
+	/** Loads the selected objective into focused draft fields. */
+	private void loadSelectedObjective() {
+		loadingObjectives = true;
+		try {
+			IncidentObjective objective = objectivesList.getSelectedValue();
+			objectiveTextArea.setText(objective == null ? "" : objective.getText());
+			objectiveAssessment
+					.setSelectedItem(objective == null ? ObjectiveAssessment.NOT_ASSESSED : objective.getAssessment());
+			objectiveAssessmentNote.setText(objective == null ? "" : objective.getAssessmentNote());
+			objectiveTextArea.setEnabled(objective != null);
+			objectiveAssessment.setEnabled(objective != null);
+			objectiveAssessmentNote.setEnabled(objective != null);
+		} finally {
+			loadingObjectives = false;
+		}
+	}
+
+	/** Adds and selects a normal stable objective. */
+	private void addObjective() {
+		IncidentObjective objective = new IncidentObjective("", objectivesModel.size());
+		objectivesModel.addElement(objective);
+		controller.getData().getForm202().setStructuredObjectives(modelObjectives());
+		objectivesList.setSelectedIndex(objectivesModel.size() - 1);
+		objectiveTextArea.requestFocusInWindow();
+		controller.markDirty();
+	}
+
+	/** Applies focused text and assessment without calculating it from task state. */
+	private void applySelectedObjective() {
+		if (loadingObjectives) {
+			return;
+		}
+		IncidentObjective objective = objectivesList.getSelectedValue();
+		if (objective == null) {
+			return;
+		}
+		ObjectiveAssessment previous = objective.getAssessment();
+		objective.setText(objectiveTextArea.getText());
+		objective.setAssessment((ObjectiveAssessment) objectiveAssessment.getSelectedItem());
+		objective.setAssessmentNote(objectiveAssessmentNote.getText().trim());
+		if (previous != objective.getAssessment()) {
+			objective.setAssessedBy(controller.getData().getIncidentContext().getCurrentUser());
+			objective.setAssessedAt(java.time.LocalDateTime.now().withSecond(0).withNano(0));
+		}
+		controller.getData().getForm202().setStructuredObjectives(modelObjectives());
+		objectivesList.repaint();
+		controller.markDirty();
+	}
+
+	/**
+	 * Moves a selected stable objective without changing its identity.
+	 *
+	 * @param offset negative to move up, positive to move down.
+	 */
+	private void moveSelectedObjective(int offset) {
+		int source = objectivesList.getSelectedIndex();
+		int target = source + offset;
+		if (source < 0 || target < 0 || target >= objectivesModel.size()) {
+			return;
+		}
+		IncidentObjective objective = objectivesModel.remove(source);
+		objectivesModel.add(target, objective);
+		controller.getData().getForm202().setStructuredObjectives(modelObjectives());
+		objectivesList.setSelectedIndex(target);
+		controller.markDirty();
+	}
+
+	/** Removes an objective after explicit resolution of assignment links. */
+	private void removeSelectedObjective() {
+		IncidentObjective objective = objectivesList.getSelectedValue();
+		if (objective == null) {
+			return;
+		}
+		boolean unlink = false;
+		if (!controller.getData().getAssignmentsForObjective(objective.getObjectiveId()).isEmpty()) {
+			int choice = JOptionPane.showConfirmDialog(this,
+					"This objective has linked assignments. Explicitly unlink them and remove the objective?",
+					"Resolve objective links", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+			if (choice != JOptionPane.OK_OPTION) {
+				return;
+			}
+			unlink = true;
+		}
+		controller.getData().removeObjective(objective.getObjectiveId(), "", unlink);
+		refreshObjectives(controller.getData().getForm202());
+		controller.markDirty();
+	}
+
+	/**
+	 * Returns stable objectives currently displayed by the ordered editor.
+	 *
+	 * @return ordered objective list.
+	 */
+	private List<IncidentObjective> modelObjectives() {
+		List<IncidentObjective> objectives = new ArrayList<>();
+		for (int index = 0; index < objectivesModel.size(); index++) {
+			objectives.add(objectivesModel.get(index));
+		}
+		return objectives;
+	}
+
+	/**
+	 * Reloads stable objective rows without creating new identities.
+	 *
+	 * @param form active ICS 202 form.
+	 */
+	private void refreshObjectives(Ics202Form form) {
+		String selectedId = objectivesList.getSelectedValue() == null
+				? ""
+				: objectivesList.getSelectedValue().getObjectiveId();
+		objectivesModel.clear();
+		for (IncidentObjective objective : form.getStructuredObjectives()) {
+			objectivesModel.addElement(objective);
+		}
+		for (int index = 0; index < objectivesModel.size(); index++) {
+			if (selectedId.equals(objectivesModel.get(index).getObjectiveId())) {
+				objectivesList.setSelectedIndex(index);
+				return;
+			}
+		}
+		if (!objectivesModel.isEmpty()) {
+			objectivesList.setSelectedIndex(0);
+		} else {
+			loadSelectedObjective();
 		}
 	}
 
 	/** Loads values from the model. */
 	public void refreshFromModel() {
 		Ics202Form form = controller.getData().getForm202();
-		objectivesArea.setText(String.join("\n", form.getObjectives()));
+		refreshObjectives(form);
 		commandEmphasisArea.setText(nullSafe(form.getCommandEmphasis()));
 		situationalAwarenessArea.setText(nullSafe(form.getSituationalAwareness()));
 		siteSafetyPlanRequired.setSelected(form.isSiteSafetyPlanRequired());
@@ -155,7 +325,8 @@ public class Ics202Panel extends JPanel {
 	 */
 	public void pushToModel() {
 		Ics202Form form = controller.getData().getForm202();
-		form.setObjectives(objectiveLines(objectivesArea.getText()));
+		applySelectedObjective();
+		form.setStructuredObjectives(modelObjectives());
 		form.setCommandEmphasis(commandEmphasisArea.getText().trim());
 		form.setSituationalAwareness(situationalAwarenessArea.getText().trim());
 		form.setSiteSafetyPlanRequired(siteSafetyPlanRequired.isSelected());
@@ -167,22 +338,6 @@ public class Ics202Panel extends JPanel {
 		form.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
 		form.setApprovedDateTime(AppController.toLocalDateTime((java.util.Date) approvedDateTimeField.getValue()));
 		form.setIapPage(iapPageField.getText().trim());
-	}
-
-	/**
-	 * Splits logical objective lines without trimming source characters.
-	 *
-	 * @param value original objective input.
-	 * @return nonempty objectives preserving tabs, spaces, and unwanted controls.
-	 */
-	private List<String> objectiveLines(String value) {
-		List<String> items = new ArrayList<>();
-		for (String line : value.split("\r\n|\r|\n", -1)) {
-			if (!line.matches("[ \t]*")) {
-				items.add(line);
-			}
-		}
-		return items;
 	}
 
 	private JPanel includedFormsPanel() {

@@ -23,7 +23,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 12;
+	public static final int CURRENT_SCHEMA_VERSION = 13;
 	private static final ObjectMapper MEDICAL_PLAN_COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -39,6 +39,9 @@ public class AppData {
 		private MedicalPlan medicalPlan;
 		private CanineMedicalPlan canineMedicalPlan;
 		private Ics205Form form205;
+		private Ics202Form form202;
+		private List<Ics204Form> forms204 = new ArrayList<>();
+		private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
 
 		/** Creates an empty record. */
 		public OperationalPeriodRecord() {
@@ -148,6 +151,36 @@ public class AppData {
 		 */
 		public void setForm205(Ics205Form form205) {
 			this.form205 = form205;
+		}
+
+		/** @return archived objective form, or null for legacy records. */
+		public Ics202Form getForm202() {
+			return form202;
+		}
+
+		/** @param form202 archived objective form. */
+		public void setForm202(Ics202Form form202) {
+			this.form202 = form202;
+		}
+
+		/** @return archived assignment forms. */
+		public List<Ics204Form> getForms204() {
+			return forms204;
+		}
+
+		/** @param forms204 archived assignment forms. */
+		public void setForms204(List<Ics204Form> forms204) {
+			this.forms204 = forms204 == null ? new ArrayList<>() : forms204;
+		}
+
+		/** @return archived linked SAR task snapshots. */
+		public List<SarTaskAssignment> getSarTaskAssignments() {
+			return sarTaskAssignments;
+		}
+
+		/** @param sarTaskAssignments archived linked SAR task snapshots. */
+		public void setSarTaskAssignments(List<SarTaskAssignment> sarTaskAssignments) {
+			this.sarTaskAssignments = sarTaskAssignments == null ? new ArrayList<>() : sarTaskAssignments;
 		}
 	}
 
@@ -337,6 +370,15 @@ public class AppData {
 		record.setMedicalPlan(copyMedicalPlan(getMedicalPlan()));
 		record.setCanineMedicalPlan(copyCanineMedicalPlan(getCanineMedicalPlan()));
 		record.setForm205(getForm205().deepCopy());
+		record.setForm202(MEDICAL_PLAN_COPIER.convertValue(getForm202(), Ics202Form.class));
+		List<Ics204Form> archivedForms204 = new ArrayList<>();
+		archivedForms204.add(MEDICAL_PLAN_COPIER.convertValue(getForm204(), Ics204Form.class));
+		for (Ics204Form form : getAdditionalForms204()) {
+			archivedForms204.add(MEDICAL_PLAN_COPIER.convertValue(form, Ics204Form.class));
+		}
+		record.setForms204(archivedForms204);
+		record.setSarTaskAssignments(MEDICAL_PLAN_COPIER.convertValue(getSarTaskAssignments(),
+				MEDICAL_PLAN_COPIER.getTypeFactory().constructCollectionType(List.class, SarTaskAssignment.class)));
 		operationalPeriodHistory.add(record);
 		getArchivedSafetyHazardReports().addAll(archiveSafetyHazardReports(sarTaskAssignments,
 				record.getPeriodStart(), record.getPeriodEnd()));
@@ -1357,5 +1399,73 @@ public class AppData {
 	 */
 	public void setPdfLayoutSettings(PdfLayoutSettings pdfLayoutSettings) {
 		this.pdfLayoutSettings = pdfLayoutSettings == null ? new PdfLayoutSettings() : pdfLayoutSettings;
+	}
+
+	/**
+	 * Returns every assignment row in the active operational period.
+	 *
+	 * @return mutable assignment objects in primary-then-additional form order.
+	 */
+	@JsonIgnore
+	public List<ResourceAssignment> getAllAssignmentResources() {
+		List<ResourceAssignment> assignments = new ArrayList<>();
+		if (getForm204() != null) {
+			assignments.addAll(getForm204().getResourcesAssigned());
+		}
+		for (Ics204Form form : getAdditionalForms204()) {
+			if (form != null) {
+				assignments.addAll(form.getResourcesAssigned());
+			}
+		}
+		return assignments;
+	}
+
+	/**
+	 * Finds assignments linked to one stable objective.
+	 *
+	 * @param objectiveId stable objective identifier.
+	 * @return linked assignments in form order.
+	 */
+	@JsonIgnore
+	public List<ResourceAssignment> getAssignmentsForObjective(String objectiveId) {
+		if (objectiveId == null || objectiveId.isBlank()) {
+			return List.of();
+		}
+		return getAllAssignmentResources().stream()
+				.filter(assignment -> assignment.getObjectiveIds().contains(objectiveId)).toList();
+	}
+
+	/**
+	 * Removes an objective only after linked assignments are explicitly unlinked or
+	 * reassigned.
+	 *
+	 * @param objectiveId objective to remove.
+	 * @param replacementObjectiveId replacement objective, or blank to unlink.
+	 * @param unlinkLinkedAssignments true when the operator explicitly chose to unlink.
+	 * @throws IllegalStateException when linked assignments have no explicit resolution.
+	 */
+	public void removeObjective(String objectiveId, String replacementObjectiveId, boolean unlinkLinkedAssignments) {
+		List<ResourceAssignment> linked = getAssignmentsForObjective(objectiveId);
+		String replacement = replacementObjectiveId == null ? "" : replacementObjectiveId;
+		if (!linked.isEmpty() && replacement.isBlank() && !unlinkLinkedAssignments) {
+			throw new IllegalStateException(
+					"Objective is linked to assignments; choose a replacement or explicitly unlink them.");
+		}
+		if (!replacement.isBlank() && getForm202().getStructuredObjectives().stream()
+				.noneMatch(objective -> replacement.equals(objective.getObjectiveId()))) {
+			throw new IllegalArgumentException("Replacement objective does not exist.");
+		}
+		for (ResourceAssignment assignment : linked) {
+			List<String> links = new ArrayList<>(assignment.getObjectiveIds());
+			int position = links.indexOf(objectiveId);
+			links.removeIf(objectiveId::equals);
+			if (!replacement.isBlank() && !links.contains(replacement)) {
+				links.add(Math.max(0, position), replacement);
+			}
+			assignment.setObjectiveIds(links);
+		}
+		List<IncidentObjective> retained = new ArrayList<>(getForm202().getStructuredObjectives());
+		retained.removeIf(objective -> objectiveId.equals(objective.getObjectiveId()));
+		getForm202().setStructuredObjectives(retained);
 	}
 }

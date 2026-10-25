@@ -1,5 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -21,6 +26,7 @@ public class ResourceAssignment {
 	private String remarks = "";
 	private String notes = "";
 	private String assignment = "";
+	private List<String> objectiveIds = new ArrayList<>();
 
 	/**
 	 * Returns the stable assignment linkage identifier.
@@ -305,5 +311,33 @@ public class ResourceAssignment {
 	 */
 	public void setAssignment(String assignment) {
 		this.assignment = assignment;
+	}
+
+	/**
+	 * Returns stable objectives supported by this assignment.
+	 *
+	 * @return mutable objective identifier list.
+	 */
+	public List<String> getObjectiveIds() {
+		if (objectiveIds == null) {
+			objectiveIds = new ArrayList<>();
+		}
+		return objectiveIds;
+	}
+
+	/**
+	 * Replaces objective links, removing blanks and duplicates while retaining order.
+	 *
+	 * @param objectiveIds objective identifiers.
+	 */
+	public void setObjectiveIds(List<String> objectiveIds) {
+		this.objectiveIds = new ArrayList<>();
+		if (objectiveIds != null) {
+			for (String objectiveId : objectiveIds) {
+				if (objectiveId != null && !objectiveId.isBlank() && !this.objectiveIds.contains(objectiveId)) {
+					this.objectiveIds.add(objectiveId);
+				}
+			}
+		}
 	}
 }
