@@ -1,4 +1,6 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
@@ -1898,6 +1900,9 @@ public class TCardPanel extends JPanel {
 		TCard card = new TCard();
 		TCardType type = inferCardType(typeStr);
 		card.setCardType(type);
+		card.setCanineResource(type == TCardType.EQUIPMENT && typeStr != null
+				&& (typeStr.toLowerCase().contains("canine") || typeStr.toLowerCase().contains("handler")
+						|| typeStr.toLowerCase().contains("k9")));
 		String safeName = name == null ? "" : name.trim();
 		// For PERSONNEL cards, the name is the person's name; for all other card types
 		// (equipment, canines, aircraft, etc.) the name is the resource identifier.
@@ -2425,6 +2430,7 @@ public class TCardPanel extends JPanel {
 		copy.setNotes(src.getNotes());
 		copy.setSourceRef(src.getSourceRef());
 		copy.setHandlerName(src.getHandlerName());
+		copy.setCanineResource(src.isCanineResourceCard());
 		return copy;
 	}
 

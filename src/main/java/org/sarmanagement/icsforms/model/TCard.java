@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -79,6 +82,12 @@ public class TCard {
 	 * card. Blank when not applicable.
 	 */
 	private String handlerName = "";
+
+	/**
+	 * Explicit canine marker because ICS 219 represents canines and ordinary
+	 * equipment with the same EQUIPMENT card type.
+	 */
+	private boolean canineResource;
 
 	/**
 	 * Number of persons represented by this T-card. Meaningful for CREW cards (a
@@ -368,6 +377,38 @@ public class TCard {
 	 */
 	public void setHandlerName(String handlerName) {
 		this.handlerName = handlerName == null ? "" : handlerName;
+	}
+
+	/**
+	 * Returns whether this card explicitly identifies a canine resource.
+	 *
+	 * <p>
+	 * The explicit marker is authoritative. Handler-linked equipment and legacy
+	 * canine labels are also recognized because earlier documents had no dedicated
+	 * canine discriminator.
+	 * </p>
+	 *
+	 * @return true when this is a canine resource T-card.
+	 */
+	public boolean isCanineResourceCard() {
+		if (canineResource) {
+			return true;
+		}
+		if (cardType != TCardType.EQUIPMENT) {
+			return false;
+		}
+		String identifier = getResourceIdentifier().toLowerCase();
+		return !getHandlerName().isBlank() || identifier.contains("canine") || identifier.contains("k9")
+				|| identifier.contains("dog");
+	}
+
+	/**
+	 * Sets the explicit canine marker independently of the ICS 219 card category.
+	 *
+	 * @param canineResource true when the equipment card represents a canine.
+	 */
+	public void setCanineResource(boolean canineResource) {
+		this.canineResource = canineResource;
 	}
 
 	/**

@@ -83,6 +83,21 @@ class Ics207PdfRendererTest {
 		}
 	}
 
+	@Test
+	void medicalUnitLeaderAppearsInTheLogisticsChart() throws Exception {
+		AppData data = new AppData();
+		data.getOrganizationalChart().setMedicalUnitLeaderName("Fictional Medical Leader");
+		Path file = directory.resolve("medical-unit-leader.pdf");
+
+		new Ics207PdfRenderer().render(data, file);
+
+		try (PDDocument pdf = Loader.loadPDF(file.toFile())) {
+			String text = new PDFTextStripper().getText(pdf);
+			assertTrue(text.contains("Medical Unit Ldr"));
+			assertTrue(text.contains("Fictional Medical Leader"));
+		}
+	}
+
 	/**
 	 * Verifies the staff rectangle is one-third narrower and shifted right of the stem.
 	 *

@@ -3,6 +3,7 @@
  */
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.pdf.PdfText;
 
@@ -36,6 +37,8 @@ public class Ics202Panel extends JPanel {
 	private final JCheckBox includeIcs204 = new JCheckBox("ICS 204");
 	private final JCheckBox includeIcs208 = new JCheckBox("ICS 208");
 	private final JCheckBox includeIcs215a = new JCheckBox("ICS 215A");
+	private final JCheckBox includeIcs206 = new JCheckBox("ICS 206");
+	private final JCheckBox includeCanine206 = new JCheckBox("ICS 206CANINE (adapted)");
 	private final JCheckBox includeSarTaskAssignment = new JCheckBox("SAR Task Assignment");
 	private final JCheckBox includeMapPacket = new JCheckBox("Map packet");
 	private final JTextArea additionalFormsArea = UiSupport.textArea(2);
@@ -155,7 +158,9 @@ public class Ics202Panel extends JPanel {
 		form.setCommandEmphasis(commandEmphasisArea.getText().trim());
 		form.setSituationalAwareness(situationalAwarenessArea.getText().trim());
 		form.setSiteSafetyPlanRequired(siteSafetyPlanRequired.isSelected());
-		form.setIncidentActionPlanAttachments(getIncludedForms());
+		List<String> includedForms = getIncludedForms();
+		form.setIncidentActionPlanAttachments(includedForms);
+		synchronizeMedicalPlanInclusion(controller.getData(), includedForms);
 		form.setApprovedByIncidentCommanderName(approvedByNameField.getText().trim());
 		form.setPreparedByName(preparedByNameField.getText().trim());
 		form.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
@@ -188,6 +193,8 @@ public class Ics202Panel extends JPanel {
 		checks.add(includeIcs204);
 		checks.add(includeIcs208);
 		checks.add(includeIcs215a);
+		checks.add(includeIcs206);
+		checks.add(includeCanine206);
 		checks.add(includeSarTaskAssignment);
 		checks.add(includeMapPacket);
 		panel.add(checks, BorderLayout.NORTH);
@@ -202,6 +209,8 @@ public class Ics202Panel extends JPanel {
 		includeIcs204.setSelected(false);
 		includeIcs208.setSelected(false);
 		includeIcs215a.setSelected(false);
+		includeIcs206.setSelected(false);
+		includeCanine206.setSelected(false);
 		includeSarTaskAssignment.setSelected(false);
 		includeMapPacket.setSelected(false);
 		List<String> additional = new ArrayList<>();
@@ -214,6 +223,10 @@ public class Ics202Panel extends JPanel {
 				includeIcs208.setSelected(true);
 			} else if ("ICS 215A".equalsIgnoreCase(item)) {
 				includeIcs215a.setSelected(true);
+			} else if ("ICS 206".equalsIgnoreCase(item)) {
+				includeIcs206.setSelected(true);
+			} else if ("ICS 206CANINE".equalsIgnoreCase(item)) {
+				includeCanine206.setSelected(true);
 			} else if ("SAR Task Assignment".equalsIgnoreCase(item)) {
 				includeSarTaskAssignment.setSelected(true);
 			} else if ("Map packet".equalsIgnoreCase(item)) {
@@ -239,6 +252,12 @@ public class Ics202Panel extends JPanel {
 		if (includeIcs215a.isSelected()) {
 			items.add("ICS 215A");
 		}
+		if (includeIcs206.isSelected()) {
+			items.add("ICS 206");
+		}
+		if (includeCanine206.isSelected()) {
+			items.add("ICS 206CANINE");
+		}
 		if (includeSarTaskAssignment.isSelected()) {
 			items.add("SAR Task Assignment");
 		}
@@ -247,6 +266,18 @@ public class Ics202Panel extends JPanel {
 		}
 		items.addAll(lines(additionalFormsArea.getText()));
 		return items;
+	}
+
+	/**
+	 * Keeps legacy active flags aligned with the ICS 202 attachment selections.
+	 *
+	 * @param data incident whose medical plans are being configured.
+	 * @param includedForms selected ICS 202 attachments.
+	 */
+	static void synchronizeMedicalPlanInclusion(AppData data, List<String> includedForms) {
+		data.getMedicalPlan().setActive(includedForms.stream().anyMatch(item -> "ICS 206".equalsIgnoreCase(item)));
+		data.getCanineMedicalPlan().setActive(
+				includedForms.stream().anyMatch(item -> "ICS 206CANINE".equalsIgnoreCase(item)));
 	}
 
 	/**

@@ -26,12 +26,15 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
+import javax.swing.JPanel;
 import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.GraphicsEnvironment;
+import java.awt.Dimension;
 import java.awt.Window;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -76,6 +79,20 @@ class PdfPrintOptionsTest {
 			adapt.setSelected(true);
 			assertEquals(List.of("Clue Log"), panel.selectedFormKeys(List.of("Clue Log")));
 		}
+	}
+
+	@Test
+	void exportFormChoicesAreAllAddedWithoutAScrollPane() {
+		List<JCheckBox> choices = new ArrayList<>();
+		for (int index = 0; index < 24; index++) {
+			choices.add(new JCheckBox("Form " + index));
+		}
+
+		JPanel panel = MainFrame.createExportFormChoicesPanel(choices);
+
+		assertEquals(24, panel.getComponentCount());
+		assertEquals(new Dimension(600, 600), panel.getPreferredSize());
+		assertTrue(java.util.Arrays.stream(panel.getComponents()).allMatch(JCheckBox.class::isInstance));
 	}
 
 	@Test
@@ -124,6 +141,10 @@ class PdfPrintOptionsTest {
 										.allMatch(JCheckBox::isSelected));
 								assertFalse(selectors.stream().anyMatch(check -> check.getText().equals(
 										"Clue Log – Adapted ICS 233-CG")));
+								assertTrue(components(dialog, JScrollPane.class).stream()
+										.noneMatch(scroll -> components(scroll, JCheckBox.class).size() > 1));
+								assertTrue(selectors.stream().filter(check -> !check.getText().startsWith("Export SAR"))
+										.allMatch(JCheckBox::isShowing));
 							} catch (Throwable failure) {
 								dialogFailure.set(failure);
 							} finally {

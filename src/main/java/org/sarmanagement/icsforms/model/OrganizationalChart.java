@@ -121,6 +121,10 @@ public class OrganizationalChart {
 	private String foodUnitLeaderRadio = "";
 	private String foodUnitLeaderPhone = "";
 
+	private String medicalUnitLeaderName = "";
+	private String medicalUnitLeaderRadio = "";
+	private String medicalUnitLeaderPhone = "";
+
 	// Finance/Admin Section positions
 	private String timeUnitLeaderName = "";
 	private String timeUnitLeaderRadio = "";
@@ -171,7 +175,8 @@ public class OrganizationalChart {
 				getDemobilizationUnitLeaderName(), getStagingAreaManagerName(), getCommunicationsUnitLeaderName(),
 				getCommunicationsTechnicianName(), getSupplyUnitLeaderName(), getFacilitiesUnitLeaderName(),
 				getGroundSupportUnitLeaderName(), getFoodUnitLeaderName(), getTimeUnitLeaderName(),
-				getProcurementUnitLeaderName(), getCompClaimsUnitLeaderName(), getCostUnitLeaderName());
+				getProcurementUnitLeaderName(), getCompClaimsUnitLeaderName(), getCostUnitLeaderName(),
+				getMedicalUnitLeaderName());
 		return names.stream().anyMatch(name -> !name.isBlank())
 				|| incidentCommanders.stream().anyMatch(name -> name != null && !name.isBlank())
 				|| incidentCommanderEntries.stream().anyMatch(entry -> entry != null && !entry.getName().isBlank())
@@ -582,6 +587,60 @@ public class OrganizationalChart {
 	}
 	public void setFoodUnitLeaderPhone(String v) {
 		foodUnitLeaderPhone = v == null ? "" : v;
+	}
+
+	/**
+	 * Returns the Medical Unit Leader name.
+	 *
+	 * @return assigned Medical Unit Leader name.
+	 */
+	public String getMedicalUnitLeaderName() {
+		return medicalUnitLeaderName;
+	}
+
+	/**
+	 * Sets the Medical Unit Leader name.
+	 *
+	 * @param value assigned name.
+	 */
+	public void setMedicalUnitLeaderName(String value) {
+		medicalUnitLeaderName = value == null ? "" : value;
+	}
+
+	/**
+	 * Returns the Medical Unit Leader radio channel.
+	 *
+	 * @return radio channel.
+	 */
+	public String getMedicalUnitLeaderRadio() {
+		return medicalUnitLeaderRadio;
+	}
+
+	/**
+	 * Sets the Medical Unit Leader radio channel.
+	 *
+	 * @param value radio channel.
+	 */
+	public void setMedicalUnitLeaderRadio(String value) {
+		medicalUnitLeaderRadio = value == null ? "" : value;
+	}
+
+	/**
+	 * Returns the Medical Unit Leader phone number.
+	 *
+	 * @return phone number.
+	 */
+	public String getMedicalUnitLeaderPhone() {
+		return medicalUnitLeaderPhone;
+	}
+
+	/**
+	 * Sets the Medical Unit Leader phone number.
+	 *
+	 * @param value phone number.
+	 */
+	public void setMedicalUnitLeaderPhone(String value) {
+		medicalUnitLeaderPhone = value == null ? "" : value;
 	}
 
 	// --- Time Unit Leader (Finance/Admin) ---

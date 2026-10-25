@@ -106,12 +106,14 @@ public class LocalRepository {
 		try {
 			AppData data = objectMapper.readValue(filePath.toFile(), AppData.class);
 			data.normalizeIdentity();
+			data.reconcileMedicalUnitLeaderAssignment();
 			return data;
 		} catch (IOException primaryFailure) {
 			if (Files.exists(backupPath)) {
 				try {
 					AppData data = objectMapper.readValue(backupPath.toFile(), AppData.class);
 					data.normalizeIdentity();
+					data.reconcileMedicalUnitLeaderAssignment();
 					return data;
 				} catch (IOException backupFailure) {
 					throw new IllegalStateException("Failed to load local data or backup", backupFailure);

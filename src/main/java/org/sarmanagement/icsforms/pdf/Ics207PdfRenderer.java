@@ -102,7 +102,8 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 			// Row 2 (middle): org chart
 			float chartH = y - footerY - footerH;
-			drawOrgChart(stream, bold, regular, x, footerY + footerH, fullW, chartH, chart, tasks);
+			drawOrgChart(stream, bold, regular, x, footerY + footerH, fullW, chartH, chart, tasks,
+					data.getMedicalUnitLeaderAssignment().getName());
 
 			// Footer: Prepared by
 			drawFooter(stream, bold, regular, x, footerY, fullW, footerH, form, data);
@@ -155,7 +156,8 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @throws IOException when PDF drawing fails.
 	 */
 	private void drawOrgChart(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float sX, float sY,
-			float width, float height, OrganizationalChart chart, List<SarTaskAssignment> tasks) throws IOException {
+			float width, float height, OrganizationalChart chart, List<SarTaskAssignment> tasks,
+			String medicalUnitLeaderName) throws IOException {
 		drawCell(stream, sX, sY, width, height);
 		drawHeading(stream, bold, sX, sY + height, "3. Organization Chart");
 
@@ -268,7 +270,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 		// Logistics sub-units
 		drawSubUnits(stream, bold, regular, LEFT + 2f * secW, secCX[2], secBoxBot, secW, subTopStart, subH, subGap,
-				buildLogisticsSubUnits(chart), sY);
+				buildLogisticsSubUnits(chart, medicalUnitLeaderName), sY);
 
 		// Finance/Admin sub-units
 		drawSubUnits(stream, bold, regular, LEFT + 3f * secW, secCX[3], secBoxBot, secW, subTopStart, subH, subGap,
@@ -357,7 +359,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return list;
 	}
 
-	private List<String[]> buildLogisticsSubUnits(OrganizationalChart chart) {
+	private List<String[]> buildLogisticsSubUnits(OrganizationalChart chart, String medicalUnitLeaderName) {
 		List<String[]> list = new ArrayList<>();
 		addIfNamed(list, "Comms Unit Leader", chart.getCommunicationsUnitLeaderName());
 		addIfNamed(list, "Comms Technician", chart.getCommunicationsTechnicianName());
@@ -365,6 +367,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		addIfNamed(list, "Facilities Unit Ldr", chart.getFacilitiesUnitLeaderName());
 		addIfNamed(list, "Gnd Support Unit Ldr", chart.getGroundSupportUnitLeaderName());
 		addIfNamed(list, "Food Unit Ldr", chart.getFoodUnitLeaderName());
+		addIfNamed(list, "Medical Unit Ldr", medicalUnitLeaderName);
 		for (OrgChartEntry e : chart.getAdditionalPositions()) {
 			if (e.getSection() == OrgChartEntry.Section.LOGISTICS) {
 				list.add(new String[]{safe(e.getTitle()), safe(e.getName())});
