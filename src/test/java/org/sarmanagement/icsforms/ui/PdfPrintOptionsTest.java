@@ -15,6 +15,7 @@ import org.sarmanagement.icsforms.model.OpenActionItem;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.pdf.ClueLogIcs233PdfRenderer;
 import org.sarmanagement.icsforms.pdf.ClueLogPdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics201PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics203PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics205PdfRenderer;
@@ -502,10 +503,10 @@ class PdfPrintOptionsTest {
 	/**
 	 * Creates the real renderers used by generation dialog tests.
 	 *
-	 * @return export service for clue layouts, tracker, objectives and organization forms
+	 * @return export service for clue layouts, tracker, briefing, objectives and organization forms
 	 */
 	private PdfExportService service() {
-		return new PdfExportService(new Ics202PdfRenderer(), new Ics203PdfRenderer(), new Ics207PdfRenderer(),
+		return new PdfExportService(new Ics201PdfRenderer(), new Ics202PdfRenderer(), new Ics203PdfRenderer(), new Ics207PdfRenderer(),
 				new ClueLogPdfRenderer(), new Ics233CgPdfRenderer(), new ClueLogIcs233PdfRenderer());
 	}
 
