@@ -18,6 +18,9 @@ import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.text.JTextComponent;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -48,6 +51,8 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final JTextField signature = new JTextField(20);
 	private final AppController.IncidentChangeSubscription subscription;
 	private boolean refreshing;
+	private boolean loadingApprovalDraft;
+	private boolean approvalDraftDirty;
 
 	/**
 	 * Creates the Incident Command role panel.
@@ -62,6 +67,7 @@ public class IncidentCommandRolePanel extends JPanel {
 		binding = controller.captureIncidentBinding();
 		add(buildHeader(), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
+		installApprovalDraftListeners();
 		planningStage.addActionListener(event -> applyPlanningStage());
 		refreshFromModel();
 		subscription = controller.addIncidentChangeListener(change -> {
@@ -96,14 +102,44 @@ public class IncidentCommandRolePanel extends JPanel {
 		}
 		approvalStatus.setText(approval);
 		approvalStatus.getAccessibleContext().setAccessibleName("Objective approval status");
-		if (approver.getText().isBlank()) {
+		if (!approvalDraftDirty) {
+			loadingApprovalDraft = true;
 			String current = data.getForm202().getApprovedByIncidentCommanderName();
 			approver.setText(current.isBlank() ? data.getIncidentContext().getCurrentUser() : current);
-		}
-		if (signature.getText().isBlank()) {
 			signature.setText(data.getForm202().getApprovedBySignature());
+			loadingApprovalDraft = false;
 		}
 		refreshing = false;
+	}
+
+	/** Tracks approval drafts so live changes cannot replace partially typed values. */
+	private void installApprovalDraftListeners() {
+		DocumentListener listener = new DocumentListener() {
+			@Override
+			public void insertUpdate(DocumentEvent event) {
+				markApprovalDraftDirty();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent event) {
+				markApprovalDraftDirty();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent event) {
+				markApprovalDraftDirty();
+			}
+		};
+		for (JTextComponent field : new JTextComponent[] { approver, signature }) {
+			field.getDocument().addDocumentListener(listener);
+		}
+	}
+
+	/** Marks approval fields as a user draft unless model values are loading. */
+	private void markApprovalDraftDirty() {
+		if (!loadingApprovalDraft) {
+			approvalDraftDirty = true;
+		}
 	}
 
 	/**
@@ -209,6 +245,7 @@ public class IncidentCommandRolePanel extends JPanel {
 		try {
 			controller.approveCurrentObjectives(approver.getText(), signature.getText(),
 					LocalDateTime.now().withSecond(0).withNano(0));
+			approvalDraftDirty = false;
 			refreshFromModel();
 		} catch (IllegalArgumentException exception) {
 			UiSupport.showDocumentMessage(this, exception.getMessage(), "Unable to approve objectives",

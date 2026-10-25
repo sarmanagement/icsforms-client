@@ -10,10 +10,15 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -87,6 +92,92 @@ class AppControllerLiveChangeTest {
 
 		assertEquals("Current", controller.getData().getIncidentContext().getIncidentName());
 		assertEquals(1, changes.size());
+	}
+
+	@Test
+	void defersAndCoalescesChangesPublishedOnEventDispatchThread() throws Exception {
+		AppController controller = controller(new AppData());
+		AtomicInteger deliveries = new AtomicInteger();
+		controller.addIncidentChangeListener(change -> deliveries.incrementAndGet());
+
+		SwingUtilities.invokeAndWait(() -> {
+			controller.markDirty();
+			controller.markDirty();
+			assertEquals(0, deliveries.get());
+		});
+		SwingUtilities.invokeAndWait(() -> {
+		});
+
+		assertEquals(1, deliveries.get());
+	}
+
+	@Test
+	void isolatesListenerFailureAfterPersistingEditorChanges() throws Exception {
+		Path incident = directory.resolve("persisted-incident.json");
+		LocalRepository repository = new LocalRepository(incident);
+		AppController controller = new AppController(new AppData(), repository, new PdfExportService(),
+				new IncidentValidator());
+		AtomicInteger laterDeliveries = new AtomicInteger();
+		controller.addIncidentChangeListener(change -> {
+			throw new IllegalStateException("Broken presentation listener");
+		});
+		controller.addIncidentChangeListener(change -> laterDeliveries.incrementAndGet());
+
+		controller.persistEditorChanges(
+				() -> controller.getData().getIncidentContext().setIncidentName("Persist despite listener failure"));
+		SwingUtilities.invokeAndWait(() -> {
+		});
+
+		assertEquals("Persist despite listener failure", controller.getData().getIncidentContext().getIncidentName());
+		assertEquals("Persist despite listener failure",
+				repository.loadOrDefault().getIncidentContext().getIncidentName());
+		assertEquals(1, laterDeliveries.get());
+	}
+
+	@Test
+	void documentMutationPublishesAfterDocumentNotificationCompletes() throws Exception {
+		AppController controller = controller(new AppData());
+		JTextField source = new JTextField();
+		AtomicBoolean insideDocumentNotification = new AtomicBoolean();
+		AtomicBoolean deliveredInline = new AtomicBoolean();
+		controller.addIncidentChangeListener(change -> {
+			deliveredInline.set(insideDocumentNotification.get());
+			if (!"Presented".equals(source.getText())) {
+				source.setText("Presented");
+			}
+		});
+		source.getDocument().addDocumentListener(new DocumentListener() {
+			@Override
+			public void insertUpdate(DocumentEvent event) {
+				publishFromDocumentNotification();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent event) {
+				publishFromDocumentNotification();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent event) {
+				publishFromDocumentNotification();
+			}
+
+			private void publishFromDocumentNotification() {
+				insideDocumentNotification.set(true);
+				try {
+					controller.markDirty();
+				} finally {
+					insideDocumentNotification.set(false);
+				}
+			}
+		});
+
+		SwingUtilities.invokeAndWait(() -> source.setText("Draft"));
+		SwingUtilities.invokeAndWait(() -> {
+		});
+
+		assertFalse(deliveredInline.get());
+		assertEquals("Presented", source.getText());
 	}
 
 	private AppController controller(AppData data) {

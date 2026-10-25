@@ -15,6 +15,7 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
 import javax.swing.SwingUtilities;
+import javax.swing.JTextField;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.List;
@@ -63,6 +64,31 @@ class IncidentCommandRolePanelTest {
 		SwingUtilities.invokeAndWait(panel[0]::dispose);
 	}
 
+	@Test
+	void unrelatedLiveChangePreservesApprovalDraft() throws Exception {
+		AppController controller = controller(new AppData());
+		IncidentCommandRolePanel[] panel = new IncidentCommandRolePanel[1];
+		SwingUtilities.invokeAndWait(() -> {
+			panel[0] = new IncidentCommandRolePanel(controller, ignored -> {
+			});
+			try {
+				textField(panel[0], "approver").setText("");
+				textField(panel[0], "signature").setText("Draft signature");
+			} catch (ReflectiveOperationException exception) {
+				throw new IllegalStateException(exception);
+			}
+		});
+
+		controller.getData().getIncidentContext().setIncidentName("Unrelated update");
+		controller.markDirty();
+		SwingUtilities.invokeAndWait(() -> {
+		});
+
+		assertEquals("", textField(panel[0], "approver").getText());
+		assertEquals("Draft signature", textField(panel[0], "signature").getText());
+		SwingUtilities.invokeAndWait(panel[0]::dispose);
+	}
+
 	private AppController controller(AppData data) {
 		return new AppController(data, new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
 				new IncidentValidator());
@@ -73,5 +99,11 @@ class IncidentCommandRolePanelTest {
 		Field field = IncidentCommandRolePanel.class.getDeclaredField("planningStage");
 		field.setAccessible(true);
 		return (JComboBox<IapPlanningStage>) field.get(panel);
+	}
+
+	private JTextField textField(IncidentCommandRolePanel panel, String name) throws ReflectiveOperationException {
+		Field field = IncidentCommandRolePanel.class.getDeclaredField(name);
+		field.setAccessible(true);
+		return (JTextField) field.get(panel);
 	}
 }

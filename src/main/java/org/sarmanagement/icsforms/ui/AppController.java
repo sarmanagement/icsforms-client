@@ -54,6 +54,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Coordinates UI edits, autosave, validation, and linked SAR task
@@ -61,6 +63,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class AppController {
 	private static final int AUTOSAVE_DELAY_MS = 750;
+	private static final Logger LOGGER = Logger.getLogger(AppController.class.getName());
 	private static final ObjectMapper INCIDENT_COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -78,6 +81,9 @@ public class AppController {
 	private long incidentGeneration = 1;
 	private long changeSequence;
 	private boolean suppressChangeNotifications;
+	private final Object incidentChangeDeliveryLock = new Object();
+	private IncidentChange pendingIncidentChange;
+	private boolean incidentChangeDeliveryScheduled;
 	private java.util.function.Consumer<RuntimeException> autosaveErrorHandler = exception -> {
 		throw exception;
 	};
@@ -519,7 +525,6 @@ public class AppController {
 			markDirty();
 			save();
 			suppressChangeNotifications = previousSuppression;
-			publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
 		} catch (RuntimeException exception) {
 			suppressChangeNotifications = previousSuppression;
 			autosaveTimer.stop();
@@ -531,10 +536,14 @@ public class AppController {
 			}
 			throw exception;
 		}
+		publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
 	}
 
 	/**
-	 * Publishes a live-view notification without asking full editors to reload.
+	 * Schedules a coalesced live-view notification without asking full editors to
+	 * reload. Delivery never occurs synchronously inside a source Swing document
+	 * callback, and one failing presentation listener cannot affect persistence or
+	 * prevent other listeners from receiving the change.
 	 *
 	 * @param kind category of committed model change.
 	 */
@@ -542,16 +551,35 @@ public class AppController {
 		if (suppressChangeNotifications || incidentChangeListeners.isEmpty()) {
 			return;
 		}
-		IncidentChange change = new IncidentChange(captureIncidentBinding(), ++changeSequence, kind);
-		Runnable delivery = () -> {
-			for (IncidentChangeListener listener : incidentChangeListeners) {
-				listener.incidentChanged(change);
+		synchronized (incidentChangeDeliveryLock) {
+			pendingIncidentChange = new IncidentChange(captureIncidentBinding(), ++changeSequence, kind);
+			if (incidentChangeDeliveryScheduled) {
+				return;
 			}
-		};
-		if (SwingUtilities.isEventDispatchThread()) {
-			delivery.run();
-		} else {
-			SwingUtilities.invokeLater(delivery);
+			incidentChangeDeliveryScheduled = true;
+		}
+		SwingUtilities.invokeLater(this::deliverPendingIncidentChange);
+	}
+
+	/**
+	 * Delivers the latest pending presentation event and isolates listener failures.
+	 */
+	private void deliverPendingIncidentChange() {
+		IncidentChange change;
+		synchronized (incidentChangeDeliveryLock) {
+			change = pendingIncidentChange;
+			pendingIncidentChange = null;
+			incidentChangeDeliveryScheduled = false;
+		}
+		if (change == null) {
+			return;
+		}
+		for (IncidentChangeListener listener : incidentChangeListeners) {
+			try {
+				listener.incidentChanged(change);
+			} catch (RuntimeException exception) {
+				LOGGER.log(Level.WARNING, "Incident change listener failed; continuing delivery", exception);
+			}
 		}
 	}
 

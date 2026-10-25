@@ -21,6 +21,9 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
@@ -50,6 +53,8 @@ public class SafetyRolePanel extends JPanel {
 	private final PlanReviewStrip humanReview;
 	private final PlanReviewStrip canineReview;
 	private final AppController.IncidentChangeSubscription subscription;
+	private boolean loadingFocusedEdits;
+	private boolean focusedEditsDirty;
 
 	/**
 	 * Creates the Safety Officer panel.
@@ -69,6 +74,7 @@ public class SafetyRolePanel extends JPanel {
 		});
 		add(new JLabel("SAFETY OFFICER | Focused live view — not an authorization boundary"), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
+		installFocusedDraftListeners();
 		showAll.addActionListener(event -> rebuildWorklist());
 		worklist.addListSelectionListener(event -> {
 			if (!event.getValueIsAdjusting()) {
@@ -97,8 +103,12 @@ public class SafetyRolePanel extends JPanel {
 	/** Refreshes shared facts while preserving worklist selection. */
 	public void refreshFromModel() {
 		String selected = worklist.getSelectedValue();
-		safetyOfficer.setText(MedicalRoleSupport.safetyOfficerName(controller.getData()));
-		safetyMessage.setText(controller.getData().getForm208().getFreeText());
+		if (!focusedEditsDirty) {
+			loadingFocusedEdits = true;
+			safetyOfficer.setText(MedicalRoleSupport.safetyOfficerName(controller.getData()));
+			safetyMessage.setText(controller.getData().getForm208().getFreeText());
+			loadingFocusedEdits = false;
+		}
 		rebuildWorklist();
 		if (selected != null) {
 			worklist.setSelectedValue(selected, true);
@@ -110,6 +120,36 @@ public class SafetyRolePanel extends JPanel {
 		humanReview.refreshFromModel();
 		canineReview.refreshFromModel();
 		refreshSelectedItem();
+	}
+
+	/** Tracks unsaved focused edits so unrelated live updates cannot replace them. */
+	private void installFocusedDraftListeners() {
+		DocumentListener listener = new DocumentListener() {
+			@Override
+			public void insertUpdate(DocumentEvent event) {
+				markFocusedEditsDirty();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent event) {
+				markFocusedEditsDirty();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent event) {
+				markFocusedEditsDirty();
+			}
+		};
+		for (JTextComponent field : new JTextComponent[] { safetyOfficer, safetyMessage }) {
+			field.getDocument().addDocumentListener(listener);
+		}
+	}
+
+	/** Marks focused fields as containing a user draft unless they are loading. */
+	private void markFocusedEditsDirty() {
+		if (!loadingFocusedEdits) {
+			focusedEditsDirty = true;
+		}
 	}
 
 	/**
@@ -223,6 +263,7 @@ public class SafetyRolePanel extends JPanel {
 		}
 		MedicalRoleSupport.setSafetyOfficerName(controller.getData(), safetyOfficer.getText());
 		controller.getData().getForm208().setFreeText(safetyMessage.getText());
+		focusedEditsDirty = false;
 		controller.markDirty();
 	}
 

@@ -19,6 +19,9 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
@@ -48,6 +51,8 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 	private final PlanReviewStrip humanReview;
 	private final PlanReviewStrip canineReview;
 	private final AppController.IncidentChangeSubscription subscription;
+	private boolean loadingFocusedEdits;
+	private boolean focusedEditsDirty;
 
 	/**
 	 * Creates the Medical Unit Leader panel.
@@ -64,6 +69,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		canineReview = new PlanReviewStrip(controller, PlanReviewArea.CANINE_MEDICAL, this::applyFocusedEdits);
 		add(new JLabel("MEDICAL UNIT LEADER | Human and canine plans remain separate"), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
+		installFocusedDraftListeners();
 		showAll.addActionListener(event -> rebuildWorklist());
 		worklist.addListSelectionListener(event -> {
 			if (!event.getValueIsAdjusting()) {
@@ -91,11 +97,15 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 	public void refreshFromModel() {
 		String selected = worklist.getSelectedValue();
 		AppData data = controller.getData();
-		leaderName.setText(data.getMedicalUnitLeaderAssignment().getName());
-		leaderRadio.setText(data.getMedicalUnitLeaderAssignment().getRadioChannel());
-		leaderPhone.setText(data.getMedicalUnitLeaderAssignment().getPhoneNumber());
-		humanInstruction.setText(data.getMedicalPlan().getCall911Procedure());
-		canineInstruction.setText(data.getCanineMedicalPlan().getEmergencyProcedures());
+		if (!focusedEditsDirty) {
+			loadingFocusedEdits = true;
+			leaderName.setText(data.getMedicalUnitLeaderAssignment().getName());
+			leaderRadio.setText(data.getMedicalUnitLeaderAssignment().getRadioChannel());
+			leaderPhone.setText(data.getMedicalUnitLeaderAssignment().getPhoneNumber());
+			humanInstruction.setText(data.getMedicalPlan().getCall911Procedure());
+			canineInstruction.setText(data.getCanineMedicalPlan().getEmergencyProcedures());
+			loadingFocusedEdits = false;
+		}
 		rebuildWorklist();
 		if (selected != null) {
 			worklist.setSelectedValue(selected, true);
@@ -106,6 +116,37 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		humanReview.refreshFromModel();
 		canineReview.refreshFromModel();
 		refreshSelectedItem();
+	}
+
+	/** Tracks unsaved focused edits so unrelated live updates cannot replace them. */
+	private void installFocusedDraftListeners() {
+		DocumentListener listener = new DocumentListener() {
+			@Override
+			public void insertUpdate(DocumentEvent event) {
+				markFocusedEditsDirty();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent event) {
+				markFocusedEditsDirty();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent event) {
+				markFocusedEditsDirty();
+			}
+		};
+		for (JTextComponent field : new JTextComponent[] { leaderName, leaderRadio, leaderPhone, humanInstruction,
+				canineInstruction }) {
+			field.getDocument().addDocumentListener(listener);
+		}
+	}
+
+	/** Marks focused fields as containing a user draft unless they are loading. */
+	private void markFocusedEditsDirty() {
+		if (!loadingFocusedEdits) {
+			focusedEditsDirty = true;
+		}
 	}
 
 	/**
@@ -219,6 +260,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 				leaderPhone.getText());
 		controller.getData().getMedicalPlan().setCall911Procedure(humanInstruction.getText());
 		controller.getData().getCanineMedicalPlan().setEmergencyProcedures(canineInstruction.getText());
+		focusedEditsDirty = false;
 		controller.markDirty();
 	}
 
