@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -22,7 +23,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 11;
+	public static final int CURRENT_SCHEMA_VERSION = 12;
 	private static final ObjectMapper MEDICAL_PLAN_COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -37,6 +38,7 @@ public class AppData {
 		private List<String> incidentCommanders = new ArrayList<>();
 		private MedicalPlan medicalPlan;
 		private CanineMedicalPlan canineMedicalPlan;
+		private Ics205Form form205;
 
 		/** Creates an empty record. */
 		public OperationalPeriodRecord() {
@@ -131,6 +133,22 @@ public class AppData {
 		public void setCanineMedicalPlan(CanineMedicalPlan canineMedicalPlan) {
 			this.canineMedicalPlan = canineMedicalPlan;
 		}
+
+		/**
+		 * Returns the archived communications plan in this record's period context.
+		 * @return archived plan, or null for legacy records without one
+		 */
+		public Ics205Form getForm205() {
+			return form205;
+		}
+
+		/**
+		 * Sets the archived communications plan.
+		 * @param form205 archived plan, or null when absent
+		 */
+		public void setForm205(Ics205Form form205) {
+			this.form205 = form205;
+		}
 	}
 
 	private int schemaVersion = CURRENT_SCHEMA_VERSION;
@@ -154,6 +172,8 @@ public class AppData {
 	private String form205aIapPage = "";
 	private Ics207Form form207 = new Ics207Form();
 	private Ics204Form form204 = new Ics204Form();
+	private Ics205Form form205 = new Ics205Form();
+	private boolean ics205Enabled = true;
 	private List<Ics204Form> additionalForms204 = new ArrayList<>();
 	private List<Ics214Form> activityLogs = new ArrayList<>();
 	private List<ActivityEventType> activityEventTypes = new ArrayList<>();
@@ -286,11 +306,25 @@ public class AppData {
 	 * is set to {@link IapPhase#DURING_OP}. The incident context, incident mode,
 	 * and activity event types are retained.
 	 * Medical plan content is copied forward with its review workflow reset.
+	 * The communications plan is archived, but the new period's plan starts empty;
+	 * use {@link #advanceToNewOperationalPeriod(boolean)} to explicitly carry it.
 	 * Incident-level open action items and tracker/export preferences are also
 	 * retained so unfinished IC/UC work carries into the next operational period.
 	 * </p>
 	 */
 	public void advanceToNewOperationalPeriod() {
+		advanceToNewOperationalPeriod(false);
+	}
+
+	/**
+	 * Advances the period, archiving an independent communications-plan snapshot
+	 * with the completed period's start and end. Existing medical-plan and shared
+	 * incident lifecycle behavior is unchanged.
+	 * @param bringForwardCommunicationsPlan true to copy channels and instructions;
+	 *            false to start with an empty plan. Dates, signature, and page are
+	 *            always cleared in the new period.
+	 */
+	public void advanceToNewOperationalPeriod(boolean bringForwardCommunicationsPlan) {
 		// Capture the current operational period context before clearing.
 		OperationalPeriodRecord record = new OperationalPeriodRecord();
 		if (incidentContext != null) {
@@ -302,6 +336,7 @@ public class AppData {
 		}
 		record.setMedicalPlan(copyMedicalPlan(getMedicalPlan()));
 		record.setCanineMedicalPlan(copyCanineMedicalPlan(getCanineMedicalPlan()));
+		record.setForm205(getForm205().deepCopy());
 		operationalPeriodHistory.add(record);
 		getArchivedSafetyHazardReports().addAll(archiveSafetyHazardReports(sarTaskAssignments,
 				record.getPeriodStart(), record.getPeriodEnd()));
@@ -309,6 +344,7 @@ public class AppData {
 		this.iapPhase = IapPhase.DURING_OP;
 		this.form202 = new Ics202Form();
 		this.form205aIapPage = "";
+		this.form205 = bringForwardCommunicationsPlan ? record.getForm205().copyForNewPeriod() : new Ics205Form();
 		this.form204 = new Ics204Form();
 		this.additionalForms204 = new ArrayList<>();
 		this.sarTaskAssignments = new ArrayList<>();
@@ -459,7 +495,10 @@ public class AppData {
 	/**
 	 * Assigns missing incident and child identities and missing document timestamps.
 	 * Existing identifiers, timestamps, revisions, and origin node identifiers are
-	 * preserved. Call only after the persistence layer has had an opportunity to
+	 * preserved, except duplicate channel IDs within a single communications plan
+	 * are replaced after their first occurrence. Channel IDs may recur across
+	 * period snapshots to retain external links.
+	 * Call only after the persistence layer has had an opportunity to
 	 * supply an incident ID and timestamps for legacy documents.
 	 */
 	public void normalizeIdentity() {
@@ -471,6 +510,12 @@ public class AppData {
 		}
 		if (updatedAt == null) {
 			updatedAt = createdAt;
+		}
+		getForm205().normalizeIdentity();
+		for (OperationalPeriodRecord record : operationalPeriodHistory) {
+			if (record != null && record.getForm205() != null) {
+				record.getForm205().normalizeIdentity();
+			}
 		}
 		if (tCards != null) {
 			for (TCard card : tCards) {
@@ -508,6 +553,38 @@ public class AppData {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Returns the current communications plan, including channels hidden on output.
+	 * @return current plan, never null
+	 */
+	public Ics205Form getForm205() {
+		return form205;
+	}
+
+	/**
+	 * Replaces the current communications plan.
+	 * @param form205 communications plan; null becomes an empty plan
+	 */
+	public void setForm205(Ics205Form form205) {
+		this.form205 = form205 == null ? new Ics205Form() : form205;
+	}
+
+	/**
+	 * Returns whether the ICS 205 workspace and export are enabled.
+	 * @return true when enabled, including for legacy documents by default
+	 */
+	public boolean isIcs205Enabled() {
+		return ics205Enabled;
+	}
+
+	/**
+	 * Enables or hides ICS 205 without discarding stored channels.
+	 * @param ics205Enabled true to enable
+	 */
+	public void setIcs205Enabled(boolean ics205Enabled) {
+		this.ics205Enabled = ics205Enabled;
 	}
 
 	/**
@@ -610,6 +687,16 @@ public class AppData {
 		if (medicalUnitLeaderAssignment == null) {
 			reconcileMedicalUnitLeaderAssignment();
 		}
+		return medicalUnitLeaderAssignment;
+	}
+
+	/**
+	 * Returns the existing shared medical assignment without reconciling legacy
+	 * fields or creating an assignment.
+	 * @return stored assignment, or null when not yet initialized
+	 */
+	@JsonIgnore
+	public MedicalUnitLeaderAssignment peekMedicalUnitLeaderAssignment() {
 		return medicalUnitLeaderAssignment;
 	}
 
@@ -1110,6 +1197,15 @@ public class AppData {
 	}
 
 	/**
+	 * Returns the stored medical plan without initializing a missing legacy plan.
+	 * @return stored plan, or null when absent
+	 */
+	@JsonIgnore
+	public MedicalPlan peekMedicalPlan() {
+		return medicalPlan;
+	}
+
+	/**
 	 * Sets the current period's standard medical plan.
 	 *
 	 * @param medicalPlan plan; null becomes inactive and empty.
@@ -1127,6 +1223,15 @@ public class AppData {
 		if (canineMedicalPlan == null) {
 			canineMedicalPlan = new CanineMedicalPlan();
 		}
+		return canineMedicalPlan;
+	}
+
+	/**
+	 * Returns the stored canine plan without initializing a missing legacy plan.
+	 * @return stored plan, or null when absent
+	 */
+	@JsonIgnore
+	public CanineMedicalPlan peekCanineMedicalPlan() {
 		return canineMedicalPlan;
 	}
 

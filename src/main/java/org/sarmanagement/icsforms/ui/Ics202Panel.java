@@ -35,6 +35,7 @@ public class Ics202Panel extends JPanel {
 	private final JCheckBox siteSafetyPlanRequired = new JCheckBox("Site safety plan required");
 	private final JCheckBox includeIcs202 = new JCheckBox("ICS 202");
 	private final JCheckBox includeIcs204 = new JCheckBox("ICS 204");
+	private final JCheckBox includeIcs205 = new JCheckBox("ICS 205");
 	private final JCheckBox includeIcs208 = new JCheckBox("ICS 208");
 	private final JCheckBox includeIcs215a = new JCheckBox("ICS 215A");
 	private final JCheckBox includeIcs206 = new JCheckBox("ICS 206");
@@ -191,6 +192,7 @@ public class Ics202Panel extends JPanel {
 		checks.setOpaque(false);
 		checks.add(includeIcs202);
 		checks.add(includeIcs204);
+		checks.add(includeIcs205);
 		checks.add(includeIcs208);
 		checks.add(includeIcs215a);
 		checks.add(includeIcs206);
@@ -207,6 +209,7 @@ public class Ics202Panel extends JPanel {
 	private void setIncludedForms(List<String> items) {
 		includeIcs202.setSelected(false);
 		includeIcs204.setSelected(false);
+		includeIcs205.setSelected(false);
 		includeIcs208.setSelected(false);
 		includeIcs215a.setSelected(false);
 		includeIcs206.setSelected(false);
@@ -219,6 +222,8 @@ public class Ics202Panel extends JPanel {
 				includeIcs202.setSelected(true);
 			} else if ("ICS 204".equalsIgnoreCase(item)) {
 				includeIcs204.setSelected(true);
+			} else if ("ICS 205".equalsIgnoreCase(item)) {
+				includeIcs205.setSelected(true);
 			} else if ("ICS 208".equalsIgnoreCase(item)) {
 				includeIcs208.setSelected(true);
 			} else if ("ICS 215A".equalsIgnoreCase(item)) {
@@ -245,6 +250,9 @@ public class Ics202Panel extends JPanel {
 		}
 		if (includeIcs204.isSelected()) {
 			items.add("ICS 204");
+		}
+		if (includeIcs205.isSelected()) {
+			items.add("ICS 205");
 		}
 		if (includeIcs208.isSelected()) {
 			items.add("ICS 208");

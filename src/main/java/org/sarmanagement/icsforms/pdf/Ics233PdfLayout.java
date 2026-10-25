@@ -16,6 +16,7 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.util.Matrix;
 import org.sarmanagement.icsforms.model.AppData;
 
 /**
@@ -37,18 +38,24 @@ final class Ics233PdfLayout extends AbstractPdfRenderer {
 	 * @param title form title
 	 * @param rows eight-cell rows corresponding to blocks 2 through 9
 	 * @param adaptedClues whether to use clue-specific POC headings
+	 * @param orientation media and content orientation
 	 * @throws IOException if output fails or the margins leave no usable grid
 	 */
-	void render(AppData data, Path outputFile, String title, List<List<String>> rows, boolean adaptedClues)
+	void render(AppData data, Path outputFile, String title, List<List<String>> rows, boolean adaptedClues,
+			PdfOrientation orientation)
 			throws IOException {
+		java.util.Objects.requireNonNull(orientation, "orientation");
 		Path parent = outputFile.getParent();
 		if (parent != null) {
 			Files.createDirectories(parent);
 		}
 		PDRectangle paper = pageSize(data);
-		PDRectangle size = data.isIcs233Portrait() ? paper : new PDRectangle(paper.getHeight(), paper.getWidth());
+		PDRectangle size = orientation == PdfOrientation.PORTRAIT
+				? paper : new PDRectangle(paper.getHeight(), paper.getWidth());
 		float margin = Math.max(FORM_MARGIN, pageMargin(data));
-		float width = size.getWidth() - 2f * margin;
+		// The rotated body must leave space for upright labels on the physical sheet.
+		float bodyMargin = margin + (orientation == PdfOrientation.PORTRAIT_FIT ? 24f : 0f);
+		float width = size.getWidth() - 2f * bodyMargin;
 		PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
 		PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 		if (width < 200f) {
@@ -74,30 +81,36 @@ final class Ics233PdfLayout extends AbstractPdfRenderer {
 		List<List<Segment>> pages = paginate(regular, rows, width, capacity);
 		try (PDDocument document = new PDDocument()) {
 			for (int index = 0; index < pages.size(); index++) {
-				PDPage page = new PDPage(size);
+				PDPage page = new PDPage(orientation == PdfOrientation.PORTRAIT_FIT ? paper : size);
+				page.setCropBox(new PDRectangle(page.getMediaBox().getWidth(), page.getMediaBox().getHeight()));
 				document.addPage(page);
 				try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+					stream.saveGraphicsState();
+					if (orientation == PdfOrientation.PORTRAIT_FIT) {
+						stream.transform(new Matrix(0, 1, -1, 0, paper.getWidth(), 0));
+					}
 					float top = size.getHeight() - margin;
 					for (int line = 0; line < titleLines.size(); line++) {
-						text(stream, bold, titleLines.get(line), margin, top - FONT_SIZE - line * LEADING);
+						text(stream, bold, titleLines.get(line), bodyMargin, top - FONT_SIZE - line * LEADING);
 					}
-					drawCell(stream, regular, incidentLines, margin, top - titleHeight, width, incidentHeight);
-					drawRow(stream, bold, headings, margin, gridTop + headerHeight, width, headerHeight);
+					drawCell(stream, regular, incidentLines, bodyMargin, top - titleHeight, width, incidentHeight);
+					drawRow(stream, bold, headings, bodyMargin, gridTop + headerHeight, width, headerHeight);
 					float y = gridTop;
 					for (Segment segment : pages.get(index)) {
 						float height = segment.lineCount() * LEADING + 2f * PADDING;
-						drawRow(stream, regular, segment.cells(), margin, y, width, height);
+						drawRow(stream, regular, segment.cells(), bodyMargin, y, width, height);
 						y -= height;
 					}
 					while (y > gridBottom + 0.1f) {
 						float height = Math.min(28f, y - gridBottom);
-						drawRow(stream, regular, List.of(), margin, y, width, height);
+						drawRow(stream, regular, List.of(), bodyMargin, y, width, height);
 						y -= height;
 					}
+					stream.restoreGraphicsState();
 					text(stream, regular, "ICS 233-CG Rev1/07", margin, margin);
 					String pageLabel = "Page " + (index + 1) + " of " + pages.size();
 					float labelWidth = regular.getStringWidth(pageLabel) / 1000f * FONT_SIZE;
-					text(stream, regular, pageLabel, margin + width - labelWidth, margin);
+					text(stream, regular, pageLabel, page.getMediaBox().getWidth() - margin - labelWidth, margin);
 				}
 			}
 			document.save(outputFile.toFile());

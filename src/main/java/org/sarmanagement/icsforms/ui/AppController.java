@@ -3,6 +3,8 @@
  */
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.pdf.PdfOrientation;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -733,7 +735,16 @@ public class AppController {
 	 * </p>
 	 */
 	public void newOperationalPeriod() {
-		data.advanceToNewOperationalPeriod();
+		newOperationalPeriod(false);
+	}
+
+	/**
+	 * Advances the period with an explicit choice to carry communications data forward.
+	 *
+	 * @param bringForwardCommunicationsPlan whether to deep-copy ICS 205 channels and instructions.
+	 */
+	public void newOperationalPeriod(boolean bringForwardCommunicationsPlan) {
+		data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan);
 		ensureDefaults(data);
 		syncSarTasks();
 		dirty = true;
@@ -913,6 +924,28 @@ public class AppController {
 	}
 
 	/**
+	 * Exports selected PDFs with independent, non-persistent form orientations.
+	 *
+	 * @param formKeys selected renderer keys, or null for no forms
+	 * @param outputDirectory destination directory
+	 * @param source authoritative linked-field source
+	 * @param ics205Orientation ICS 205 media and content orientation
+	 * @param ics233Orientation ICS 233 and adapted clue-log orientation
+	 * @return published PDFs by form key
+	 * @throws IOException when copying or exporting fails
+	 */
+	public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory,
+			LinkSource source, PdfOrientation ics205Orientation, PdfOrientation ics233Orientation) throws IOException {
+		java.util.Objects.requireNonNull(ics205Orientation, "ics205Orientation");
+		java.util.Objects.requireNonNull(ics233Orientation, "ics233Orientation");
+		AppData snapshot = createPrintSnapshot(source, ics233Orientation == PdfOrientation.PORTRAIT);
+		List<String> supported = formKeys == null ? List.of()
+				: formKeys.stream().distinct().filter(exportService::supports).toList();
+		return supported.isEmpty() ? new LinkedHashMap<>()
+				: exportService.exportForms(supported, snapshot, outputDirectory, ics205Orientation, ics233Orientation);
+	}
+
+	/**
 	 * Returns the inclusion or failure summary of the most recent PDF bundle.
 	 *
 	 * @return user-facing PDF bundle export summary.
@@ -933,7 +966,44 @@ public class AppController {
 	 */
 	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source,
 			boolean portrait) throws IOException {
-		return exportService.exportIapBundle(createPrintSnapshot(source, portrait), outputDirectory, formKeys);
+		return exportSelectedIapBundle(formKeys, outputDirectory, source, portrait, false);
+	}
+
+	/**
+	 * Exports a selected bundle with explicit, non-persistent ICS 205 orientation.
+	 *
+	 * @param formKeys selected renderer keys.
+	 * @param outputDirectory destination directory.
+	 * @param source authoritative linked-field source.
+	 * @param portrait true for portrait ICS 233 pages.
+	 * @param ics205NativeLandscape true to retain native landscape radio-plan sheets.
+	 * @return merged bundle file.
+	 * @throws IOException when copying, rendering or merging fails.
+	 */
+	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source,
+			boolean portrait, boolean ics205NativeLandscape) throws IOException {
+		return exportService.exportIapBundle(createPrintSnapshot(source, portrait), outputDirectory, formKeys,
+				ics205NativeLandscape);
+	}
+
+	/**
+	 * Exports a bundle with independent orientations on an isolated incident snapshot.
+	 *
+	 * @param formKeys selected keys, or null/empty for defaults
+	 * @param outputDirectory destination directory
+	 * @param source authoritative linked-field source
+	 * @param ics205Orientation ICS 205 media and content orientation
+	 * @param ics233Orientation ICS 233 and adapted clue-log orientation
+	 * @return published bundle PDF
+	 * @throws IOException when copying, rendering, or merging fails
+	 */
+	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source,
+			PdfOrientation ics205Orientation, PdfOrientation ics233Orientation) throws IOException {
+		java.util.Objects.requireNonNull(ics205Orientation, "ics205Orientation");
+		java.util.Objects.requireNonNull(ics233Orientation, "ics233Orientation");
+		return exportService.exportIapBundle(
+				createPrintSnapshot(source, ics233Orientation == PdfOrientation.PORTRAIT), outputDirectory, formKeys,
+				ics205Orientation, ics233Orientation);
 	}
 
 	/**

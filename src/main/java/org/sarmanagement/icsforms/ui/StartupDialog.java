@@ -12,6 +12,7 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -62,6 +63,8 @@ public class StartupDialog extends JDialog {
 	private StartupAction chosenAction;
 	private IncidentMode chosenMode = IncidentMode.SAR;
 	private IncidentId chosenIncidentId;
+	private final JCheckBox bringForwardCommunicationsPlan = new JCheckBox(
+			"Bring forward communications plan (ICS 205)", false);
 
 	/**
 	 * Creates the startup dialog.
@@ -120,6 +123,15 @@ public class StartupDialog extends JDialog {
 		return chosenIncidentId;
 	}
 
+	/**
+	 * Returns the operator's explicit new-period communications choice.
+	 *
+	 * @return true only when the carry-forward checkbox was checked.
+	 */
+	public boolean isBringForwardCommunicationsPlan() {
+		return bringForwardCommunicationsPlan.isSelected();
+	}
+
 	// -------------------------------------------------------------------------
 
 	/**
@@ -164,6 +176,7 @@ public class StartupDialog extends JDialog {
 						+ "operational period, clearing operational forms while keeping<br>"
 						+ "the ICS 201 and org chart as historical context.</html>",
 				StartupAction.OPEN_NEW_PERIOD, store));
+		panel.add(bringForwardCommunicationsPlan);
 
 		return panel;
 	}

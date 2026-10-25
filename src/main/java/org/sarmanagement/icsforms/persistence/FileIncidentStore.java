@@ -219,6 +219,7 @@ public class FileIncidentStore implements IncidentStore {
 		data.setRevision(revision + 1);
 		data.setUpdatedAt(Instant.now());
 		data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
+		data.normalizeIdentity();
 		Path temp = path.resolveSibling(path.getFileName() + ".tmp");
 		try {
 			MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), data);
@@ -396,7 +397,8 @@ public class FileIncidentStore implements IncidentStore {
 	}
 
 	/**
-	 * Normalizes pre-v6 documents after deserialization.
+	 * Upgrades legacy documents and normalizes incident and child identities,
+	 * including schema-12 communications plans.
 	 *
 	 * @param data
 	 *            loaded document.

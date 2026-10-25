@@ -76,6 +76,8 @@ public class Ics206Panel extends JPanel {
 	public Ics206Panel(AppController controller) {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
+		RadioChannelPicker.install(aidTable, 3, controller);
+		RadioChannelPicker.install(transportTable, 3, controller);
 		JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		header.add(new JLabel("Plan detail:"));
 		header.add(mode);
@@ -139,15 +141,7 @@ public class Ics206Panel extends JPanel {
 		}
 		flushing = true;
 		try {
-			if (aidTable.isEditing()) {
-				aidTable.getCellEditor().stopCellEditing();
-			}
-			if (transportTable.isEditing()) {
-				transportTable.getCellEditor().stopCellEditing();
-			}
-			if (hospitalTable.isEditing()) {
-				hospitalTable.getCellEditor().stopCellEditing();
-			}
+			UiSupport.commitTableEdits(aidTable, transportTable, hospitalTable);
 			MedicalPlan plan = controller.getData().getMedicalPlan();
 			plan.setSimpleMode("Simple".equals(mode.getSelectedItem()));
 			plan.setDesignatedMedicalUnitRole(medicalRole.getText());
@@ -156,7 +150,6 @@ public class Ics206Panel extends JPanel {
 			plan.setEmergencyProcedures(procedures.getText());
 			plan.setAviationAssetsUsed(aviationUsed.isSelected());
 			plan.setAirOperationsReminder(airOperations.getText());
-			MedicalRoleSupport.setSafetyOfficerName(controller.getData(), reviewedBy.getText());
 			plan.setReviewStatus(String.valueOf(reviewStatus.getSelectedItem()));
 			setPreparedAt(plan);
 			saveAidStations(plan);
@@ -314,7 +307,7 @@ public class Ics206Panel extends JPanel {
 	}
 
 	/**
-	 * Synchronizes a nonblank selected role name across shared form fields and models.
+	 * Synchronizes a selected role name or explicit clearing across shared form fields and models.
 	 *
 	 * @param source edited role field.
 	 * @param otherField corresponding display field, if any.
@@ -334,8 +327,8 @@ public class Ics206Panel extends JPanel {
 					}
 				});
 			}
-		} else if (medicalLeader) {
-			MedicalRoleSupport.setMedicalUnitLeaderName(controller.getData(), "");
+		} else {
+			setSharedRole("", medicalLeader);
 		}
 		inputChanged();
 	}

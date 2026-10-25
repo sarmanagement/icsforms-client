@@ -15,6 +15,7 @@ import org.sarmanagement.icsforms.pdf.Ics233CgPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics201PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics203PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics205PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics205aPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics206PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics206CaninePdfRenderer;
@@ -82,11 +83,8 @@ public final class App {
 								&& (fileStore.isLockedElsewhere(id) || !fileStore.lock(id))) {
 							throw new StoreConflictException("Incident is open in another window: " + id.value());
 						}
-						data = store.load(id);
-						if (action == StartupDialog.StartupAction.OPEN_NEW_PERIOD) {
-							data.advanceToNewOperationalPeriod();
-							store.save(id, data);
-						}
+						data = loadExistingIncident(store, id, action == StartupDialog.StartupAction.OPEN_NEW_PERIOD,
+								startup.isBringForwardCommunicationsPlan());
 					}
 					default -> {
 						data = new AppData();
@@ -111,12 +109,7 @@ public final class App {
 				return;
 			}
 
-			PdfExportService exportService = new PdfExportService(new Ics201PdfRenderer(), new Ics202PdfRenderer(),
-					new Ics203PdfRenderer(), new Ics205aPdfRenderer(), new Ics207PdfRenderer(), new Ics204PdfRenderer(),
-					new Ics206PdfRenderer(), new Ics206CaninePdfRenderer(), new Ics215aPdfRenderer(),
-					new Ics208PdfRenderer(), new Ics214PdfRenderer(),
-					new SarTaskAssignmentPdfRenderer(), new ClueLogPdfRenderer(),
-					new Ics233CgPdfRenderer(), new ClueLogIcs233PdfRenderer());
+			PdfExportService exportService = createExportService();
 			try {
 				MainFrame frame = new MainFrame(data, store, id, exportService, new IncidentValidator(), homeDir);
 				frame.setVisible(true);
@@ -126,5 +119,39 @@ public final class App {
 				store.close();
 			}
 		});
+	}
+
+	/**
+	 * Loads an existing incident and persists a new period only when explicitly requested.
+	 *
+	 * @param store selected incident store.
+	 * @param id selected incident identity, already locked by the caller when required.
+	 * @param newPeriod whether to advance the existing incident.
+	 * @param bringForwardCommunicationsPlan explicit ICS 205 carry-forward choice.
+	 * @return loaded incident with the requested period transition applied.
+	 */
+	static AppData loadExistingIncident(IncidentStore store, IncidentId id, boolean newPeriod,
+			boolean bringForwardCommunicationsPlan) {
+		AppData data = store.load(id);
+		if (newPeriod) {
+			data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan);
+			store.save(id, data);
+		}
+		return data;
+	}
+
+	/**
+	 * Creates the production PDF registry shared by standalone exports and IAP bundles.
+	 *
+	 * @return export service with the radio plan and legacy communications list registered independently.
+	 */
+	static PdfExportService createExportService() {
+		return new PdfExportService(new Ics201PdfRenderer(), new Ics202PdfRenderer(),
+				new Ics203PdfRenderer(), new Ics205PdfRenderer(), new Ics205aPdfRenderer(),
+				new Ics207PdfRenderer(), new Ics204PdfRenderer(),
+				new Ics206PdfRenderer(), new Ics206CaninePdfRenderer(), new Ics215aPdfRenderer(),
+				new Ics208PdfRenderer(), new Ics214PdfRenderer(),
+				new SarTaskAssignmentPdfRenderer(), new ClueLogPdfRenderer(),
+				new Ics233CgPdfRenderer(), new ClueLogIcs233PdfRenderer());
 	}
 }

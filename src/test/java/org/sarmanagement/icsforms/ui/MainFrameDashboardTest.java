@@ -41,7 +41,7 @@ class MainFrameDashboardTest {
 	}
 
 	@Test
-	void operationsAndCommunicationsExposeSharedSafetyOrgAndMedicalEditorsWithoutIcs205() {
+	void operationsAndCommunicationsExposeSharedSafetyOrgMedicalAndOptionalRadioEditors() {
 		for (MainFrame.Dashboard dashboard :
 				List.of(MainFrame.Dashboard.OPERATIONS, MainFrame.Dashboard.COMMUNICATIONS)) {
 			List<WorkspaceId> workspaces = dashboard.workspaceIds();
@@ -49,7 +49,8 @@ class MainFrameDashboardTest {
 			assertTrue(workspaces.contains(WorkspaceId.ORG_CHART));
 			assertTrue(workspaces.contains(WorkspaceId.MEDICAL));
 			assertEquals(1, workspaces.stream().filter(WorkspaceId.MEDICAL::equals).count());
-			assertFalseContainsIcs205(workspaces);
+			assertTrue(workspaces.contains(WorkspaceId.ICS_205));
+			assertTrue(workspaces.stream().noneMatch(id -> "ICS 205A".equals(id.displayLabel())));
 		}
 	}
 
@@ -84,13 +85,4 @@ class MainFrameDashboardTest {
 		assertEquals("log-instance-one", first.instanceId());
 	}
 
-	/**
-	 * Confirms that the Communications dashboard does not invent ICS 205 workspaces.
-	 *
-	 * @param titles dashboard workspace titles.
-	 */
-	private void assertFalseContainsIcs205(List<WorkspaceId> workspaces) {
-		assertTrue(workspaces.stream().noneMatch(id -> id.displayLabel().equals("ICS 205")
-				|| id.displayLabel().equals("ICS 205A")));
-	}
 }

@@ -2070,6 +2070,7 @@ public class TCardPanel extends JPanel {
 		homeStateField.setPreferredSize(new Dimension(48, homeStateField.getPreferredSize().height));
 		JTextField phoneField = UiSupport.textField();
 		JTextField radioChannelField = UiSupport.textField();
+		RadioChannelPicker.install(radioChannelField, controller);
 		JTextField personnelResIdField = UiSupport.textField();
 		JTextField personnelLocField = UiSupport.textField();
 		JComboBox<String> personnelStatusCombo = new JComboBox<>(STATUS_OPTIONS);
@@ -2084,6 +2085,7 @@ public class TCardPanel extends JPanel {
 		homeStateField.setText(card.getHomeState());
 		phoneField.setText(card.getPhoneNumber());
 		radioChannelField.setText(card.getRadioChannel());
+		RadioChannelPicker.restoreReference(radioChannelField, card.getRadioChannelId());
 		personnelResIdField.setText(card.getResourceIdentifier());
 		personnelLocField.setText(card.getLocation());
 		personnelStatusCombo.setSelectedItem(card.getStatus());
@@ -2234,6 +2236,7 @@ public class TCardPanel extends JPanel {
 				card.setHomeState(homeStateField.getText().trim());
 				card.setPhoneNumber(phoneField.getText().trim());
 				card.setRadioChannel(radioChannelField.getText().trim());
+				card.setRadioChannelId(RadioChannelPicker.referenceId(radioChannelField));
 				Object spinnerVal = checkInSpinner.getValue();
 				if (spinnerVal instanceof Date d) {
 					card.setCheckInDateTime(LocalDateTime.ofInstant(d.toInstant(), ZoneId.systemDefault()));
@@ -2415,6 +2418,12 @@ public class TCardPanel extends JPanel {
 		dlg.setVisible(true);
 	}
 
+	/**
+	 * Copies a card for cancel-safe editing, retaining its channel identity and text fallback.
+	 *
+	 * @param src source resource card.
+	 * @return detached editable copy.
+	 */
 	private static TCard copyCard(TCard src) {
 		TCard copy = new TCard();
 		copy.setCardType(src.getCardType());
@@ -2423,6 +2432,7 @@ public class TCardPanel extends JPanel {
 		copy.setHomeState(src.getHomeState());
 		copy.setPhoneNumber(src.getPhoneNumber());
 		copy.setRadioChannel(src.getRadioChannel());
+		copy.setRadioChannelId(src.getRadioChannelId());
 		copy.setCheckInDateTime(src.getCheckInDateTime());
 		copy.setResourceIdentifier(src.getResourceIdentifier());
 		copy.setLocation(src.getLocation());

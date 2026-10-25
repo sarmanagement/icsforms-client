@@ -191,6 +191,8 @@ public class OrganizationalChartPanel extends JPanel {
 	public OrganizationalChartPanel(AppController controller) {
 		super(new BorderLayout());
 		this.controller = controller;
+		RadioChannelPicker.install(agencyRepresentatives.table, 2, controller);
+		RadioChannelPicker.install(customPositionsTable, 3, controller);
 
 		JPanel icSection = UiSupport.formPanel();
 		icSection.setBorder(BorderFactory.createTitledBorder("Incident Command"));
@@ -296,7 +298,14 @@ public class OrganizationalChartPanel extends JPanel {
 		installPersonAutocomplete(foodUnitLeaderNameField, foodUnitLeaderRadioField, foodUnitLeaderPhoneField);
 		installPersonAutocomplete(medicalUnitLeaderNameField, medicalUnitLeaderRadioField, medicalUnitLeaderPhoneField,
 				name -> updateMedicalUnitLeaderAssignment());
-		watchMedicalUnitLeaderFields();
+		watchRoleFields(List.of(medicalUnitLeaderNameField, medicalUnitLeaderRadioField,
+				medicalUnitLeaderPhoneField), this::updateMedicalUnitLeaderAssignment);
+		watchRoleFields(List.of(safetyOfficerNameField), () -> {
+			if (!loading) {
+				MedicalRoleSupport.setSafetyOfficerName(controller.getData(), safetyOfficerNameField.getText());
+				controller.markDirty();
+			}
+		});
 		installPersonAutocomplete(timeUnitLeaderNameField, timeUnitLeaderRadioField, timeUnitLeaderPhoneField);
 		installPersonAutocomplete(procurementUnitLeaderNameField, procurementUnitLeaderRadioField,
 				procurementUnitLeaderPhoneField);
@@ -380,7 +389,9 @@ public class OrganizationalChartPanel extends JPanel {
 	AssignmentListEditor createAssignmentListEditor() {
 		Ics203Form form = controller.getData().getOrganizationalChart().getAssignmentList();
 		form.setAgencyRepresentatives(agencyRepresentatives.getEntries());
-		return new AssignmentListEditor(form);
+		AssignmentListEditor editor = new AssignmentListEditor(form);
+		RadioChannelPicker.install(editor.agencies.table, 2, controller);
+		return editor;
 	}
 
 	/**
@@ -771,6 +782,7 @@ public class OrganizationalChartPanel extends JPanel {
 	 */
 	private void installPersonAutocomplete(JTextField nameField, JTextField radioField, JTextField phoneField,
 			java.util.function.Consumer<String> onSelected) {
+		RadioChannelPicker.install(radioField, controller);
 		// Show/hide contact fields based on whether the name is currently blank.
 		updateContactVisibility(nameField, radioField, phoneField);
 		nameField.getDocument().addDocumentListener(new DocumentListener() {
@@ -803,25 +815,27 @@ public class OrganizationalChartPanel extends JPanel {
 	}
 
 	/**
-	 * Binds the Medical Unit Leader's editable name and contact fields to the canonical assignment.
+	 * Binds editable shared-role fields to their canonical assignment.
+	 *
+	 * @param fields role fields to watch.
+	 * @param update callback that saves a live edit outside model refreshes.
 	 */
-	private void watchMedicalUnitLeaderFields() {
-		for (JTextField field : List.of(medicalUnitLeaderNameField, medicalUnitLeaderRadioField,
-				medicalUnitLeaderPhoneField)) {
+	private void watchRoleFields(List<JTextField> fields, Runnable update) {
+		for (JTextField field : fields) {
 			field.getDocument().addDocumentListener(new DocumentListener() {
 				@Override
 				public void insertUpdate(DocumentEvent event) {
-					updateMedicalUnitLeaderAssignment();
+					update.run();
 				}
 
 				@Override
 				public void removeUpdate(DocumentEvent event) {
-					updateMedicalUnitLeaderAssignment();
+					update.run();
 				}
 
 				@Override
 				public void changedUpdate(DocumentEvent event) {
-					updateMedicalUnitLeaderAssignment();
+					update.run();
 				}
 			});
 		}
@@ -1031,10 +1045,8 @@ public class OrganizationalChartPanel extends JPanel {
 		chart.setIncidentCommanderRadio(propagatedRadio);
 		chart.setIncidentCommanderPhone(propagatedPhone);
 
-		chart.setSafetyOfficerName(safetyOfficerNameField.getText().trim());
 		chart.setSafetyOfficerRadio(safetyOfficerRadioField.getText().trim());
 		chart.setSafetyOfficerPhone(safetyOfficerPhoneField.getText().trim());
-		MedicalRoleSupport.setSafetyOfficerName(controller.getData(), safetyOfficerNameField.getText());
 
 		chart.setPublicInformationOfficerName(pioNameField.getText().trim());
 		chart.setPublicInformationOfficerRadio(pioRadioField.getText().trim());

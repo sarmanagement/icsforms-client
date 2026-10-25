@@ -25,6 +25,19 @@ public final class Ics233CgPdfRenderer extends AbstractPdfRenderer implements Pd
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
+		render(data, outputFile, data != null && data.isIcs233Portrait()
+				? PdfOrientation.PORTRAIT : PdfOrientation.LANDSCAPE);
+	}
+
+	/**
+	 * Renders the tracker with an export-only orientation.
+	 *
+	 * @param data source incident
+	 * @param outputFile destination PDF
+	 * @param orientation media and content orientation
+	 * @throws IOException when output fails
+	 */
+	public void render(AppData data, Path outputFile, PdfOrientation orientation) throws IOException {
 		PdfText.validateForm(data, getFormKey());
 		AppData source = data == null ? new AppData() : data;
 		List<List<String>> rows = new ArrayList<>();
@@ -39,6 +52,6 @@ public final class Ics233CgPdfRenderer extends AbstractPdfRenderer implements Pd
 						formatPdfDateTime(source, item.getTargetDate()), formatPdfDateTime(source, item.getActualDate())));
 			}
 		}
-		new Ics233PdfLayout().render(source, outputFile, "ICS 233-CG OPEN ACTION TRACKER", rows, false);
+		new Ics233PdfLayout().render(source, outputFile, "ICS 233-CG OPEN ACTION TRACKER", rows, false, orientation);
 	}
 }

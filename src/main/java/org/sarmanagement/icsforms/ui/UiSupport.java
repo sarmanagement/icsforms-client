@@ -61,6 +61,21 @@ final class UiSupport {
 	private UiSupport() {
 	}
 
+	/**
+	 * Commits pending table editors before reading or replacing their models.
+	 * Rejected input remains editable instead of being silently cancelled.
+	 *
+	 * @param tables tables participating in a save or navigation flush.
+	 * @throws IllegalStateException if an editor rejects its pending value.
+	 */
+	static void commitTableEdits(JTable... tables) {
+		for (JTable table : tables) {
+			if (table.isEditing() && table.getCellEditor() != null && !table.getCellEditor().stopCellEditing()) {
+				throw new IllegalStateException("Finish editing the table value before saving or leaving this form.");
+			}
+		}
+	}
+
 	static ZoneId getDateTimeDisplayZone() {
 		return dateTimeDisplayZone;
 	}

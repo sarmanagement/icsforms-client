@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
 
 import org.junit.jupiter.api.Test;
@@ -75,11 +78,10 @@ class Ics214FormTest {
 	}
 
 	@Test
-	void appDataSchemaVersionIsNowEleven() {
+	void appDataDefaultsToCurrentSchemaVersion() {
 		AppData data = new AppData();
 
-		assertEquals(11, AppData.CURRENT_SCHEMA_VERSION);
-		assertEquals(11, data.getSchemaVersion());
+		assertEquals(AppData.CURRENT_SCHEMA_VERSION, data.getSchemaVersion());
 	}
 
 	// --- ActivityEventType configurable behaviour ----------------------------

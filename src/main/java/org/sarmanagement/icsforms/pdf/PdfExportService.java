@@ -75,6 +75,23 @@ public class PdfExportService {
 	 */
 	private Path exportSelected(String formKey, AppData data, Path outputDirectory, BlankExportPages blankExportPages)
 			throws IOException {
+		return exportSelected(formKey, data, outputDirectory, blankExportPages, PdfOrientation.LANDSCAPE, null);
+	}
+
+	/**
+	 * Stages a form with export-only ICS 205 and ICS 233 physical page orientations.
+	 *
+	 * @param formKey renderer identifier
+	 * @param data incident document
+	 * @param outputDirectory destination
+	 * @param blankExportPages blank fallback numbering
+	 * @param orientation205 ICS 205 media and content orientation
+	 * @param orientation233 ICS 233 orientation, or null for incident preferences
+	 * @return published form file
+	 * @throws IOException when rendering or publication fails
+	 */
+	private Path exportSelected(String formKey, AppData data, Path outputDirectory, BlankExportPages blankExportPages,
+			PdfOrientation orientation205, PdfOrientation orientation233) throws IOException {
 		PdfFormRenderer renderer = renderers.get(formKey);
 		if (renderer == null) {
 			throw new IllegalArgumentException("Unsupported form export: " + formKey);
@@ -84,7 +101,16 @@ public class PdfExportService {
 		try {
 			Files.createDirectories(outputDirectory);
 			temporary = Files.createTempFile(outputDirectory, ".pdf-export-", ".pdf");
-			renderer.render(exportData(formKey, data, blankExportPages), temporary);
+			AppData source = exportData(formKey, data, blankExportPages);
+			if (renderer instanceof Ics205PdfRenderer radioRenderer) {
+				radioRenderer.render(source, temporary, orientation205);
+			} else if (orientation233 != null && renderer instanceof Ics233CgPdfRenderer trackerRenderer) {
+				trackerRenderer.render(source, temporary, orientation233);
+			} else if (orientation233 != null && renderer instanceof ClueLogIcs233PdfRenderer clueRenderer) {
+				clueRenderer.render(source, temporary, orientation233);
+			} else {
+				renderer.render(source, temporary);
+			}
 			replaceFile(temporary, output);
 			return output;
 		} catch (IOException | RuntimeException exception) {
@@ -123,6 +149,23 @@ public class PdfExportService {
 	 * @throws IOException when rendering or publication fails.
 	 */
 	public Map<String, Path> exportForms(List<String> formKeys, AppData data, Path outputDirectory) throws IOException {
+		return exportForms(formKeys, data, outputDirectory, PdfOrientation.LANDSCAPE, null);
+	}
+
+	/**
+	 * Publishes selected PDFs using transient per-form orientations.
+	 *
+	 * @param formKeys selected renderer identifiers
+	 * @param data export document
+	 * @param outputDirectory destination directory
+	 * @param orientation205 ICS 205 layout
+	 * @param orientation233 ICS 233 layout, or null for incident preferences
+	 * @return published PDFs by form
+	 * @throws IOException when rendering or publication fails
+	 */
+	public Map<String, Path> exportForms(List<String> formKeys, AppData data, Path outputDirectory,
+			PdfOrientation orientation205, PdfOrientation orientation233) throws IOException {
+		java.util.Objects.requireNonNull(orientation205, "orientation205");
 		Path staging = null;
 		Map<String, Path> staged = new LinkedHashMap<>();
 		Set<Path> retainedBackups = new LinkedHashSet<>();
@@ -132,7 +175,8 @@ public class PdfExportService {
 			staging = Files.createTempDirectory(outputDirectory, ".pdf-all-");
 			for (String formKey : formKeys) {
 				current = formKey;
-				staged.put(formKey, exportSelected(formKey, data, staging));
+				staged.put(formKey, exportSelected(formKey, data, staging, BlankExportPages.NONE,
+						orientation205, orientation233));
 			}
 			return publishAll(staged, outputDirectory, staging, retainedBackups);
 		} catch (IOException | RuntimeException exception) {
@@ -366,6 +410,41 @@ public class PdfExportService {
 	 *             when export or merge fails.
 	 */
 	public Path exportIapBundle(AppData data, Path outputDirectory, List<String> selectedFormKeys) throws IOException {
+		return exportIapBundle(data, outputDirectory, selectedFormKeys, false);
+	}
+
+	/**
+	 * Exports an IAP with a per-export native-landscape alternative for ICS 205.
+	 * The default rotates its actual landscape content onto portrait media and crop
+	 * boxes, leaving IAP page numbering upright. Other forms retain their own layouts.
+	 *
+	 * @param data incident document
+	 * @param outputDirectory destination directory
+	 * @param selectedFormKeys selected keys; null or empty uses default forms
+	 * @param ics205NativeLandscape true to retain native landscape ICS 205 sheets
+	 * @return merged bundle path
+	 * @throws IOException when rendering, merging, or publication fails
+	 */
+	public Path exportIapBundle(AppData data, Path outputDirectory, List<String> selectedFormKeys,
+			boolean ics205NativeLandscape) throws IOException {
+		return exportIapBundle(data, outputDirectory, selectedFormKeys,
+				ics205NativeLandscape ? PdfOrientation.LANDSCAPE : PdfOrientation.PORTRAIT_FIT, null);
+	}
+
+	/**
+	 * Exports a bundle using transient orientations and matching measured page counts.
+	 *
+	 * @param data export document, whose page labels are assigned for the bundle
+	 * @param outputDirectory destination directory
+	 * @param selectedFormKeys selected keys; null or empty uses defaults
+	 * @param orientation205 ICS 205 layout
+	 * @param orientation233 ICS 233 layout, or null for incident preferences
+	 * @return published merged PDF
+	 * @throws IOException when rendering, merging, or publication fails
+	 */
+	public Path exportIapBundle(AppData data, Path outputDirectory, List<String> selectedFormKeys,
+			PdfOrientation orientation205, PdfOrientation orientation233) throws IOException {
+		java.util.Objects.requireNonNull(orientation205, "orientation205");
 		lastBundleSummary = "";
 		Path staging = null;
 		Map<String, Path> parts = new LinkedHashMap<>();
@@ -386,7 +465,7 @@ public class PdfExportService {
 			CoverPageRenderer coverPageRenderer = new CoverPageRenderer();
 			Path coverPath = staging.resolve("cover.pdf");
 			coverPageRenderer.render(data, coverPath);
-			BlankExportPages blankExportPages = assignIapPageNumbers(data, includedFormKeys, skipIcs201);
+			BlankExportPages blankExportPages = assignIapPageNumbers(data, includedFormKeys, skipIcs201, orientation205);
 			for (String formKey : includedFormKeys) {
 				current = formKey;
 				if (!renderers.containsKey(formKey)) {
@@ -395,7 +474,8 @@ public class PdfExportService {
 				if (skipIcs201 && "ICS 201".equals(formKey)) {
 					continue;
 				}
-				parts.put(formKey, exportSelected(formKey, data, staging, blankExportPages));
+				parts.put(formKey, exportSelected(formKey, data, staging, blankExportPages,
+						orientation205, orientation233));
 			}
 			current = "bundle merge";
 			String bundleName = iapBundleFileName(data.getIncidentContext());
@@ -453,6 +533,20 @@ public class PdfExportService {
 	 * @return starting page labels for temporary blank task and activity forms.
 	 */
 	static BlankExportPages assignIapPageNumbers(AppData data, List<String> includedFormKeys, boolean skipIcs201) {
+		return assignIapPageNumbers(data, includedFormKeys, skipIcs201, PdfOrientation.LANDSCAPE);
+	}
+
+	/**
+	 * Assigns bundle labels accounting for orientation-specific radio-plan pagination.
+	 *
+	 * @param data export document
+	 * @param includedFormKeys selected keys, or null for all
+	 * @param skipIcs201 whether to omit an unused briefing
+	 * @param orientation205 requested radio-plan layout
+	 * @return page labels for temporary blank forms
+	 */
+	static BlankExportPages assignIapPageNumbers(AppData data, List<String> includedFormKeys, boolean skipIcs201,
+			PdfOrientation orientation205) {
 		int page = 1;
 		String blankSarTaskPage = "";
 		String blankIcs214Page = "";
@@ -464,6 +558,7 @@ public class PdfExportService {
 		data.getMedicalPlan().setIapPage("");
 		data.getCanineMedicalPlan().setIapPage("");
 		data.setForm205aIapPage("");
+		data.getForm205().setIapPage("");
 		data.getForm215a().setIapPage("");
 		data.getForm208().setIapPage("");
 		data.getForm207().setIapPage("");
@@ -529,6 +624,12 @@ public class PdfExportService {
 								page += 2;
 							}
 						}
+					}
+				}
+				case "ICS 205" -> {
+					if (includedOrAll(included, formKey)) {
+						data.getForm205().setIapPage(String.valueOf(page));
+						page += Ics205PdfRenderer.pageCount(data, orientation205);
 					}
 				}
 				case "ICS 205A" -> {
@@ -647,6 +748,7 @@ public class PdfExportService {
 		copy.setOrganizationalChart(data.getOrganizationalChart());
 		copy.setForm201(data.getForm201());
 		copy.setForm202(data.getForm202());
+		copy.setForm205(data.getForm205());
 		copy.setForm215a(data.getForm215a());
 		copy.setForm208(data.getForm208());
 		copy.setForm205aIapPage(data.getForm205aIapPage());

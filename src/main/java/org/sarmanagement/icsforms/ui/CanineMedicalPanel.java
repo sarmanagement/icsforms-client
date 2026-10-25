@@ -228,6 +228,7 @@ public class CanineMedicalPanel extends JPanel {
 			DrivingRouteProvider routeProvider) {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
+		RadioChannelPicker.install(transportTable, 3, controller);
 		this.defaultDirectory = defaultDirectory;
 		this.geocoder = geocoder;
 		this.routeProvider = routeProvider;
@@ -351,7 +352,6 @@ public class CanineMedicalPanel extends JPanel {
 			data.getCanineMedicalPlan().setEmergencyProcedures(procedures.getText());
 			data.getCanineMedicalPlan().setAviationAssetsUsed(aviationUsed.isSelected());
 			setPreparedAt(data.getCanineMedicalPlan());
-			MedicalRoleSupport.setSafetyOfficerName(data, safetyOfficer.getText());
 			data.getCanineMedicalPlan().setReviewStatus(String.valueOf(reviewStatus.getSelectedItem()));
 			saveDirectory(data.getVetDirectory());
 			saveSelection(data.getCanineMedicalPlan());
@@ -827,7 +827,7 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
-	 * Registers a document listener for a text field.
+	 * Registers a document listener, saving live Safety Officer edits before panel flushes.
 	 *
 	 * @param field editable field.
 	 * @param invalidatesRouting whether an edit invalidates route requests.
@@ -836,17 +836,27 @@ public class CanineMedicalPanel extends JPanel {
 		field.getDocument().addDocumentListener(new DocumentListener() {
 			@Override
 			public void insertUpdate(DocumentEvent event) {
+				updateSafetyOfficer();
 				inputChanged(invalidatesRouting);
 			}
 
 			@Override
 			public void removeUpdate(DocumentEvent event) {
+				updateSafetyOfficer();
 				inputChanged(invalidatesRouting);
 			}
 
 			@Override
 			public void changedUpdate(DocumentEvent event) {
+				updateSafetyOfficer();
 				inputChanged(invalidatesRouting);
+			}
+
+			/** Saves only direct Safety Officer edits, never stale fields during a refresh or flush. */
+			private void updateSafetyOfficer() {
+				if (field == safetyOfficer && !loading && !flushing) {
+					MedicalRoleSupport.setSafetyOfficerName(controller.getData(), field.getText());
+				}
 			}
 		});
 	}
@@ -2118,16 +2128,12 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
-	 * Stops an active cell editor before model replacement.
+	 * Commits an active cell editor before model replacement, retaining rejected input.
 	 *
 	 * @param table table to flush.
 	 */
 	private void stopEditing(JTable table) {
-		if (table.isEditing()) {
-			if (!table.getCellEditor().stopCellEditing()) {
-				table.getCellEditor().cancelCellEditing();
-			}
-		}
+		UiSupport.commitTableEdits(table);
 	}
 
 	/**
