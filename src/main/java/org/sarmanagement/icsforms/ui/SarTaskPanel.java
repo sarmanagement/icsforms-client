@@ -2342,6 +2342,9 @@ public class SarTaskPanel extends JPanel {
 			leaderRoleField = textField(row.getLeaderRole(), false);
 			leaderField = textField(row.getLeader(), false);
 			contactField = textField(row.getContact(), false);
+			if (controller != null && contactField.isEditable()) {
+				RadioChannelPicker.install(contactField, controller);
+			}
 
 			// When the leader field loses focus and the resource type is Canine, check
 			// whether that handler has a linked canine T-card and offer to pre-fill the

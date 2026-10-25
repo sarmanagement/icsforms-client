@@ -75,6 +75,22 @@ public class PdfExportService {
 	 */
 	private Path exportSelected(String formKey, AppData data, Path outputDirectory, BlankExportPages blankExportPages)
 			throws IOException {
+		return exportSelected(formKey, data, outputDirectory, blankExportPages, false);
+	}
+
+	/**
+	 * Stages a form with an export-only ICS 205 physical page orientation.
+	 *
+	 * @param formKey renderer identifier
+	 * @param data incident document
+	 * @param outputDirectory destination
+	 * @param blankExportPages blank fallback numbering
+	 * @param portrait205 whether to rotate ICS 205 body content onto portrait media
+	 * @return published form file
+	 * @throws IOException when rendering or publication fails
+	 */
+	private Path exportSelected(String formKey, AppData data, Path outputDirectory, BlankExportPages blankExportPages,
+			boolean portrait205) throws IOException {
 		PdfFormRenderer renderer = renderers.get(formKey);
 		if (renderer == null) {
 			throw new IllegalArgumentException("Unsupported form export: " + formKey);
@@ -84,7 +100,12 @@ public class PdfExportService {
 		try {
 			Files.createDirectories(outputDirectory);
 			temporary = Files.createTempFile(outputDirectory, ".pdf-export-", ".pdf");
-			renderer.render(exportData(formKey, data, blankExportPages), temporary);
+			AppData source = exportData(formKey, data, blankExportPages);
+			if (portrait205 && renderer instanceof Ics205PdfRenderer radioRenderer) {
+				radioRenderer.render(source, temporary, true);
+			} else {
+				renderer.render(source, temporary);
+			}
 			replaceFile(temporary, output);
 			return output;
 		} catch (IOException | RuntimeException exception) {
@@ -366,6 +387,23 @@ public class PdfExportService {
 	 *             when export or merge fails.
 	 */
 	public Path exportIapBundle(AppData data, Path outputDirectory, List<String> selectedFormKeys) throws IOException {
+		return exportIapBundle(data, outputDirectory, selectedFormKeys, false);
+	}
+
+	/**
+	 * Exports an IAP with a per-export native-landscape alternative for ICS 205.
+	 * The default rotates its actual landscape content onto portrait media and crop
+	 * boxes, leaving IAP page numbering upright. Other forms retain their own layouts.
+	 *
+	 * @param data incident document
+	 * @param outputDirectory destination directory
+	 * @param selectedFormKeys selected keys; null or empty uses default forms
+	 * @param ics205NativeLandscape true to retain native landscape ICS 205 sheets
+	 * @return merged bundle path
+	 * @throws IOException when rendering, merging, or publication fails
+	 */
+	public Path exportIapBundle(AppData data, Path outputDirectory, List<String> selectedFormKeys,
+			boolean ics205NativeLandscape) throws IOException {
 		lastBundleSummary = "";
 		Path staging = null;
 		Map<String, Path> parts = new LinkedHashMap<>();
@@ -395,7 +433,7 @@ public class PdfExportService {
 				if (skipIcs201 && "ICS 201".equals(formKey)) {
 					continue;
 				}
-				parts.put(formKey, exportSelected(formKey, data, staging, blankExportPages));
+				parts.put(formKey, exportSelected(formKey, data, staging, blankExportPages, !ics205NativeLandscape));
 			}
 			current = "bundle merge";
 			String bundleName = iapBundleFileName(data.getIncidentContext());
@@ -464,6 +502,7 @@ public class PdfExportService {
 		data.getMedicalPlan().setIapPage("");
 		data.getCanineMedicalPlan().setIapPage("");
 		data.setForm205aIapPage("");
+		data.getForm205().setIapPage("");
 		data.getForm215a().setIapPage("");
 		data.getForm208().setIapPage("");
 		data.getForm207().setIapPage("");
@@ -529,6 +568,12 @@ public class PdfExportService {
 								page += 2;
 							}
 						}
+					}
+				}
+				case "ICS 205" -> {
+					if (includedOrAll(included, formKey)) {
+						data.getForm205().setIapPage(String.valueOf(page));
+						page += Ics205PdfRenderer.pageCount(data);
 					}
 				}
 				case "ICS 205A" -> {
@@ -647,6 +692,7 @@ public class PdfExportService {
 		copy.setOrganizationalChart(data.getOrganizationalChart());
 		copy.setForm201(data.getForm201());
 		copy.setForm202(data.getForm202());
+		copy.setForm205(data.getForm205());
 		copy.setForm215a(data.getForm215a());
 		copy.setForm208(data.getForm208());
 		copy.setForm205aIapPage(data.getForm205aIapPage());

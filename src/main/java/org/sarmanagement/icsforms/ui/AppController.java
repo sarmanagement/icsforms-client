@@ -733,7 +733,16 @@ public class AppController {
 	 * </p>
 	 */
 	public void newOperationalPeriod() {
-		data.advanceToNewOperationalPeriod();
+		newOperationalPeriod(false);
+	}
+
+	/**
+	 * Advances the period with an explicit choice to carry communications data forward.
+	 *
+	 * @param bringForwardCommunicationsPlan whether to deep-copy ICS 205 channels and instructions.
+	 */
+	public void newOperationalPeriod(boolean bringForwardCommunicationsPlan) {
+		data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan);
 		ensureDefaults(data);
 		syncSarTasks();
 		dirty = true;
@@ -933,7 +942,24 @@ public class AppController {
 	 */
 	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source,
 			boolean portrait) throws IOException {
-		return exportService.exportIapBundle(createPrintSnapshot(source, portrait), outputDirectory, formKeys);
+		return exportSelectedIapBundle(formKeys, outputDirectory, source, portrait, false);
+	}
+
+	/**
+	 * Exports a selected bundle with explicit, non-persistent ICS 205 orientation.
+	 *
+	 * @param formKeys selected renderer keys.
+	 * @param outputDirectory destination directory.
+	 * @param source authoritative linked-field source.
+	 * @param portrait true for portrait ICS 233 pages.
+	 * @param ics205NativeLandscape true to retain native landscape radio-plan sheets.
+	 * @return merged bundle file.
+	 * @throws IOException when copying, rendering or merging fails.
+	 */
+	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source,
+			boolean portrait, boolean ics205NativeLandscape) throws IOException {
+		return exportService.exportIapBundle(createPrintSnapshot(source, portrait), outputDirectory, formKeys,
+				ics205NativeLandscape);
 	}
 
 	/**

@@ -228,6 +228,7 @@ public class CanineMedicalPanel extends JPanel {
 			DrivingRouteProvider routeProvider) {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
+		RadioChannelPicker.install(transportTable, 3, controller);
 		this.defaultDirectory = defaultDirectory;
 		this.geocoder = geocoder;
 		this.routeProvider = routeProvider;

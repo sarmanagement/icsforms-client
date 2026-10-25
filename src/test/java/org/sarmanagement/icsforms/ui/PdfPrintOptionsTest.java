@@ -16,6 +16,8 @@ import org.sarmanagement.icsforms.pdf.ClueLogIcs233PdfRenderer;
 import org.sarmanagement.icsforms.pdf.ClueLogPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics203PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics205PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics205aPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics207PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics233CgPdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
@@ -48,6 +50,73 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Verifies transient print options, real PDF layouts, and incident isolation. */
 class PdfPrintOptionsTest {
+	@Test
+	void radioOrientationDefaultsToPortraitFitAndRemainsIndependentOf233() {
+		PdfPrintOptionsPanel panel = new PdfPrintOptionsPanel(List.of("ICS 205", "ICS 233-CG"));
+		assertFalse(panel.isIcs205NativeLandscape());
+		List<JComboBox> choices = components(panel, JComboBox.class);
+		choices.get(1).setSelectedItem("Native landscape");
+		assertTrue(panel.isIcs205NativeLandscape());
+		assertTrue(panel.isPortrait());
+		choices.get(0).setSelectedItem("Landscape");
+		assertTrue(panel.isIcs205NativeLandscape());
+		assertFalse(panel.isPortrait());
+		assertFalse(new PdfPrintOptionsPanel(List.of("ICS 205")).isIcs205NativeLandscape());
+		PdfPrintOptionsPanel unavailable = new PdfPrintOptionsPanel(List.of("ICS 233-CG"));
+		components(unavailable, JComboBox.class).get(1).setSelectedItem("Native landscape");
+		assertFalse(unavailable.isIcs205NativeLandscape());
+	}
+
+	@Test
+	void radioBundleChoiceWorksWhileHiddenAndCannotMutateIncidentOr233Choice() throws Exception {
+		Path directory = testDirectory();
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			AppData data = new AppData();
+			data.setIcs205Enabled(false);
+			data.setIcs233Portrait(true);
+			data.getForm205().setIapPage("88");
+			data.setForm205aIapPage("77");
+			var channel = new org.sarmanagement.icsforms.model.RadioChannel();
+			channel.setRxFrequency("155.1600125");
+			data.getForm205().getChannels().add(channel);
+			var id = store.create(data);
+			long revision = data.getRevision();
+			AppController controller = new AppController(data, store, id,
+					new PdfExportService(new Ics205PdfRenderer(), new Ics205aPdfRenderer(),
+							new Ics233CgPdfRenderer()), new IncidentValidator());
+			for (boolean nativeLandscape : List.of(false, true)) {
+				for (boolean portrait233 : List.of(false, true)) {
+					Path bundle = controller.exportSelectedIapBundle(List.of("ICS 233-CG", "ICS 205A", "ICS 205"),
+							directory, AppController.LinkSource.NONE, portrait233, nativeLandscape);
+					try (PDDocument pdf = Loader.loadPDF(bundle.toFile())) {
+						assertEquals(4, pdf.getNumberOfPages());
+						assertOrientation(pdf, 1, !nativeLandscape);
+						assertOrientation(pdf, 2, true);
+						assertOrientation(pdf, 3, portrait233);
+						assertEquals(0, pdf.getPage(1).getRotation());
+						assertTrue(pageText(pdf, 2).contains("IAP Page: 1"));
+						assertTrue(pageText(pdf, 3).matches("(?s).*IAP Page\\s+2\\b.*"));
+					}
+					assertSame(data, controller.getData());
+					assertSame(channel, data.getForm205().getChannels().get(0));
+					assertEquals("155.1600125", channel.getRxFrequency());
+					assertEquals("88", data.getForm205().getIapPage());
+					assertEquals("77", data.getForm205aIapPage());
+					assertFalse(data.isIcs205Enabled());
+					assertTrue(data.isIcs233Portrait());
+					assertFalse(controller.isDirty());
+					assertEquals(revision, data.getRevision());
+					AppData saved = store.load(id);
+					assertEquals(revision, saved.getRevision());
+					assertEquals("88", saved.getForm205().getIapPage());
+					assertEquals("155.1600125", saved.getForm205().getChannels().get(0).getRxFrequency());
+				}
+			}
+		} finally {
+			deleteDirectory(directory);
+		}
+	}
+
 	@Test
 	void defaultsAndClueMappingAreTransientDistinctAndRespectUnchecking() {
 		PdfPrintOptionsPanel panel = new PdfPrintOptionsPanel(List.of("Clue Log",
@@ -96,12 +165,15 @@ class PdfPrintOptionsTest {
 	}
 
 	@Test
-	void startupHasOnlyActionAndModeControls() throws Exception {
+	void startupHasOnlyActionModeAndExplicitRadioCarryForwardControls() throws Exception {
 		Assumptions.assumeFalse(GraphicsEnvironment.isHeadless());
 		SwingUtilities.invokeAndWait(() -> {
 			StartupDialog startup = new StartupDialog(null, null, false);
 			try {
-				assertTrue(components(startup, JCheckBox.class).isEmpty());
+				List<JCheckBox> checkboxes = components(startup, JCheckBox.class);
+				assertEquals(1, checkboxes.size());
+				assertEquals("Bring forward communications plan (ICS 205)", checkboxes.get(0).getText());
+				assertFalse(checkboxes.get(0).isSelected());
 				assertTrue(components(startup, JComboBox.class).isEmpty());
 				assertTrue(components(startup, ActionTrackerSettingsPanel.class).isEmpty());
 				assertEquals(org.sarmanagement.icsforms.model.IncidentMode.SAR, startup.getChosenMode());

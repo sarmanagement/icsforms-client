@@ -191,6 +191,8 @@ public class OrganizationalChartPanel extends JPanel {
 	public OrganizationalChartPanel(AppController controller) {
 		super(new BorderLayout());
 		this.controller = controller;
+		RadioChannelPicker.install(agencyRepresentatives.table, 2, controller);
+		RadioChannelPicker.install(customPositionsTable, 3, controller);
 
 		JPanel icSection = UiSupport.formPanel();
 		icSection.setBorder(BorderFactory.createTitledBorder("Incident Command"));
@@ -380,7 +382,9 @@ public class OrganizationalChartPanel extends JPanel {
 	AssignmentListEditor createAssignmentListEditor() {
 		Ics203Form form = controller.getData().getOrganizationalChart().getAssignmentList();
 		form.setAgencyRepresentatives(agencyRepresentatives.getEntries());
-		return new AssignmentListEditor(form);
+		AssignmentListEditor editor = new AssignmentListEditor(form);
+		RadioChannelPicker.install(editor.agencies.table, 2, controller);
+		return editor;
 	}
 
 	/**
@@ -771,6 +775,7 @@ public class OrganizationalChartPanel extends JPanel {
 	 */
 	private void installPersonAutocomplete(JTextField nameField, JTextField radioField, JTextField phoneField,
 			java.util.function.Consumer<String> onSelected) {
+		RadioChannelPicker.install(radioField, controller);
 		// Show/hide contact fields based on whether the name is currently blank.
 		updateContactVisibility(nameField, radioField, phoneField);
 		nameField.getDocument().addDocumentListener(new DocumentListener() {

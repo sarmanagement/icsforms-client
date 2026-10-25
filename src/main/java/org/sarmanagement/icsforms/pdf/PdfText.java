@@ -185,7 +185,23 @@ public final class PdfText {
 	 * @param form selected renderer.
 	 */
 	private static void validateSupportingFields(AppData data, JsonNode root, String form) {
-		if ("ICS 204".equals(form)) {
+		if ("ICS 205".equals(form)) {
+			JsonNode plan = root.get("form205");
+			validateFields(plan, form, "form205", false, "specialInstructions", "preparedByName",
+					"preparedBySignature", "iapPage");
+			JsonNode channels = plan == null ? null : plan.get("channels");
+			if (channels != null && channels.isArray()) {
+				for (int i = 0; i < channels.size(); i++) {
+					JsonNode channel = channels.get(i);
+					if (channel.path("includeOnForm").asBoolean(true)) {
+						validateFields(channel, form, "form205.channels[" + i + "]", false, "zoneGroup",
+								"channelNumber", "function", "channelName", "assignment", "rxFrequency", "rxBandwidth",
+								"rxToneNac", "txFrequency", "txBandwidth", "txToneNac", "mode", "digitalProtocol",
+								"system", "remarks", "txPolicy");
+					}
+				}
+			}
+		} else if ("ICS 204".equals(form)) {
 			String[] fields = {"selectedContextHeading", "selectedContextValue", "operationsSectionChiefName",
 					"operationsSectionChiefContact", "secondaryManagementRoleLabel", "secondaryManagementName",
 					"secondaryManagementContact", "specialInstructions", "sharedWorkAssignment", "preparedByName",

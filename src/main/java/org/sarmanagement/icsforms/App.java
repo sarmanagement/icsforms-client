@@ -15,6 +15,7 @@ import org.sarmanagement.icsforms.pdf.Ics233CgPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics201PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics203PdfRenderer;
+import org.sarmanagement.icsforms.pdf.Ics205PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics205aPdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics206PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics206CaninePdfRenderer;
@@ -84,7 +85,7 @@ public final class App {
 						}
 						data = store.load(id);
 						if (action == StartupDialog.StartupAction.OPEN_NEW_PERIOD) {
-							data.advanceToNewOperationalPeriod();
+							data.advanceToNewOperationalPeriod(startup.isBringForwardCommunicationsPlan());
 							store.save(id, data);
 						}
 					}
@@ -112,7 +113,8 @@ public final class App {
 			}
 
 			PdfExportService exportService = new PdfExportService(new Ics201PdfRenderer(), new Ics202PdfRenderer(),
-					new Ics203PdfRenderer(), new Ics205aPdfRenderer(), new Ics207PdfRenderer(), new Ics204PdfRenderer(),
+					new Ics203PdfRenderer(), new Ics205PdfRenderer(), new Ics205aPdfRenderer(),
+					new Ics207PdfRenderer(), new Ics204PdfRenderer(),
 					new Ics206PdfRenderer(), new Ics206CaninePdfRenderer(), new Ics215aPdfRenderer(),
 					new Ics208PdfRenderer(), new Ics214PdfRenderer(),
 					new SarTaskAssignmentPdfRenderer(), new ClueLogPdfRenderer(),

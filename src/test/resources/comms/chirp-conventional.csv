@@ -1,0 +1,9 @@
+Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment,URCALL,RPT1CALL,RPT2CALL,DVCODE
+0,Simplex,146.520000,,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,FM,5.00,,50W,Simplex channel,,,,
+1,Plus,146.940000,+,0.600000,Tone,100.0,88.5,023,NN,023,Tone->Tone,FM,5.00,,5W,Repeater,,,,
+2,Minus,155.250000,-,5.000000,TSQL,88.5,123.0,023,NN,023,Tone->Tone,NFM,2.50,S,5W,Narrow repeater,,,,
+3,Split,145.000000,split,435.000000,DTCS,88.5,88.5,023,NR,025,Tone->Tone,FM,5.00,,5W,Split pair,,,,
+4,Monitor,162.550000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,5W,Receive only,,,,
+5,Cross,154.123456,+,0.012500,Cross,100.0,123.0,023,RN,025,Tone->DTCS,NFM,2.50,,5W,"Quoted, ""name""
+second line",,,,
+6,CrossDcs,155.000000,,0.000000,Cross,88.5,88.5,023,RN,025,DTCS->DTCS,FM,5.00,,5W,Independent digital squelch,,,,

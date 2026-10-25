@@ -9,10 +9,12 @@ import javax.swing.JPanel;
 import java.awt.BorderLayout;
 import java.util.List;
 
-/** Per-export ICS 233 layout choices that never change incident preferences. */
+/** Per-export radio-plan and ICS 233 layout choices that never change incident preferences. */
 class PdfPrintOptionsPanel extends JPanel {
 	static final String ADAPTED_CLUE_LOG = "Clue Log (ICS 233-CG adapted)";
 	private final JComboBox<String> orientation = new JComboBox<>(new String[]{"Landscape", "Portrait"});
+	private final JComboBox<String> radioOrientation = new JComboBox<>(
+			new String[]{"Portrait-fit (IAP default)", "Native landscape"});
 	private final JCheckBox adaptedClues = new JCheckBox("Export SAR clue log as adapted ICS 233");
 
 	/**
@@ -27,6 +29,8 @@ class PdfPrintOptionsPanel extends JPanel {
 		adaptedClues.setEnabled(formKeys.contains("Clue Log") && formKeys.contains(ADAPTED_CLUE_LOG));
 		UiSupport.addRow(form, 0, "ICS 233 orientation", orientation);
 		UiSupport.addRow(form, 1, "", adaptedClues);
+		radioOrientation.setEnabled(formKeys.contains("ICS 205"));
+		UiSupport.addRow(form, 2, "ICS 205 in IAP", radioOrientation);
 		add(form, BorderLayout.CENTER);
 	}
 
@@ -37,6 +41,15 @@ class PdfPrintOptionsPanel extends JPanel {
 	 */
 	boolean isPortrait() {
 		return orientation.getSelectedIndex() == 1;
+	}
+
+	/**
+	 * Returns the transient ICS 205 orientation choice for combined IAP exports.
+	 *
+	 * @return true for native landscape sheets, false for portrait-fit sheets
+	 */
+	boolean isIcs205NativeLandscape() {
+		return radioOrientation.isEnabled() && radioOrientation.getSelectedIndex() == 1;
 	}
 
 	/**

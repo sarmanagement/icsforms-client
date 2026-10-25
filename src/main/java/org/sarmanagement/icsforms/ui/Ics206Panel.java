@@ -76,6 +76,8 @@ public class Ics206Panel extends JPanel {
 	public Ics206Panel(AppController controller) {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
+		RadioChannelPicker.install(aidTable, 3, controller);
+		RadioChannelPicker.install(transportTable, 3, controller);
 		JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		header.add(new JLabel("Plan detail:"));
 		header.add(mode);

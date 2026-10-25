@@ -2070,6 +2070,7 @@ public class TCardPanel extends JPanel {
 		homeStateField.setPreferredSize(new Dimension(48, homeStateField.getPreferredSize().height));
 		JTextField phoneField = UiSupport.textField();
 		JTextField radioChannelField = UiSupport.textField();
+		RadioChannelPicker.install(radioChannelField, controller);
 		JTextField personnelResIdField = UiSupport.textField();
 		JTextField personnelLocField = UiSupport.textField();
 		JComboBox<String> personnelStatusCombo = new JComboBox<>(STATUS_OPTIONS);

@@ -256,8 +256,9 @@ class PdfExportServiceTest {
 		assertEquals("1", data.getForm201().getIapPage(),
 				"Completed ICS 201 must be assigned page 1 even in DURING_OP phase");
 		assertEquals("5", data.getForm202().getIapPage(), "ICS 202 should follow immediately after ICS 201");
-		assertEquals("9", data.getForm205aIapPage(),
-				"ICS 205A follows ICS 204 and its selected SAR task assignment pages");
+		assertEquals("9", data.getForm205().getIapPage());
+		assertEquals("10", data.getForm205aIapPage(),
+				"ICS 205A follows ICS 205, ICS 204 and its selected SAR task assignment pages");
 	}
 
 	@Test
@@ -285,8 +286,8 @@ class PdfExportServiceTest {
 
 		PdfExportService.assignIapPageNumbers(data);
 
-		assertEquals("9", data.getForm205aIapPage());
-		assertEquals(String.valueOf(9 + Ics205aPdfRenderer.pageCount(data)), data.getForm207().getIapPage());
+		assertEquals("10", data.getForm205aIapPage());
+		assertEquals(String.valueOf(10 + Ics205aPdfRenderer.pageCount(data)), data.getForm207().getIapPage());
 	}
 
 	@Test

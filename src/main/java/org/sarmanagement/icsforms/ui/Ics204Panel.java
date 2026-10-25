@@ -72,6 +72,7 @@ public class Ics204Panel extends JPanel {
 	private final JPanel managementContactsPanel = new JPanel(new GridBagLayout());
 	private final ResourceTableModel resourceTableModel = new ResourceTableModel();
 	private final CommunicationsTableModel communicationsTableModel = new CommunicationsTableModel();
+	private final JTable communicationsTable = new JTable(communicationsTableModel);
 	private final JTable resourceTable = new JTable(resourceTableModel);
 	private String activeManagementContext = Ics204Form.MANAGEMENT_STAGING_AREA;
 	private boolean updatingContextSelection;
@@ -85,6 +86,9 @@ public class Ics204Panel extends JPanel {
 	public Ics204Panel(AppController controller) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
+		RadioChannelPicker.install(operationsChiefContactField, controller);
+		RadioChannelPicker.install(branchDirectorContactField, controller);
+		RadioChannelPicker.install(supervisorContactField, controller);
 
 		JPanel form = UiSupport.formPanel();
 		selectedContextValueField.setColumns(16);
@@ -145,7 +149,8 @@ public class Ics204Panel extends JPanel {
 		updateSelectedContextLabel();
 		rebuildManagementContacts();
 
-		JTable communicationsTable = new JTable(communicationsTableModel);
+		RadioChannelPicker.install(communicationsTable, 2, controller);
+		communicationsTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
 		resourceTable.setFillsViewportHeight(true);
 		communicationsTable.setFillsViewportHeight(true);
 		installResourceRowEditor();
@@ -162,11 +167,19 @@ public class Ics204Panel extends JPanel {
 		JButton addCommRowBtn = new JButton("Add Row");
 		JButton addStaffBtn = new JButton("Add Staff…");
 		JButton removeCommBtn = new JButton("Remove");
+		JButton planChannelBtn = new JButton("Add plan channel…");
+		planChannelBtn.addActionListener(event -> {
+			org.sarmanagement.icsforms.model.RadioChannel channel = RadioChannelPicker.choose(this, controller);
+			if (channel != null) {
+				addPlanChannel(channel);
+			}
+		});
 		addCommRowBtn.addActionListener(e -> communicationsTableModel.addRow());
 		addStaffBtn.addActionListener(e -> addStaffToComms());
 		removeCommBtn.addActionListener(e -> removeSelectedCommunicationRow(communicationsTable));
 		commButtons.add(addCommRowBtn);
 		commButtons.add(addStaffBtn);
+		commButtons.add(planChannelBtn);
 		commButtons.add(removeCommBtn);
 		communicationsPanel.add(commButtons, BorderLayout.SOUTH);
 
@@ -179,6 +192,24 @@ public class Ics204Panel extends JPanel {
 		formScrollPane.setPreferredSize(new Dimension(0, 260));
 		add(formScrollPane, BorderLayout.NORTH);
 		add(tablesPanel, BorderLayout.CENTER);
+	}
+
+	/**
+	 * Appends an explicitly selected communications suggestion without overwriting existing rows.
+	 *
+	 * @param channel selected ICS 205 channel.
+	 */
+	void addPlanChannel(org.sarmanagement.icsforms.model.RadioChannel channel) {
+		if (communicationsTable.isEditing()) {
+			communicationsTable.getCellEditor().stopCellEditing();
+		}
+		CommunicationEntry entry = new CommunicationEntry();
+		entry.setName(RadioChannelPicker.displayName(channel));
+		entry.setFunction(channel.getFunction());
+		entry.setPrimaryContact(RadioChannelPicker.displayName(channel));
+		communicationsTableModel.addEntry(entry);
+		pushToModel();
+		controller.markDirty();
 	}
 
 	/**
@@ -264,6 +295,9 @@ public class Ics204Panel extends JPanel {
 
 	/** Applies field values to the model. */
 	public void pushToModel() {
+		if (communicationsTable.isEditing()) {
+			communicationsTable.getCellEditor().stopCellEditing();
+		}
 		Ics204Form form = controller.getData().getForm204();
 		storeSelectedContextValue(activeManagementContext);
 		form.setManagementContext(activeManagementContext);
@@ -989,6 +1023,7 @@ public class Ics204Panel extends JPanel {
 			personsField.setColumns(4);
 			personsField.setText(row.getNumberOfPersons() <= 0 ? "" : String.valueOf(row.getNumberOfPersons()));
 			contactField.setText(row.getContact());
+			RadioChannelPicker.install(contactField, controller);
 			contactField.setToolTipText("Radio channel or phone number for contacting the team leader");
 			// Auto-fill contact from the leader's T-card radio/phone when the field is
 			// blank on open.

@@ -2,7 +2,7 @@
 
 `icsforms-client` is a Java Swing desktop application for authoring Incident Command System (ICS) incident forms with local JSON persistence and PDF export. Development is ongoing and the application is still evolving as additional forms and functionality are added.
 
-This project is intended to support the **SAR** (Search and Rescue) community, but it is also useful for generic ICS incident planning and documentation. The application currently supports ICS 201, ICS 202, ICS 203, ICS 204, ICS 205A, ICS 206, an adapted canine ICS 206, ICS 207, ICS 208, ICS 214, and ICS 215A PDF forms, along with SAR task assignment forms, a clue log, T-cards, and an organizational chart.  I got tired of copying the same header information from one form to another by hand, and having to subject people to my handwriting in SAR Task Assignment Form Debriefing sections, so this tool is intended to make it easier to author ICS forms and share them with others in a clean, legible format.
+This project is intended to support the **SAR** (Search and Rescue) community, but it is also useful for generic ICS incident planning and documentation. The application currently supports ICS 201, ICS 202, ICS 203, ICS 204, ICS 205, ICS 205A, ICS 206, an adapted canine ICS 206, ICS 207, ICS 208, ICS 214, and ICS 215A PDF forms, along with SAR task assignment forms, a clue log, T-cards, and an organizational chart.  I got tired of copying the same header information from one form to another by hand, and having to subject people to my handwriting in SAR Task Assignment Form Debriefing sections, so this tool is intended to make it easier to author ICS forms and share them with others in a clean, legible format.
 
 Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. Each incident is persisted locally at `~/.icsforms/incidents/<incidentId>.json`, with its own `.json.bak` backup; the install's node identity is kept in `~/.icsforms/node.json`. On first launch, an existing `~/.icsforms/incident.json` is imported as a new incident if no incidents exist yet. The original is left untouched and `incident.json.migrated` prevents repeat imports. File → Import JSON can also import an external workspace as a separate incident. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF. An H2-backed store and offline-to-remote synchronization are planned, but not yet implemented.
 
@@ -15,7 +15,7 @@ This project is open source under the Apache 2.0 license. Contributions are welc
    - **New incident — Initial Incident Response:** an incident has started; ICS 201 is the primary capture tool.
    - **New incident — Subsequent Operational Period:** open a fresh workspace for a new operational period, with ICS 201 read-only.
    - **Open existing incident:** continue working on a previously saved incident.
-   - **Open existing incident and add a new operational period:** load an existing workspace and advance it to the next operational period, preserving the org chart and ICS 201 history while clearing the operational-period forms.
+   - **Open existing incident and add a new operational period:** load an existing workspace and advance it to the next operational period, preserving the org chart and ICS 201 history while clearing the operational-period forms. ICS 205 can optionally be brought forward using the explicit checkbox.
 2. Select the incident mode: **SAR** (default) or **Generic**.
    - SAR mode enables SAR Task Assignment forms that provide further detail for each Assignment listed on a ICS 204 and a clue log.
    - SAR Task Assignment forms support debriefing, including structured capture of POD factors for SAR operations.
@@ -42,6 +42,7 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   - ICS 201
   - ICS 202
   - ICS 204
+  - Optional ICS 205 Incident Radio Communications Plan (SAR and Generic modes)
   - Medical Plan (ICS 206)
   - Canine Medical Plan (ICS 206CANINE, adapted; eligible in SAR mode or when a canine T-card exists)
   - Role-oriented dashboard ordering for IC/ICP, Safety Officer, Operations, and Communications
@@ -64,7 +65,7 @@ File → New always creates a separate incident. File → Duplicate Incident cop
 - **Safety Overview** includes a readiness summary and read-only PDF-like previews of the current ICS 208, ICS 206, and adapted ICS 206CANINE forms. The summary reports the shared Safety Officer and Medical Unit Leader assignments and recorded aid stations.
 - Canine veterinary directories are incident-owned copies, not live links to source files. JSON regional files use schema version 1 (`schemaVersion` and `facilities`). CSV imports accept the app's extended headers or a minimal hospital file with `Hospital Name,Address,City,State,Zip,Contact Number,Fax,Notes`; column names are case- and whitespace-insensitive. Imported street address, city, state, ZIP, contact number, and fax remain separate fields. `Notes` is retained as descriptive capabilities/notes and does not imply confirmed 24-hour availability. The app's UTF-8 CSV export uses `id,name,town,state,postalCode,address,contactNumbers,fax,available24Hours,availabilityNotes,capabilities,verifiedAt,latitude,longitude`; multiple contacts are semicolon-separated. Blank availability is unknown, not confirmation of 24-hour service. Directory edits require explicit export and do not overwrite sources implicitly.
 - Address geocoding and driving routes are separate services. HeiGIT-hosted openrouteservice is the default provider: geocoding uses `https://api.heigit.org/pelias/v1/search`, and driving matrices use `https://api.heigit.org/openrouteservice/v2/matrix/driving-car`. The veterinary routing tab guides the operator through loading a directory, confirming coordinates for the base and facilities, calculating road routes, then reviewing and adding the closest confirmed 24-hour facilities. Route calculation remains disabled until the base and at least one facility have valid coordinates; shortlist review remains disabled until a current road route exists for a confirmed 24-hour facility. Requests send entered addresses or coordinates to that third party. Configure the key in **Configuration > Medical Routing (OpenRouteService)…**, set `ORS_API_KEY`, or place the key in `~/.icsforms/ors-api-key`; the environment variable takes precedence, and credentials are not stored in incident JSON or regional files. Verify current [HeiGIT terms and restrictions](https://account.heigit.org/info/tos), quotas, and service limits before operational use. The tab displays **© openrouteservice by HeiGIT | Data from [OpenStreetMap](https://openstreetmap.org/copyright)**. Unresolved/unreachable locations remain visible for manual handling; any straight-line estimate is explicitly labeled and is not a driving time.
-- Role dashboards reorder the same editors; they do not duplicate incident data. Choose **View > Dashboard** (IC/ICP is the default). ICS 205A remains available. The separate ICS 205 radio communications-plan work tracked by issue #14 is not implemented by the dashboard work.
+- Role dashboards reorder the same editors; they do not duplicate incident data. Choose **View > Dashboard** (IC/ICP is the default). ICS 205 is the radio communications plan; ICS 205A remains a distinct communications/contact list.
 - **Export All PDFs** for individual per-form PDF files.
 - **Export IAP Bundle** for a single merged PDF bundle of selected forms with a cover page.
 - PDF export handles multiline text and tabs, and reports unwanted controls or unsupported characters with the affected form/field and correction guidance. Failed renders do not replace existing good PDFs or leave partial bundle files.
@@ -98,6 +99,113 @@ standard clue output, regardless of legacy saved export flags. These print-time
 choices are not saved with the incident. Uncheck **Clue Log** to omit clues
 entirely; the enabled incident tracker remains a separate export selection.
 
+### Radio communications plan (ICS 205; issue #14)
+
+The ICS 205 summarizes subscriber radio frequency and trunked talkgroup assignments
+for the operational period. The Communications Unit Leader prepares it for the
+IAP; use the relevant assignments on ICS 204. Incident name and operational period
+come from **Shared**. Review all imported or carried-forward settings before use.
+Selecting or suggesting a preparer's name is not a signature.
+
+The optional communications-plan workspace is available in both incident modes;
+show or hide it under **View → Communications Plan (ICS 205)**. The Communications
+dashboard places it first. Hiding it does not delete the plan or prevent
+explicitly selecting its PDF. CSV actions are also available from the main
+Import/Export menus.
+The channel editor keeps RX and TX frequencies, bandwidths, and tones/NAC separate.
+Channel numbers and functions allow free text. Digital protocol is separate from
+the form's A/D/M mode; a generic D or M is not a programming specification.
+Trunked system information is not a conventional transmit frequency.
+
+When advancing the operational period, explicitly select **Bring forward
+communications plan (ICS 205)** to copy the channel order, assignments, and special
+instructions. Otherwise the new plan starts empty. The previous plan is archived
+with its period context. Copies have independent mutable data, and preparation
+times, signature, and IAP page are cleared for the new period.
+
+Standalone ICS 205 PDFs default to native landscape. In a combined IAP, the
+default fits rotated landscape **content** inside portrait-sized pages, with
+upright bundle page numbers. The export dialog also offers native landscape for
+ICS 205; that choice is independent of ICS 233 orientation. Long content continues
+on additional pages with identifying context rather than being silently dropped.
+Configured paper size and minimum margins apply.
+
+Native plan CSV is the lossless interchange format; CHIRP CSV is not. Frequencies
+are stored as text without reducing programming precision to the printed form's
+four decimal places. Tone/NAC leading zeros, unknown values, and unsupported
+programming information must survive native interchange. Unknown TX is not
+automatically simplex or receive-only. Use **Copy RX → TX** only when simplex
+transmission is actually intended.
+
+The versioned native CSV uses `schemaVersion=1`, a `recordType` column, and a
+`formMetadata` column. There is exactly one `form` record, even for an empty plan;
+its metadata is a JSON object containing the plan's non-channel fields. Subsequent
+`channel` records retain list order. Their named columns cover channel identity,
+all form fields, TX policy, digital protocol, system, print selection, and
+programming metadata. Channel cell values are JSON-encoded inside normal CSV
+quoting: for example a frequency string is `"155.1600125"` as a JSON value,
+not a spreadsheet number. This preserves leading zeros, exact strings, booleans,
+and metadata maps. Use the application's export as a template rather than
+converting these cells to spreadsheet numbers. Files are UTF-8; imports accept
+an initial BOM and map headers rather than relying on column position.
+
+Import parses the whole file before offering a selectable-row preview. Appending
+is the default; replacement and explicit identity-based update are separate
+choices. Names and frequencies are not reliable identities and are never used
+to guess updates. Appending a colliding identity must create a distinct channel,
+not overwrite the existing one. Cancelling preview or rejecting malformed input
+leaves the incident unchanged. A native CSV is a full plan, not an unversioned
+generic frequency library; CHIRP CSV has its own separate import/export action.
+
+CSV files may contain spreadsheet formulas as literal field values. Native export
+does not prefix or rewrite them, since that would corrupt a round trip. Import
+untrusted CSV into a spreadsheet as **text**, with formula evaluation disabled;
+do not rely on quoting alone to prevent spreadsheet formula execution.
+
+CHIRP's generic CSV is a channel interchange boundary, not direct radio
+programming. Radio-specific `.img` files can contain settings beyond generic CSV
+and are interpreted through CHIRP's supported image formats/drivers; they are not
+universally unreadable. This application does not implement image drivers, radio
+uploads, or a runtime CHIRP/Python dependency. Always review CSV in CHIRP against
+the intended radio's capabilities and a downloaded image before writing a radio.
+
+Digital export requires more than recognition of a mode label. DV/D-STAR and
+DN/System Fusion require verified routing/settings and representative image
+workflows; those hardware/image checks are not claimed here. DMR, P25, NXDN,
+generic D/M, and trunked talkgroups must not be presented as programmable analog
+channels. Color code, slot, talkgroup, NAC, or routing information in comments is
+not a substitute for programming settings. Unsupported records remain available
+in native JSON/CSV, and excluding records from CHIRP output requires explicit
+confirmation.
+
+#### CHIRP support and verification boundary
+
+CSV semantics are pinned to upstream CHIRP commit
+[`21e42e4518c167548af90ed7f9edf75e516c491a`](https://github.com/kk7ds/chirp/tree/21e42e4518c167548af90ed7f9edf75e516c491a),
+particularly [`generic_csv.py`](https://github.com/kk7ds/chirp/blob/21e42e4518c167548af90ed7f9edf75e516c491a/chirp/drivers/generic_csv.py)
+and [`chirp_common.py`](https://github.com/kk7ds/chirp/blob/21e42e4518c167548af90ed7f9edf75e516c491a/chirp/chirp_common.py).
+Recognition in `MODES` is not proof that generic CSV carries every required setting.
+The checked-in conventional CSV fixture is hand-authored from these source
+semantics, with its commit and scope recorded in the accompanying properties
+file. Java conformance tests do not constitute a run of upstream CHIRP, a
+radio-image import/export test, or a hardware programming test.
+
+| Channel/settings | Interchange policy |
+| --- | --- |
+| Conventional analog FM/NFM | Supported CSV projection with explicit RX/TX settings; review target-radio capabilities. |
+| Simplex, positive/negative offset, split, receive-only | Separate subscriber RX/TX mapping; unknown TX is excluded, never guessed. |
+| CTCSS, DTCS and independent cross tones/polarities | Mapped independently in the TX and RX directions. Unsupported squelch variants require native preservation. |
+| DV / D-STAR | Export deferred: upstream recognizes DV and constructs a `DVMemory`, but the generic driver's `ATTR_MAP` does not map its routing/call fields. No verified image workflow. |
+| DN / System Fusion | Export deferred: mode recognition alone does not verify required settings or a representative image workflow. |
+| DMR / P25 / NXDN, generic D/M, trunked systems | Not exported as programmable channels; native records retained with exclusion diagnostics. |
+| Radio images, uploads, hardware validation | Not implemented or claimed tested. Use CHIRP and the intended radio's supported driver. |
+
+CHIRP itself can substitute a default power when CSV power is absent (50 W in the
+pinned generic driver). Review power, channel numbering, tuning steps, supported
+tones, and band limits in the target radio image; generic CSV acceptance does not
+certify that a radio can or should transmit those settings. Comments do not set
+radio programming parameters.
+
 ## Incident phases
 
 The application models three phases of an incident lifecycle, selectable at startup and changeable from the **Configuration → IAP Phase** menu:
@@ -112,7 +220,7 @@ An incident has started. ICS 201 – Incident Briefing is the **primary capture 
 
 ### (c) Subsequent Operational Periods
 
-The incident has progressed beyond the initial response. ICS 201 is **locked (read-only)** and attached to the IAP bundle as the historical initial-response record. ICS 202 (Incident Objectives) and ICS 204 (Assignment List) become the primary forms for each subsequent operational period. When advancing to a new operational period the operational-period forms are cleared while the organizational chart and ICS 201 are preserved as historical context.
+The incident has progressed beyond the initial response. ICS 201 is **locked (read-only)** and attached to the IAP bundle as the historical initial-response record. ICS 202 (Incident Objectives) and ICS 204 (Assignment List) become the primary forms for each subsequent operational period. When advancing to a new operational period the operational-period forms are cleared while the organizational chart and ICS 201 are preserved as historical context. ICS 205 starts empty unless its explicit bring-forward checkbox is selected; the completed period's communications plan is archived in either case.
 
 ## Repository structure
 
