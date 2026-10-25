@@ -119,6 +119,11 @@ show or hide it under **View → Communications Plan (ICS 205)**. The Communicat
 dashboard places it first. Hiding it does not delete the plan or prevent
 explicitly selecting its PDF. CSV actions are also available from the main
 Import/Export menus.
+Double-click a channel to edit it, or right-click for channel actions. Row actions
+are enabled only for a selected channel; movement also respects list boundaries.
+The preparer area shows the selected person's known role and offers the
+Communications Unit Leader shortcut only when that position is assigned.
+Use the main PDF export dialog to print ICS 205.
 The channel editor keeps RX and TX frequencies, bandwidths, and tones/NAC separate.
 Channel numbers and functions allow free text. Digital protocol is separate from
 the form's A/D/M mode; a generic D or M is not a programming specification.

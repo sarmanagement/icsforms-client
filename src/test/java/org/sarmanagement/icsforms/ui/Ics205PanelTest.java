@@ -375,21 +375,125 @@ class Ics205PanelTest {
 	}
 
 	@Test
-	void pdfShortcutRequestsExplicitRadioFormWithoutChangingWorkspaceAvailability() throws Exception {
+	void pdfShortcutIsAbsentAndPreparerRoleTracksSelectionAndLeaderAvailability() throws Exception {
 		AppData data = new AppData();
 		data.setIcs205Enabled(false);
 		AppController controller = controller(data);
-		List<String> requests = new ArrayList<>();
 		SwingUtilities.invokeAndWait(() -> {
 			Ics205Panel panel = new Ics205Panel(controller);
-			panel.setExportRequest(requests::add);
-			button(panel, "Export ICS 205 PDF").doClick();
-			assertEquals(List.of("ICS 205"), requests);
+			assertNull(button(panel, "Export ICS 205 PDF"));
+			JButton leader = button(panel, "Use Communications Unit Leader");
+			assertFalse(leader.isEnabled());
+			assertEquals("Role: Not specified", ((javax.swing.JLabel) field(panel, "preparerRole")).getText());
+			data.getOrganizationalChart().setCommunicationsUnitLeaderName("Leader");
+			panel.refreshFromModel();
+			assertTrue(leader.isEnabled());
+			leader.doClick();
+			assertEquals("Leader", data.getForm205().getPreparedByName());
+			assertEquals("Role: Communications Unit Leader", ((javax.swing.JLabel) field(panel, "preparerRole")).getText());
+			var position = new org.sarmanagement.icsforms.model.OrgChartEntry();
+			position.setName("Override");
+			position.setTitle("Radio Operator");
+			data.getOrganizationalChart().getAdditionalPositions().add(position);
+			((JTextField) field(panel, "preparedBy")).setText("Override");
+			assertEquals("Role: Radio Operator", ((javax.swing.JLabel) field(panel, "preparerRole")).getText());
+			((JTextField) field(panel, "preparedBy")).setText("Unknown");
+			assertEquals("Role: Not specified", ((javax.swing.JLabel) field(panel, "preparerRole")).getText());
+			data.getOrganizationalChart().setCommunicationsUnitLeaderName(" ");
+			panel.refreshFromModel();
+			assertFalse(leader.isEnabled());
+			assertEquals("Unknown", data.getForm205().getPreparedByName());
 			assertFalse(data.isIcs205Enabled());
 			assertNull(data.getForm205().getPreparedDateTime());
-			panel.setExportRequest(null);
-			button(panel, "Export ICS 205 PDF").doClick();
-			assertEquals(1, requests.size());
+		});
+	}
+
+	@Test
+	void channelToolbarAndContextMenuFollowSelectionAndClickedRow() throws Exception {
+		AppData data = new AppData();
+		AppController controller = controller(data);
+		SwingUtilities.invokeAndWait(() -> {
+			Ics205Panel panel = new Ics205Panel(controller);
+			panel.applyChannel(-1, channel("First"));
+			panel.applyChannel(-1, channel("Second"));
+			JTable table = (JTable) field(panel, "table");
+			for (String label : List.of("Edit…", "Duplicate", "Remove", "Up", "Down")) {
+				assertFalse(button(panel, label).isEnabled());
+			}
+			assertTrue(button(panel, "Add…").isEnabled());
+			table.setRowSelectionInterval(0, 0);
+			assertTrue(button(panel, "Edit…").isEnabled());
+			assertTrue(button(panel, "Duplicate").isEnabled());
+			assertTrue(button(panel, "Remove").isEnabled());
+			assertFalse(button(panel, "Up").isEnabled());
+			assertTrue(button(panel, "Down").isEnabled());
+			var popup = table.getComponentPopupMenu();
+			assertEquals(5, popup.getComponentCount());
+			for (var listener : table.getMouseListeners()) {
+				if (listener.getClass().getEnclosingClass() == Ics205Panel.class) {
+					listener.mousePressed(new java.awt.event.MouseEvent(table,
+							java.awt.event.MouseEvent.MOUSE_PRESSED, 0, 0, 5, table.getRowHeight() + 2,
+							1, true, java.awt.event.MouseEvent.BUTTON3));
+				}
+			}
+			assertEquals(1, table.getSelectedRow());
+			assertTrue(button(panel, "Up").isEnabled());
+			assertFalse(button(panel, "Down").isEnabled());
+			assertSame(((javax.swing.JMenuItem) popup.getComponent(1)).getAction(),
+					button(panel, "Duplicate").getAction());
+			((javax.swing.JMenuItem) popup.getComponent(1)).doClick();
+			assertEquals("Second", data.getForm205().getChannels().get(2).getChannelName());
+			assertFalse(button(panel, "Remove").isEnabled());
+			table.setRowSelectionInterval(0, 0);
+			for (var listener : table.getMouseListeners()) {
+				if (listener.getClass().getEnclosingClass() == Ics205Panel.class) {
+					listener.mouseReleased(new java.awt.event.MouseEvent(table,
+							java.awt.event.MouseEvent.MOUSE_RELEASED, 0, 0, 5, table.getRowHeight() * 5,
+							1, true, java.awt.event.MouseEvent.BUTTON3));
+				}
+			}
+			assertEquals(-1, table.getSelectedRow());
+			assertFalse(((javax.swing.JMenuItem) popup.getComponent(0)).isEnabled());
+		});
+	}
+
+	@Test
+	void leftDoubleClickOpensEditorForClickedChannelAndCancellationPreservesIt() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		AppData data = new AppData();
+		data.getForm205().getChannels().add(channel("First"));
+		data.getForm205().getChannels().add(channel("Second"));
+		AppController controller = controller(data);
+		SwingUtilities.invokeAndWait(() -> {
+			Ics205Panel panel = new Ics205Panel(controller);
+			JTable table = (JTable) field(panel, "table");
+			table.setRowSelectionInterval(0, 0);
+			java.util.concurrent.atomic.AtomicBoolean opened = new java.util.concurrent.atomic.AtomicBoolean();
+			Timer cancel = new Timer(100, event -> {
+				for (java.awt.Window window : java.awt.Window.getWindows()) {
+					if (window instanceof javax.swing.JDialog dialog && dialog.isShowing()
+							&& "Edit radio channel".equals(dialog.getTitle())) {
+						opened.set(true);
+						dialog.dispose();
+					}
+				}
+			});
+			cancel.start();
+			try {
+				for (var listener : table.getMouseListeners()) {
+					if (listener.getClass().getEnclosingClass() == Ics205Panel.class) {
+						listener.mouseClicked(new java.awt.event.MouseEvent(table,
+								java.awt.event.MouseEvent.MOUSE_CLICKED, 0, 0, 5, table.getRowHeight() + 2,
+								2, false, java.awt.event.MouseEvent.BUTTON1));
+					}
+				}
+				assertTrue(opened.get());
+				assertEquals(1, table.getSelectedRow());
+				assertEquals("Second", data.getForm205().getChannels().get(1).getChannelName());
+				assertFalse(controller.isDirty());
+			} finally {
+				cancel.stop();
+			}
 		});
 	}
 

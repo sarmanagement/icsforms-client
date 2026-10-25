@@ -7,9 +7,12 @@ import org.sarmanagement.icsforms.model.Ics205Form;
 import org.sarmanagement.icsforms.model.RadioChannel;
 
 import javax.swing.JButton;
+import javax.swing.AbstractAction;
+import javax.swing.Action;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
@@ -26,7 +29,6 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.function.Consumer;
 
 /**
  * Optional ICS 205 workspace. Hiding it never deletes channel or preparation data.
@@ -40,7 +42,13 @@ public final class Ics205Panel extends JPanel {
 	private final JCheckBox preparedDatePresent = new JCheckBox("Preparation date/time recorded");
 	private final JSpinner preparedDate = UiSupport.dateTimeSpinner();
 	private final JLabel validation = new JLabel(" ");
-	private Consumer<String> exportRequest = ignored -> { };
+	private final JLabel preparerRole = new JLabel();
+	private final JButton useLeader = new JButton("Use Communications Unit Leader");
+	private final Action edit = channelAction("Edit…", () -> editChannel(false));
+	private final Action duplicate = channelAction("Duplicate", () -> duplicateChannel(table.getSelectedRow()));
+	private final Action remove = channelAction("Remove", () -> removeChannel(table.getSelectedRow()));
+	private final Action up = channelAction("Up", () -> moveChannel(table.getSelectedRow(), -1));
+	private final Action down = channelAction("Down", () -> moveChannel(table.getSelectedRow(), 1));
 	private boolean loading;
 
 	/**
@@ -60,12 +68,34 @@ public final class Ics205Panel extends JPanel {
 		table.addMouseListener(new java.awt.event.MouseAdapter() {
 			/** {@inheritDoc} */
 			@Override
+			public void mousePressed(java.awt.event.MouseEvent event) {
+				selectPopupRow(event);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void mouseReleased(java.awt.event.MouseEvent event) {
+				selectPopupRow(event);
+			}
+
+			/** {@inheritDoc} */
+			@Override
 			public void mouseClicked(java.awt.event.MouseEvent event) {
-				if (event.getClickCount() == 2 && table.getSelectedRow() >= 0) {
-					editChannel(false);
+				if (event.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(event)) {
+					int row = table.rowAtPoint(event.getPoint());
+					if (row >= 0) {
+						table.setRowSelectionInterval(row, row);
+						editChannel(false);
+					}
 				}
 			}
 		});
+		table.getSelectionModel().addListSelectionListener(event -> updateChannelActions());
+		JPopupMenu menu = new JPopupMenu();
+		for (Action action : new Action[]{edit, duplicate, remove, up, down}) {
+			menu.add(action);
+		}
+		table.setComponentPopupMenu(menu);
 		add(buildToolbar(), BorderLayout.NORTH);
 		add(new JScrollPane(table), BorderLayout.CENTER);
 		JPanel footer = new JPanel(new BorderLayout(4, 4));
@@ -105,15 +135,6 @@ public final class Ics205Panel extends JPanel {
 				name -> preparedBy.setText(name));
 	}
 
-	/**
-	 * Sets the PDF export shortcut, also available when the workspace is hidden.
-	 *
-	 * @param request explicit form export action.
-	 */
-	public void setExportRequest(Consumer<String> request) {
-		exportRequest = request == null ? ignored -> { } : request;
-	}
-
 	/** Reloads the active document without creating preparation details or dirtying it. */
 	public void refreshFromModel() {
 		loading = true;
@@ -130,6 +151,8 @@ public final class Ics205Panel extends JPanel {
 			}
 			preparedDate.setEnabled(preparedDatePresent.isSelected());
 			tableModel.fireTableDataChanged();
+			updateChannelActions();
+			updatePreparerRole();
 			updateWarnings();
 		} finally {
 			loading = false;
@@ -161,6 +184,7 @@ public final class Ics205Panel extends JPanel {
 		Ics205Form plan = controller.getData().getForm205();
 		plan.setSpecialInstructions(instructions.getText());
 		plan.setPreparedByName(preparedBy.getText());
+		updatePreparerRole();
 		if (!Objects.equals(preparation, preparationDate(plan))) {
 			plan.setPreparedDateTime(preparation);
 			plan.setDatePrepared(preparation);
@@ -285,19 +309,117 @@ public final class Ics205Panel extends JPanel {
 	private JPanel buildToolbar() {
 		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		addButton(panel, "Add…", () -> editChannel(true));
-		addButton(panel, "Edit…", () -> editChannel(false));
-		addButton(panel, "Duplicate", () -> duplicateChannel(table.getSelectedRow()));
-		addButton(panel, "Remove", () -> removeChannel(table.getSelectedRow()));
-		addButton(panel, "Up", () -> moveChannel(table.getSelectedRow(), -1));
-		addButton(panel, "Down", () -> moveChannel(table.getSelectedRow(), 1));
+		for (Action action : new Action[]{edit, duplicate, remove, up, down}) {
+			panel.add(new JButton(action));
+		}
 		addButton(panel, "Import CSV…", () -> new RadioChannelCsvDialogs(this, controller).importCsv());
 		addButton(panel, "Export CSV…", () -> new RadioChannelCsvDialogs(this, controller).exportCsv(false));
 		addButton(panel, "Export CHIRP…", () -> new RadioChannelCsvDialogs(this, controller).exportCsv(true));
-		addButton(panel, "Export ICS 205 PDF", () -> {
-			pushToModel();
-			exportRequest.accept("ICS 205");
-		});
 		return panel;
+	}
+
+	/**
+	 * Creates an action shared by the toolbar and channel context menu.
+	 *
+	 * @param label action label.
+	 * @param operation channel operation.
+	 * @return initially disabled selection-dependent action.
+	 */
+	private static Action channelAction(String label, Runnable operation) {
+		Action action = new AbstractAction(label) {
+			/** {@inheritDoc} */
+			@Override
+			public void actionPerformed(java.awt.event.ActionEvent event) {
+				operation.run();
+			}
+		};
+		action.setEnabled(false);
+		return action;
+	}
+
+	/**
+	 * Selects the context-menu target, clearing stale selection on empty space.
+	 *
+	 * @param event platform-specific popup mouse event.
+	 */
+	private void selectPopupRow(java.awt.event.MouseEvent event) {
+		if (event.isPopupTrigger() || javax.swing.SwingUtilities.isRightMouseButton(event)) {
+			int row = table.rowAtPoint(event.getPoint());
+			if (row >= 0) {
+				table.setRowSelectionInterval(row, row);
+			} else {
+				table.clearSelection();
+			}
+		}
+	}
+
+	/** Keeps toolbar and popup actions aligned with selection and ordering bounds. */
+	private void updateChannelActions() {
+		int row = table.getSelectedRow();
+		boolean selected = row >= 0 && row < table.getRowCount();
+		edit.setEnabled(selected);
+		duplicate.setEnabled(selected);
+		remove.setEnabled(selected);
+		up.setEnabled(selected && row > 0);
+		down.setEnabled(selected && row < table.getRowCount() - 1);
+	}
+
+	/** Displays the selected preparer's known role without assigning one or creating a person. */
+	private void updatePreparerRole() {
+		String leader = controller.getData().getOrganizationalChart().getCommunicationsUnitLeaderName();
+		useLeader.setEnabled(!leader.isBlank());
+		String name = preparedBy.getText().trim();
+		String role = "";
+		if (!name.isBlank()) {
+			if (name.equalsIgnoreCase(leader.trim())) {
+				role = "Communications Unit Leader";
+			} else {
+				var chart = controller.getData().getOrganizationalChart();
+				String[][] positions = {
+						{"Safety Officer", chart.getSafetyOfficerName()},
+						{"Public Information Officer", chart.getPublicInformationOfficerName()},
+						{"Liaison Officer", chart.getLiaisonOfficerName()},
+						{"Operations Section Chief", chart.getOperationsSectionChiefName()},
+						{"Planning Section Chief", chart.getPlanningSectionChiefName()},
+						{"Logistics Section Chief", chart.getLogisticsSectionChiefName()},
+						{"Finance/Admin Section Chief", chart.getFinanceAdminSectionChiefName()},
+						{"Documentation Unit Leader", chart.getDocumentationUnitLeaderName()},
+						{"Communications Technician", chart.getCommunicationsTechnicianName()},
+						{"Staging Area Manager", chart.getStagingAreaManagerName()},
+						{"Resources Unit Leader", chart.getResourcesUnitLeaderName()},
+						{"Situation Unit Leader", chart.getSituationUnitLeaderName()},
+						{"Demobilization Unit Leader", chart.getDemobilizationUnitLeaderName()},
+						{"Supply Unit Leader", chart.getSupplyUnitLeaderName()},
+						{"Facilities Unit Leader", chart.getFacilitiesUnitLeaderName()},
+						{"Ground Support Unit Leader", chart.getGroundSupportUnitLeaderName()},
+						{"Food Unit Leader", chart.getFoodUnitLeaderName()},
+						{"Medical Unit Leader", chart.getMedicalUnitLeaderName()},
+						{"Time Unit Leader", chart.getTimeUnitLeaderName()},
+						{"Procurement Unit Leader", chart.getProcurementUnitLeaderName()},
+						{"Comp/Claims Unit Leader", chart.getCompClaimsUnitLeaderName()},
+						{"Cost Unit Leader", chart.getCostUnitLeaderName()}
+				};
+				java.util.Set<String> roles = new java.util.LinkedHashSet<>();
+				if (chart.getIncidentCommanders().stream().anyMatch(person -> name.equalsIgnoreCase(person.trim()))) {
+					roles.add("Incident Commander");
+				}
+				for (String[] position : positions) {
+					if (name.equalsIgnoreCase(position[1].trim())) {
+						roles.add(position[0]);
+					}
+				}
+				chart.getAdditionalPositions().stream()
+						.filter(position -> name.equalsIgnoreCase(position.getName().trim()))
+						.map(org.sarmanagement.icsforms.model.OrgChartEntry::getTitle)
+						.filter(title -> !title.isBlank()).forEach(roles::add);
+				role = String.join(", ", roles);
+			}
+			var context = controller.getData().getIncidentContext();
+			if (role.isBlank() && name.equalsIgnoreCase(context.getCurrentUser().trim())) {
+				role = context.getCurrentUserPositionTitle();
+			}
+		}
+		preparerRole.setText("Role: " + (role.isBlank() ? "Not specified" : role));
 	}
 
 	/**
@@ -314,8 +436,10 @@ public final class Ics205Panel extends JPanel {
 		UiSupport.addRow(form, 0, "Special instructions", new JScrollPane(instructions));
 		JPanel preparer = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		preparer.add(preparedBy);
-		addButton(preparer, "Use Communications Unit Leader", () -> preparedBy.setText(
+		useLeader.addActionListener(event -> preparedBy.setText(
 				controller.getData().getOrganizationalChart().getCommunicationsUnitLeaderName()));
+		preparer.add(useLeader);
+		preparer.add(preparerRole);
 		UiSupport.addRow(form, 1, "Prepared by (override allowed)", preparer);
 		JPanel date = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		date.add(preparedDatePresent);
@@ -367,6 +491,7 @@ public final class Ics205Panel extends JPanel {
 	/** Saves a user edit and schedules existing autosave behavior. */
 	private void changed() {
 		if (!loading) {
+			updatePreparerRole();
 			preparedDate.setEnabled(preparedDatePresent.isSelected());
 			if (applyPreparationFields()) {
 				controller.markDirty();

@@ -194,7 +194,6 @@ public class MainFrame extends JFrame {
 		this.safetyPanel = new SafetyPanel(controller);
 		this.safetyDashboardPanel = new SafetyDashboardPanel(this::openWorkspace);
 		safetyPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
-		ics205Panel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		medicalPlanPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		canineMedicalPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		controller.setPersonnelCardCreator(tCardPanel::createPersonnelCardFromPicker);
