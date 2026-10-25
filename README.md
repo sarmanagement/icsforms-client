@@ -238,10 +238,13 @@ radio-image import/export test, or a hardware programming test.
 
 CHIRP itself can substitute a default power when CSV power is absent (50 W in the
 pinned generic driver). Consequently this application's CHIRP projection requires
-explicit `chirp.Power` programming metadata (for example `"chirp.Power": "5W"` in
-the channel's JSON metadata editor) and an explicit nonnegative numeric channel
+explicit power entered in **Edit radio channel → CHIRP power (watts)** (for
+example `5` or `5W`, saved as `chirp.Power` metadata) and an explicit nonnegative numeric channel
 number. It excludes rows without those settings rather than inventing power or
 silently renumbering channels. Imported CHIRP settings retain their metadata.
+The power field starts blank when unknown; clearing it removes the power setting.
+An edited power field overrides the JSON power entry; otherwise JSON edits are
+retained. Verify the chosen power against the target radio and permitted operation.
 For verified analog tone conversion, use a blank value for no tone, a numeric
 CTCSS value or `CTCSS:88.5`, and `DTCS:023:N` / `DTCS:023:R` for DTCS code and
 polarity. Other tone/NAC text remains valid native form content but may be

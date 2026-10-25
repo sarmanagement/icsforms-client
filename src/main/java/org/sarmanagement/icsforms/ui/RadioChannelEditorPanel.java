@@ -48,6 +48,7 @@ final class RadioChannelEditorPanel extends JPanel {
 			RadioChannel.TX_POLICY_UNKNOWN, RadioChannel.TX_POLICY_TRANSMIT, RadioChannel.TX_POLICY_RECEIVE_ONLY});
 	private final JComboBox<String> linkMode = new JComboBox<>(new String[]{"Unchanged", "Simplex", "Duplex"});
 	private final JTextField offset = new JTextField(12);
+	private final JTextField chirpPower = new JTextField(12);
 	private final JLabel arithmeticStatus = new JLabel(" ");
 	private final JTextArea metadata = new JTextArea(2, 40);
 	private final RadioChannel original;
@@ -120,9 +121,14 @@ final class RadioChannelEditorPanel extends JPanel {
 		radio.add(fieldGroup("Transmit (TX)", controls, 1,
 				Field.TX_FREQUENCY, Field.TX_BANDWIDTH, Field.TX_TONE));
 		form.add(radio);
-		JPanel policy = new JPanel(new GridLayout(1, 2, 8, 0));
+		JPanel policy = new JPanel(new GridLayout(1, 3, 8, 0));
 		policy.add(labeled("Transmit policy", txPolicy));
 		policy.add(labeled("Included in plan", include));
+		chirpPower.setText(channel.getProgrammingMetadata().getOrDefault("chirp.Power", ""));
+		chirpPower.getAccessibleContext().setAccessibleName("CHIRP power (watts)");
+		chirpPower.setToolTipText("Explicit target-radio power, e.g. 5 or 5W. Blank means unknown; no default is inferred."
+				+ " An edited value overrides chirp.Power in the JSON metadata.");
+		policy.add(labeled("CHIRP power (watts)", chirpPower));
 		form.add(policy);
 		form.add(fieldGroup("Operational details", controls, 3, Field.ASSIGNMENT, Field.SYSTEM, Field.REMARKS));
 		try {
@@ -329,7 +335,7 @@ final class RadioChannelEditorPanel extends JPanel {
 	 * Returns edited data with lossless arbitrary programming metadata.
 	 *
 	 * @return independent edited channel.
-	 * @throws IllegalArgumentException when metadata is not a JSON string map or duplex arithmetic is invalid.
+	 * @throws IllegalArgumentException when metadata, edited CHIRP power, or duplex arithmetic is invalid.
 	 */
 	RadioChannel editedChannel() {
 		if ("Duplex".equals(linkMode.getSelectedItem()) && arithmeticError != null) {
@@ -354,6 +360,20 @@ final class RadioChannelEditorPanel extends JPanel {
 			edited.setProgrammingMetadata(MAPPER.convertValue(node, new TypeReference<Map<String, String>>() { }));
 		} catch (JsonProcessingException exception) {
 			throw new IllegalArgumentException("Programming metadata must be valid JSON.", exception);
+		}
+		String power = chirpPower.getText();
+		if (!power.equals(original.getProgrammingMetadata().getOrDefault("chirp.Power", ""))) {
+			power = power.trim();
+			if (power.isEmpty()) {
+				edited.getProgrammingMetadata().remove("chirp.Power");
+			} else {
+				if (!power.matches("[0-9]+(\\.[0-9]+)?[Ww]?")
+						|| new BigDecimal(power.replace("W", "").replace("w", "")).signum() <= 0) {
+					throw new IllegalArgumentException("CHIRP power must be positive watts, e.g. 5 or 5W,"
+							+ " or blank for unknown. Verify suitability for the target radio.");
+				}
+				edited.getProgrammingMetadata().put("chirp.Power", power);
+			}
 		}
 		return edited;
 	}

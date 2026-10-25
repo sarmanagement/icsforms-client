@@ -576,7 +576,8 @@ public class ChirpCsvService {
 	private static void validateOptional(Map<String, String> row) {
 		if (row.get("Power").isBlank()) {
 			throw new IllegalArgumentException("Unknown CHIRP Power; an operator must explicitly choose "
-					+ "programmingMetadata chirp.Power before export. No transmit power is inferred.");
+					+ "CHIRP power (watts) in the Edit radio channel dialog before export"
+					+ " (saved as programmingMetadata chirp.Power). No transmit power is inferred.");
 		}
 		polarity(row.get("DtcsPolarity"));
 		tone("Tone", row.get("rToneFreq"), "N");

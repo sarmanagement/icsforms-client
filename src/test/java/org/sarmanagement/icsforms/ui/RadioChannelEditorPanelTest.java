@@ -25,6 +25,63 @@ import static org.sarmanagement.icsforms.ui.RadioChannelEditorPanel.Field.*;
 /** Headless-safe compact editor, exact arithmetic and conservative programming regressions. */
 class RadioChannelEditorPanelTest {
 	@Test
+	void explicitPowerFieldEnablesChirpExportAndClearingRestoresUnknown() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			RadioChannel original = channel("155.16000", "155.16000");
+			original.setChannelNumber("1");
+			original.setMode("A");
+			original.setRxBandwidth("N");
+			original.setTxBandwidth("N");
+			original.setTxPolicy(RadioChannel.TX_POLICY_TRANSMIT);
+			RadioChannelEditorPanel editor = new RadioChannelEditorPanel(original);
+			JTextField power = (JTextField) member(editor, "chirpPower");
+			assertEquals("", power.getText());
+			var form = new org.sarmanagement.icsforms.model.Ics205Form();
+			form.getChannels().add(editor.editedChannel());
+			var service = new org.sarmanagement.icsforms.comms.ChirpCsvService();
+			assertEquals(1, service.exportCsv(form).excludedChannels().size());
+			power.setText("2.5W");
+			form.getChannels().set(0, editor.editedChannel());
+			assertEquals("2.5W", form.getChannels().get(0).getProgrammingMetadata().get("chirp.Power"));
+			assertTrue(service.exportCsv(form).excludedChannels().isEmpty());
+			assertTrue(service.exportCsv(form).csv().contains("2.5W"));
+			assertFalse(original.getProgrammingMetadata().containsKey("chirp.Power"));
+			RadioChannelEditorPanel reopened = new RadioChannelEditorPanel(form.getChannels().get(0));
+			assertEquals("2.5W", ((JTextField) member(reopened, "chirpPower")).getText());
+			((JTextField) member(reopened, "chirpPower")).setText("");
+			form.getChannels().set(0, reopened.editedChannel());
+			assertFalse(form.getChannels().get(0).getProgrammingMetadata().containsKey("chirp.Power"));
+			assertEquals(1, service.exportCsv(form).excludedChannels().size());
+		});
+	}
+
+	@Test
+	void powerValidationPreservesLegacyMetadataAndAllowsExplicitCorrection() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			RadioChannel original = channel("", "");
+			original.setProgrammingMetadata(Map.of("chirp.Power", "vendor high", "other", "retained"));
+			RadioChannelEditorPanel editor = new RadioChannelEditorPanel(original);
+			assertEquals(original.getProgrammingMetadata(), editor.editedChannel().getProgrammingMetadata());
+			JTextField power = (JTextField) member(editor, "chirpPower");
+			for (String invalid : List.of("0", "-5", "0W", "high", "NaN", "1e3", "5 watts")) {
+				power.setText(invalid);
+				assertThrows(IllegalArgumentException.class, editor::editedChannel);
+				assertEquals("vendor high", original.getProgrammingMetadata().get("chirp.Power"));
+			}
+			power.setText(" 5w ");
+			assertEquals(Map.of("chirp.Power", "5w", "other", "retained"),
+					editor.editedChannel().getProgrammingMetadata());
+			assertEquals(RadioChannel.TX_POLICY_UNKNOWN, editor.editedChannel().getTxPolicy());
+			var json = (javax.swing.JTextArea) member(editor, "metadata");
+			json.setText("{\"chirp.Power\":\"10W\",\"other\":\"updated\"}");
+			assertEquals("5w", editor.editedChannel().getProgrammingMetadata().get("chirp.Power"));
+			power.setText("vendor high");
+			assertEquals(Map.of("chirp.Power", "10W", "other", "updated"),
+					editor.editedChannel().getProgrammingMetadata());
+		});
+	}
+
+	@Test
 	void openingUnknownReceiveOnlyTrunkedAndUnsupportedProgrammingNeverInfersTx() throws Exception {
 		SwingUtilities.invokeAndWait(() -> {
 			for (String policy : List.of(RadioChannel.TX_POLICY_UNKNOWN, RadioChannel.TX_POLICY_RECEIVE_ONLY,
