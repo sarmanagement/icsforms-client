@@ -498,6 +498,9 @@ public class MainFrame extends JFrame {
 			controller.getData().setIcs205Enabled(communicationsPlanItem.isSelected());
 			controller.markDirty();
 			refreshFromModel();
+			if (communicationsPlanItem.isSelected()) {
+				openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_205));
+			}
 		});
 		viewMenu.add(communicationsPlanItem);
 

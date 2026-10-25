@@ -411,6 +411,63 @@ class Ics205PanelTest {
 	}
 
 	@Test
+	void linked204DisplayTracksOnlyExactIdentityAndFallsBackAfterDeletion() throws Exception {
+		AppData data = new AppData();
+		RadioChannel linked = channel("Duplicate name");
+		RadioChannel unrelated = channel("Duplicate name");
+		data.getForm205().getChannels().addAll(List.of(linked, unrelated));
+		var entry = new org.sarmanagement.icsforms.model.CommunicationEntry();
+		entry.setPrimaryContact("Saved fallback");
+		entry.setRadioChannelId(linked.getChannelId());
+		var legacy = new org.sarmanagement.icsforms.model.CommunicationEntry();
+		legacy.setPrimaryContact("Duplicate name");
+		data.getForm204().getCommunications().addAll(List.of(entry, legacy));
+		AppController controller = controller(data);
+		SwingUtilities.invokeAndWait(() -> {
+			Ics204Panel panel = new Ics204Panel(controller);
+			panel.refreshFromModel();
+			JTable table = (JTable) field(panel, "communicationsTable");
+			java.util.function.IntFunction<String> displayed = row ->
+					((javax.swing.JLabel) table.prepareRenderer(table.getCellRenderer(row, 2), row, 2)).getText();
+			assertEquals("Duplicate name", displayed.apply(0));
+			linked.setChannelName("Renamed exact target");
+			assertEquals("Renamed exact target", displayed.apply(0));
+			assertEquals("Duplicate name", displayed.apply(1));
+			assertEquals("Saved fallback", entry.getPrimaryContact());
+			assertEquals("Duplicate name", unrelated.getChannelName());
+			data.getForm205().getChannels().remove(linked);
+			assertEquals("Saved fallback", displayed.apply(0));
+			assertEquals(linked.getChannelId(), entry.getRadioChannelId());
+		});
+	}
+
+	@Test
+	void sarCommunicationReconstructionRetainsOnlyUnchangedExplicitLinks() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			try {
+				var entry = new org.sarmanagement.icsforms.model.CommunicationEntry();
+				entry.setPrimaryContact("Recorded radio");
+				entry.setRadioChannelId("stable-channel-id");
+				List<Object> fields = new java.util.ArrayList<>();
+				var build = SarTaskPanel.class.getDeclaredMethod("communicationEditorPanel", List.class, List.class);
+				build.setAccessible(true);
+				build.invoke(null, List.of(entry), fields);
+				var values = SarTaskPanel.class.getDeclaredMethod("communicationValuesFrom", List.class);
+				values.setAccessible(true);
+				var preserved = (List<?>) values.invoke(null, fields);
+				assertEquals("stable-channel-id",
+						((org.sarmanagement.icsforms.model.CommunicationEntry) preserved.get(0)).getRadioChannelId());
+				((JTextField) field(fields.get(0), "primaryContactField")).setText("Manual override");
+				var changed = (List<?>) values.invoke(null, fields);
+				assertEquals("", ((org.sarmanagement.icsforms.model.CommunicationEntry) changed.get(0)).getRadioChannelId());
+				assertEquals("stable-channel-id", entry.getRadioChannelId());
+			} catch (Exception exception) {
+				throw new RuntimeException(exception);
+			}
+		});
+	}
+
+	@Test
 	void hiddenWorkspaceIsStillExplicitlyExportableInEitherIncidentMode() {
 		AppData data = new AppData();
 		for (IncidentMode mode : IncidentMode.values()) {

@@ -23,6 +23,7 @@ import javax.swing.JTable;
 import javax.swing.DefaultCellEditor;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dialog;
@@ -32,8 +33,6 @@ import java.awt.event.ActionEvent;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 /**
  * Shared searchable channel picker that deliberately preserves legacy free-text fields.
@@ -122,6 +121,17 @@ final class RadioChannelPicker {
 			java.util.function.BiConsumer<Integer, String> referenceSetter) {
 		JTextField field = new JTextField();
 		install(field, controller);
+		table.getColumnModel().getColumn(column).setCellRenderer(new DefaultTableCellRenderer() {
+			/** {@inheritDoc} */
+			@Override
+			public Component getTableCellRendererComponent(JTable component, Object value, boolean selected,
+					boolean focused, int row, int rendererColumn) {
+				String fallback = value == null ? "" : value.toString();
+				String label = ChannelLinkSource.resolve(controller.getData(),
+						referenceGetter.apply(component.convertRowIndexToModel(row)), fallback).displayLabel();
+				return super.getTableCellRendererComponent(component, label, selected, focused, row, rendererColumn);
+			}
+		});
 		table.getColumnModel().getColumn(column).setCellEditor(new DefaultCellEditor(field) {
 			private int modelRow = -1;
 
@@ -196,13 +206,7 @@ final class RadioChannelPicker {
 	 * @return existing labels in source order.
 	 */
 	static List<String> legacyLabels(AppController controller) {
-		Set<String> labels = new LinkedHashSet<>();
-		ChannelLinkSource.links(controller.getData()).stream()
-				.filter(link -> link.sourceKind() != ChannelLinkSource.SourceKind.ICS205_ASSIGNMENT)
-				.map(ChannelLinkSource.ChannelLink::legacyFallback)
-				.filter(value -> !value.isBlank())
-				.forEach(labels::add);
-		return List.copyOf(labels);
+		return ChannelLinkSource.legacyChannelNames(controller.getData());
 	}
 
 	/**

@@ -18,6 +18,7 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import javax.swing.JCheckBox;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.JFrame;
@@ -83,13 +84,24 @@ class MainFrameIcs205WorkspaceTest {
 					assertTrue(toggle.isSelected());
 					assertEquals("ICS 205", tabs.getTitleAt(tabs.getSelectedIndex()));
 					Component radioEditor = tabs.getSelectedComponent();
+					JTextArea instructions = (JTextArea) Ics205PanelTest.field(radioEditor, "instructions");
+					instructions.setText("Pending typed navigation");
 					tabs.setTitleAt(tabs.getSelectedIndex(), "Renamed radio plan");
 					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_204));
 					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_205));
 					assertSame(radioEditor, tabs.getSelectedComponent());
+					assertEquals("Pending typed navigation", data.getForm205().getSpecialInstructions());
+					instructions.setText("Pending View navigation");
+					tabs.setTitleAt(tabs.getSelectedIndex(), "Renamed before toggle");
+					toggle.doClick();
+					toggle.doClick();
+					assertSame(radioEditor, tabs.getSelectedComponent());
+					assertEquals("Pending View navigation", data.getForm205().getSpecialInstructions());
 					refresh(frame);
 					assertSame(radioEditor, tabs.getSelectedComponent());
 					assertEquals("ICS 205", tabs.getTitleAt(tabs.getSelectedIndex()));
+					instructions.setText("Pending dashboard navigation");
+					tabs.setTitleAt(tabs.getSelectedIndex(), "Renamed before dashboard");
 					try {
 						var select = MainFrame.class.getDeclaredMethod("selectDashboard", MainFrame.Dashboard.class);
 						select.setAccessible(true);
@@ -98,6 +110,8 @@ class MainFrameIcs205WorkspaceTest {
 						throw new AssertionError(exception);
 					}
 					assertEquals("ICS 205", tabs.getTitleAt(0));
+					assertSame(radioEditor, tabs.getSelectedComponent());
+					assertEquals("Pending dashboard navigation", data.getForm205().getSpecialInstructions());
 				} finally {
 					if (previousDashboard == null) {
 						preferences.remove("workspace-dashboard");

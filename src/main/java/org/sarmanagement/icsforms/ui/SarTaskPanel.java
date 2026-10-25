@@ -1710,6 +1710,13 @@ public class SarTaskPanel extends JPanel {
 		return resources;
 	}
 
+	/**
+	 * Builds detached communications fields while retaining explicit channel references.
+	 *
+	 * @param communications existing communications.
+	 * @param fields destination for editable rows.
+	 * @return communications editor.
+	 */
 	private static JPanel communicationEditorPanel(List<CommunicationEntry> communications,
 			List<CommunicationEntryFields> fields) {
 		JPanel panel = new JPanel(new GridLayout(0, 3, 6, 3));
@@ -1724,6 +1731,8 @@ public class SarTaskPanel extends JPanel {
 				entry.nameField.setText(communications.get(i).getName());
 				entry.functionField.setText(communications.get(i).getFunction());
 				entry.primaryContactField.setText(communications.get(i).getPrimaryContact());
+				entry.originalPrimaryContact = communications.get(i).getPrimaryContact();
+				entry.originalRadioChannelId = communications.get(i).getRadioChannelId();
 			}
 			fields.add(entry);
 			panel.add(entry.nameField);
@@ -1822,6 +1831,12 @@ public class SarTaskPanel extends JPanel {
 		return panel;
 	}
 
+	/**
+	 * Rebuilds communications without discarding links whose fallback text is unchanged.
+	 *
+	 * @param fields edited communications rows.
+	 * @return detached communications with changed contact references cleared.
+	 */
 	private static List<CommunicationEntry> communicationValuesFrom(List<CommunicationEntryFields> fields) {
 		List<CommunicationEntry> communications = new ArrayList<>();
 		for (CommunicationEntryFields entry : fields) {
@@ -1833,6 +1848,9 @@ public class SarTaskPanel extends JPanel {
 			communication.setName(entry.nameField.getText().trim());
 			communication.setFunction(entry.functionField.getText().trim());
 			communication.setPrimaryContact(entry.primaryContactField.getText().trim());
+			if (communication.getPrimaryContact().equals(entry.originalPrimaryContact)) {
+				communication.setRadioChannelId(entry.originalRadioChannelId);
+			}
 			communications.add(communication);
 		}
 		return communications;
@@ -1914,10 +1932,13 @@ public class SarTaskPanel extends JPanel {
 	private record LabeledComponent(String label, JComponent component) {
 	}
 
+	/** Detached communications controls with the original reference and fallback. */
 	private static class CommunicationEntryFields {
 		private final JTextField nameField = UiSupport.textField();
 		private final JTextField functionField = UiSupport.textField();
 		private final JTextField primaryContactField = UiSupport.textField();
+		private String originalPrimaryContact = "";
+		private String originalRadioChannelId = "";
 	}
 
 	private static class ClueEntriesTableModel extends AbstractTableModel {
