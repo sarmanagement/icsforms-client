@@ -66,6 +66,7 @@ public class IncidentContextPanel extends JPanel {
 	};
 	private final JTable locationsTable = new JTable(locationsModel);
 	private boolean loadingLocations;
+	private boolean savingLocations;
 
 	// Operational period history table
 	private final DefaultTableModel historyTableModel = new DefaultTableModel(
@@ -146,7 +147,7 @@ public class IncidentContextPanel extends JPanel {
 		locationControls.add(removeLocation);
 		locationsPanel.add(locationControls, BorderLayout.SOUTH);
 		locationsModel.addTableModelListener(event -> {
-			if (!loadingLocations) {
+			if (!loadingLocations && !savingLocations) {
 				saveIncidentLocations();
 				controller.markDirty();
 			}
@@ -272,24 +273,27 @@ public class IncidentContextPanel extends JPanel {
 	 * Applies edited table rows to the active incident while retaining location identifiers.
 	 */
 	private void saveIncidentLocations() {
-		if (locationsTable.isEditing() && locationsTable.getCellEditor() != null) {
-			locationsTable.getCellEditor().stopCellEditing();
+		savingLocations = true;
+		try {
+			UiSupport.commitTableEdits(locationsTable);
+			List<IncidentLocation> locations = new ArrayList<>();
+			for (int row = 0; row < locationsModel.getRowCount(); row++) {
+				IncidentLocation location = new IncidentLocation();
+				location.setType(String.valueOf(locationsModel.getValueAt(row, 0)));
+				location.setName(String.valueOf(locationsModel.getValueAt(row, 1)));
+				location.setAddress(String.valueOf(locationsModel.getValueAt(row, 2)));
+				location.setId(String.valueOf(locationsModel.getValueAt(row, 3)));
+				locations.add(location);
+			}
+			String selectedBaseId = controller.getData().getCanineRoutingBaseLocationId();
+			if (!selectedBaseId.isBlank() && locations.stream().noneMatch(location ->
+					selectedBaseId.equals(location.getId()))) {
+				controller.getData().setCanineRoutingBaseLocationId("");
+			}
+			controller.getData().setIncidentLocations(locations);
+		} finally {
+			savingLocations = false;
 		}
-		List<IncidentLocation> locations = new ArrayList<>();
-		for (int row = 0; row < locationsModel.getRowCount(); row++) {
-			IncidentLocation location = new IncidentLocation();
-			location.setType(String.valueOf(locationsModel.getValueAt(row, 0)));
-			location.setName(String.valueOf(locationsModel.getValueAt(row, 1)));
-			location.setAddress(String.valueOf(locationsModel.getValueAt(row, 2)));
-			location.setId(String.valueOf(locationsModel.getValueAt(row, 3)));
-			locations.add(location);
-		}
-		String selectedBaseId = controller.getData().getCanineRoutingBaseLocationId();
-		if (!selectedBaseId.isBlank() && locations.stream().noneMatch(location ->
-				selectedBaseId.equals(location.getId()))) {
-			controller.getData().setCanineRoutingBaseLocationId("");
-		}
-		controller.getData().setIncidentLocations(locations);
 	}
 
 	/**

@@ -96,6 +96,7 @@ public class Ics201Panel extends JPanel {
 
 	/** Applies field values to the model. */
 	public void pushToModel() {
+		UiSupport.commitTableEdits(actionTable, resourceSummaryTable);
 		Ics201Form form = controller.getData201();
 		IncidentContext context = controller.getData().getIncidentContext();
 		form.setIncidentName(resolveIncidentName(form, context));

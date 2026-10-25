@@ -298,9 +298,7 @@ public class Ics204Panel extends JPanel {
 
 	/** Applies field values to the model. */
 	public void pushToModel() {
-		if (communicationsTable.isEditing()) {
-			communicationsTable.getCellEditor().stopCellEditing();
-		}
+		UiSupport.commitTableEdits(communicationsTable);
 		Ics204Form form = controller.getData().getForm204();
 		storeSelectedContextValue(activeManagementContext);
 		form.setManagementContext(activeManagementContext);

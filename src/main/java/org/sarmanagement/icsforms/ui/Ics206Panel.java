@@ -141,15 +141,7 @@ public class Ics206Panel extends JPanel {
 		}
 		flushing = true;
 		try {
-			if (aidTable.isEditing()) {
-				aidTable.getCellEditor().stopCellEditing();
-			}
-			if (transportTable.isEditing()) {
-				transportTable.getCellEditor().stopCellEditing();
-			}
-			if (hospitalTable.isEditing()) {
-				hospitalTable.getCellEditor().stopCellEditing();
-			}
+			UiSupport.commitTableEdits(aidTable, transportTable, hospitalTable);
 			MedicalPlan plan = controller.getData().getMedicalPlan();
 			plan.setSimpleMode("Simple".equals(mode.getSelectedItem()));
 			plan.setDesignatedMedicalUnitRole(medicalRole.getText());

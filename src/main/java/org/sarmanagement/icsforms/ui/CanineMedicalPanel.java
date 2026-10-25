@@ -2128,16 +2128,12 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
-	 * Stops an active cell editor before model replacement.
+	 * Commits an active cell editor before model replacement, retaining rejected input.
 	 *
 	 * @param table table to flush.
 	 */
 	private void stopEditing(JTable table) {
-		if (table.isEditing()) {
-			if (!table.getCellEditor().stopCellEditing()) {
-				table.getCellEditor().cancelCellEditing();
-			}
-		}
+		UiSupport.commitTableEdits(table);
 	}
 
 	/**
