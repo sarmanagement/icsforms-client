@@ -50,6 +50,7 @@ class MainFrameDashboardTest {
 			assertTrue(workspaces.contains(WorkspaceId.MEDICAL));
 			assertEquals(1, workspaces.stream().filter(WorkspaceId.MEDICAL::equals).count());
 			assertTrue(workspaces.contains(WorkspaceId.ICS_205));
+			assertTrue(workspaces.stream().noneMatch(id -> "ICS 205A".equals(id.displayLabel())));
 		}
 	}
 

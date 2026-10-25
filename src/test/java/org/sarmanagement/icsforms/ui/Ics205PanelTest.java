@@ -51,6 +51,7 @@ class Ics205PanelTest {
 		AppController controller = controller(data);
 		SwingUtilities.invokeAndWait(() -> {
 			Ics205Panel panel = new Ics205Panel(controller);
+			assertNotNull(((JTextField) field(panel, "preparedBy")).getClientProperty("uiSupport.namePicker.open"));
 			panel.pushToModel();
 			assertEquals("", data.getForm205().getPreparedByName());
 			assertEquals("", data.getForm205().getPreparedBySignature());

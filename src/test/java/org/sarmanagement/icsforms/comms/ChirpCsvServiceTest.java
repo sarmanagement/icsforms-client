@@ -140,6 +140,9 @@ class ChirpCsvServiceTest {
 		form.getChannels().get(0).setTxPolicy(RadioChannel.TX_POLICY_RECEIVE_ONLY);
 		form.getChannels().get(0).setTxFrequency("nonsense must not transmit");
 		report = service.exportCsv(form);
+		assertEquals(1, report.excludedChannels().size());
+		form.getChannels().get(0).setTxFrequency("");
+		report = service.exportCsv(form);
 		assertEquals(0, report.excludedChannels().size());
 		assertEquals("off", CsvTable.records(report.csv(), List.of("Duplex")).get(0).get("Duplex"));
 	}
@@ -251,17 +254,22 @@ class ChirpCsvServiceTest {
 		Ics205Form form = service.importCsv(fixture());
 		RadioChannel channel = form.getChannels().get(0);
 		form.setChannels(List.of(channel));
-		channel.setTxPolicy(RadioChannel.TX_POLICY_RECEIVE_ONLY);
+		channel.setTxPolicy(RadioChannel.TX_POLICY_TRANSMIT);
 		channel.setMode("NFM");
 		channel.setRxBandwidth("12.5");
 		channel.setTxBandwidth("12.5");
 		channel.setTxToneNac("CTCSS:123.0");
 		Map<String, String> exported = CsvTable.records(service.exportCsv(form).csv(),
 				List.of("Duplex", "Mode", "Tone", "rToneFreq")).get(0);
-		assertEquals("off", exported.get("Duplex"));
+		assertEquals("", exported.get("Duplex"));
 		assertEquals("NFM", exported.get("Mode"));
 		assertEquals("Tone", exported.get("Tone"));
 		assertEquals("123.0", exported.get("rToneFreq"));
+		channel.setTxPolicy(RadioChannel.TX_POLICY_RECEIVE_ONLY);
+		channel.setTxFrequency("");
+		channel.setTxToneNac("");
+		channel.setTxBandwidth("");
+		assertEquals("off", CsvTable.records(service.exportCsv(form).csv(), List.of("Duplex")).get(0).get("Duplex"));
 		channel.setDigitalProtocol("DMR");
 		assertEquals(1, service.exportCsv(form).excludedChannels().size());
 		channel.setDigitalProtocol("");
@@ -308,6 +316,7 @@ class ChirpCsvServiceTest {
 		ChirpCsvService.ExportReport report = service.exportCsv(form);
 		assertEquals(1, report.excludedChannels().size());
 		assertTrue(report.diagnostics().stream().anyMatch(message -> message.contains("Unknown CHIRP Power")));
+		assertTrue(report.diagnostics().stream().anyMatch(message -> message.contains("CHIRP may substitute 50W")));
 		assertFalse(report.csv().contains("50W"));
 		assertEquals(0, form.getChannels().get(0).getProgrammingMetadata().size());
 		form.getChannels().get(0).getProgrammingMetadata().put("chirp.Power", "");
@@ -358,7 +367,7 @@ class ChirpCsvServiceTest {
 	}
 
 	@Test
-	void receiveOnlyContradictoryTransmitSettingsProduceExplicitPerChannelWarnings() {
+	void receiveOnlyContradictoryTransmitSettingsAreExcludedWithoutChangingNativeValues() {
 		Ics205Form form = plan();
 		RadioChannel channel = form.getChannels().get(0);
 		channel.setTxPolicy(RadioChannel.TX_POLICY_RECEIVE_ONLY);
@@ -366,9 +375,9 @@ class ChirpCsvServiceTest {
 		channel.setTxToneNac("DTCS:023:R");
 		channel.setTxBandwidth("W");
 		ChirpCsvService.ExportReport report = service.exportCsv(form);
-		assertTrue(report.excludedChannels().isEmpty(), report.diagnostics().toString());
+		assertEquals(1, report.excludedChannels().size(), report.diagnostics().toString());
 		String warning = report.diagnostics().stream()
-				.filter(message -> message.contains("receive-only Duplex=off")).findFirst().orElseThrow();
+				.filter(message -> message.contains("receive-only policy conflicts")).findFirst().orElseThrow();
 		assertTrue(warning.contains(channel.getChannelId()));
 		assertTrue(warning.contains("txFrequency"));
 		assertTrue(warning.contains("txToneNac"));
@@ -376,7 +385,11 @@ class ChirpCsvServiceTest {
 		assertEquals("147.123456", channel.getTxFrequency());
 		assertEquals("DTCS:023:R", channel.getTxToneNac());
 		assertEquals("W", channel.getTxBandwidth());
-		assertEquals("off", CsvTable.records(report.csv(), List.of("Duplex")).get(0).get("Duplex"));
+		assertEquals(1, CsvTable.parse(report.csv()).size());
+		channel.setTxFrequency("");
+		channel.setTxToneNac("");
+		channel.setTxBandwidth("");
+		assertEquals("off", CsvTable.records(service.exportCsv(form).csv(), List.of("Duplex")).get(0).get("Duplex"));
 	}
 
 	@Test
@@ -399,6 +412,55 @@ class ChirpCsvServiceTest {
 		form.getChannels().get(0).setSystem("Named trunking system");
 		assertTrue(service.exportCsv(form).diagnostics().stream()
 				.anyMatch(message -> message.contains("Unsupported system 'Named trunking system'")));
+	}
+
+	@Test
+	void partialTsqlHeadersCopyOnlyTheExplicitCtcCssValueAsUpstreamDoes() {
+		String base = "Location,Name,Frequency,Duplex,Offset,Mode,Tone,";
+		for (String header : List.of("rToneFreq", "cToneFreq")) {
+			Ics205Form imported = service.importCsv(base + header + "\n0,Partial,146.5,,0,FM,TSQL,123.0");
+			RadioChannel channel = imported.getChannels().get(0);
+			assertEquals("CTCSS:123.0", channel.getTxToneNac(), header);
+			assertEquals("CTCSS:123.0", channel.getRxToneNac(), header);
+			assertEquals("123.0", channel.getProgrammingMetadata().get("chirp." + header));
+			assertFalse(channel.getProgrammingMetadata().containsKey("chirp."
+					+ ("rToneFreq".equals(header) ? "cToneFreq" : "rToneFreq")));
+		}
+	}
+
+	@Test
+	void crossModesCopyPartialCtcCssHeadersButKeepIndependentReceiveAndTransmitValues() {
+		String base = "Location,Name,Frequency,Duplex,Offset,Mode,Tone,CrossMode,";
+		RadioChannel txOnlyHeader = service.importCsv(base + "rToneFreq,RxDtcsCode\n"
+				+ "0,Cross,146.5,,0,FM,Cross,Tone->DTCS,123.0,025").getChannels().get(0);
+		assertEquals("CTCSS:123.0", txOnlyHeader.getTxToneNac());
+		assertEquals("DTCS:025:N", txOnlyHeader.getRxToneNac());
+		RadioChannel rxOnlyHeader = service.importCsv(base + "cToneFreq,DtcsCode\n"
+				+ "0,Cross,146.5,,0,FM,Cross,DTCS->Tone,131.8,023").getChannels().get(0);
+		assertEquals("DTCS:023:N", rxOnlyHeader.getTxToneNac());
+		assertEquals("CTCSS:131.8", rxOnlyHeader.getRxToneNac());
+		RadioChannel copied = service.importCsv(base + "rToneFreq\n"
+				+ "0,Cross,146.5,,0,FM,Cross,Tone->Tone,123.0").getChannels().get(0);
+		assertEquals("CTCSS:123.0", copied.getTxToneNac());
+		assertEquals("CTCSS:123.0", copied.getRxToneNac());
+		RadioChannel independent = service.importCsv(base + "rToneFreq,cToneFreq\n"
+				+ "0,Cross,146.5,,0,FM,Cross,Tone->Tone,100.0,123.0").getChannels().get(0);
+		assertEquals("CTCSS:100.0", independent.getTxToneNac());
+		assertEquals("CTCSS:123.0", independent.getRxToneNac());
+	}
+
+	@Test
+	void missingActiveToneFieldsNeverSilentlyAcquireInactiveDefaults() {
+		String base = "Location,Name,Frequency,Duplex,Offset,Mode,Tone";
+		for (String csv : List.of(base + "\n0,Missing,146.5,,0,FM,TSQL",
+				base + ",rToneFreq\n0,Blank,146.5,,0,FM,TSQL,",
+				base + "\n0,Missing,146.5,,0,FM,Tone",
+				base + "\n0,Missing,146.5,,0,FM,DTCS",
+				base + ",CrossMode,rToneFreq\n0,Missing,146.5,,0,FM,Cross,Tone->DTCS,123.0",
+				base + ",rToneFreq,cToneFreq\n0,Blank,146.5,,0,FM,TSQL,123.0,")) {
+			IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> service.importCsv(csv));
+			assertTrue(exception.getMessage().contains("Missing active tone value in column"), exception.getMessage());
+		}
 	}
 
 	/**

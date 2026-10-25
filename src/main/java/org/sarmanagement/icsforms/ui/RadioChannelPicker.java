@@ -212,13 +212,7 @@ final class RadioChannelPicker {
 	 * @return channel label.
 	 */
 	static String displayName(RadioChannel channel) {
-		if (!channel.getChannelName().isBlank()) {
-			return channel.getChannelName();
-		}
-		if (!channel.getChannelNumber().isBlank()) {
-			return channel.getChannelNumber();
-		}
-		return channel.getChannelId();
+		return ChannelLinkSource.channelLabel(channel);
 	}
 
 	/**

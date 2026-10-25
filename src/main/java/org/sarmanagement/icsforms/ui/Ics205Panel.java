@@ -103,6 +103,8 @@ public final class Ics205Panel extends JPanel {
 		preparedDate.addChangeListener(event -> changed());
 		datePreparedPresent.addActionListener(event -> changed());
 		datePrepared.addChangeListener(event -> changed());
+		UiSupport.installNameAutocomplete(preparedBy, controller::getPersonnelNames,
+				name -> preparedBy.setText(name));
 	}
 
 	/**

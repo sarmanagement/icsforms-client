@@ -101,7 +101,7 @@ public class ChirpCsvService {
 				} else {
 					channel.setMode("A".equals(importedMode) ? "CHIRP:A" : importedMode);
 				}
-				channel.setTxBandwidth(channel.getRxBandwidth());
+				channel.setTxBandwidth(tx == null ? "" : channel.getRxBandwidth());
 				channel.setRemarks(row.getOrDefault("Comment", ""));
 				Map<String, String> metadata = new LinkedHashMap<>();
 				row.forEach((key, value) -> metadata.put(PREFIX + key, value));
@@ -134,7 +134,9 @@ public class ChirpCsvService {
 		List<String> diagnostics = new ArrayList<>();
 		diagnostics.add("CHIRP is a programming projection, not a lossless plan backup. "
 				+ "Use native CSV to retain ICS assignments, form metadata, IDs and print selection. "
-				+ "No hardware suitability, legal authorization, or radio compatibility is implied.");
+				+ "No hardware suitability, legal authorization, or radio compatibility is implied. "
+				+ "CHIRP may substitute 50W when Power is unspecified; review power against the target "
+				+ "radio image before transmitting. This export excludes channels without explicit Power.");
 		List<String> omittedFormFields = new ArrayList<>();
 		if (!form.getSpecialInstructions().isEmpty()) {
 			omittedFormFields.add("specialInstructions");
@@ -196,24 +198,6 @@ public class ChirpCsvService {
 					diagnostics.add("Channel " + channel.getChannelName() + " [" + channel.getChannelId()
 							+ "]: CHIRP omits " + String.join(", ", omitted) + "; values remain in the native plan.");
 				}
-				if (RadioChannel.TX_POLICY_RECEIVE_ONLY.equals(channel.getTxPolicy())) {
-					List<String> inactive = new ArrayList<>();
-					if (!channel.getTxFrequency().isEmpty()) {
-						inactive.add("txFrequency");
-					}
-					if (!channel.getTxToneNac().isEmpty()) {
-						inactive.add("txToneNac");
-					}
-					if (!channel.getTxBandwidth().isEmpty()) {
-						inactive.add("txBandwidth");
-					}
-					if (!inactive.isEmpty()) {
-						diagnostics.add("Channel " + channel.getChannelName() + " [" + channel.getChannelId()
-								+ "]: receive-only Duplex=off disables transmission; populated "
-								+ String.join(", ", inactive) + " settings are not effective in CHIRP "
-								+ "and remain unchanged in the native plan.");
-					}
-				}
 			} catch (IllegalArgumentException e) {
 				excluded.add(channel);
 				diagnostics.add("Excluded " + channel.getChannelName() + " [" + channel.getChannelId() + "]: " + e.getMessage());
@@ -235,6 +219,22 @@ public class ChirpCsvService {
 	private static Map<String, String> encode(RadioChannel channel) {
 		if (!Set.of(RadioChannel.TX_POLICY_TRANSMIT, RadioChannel.TX_POLICY_RECEIVE_ONLY).contains(channel.getTxPolicy())) {
 			throw new IllegalArgumentException("Unknown TX policy; explicitly choose transmit or receive-only.");
+		}
+		if (RadioChannel.TX_POLICY_RECEIVE_ONLY.equals(channel.getTxPolicy())) {
+			List<String> conflicts = new ArrayList<>();
+			if (!channel.getTxFrequency().isEmpty()) {
+				conflicts.add("txFrequency");
+			}
+			if (!channel.getTxToneNac().isEmpty()) {
+				conflicts.add("txToneNac");
+			}
+			if (!channel.getTxBandwidth().isEmpty()) {
+				conflicts.add("txBandwidth");
+			}
+			if (!conflicts.isEmpty()) {
+				throw new IllegalArgumentException("receive-only policy conflicts with populated "
+						+ String.join(", ", conflicts) + "; clear those fields or correct TX policy. Native values are unchanged.");
+			}
 		}
 		String mode = channel.getMode();
 		String rxBandwidth = bandwidth(channel.getRxBandwidth());
@@ -372,20 +372,25 @@ public class ChirpCsvService {
 	private static void decodeTones(RadioChannel channel, Map<String, String> input) {
 		Map<String, String> row = defaults();
 		row.putAll(input);
+		if (input.containsKey("rToneFreq") && !input.containsKey("cToneFreq")) {
+			row.put("cToneFreq", input.get("rToneFreq"));
+		} else if (input.containsKey("cToneFreq") && !input.containsKey("rToneFreq")) {
+			row.put("rToneFreq", input.get("cToneFreq"));
+		}
 		String tone = row.get("Tone");
 		String tx = "";
 		String rx = "";
 		switch (tone) {
 			case "" -> { }
-			case "Tone" -> tx = tone("Tone", row.get("rToneFreq"), "N");
+			case "Tone" -> tx = decodedTone(input, row, "Tone", "rToneFreq", "N");
 			case "TSQL" -> {
-				tx = tone("Tone", row.get("cToneFreq"), "N");
+				tx = decodedTone(input, row, "Tone", "cToneFreq", "N");
 				rx = tx;
 			}
 			case "DTCS" -> {
 				String polarity = polarity(row.get("DtcsPolarity"));
-				tx = tone("DTCS", row.get("DtcsCode"), polarity.substring(0, 1));
-				rx = tone("DTCS", row.get("DtcsCode"), polarity.substring(1));
+				tx = decodedTone(input, row, "DTCS", "DtcsCode", polarity.substring(0, 1));
+				rx = decodedTone(input, row, "DTCS", "DtcsCode", polarity.substring(1));
 			}
 			case "Cross" -> {
 				String cross = row.get("CrossMode");
@@ -396,8 +401,8 @@ public class ChirpCsvService {
 				String txMode = cross.substring(0, arrow);
 				String rxMode = cross.substring(arrow + 2);
 				String polarity = polarity(row.get("DtcsPolarity"));
-				tx = tone(txMode, row.get("Tone".equals(txMode) ? "rToneFreq" : "DtcsCode"), polarity.substring(0, 1));
-				rx = tone(rxMode, row.get("Tone".equals(rxMode) ? "cToneFreq" : "RxDtcsCode"), polarity.substring(1));
+				tx = decodedTone(input, row, txMode, "Tone".equals(txMode) ? "rToneFreq" : "DtcsCode", polarity.substring(0, 1));
+				rx = decodedTone(input, row, rxMode, "Tone".equals(rxMode) ? "cToneFreq" : "RxDtcsCode", polarity.substring(1));
 			}
 			case "TSQL-R", "DTCS-R" -> {
 				tx = "RAW:" + tone;
@@ -407,6 +412,31 @@ public class ChirpCsvService {
 		}
 		channel.setTxToneNac(tx);
 		channel.setRxToneNac(rx);
+	}
+
+	/**
+	 * Decodes an active tone only when supplied by an explicit compatible header.
+	 * Single CTCSS headers may supply both sides, matching upstream _clean_tmode;
+	 * missing active CTCSS/DTCS values never acquire inactive-field defaults.
+	 * @param input original imported cells.
+	 * @param effective cells after upstream-compatible CTCSS header copying.
+	 * @param mode tone type, or blank for no tone.
+	 * @param field active numeric tone field.
+	 * @param polarity DTCS polarity.
+	 * @return canonical native tone text.
+	 */
+	private static String decodedTone(Map<String, String> input, Map<String, String> effective,
+			String mode, String field, String polarity) {
+		if (mode.isEmpty()) {
+			return "";
+		}
+		boolean supplied = input.containsKey(field)
+				|| (Set.of("rToneFreq", "cToneFreq").contains(field)
+						&& (input.containsKey("rToneFreq") || input.containsKey("cToneFreq")));
+		if (!supplied || effective.get(field).isBlank()) {
+			throw new IllegalArgumentException("Missing active tone value in column " + field + ".");
+		}
+		return tone(mode, effective.get(field), polarity);
 	}
 
 	/**

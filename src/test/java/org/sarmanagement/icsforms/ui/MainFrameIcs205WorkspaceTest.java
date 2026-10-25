@@ -10,15 +10,24 @@ import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.pdf.Ics205PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
+import org.sarmanagement.icsforms.comms.RadioChannelCsvService;
+import org.sarmanagement.icsforms.comms.ChirpCsvService;
+import org.sarmanagement.icsforms.model.Ics205Form;
+import org.sarmanagement.icsforms.persistence.LocalRepository;
 
 import javax.swing.JCheckBox;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.JFrame;
+import javax.swing.JDialog;
+import javax.swing.JOptionPane;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.GraphicsEnvironment;
+import java.awt.Dialog;
+import java.awt.Dimension;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -42,7 +51,11 @@ class MainFrameIcs205WorkspaceTest {
 			SwingUtilities.invokeAndWait(() -> {
 				MainFrame frame = new MainFrame(data, store, id, new PdfExportService(new Ics205PdfRenderer()),
 						new IncidentValidator(), directory);
+				AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
+				var preferences = (java.util.prefs.Preferences) Ics205PanelTest.field(frame, "userPreferences");
+				String previousDashboard = preferences.get("workspace-dashboard", null);
 				try {
+					frame.setVisible(true);
 					JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame, "tabs");
 					JCheckBoxMenuItem toggle = (JCheckBoxMenuItem) Ics205PanelTest.field(frame, "communicationsPlanItem");
 					assertEquals(-1, tabs.indexOfTab("ICS 205"));
@@ -59,14 +72,76 @@ class MainFrameIcs205WorkspaceTest {
 						assertEquals("Retained channel", data.getForm205().getChannels().get(0).getChannelName());
 						assertEquals("Retained instructions", data.getForm205().getSpecialInstructions());
 					}
+					try {
+						assertTrue(Files.exists(controller.exportSelected("ICS 205", directory, AppController.LinkSource.NONE)));
+					} catch (java.io.IOException exception) {
+						throw new AssertionError(exception);
+					}
+					assertFalse(data.isIcs205Enabled());
 					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_205));
 					assertTrue(data.isIcs205Enabled());
 					assertTrue(toggle.isSelected());
 					assertEquals("ICS 205", tabs.getTitleAt(tabs.getSelectedIndex()));
+					Component radioEditor = tabs.getSelectedComponent();
+					tabs.setTitleAt(tabs.getSelectedIndex(), "Renamed radio plan");
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_204));
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_205));
+					assertSame(radioEditor, tabs.getSelectedComponent());
 					refresh(frame);
+					assertSame(radioEditor, tabs.getSelectedComponent());
 					assertEquals("ICS 205", tabs.getTitleAt(tabs.getSelectedIndex()));
+					try {
+						var select = MainFrame.class.getDeclaredMethod("selectDashboard", MainFrame.Dashboard.class);
+						select.setAccessible(true);
+						select.invoke(frame, MainFrame.Dashboard.COMMUNICATIONS);
+					} catch (ReflectiveOperationException exception) {
+						throw new AssertionError(exception);
+					}
+					assertEquals("ICS 205", tabs.getTitleAt(0));
 				} finally {
-					AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
+					if (previousDashboard == null) {
+						preferences.remove("workspace-dashboard");
+					} else {
+						preferences.put("workspace-dashboard", previousDashboard);
+					}
+					((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
+					frame.dispose();
+				}
+			});
+		} finally {
+			deleteTree(directory);
+		}
+	}
+
+	@Test
+	void actualDocumentModalImportPreviewCancelPreservesPlan() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		Path directory = Files.createDirectories(Path.of("target", "ics205-preview-" + UUID.randomUUID()));
+		try {
+			Ics205Form imported = new Ics205Form();
+			imported.getChannels().add(Ics205PanelTest.channel("Imported"));
+			Path path = directory.resolve("incoming.csv");
+			new RadioChannelCsvService().write(path, imported);
+			AppData data = new AppData();
+			Ics205Form original = data.getForm205();
+			original.getChannels().add(Ics205PanelTest.channel("Retained"));
+			AppController controller = new AppController(data, new LocalRepository(directory.resolve("incident.json")),
+					new PdfExportService(new Ics205PdfRenderer()), new IncidentValidator());
+			SwingUtilities.invokeAndWait(() -> {
+				JFrame frame = new JFrame("Import preview owner");
+				Ics205Panel panel = new Ics205Panel(controller);
+				frame.setContentPane(panel);
+				frame.setSize(900, 700);
+				frame.setVisible(true);
+				try {
+					PreviewDialogs dialogs = new PreviewDialogs(path);
+					new RadioChannelCsvDialogs(panel, controller, dialogs).importCsv();
+					assertTrue(dialogs.previewShown);
+					assertEquals(Dialog.ModalityType.DOCUMENT_MODAL, dialogs.modality);
+					assertSame(original, data.getForm205());
+					assertEquals("Retained", original.getChannels().get(0).getChannelName());
+					assertFalse(controller.isDirty());
+				} finally {
 					((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
 					frame.dispose();
 				}
@@ -146,6 +221,80 @@ class MainFrameIcs205WorkspaceTest {
 			for (Path path : files.sorted(Comparator.reverseOrder()).toList()) {
 				Files.deleteIfExists(path);
 			}
+		}
+	}
+
+	/** Uses a real controlled preview while avoiding any uncontrolled file chooser. */
+	private static final class PreviewDialogs implements RadioChannelCsvDialogs.Dialogs {
+		private final Path input;
+		private boolean previewShown;
+		private Dialog.ModalityType modality;
+
+		/**
+		 * Supplies a project-local native CSV fixture.
+		 *
+		 * @param input import path.
+		 */
+		private PreviewDialogs(Path input) {
+			this.input = input;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public RadioChannelCsvDialogs.ImportSource chooseImport(Component parent) {
+			return new RadioChannelCsvDialogs.ImportSource(input, false);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public RadioChannelCsvDialogs.ImportSelection preview(Component parent, Ics205Form imported) {
+			var preview = new RadioChannelCsvDialogs.ImportPreviewPanel(imported);
+			Timer cancel = new Timer(150, event -> {
+				var window = SwingUtilities.getWindowAncestor(preview);
+				if (window instanceof JDialog dialog) {
+					previewShown = dialog.isShowing();
+					modality = dialog.getModalityType();
+				}
+				var pane = (JOptionPane) SwingUtilities.getAncestorOfClass(JOptionPane.class, preview);
+				if (pane != null) {
+					pane.setValue(JOptionPane.CANCEL_OPTION);
+				} else if (window != null) {
+					window.dispose();
+				}
+			});
+			cancel.setRepeats(false);
+			cancel.start();
+			try {
+				assertFalse(UiSupport.showResizableConfirmDialog(parent, "Controlled channel preview",
+						preview, new Dimension(900, 500)));
+				return null;
+			} finally {
+				cancel.stop();
+			}
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public boolean confirmProjection(Component parent, ChirpCsvService.ExportReport report) {
+			throw new AssertionError("Unexpected export dialog");
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Path chooseExport(Component parent, boolean chirp) {
+			throw new AssertionError("Unexpected export chooser");
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public boolean confirmOverwrite(Component parent, Path path) {
+			throw new AssertionError("Unexpected overwrite dialog");
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void error(Component parent, String message) {
+			throw new AssertionError(message);
 		}
 	}
 }
