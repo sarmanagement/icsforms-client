@@ -101,14 +101,17 @@ class Ics204PanelTest {
 		IncidentObjective second = new IncidentObjective("Second", 1);
 		controller.getData().getForm202().setStructuredObjectives(List.of(first, second));
 		ResourceAssignment assignment = controller.getAssignmentResources().get(0);
-		assignment.setObjectiveIds(List.of(first.getObjectiveId(), second.getObjectiveId()));
+		assignment.setObjectiveIds(List.of(first.getObjectiveId(), second.getObjectiveId(), "imported-unavailable"));
 		Object editor = assignmentEditor(assignment, controller);
+		var linked = (javax.swing.JList<?>) fieldValue(editor, "objectivesField");
+		assertEquals("Unavailable objective (imported-unavailable)", linked.getModel().getElementAt(2));
 		controller.getData().getForm202().setStructuredObjectives(List.of(second, first));
 		saveEditor(new Ics204Panel(controller), assignment, editor);
-		assertEquals(List.of(first.getObjectiveId(), second.getObjectiveId()), assignment.getObjectiveIds());
+		assertEquals(List.of(first.getObjectiveId(), second.getObjectiveId(), "imported-unavailable"),
+				assignment.getObjectiveIds());
 		controller.getData().removeObjective(first.getObjectiveId(), "", true);
 		saveEditor(new Ics204Panel(controller), assignment, editor);
-		assertEquals(List.of(second.getObjectiveId()), assignment.getObjectiveIds());
+		assertEquals(List.of(second.getObjectiveId(), "imported-unavailable"), assignment.getObjectiveIds());
 	}
 
 	@Test

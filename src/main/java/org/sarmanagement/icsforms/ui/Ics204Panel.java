@@ -775,7 +775,7 @@ public class Ics204Panel extends JPanel {
 		}
 		List<String> validObjectives = controller.getData().getForm202().getStructuredObjectives().stream()
 				.map(IncidentObjective::getObjectiveId).toList();
-		editor.objectiveIds.removeIf(id -> !validObjectives.contains(id));
+		editor.objectiveIds.removeIf(id -> editor.knownObjectiveIds.contains(id) && !validObjectives.contains(id));
 		try {
 			controller.persistEditorChanges(() -> {
 				editor.applyTo(assignment);
@@ -1032,6 +1032,7 @@ public class Ics204Panel extends JPanel {
 		private final DefaultListModel<String> linkedObjectivesModel = new DefaultListModel<>();
 		private final JList<String> objectivesField = new JList<>(linkedObjectivesModel);
 		private final List<String> objectiveIds = new ArrayList<>();
+		private final java.util.Set<String> knownObjectiveIds = new java.util.HashSet<>();
 		private final AppController controller;
 		private final AppController.IncidentBinding incidentBinding;
 		private final String initialAssignment;
@@ -1046,6 +1047,8 @@ public class Ics204Panel extends JPanel {
 		private ResourceAssignmentEditor(ResourceAssignment row, AppController controller) {
 			this.controller = controller;
 			incidentBinding = controller.captureIncidentBinding();
+			controller.getData().getForm202().getStructuredObjectives().stream()
+					.map(IncidentObjective::getObjectiveId).forEach(knownObjectiveIds::add);
 			initialAssignment = row.getAssignment();
 			initialEquipment = row.getSpecialEquipment();
 			resourceTypeField.setEditable(true);
@@ -1179,6 +1182,7 @@ public class Ics204Panel extends JPanel {
 				if (!objectiveIds.contains(objective.getObjectiveId())
 						&& controller.getData().getForm202().getStructuredObjectives().contains(objective)) {
 					objectiveIds.add(objective.getObjectiveId());
+					knownObjectiveIds.add(objective.getObjectiveId());
 				}
 			}
 			refreshLinkedObjectives();
