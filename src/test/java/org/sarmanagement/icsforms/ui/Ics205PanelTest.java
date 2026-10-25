@@ -204,7 +204,7 @@ class Ics205PanelTest {
 			RadioChannel simplex = editor.editedChannel();
 			assertEquals("155.12345", simplex.getTxFrequency());
 			assertEquals("Custom bandwidth", simplex.getTxBandwidth());
-			assertEquals("NAC $123", simplex.getTxToneNac());
+			assertEquals(channel.getTxToneNac(), simplex.getTxToneNac());
 			assertEquals(RadioChannel.TX_POLICY_TRANSMIT, simplex.getTxPolicy());
 			assertEquals(RadioChannel.TX_POLICY_RECEIVE_ONLY, channel.getTxPolicy());
 		});

@@ -149,7 +149,7 @@ final class RadioChannelEditorPanel extends JPanel {
 		updateOffset();
 		offset.setEnabled(false);
 		linkMode.addActionListener(event -> changeLinkMode());
-		for (Field field : List.of(Field.RX_FREQUENCY, Field.RX_BANDWIDTH, Field.RX_TONE, Field.TX_FREQUENCY)) {
+		for (Field field : List.of(Field.RX_FREQUENCY, Field.RX_BANDWIDTH, Field.TX_FREQUENCY)) {
 			onEdit(fields.get(field), () -> programmingChanged(field));
 		}
 		onEdit(offset, () -> programmingChanged(null));
@@ -221,7 +221,7 @@ final class RadioChannelEditorPanel extends JPanel {
 	private void changeLinkMode() {
 		boolean simplex = "Simplex".equals(linkMode.getSelectedItem());
 		offset.setEnabled("Duplex".equals(linkMode.getSelectedItem()));
-		for (Field field : List.of(Field.TX_FREQUENCY, Field.TX_BANDWIDTH, Field.TX_TONE)) {
+		for (Field field : List.of(Field.TX_FREQUENCY, Field.TX_BANDWIDTH)) {
 			fields.get(field).setEditable(!simplex);
 			controls.get(field).setEnabled(!simplex);
 		}
@@ -308,20 +308,19 @@ final class RadioChannelEditorPanel extends JPanel {
 		return value;
 	}
 
-	/** Copies RX raw values without recursive listeners or altering an explicit transmit policy. */
+	/** Copies RX frequency and bandwidth without altering independent tones or transmit policy. */
 	private void copySimplexValues() {
 		updating = true;
 		try {
 			fields.get(Field.TX_FREQUENCY).setText(fields.get(Field.RX_FREQUENCY).getText());
 			fields.get(Field.TX_BANDWIDTH).setText(fields.get(Field.RX_BANDWIDTH).getText());
-			fields.get(Field.TX_TONE).setText(fields.get(Field.RX_TONE).getText());
 			offset.setText("+0");
 		} finally {
 			updating = false;
 		}
 	}
 
-	/** Explicitly enables simplex transmission and follows subsequent RX programming edits. */
+	/** Explicitly enables simplex transmission and follows RX frequency/bandwidth, keeping tones independent. */
 	void copyRxToTx() {
 		if (!"Simplex".equals(linkMode.getSelectedItem())) {
 			linkMode.setSelectedItem("Simplex");

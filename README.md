@@ -125,9 +125,10 @@ The preparer area shows the selected person's known role and offers the
 Communications Unit Leader shortcut only when that position is assigned.
 Use the main PDF export dialog to print ICS 205.
 The channel editor keeps RX and TX frequencies, bandwidths, and tones/NAC separate.
-Its compact RX, simplex/duplex, and TX columns support explicit simplex copying
+Its compact RX, simplex/duplex, and TX columns support explicit simplex frequency/bandwidth copying
 and duplex frequency/offset entry with exact decimal arithmetic. Unknown transmit
-settings remain unknown until explicitly supplied. Bandwidth and mode choices
+settings remain unknown until explicitly supplied. RX and TX tones stay independently
+editable in every mode; simplex never copies or synchronizes tones. Bandwidth and mode choices
 use readable labels while retaining the native N/W and A/D/M codes.
 **Included in plan** controls whether a channel prints. Included rows are green
 and excluded rows gray; choose **Included in plan only** to hide reusable channels

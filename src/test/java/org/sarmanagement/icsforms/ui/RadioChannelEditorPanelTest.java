@@ -211,7 +211,7 @@ class RadioChannelEditorPanelTest {
 	}
 
 	@Test
-	void explicitSimplexCopiesAndFollowsAllRxFieldsButPolicyRemainsSeparatelyEditable() throws Exception {
+	void explicitSimplexFollowsFrequencyAndBandwidthButKeepsTonesAndPolicyIndependent() throws Exception {
 		SwingUtilities.invokeAndWait(() -> {
 			RadioChannel original = channel("155.1234500", "");
 			original.setRxBandwidth("N");
@@ -222,7 +222,7 @@ class RadioChannelEditorPanelTest {
 			assertEquals("Simplex", combo(editor, "linkMode").getSelectedItem());
 			assertEquals("155.1234500", editor.editedChannel().getTxFrequency());
 			assertEquals("N", editor.editedChannel().getTxBandwidth());
-			assertEquals("NAC $293", editor.editedChannel().getTxToneNac());
+			assertEquals("", editor.editedChannel().getTxToneNac());
 			assertEquals(RadioChannel.TX_POLICY_TRANSMIT, editor.editedChannel().getTxPolicy());
 			assertFalse(text(editor, TX_FREQUENCY).isEditable());
 			assertFalse(offset(editor).isEnabled());
@@ -233,7 +233,8 @@ class RadioChannelEditorPanelTest {
 			RadioChannel changed = editor.editedChannel();
 			assertEquals("154.987650000", changed.getTxFrequency());
 			assertEquals("W", changed.getTxBandwidth());
-			assertEquals("123.0", changed.getTxToneNac());
+			assertEquals("123.0", changed.getRxToneNac());
+			assertEquals("", changed.getTxToneNac());
 			assertEquals(RadioChannel.TX_POLICY_RECEIVE_ONLY, changed.getTxPolicy());
 			assertEquals("", changed.getDigitalProtocol());
 			assertEquals("", original.getTxFrequency());
@@ -241,6 +242,41 @@ class RadioChannelEditorPanelTest {
 			assertTrue(text(editor, TX_FREQUENCY).isEditable());
 			text(editor, RX_FREQUENCY).setText("100");
 			assertEquals("154.987650000", editor.editedChannel().getTxFrequency());
+		});
+	}
+
+	@Test
+	void tonesStayEditableAndIndependentAcrossSimplexDuplexAndFrequencyChanges() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			for (String rx : List.of("", "88.5")) {
+				for (String tx : List.of("", "123.0")) {
+					RadioChannel original = channel("155.16000", "155.16000");
+					original.setRxToneNac(rx);
+					original.setTxToneNac(tx);
+					RadioChannelEditorPanel editor = new RadioChannelEditorPanel(original);
+					for (String mode : List.of("Simplex", "Duplex", "Unchanged", "Simplex")) {
+						combo(editor, "linkMode").setSelectedItem(mode);
+						assertTrue(text(editor, RX_TONE).isEditable());
+						assertTrue(text(editor, RX_TONE).isEnabled());
+						assertTrue(text(editor, TX_TONE).isEditable());
+						assertTrue(text(editor, TX_TONE).isEnabled());
+						assertEquals(rx, editor.editedChannel().getRxToneNac());
+						assertEquals(tx, editor.editedChannel().getTxToneNac());
+					}
+					text(editor, TX_TONE).setText("DTCS:023:R");
+					text(editor, RX_FREQUENCY).setText("154.98765");
+					text(editor, RX_BANDWIDTH).setText("N (narrow)");
+					assertEquals("DTCS:023:R", editor.editedChannel().getTxToneNac());
+					text(editor, RX_TONE).setText("");
+					assertEquals("DTCS:023:R", editor.editedChannel().getTxToneNac());
+					text(editor, TX_TONE).setText("");
+					text(editor, RX_TONE).setText("NAC $293");
+					assertEquals("", editor.editedChannel().getTxToneNac());
+					assertEquals("NAC $293", editor.editedChannel().getRxToneNac());
+					assertEquals(rx, original.getRxToneNac());
+					assertEquals(tx, original.getTxToneNac());
+				}
+			}
 		});
 	}
 
