@@ -21,6 +21,7 @@ public class CanineMedicalPlan {
 	private String poisonControlContact = "";
 	private String onsiteVeterinarian = "";
 	private String veterinarianDvm = "";
+	private List<String> veterinaryPersonnelResourceIds = new ArrayList<>();
 	private String veterinaryCapabilityNotes = "";
 	private String emergencyProcedures = "";
 	private boolean aviationAssetsUsed;
@@ -114,6 +115,34 @@ public class CanineMedicalPlan {
 	/** @param veterinarianDvm entered DVM credential/name. */
 	public void setVeterinarianDvm(String veterinarianDvm) {
 		this.veterinarianDvm = safe(veterinarianDvm);
+	}
+
+	/**
+	 * Returns linked personnel T-cards for incident veterinary personnel.
+	 *
+	 * @return mutable stable resource identifier list.
+	 */
+	public List<String> getVeterinaryPersonnelResourceIds() {
+		if (veterinaryPersonnelResourceIds == null) {
+			veterinaryPersonnelResourceIds = new ArrayList<>();
+		}
+		return veterinaryPersonnelResourceIds;
+	}
+
+	/**
+	 * Replaces linked veterinary personnel, removing blank and duplicate identities.
+	 *
+	 * @param veterinaryPersonnelResourceIds stable T-card identifiers.
+	 */
+	public void setVeterinaryPersonnelResourceIds(List<String> veterinaryPersonnelResourceIds) {
+		this.veterinaryPersonnelResourceIds = new ArrayList<>();
+		if (veterinaryPersonnelResourceIds != null) {
+			for (String id : veterinaryPersonnelResourceIds) {
+				if (id != null && !id.isBlank() && !this.veterinaryPersonnelResourceIds.contains(id)) {
+					this.veterinaryPersonnelResourceIds.add(id);
+				}
+			}
+		}
 	}
 
 	/** @return veterinary capability notes and preamble. */

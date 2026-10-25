@@ -349,6 +349,17 @@ public class MainFrame extends JFrame {
 		logsListMenu.setMnemonic(KeyEvent.VK_G);
 		viewMenu.add(createDashboardMenu(activeDashboard, this::selectDashboard));
 		viewMenu.addSeparator();
+		JMenuItem humanMedicalReference = new JMenuItem("Human Medical Reference — ICS 206");
+		humanMedicalReference.setMnemonic(KeyEvent.VK_H);
+		humanMedicalReference.addActionListener(
+				event -> HumanMedicalReferenceWindow.open(this, controller, this::openWorkspace));
+		JMenuItem canineMedicalReference = new JMenuItem("Canine Medical Reference — adapted ICS 206CANINE");
+		canineMedicalReference.setMnemonic(KeyEvent.VK_K);
+		canineMedicalReference.addActionListener(
+				event -> CanineMedicalReferenceWindow.open(this, controller, this::openWorkspace));
+		viewMenu.add(humanMedicalReference);
+		viewMenu.add(canineMedicalReference);
+		viewMenu.addSeparator();
 		JMenu openLogInNewWindowMenu = new JMenu("Open Log in New Window");
 		openLogInNewWindowMenu.setMnemonic(KeyEvent.VK_O);
 

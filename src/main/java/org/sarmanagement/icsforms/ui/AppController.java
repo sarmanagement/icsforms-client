@@ -2510,6 +2510,7 @@ public class AppController {
 			errors.add("No task provided.");
 			return errors;
 		}
+
 		if (!"returned".equalsIgnoreCase(task.getTaskLifecycleStatus())) {
 			errors.add("Task must be in 'returned' status before debriefing can be completed.");
 		}
@@ -2530,6 +2531,42 @@ public class AppController {
 			markDirty();
 		}
 		return errors;
+	}
+
+	/**
+	 * Records one explicitly confirmed medical event in the ICP activity log.
+	 * Merely opening or consulting a reference never calls this operation.
+	 *
+	 * @param canine true for a response-canine event; false for a responder event.
+	 * @param note minimal operator-entered event note.
+	 * @param assignmentId optional task assignment context.
+	 * @throws IllegalArgumentException when the note is blank.
+	 */
+	public void recordMedicalEvent(boolean canine, String note, String assignmentId) {
+		if (note == null || note.isBlank()) {
+			throw new IllegalArgumentException("A brief event note is required.");
+		}
+		String eventTypeId = canine
+				? ActivityEventType.ID_CANINE_MEDICAL_EVENT
+				: ActivityEventType.ID_RESPONDER_MEDICAL_EVENT;
+		Ics214Form log = data.getActivityLogs().stream()
+				.filter(candidate -> candidate.getLogScope() == ActivityLogScope.ICP).findFirst().orElseGet(() -> {
+					Ics214Form created = new Ics214Form();
+					created.setName("ICP Communications Log");
+					data.getActivityLogs().add(created);
+					return created;
+				});
+		ActivityLogEntry entry = new ActivityLogEntry();
+		entry.setTimestamp(LocalDateTime.now().withSecond(0).withNano(0));
+		entry.setEventTypeId(eventTypeId);
+		entry.setNotableActivity(note.trim());
+		if (assignmentId != null && !assignmentId.isBlank()) {
+			entry.setResourceIdentifier(data.getSarTaskAssignments().stream()
+					.filter(task -> assignmentId.equals(task.getAssignmentId()))
+					.map(SarTaskSupport::taskResourceDisplayLabel).findFirst().orElse(""));
+		}
+		log.getActivityLog().add(entry);
+		markDirty();
 	}
 
 	private void addOrgCard(Map<String, TCard> wanted, Map<String, TCard> existing, Map<String, TCard> byName,
