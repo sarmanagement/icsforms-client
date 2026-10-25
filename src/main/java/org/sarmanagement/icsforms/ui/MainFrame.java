@@ -358,6 +358,10 @@ public class MainFrame extends JFrame {
 				event -> RolePanelWindows.openMedicalUnitLeader(this, controller, this::openWorkspace));
 		JMenuItem operationsRolePanel = new JMenuItem("Operations");
 		operationsRolePanel.addActionListener(event -> openOperationsRolePanel());
+		JMenuItem incidentCommandRolePanel = new JMenuItem("Incident Command");
+		incidentCommandRolePanel.addActionListener(
+				event -> RolePanelWindows.openIncidentCommand(this, controller, this::openWorkspace));
+		rolePanelsMenu.add(incidentCommandRolePanel);
 		rolePanelsMenu.add(safetyRolePanel);
 		rolePanelsMenu.add(medicalRolePanel);
 		rolePanelsMenu.add(operationsRolePanel);

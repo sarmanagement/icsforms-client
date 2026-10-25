@@ -1323,6 +1323,28 @@ public class AppController {
 	}
 
 	/**
+	 * Sets the operator-selected position in the IAP planning cycle.
+	 *
+	 * @param stage explicit planning-cycle stage.
+	 */
+	public void setIapPlanningStage(org.sarmanagement.icsforms.model.IapPlanningStage stage) {
+		data.setIapPlanningStage(stage);
+		markDirty();
+	}
+
+	/**
+	 * Records the Incident Commander's approval of the current ordered objectives.
+	 *
+	 * @param approver approving Incident Commander.
+	 * @param signature optional typed signature.
+	 * @param approvedAt approval time.
+	 */
+	public void approveCurrentObjectives(String approver, String signature, LocalDateTime approvedAt) {
+		data.getForm202().recordObjectiveApproval(approver, signature, approvedAt);
+		markDirty();
+	}
+
+	/**
 	 * Synchronizes SAR task scaffold records from ICS 204 resources using stable
 	 * assignment IDs.
 	 */

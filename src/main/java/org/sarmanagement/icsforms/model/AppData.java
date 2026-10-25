@@ -23,7 +23,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 13;
+	public static final int CURRENT_SCHEMA_VERSION = 14;
 	private static final ObjectMapper MEDICAL_PLAN_COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -35,6 +35,7 @@ public class AppData {
 	public static class OperationalPeriodRecord {
 		private LocalDateTime periodStart;
 		private LocalDateTime periodEnd;
+		private IapPlanningStage iapPlanningStage = IapPlanningStage.NOT_RECORDED;
 		private List<String> incidentCommanders = new ArrayList<>();
 		private MedicalPlan medicalPlan;
 		private CanineMedicalPlan canineMedicalPlan;
@@ -85,6 +86,24 @@ public class AppData {
 		 */
 		public void setPeriodEnd(LocalDateTime periodEnd) {
 			this.periodEnd = periodEnd;
+		}
+
+		/**
+		 * Returns the final explicitly recorded planning-cycle stage for this period.
+		 *
+		 * @return archived planning stage.
+		 */
+		public IapPlanningStage getIapPlanningStage() {
+			return iapPlanningStage == null ? IapPlanningStage.NOT_RECORDED : iapPlanningStage;
+		}
+
+		/**
+		 * Sets the final planning-cycle stage for this period.
+		 *
+		 * @param iapPlanningStage archived stage; null becomes not recorded.
+		 */
+		public void setIapPlanningStage(IapPlanningStage iapPlanningStage) {
+			this.iapPlanningStage = iapPlanningStage == null ? IapPlanningStage.NOT_RECORDED : iapPlanningStage;
 		}
 
 		/**
@@ -238,6 +257,7 @@ public class AppData {
 	private String configuredTimeZoneId = "UTC";
 	private IncidentMode incidentMode = IncidentMode.SAR;
 	private IapPhase iapPhase = IapPhase.PRE_OP;
+	private IapPlanningStage iapPlanningStage = IapPlanningStage.NOT_RECORDED;
 	private List<OperationalPeriodRecord> operationalPeriodHistory = new ArrayList<>();
 	private IncidentContext incidentContext = new IncidentContext();
 	private OrganizationalChart organizationalChart = new OrganizationalChart();
@@ -418,6 +438,7 @@ public class AppData {
 		record.setMedicalPlan(copyMedicalPlan(getMedicalPlan()));
 		record.setCanineMedicalPlan(copyCanineMedicalPlan(getCanineMedicalPlan()));
 		record.setForm205(getForm205().deepCopy());
+		record.setIapPlanningStage(getIapPlanningStage());
 		record.setForm202(MEDICAL_PLAN_COPIER.convertValue(getForm202(), Ics202Form.class));
 		List<Ics204Form> archivedForms204 = new ArrayList<>();
 		archivedForms204.add(MEDICAL_PLAN_COPIER.convertValue(getForm204(), Ics204Form.class));
@@ -436,6 +457,7 @@ public class AppData {
 				record.getPeriodStart(), record.getPeriodEnd()));
 
 		this.iapPhase = IapPhase.DURING_OP;
+		this.iapPlanningStage = IapPlanningStage.NOT_RECORDED;
 		this.form202 = new Ics202Form();
 		this.form205aIapPage = "";
 		this.form205 = bringForwardCommunicationsPlan ? record.getForm205().copyForNewPeriod() : new Ics205Form();
@@ -1245,6 +1267,24 @@ public class AppData {
 	 */
 	public void setIapPhase(IapPhase iapPhase) {
 		this.iapPhase = iapPhase == null ? IapPhase.PRE_OP : iapPhase;
+	}
+
+	/**
+	 * Returns the explicitly recorded IAP planning-cycle stage.
+	 *
+	 * @return planning-cycle stage, never null.
+	 */
+	public IapPlanningStage getIapPlanningStage() {
+		return iapPlanningStage == null ? IapPlanningStage.NOT_RECORDED : iapPlanningStage;
+	}
+
+	/**
+	 * Sets the explicit IAP planning-cycle stage.
+	 *
+	 * @param iapPlanningStage stage; null becomes not recorded.
+	 */
+	public void setIapPlanningStage(IapPlanningStage iapPlanningStage) {
+		this.iapPlanningStage = iapPlanningStage == null ? IapPlanningStage.NOT_RECORDED : iapPlanningStage;
 	}
 
 	/**

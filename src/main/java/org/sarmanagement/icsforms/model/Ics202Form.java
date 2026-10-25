@@ -3,8 +3,14 @@
  */
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 
 /**
@@ -24,6 +30,7 @@ public class Ics202Form {
 	private String approvedByIncidentCommanderName = "";
 	private String approvedBySignature = "";
 	private LocalDateTime approvedDateTime;
+	private String approvedObjectivesDigest = "";
 	private String formNumber = "ICS 202";
 	private String iapPage = "";
 
@@ -305,6 +312,101 @@ public class Ics202Form {
 	 */
 	public void setApprovedDateTime(LocalDateTime approvedDateTime) {
 		this.approvedDateTime = approvedDateTime;
+	}
+
+	/**
+	 * Returns the content digest captured with the objective approval.
+	 *
+	 * @return SHA-256 digest, or blank for untracked legacy approval.
+	 */
+	public String getApprovedObjectivesDigest() {
+		return approvedObjectivesDigest == null ? "" : approvedObjectivesDigest;
+	}
+
+	/**
+	 * Sets the content digest captured with the objective approval.
+	 *
+	 * @param approvedObjectivesDigest SHA-256 digest; null becomes blank.
+	 */
+	public void setApprovedObjectivesDigest(String approvedObjectivesDigest) {
+		this.approvedObjectivesDigest = approvedObjectivesDigest == null ? "" : approvedObjectivesDigest;
+	}
+
+	/**
+	 * Records an explicit Incident Commander approval of the current ordered
+	 * objectives.
+	 *
+	 * @param approver Incident Commander name.
+	 * @param signature typed signature, which may be blank.
+	 * @param approvedAt approval time.
+	 * @throws IllegalArgumentException when approver, time, or substantive
+	 *             objectives are absent.
+	 */
+	public void recordObjectiveApproval(String approver, String signature, LocalDateTime approvedAt) {
+		if (approver == null || approver.isBlank()) {
+			throw new IllegalArgumentException("Enter the approving Incident Commander.");
+		}
+		if (approvedAt == null) {
+			throw new IllegalArgumentException("Enter an objective approval time.");
+		}
+		if (getStructuredObjectives().stream().noneMatch(objective -> !objective.getText().isBlank())) {
+			throw new IllegalArgumentException("Enter at least one objective before approval.");
+		}
+		setApprovedByIncidentCommanderName(approver.trim());
+		setApprovedBySignature(signature);
+		setApprovedDateTime(approvedAt);
+		setApprovedObjectivesDigest(currentObjectivesDigest());
+	}
+
+	/**
+	 * Returns whether the approval matches current objective wording and order.
+	 *
+	 * @return objective approval status.
+	 */
+	@JsonIgnore
+	public ObjectiveApprovalStatus getObjectiveApprovalStatus() {
+		boolean approvalRecorded = approvedDateTime != null
+				|| (approvedByIncidentCommanderName != null && !approvedByIncidentCommanderName.isBlank())
+				|| (approvedBySignature != null && !approvedBySignature.isBlank());
+		if (!approvalRecorded) {
+			return ObjectiveApprovalStatus.NOT_APPROVED;
+		}
+		if (getApprovedObjectivesDigest().isBlank()) {
+			return ObjectiveApprovalStatus.LEGACY_UNVERIFIED;
+		}
+		return getApprovedObjectivesDigest().equals(currentObjectivesDigest())
+				? ObjectiveApprovalStatus.APPROVED_CURRENT
+				: ObjectiveApprovalStatus.CONTENT_CHANGED;
+	}
+
+	/**
+	 * Computes the stable digest of ordered objective identities and wording.
+	 *
+	 * @return lowercase SHA-256 hexadecimal digest.
+	 */
+	private String currentObjectivesDigest() {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			for (IncidentObjective objective : getStructuredObjectives()) {
+				updateDigest(digest, objective.getObjectiveId());
+				updateDigest(digest, objective.getText());
+			}
+			return HexFormat.of().formatHex(digest.digest());
+		} catch (NoSuchAlgorithmException exception) {
+			throw new IllegalStateException("SHA-256 is unavailable", exception);
+		}
+	}
+
+	/**
+	 * Adds one length-delimited value to an objective digest.
+	 *
+	 * @param digest digest receiving the value.
+	 * @param value value to add.
+	 */
+	private static void updateDigest(MessageDigest digest, String value) {
+		byte[] bytes = (value == null ? "" : value).getBytes(StandardCharsets.UTF_8);
+		digest.update(java.nio.ByteBuffer.allocate(Integer.BYTES).putInt(bytes.length).array());
+		digest.update(bytes);
 	}
 
 	/**

@@ -14,12 +14,13 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * Opens and tracks the local Safety and Medical Unit Leader role windows.
+ * Opens and tracks local responsibility-focused role windows.
  */
 final class RolePanelWindows {
 	private static final Map<AppData, JFrame> SAFETY_WINDOWS = new IdentityHashMap<>();
 	private static final Map<AppData, JFrame> MEDICAL_WINDOWS = new IdentityHashMap<>();
 	private static final Map<AppData, JFrame> OPERATIONS_WINDOWS = new IdentityHashMap<>();
+	private static final Map<AppData, JFrame> INCIDENT_COMMAND_WINDOWS = new IdentityHashMap<>();
 
 	/** Prevents utility construction. */
 	private RolePanelWindows() {
@@ -126,6 +127,38 @@ final class RolePanelWindows {
 		});
 		UiSupport.registerIncidentWindow(frame, incident);
 		OPERATIONS_WINDOWS.put(incident, frame);
+		frame.setVisible(true);
+		return frame;
+	}
+
+	/**
+	 * Opens or focuses the Incident Command panel.
+	 *
+	 * @param owner parent window.
+	 * @param controller incident controller.
+	 * @param navigator typed workspace navigator.
+	 * @return role window.
+	 */
+	static JFrame openIncidentCommand(Window owner, AppController controller,
+			Consumer<WorkspaceDestination> navigator) {
+		AppData incident = controller.getData();
+		JFrame existing = INCIDENT_COMMAND_WINDOWS.get(incident);
+		if (existing != null && existing.isDisplayable()) {
+			existing.toFront();
+			return existing;
+		}
+		IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller, navigator);
+		JFrame frame = createFrame("Incident Command — " + incident.getIncidentContext().getIncidentName(), panel);
+		frame.addWindowListener(new java.awt.event.WindowAdapter() {
+			/** {@inheritDoc} */
+			@Override
+			public void windowClosed(java.awt.event.WindowEvent event) {
+				panel.dispose();
+				INCIDENT_COMMAND_WINDOWS.remove(incident);
+			}
+		});
+		UiSupport.registerIncidentWindow(frame, incident);
+		INCIDENT_COMMAND_WINDOWS.put(incident, frame);
 		frame.setVisible(true);
 		return frame;
 	}
