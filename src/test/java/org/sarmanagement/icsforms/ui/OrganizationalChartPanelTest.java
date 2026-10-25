@@ -48,37 +48,138 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 /** Workflow coverage for main-tab representatives and supplemental organization assignments. */
 class OrganizationalChartPanelTest {
 	@Test
-	void safetyOfficerEditsSurviveStalePanelFlushesAndExplicitClearing() throws Exception {
+	void sharedRoleEditsSurviveEveryStalePanelFlushOrderAndExplicitClearing() throws Exception {
 		SwingUtilities.invokeAndWait(() -> {
 			try {
 				AppController controller = sampleController();
 				OrganizationalChartPanel orgChart = new OrganizationalChartPanel(controller);
 				Ics206Panel humanPlan = new Ics206Panel(controller);
 				CanineMedicalPanel caninePlan = new CanineMedicalPanel(controller, Path.of("target"));
-				JTextField orgName = (JTextField) field(orgChart, "safetyOfficerNameField");
-				JTextField humanName = (JTextField) field(humanPlan, "reviewedBy");
-				JTextField canineName = (JTextField) field(caninePlan, "safetyOfficer");
-				for (JTextField editor : List.of(orgName, humanName, canineName)) {
-					for (String name : List.of("Assigned Safety Officer", "")) {
-						editor.setText(name);
-						orgChart.pushToModel();
-						humanPlan.pushToModel();
-						caninePlan.pushToModel();
-						assertEquals(name, controller.getData().getOrganizationalChart().getSafetyOfficerName());
-						assertEquals(name, controller.getData().getMedicalPlan().getReviewedBySafetyOfficer());
-						assertEquals(name, controller.getData().getCanineMedicalPlan().getReviewedBySafetyOfficer());
-						orgChart.refreshFromModel();
-						humanPlan.refreshFromModel();
-						caninePlan.refreshFromModel();
-						assertEquals(name, orgName.getText());
-						assertEquals(name, humanName.getText());
-						assertEquals(name, canineName.getText());
+				List<Runnable> flushes = List.of(orgChart::pushToModel, humanPlan::pushToModel, caninePlan::pushToModel);
+				for (boolean medicalLeader : List.of(false, true)) {
+					JTextField orgName = (JTextField) field(orgChart,
+							medicalLeader ? "medicalUnitLeaderNameField" : "safetyOfficerNameField");
+					JTextField humanName = (JTextField) field(humanPlan, medicalLeader ? "medicalName" : "reviewedBy");
+					JTextField canineName = (JTextField) field(caninePlan, medicalLeader ? "preparedBy" : "safetyOfficer");
+					List<JTextField> editors = new java.util.ArrayList<>(List.of(orgName, humanName, canineName));
+					if (medicalLeader) {
+						editors.add((JTextField) field(humanPlan, "preparedBy"));
+					}
+					for (List<Integer> order : List.of(List.of(0, 1, 2), List.of(0, 2, 1), List.of(1, 0, 2),
+							List.of(1, 2, 0), List.of(2, 0, 1), List.of(2, 1, 0))) {
+						for (JTextField editor : editors) {
+							for (String name : List.of("Assigned person", "Replacement person", "")) {
+								editor.setText(name);
+								for (int index : order) {
+									flushes.get(index).run();
+								}
+								if (medicalLeader) {
+									assertEquals(name, controller.getData().getMedicalUnitLeaderAssignment().getName());
+								} else {
+									assertEquals(name, controller.getData().getOrganizationalChart().getSafetyOfficerName());
+									assertEquals(name, controller.getData().getMedicalPlan().getReviewedBySafetyOfficer());
+									assertEquals(name, controller.getData().getCanineMedicalPlan().getReviewedBySafetyOfficer());
+								}
+								orgChart.refreshFromModel();
+								humanPlan.refreshFromModel();
+								caninePlan.refreshFromModel();
+								for (JTextField roleEditor : editors) {
+									assertEquals(name, roleEditor.getText(), "Shared role after flush order " + order);
+								}
+							}
+						}
 					}
 				}
 			} catch (Exception exception) {
 				throw new AssertionError(exception);
 			}
 		});
+	}
+
+	@Test
+	void allOrgChartTextFieldsSurviveEveryWorkspaceAndFileStoreReload() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		Path workspace = Files.createTempDirectory(Files.createDirectories(Path.of("target")), "org-chart-retention-");
+		try (FileIncidentStore store = new FileIncidentStore(workspace)) {
+			AppData data = new AppData();
+			data.getActivityLogs().add(new org.sarmanagement.icsforms.model.Ics214Form());
+			IncidentId id = store.create(data);
+			SwingUtilities.invokeAndWait(() -> {
+				MainFrame frame = new MainFrame(data, store, id, new PdfExportService(),
+						new IncidentValidator(), workspace);
+				try {
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ORG_CHART));
+					OrganizationalChartPanel orgChart = (OrganizationalChartPanel) field(frame, "organizationalChartPanel");
+					Object commander = ((List<?>) field(orgChart, "incidentCommanderRows")).get(0);
+					((JTextField) field(commander, "nameField")).setText("Entered Commander");
+					((JTextField) field(commander, "radioField")).setText("Command Radio");
+					((JTextField) field(commander, "phoneField")).setText("555-0143");
+					Map<String, String> expected = new java.util.LinkedHashMap<>();
+					for (Field declared : OrganizationalChartPanel.class.getDeclaredFields()) {
+						if (declared.getType() == JTextField.class) {
+							String value = "Entered " + declared.getName();
+							expected.put(declared.getName(), value);
+							((JTextField) field(orgChart, declared.getName())).setText(value);
+						}
+					}
+					assertFalse(expected.isEmpty());
+					for (var mode : org.sarmanagement.icsforms.model.IncidentMode.values()) {
+						data.setIncidentMode(mode);
+						for (WorkspaceId destination : WorkspaceId.values()) {
+							WorkspaceDestination target = switch (destination) {
+								case HUMAN_MEDICAL_PLAN -> WorkspaceDestination.humanMedicalPlan();
+								case CANINE_MEDICAL_PLAN -> WorkspaceDestination.canineMedicalPlan();
+								case ACTIVITY_LOG -> WorkspaceDestination.activityLog(((Map<?, ?>)
+										field(frame, "activityLogFormsById")).keySet().iterator().next().toString());
+								default -> WorkspaceDestination.of(destination);
+							};
+							frame.openWorkspace(target);
+							((javax.swing.JTabbedPane) field(frame, "tabs")).setSelectedComponent(orgChart);
+							frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ORG_CHART));
+							orgChart.refreshFromModel();
+							for (var entry : expected.entrySet()) {
+								assertEquals(entry.getValue(), ((JTextField) field(orgChart, entry.getKey())).getText(),
+										entry.getKey() + " after visiting " + destination + " in " + mode);
+							}
+							assertEquals(List.of("Entered Commander"), data.getOrganizationalChart().getIncidentCommanders());
+							OrgChartEntry entry = data.getOrganizationalChart().getIncidentCommanderEntries().get(0);
+							assertEquals("Command Radio", entry.getRadio());
+							assertEquals("555-0143", entry.getPhone());
+						}
+					}
+					store.save(id, data);
+					AppController reloadedController = new AppController(store.load(id), store, id,
+							new PdfExportService(), new IncidentValidator());
+					OrganizationalChartPanel reloaded = new OrganizationalChartPanel(reloadedController);
+					reloaded.refreshFromModel();
+					Object reloadedCommander = ((List<?>) field(reloaded, "incidentCommanderRows")).get(0);
+					assertEquals("Entered Commander", ((JTextField) field(reloadedCommander, "nameField")).getText());
+					assertEquals("Command Radio", ((JTextField) field(reloadedCommander, "radioField")).getText());
+					assertEquals("555-0143", ((JTextField) field(reloadedCommander, "phoneField")).getText());
+					for (var entry : expected.entrySet()) {
+						assertEquals(entry.getValue(), ((JTextField) field(reloaded, entry.getKey())).getText(),
+								entry.getKey() + " after save/reload");
+					}
+				} catch (Exception exception) {
+					throw new AssertionError(exception);
+				} finally {
+					try {
+						AppController controller = (AppController) field(frame, "controller");
+						((Timer) field(controller, "autosaveTimer")).stop();
+					} catch (Exception exception) {
+						throw new AssertionError(exception);
+					} finally {
+						frame.dispose();
+					}
+				}
+			});
+		} finally {
+			try (var files = Files.walk(workspace)) {
+				for (Path path : files.sorted(Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(path);
+				}
+			}
+		}
 	}
 
 	@Test

@@ -1353,7 +1353,7 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Opens an existing workspace destination after flushing the current editor state.
+	 * Opens an existing workspace after flushing edits and refreshing linked values in its editor.
 	 *
 	 * @param destination typed workspace navigation target.
 	 */
@@ -1363,6 +1363,7 @@ public class MainFrame extends JFrame {
 		}
 		try {
 			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			refreshFromModel();
 		} catch (RuntimeException exception) {
 			showSaveError(exception);
 			return;
