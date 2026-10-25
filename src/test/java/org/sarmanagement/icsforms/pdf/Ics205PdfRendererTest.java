@@ -166,6 +166,7 @@ class Ics205PdfRendererTest {
 			assertEquals(Ics205PdfRenderer.pageCount(data), pdf.getNumberOfPages());
 			assertTrue(pdf.getNumberOfPages() > 4);
 			String allText = new PDFTextStripper().getText(pdf);
+			assertTrue(pageText(pdf, 2).contains("Ch # 1 / Channel1 (continued)"));
 			for (String remark : remarks) {
 				assertTrue(allText.contains(remark), remark);
 			}

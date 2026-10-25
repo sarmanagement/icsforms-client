@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -60,7 +61,29 @@ public class RadioChannelCsvService {
 	 * @throws IOException when writing fails.
 	 */
 	public void write(Path path, Ics205Form form) throws IOException {
-		Files.writeString(path, exportCsv(form), StandardCharsets.UTF_8);
+		writeCsv(path, exportCsv(form));
+	}
+
+	/**
+	 * Publishes a complete native or CHIRP CSV without truncating an existing backup.
+	 * Atomic-move failures are not retried with a non-atomic replacement.
+	 *
+	 * @param path destination file.
+	 * @param csv complete UTF-8 CSV text.
+	 * @throws IOException when staging or atomic publication fails.
+	 */
+	public static void writeCsv(Path path, String csv) throws IOException {
+		if (path == null || csv == null) {
+			throw new IllegalArgumentException("CSV destination and text are required.");
+		}
+		Path destination = path.toAbsolutePath();
+		Path temporary = Files.createTempFile(destination.getParent(), ".ics205-csv-", ".tmp");
+		try {
+			Files.writeString(temporary, csv, StandardCharsets.UTF_8);
+			Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		} finally {
+			Files.deleteIfExists(temporary);
+		}
 	}
 
 	/**

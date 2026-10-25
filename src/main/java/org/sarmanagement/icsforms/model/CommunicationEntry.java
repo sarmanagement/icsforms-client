@@ -1,4 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Communication row for ICS 204 or linked SAR task context.
@@ -7,6 +13,24 @@ public class CommunicationEntry {
 	private String name = "";
 	private String function = "";
 	private String primaryContact = "";
+	private String radioChannelId = "";
+
+	/** Creates an unlinked communications row. */
+	public CommunicationEntry() {
+	}
+
+	/**
+	 * Restores the channel label and optional identity together, independently of
+	 * JSON property order.
+	 * @param primaryContact persisted fallback contact; null becomes empty
+	 * @param radioChannelId persisted channel identity; null becomes empty
+	 */
+	@JsonCreator
+	public CommunicationEntry(@JsonProperty("primaryContact") String primaryContact,
+			@JsonProperty("radioChannelId") String radioChannelId) {
+		this.primaryContact = primaryContact == null ? "" : primaryContact;
+		setRadioChannelId(radioChannelId);
+	}
 
 	/**
 	 * Returns the contact name.
@@ -86,12 +110,34 @@ public class CommunicationEntry {
 	}
 
 	/**
-	 * Sets the primary contact channel.
+	 * Sets the primary contact channel. A changed label clears its optional plan
+	 * reference; assigning the identical label preserves that reference.
 	 *
 	 * @param primaryContact
-	 *            primary contact.
+	 *            primary contact; null becomes empty.
 	 */
 	public void setPrimaryContact(String primaryContact) {
-		this.primaryContact = primaryContact;
+		String value = primaryContact == null ? "" : primaryContact;
+		if (!this.primaryContact.equals(value)) {
+			radioChannelId = "";
+		}
+		this.primaryContact = value;
+	}
+
+	/**
+	 * Returns the optional stable ICS 205 channel reference.
+	 * @return channel identity, or empty when the contact is free text
+	 */
+	public String getRadioChannelId() {
+		return radioChannelId;
+	}
+
+	/**
+	 * Sets an optional channel reference without altering the fallback label.
+	 * Assign the label before the identity when selecting a different channel.
+	 * @param radioChannelId stable channel identity; null becomes empty
+	 */
+	public void setRadioChannelId(String radioChannelId) {
+		this.radioChannelId = radioChannelId == null ? "" : radioChannelId;
 	}
 }

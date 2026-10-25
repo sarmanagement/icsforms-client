@@ -1,6 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -86,7 +90,8 @@ public class SarTaskAssignment {
 	private String iapPage = "";
 
 	/**
-	 * Creates a SAR scaffold from a linked ICS 204 resource assignment.
+	 * Creates a SAR scaffold from a linked ICS 204 resource assignment, preserving
+	 * communications fallback labels and their optional stable channel references.
 	 *
 	 * @param resourceAssignment
 	 *            ICS 204 resource assignment.
@@ -141,6 +146,7 @@ public class SarTaskAssignment {
 				clone.setName(entry.getName());
 				clone.setFunction(entry.getFunction());
 				clone.setPrimaryContact(entry.getPrimaryContact());
+				clone.setRadioChannelId(entry.getRadioChannelId());
 				copied.add(clone);
 			}
 			task.setCommunications(copied);
@@ -187,6 +193,15 @@ public class SarTaskAssignment {
 		if (taskId == null || taskId.isBlank()) {
 			taskId = UUID.randomUUID().toString();
 		}
+		return taskId;
+	}
+
+	/**
+	 * Returns the stored task identity without assigning one to a legacy task.
+	 * @return existing task identity, or null when not yet assigned
+	 */
+	@JsonIgnore
+	public String peekTaskId() {
 		return taskId;
 	}
 

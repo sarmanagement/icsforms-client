@@ -85,6 +85,9 @@ final class RadioChannelCsvDialogs {
 				result.setPreparedDateTime(imported.getPreparedDateTime());
 				result.setDatePrepared(imported.getDatePrepared());
 				result.setIapPage(imported.getIapPage());
+				if (selection.mode() == ChannelImportService.Mode.REPLACE) {
+					result.setFormId(imported.getFormId());
+				}
 			}
 			controller.getData().setForm205(result);
 			controller.markDirty();
@@ -116,7 +119,7 @@ final class RadioChannelCsvDialogs {
 			if (path == null || Files.exists(path) && !dialogs.confirmOverwrite(parent, path)) {
 				return;
 			}
-			Files.writeString(path, csv, StandardCharsets.UTF_8);
+			RadioChannelCsvService.writeCsv(path, csv);
 		} catch (IOException | RuntimeException exception) {
 			dialogs.error(parent, "CSV export failed. " + exception.getMessage());
 		}

@@ -149,7 +149,9 @@ public class Ics204Panel extends JPanel {
 		updateSelectedContextLabel();
 		rebuildManagementContacts();
 
-		RadioChannelPicker.install(communicationsTable, 2, controller);
+		RadioChannelPicker.install(communicationsTable, 2, controller,
+				row -> communicationsTableModel.getRows().get(row).getRadioChannelId(),
+				(row, id) -> communicationsTableModel.getRows().get(row).setRadioChannelId(id));
 		communicationsTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
 		resourceTable.setFillsViewportHeight(true);
 		communicationsTable.setFillsViewportHeight(true);
@@ -207,6 +209,7 @@ public class Ics204Panel extends JPanel {
 		entry.setName(RadioChannelPicker.displayName(channel));
 		entry.setFunction(channel.getFunction());
 		entry.setPrimaryContact(RadioChannelPicker.displayName(channel));
+		entry.setRadioChannelId(channel.getChannelId());
 		communicationsTableModel.addEntry(entry);
 		pushToModel();
 		controller.markDirty();

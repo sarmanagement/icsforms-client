@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.comms.ChannelLinkSource;
 
 import javax.swing.AbstractAction;
 import javax.swing.DefaultListModel;
@@ -31,6 +32,8 @@ import java.awt.event.ActionEvent;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * Shared searchable channel picker that deliberately preserves legacy free-text fields.
@@ -51,6 +54,25 @@ final class RadioChannelPicker {
 			return;
 		}
 		field.putClientProperty("radioChannelPicker", Boolean.TRUE);
+		field.getDocument().addDocumentListener(new DocumentListener() {
+			/** {@inheritDoc} */
+			@Override
+			public void insertUpdate(DocumentEvent event) {
+				field.putClientProperty("radioChannelId", null);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void removeUpdate(DocumentEvent event) {
+				field.putClientProperty("radioChannelId", null);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void changedUpdate(DocumentEvent event) {
+				field.putClientProperty("radioChannelId", null);
+			}
+		});
 		AbstractAction action = new AbstractAction("Choose communications plan channel…") {
 			/** {@inheritDoc} */
 			@Override
@@ -87,6 +109,69 @@ final class RadioChannelPicker {
 	}
 
 	/**
+	 * Installs an editable table picker with persisted stable identity and legacy text fallback.
+	 *
+	 * @param table legacy contact table.
+	 * @param column radio/contact column index.
+	 * @param controller active incident controller.
+	 * @param referenceGetter stored reference for a model row.
+	 * @param referenceSetter setter for a model row's accepted reference.
+	 */
+	static void install(JTable table, int column, AppController controller,
+			java.util.function.IntFunction<String> referenceGetter,
+			java.util.function.BiConsumer<Integer, String> referenceSetter) {
+		JTextField field = new JTextField();
+		install(field, controller);
+		table.getColumnModel().getColumn(column).setCellEditor(new DefaultCellEditor(field) {
+			private int modelRow = -1;
+
+			/** {@inheritDoc} */
+			@Override
+			public Component getTableCellEditorComponent(JTable component, Object value, boolean selected,
+					int row, int editorColumn) {
+				Component editor = super.getTableCellEditorComponent(component, value, selected, row, editorColumn);
+				modelRow = component.convertRowIndexToModel(row);
+				restoreReference(field, referenceGetter.apply(modelRow));
+				return editor;
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public boolean stopCellEditing() {
+				String reference = referenceId(field);
+				int row = modelRow;
+				boolean accepted = super.stopCellEditing();
+				if (accepted && row >= 0) {
+					referenceSetter.accept(row, reference);
+					modelRow = -1;
+				}
+				return accepted;
+			}
+		});
+	}
+
+	/**
+	 * Restores a persisted reference after loading the corresponding fallback text.
+	 *
+	 * @param field radio/contact field.
+	 * @param channelId persisted ID, or blank for legacy text.
+	 */
+	static void restoreReference(JTextField field, String channelId) {
+		field.putClientProperty("radioChannelId", channelId == null || channelId.isBlank() ? null : channelId);
+	}
+
+	/**
+	 * Returns a field's still-valid selected identity; manual edits clear it.
+	 *
+	 * @param field radio/contact field.
+	 * @return selected channel ID, or empty for free text.
+	 */
+	static String referenceId(JTextField field) {
+		Object value = field.getClientProperty("radioChannelId");
+		return value instanceof String reference ? reference : "";
+	}
+
+	/**
 	 * Finds matching channels in original order, including channels excluded from printed forms.
 	 *
 	 * @param controller current incident controller.
@@ -101,6 +186,23 @@ final class RadioChannelPicker {
 						+ " " + channel.getRxFrequency() + " " + channel.getTxFrequency())
 						.toLowerCase(Locale.ROOT).contains(query))
 				.toList();
+	}
+
+	/**
+	 * Collects distinct legacy radio/contact text as unverified name suggestions.
+	 * Existing plan rows are not deduplicated or merged, and no programming value is derived.
+	 *
+	 * @param controller active incident controller.
+	 * @return existing labels in source order.
+	 */
+	static List<String> legacyLabels(AppController controller) {
+		Set<String> labels = new LinkedHashSet<>();
+		ChannelLinkSource.links(controller.getData()).stream()
+				.filter(link -> link.sourceKind() != ChannelLinkSource.SourceKind.ICS205_ASSIGNMENT)
+				.map(ChannelLinkSource.ChannelLink::legacyFallback)
+				.filter(value -> !value.isBlank())
+				.forEach(labels::add);
+		return List.copyOf(labels);
 	}
 
 	/**
@@ -133,6 +235,7 @@ final class RadioChannelPicker {
 		filter.getAccessibleContext().setAccessibleName("Filter radio channels");
 		DefaultListModel<RadioChannel> model = new DefaultListModel<>();
 		JList<RadioChannel> list = new JList<>(model);
+		String preferredReference = parent instanceof JTextField field ? referenceId(field) : "";
 		list.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
 		list.setCellRenderer((component, value, index, selected, focus) -> {
 			JLabel label = new JLabel(displayName(value) + " | " + value.getZoneGroup() + " | "
@@ -147,6 +250,12 @@ final class RadioChannelPicker {
 			matches(controller, filter.getText()).forEach(model::addElement);
 			if (!model.isEmpty()) {
 				list.setSelectedIndex(0);
+				for (int row = 0; row < model.size(); row++) {
+					if (model.get(row).getChannelId().equals(preferredReference)) {
+						list.setSelectedIndex(row);
+						break;
+					}
+				}
 			}
 		};
 		filter.getDocument().addDocumentListener(new DocumentListener() {
@@ -183,7 +292,7 @@ final class RadioChannelPicker {
 			RadioChannel channel = new RadioChannel();
 			channel.setChannelName(filter.getText());
 			channel.setChannelId(UUID.randomUUID().toString());
-			RadioChannelEditorPanel editor = new RadioChannelEditorPanel(channel);
+			RadioChannelEditorPanel editor = new RadioChannelEditorPanel(channel, legacyLabels(controller));
 			if (UiSupport.showResizableConfirmDialog(dialog, "Create radio channel", editor, new Dimension(780, 680))) {
 				try {
 					result[0] = editor.editedChannel();
@@ -203,6 +312,9 @@ final class RadioChannelPicker {
 		dialog.add(filter, BorderLayout.NORTH);
 		dialog.add(new JScrollPane(list), BorderLayout.CENTER);
 		dialog.add(buttons, BorderLayout.SOUTH);
+		dialog.getRootPane().setDefaultButton(select);
+		dialog.getRootPane().registerKeyboardAction(event -> dialog.dispose(), KeyStroke.getKeyStroke("ESCAPE"),
+				javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW);
 		dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 		dialog.setSize(780, 440);
 		dialog.setLocationRelativeTo(parent);

@@ -75,6 +75,10 @@ class ChirpCsvServiceTest {
 	void importsAllConventionalDuplexesAtExactHzPrecision() throws Exception {
 		Ics205Form form = service.importCsv("\uFEFF" + fixture());
 		assertEquals(7, form.getChannels().size());
+		assertEquals("A", form.getChannels().get(0).getMode());
+		assertEquals("W", form.getChannels().get(0).getRxBandwidth());
+		assertEquals("N", form.getChannels().get(2).getRxBandwidth());
+		assertEquals("FM", form.getChannels().get(0).getProgrammingMetadata().get("chirp.Mode"));
 		assertEquals("146.520000", form.getChannels().get(0).getTxFrequency());
 		assertEquals("147.540000", form.getChannels().get(1).getTxFrequency());
 		assertEquals("150.250000", form.getChannels().get(2).getTxFrequency());
@@ -169,7 +173,9 @@ class ChirpCsvServiceTest {
 	void digitalImportPreservesCallsignAndVendorRawMetadataWithoutPretendingSupport() throws Exception {
 		String csv = fixture().replace(",FM,", ",DV,");
 		Ics205Form form = service.importCsv(csv);
-		assertEquals("DV", form.getChannels().get(0).getMode());
+		assertEquals("D", form.getChannels().get(0).getMode());
+		assertEquals("D-STAR", form.getChannels().get(0).getDigitalProtocol());
+		assertEquals("DV", form.getChannels().get(0).getProgrammingMetadata().get("chirp.Mode"));
 		assertTrue(form.getChannels().get(0).getProgrammingMetadata().containsKey("chirp.URCALL"));
 		assertFalse(service.exportCsv(form).excludedChannels().isEmpty());
 	}
@@ -282,7 +288,7 @@ class ChirpCsvServiceTest {
 		channel.setFunction("Command");
 		channel.setAssignment("Team A");
 		channel.setIncludeOnForm(false);
-		channel.setProgrammingMetadata(Map.of("vendor-only", "retained"));
+		channel.setProgrammingMetadata(Map.of("vendor-only", "retained", "chirp.Power", "5W"));
 		ChirpCsvService.ExportReport report = service.exportCsv(form);
 		assertEquals(0, report.excludedChannels().size());
 		String diagnostics = String.join("\n", report.diagnostics());
@@ -293,6 +299,106 @@ class ChirpCsvServiceTest {
 		}
 		assertEquals("Team A", channel.getAssignment());
 		assertEquals("retained", channel.getProgrammingMetadata().get("vendor-only"));
+	}
+
+	@Test
+	void neverInventsTransmitPowerForManualOrMissingPowerImports() {
+		Ics205Form form = plan();
+		form.getChannels().get(0).getProgrammingMetadata().clear();
+		ChirpCsvService.ExportReport report = service.exportCsv(form);
+		assertEquals(1, report.excludedChannels().size());
+		assertTrue(report.diagnostics().stream().anyMatch(message -> message.contains("Unknown CHIRP Power")));
+		assertFalse(report.csv().contains("50W"));
+		assertEquals(0, form.getChannels().get(0).getProgrammingMetadata().size());
+		form.getChannels().get(0).getProgrammingMetadata().put("chirp.Power", "");
+		assertEquals(1, service.exportCsv(form).excludedChannels().size());
+		form.getChannels().get(0).getProgrammingMetadata().put("chirp.Power", "0W");
+		assertEquals(1, service.exportCsv(form).excludedChannels().size());
+		form.getChannels().get(0).getProgrammingMetadata().put("chirp.Power", "2.5W");
+		Map<String, String> row = CsvTable.records(service.exportCsv(form).csv(), List.of("Power")).get(0);
+		assertEquals("2.5W", row.get("Power"));
+		Ics205Form imported = service.importCsv("Location,Name,Frequency,Duplex,Offset,Mode\n0,A,146.5,,0,FM");
+		assertFalse(imported.getChannels().get(0).getProgrammingMetadata().containsKey("chirp.Power"));
+		assertEquals(1, service.exportCsv(imported).excludedChannels().size());
+	}
+
+	@Test
+	void exportsCanonicalIcsAnalogModeWithNarrowWideAndDecimalAliases() {
+		for (String alias : List.of("N", "n", "12.5", "12.500", "W", "w", "25", "25.000")) {
+			Ics205Form form = plan();
+			RadioChannel channel = form.getChannels().get(0);
+			channel.setMode("A");
+			channel.setRxBandwidth(alias);
+			channel.setTxBandwidth(alias);
+			ChirpCsvService.ExportReport report = service.exportCsv(form);
+			assertTrue(report.excludedChannels().isEmpty(), alias + report.diagnostics());
+			String mode = CsvTable.records(report.csv(), List.of("Mode")).get(0).get("Mode");
+			assertEquals(List.of("N", "n", "12.5", "12.500").contains(alias) ? "NFM" : "FM", mode);
+		}
+	}
+
+	@Test
+	void mapsVerifiedDigitalProtocolsSeparatelyWithoutReclassifyingUnknownModes() {
+		for (String mode : List.of("DV", "DN", "DMR", "P25", "NXDN", "UNKNOWN")) {
+			Ics205Form imported = service.importCsv("Location,Name,Frequency,Duplex,Offset,Mode\n0,A,146.5,,0," + mode);
+			RadioChannel channel = imported.getChannels().get(0);
+			assertEquals("UNKNOWN".equals(mode) ? "UNKNOWN" : "D", channel.getMode());
+			assertEquals("DV".equals(mode) ? "D-STAR" : "UNKNOWN".equals(mode) ? "" : mode,
+					channel.getDigitalProtocol());
+			assertEquals(mode, channel.getProgrammingMetadata().get("chirp.Mode"));
+			assertEquals(1, service.exportCsv(imported).excludedChannels().size());
+		}
+		Ics205Form invalidAnalog = service.importCsv("Location,Name,Frequency,Duplex,Offset,Mode\n0,A,146.5,,0,A");
+		RadioChannel channel = invalidAnalog.getChannels().get(0);
+		channel.setRxBandwidth("N");
+		channel.getProgrammingMetadata().put("chirp.Power", "5W");
+		assertEquals("CHIRP:A", channel.getMode());
+		assertEquals("A", channel.getProgrammingMetadata().get("chirp.Mode"));
+		assertEquals(1, service.exportCsv(invalidAnalog).excludedChannels().size());
+	}
+
+	@Test
+	void receiveOnlyContradictoryTransmitSettingsProduceExplicitPerChannelWarnings() {
+		Ics205Form form = plan();
+		RadioChannel channel = form.getChannels().get(0);
+		channel.setTxPolicy(RadioChannel.TX_POLICY_RECEIVE_ONLY);
+		channel.setTxFrequency("147.123456");
+		channel.setTxToneNac("DTCS:023:R");
+		channel.setTxBandwidth("W");
+		ChirpCsvService.ExportReport report = service.exportCsv(form);
+		assertTrue(report.excludedChannels().isEmpty(), report.diagnostics().toString());
+		String warning = report.diagnostics().stream()
+				.filter(message -> message.contains("receive-only Duplex=off")).findFirst().orElseThrow();
+		assertTrue(warning.contains(channel.getChannelId()));
+		assertTrue(warning.contains("txFrequency"));
+		assertTrue(warning.contains("txToneNac"));
+		assertTrue(warning.contains("txBandwidth"));
+		assertEquals("147.123456", channel.getTxFrequency());
+		assertEquals("DTCS:023:R", channel.getTxToneNac());
+		assertEquals("W", channel.getTxBandwidth());
+		assertEquals("off", CsvTable.records(report.csv(), List.of("Duplex")).get(0).get("Duplex"));
+	}
+
+	@Test
+	void digitalRoutingMetadataIsNeverProjectedAsAnalogCommentsOrSettings() {
+		for (String key : List.of("chirp.URCALL", "chirp.RPT1CALL", "chirp.RPT2CALL", "chirp.DVCODE",
+				"URCALL", "RPT1", "RPT2", "DVCODE", "chirp.urcall")) {
+			Ics205Form form = plan();
+			RadioChannel channel = form.getChannels().get(0);
+			channel.getProgrammingMetadata().put(key, "001");
+			ChirpCsvService.ExportReport report = service.exportCsv(form);
+			assertEquals(1, report.excludedChannels().size(), key);
+			assertTrue(report.diagnostics().stream()
+					.anyMatch(message -> message.contains("digital routing field " + key)), key);
+			assertEquals(1, CsvTable.parse(report.csv()).size());
+			RadioChannelCsvService nativeService = new RadioChannelCsvService();
+			assertEquals("001", nativeService.importCsv(nativeService.exportCsv(form))
+					.getChannels().get(0).getProgrammingMetadata().get(key));
+		}
+		Ics205Form form = plan();
+		form.getChannels().get(0).setSystem("Named trunking system");
+		assertTrue(service.exportCsv(form).diagnostics().stream()
+				.anyMatch(message -> message.contains("Unsupported system 'Named trunking system'")));
 	}
 
 	/**
@@ -319,6 +425,7 @@ class ChirpCsvServiceTest {
 		channel.setRxFrequency("146.520000");
 		channel.setTxFrequency("146.520000");
 		channel.setTxPolicy(RadioChannel.TX_POLICY_TRANSMIT);
+		channel.setProgrammingMetadata(Map.of("chirp.Power", "5W"));
 		form.setChannels(List.of(channel));
 		return form;
 	}

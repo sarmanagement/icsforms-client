@@ -147,7 +147,7 @@ public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		float bodyHeight = layout.height() - metadataHeight - preparerHeight - FOOTER_HEIGHT;
 		float tableHeight = bodyHeight - INSTRUCTIONS_HEIGHT;
 		float rowArea = tableHeight - tableHeaderHeight;
-		if (rowArea < 28) {
+		if (rowArea < SECTION_HEADING_HEIGHT + LEADING + PADDING * 2) {
 			throw new IllegalArgumentException("ICS 205 margins or repeated metadata leave no printable body area.");
 		}
 		float minimumRow = rowArea / BODY_ROWS;
@@ -173,13 +173,16 @@ public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			while (channelIndex < channels.size() && rows.size() < BODY_ROWS) {
 				List<List<String>> cells = channels.get(channelIndex);
 				int remaining = maxLines(cells) - channelLine;
-				int capacity = (int) ((rowArea - used - PADDING * 2) / LEADING);
-				if (capacity < 1 || rowArea - used < minimumRow - 0.01f) {
+				float continuationHeight = channelLine > 0 ? SECTION_HEADING_HEIGHT : 0;
+				int capacity = (int) ((rowArea - used - continuationHeight - PADDING * 2) / LEADING);
+				if (capacity < 1 || rowArea - used < minimumRow + continuationHeight - 0.01f) {
 					break;
 				}
 				int count = Math.min(remaining, capacity);
-				float rowHeight = Math.max(minimumRow, count * LEADING + PADDING * 2);
-				rows.add(new Row(slice(cells, channelLine, count), rowHeight));
+				float rowHeight = Math.max(minimumRow, count * LEADING + PADDING * 2) + continuationHeight;
+				String continuation = channelLine > 0
+						? "Ch # " + cells.get(1).get(0) + " / " + cells.get(3).get(0) + " (continued)" : "";
+				rows.add(new Row(slice(cells, channelLine, count), rowHeight, continuation));
 				used += rowHeight;
 				channelLine += count;
 				if (channelLine >= maxLines(cells)) {
@@ -188,7 +191,7 @@ public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				}
 			}
 			while (rows.size() < BODY_ROWS && used + minimumRow <= rowArea + 0.01f) {
-				rows.add(new Row(List.of(), minimumRow));
+				rows.add(new Row(List.of(), minimumRow, ""));
 				used += minimumRow;
 			}
 			// Instruction-only continuations use the otherwise empty table body.
@@ -280,8 +283,15 @@ public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			cells(stream, bold, layout.x(), y, plan.widths(), headingHeight, plan.headings());
 			y -= headingHeight;
 			for (Row row : sheet.rows()) {
-				cells(stream, font, layout.x(), y, plan.widths(), row.height(), row.cells());
-				y -= row.height();
+				float height = row.height();
+				if (!row.continuation().isEmpty()) {
+					cells(stream, font, layout.x(), y, new float[]{layout.width()}, SECTION_HEADING_HEIGHT,
+							List.of(List.of(row.continuation())));
+					y -= SECTION_HEADING_HEIGHT;
+					height -= SECTION_HEADING_HEIGHT;
+				}
+				cells(stream, font, layout.x(), y, plan.widths(), height, row.cells());
+				y -= height;
 			}
 			List<String> instructionText = new ArrayList<>();
 			instructionText.add("5. Special Instructions" + (index == 0 ? "" : " (continued)"));
@@ -486,7 +496,8 @@ public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 *
 	 * @param cells measured cell lines
 	 * @param height printable row height
+	 * @param continuation identifying banner for a split channel row, or empty for whole rows
 	 */
-	private record Row(List<List<String>> cells, float height) {
+	private record Row(List<List<String>> cells, float height, String continuation) {
 	}
 }

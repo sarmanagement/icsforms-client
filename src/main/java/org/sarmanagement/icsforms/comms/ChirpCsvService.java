@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Locale;
 
 /**
  * Conservative conventional analog CHIRP interchange, verified against upstream
@@ -45,6 +46,8 @@ public class ChirpCsvService {
 	/**
 	 * Imports all channels, including unsupported modes, preserving original cells.
 	 * CHIRP file comments are retained in the plan's special instructions.
+	 * FM/NFM become ICS A with W/N bandwidth; recognized digital protocols become D.
+	 * Original CHIRP Mode remains in programming metadata.
 	 * @param csv CHIRP generic CSV text.
 	 * @return detached plan with explicit TX policy derived from Duplex.
 	 */
@@ -88,8 +91,16 @@ public class ChirpCsvService {
 				}
 				channel.setTxPolicy(tx == null ? RadioChannel.TX_POLICY_RECEIVE_ONLY : RadioChannel.TX_POLICY_TRANSMIT);
 				channel.setTxFrequency(tx == null ? "" : tx.toPlainString());
-				channel.setMode(row.get("Mode"));
-				channel.setRxBandwidth("NFM".equals(row.get("Mode")) ? "12.5" : "FM".equals(row.get("Mode")) ? "25" : "");
+				String importedMode = row.get("Mode");
+				if (Set.of("FM", "NFM").contains(importedMode)) {
+					channel.setMode("A");
+					channel.setRxBandwidth("NFM".equals(importedMode) ? "N" : "W");
+				} else if (Set.of("DV", "DN", "DMR", "P25", "NXDN").contains(importedMode)) {
+					channel.setMode("D");
+					channel.setDigitalProtocol("DV".equals(importedMode) ? "D-STAR" : importedMode);
+				} else {
+					channel.setMode("A".equals(importedMode) ? "CHIRP:A" : importedMode);
+				}
 				channel.setTxBandwidth(channel.getRxBandwidth());
 				channel.setRemarks(row.getOrDefault("Comment", ""));
 				Map<String, String> metadata = new LinkedHashMap<>();
@@ -109,6 +120,7 @@ public class ChirpCsvService {
 	/**
 	 * Exports safe analog rows, reporting every excluded channel explicitly.
 	 * UNKNOWN transmit policy is never inferred as simplex or permission to transmit.
+	 * Explicit operator-supplied chirp.Power metadata is required; power is never invented.
 	 * @param form native source plan; print selection does not limit export.
 	 * @return CSV plus warnings and detached excluded channel copies.
 	 */
@@ -121,7 +133,8 @@ public class ChirpCsvService {
 		}
 		List<String> diagnostics = new ArrayList<>();
 		diagnostics.add("CHIRP is a programming projection, not a lossless plan backup. "
-				+ "Use native CSV to retain ICS assignments, form metadata, IDs and print selection.");
+				+ "Use native CSV to retain ICS assignments, form metadata, IDs and print selection. "
+				+ "No hardware suitability, legal authorization, or radio compatibility is implied.");
 		List<String> omittedFormFields = new ArrayList<>();
 		if (!form.getSpecialInstructions().isEmpty()) {
 			omittedFormFields.add("specialInstructions");
@@ -183,6 +196,24 @@ public class ChirpCsvService {
 					diagnostics.add("Channel " + channel.getChannelName() + " [" + channel.getChannelId()
 							+ "]: CHIRP omits " + String.join(", ", omitted) + "; values remain in the native plan.");
 				}
+				if (RadioChannel.TX_POLICY_RECEIVE_ONLY.equals(channel.getTxPolicy())) {
+					List<String> inactive = new ArrayList<>();
+					if (!channel.getTxFrequency().isEmpty()) {
+						inactive.add("txFrequency");
+					}
+					if (!channel.getTxToneNac().isEmpty()) {
+						inactive.add("txToneNac");
+					}
+					if (!channel.getTxBandwidth().isEmpty()) {
+						inactive.add("txBandwidth");
+					}
+					if (!inactive.isEmpty()) {
+						diagnostics.add("Channel " + channel.getChannelName() + " [" + channel.getChannelId()
+								+ "]: receive-only Duplex=off disables transmission; populated "
+								+ String.join(", ", inactive) + " settings are not effective in CHIRP "
+								+ "and remain unchanged in the native plan.");
+					}
+				}
 			} catch (IllegalArgumentException e) {
 				excluded.add(channel);
 				diagnostics.add("Excluded " + channel.getChannelName() + " [" + channel.getChannelId() + "]: " + e.getMessage());
@@ -206,20 +237,30 @@ public class ChirpCsvService {
 			throw new IllegalArgumentException("Unknown TX policy; explicitly choose transmit or receive-only.");
 		}
 		String mode = channel.getMode();
+		String rxBandwidth = bandwidth(channel.getRxBandwidth());
+		String txBandwidth = bandwidth(channel.getTxBandwidth());
 		if ("A".equals(mode)) {
-			mode = switch (channel.getRxBandwidth()) {
-				case "12.5" -> "NFM";
-				case "25" -> "FM";
-				default -> throw new IllegalArgumentException("Analog A requires explicit 12.5 or 25 kHz bandwidth.");
+			mode = switch (rxBandwidth) {
+				case "N" -> "NFM";
+				case "W" -> "FM";
+				default -> throw new IllegalArgumentException("Analog A requires explicit N/12.5 or W/25 kHz bandwidth.");
 			};
 		}
-		if (!Set.of("FM", "NFM").contains(mode) || !channel.getDigitalProtocol().isBlank()
-				|| !channel.getSystem().isBlank()) {
-			throw new IllegalArgumentException("Unsupported digital, mixed, trunked or unverified mode/system; native data retained.");
+		if (!Set.of("FM", "NFM").contains(mode)) {
+			throw new IllegalArgumentException("Unsupported digital, mixed, or unverified mode '" + mode + "'; native data retained.");
 		}
-		String bandwidth = "FM".equals(mode) ? "25" : "12.5";
-		if ((!channel.getRxBandwidth().isBlank() && !bandwidth.equals(channel.getRxBandwidth()))
-				|| (!channel.getTxBandwidth().isBlank() && !bandwidth.equals(channel.getTxBandwidth()))) {
+		if (!channel.getDigitalProtocol().isBlank()) {
+			throw new IllegalArgumentException("Unsupported digitalProtocol '" + channel.getDigitalProtocol()
+					+ "'; native data retained.");
+		}
+		if (!channel.getSystem().isBlank()) {
+			throw new IllegalArgumentException("Unsupported system '" + channel.getSystem()
+					+ "'; system/trunking configuration remains native-only.");
+		}
+		rejectRoutingMetadata(channel);
+		String expectedBandwidth = "FM".equals(mode) ? "W" : "N";
+		if ((!rxBandwidth.isEmpty() && !expectedBandwidth.equals(rxBandwidth))
+				|| (!txBandwidth.isEmpty() && !expectedBandwidth.equals(txBandwidth))) {
 			throw new IllegalArgumentException("Mode and independent RX/TX bandwidths are not representable in CHIRP.");
 		}
 		Map<String, String> row = defaults();
@@ -264,6 +305,25 @@ public class ChirpCsvService {
 	}
 
 	/**
+	 * Rejects digital routing settings on conventional analog projections.
+	 * @param channel source channel.
+	 */
+	private static void rejectRoutingMetadata(RadioChannel channel) {
+		Set<String> routingFields = Set.of("URCALL", "RPT1CALL", "RPT2CALL", "DVCODE", "RPT1", "RPT2");
+		for (Map.Entry<String, String> entry : channel.getProgrammingMetadata().entrySet()) {
+			if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isBlank()) {
+				continue;
+			}
+			String key = entry.getKey().toUpperCase(Locale.ROOT);
+			String field = key.startsWith("CHIRP.") ? key.substring("CHIRP.".length()) : key;
+			if (routingFields.contains(field)) {
+				throw new IllegalArgumentException("Nonblank digital routing field " + entry.getKey()
+						+ " cannot be projected as analog programming data; retained in native metadata.");
+			}
+		}
+	}
+
+	/**
 	 * Creates upstream-compatible defaults for nonessential programming fields.
 	 * @return default cell map.
 	 */
@@ -277,8 +337,31 @@ public class ChirpCsvService {
 		row.put("DtcsPolarity", "NN");
 		row.put("CrossMode", "Tone->Tone");
 		row.put("TStep", "5.00");
-		row.put("Power", "50W");
 		return row;
+	}
+
+	/**
+	 * Resolves conventional narrow/wide aliases without changing native text.
+	 * @param text N/W or a supported decimal kHz value.
+	 * @return N, W, or blank when unset.
+	 */
+	private static String bandwidth(String text) {
+		String value = text.trim().toUpperCase(Locale.ROOT);
+		if (Set.of("", "N", "W").contains(value)) {
+			return value;
+		}
+		try {
+			BigDecimal number = new BigDecimal(value);
+			if (number.compareTo(new BigDecimal("12.5")) == 0) {
+				return "N";
+			}
+			if (number.compareTo(new BigDecimal("25")) == 0) {
+				return "W";
+			}
+		} catch (NumberFormatException e) {
+			throw new IllegalArgumentException("Unsupported bandwidth: " + text, e);
+		}
+		throw new IllegalArgumentException("Unsupported bandwidth: " + text);
 	}
 
 	/**
@@ -461,6 +544,10 @@ public class ChirpCsvService {
 	 * @param row output cells.
 	 */
 	private static void validateOptional(Map<String, String> row) {
+		if (row.get("Power").isBlank()) {
+			throw new IllegalArgumentException("Unknown CHIRP Power; an operator must explicitly choose "
+					+ "programmingMetadata chirp.Power before export. No transmit power is inferred.");
+		}
 		polarity(row.get("DtcsPolarity"));
 		tone("Tone", row.get("rToneFreq"), "N");
 		tone("Tone", row.get("cToneFreq"), "N");
@@ -475,6 +562,10 @@ public class ChirpCsvService {
 		if (!row.get("Power").matches("[0-9]+(\\.[0-9]+)?[Ww]?")
 				|| !row.get("TStep").matches("[0-9]+(\\.[0-9]+)?")) {
 			throw new IllegalArgumentException("Unverified Power or TStep value.");
+		}
+		String power = row.get("Power").replace("W", "").replace("w", "");
+		if (new BigDecimal(power).signum() <= 0) {
+			throw new IllegalArgumentException("CHIRP Power must be explicitly positive; hardware suitability remains unverified.");
 		}
 	}
 }

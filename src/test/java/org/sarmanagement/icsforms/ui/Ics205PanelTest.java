@@ -141,7 +141,7 @@ class Ics205PanelTest {
 				field.setter.accept(channel, "custom " + field.name() + (field.multiline ? "\nsecond line" : ""));
 			}
 		}
-		channel.setProgrammingMetadata(Map.of("vendor\nkey", "value\nwith=equals", "unknown", "\"quoted\""));
+		channel.setProgrammingMetadata(Map.of("vendor=key\nmultiline", "value\nwith=equals", "unknown", "\"quoted\""));
 		channel.setIncludeOnForm(false);
 		channel.setTxPolicy(RadioChannel.TX_POLICY_RECEIVE_ONLY);
 		SwingUtilities.invokeAndWait(() -> {
@@ -157,6 +157,7 @@ class Ics205PanelTest {
 			@SuppressWarnings("unchecked")
 			Map<RadioChannelEditorPanel.Field, JTextComponent> fields =
 					(Map<RadioChannelEditorPanel.Field, JTextComponent>) field(editor, "fields");
+			assertFalse(fields.get(RadioChannelEditorPanel.Field.ID).isEditable());
 			assertInstanceOf(JTextArea.class, fields.get(RadioChannelEditorPanel.Field.ASSIGNMENT));
 			assertInstanceOf(JTextArea.class, fields.get(RadioChannelEditorPanel.Field.SYSTEM));
 			assertInstanceOf(JTextArea.class, fields.get(RadioChannelEditorPanel.Field.REMARKS));
@@ -171,6 +172,15 @@ class Ics205PanelTest {
 			assertEquals(RadioChannel.TX_POLICY_TRANSMIT, simplex.getTxPolicy());
 			assertEquals(RadioChannel.TX_POLICY_RECEIVE_ONLY, channel.getTxPolicy());
 		});
+	}
+
+	@Test
+	void channelSuggestionsUseCanonicalCodesAndAllStandardFunctions() {
+		assertEquals(List.of("", "N", "W"), List.of(RadioChannelEditorPanel.Field.RX_BANDWIDTH.choices));
+		assertEquals(List.of("", "N", "W"), List.of(RadioChannelEditorPanel.Field.TX_BANDWIDTH.choices));
+		assertEquals(List.of("", "A", "D", "M"), List.of(RadioChannelEditorPanel.Field.MODE.choices));
+		assertTrue(List.of(RadioChannelEditorPanel.Field.FUNCTION.choices).containsAll(
+				List.of("Command", "Tactical", "Ground-to-Air", "Air-to-Air", "Support", "Dispatch")));
 	}
 
 	@Test
@@ -246,10 +256,56 @@ class Ics205PanelTest {
 			assertEquals("Legacy talkgroup / phone 555-0100", legacy.getText());
 			assertEquals(1, legacy.getComponentPopupMenu().getComponentCount());
 			assertNotNull(legacy.getActionMap().get("pick-radio-channel"));
+			RadioChannelPicker.restoreReference(legacy, channel.getChannelId());
+			assertEquals(channel.getChannelId(), RadioChannelPicker.referenceId(legacy));
+			legacy.setText("Explicit legacy override");
+			assertEquals("", RadioChannelPicker.referenceId(legacy));
 			assertEquals(List.of(channel), RadioChannelPicker.matches(controller, "NORTH"));
 			assertEquals(List.of(channel), RadioChannelPicker.matches(controller, "155.500"));
 			assertTrue(RadioChannelPicker.matches(controller, "missing").isEmpty());
 			assertFalse(data.isIcs205Enabled());
+			assertFalse(controller.isDirty());
+		});
+	}
+
+	@Test
+	void legacyRadioFieldsBecomeUnverifiedNameChoicesWithoutDeduplicatingPlanIdentities() throws Exception {
+		AppData data = new AppData();
+		data.getOrganizationalChart().setSafetyOfficerRadio("Legacy command");
+		data.getOrganizationalChart().setLiaisonOfficerRadio("Legacy command");
+		var additional = new org.sarmanagement.icsforms.model.OrgChartEntry();
+		additional.setRadio("Additional organization radio");
+		data.getOrganizationalChart().getAdditionalPositions().add(additional);
+		var card = new org.sarmanagement.icsforms.model.TCard();
+		card.setRadioChannel("Personnel radio");
+		data.getTCards().add(card);
+		var entry = new org.sarmanagement.icsforms.model.CommunicationEntry();
+		entry.setPrimaryContact("Assignment radio / phone");
+		data.getForm204().getCommunications().add(entry);
+		var station = new org.sarmanagement.icsforms.model.MedicalPlan.AidStation();
+		station.setFrequency("Medical legacy frequency");
+		data.getMedicalPlan().getAidStations().add(station);
+		data.getForm205().getChannels().add(channel("Same display name"));
+		data.getForm205().getChannels().add(channel("Same display name"));
+		AppController controller = controller(data);
+		SwingUtilities.invokeAndWait(() -> {
+			List<String> suggestions = RadioChannelPicker.legacyLabels(controller);
+			assertTrue(suggestions.containsAll(List.of("Legacy command", "Additional organization radio",
+					"Personnel radio", "Assignment radio / phone", "Medical legacy frequency")));
+			assertEquals(1, suggestions.stream().filter("Legacy command"::equals).count());
+			assertEquals(2, RadioChannelPicker.matches(controller, "Same display name").size());
+			RadioChannelEditorPanel editor = new RadioChannelEditorPanel(channel(""), suggestions);
+			@SuppressWarnings("unchecked")
+			Map<RadioChannelEditorPanel.Field, JTextComponent> fields =
+					(Map<RadioChannelEditorPanel.Field, JTextComponent>) field(editor, "fields");
+			fields.get(RadioChannelEditorPanel.Field.NAME).setText("Personnel radio");
+			RadioChannel selected = editor.editedChannel();
+			assertEquals("Personnel radio", selected.getChannelName());
+			assertEquals("", selected.getRxFrequency());
+			assertEquals("", selected.getTxFrequency());
+			assertEquals(RadioChannel.TX_POLICY_UNKNOWN, selected.getTxPolicy());
+			assertEquals("Personnel radio", card.getRadioChannel());
+			assertEquals(2, data.getForm205().getChannels().size());
 			assertFalse(controller.isDirty());
 		});
 	}
@@ -322,7 +378,35 @@ class Ics205PanelTest {
 			assertEquals("Pending legacy radio edit", data.getForm204().getCommunications().get(0).getPrimaryContact());
 			assertEquals("Plan channel", data.getForm204().getCommunications().get(1).getPrimaryContact());
 			assertEquals("Tactical", data.getForm204().getCommunications().get(1).getFunction());
+			assertEquals(suggestion.getChannelId(), data.getForm204().getCommunications().get(1).getRadioChannelId());
+			communications.editCellAt(1, 2);
+			JTextField radio = (JTextField) communications.getEditorComponent();
+			assertEquals(suggestion.getChannelId(), RadioChannelPicker.referenceId(radio));
+			communications.getCellEditor().stopCellEditing();
+			assertEquals(suggestion.getChannelId(), data.getForm204().getCommunications().get(1).getRadioChannelId());
+			communications.editCellAt(1, 2);
+			radio = (JTextField) communications.getEditorComponent();
+			radio.setText("Manual phone / radio override");
+			communications.getCellEditor().stopCellEditing();
+			assertEquals("", data.getForm204().getCommunications().get(1).getRadioChannelId());
+			assertEquals("Manual phone / radio override", data.getForm204().getCommunications().get(1).getPrimaryContact());
 		});
+	}
+
+	@Test
+	void cancelSafePersonnelCopyPreservesStableChannelReferenceAndTextFallback() throws Exception {
+		var card = new org.sarmanagement.icsforms.model.TCard();
+		card.setPersonName("Person");
+		card.setRadioChannel("Recorded label");
+		card.setRadioChannelId("stable-channel-id");
+		var method = TCardPanel.class.getDeclaredMethod("copyCard", org.sarmanagement.icsforms.model.TCard.class);
+		method.setAccessible(true);
+		var copy = (org.sarmanagement.icsforms.model.TCard) method.invoke(null, card);
+		assertEquals("Recorded label", copy.getRadioChannel());
+		assertEquals("stable-channel-id", copy.getRadioChannelId());
+		copy.setRadioChannel("Manual override");
+		assertEquals("", copy.getRadioChannelId());
+		assertEquals("stable-channel-id", card.getRadioChannelId());
 	}
 
 	@Test

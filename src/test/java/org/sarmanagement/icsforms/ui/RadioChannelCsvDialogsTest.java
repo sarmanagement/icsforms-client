@@ -126,6 +126,18 @@ class RadioChannelCsvDialogsTest {
 		assertEquals(imported.getPreparedDateTime(), data.getForm205().getPreparedDateTime());
 		assertEquals(imported.getDatePrepared(), data.getForm205().getDatePrepared());
 		assertEquals("9", data.getForm205().getIapPage());
+		assertEquals(imported.getFormId(), data.getForm205().getFormId());
+	}
+
+	@Test
+	void appendingWithExplicitMetadataDoesNotReplacePlanIdentity() throws Exception {
+		String originalId = data.getForm205().getFormId();
+		Ics205Form imported = source("Incoming");
+		writeImport(imported);
+		dialogs.selection = new RadioChannelCsvDialogs.ImportSelection(List.of(0), ChannelImportService.Mode.APPEND, true);
+		runImport();
+		assertEquals(originalId, data.getForm205().getFormId());
+		assertEquals("Imported instructions", data.getForm205().getSpecialInstructions());
 	}
 
 	@Test
@@ -189,6 +201,7 @@ class RadioChannelCsvDialogsTest {
 		valid.setMode("FM");
 		valid.setRxBandwidth("25");
 		valid.setTxBandwidth("25");
+		valid.setProgrammingMetadata(java.util.Map.of("chirp.Power", "5W"));
 		data.getForm205().getChannels().add(valid);
 		dialogs.acceptProjection = true;
 		runExport(true);
@@ -205,6 +218,19 @@ class RadioChannelCsvDialogsTest {
 		dialogs.acceptOverwrite = false;
 		runExport(false);
 		assertEquals("Existing bytes", Files.readString(dialogs.destination));
+	}
+
+	@Test
+	void publicationFailureCleansSiblingStagingAndLeavesDestinationUntouched() throws Exception {
+		dialogs.destination = Files.createDirectories(directory.resolve("existing-directory.csv"));
+		Files.writeString(dialogs.destination.resolve("retained.txt"), "Retained content");
+		dialogs.acceptOverwrite = true;
+		runExport(false);
+		assertNotNull(dialogs.error);
+		assertEquals("Retained content", Files.readString(dialogs.destination.resolve("retained.txt")));
+		try (var files = Files.list(directory)) {
+			assertTrue(files.noneMatch(path -> path.getFileName().toString().startsWith(".ics205-")));
+		}
 	}
 
 	/**

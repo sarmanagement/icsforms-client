@@ -19,6 +19,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
+import java.util.UUID;
+import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -143,12 +145,69 @@ class RadioChannelCsvServiceTest {
 	}
 
 	@Test
+	void atomicallyReplacesExistingCsvAndCleansSiblingStagingFiles() throws Exception {
+		Path directory = Path.of("target");
+		Files.createDirectories(directory);
+		Path destination = directory.resolve("native-atomic-" + UUID.randomUUID() + ".csv");
+		List<Path> stagingBefore = stagingFiles(directory);
+		Ics205Form original = new Ics205Form();
+		original.setSpecialInstructions("Original complete backup");
+		Ics205Form replacement = original.deepCopy();
+		replacement.setSpecialInstructions("Replacement, complete 日本語");
+		try {
+			service.write(destination, original);
+			service.write(destination, replacement);
+			assertEquals(replacement.getSpecialInstructions(), service.read(destination).getSpecialInstructions());
+			assertEquals(stagingBefore, stagingFiles(directory));
+			RadioChannelCsvService.writeCsv(destination, "CHIRP CSV\r\n");
+			assertEquals("CHIRP CSV\r\n", Files.readString(destination));
+			assertEquals(stagingBefore, stagingFiles(directory));
+		} finally {
+			Files.deleteIfExists(destination);
+		}
+	}
+
+	@Test
+	void failedAtomicPublicationPreservesExistingFilesAndCleansStaging() throws Exception {
+		Path directory = Path.of("target");
+		Files.createDirectories(directory);
+		Path backup = directory.resolve("native-atomic-backup-" + UUID.randomUUID() + ".csv");
+		Ics205Form form = new Ics205Form();
+		form.setSpecialInstructions("Existing backup must survive");
+		String original = service.exportCsv(form);
+		Files.writeString(backup, original);
+		List<Path> stagingBefore = stagingFiles(Path.of("."));
+		try {
+			assertThrows(IOException.class, () -> RadioChannelCsvService.writeCsv(directory, "replacement"));
+			assertTrue(Files.isDirectory(directory));
+			assertEquals(original, Files.readString(backup));
+			assertEquals(stagingBefore, stagingFiles(Path.of(".")));
+			assertThrows(IllegalArgumentException.class, () -> RadioChannelCsvService.writeCsv(backup, null));
+			assertEquals(original, Files.readString(backup));
+		} finally {
+			Files.deleteIfExists(backup);
+		}
+	}
+
+	@Test
 	void parserHandlesRfc4180AndRejectsMalformedQuotesHeadersAndWidths() {
 		assertEquals(List.of(List.of("a", "b"), List.of("one,\"two\"", "line\r\nnext")),
 				CsvTable.parse("\uFEFFa,b\r\n\"one,\"\"two\"\"\",\"line\r\nnext\""));
 		for (String bad : List.of("a,b\n\"unclosed,x", "a,b\nx\"y,z", "a,b\n\"x\"z,y",
 				"a,a\nx,y", "a,A,b\nx,y,z", "a,b\nx", "a,b\nx,y,z", ",b\nx,y")) {
 			assertThrows(IllegalArgumentException.class, () -> CsvTable.records(bad, List.of("a", "b")), bad);
+		}
+	}
+
+	/**
+	 * Lists only sibling CSV staging files used by atomic publication.
+	 * @param directory destination parent directory.
+	 * @return sorted staging paths.
+	 * @throws IOException when listing fails.
+	 */
+	private static List<Path> stagingFiles(Path directory) throws IOException {
+		try (var paths = Files.list(directory)) {
+			return paths.filter(path -> path.getFileName().toString().startsWith(".ics205-csv-")).sorted().toList();
 		}
 	}
 }

@@ -117,6 +117,19 @@ Channel numbers and functions allow free text. Digital protocol is separate from
 the form's A/D/M mode; a generic D or M is not a programming specification.
 Trunked system information is not a conventional transmit frequency.
 
+Workspace navigation uses the existing typed `WorkspaceId.ICS_205` destination,
+not the tab's displayed title. Menus and role dashboards reuse the same editor
+and incident data, including the existing edit-flush lifecycle.
+
+Channel linkage has a central read-only projection for assignments, tasks,
+resources, medical/safety references, and plan-derived assignments. A unique
+explicit channel ID takes display precedence over saved free text. Missing,
+deleted, ambiguous, or absent links fall back to the legacy value; blank fallback
+means unknown/unset, not a usable frequency. Matching labels or frequencies never
+establishes a link automatically. This preserves older incidents and duplicate
+channel names without destructive rename-by-text replacement. Legacy fields are
+not all rewritten into references by this change.
+
 When advancing the operational period, explicitly select **Bring forward
 communications plan (ICS 205)** to copy the channel order, assignments, and special
 instructions. Otherwise the new plan starts empty. The previous plan is archived
@@ -201,10 +214,19 @@ radio-image import/export test, or a hardware programming test.
 | Radio images, uploads, hardware validation | Not implemented or claimed tested. Use CHIRP and the intended radio's supported driver. |
 
 CHIRP itself can substitute a default power when CSV power is absent (50 W in the
-pinned generic driver). Review power, channel numbering, tuning steps, supported
-tones, and band limits in the target radio image; generic CSV acceptance does not
-certify that a radio can or should transmit those settings. Comments do not set
-radio programming parameters.
+pinned generic driver). Consequently this application's CHIRP projection requires
+explicit `chirp.Power` programming metadata (for example `"chirp.Power": "5W"` in
+the channel's JSON metadata editor) and an explicit nonnegative numeric channel
+number. It excludes rows without those settings rather than inventing power or
+silently renumbering channels. Imported CHIRP settings retain their metadata.
+For verified analog tone conversion, use a blank value for no tone, a numeric
+CTCSS value or `CTCSS:88.5`, and `DTCS:023:N` / `DTCS:023:R` for DTCS code and
+polarity. Other tone/NAC text remains valid native form content but may be
+excluded from CHIRP conversion rather than guessed.
+Review power, channel numbering, tuning steps, supported tones, and band limits in
+the target radio image; generic CSV acceptance does not certify that a radio can
+or should transmit those settings. Comments do not set radio programming
+parameters.
 
 ## Incident phases
 
@@ -233,6 +255,8 @@ All production source lives under `src/main/java/org/sarmanagement/icsforms/`, w
 **`ui/`** contains the Swing presentation layer. `MainFrame` builds the top-level tabbed pane and houses all the per-form panels. `AppController` wires the model to the UI and drives save, load, and export actions. Each form has a dedicated panel class (e.g. `Ics201Panel`, `Ics202Panel`) that owns its own sub-tabs or sections. `UiSupport` provides shared Swing helper utilities used across panels.
 
 **`pdf/`** is responsible for turning the in-memory model into PDF files. `AbstractPdfRenderer` and `PdfFormRenderer` provide the shared drawing infrastructure (Apache PDFBox). Each form has a dedicated renderer (e.g. `Ics201PdfRenderer`, `Ics204PdfRenderer`). `CoverPageRenderer` produces the IAP bundle cover page. `PdfExportService` coordinates single-form export, bulk export, and the merged IAP bundle export.
+
+**`comms/`** owns native/CHIRP interchange and the UI-independent `ChannelLinkSource` read API. `links(AppData)` returns immutable, typed source/reference snapshots; `resolve(AppData, channelId, legacyFallback)` applies linked-channel-first display precedence; `legacyChannelNames(AppData)` supplies centralized presentation suggestions. `LINKED` requires one exact ID match, `UNLINKED` means no explicit ID, `MISSING` means no target, and `AMBIGUOUS` means duplicate target IDs. All non-linked outcomes retain the original fallback (null becomes empty). Labels never establish links. Structural row locations are documented as locations, not new persisted identities. Reads do not generate IDs or reconcile medical/role state.
 
 **`persistence/`** defines the store-independent `IncidentStore` contract. `FileIncidentStore` stores each incident as JSON with a separate backup, revision checks, and advisory locks; `LocalRepository` remains for compatibility with older integrations.
 

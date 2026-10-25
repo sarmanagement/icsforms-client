@@ -4,6 +4,9 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -46,6 +49,8 @@ public class TCard {
 	private String phoneNumber = "";
 	/** Assigned radio channel or talkgroup for the operational period. */
 	private String radioChannel = "";
+	/** Optional stable ICS 205 channel reference; blank for free-text assignments. */
+	private String radioChannelId = "";
 	/** Date and time of check-in at the incident. */
 	private LocalDateTime checkInDateTime;
 
@@ -102,6 +107,19 @@ public class TCard {
 	}
 
 	/**
+	 * Restores a radio assignment and its optional identity together so JSON
+	 * property ordering cannot accidentally discard a persisted reference.
+	 * @param radioChannel persisted fallback label; null becomes empty
+	 * @param radioChannelId persisted channel identity; null becomes empty
+	 */
+	@JsonCreator
+	public TCard(@JsonProperty("radioChannel") String radioChannel,
+			@JsonProperty("radioChannelId") String radioChannelId) {
+		this.radioChannel = radioChannel == null ? "" : radioChannel;
+		setRadioChannelId(radioChannelId);
+	}
+
+	/**
 	 * Returns the card type.
 	 *
 	 * @return card type.
@@ -130,6 +148,15 @@ public class TCard {
 		if (resourceId == null || resourceId.isBlank()) {
 			resourceId = UUID.randomUUID().toString();
 		}
+		return resourceId;
+	}
+
+	/**
+	 * Returns the stored resource identity without assigning one to a legacy card.
+	 * @return existing resource identity, or null when not yet assigned
+	 */
+	@JsonIgnore
+	public String peekResourceId() {
 		return resourceId;
 	}
 
@@ -231,12 +258,35 @@ public class TCard {
 
 	/**
 	 * Sets the assigned radio channel or talkgroup for the operational period.
+	 * Changing the label clears its optional plan reference; an identical label
+	 * preserves the reference.
 	 *
 	 * @param radioChannel
-	 *            radio channel or talkgroup.
+	 *            radio channel or talkgroup; null becomes empty.
 	 */
 	public void setRadioChannel(String radioChannel) {
-		this.radioChannel = radioChannel == null ? "" : radioChannel;
+		String value = radioChannel == null ? "" : radioChannel;
+		if (!getRadioChannel().equals(value)) {
+			radioChannelId = "";
+		}
+		this.radioChannel = value;
+	}
+
+	/**
+	 * Returns the optional stable ICS 205 channel reference.
+	 * @return channel identity, or empty for a free-text assignment
+	 */
+	public String getRadioChannelId() {
+		return radioChannelId;
+	}
+
+	/**
+	 * Sets an optional plan reference without changing the fallback label.
+	 * Assign the label before the identity when selecting a different channel.
+	 * @param radioChannelId stable channel identity; null becomes empty
+	 */
+	public void setRadioChannelId(String radioChannelId) {
+		this.radioChannelId = radioChannelId == null ? "" : radioChannelId;
 	}
 
 	/**

@@ -356,7 +356,7 @@ public final class Ics205Panel extends JPanel {
 		if (create) {
 			source.setChannelId(UUID.randomUUID().toString());
 		}
-		RadioChannelEditorPanel editor = new RadioChannelEditorPanel(source);
+		RadioChannelEditorPanel editor = new RadioChannelEditorPanel(source, RadioChannelPicker.legacyLabels(controller));
 		while (UiSupport.showResizableConfirmDialog(this, create ? "Add radio channel" : "Edit radio channel",
 				editor, new Dimension(820, 700))) {
 			try {

@@ -20,6 +20,7 @@ import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -41,6 +42,16 @@ final class RadioChannelEditorPanel extends JPanel {
 	 * @param channel channel to edit.
 	 */
 	RadioChannelEditorPanel(RadioChannel channel) {
+		this(channel, List.of());
+	}
+
+	/**
+	 * Builds a detached editor with unverified legacy labels available as name suggestions.
+	 *
+	 * @param channel channel to edit.
+	 * @param legacyLabels existing radio/contact text; selection never infers programming values.
+	 */
+	RadioChannelEditorPanel(RadioChannel channel, List<String> legacyLabels) {
 		super(new BorderLayout(6, 6));
 		original = channel.deepCopy();
 		JPanel form = UiSupport.formPanel();
@@ -48,8 +59,9 @@ final class RadioChannelEditorPanel extends JPanel {
 		for (Field field : Field.values()) {
 			JTextComponent text;
 			javax.swing.JComponent control;
-			if (field.choices.length > 0) {
-				JComboBox<String> combo = new JComboBox<>(field.choices);
+			if (field.choices.length > 0 || field == Field.NAME) {
+				JComboBox<String> combo = new JComboBox<>(field == Field.NAME
+						? legacyLabels.toArray(String[]::new) : field.choices);
 				combo.setEditable(true);
 				combo.setSelectedItem(field.getter.apply(channel));
 				text = (JTextComponent) combo.getEditor().getEditorComponent();
@@ -89,6 +101,8 @@ final class RadioChannelEditorPanel extends JPanel {
 		JButton simplex = new JButton("Simplex: copy RX to TX");
 		simplex.addActionListener(event -> copyRxToTx());
 		footer.add(simplex, BorderLayout.NORTH);
+		footer.add(new JLabel("Channel-name suggestions copy unverified legacy text; no programming values are inferred."),
+				BorderLayout.CENTER);
 		footer.add(new JLabel("Unknown/custom values are retained. Verify all radio programming before use."),
 				BorderLayout.SOUTH);
 		add(footer, BorderLayout.SOUTH);
@@ -139,19 +153,19 @@ final class RadioChannelEditorPanel extends JPanel {
 		ZONE("Zone / group", RadioChannel::getZoneGroup, RadioChannel::setZoneGroup, false),
 		NUMBER("Channel number", RadioChannel::getChannelNumber, RadioChannel::setChannelNumber, false),
 		FUNCTION("Function", RadioChannel::getFunction, RadioChannel::setFunction, false,
-				"", "Command", "Tactical", "Support", "Ground-to-Air"),
+				"", "Command", "Tactical", "Ground-to-Air", "Air-to-Air", "Support", "Dispatch"),
 		NAME("Channel name", RadioChannel::getChannelName, RadioChannel::setChannelName, false),
 		ASSIGNMENT("Assignment", RadioChannel::getAssignment, RadioChannel::setAssignment, true),
 		RX_FREQUENCY("RX frequency", RadioChannel::getRxFrequency, RadioChannel::setRxFrequency, false),
-		RX_BANDWIDTH("RX bandwidth (kHz)", RadioChannel::getRxBandwidth, RadioChannel::setRxBandwidth, false,
-				"", "6.25", "12.5", "25"),
+		RX_BANDWIDTH("RX bandwidth (N/W)", RadioChannel::getRxBandwidth, RadioChannel::setRxBandwidth, false,
+				"", "N", "W"),
 		RX_TONE("RX tone / NAC", RadioChannel::getRxToneNac, RadioChannel::setRxToneNac, false),
 		TX_FREQUENCY("TX frequency", RadioChannel::getTxFrequency, RadioChannel::setTxFrequency, false),
-		TX_BANDWIDTH("TX bandwidth (kHz)", RadioChannel::getTxBandwidth, RadioChannel::setTxBandwidth, false,
-				"", "6.25", "12.5", "25"),
+		TX_BANDWIDTH("TX bandwidth (N/W)", RadioChannel::getTxBandwidth, RadioChannel::setTxBandwidth, false,
+				"", "N", "W"),
 		TX_TONE("TX tone / NAC", RadioChannel::getTxToneNac, RadioChannel::setTxToneNac, false),
 		MODE("Mode", RadioChannel::getMode, RadioChannel::setMode, false,
-				"", "A", "D", "M", "FM", "NFM"),
+				"", "A", "D", "M"),
 		PROTOCOL("Digital protocol", RadioChannel::getDigitalProtocol, RadioChannel::setDigitalProtocol, false,
 				"", "P25", "DMR", "NXDN", "D-STAR", "C4FM"),
 		SYSTEM("System", RadioChannel::getSystem, RadioChannel::setSystem, true),

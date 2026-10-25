@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -690,6 +691,16 @@ public class AppData {
 	}
 
 	/**
+	 * Returns the existing shared medical assignment without reconciling legacy
+	 * fields or creating an assignment.
+	 * @return stored assignment, or null when not yet initialized
+	 */
+	@JsonIgnore
+	public MedicalUnitLeaderAssignment peekMedicalUnitLeaderAssignment() {
+		return medicalUnitLeaderAssignment;
+	}
+
+	/**
 	 * Sets the authoritative Medical Unit Leader assignment.
 	 *
 	 * @param medicalUnitLeaderAssignment shared assignment; null triggers legacy reconciliation.
@@ -1186,6 +1197,15 @@ public class AppData {
 	}
 
 	/**
+	 * Returns the stored medical plan without initializing a missing legacy plan.
+	 * @return stored plan, or null when absent
+	 */
+	@JsonIgnore
+	public MedicalPlan peekMedicalPlan() {
+		return medicalPlan;
+	}
+
+	/**
 	 * Sets the current period's standard medical plan.
 	 *
 	 * @param medicalPlan plan; null becomes inactive and empty.
@@ -1203,6 +1223,15 @@ public class AppData {
 		if (canineMedicalPlan == null) {
 			canineMedicalPlan = new CanineMedicalPlan();
 		}
+		return canineMedicalPlan;
+	}
+
+	/**
+	 * Returns the stored canine plan without initializing a missing legacy plan.
+	 * @return stored plan, or null when absent
+	 */
+	@JsonIgnore
+	public CanineMedicalPlan peekCanineMedicalPlan() {
 		return canineMedicalPlan;
 	}
 
