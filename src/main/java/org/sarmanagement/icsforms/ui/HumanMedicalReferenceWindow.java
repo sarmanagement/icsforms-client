@@ -38,7 +38,7 @@ public final class HumanMedicalReferenceWindow {
 		}
 		MedicalReferencePanel panel = new MedicalReferencePanel(controller, false, navigator);
 		JFrame frame = new JFrame(panel.referenceTitle());
-		ApplicationIcon.install(frame);
+		ApplicationIcon.install(frame, ApplicationIcon.Variant.HUMAN_REFERENCE);
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.setContentPane(panel);
 		frame.setSize(1260, 820);

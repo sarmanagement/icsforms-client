@@ -56,6 +56,7 @@ public final class Ics205Panel extends JPanel {
 	private final Action up = channelAction("Up", () -> moveSelectedChannel(-1));
 	private final Action down = channelAction("Down", () -> moveSelectedChannel(1));
 	private boolean loading;
+	private final JButton bringForward = new JButton("Bring Forward…");
 
 	/**
 	 * Creates the communications workspace.
@@ -155,6 +156,7 @@ public final class Ics205Panel extends JPanel {
 
 	/** Reloads the active document without creating preparation details or dirtying it. */
 	public void refreshFromModel() {
+		bringForward.setEnabled(controller.canReusePlans());
 		loading = true;
 		try {
 			Ics205Form plan = controller.getData().getForm205();
@@ -329,6 +331,9 @@ public final class Ics205Panel extends JPanel {
 	 */
 	private JPanel buildToolbar() {
 		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		bringForward.addActionListener(event -> BringForwardDialog.showFromEditor(this, controller,
+				this::pushToModel, this::refreshFromModel));
+		panel.add(bringForward);
 		addButton(panel, "Add…", () -> editChannel(true));
 		for (Action action : new Action[]{edit, duplicate, remove, up, down}) {
 			panel.add(new JButton(action));

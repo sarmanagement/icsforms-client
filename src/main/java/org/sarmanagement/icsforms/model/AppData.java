@@ -40,6 +40,8 @@ public class AppData {
 		private MedicalPlan medicalPlan;
 		private CanineMedicalPlan canineMedicalPlan;
 		private Ics205Form form205;
+		private Ics215aForm form215a;
+		private Ics208Form form208;
 		private Ics202Form form202;
 		private List<Ics204Form> forms204 = new ArrayList<>();
 		private List<SarTaskAssignment> sarTaskAssignments = new ArrayList<>();
@@ -174,6 +176,26 @@ public class AppData {
 		 */
 		public void setForm205(Ics205Form form205) {
 			this.form205 = form205;
+		}
+
+		/** @return archived safety analysis, or null for legacy records. */
+		public Ics215aForm getForm215a() {
+			return form215a;
+		}
+
+		/** @param form215a archived safety analysis. */
+		public void setForm215a(Ics215aForm form215a) {
+			this.form215a = form215a;
+		}
+
+		/** @return archived safety message and site plan, or null for legacy records. */
+		public Ics208Form getForm208() {
+			return form208;
+		}
+
+		/** @param form208 archived safety message and site plan. */
+		public void setForm208(Ics208Form form208) {
+			this.form208 = form208;
 		}
 
 		/** @return archived objective form, or null for legacy records. */
@@ -438,6 +460,8 @@ public class AppData {
 		record.setMedicalPlan(copyMedicalPlan(getMedicalPlan()));
 		record.setCanineMedicalPlan(copyCanineMedicalPlan(getCanineMedicalPlan()));
 		record.setForm205(getForm205().deepCopy());
+		record.setForm215a(MEDICAL_PLAN_COPIER.convertValue(getForm215a(), Ics215aForm.class));
+		record.setForm208(MEDICAL_PLAN_COPIER.convertValue(getForm208(), Ics208Form.class));
 		record.setIapPlanningStage(getIapPlanningStage());
 		record.setForm202(MEDICAL_PLAN_COPIER.convertValue(getForm202(), Ics202Form.class));
 		List<Ics204Form> archivedForms204 = new ArrayList<>();

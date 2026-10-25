@@ -25,11 +25,13 @@ class AsyncFormPreviewPanelTest {
 	@Test
 	void failureLeavesPreviewSurfaceAvailable() throws Exception {
 		AsyncFormPreviewPanel panel = new AsyncFormPreviewPanel(new PdfFormRenderer() {
+			/** {@inheritDoc} */
 			@Override
 			public String getFormKey() {
 				return "Failure test";
 			}
 
+			/** {@inheritDoc} */
 			@Override
 			public void render(AppData data, Path outputFile) throws IOException {
 				throw new IOException("expected failure");
@@ -40,7 +42,7 @@ class AsyncFormPreviewPanelTest {
 		waitFor(() -> panel.previewStateText().contains("expected failure"));
 
 		assertEquals(0, panel.displayedPageCount());
-		assertTrue(panel.previewStateText().contains("Preview unavailable"));
+		assertTrue(panel.previewStateText().contains("PDF unavailable"));
 		SwingUtilities.invokeAndWait(panel::cancel);
 	}
 
@@ -49,11 +51,13 @@ class AsyncFormPreviewPanelTest {
 		AtomicInteger invocation = new AtomicInteger();
 		CountDownLatch firstStarted = new CountDownLatch(1);
 		PdfFormRenderer renderer = new PdfFormRenderer() {
+			/** {@inheritDoc} */
 			@Override
 			public String getFormKey() {
 				return "Stale test";
 			}
 
+			/** {@inheritDoc} */
 			@Override
 			public void render(AppData data, Path outputFile) throws IOException {
 				int current = invocation.incrementAndGet();
@@ -90,11 +94,13 @@ class AsyncFormPreviewPanelTest {
 		CountDownLatch renderStarted = new CountDownLatch(1);
 		CountDownLatch renderCompleted = new CountDownLatch(1);
 		AsyncFormPreviewPanel panel = new AsyncFormPreviewPanel(new PdfFormRenderer() {
+			/** {@inheritDoc} */
 			@Override
 			public String getFormKey() {
 				return "In-flight invalidation test";
 			}
 
+			/** {@inheritDoc} */
 			@Override
 			public void render(AppData data, Path outputFile) throws IOException {
 				renderStarted.countDown();
@@ -128,11 +134,13 @@ class AsyncFormPreviewPanelTest {
 	void rendersUsingSystemTemporaryStorage() throws Exception {
 		AtomicReference<Path> output = new AtomicReference<>();
 		AsyncFormPreviewPanel panel = new AsyncFormPreviewPanel(new PdfFormRenderer() {
+			/** {@inheritDoc} */
 			@Override
 			public String getFormKey() {
 				return "Temporary storage test";
 			}
 
+			/** {@inheritDoc} */
 			@Override
 			public void render(AppData data, Path outputFile) throws IOException {
 				output.set(outputFile);
@@ -151,6 +159,48 @@ class AsyncFormPreviewPanelTest {
 		SwingUtilities.invokeAndWait(panel::cancel);
 	}
 
+	@Test
+	void unchangedRequestsReuseWorkButReviewChangesRenderAgain() throws Exception {
+		AtomicInteger invocation = new AtomicInteger();
+		AsyncFormPreviewPanel panel = new AsyncFormPreviewPanel(new PdfFormRenderer() {
+			/** {@inheritDoc} */
+			@Override
+			public String getFormKey() {
+				return "Current review test";
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void render(AppData data, Path outputFile) throws IOException {
+				invocation.incrementAndGet();
+				try (PDDocument document = new PDDocument()) {
+					document.addPage(new PDPage());
+					document.save(outputFile.toFile());
+				}
+			}
+		});
+		AppData data = new AppData();
+		SwingUtilities.invokeAndWait(() -> {
+			panel.requestPreview(data, "same-content");
+			panel.requestPreview(data, "same-content");
+		});
+		waitFor(() -> panel.displayedPageCount() == 1);
+		assertEquals(1, invocation.get());
+		SwingUtilities.invokeAndWait(() -> {
+			data.recordPlanReview(org.sarmanagement.icsforms.model.PlanReviewArea.HUMAN_MEDICAL, "Reviewer", null);
+			panel.requestPreview(data, "same-content");
+		});
+		waitFor(() -> invocation.get() == 2 && panel.displayedPageCount() == 1);
+		assertTrue(panel.previewStateText().contains("Current PDF"));
+		SwingUtilities.invokeAndWait(panel::cancel);
+	}
+
+	/**
+	 * Waits for an asynchronous PDF state while processing queued Swing completions.
+	 *
+	 * @param condition expected state.
+	 * @throws Exception when the EDT cannot be synchronized or the wait is interrupted.
+	 */
 	private void waitFor(java.util.function.BooleanSupplier condition) throws Exception {
 		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
 		while (!condition.getAsBoolean() && System.nanoTime() < deadline) {

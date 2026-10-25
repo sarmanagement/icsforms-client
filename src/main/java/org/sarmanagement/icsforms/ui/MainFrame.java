@@ -84,6 +84,7 @@ public class MainFrame extends JFrame {
 	private static final String COMMUNICATIONS_GROUP = "Communications Plan (ICS 205)";
 	private static final String SAFETY_DASHBOARD_GROUP = "Safety Dashboard";
 	private static final String DASHBOARD_PREFERENCE = "workspace-dashboard";
+	private static final String DESCRIPTIVE_TABS_PREFERENCE = "descriptive-workspace-tabs";
 	/** Tab group for T-Card (ICS 219) resource status tabs. */
 	private static final String T_CARDS_GROUP = "T-Cards";
 	/**
@@ -100,6 +101,7 @@ public class MainFrame extends JFrame {
 	private final Ics204Panel ics204Panel;
 	private final Ics205Panel ics205Panel;
 	private final JCheckBoxMenuItem communicationsPlanItem = new JCheckBoxMenuItem(COMMUNICATIONS_GROUP);
+	private final JMenuItem bringForwardItem = new JMenuItem("Bring Forward…");
 	private final Ics206Panel medicalPlanPanel;
 	private final CanineMedicalPanel canineMedicalPanel;
 	private final MedicalWorkspacePanel medicalWorkspacePanel;
@@ -112,6 +114,7 @@ public class MainFrame extends JFrame {
 	private final SafetyDashboardPanel safetyDashboardPanel;
 	private final JTabbedPane tabs = new JTabbedPane();
 	private final Preferences userPreferences = Preferences.userNodeForPackage(MainFrame.class);
+	private boolean descriptiveTabs = userPreferences.getBoolean(DESCRIPTIVE_TABS_PREFERENCE, false);
 	private final Map<WorkspaceId, WorkspaceDefinition> workspaces = new EnumMap<>(WorkspaceId.class);
 	private final Map<Component, WorkspaceDefinition> tabWorkspaces = new IdentityHashMap<>();
 	private final List<WorkspaceId> registeredWorkspaceIds = new ArrayList<>();
@@ -193,6 +196,8 @@ public class MainFrame extends JFrame {
 		this.tCardPanel = new TCardPanel(controller);
 		this.safetyPanel = new SafetyPanel(controller);
 		this.safetyDashboardPanel = new SafetyDashboardPanel(this::openWorkspace);
+		controller.setPlanReuseEditorCallbacks(
+				() -> pushToModel(linkSourceForTab(tabs.getSelectedIndex())), this::refreshFromModel);
 		safetyPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		medicalPlanPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		canineMedicalPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
@@ -346,6 +351,13 @@ public class MainFrame extends JFrame {
 		logsMenu.setMnemonic(KeyEvent.VK_L);
 		JMenu configMenu = new JMenu("Configuration");
 		configMenu.setMnemonic(KeyEvent.VK_C);
+		JCheckBoxMenuItem descriptiveTabsItem = new JCheckBoxMenuItem("Descriptive tab labels", descriptiveTabs);
+		descriptiveTabsItem.addActionListener(event -> {
+			descriptiveTabs = descriptiveTabsItem.isSelected();
+			userPreferences.putBoolean(DESCRIPTIVE_TABS_PREFERENCE, descriptiveTabs);
+			rebuildVisibleTabs();
+		});
+		configMenu.add(descriptiveTabsItem);
 		JMenu logsListMenu = new JMenu("Go to Log");
 		logsListMenu.setMnemonic(KeyEvent.VK_G);
 		JMenu rolePanelsMenu = new JMenu("Role Panels");
@@ -401,7 +413,7 @@ public class MainFrame extends JFrame {
 					case OPEN_EXISTING -> controller.open(startup.getChosenIncidentId());
 					case OPEN_NEW_PERIOD -> {
 						controller.open(startup.getChosenIncidentId());
-						controller.newOperationalPeriod(startup.isBringForwardCommunicationsPlan());
+						controller.newOperationalPeriod();
 					}
 					case NEW_PRE_OP, NEW_INITIAL_RESPONSE, NEW_OPERATIONAL_PERIOD -> {
 						IapPhase phase = switch (action) {
@@ -580,6 +592,8 @@ public class MainFrame extends JFrame {
 		fileMenu.add(saveItem);
 		fileMenu.add(saveAsItem);
 		fileMenu.add(duplicateItem);
+		bringForwardItem.addActionListener(event -> openBringForwardPlans());
+		fileMenu.add(bringForwardItem);
 		fileMenu.addSeparator();
 		fileMenu.add(exitItem);
 		exportMenu.add(exportFormsPdfItem);
@@ -1267,6 +1281,7 @@ public class MainFrame extends JFrame {
 		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		groupVisible.put(COMMUNICATIONS_GROUP, controller.getData().isIcs205Enabled());
 		communicationsPlanItem.setSelected(controller.getData().isIcs205Enabled());
+		bringForwardItem.setEnabled(controller.canReusePlans());
 		// Reset ICS 201 group visibility to the phase-based default only when the phase
 		// changes
 		// (e.g. on document load or explicit phase switch). User toggles via the View
@@ -1281,6 +1296,18 @@ public class MainFrame extends JFrame {
 		rebuildVisibleTabs(selectedComponent, selectedLogIndex);
 		UiSupport.applyDateTimeDisplayZone(this);
 		refreshStatus();
+	}
+
+	/**
+	 * Opens selective plan reuse after preserving editor drafts, then reloads replaced plans.
+	 * Rejected table values prevent replacement and remain available for correction.
+	 */
+	void openBringForwardPlans() {
+		try {
+			BringForwardDialog.showDialog(this, controller);
+		} catch (RuntimeException exception) {
+			showSaveError(exception);
+		}
 	}
 
 	/** Applies the active incident display timezone, keeping stored dates in UTC. */
@@ -1494,7 +1521,45 @@ public class MainFrame extends JFrame {
 				&& !isGroupVisible(definition.group()))) {
 			return;
 		}
-		tabs.addTab(definition.displayLabel(), component);
+		String label = component instanceof Ics214Panel logPanel
+				? activityLogTabLabel(logPanel.getCurrentForm(), definition.displayLabel(), descriptiveTabs)
+				: workspaceTabLabel(definition.id(), definition.displayLabel(), descriptiveTabs);
+		tabs.addTab(label, component);
+	}
+
+	/**
+	 * Identifies a descriptive log tab by its recorded owner, retaining scope as a fallback.
+	 *
+	 * @param form activity log.
+	 * @param compactLabel existing scope/link label.
+	 * @param descriptive whether descriptive labels are enabled.
+	 * @return configured activity-log label.
+	 */
+	static String activityLogTabLabel(Ics214Form form, String compactLabel, boolean descriptive) {
+		String label = descriptive && !form.getName().isBlank()
+				? "ICS 214 – " + truncate(form.getName(), 24) : compactLabel;
+		return workspaceTabLabel(WorkspaceId.ACTIVITY_LOG, label, descriptive);
+	}
+
+	/**
+	 * Adds optional descriptions without changing workspace identity or ordering.
+	 *
+	 * @param id stable workspace identifier.
+	 * @param compactLabel existing label, including activity-log ownership.
+	 * @param descriptive whether descriptive labels are enabled.
+	 * @return configured tab label.
+	 */
+	static String workspaceTabLabel(WorkspaceId id, String compactLabel, boolean descriptive) {
+		if (!descriptive) {
+			return compactLabel;
+		}
+		return switch (id) {
+			case ICS_202 -> "ICS-202 Objectives";
+			case ICS_204 -> "ICS-204 Assignments";
+			case ICS_205 -> "ICS-205 Comms";
+			case ACTIVITY_LOG -> compactLabel.replaceFirst("^ICS 214", "ICS-214 Log");
+			default -> compactLabel;
+		};
 	}
 
 	/**

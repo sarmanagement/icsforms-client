@@ -43,7 +43,8 @@ final class RolePanelWindows {
 			return existing;
 		}
 		SafetyRolePanel panel = new SafetyRolePanel(controller, navigator);
-		JFrame frame = createFrame("Safety Officer — " + incident.getIncidentContext().getIncidentName(), panel);
+		JFrame frame = createFrame("Safety Officer — " + incident.getIncidentContext().getIncidentName(), panel,
+				ApplicationIcon.Variant.SAFETY);
 		frame.addWindowListener(new java.awt.event.WindowAdapter() {
 			/** {@inheritDoc} */
 			@Override
@@ -75,7 +76,8 @@ final class RolePanelWindows {
 			return existing;
 		}
 		MedicalUnitLeaderRolePanel panel = new MedicalUnitLeaderRolePanel(controller, navigator);
-		JFrame frame = createFrame("Medical Unit Leader — " + incident.getIncidentContext().getIncidentName(), panel);
+		JFrame frame = createFrame("Medical Unit Leader — " + incident.getIncidentContext().getIncidentName(), panel,
+				ApplicationIcon.Variant.MEDICAL);
 		frame.addWindowListener(new java.awt.event.WindowAdapter() {
 			/** {@inheritDoc} */
 			@Override
@@ -117,7 +119,8 @@ final class RolePanelWindows {
 		}
 		OperationsRolePanel panel = new OperationsRolePanel(controller, newAssignment, editTask, changeStatus, addLog,
 				recordClue, debrief, humanReference, canineReference);
-		JFrame frame = createFrame("Operations — " + incident.getIncidentContext().getIncidentName(), panel);
+		JFrame frame = createFrame("Operations — " + incident.getIncidentContext().getIncidentName(), panel,
+				ApplicationIcon.Variant.OPERATIONS);
 		frame.addWindowListener(new java.awt.event.WindowAdapter() {
 			/** {@inheritDoc} */
 			@Override
@@ -149,7 +152,8 @@ final class RolePanelWindows {
 			return existing;
 		}
 		IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller, navigator);
-		JFrame frame = createFrame("Incident Command — " + incident.getIncidentContext().getIncidentName(), panel);
+		JFrame frame = createFrame("Incident Command — " + incident.getIncidentContext().getIncidentName(), panel,
+				ApplicationIcon.Variant.INCIDENT_COMMAND);
 		frame.addWindowListener(new java.awt.event.WindowAdapter() {
 			/** {@inheritDoc} */
 			@Override
@@ -183,7 +187,8 @@ final class RolePanelWindows {
 			return existing;
 		}
 		CommunicationsRolePanel panel = new CommunicationsRolePanel(controller, navigator, importCsv, exportCsv);
-		JFrame frame = createFrame("Communications Unit — " + incident.getIncidentContext().getIncidentName(), panel);
+		JFrame frame = createFrame("Communications Unit — " + incident.getIncidentContext().getIncidentName(), panel,
+				ApplicationIcon.Variant.COMMUNICATIONS);
 		frame.addWindowListener(new java.awt.event.WindowAdapter() {
 			/** {@inheritDoc} */
 			@Override
@@ -203,11 +208,12 @@ final class RolePanelWindows {
 	 *
 	 * @param title frame title.
 	 * @param panel frame content.
+	 * @param variant responsibility-specific icon theme.
 	 * @return configured frame.
 	 */
-	private static JFrame createFrame(String title, javax.swing.JPanel panel) {
+	private static JFrame createFrame(String title, javax.swing.JPanel panel, ApplicationIcon.Variant variant) {
 		JFrame frame = new JFrame(title);
-		ApplicationIcon.install(frame);
+		ApplicationIcon.install(frame, variant);
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.setContentPane(panel);
 		frame.setSize(1220, 820);

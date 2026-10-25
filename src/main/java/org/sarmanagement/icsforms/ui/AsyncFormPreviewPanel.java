@@ -24,6 +24,8 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,6 +41,7 @@ public class AsyncFormPreviewPanel extends JPanel {
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 	private static final int MAX_CACHE_ENTRIES = 8;
 	private static final Map<String, List<BufferedImage>> CACHE = new LinkedHashMap<>(16, 0.75f, true) {
+		/** {@inheritDoc} */
 		@Override
 		protected boolean removeEldestEntry(Map.Entry<String, List<BufferedImage>> eldest) {
 			return size() > MAX_CACHE_ENTRIES;
@@ -46,9 +49,10 @@ public class AsyncFormPreviewPanel extends JPanel {
 	};
 	private final PdfFormRenderer renderer;
 	private final JPanel pages = new JPanel();
-	private final JLabel state = new JLabel("Preview not requested.", SwingConstants.CENTER);
+	private final JLabel state = new JLabel("PDF not loaded.", SwingConstants.CENTER);
 	private SwingWorker<List<BufferedImage>, Void> worker;
 	private long requestGeneration;
+	private String currentKey;
 
 	/**
 	 * Creates a preview surface for one standard form renderer.
@@ -67,15 +71,11 @@ public class AsyncFormPreviewPanel extends JPanel {
 	}
 
 	/**
-	 * Marks a displayed preview older than the latest structured reference.
+	 * Clears obsolete output and invalidates pending work after a content change.
 	 */
 	public void markOutOfDate() {
 		cancel();
-		if (pages.getComponentCount() > 0) {
-			state.setText("Structured information changed — displayed preview is older.");
-		} else {
-			state.setText("Structured information changed — request a new preview.");
-		}
+		showImages(List.of(), "Structured information changed — PDF update pending.");
 	}
 
 	/**
@@ -85,31 +85,41 @@ public class AsyncFormPreviewPanel extends JPanel {
 	 * @param contentKey digest of content relevant to this form.
 	 */
 	public void requestPreview(AppData source, String contentKey) {
+		AppData snapshot;
+		String key;
+		try {
+			byte[] content = COPIER.writeValueAsBytes(source);
+			key = renderer.getFormKey() + ":" + contentKey + ":"
+					+ java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+			if (key.equals(currentKey)) {
+				return;
+			}
+			snapshot = COPIER.readValue(content, AppData.class);
+		} catch (IOException | NoSuchAlgorithmException exception) {
+			cancel();
+			showImages(List.of(), "Unable to load PDF content: " + exception.getMessage());
+			return;
+		}
 		cancel();
+		currentKey = key;
 		long generation = ++requestGeneration;
-		String key = renderer.getFormKey() + ":" + contentKey;
 		List<BufferedImage> cached;
 		synchronized (CACHE) {
 			cached = CACHE.get(key);
 		}
 		if (cached != null) {
-			showImages(cached, "Cached preview — " + cached.size() + " page(s)");
+			showImages(cached, "Current PDF — " + cached.size() + " page(s)");
 			return;
 		}
-		AppData snapshot;
-		try {
-			snapshot = COPIER.readValue(COPIER.writeValueAsBytes(source), AppData.class);
-		} catch (IOException exception) {
-			state.setText("Unable to snapshot preview content: " + exception.getMessage());
-			return;
-		}
-		state.setText("Rendering detached snapshot…");
+		showImages(List.of(), "Rendering current PDF…");
 		worker = new SwingWorker<>() {
+			/** {@inheritDoc} */
 			@Override
 			protected List<BufferedImage> doInBackground() throws Exception {
 				return render(snapshot);
 			}
 
+			/** {@inheritDoc} */
 			@Override
 			protected void done() {
 				if (isCancelled() || generation != requestGeneration) {
@@ -120,15 +130,18 @@ public class AsyncFormPreviewPanel extends JPanel {
 					synchronized (CACHE) {
 						CACHE.put(key, images);
 					}
-					showImages(images, images.size() + " page(s) — detached preview");
+					showImages(images, "Current PDF — " + images.size() + " page(s)");
 				} catch (CancellationException exception) {
-					state.setText("Preview cancelled; structured reference remains available.");
+					currentKey = null;
+					state.setText("PDF loading cancelled; structured reference remains available.");
 				} catch (InterruptedException exception) {
+					currentKey = null;
 					Thread.currentThread().interrupt();
-					state.setText("Preview interrupted; structured reference remains available.");
+					state.setText("PDF loading interrupted; structured reference remains available.");
 				} catch (ExecutionException exception) {
+					currentKey = null;
 					Throwable cause = exception.getCause();
-					state.setText("Preview unavailable: " + (cause == null ? exception.getMessage() : cause.getMessage()));
+					state.setText("PDF unavailable: " + (cause == null ? exception.getMessage() : cause.getMessage()));
 				}
 			}
 		};
@@ -138,6 +151,7 @@ public class AsyncFormPreviewPanel extends JPanel {
 	/** Cancels pending work and invalidates any delayed completion. */
 	public void cancel() {
 		requestGeneration++;
+		currentKey = null;
 		if (worker != null && !worker.isDone()) {
 			worker.cancel(true);
 		}

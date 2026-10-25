@@ -52,6 +52,7 @@ import java.util.function.IntConsumer;
  */
 public class SafetyPanel extends JPanel {
 	private final AppController controller;
+	private final JButton bringForward = new JButton("Bring Forward…");
 	private final SafetyHazardCsvService csvService = new SafetyHazardCsvService();
 	private final SafetyHazardLibraryService libraryService = new SafetyHazardLibraryService();
 	private final SafetyMessageComposer composer = new SafetyMessageComposer();
@@ -122,9 +123,15 @@ public class SafetyPanel extends JPanel {
 		sections.addTab("Reported SAR Hazards", reportedHazardsPanel);
 		sections.addTab("ICS 208 Message / Plan", messagePanel);
 		configureReportedHazardsTab(controller.getIncidentMode() == IncidentMode.SAR);
-		add(new PlanReviewStrip(controller, org.sarmanagement.icsforms.model.PlanReviewArea.SAFETY,
-				this::pushToModel), BorderLayout.NORTH);
+		JPanel heading = new JPanel(new BorderLayout());
+		heading.add(new PlanReviewStrip(controller, org.sarmanagement.icsforms.model.PlanReviewArea.SAFETY,
+				this::pushToModel), BorderLayout.CENTER);
+		bringForward.addActionListener(event -> BringForwardDialog.showFromEditor(this, controller,
+				this::pushToModel, this::refreshFromModel));
+		heading.add(bringForward, BorderLayout.EAST);
+		add(heading, BorderLayout.NORTH);
 		add(sections, BorderLayout.CENTER);
+		bringForward.setEnabled(controller.canReusePlans());
 	}
 
 	/**
@@ -160,6 +167,7 @@ public class SafetyPanel extends JPanel {
 	 * Loads safety form values into the panel.
 	 */
 	public void refreshFromModel() {
+		bringForward.setEnabled(controller.canReusePlans());
 		AppData data = controller.getData();
 		Ics215aForm analysis = data.getForm215a();
 		incidentNumberField.setText(analysis.getIncidentNumber());

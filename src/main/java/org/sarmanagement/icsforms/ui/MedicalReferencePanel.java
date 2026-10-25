@@ -8,6 +8,7 @@ import org.sarmanagement.icsforms.model.CanineMedicalPlan;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.model.PlanReviewSupport;
+import org.sarmanagement.icsforms.model.PlanReviewStatus;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
@@ -25,6 +26,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
@@ -47,6 +49,7 @@ class MedicalReferencePanel extends JPanel {
 	private final Consumer<WorkspaceDestination> navigator;
 	private final AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
+	private final JLabel completion = new JLabel();
 	private final JTextArea instructions = readOnlyArea();
 	private final JTextArea personnel = readOnlyArea();
 	private final JTextArea transport = readOnlyArea();
@@ -82,7 +85,8 @@ class MedicalReferencePanel extends JPanel {
 		subscription = controller.addIncidentChangeListener(change -> {
 			if (controller.isCurrent(binding)) {
 				refreshFromModel();
-				preview.markOutOfDate();
+			} else {
+				preview.cancel();
 			}
 		});
 	}
@@ -146,13 +150,22 @@ class MedicalReferencePanel extends JPanel {
 		PlanReviewArea area = canine ? PlanReviewArea.CANINE_MEDICAL : PlanReviewArea.HUMAN_MEDICAL;
 		banner.setText("<html><b>" + referenceTitle() + "</b> | Incident: "
 				+ html(data.getIncidentContext().getIncidentName()) + " | Period: " + start + " — " + end
-				+ " | " + data.getPlanReviewStatus(area).displayLabel() + "</html>");
+				+ "</html>");
+		PlanReviewStatus status = data.getPlanReviewStatus(area);
+		boolean recorded = IncidentCommandSummary.recordedContent(data, area) > 0;
+		boolean approved = recorded && status == PlanReviewStatus.REVIEWED_APPROVED;
+		completion.setText((approved ? "✓ Content recorded / reviewed-approved — " : "○ Incomplete — ")
+				+ (recorded ? "" : "No content recorded; ") + status.displayLabel());
+		completion.setToolTipText("Recorded content with a current content-bound approval only — "
+				+ "not plan sufficiency or operational readiness.");
+		completion.getAccessibleContext().setAccessibleName(referenceTitle() + " completion and approval");
 		if (canine) {
 			refreshCanine(data);
 		} else {
 			refreshHuman(data);
 		}
 		refreshTasks(data);
+		requestPreview();
 	}
 
 	/**
@@ -163,15 +176,13 @@ class MedicalReferencePanel extends JPanel {
 	private JPanel buildHeader() {
 		JPanel panel = new JPanel(new BorderLayout(6, 4));
 		panel.add(banner, BorderLayout.CENTER);
+		panel.add(completion, BorderLayout.SOUTH);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
-		JButton render = new JButton("Refresh PDF preview");
-		render.addActionListener(event -> requestPreview());
 		JButton editor = new JButton("Open full editor");
 		editor.addActionListener(event -> navigator.accept(
 				canine ? WorkspaceDestination.canineMedicalPlan() : WorkspaceDestination.humanMedicalPlan()));
 		JButton log = new JButton(canine ? "Log canine medical event…" : "Log responder medical event…");
 		log.addActionListener(event -> logMedicalEvent());
-		actions.add(render);
 		actions.add(editor);
 		actions.add(log);
 		panel.add(actions, BorderLayout.EAST);
@@ -402,7 +413,7 @@ class MedicalReferencePanel extends JPanel {
 				+ task.getResourcesAssigned().size() + " recorded resource(s)\nCommunications: " + communications);
 	}
 
-	/** Requests a detached preview using only this reference type's content digest. */
+	/** Requests the latest PDF for this reference type without altering review. */
 	private void requestPreview() {
 		PlanReviewArea area = canine ? PlanReviewArea.CANINE_MEDICAL : PlanReviewArea.HUMAN_MEDICAL;
 		preview.requestPreview(controller.getData(), PlanReviewSupport.contentDigest(controller.getData(), area));
@@ -410,11 +421,29 @@ class MedicalReferencePanel extends JPanel {
 
 	/** Runs the explicit, confirmed medical-event logging operation. */
 	private void logMedicalEvent() {
-		String note = JOptionPane.showInputDialog(this,
-				"Enter a brief operational note. Do not enter unnecessary clinical details.",
+		JTextArea note = new JTextArea(3, 32);
+		note.getAccessibleContext().setAccessibleName("Brief medical event operational note");
+		note.setLineWrap(true);
+		note.setWrapStyleWord(true);
+		JTextField location = new JTextField(32);
+		location.getAccessibleContext().setAccessibleName("Optional medical event location");
+		JComboBox<TaskChoice> eventTask = new JComboBox<>();
+		eventTask.getAccessibleContext().setAccessibleName("Optional medical event task context");
+		for (int index = 0; index < taskContext.getItemCount(); index++) {
+			eventTask.addItem(taskContext.getItemAt(index));
+		}
+		eventTask.setSelectedItem(taskContext.getSelectedItem());
+		JPanel fields = new JPanel(new GridLayout(0, 1, 4, 4));
+		fields.add(new JLabel("Brief operational note; omit unnecessary clinical details:"));
+		fields.add(new JScrollPane(note));
+		fields.add(new JLabel("Optional task context:"));
+		fields.add(eventTask);
+		fields.add(new JLabel("Optional location context:"));
+		fields.add(location);
+		if (JOptionPane.showConfirmDialog(this, fields,
 				canine ? "Response canine medical event" : "Responder medical event",
-				JOptionPane.PLAIN_MESSAGE);
-		if (note == null || note.isBlank()) {
+				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION
+				|| note.getText().isBlank() || !controller.isCurrent(binding)) {
 			return;
 		}
 		String category = canine ? "Response canine medical event" : "Responder medical event";
@@ -422,8 +451,41 @@ class MedicalReferencePanel extends JPanel {
 				"Confirm medical event log", JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) {
 			return;
 		}
-		TaskChoice choice = (TaskChoice) taskContext.getSelectedItem();
-		controller.recordMedicalEvent(canine, note, choice == null ? "" : choice.assignmentId());
+		TaskChoice choice = (TaskChoice) eventTask.getSelectedItem();
+		recordMedicalEvent(note.getText(), choice == null ? "" : choice.assignmentId(), location.getText());
+	}
+
+	/**
+	 * Records a confirmed event with optional task and location context.
+	 *
+	 * @param note minimal operational note.
+	 * @param assignmentId optional task identifier.
+	 * @param location optional operator-entered location.
+	 * @throws IllegalArgumentException when the operational note is blank.
+	 */
+	void recordMedicalEvent(String note, String assignmentId, String location) {
+		if (controller.isCurrent(binding)) {
+			if (note == null || note.isBlank()) {
+				throw new IllegalArgumentException("A brief event note is required.");
+			}
+			String taskNote = assignmentId == null || assignmentId.isBlank() ? ""
+					: controller.getData().getSarTaskAssignments().stream()
+							.filter(task -> assignmentId.equals(task.getAssignmentId()))
+							.map(task -> "\nTask: " + task.getTaskId() + " / " + task.getAssignmentTeamNumber()
+									+ " — " + task.getAssignment())
+							.findFirst().orElse("\nTask assignment: " + assignmentId);
+			String context = location == null || location.isBlank() ? "" : "\nLocation: " + location.trim();
+			controller.recordMedicalEvent(canine, note + taskNote + context, assignmentId);
+		}
+	}
+
+	/**
+	 * Returns the content-bound completion and approval indicator.
+	 *
+	 * @return current indicator text.
+	 */
+	String completionText() {
+		return completion.getText();
 	}
 
 	/** Selects the first facility without choosing it operationally. */

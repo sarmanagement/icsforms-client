@@ -25,6 +25,8 @@ import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
+import org.sarmanagement.icsforms.model.PlanReuseService;
+import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
@@ -84,6 +86,8 @@ public class AppController {
 	private final Object incidentChangeDeliveryLock = new Object();
 	private IncidentChange pendingIncidentChange;
 	private boolean incidentChangeDeliveryScheduled;
+	private Runnable beforePlanReuse = () -> { };
+	private Runnable afterPlanReuse = () -> { };
 	private java.util.function.Consumer<RuntimeException> autosaveErrorHandler = exception -> {
 		throw exception;
 	};
@@ -266,6 +270,111 @@ public class AppController {
 	 */
 	public IncidentStore getStore() {
 		return store;
+	}
+
+	/**
+	 * Lists completed periods containing at least one reusable plan, newest first.
+	 *
+	 * @return detached period snapshots; absent legacy plan archives are not invented.
+	 */
+	public List<AppData.OperationalPeriodRecord> getPreviousPlanSources() {
+		List<AppData.OperationalPeriodRecord> sources = new ArrayList<>();
+		for (AppData.OperationalPeriodRecord period : data.getOperationalPeriodHistory()) {
+			if (!PlanReuseService.availablePlans(period).isEmpty()) {
+				sources.add(INCIDENT_COPIER.convertValue(period, AppData.OperationalPeriodRecord.class));
+			}
+		}
+		Collections.reverse(sources);
+		return sources;
+	}
+
+	/**
+	 * Determines whether previous-period bring-forward can be offered.
+	 *
+	 * @return true when at least one completed period has reusable plan content.
+	 */
+	public boolean hasPreviousPlans() {
+		return data.getOperationalPeriodHistory().stream()
+				.anyMatch(period -> !PlanReuseService.availablePlans(period).isEmpty());
+	}
+
+	/**
+	 * Determines whether plan reuse has a previous-period or cross-incident source.
+	 *
+	 * @return true when previous plans exist or another saved incident can be browsed.
+	 */
+	public boolean canReusePlans() {
+		return hasPreviousPlans() || store != null && store.list().stream()
+				.anyMatch(summary -> summary.incidentId() != null
+						&& !summary.incidentId().equals(activeIncidentId));
+	}
+
+	/**
+	 * Connects all editor flush and refresh operations to every plan-reuse launcher.
+	 * The callbacks run on the launcher's Swing event dispatch thread.
+	 *
+	 * @param before flushes all pending editor changes before opening the dialog.
+	 * @param after refreshes all editors after import or cancellation.
+	 */
+	public void setPlanReuseEditorCallbacks(Runnable before, Runnable after) {
+		beforePlanReuse = Objects.requireNonNull(before);
+		afterPlanReuse = Objects.requireNonNull(after);
+	}
+
+	/**
+	 * Runs a plan-reuse interaction between the configured editor flush and refresh.
+	 * Refresh also runs after cancellation or an unsuccessful interaction.
+	 *
+	 * @param interaction modal plan selection and import interaction.
+	 */
+	public void withPlanReuseEditors(Runnable interaction) {
+		beforePlanReuse.run();
+		try {
+			interaction.run();
+		} finally {
+			afterPlanReuse.run();
+		}
+	}
+
+	/**
+	 * Loads another saved incident's current and completed periods without opening it.
+	 *
+	 * @param incidentId source incident identifier.
+	 * @return detached nonempty plan snapshots, current period first then newest history.
+	 * @throws IllegalArgumentException when the source is the active incident or no store exists.
+	 */
+	public List<AppData.OperationalPeriodRecord> getImportPlanSources(IncidentId incidentId) {
+		if (store == null || incidentId == null || incidentId.equals(activeIncidentId)) {
+			throw new IllegalArgumentException("Choose another saved incident.");
+		}
+		AppData source = store.load(incidentId);
+		List<AppData.OperationalPeriodRecord> sources = new ArrayList<>();
+		AppData.OperationalPeriodRecord current = PlanReuseService.snapshot(source);
+		if (!PlanReuseService.availablePlans(current).isEmpty()) {
+			sources.add(current);
+		}
+		List<AppData.OperationalPeriodRecord> history = source.getOperationalPeriodHistory();
+		for (int index = history.size() - 1; index >= 0; index--) {
+			AppData.OperationalPeriodRecord period = history.get(index);
+			if (!PlanReuseService.availablePlans(period).isEmpty()) {
+				sources.add(INCIDENT_COPIER.convertValue(period, AppData.OperationalPeriodRecord.class));
+			}
+		}
+		return sources;
+	}
+
+	/**
+	 * Copies selected plan content into this incident and schedules persistence.
+	 *
+	 * @param source detached source-period snapshot.
+	 * @param areas explicitly selected plan areas.
+	 * @param crossIncident whether source identities belong to another incident.
+	 * @throws IllegalArgumentException when selected content is unavailable.
+	 */
+	public void bringForwardPlans(AppData.OperationalPeriodRecord source, Set<PlanReviewArea> areas,
+			boolean crossIncident) {
+		PlanReuseService.apply(data, source, areas, crossIncident);
+		markDirty();
 	}
 
 	/**

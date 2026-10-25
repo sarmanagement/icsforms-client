@@ -6,9 +6,9 @@ package org.sarmanagement.icsforms.ui;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IapPlanningStage;
 import org.sarmanagement.icsforms.model.IncidentObjective;
-import org.sarmanagement.icsforms.model.MedicalPlan;
+import org.sarmanagement.icsforms.model.ObjectiveApprovalStatus;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
-import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.model.PlanReviewStatus;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 
@@ -25,6 +25,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.text.JTextComponent;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.time.LocalDateTime;
@@ -33,7 +34,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -49,6 +49,7 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final JLabel banner = new JLabel();
 	private final JComboBox<IapPlanningStage> planningStage = new JComboBox<>(IapPlanningStage.values());
 	private final JPanel planProgress = new JPanel(new GridLayout(0, 2, 6, 6));
+	private final JLabel overallProgress = new JLabel();
 	private final Map<String, JLabel> progressBadges = new LinkedHashMap<>();
 	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "Assessment", "Linked assignments");
 	private final JTable objectives = new JTable(objectiveModel);
@@ -215,6 +216,9 @@ public class IncidentCommandRolePanel extends JPanel {
 		objectives.getColumnModel().getColumn(1).setMaxWidth(150);
 		objectives.getColumnModel().getColumn(2).setPreferredWidth(120);
 		objectives.getColumnModel().getColumn(2).setMaxWidth(140);
+		objectives.setRowHeight(52);
+		objectives.setToolTipText("Assignment lifecycle counts are recorded task states, not objective achievement "
+				+ "or resource readiness. Missing and conflicting lifecycle records remain explicit.");
 		planProgress.getAccessibleContext().setAccessibleName("Recorded IAP progress summary");
 		planProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
 		for (String area : List.of("Objectives", "Assignment coverage", "Safety", "Human medical", "Canine medical",
@@ -226,8 +230,14 @@ public class IncidentCommandRolePanel extends JPanel {
 			progressBadges.put(area, badge);
 			planProgress.add(badge);
 		}
+		JPanel progress = new JPanel(new BorderLayout(4, 4));
+		overallProgress.setOpaque(true);
+		overallProgress.setForeground(Color.BLACK);
+		overallProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
+		progress.add(overallProgress, BorderLayout.NORTH);
+		progress.add(planProgress, BorderLayout.CENTER);
 		JSplitPane objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(objectives),
-				new JScrollPane(planProgress));
+				new JScrollPane(progress));
 		objectiveSplit.setResizeWeight(0.6);
 		planning.add(objectiveSplit, BorderLayout.CENTER);
 		planning.add(buildApprovalPanel(), BorderLayout.SOUTH);
@@ -302,7 +312,12 @@ public class IncidentCommandRolePanel extends JPanel {
 		for (IncidentObjective objective : data.getForm202().getStructuredObjectives()) {
 			long links = controller.getAssignmentResources().stream()
 					.filter(assignment -> assignment.getObjectiveIds().contains(objective.getObjectiveId())).count();
-			objectiveModel.addRow(new Object[]{objective.toString(), objective.getAssessment().displayLabel(), links});
+			String states = IncidentCommandSummary.assignmentStates(data, objective.getObjectiveId());
+			String text = "<html>" + html(objective.toString()) + "<br><small>Assignments: "
+					+ html(states).replace("; ", "<br>") + "</small></html>";
+			objectiveModel.addRow(new Object[]{text, objective.getAssessment().displayLabel(), links});
+			objectives.setRowHeight(objectiveModel.getRowCount() - 1,
+					Math.max(52, 24 + states.split("; ", -1).length * 18));
 		}
 	}
 
@@ -325,7 +340,8 @@ public class IncidentCommandRolePanel extends JPanel {
 			String status = card.getStatus().trim();
 			String label = status.isBlank() ? "Unspecified" : status;
 			statuses.add(label);
-			String group = resourceGrouping.getSelectedIndex() == 0 ? "All resources" : card.getCardType().getLabel();
+			String group = resourceGrouping.getSelectedIndex() == 0 ? "All resources"
+					: IncidentCommandSummary.resourceGroup(card);
 			groups.computeIfAbsent(group, ignored -> new LinkedHashMap<>()).merge(label, 1, Integer::sum);
 		}
 		List<String> columns = new java.util.ArrayList<>();
@@ -358,10 +374,20 @@ public class IncidentCommandRolePanel extends JPanel {
 				.forEach(objective -> objectiveIds.add(objective.getObjectiveId()));
 		long linkedAssignments = controller.getAssignmentResources().stream()
 				.filter(assignment -> assignment.getObjectiveIds().stream().anyMatch(objectiveIds::contains)).count();
-		updateBadge("Objectives", objectiveIds.size() + " recorded",
-				data.getForm202().getObjectiveApprovalStatus().displayLabel());
-		updateBadge("Assignment coverage", linkedAssignments + "/" + controller.getAssignmentResources().size()
-				+ " assignments linked to recorded objectives", "Links only — not an assessment");
+		boolean objectivesRecorded = !objectiveIds.isEmpty();
+		boolean objectivesApproved = data.getForm202().getObjectiveApprovalStatus()
+				== ObjectiveApprovalStatus.APPROVED_CURRENT;
+		long populatedAssignments = IncidentCommandSummary.populatedAssignments(data);
+		boolean missing = !objectivesRecorded || populatedAssignments == 0;
+		boolean approved = objectivesApproved;
+		boolean animalRequired = IncidentCommandSummary.requiresAnimalMedicalPlan(data);
+		updateBadge("Objectives", mark(objectivesRecorded) + objectiveIds.size() + " recorded",
+				mark(objectivesApproved) + data.getForm202().getObjectiveApprovalStatus().displayLabel());
+		int assignmentCount = controller.getAssignmentResources().size();
+		updateBadge("Assignment coverage", mark(populatedAssignments > 0) + populatedAssignments
+				+ " populated assignment rows; " + mark(assignmentCount > 0 && linkedAssignments == assignmentCount)
+				+ linkedAssignments + "/" + assignmentCount + " assignments linked to recorded objectives",
+				"Links only — not an assessment or approval");
 		for (PlanReviewArea area : PlanReviewArea.values()) {
 			String title = switch (area) {
 				case SAFETY -> "Safety";
@@ -374,10 +400,45 @@ public class IncidentCommandRolePanel extends JPanel {
 				case CHANGED_SINCE_REVIEW -> "Stale — changed since review";
 				case NOT_YET_REVIEWED -> "Not yet reviewed";
 			};
-			long contentItems = recordedContent(data, area);
-			updateBadge(title, contentItems == 0 ? "No content recorded" : contentItems + " content items recorded",
-					review);
+			long contentItems = IncidentCommandSummary.recordedContent(data, area);
+			boolean current = data.getPlanReviewStatus(area) == PlanReviewStatus.REVIEWED_APPROVED;
+			boolean required = area != PlanReviewArea.CANINE_MEDICAL || animalRequired;
+			if (required) {
+				missing |= contentItems == 0;
+				approved &= current;
+			}
+			updateBadge(title, mark(contentItems > 0) + (contentItems == 0 ? "No content recorded"
+					: contentItems + " content items recorded"),
+					mark(current) + review + (area == PlanReviewArea.CANINE_MEDICAL
+							? required ? " (required — animal resources recorded)" : " (optional — no animal resources recorded)"
+							: ""));
 		}
+		String state = missing ? "RED — Required planning content missing"
+				: !approved ? "YELLOW — Required content recorded; approval pending or stale"
+				: "GREEN — Required content recorded and current approvals";
+		overallProgress.setText("<html><b>" + state + "</b><br>Recorded content and approvals only — "
+				+ "not plan sufficiency or operational readiness.</html>");
+		overallProgress.setBackground(missing ? new Color(255, 170, 170)
+				: !approved ? new Color(255, 230, 140) : new Color(165, 225, 165));
+		overallProgress.getAccessibleContext().setAccessibleName("Overall planning status: " + state);
+		overallProgress.setToolTipText("Required: objectives, ICS 204 assignment plan, safety, human medical, communications; canine/equine "
+				+ "medical only when animal resources are recorded. Approvals must match current content. "
+				+ "Populated means at least one substantive row or narrative section (or a nonblank objective), "
+				+ "not a validated complete plan. Red: missing required content; yellow: content present but "
+				+ "current approval missing; green: required content present with current approvals. "
+				+ "Assignments require a substantive populated row; objective links alone do not count as assignment content. "
+				+ "No separate assignment approval is inferred. Assignment links and the manually selected planning stage "
+				+ "do not certify approval or readiness.");
+	}
+
+	/**
+	 * Marks an explicitly established fact without inferring a broader status.
+	 *
+	 * @param recorded whether the fact is established.
+	 * @return checkmark or open-circle prefix.
+	 */
+	private static String mark(boolean recorded) {
+		return recorded ? "✓ " : "○ ";
 	}
 
 	/**
@@ -392,108 +453,15 @@ public class IncidentCommandRolePanel extends JPanel {
 		badge.setText("<html><b>" + html(title) + "</b><br>" + html(content) + "<br>" + html(state) + "</html>");
 		badge.getAccessibleContext().setAccessibleName(title + ": " + content + "; " + state);
 		badge.setToolTipText("Recorded content and explicit review only; not sufficiency or operational readiness. "
+				+ "A content checkmark means presence, not validated plan completeness. "
 				+ "Blank rows, default settings, signatures and page metadata do not count as plan content. "
-				+ "Content items are populated plan rows or narrative sections.");
-	}
-
-	/**
-	 * Counts substantive rows and narrative sections, excluding default settings and
-	 * preparation or review metadata.
-	 *
-	 * @param data active incident.
-	 * @param area plan area.
-	 * @return populated content-item count, not a completion score.
-	 */
-	private long recordedContent(AppData data, PlanReviewArea area) {
-		return switch (area) {
-			case SAFETY -> data.getForm215a().getEntries().stream().filter(Objects::nonNull)
-					.filter(row -> hasText(row.getHazardsRisks(), row.getMitigations(), row.getEquipmentPpe())).count()
-					+ data.getForm208().getHazardBlocks().stream().filter(Objects::nonNull)
-							.filter(row -> hasText(row.getHazard(), row.getPrecautions())).count()
-					+ countText(data.getForm208().getFreeText(), data.getForm208().getGeneralRequirements())
-					+ countText(data.getForm208().getSiteSafetyPlan().getPlanName(),
-							data.getForm208().getSiteSafetyPlan().getLocatedAt(),
-							data.getForm208().getSiteSafetyPlan().getRevision())
-					+ data.getForm208().getSiteSafetyPlan().getTextSections().values().stream()
-							.filter(value -> hasText(value)).count()
-					+ data.getSarTaskAssignments().stream().filter(task -> hasText(task.getHazardsObserved())).count();
-			case HUMAN_MEDICAL -> humanMedicalContent(data.getMedicalPlan());
-			case CANINE_MEDICAL -> countText(data.getCanineMedicalPlan().getAidStationInformation(),
-					data.getCanineMedicalPlan().getTransportServices(), data.getCanineMedicalPlan().getPoisonControlContact(),
-					data.getCanineMedicalPlan().getOnsiteVeterinarian(), data.getCanineMedicalPlan().getVeterinarianDvm(),
-					data.getCanineMedicalPlan().getVeterinaryCapabilityNotes(),
-					data.getCanineMedicalPlan().getEmergencyProcedures())
-					+ transportCount(data.getCanineMedicalPlan().getTransportServiceEntries())
-					+ data.getCanineMedicalPlan().getSelectedFacilities().stream().filter(Objects::nonNull)
-							.filter(facility -> hasText(facility.getName(), facility.getAddress())).count()
-					+ data.getCanineMedicalPlan().getVeterinaryPersonnelResourceIds().stream()
-							.filter(value -> hasText(value)).distinct().count();
-			case COMMUNICATIONS -> countText(data.getForm205().getSpecialInstructions())
-					+ data.getForm205().getChannels().stream().filter(Objects::nonNull)
-							.filter(channel -> hasText(channel.getZoneGroup(), channel.getChannelNumber(),
-									channel.getFunction(), channel.getChannelName(), channel.getAssignment(),
-									channel.getRxFrequency(), channel.getRxBandwidth(), channel.getRxToneNac(),
-									channel.getTxFrequency(), channel.getTxBandwidth(), channel.getTxToneNac(),
-									channel.getMode(), channel.getDigitalProtocol(), channel.getSystem(),
-									channel.getRemarks(), channel.getCoverageGuidance(), channel.getRelayGuidance())
-									|| !RadioChannel.TX_POLICY_UNKNOWN.equals(channel.getTxPolicy())
-									|| channel.getProgrammingMetadata().values().stream().anyMatch(value -> hasText(value)))
-							.count();
-		};
-	}
-
-	/**
-	 * Counts recorded human medical rows and text, not the built-in Call 911 default.
-	 *
-	 * @param plan human medical plan.
-	 * @return populated content items.
-	 */
-	private long humanMedicalContent(MedicalPlan plan) {
-		return countText(plan.getDesignatedMedicalUnitRole(), plan.getDesignatedMedicalUnitName(),
-				plan.getDesignatedMedicalUnitContact(), plan.getEmergencyProcedures(), plan.getAirOperationsReminder())
-				+ (hasText(plan.getCall911Procedure()) && !"Call 911".equals(plan.getCall911Procedure().trim()) ? 1 : 0)
-				+ plan.getAidStations().stream().filter(Objects::nonNull)
-						.filter(row -> hasText(row.getName(), row.getLocation(), row.getContactNumbers(),
-								row.getFrequency()) || row.getParamedicsOnSite() != null).count()
-				+ transportCount(plan.getTransportServices())
-				+ plan.getHospitals().stream().filter(Objects::nonNull)
-						.filter(row -> hasText(row.getName(), row.getAddress(),
-						row.getContactNumbers(), row.getFrequency(), row.getHelipadCoordinates(), row.getAirTravelTime(),
-						row.getGroundTravelTime(), row.getTraumaLevel()) || row.getLatitude() != null
-						|| row.getLongitude() != null || row.getTraumaCenter() != null || row.getBurnCenter() != null
-						|| row.getHelipad() != null).count();
-	}
-
-	/**
-	 * Counts transport rows with entered service information.
-	 *
-	 * @param services recorded transport rows.
-	 * @return populated row count.
-	 */
-	private long transportCount(List<MedicalPlan.TransportService> services) {
-		return services.stream().filter(Objects::nonNull)
-				.filter(row -> hasText(row.getService(), row.getLocation(), row.getContactNumbers(),
-						row.getFrequency(), row.getAirOrGround(), row.getLevelOfService())).count();
-	}
-
-	/**
-	 * Counts nonblank narrative sections.
-	 *
-	 * @param values section text.
-	 * @return populated section count.
-	 */
-	private long countText(String... values) {
-		return java.util.Arrays.stream(values).filter(value -> value != null && !value.isBlank()).count();
-	}
-
-	/**
-	 * Tests whether a row has any entered text.
-	 *
-	 * @param values row fields.
-	 * @return whether at least one field is populated.
-	 */
-	private boolean hasText(String... values) {
-		return countText(values) > 0;
+				+ "Content items are populated plan rows or narrative sections."
+				+ ("Assignment coverage".equals(title)
+						? " Required ICS 204 assignment presence is separate from objective-link coverage. "
+								+ "At least one substantive assignment row is required; generated IDs and objective links alone "
+								+ "do not count. Link coverage is checked only when every assignment links to a recorded objective; "
+								+ "it is not assignment approval, objective achievement, or operational readiness."
+						: ""));
 	}
 
 	/**

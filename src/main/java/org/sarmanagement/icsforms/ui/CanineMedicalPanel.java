@@ -138,6 +138,7 @@ public class CanineMedicalPanel extends JPanel {
 	private Consumer<String> exportRequest = ignored -> { };
 	private boolean loading;
 	private boolean flushing;
+	private final JButton bringForward = new JButton("Bring Forward…");
 	private AppData lastLoadedIncident;
 	private SwingWorker<?, ?> activeWorker;
 
@@ -236,6 +237,9 @@ public class CanineMedicalPanel extends JPanel {
 		this.routeProvider = routeProvider;
 		JPanel heading = new JPanel(new BorderLayout());
 		heading.add(buildTop(), BorderLayout.NORTH);
+		bringForward.addActionListener(event -> BringForwardDialog.showFromEditor(this, controller,
+				this::pushToModel, this::refreshFromModel));
+		heading.add(bringForward, BorderLayout.CENTER);
 		heading.add(new PlanReviewStrip(controller,
 				org.sarmanagement.icsforms.model.PlanReviewArea.CANINE_MEDICAL, this::pushToModel),
 				BorderLayout.SOUTH);
@@ -278,6 +282,7 @@ public class CanineMedicalPanel extends JPanel {
 	 * Refreshes the editor while retaining the model's directory and accepted snapshots.
 	 */
 	public void refreshFromModel() {
+		bringForward.setEnabled(controller.canReusePlans());
 		loading = true;
 		try {
 			AppData data = controller.getData();

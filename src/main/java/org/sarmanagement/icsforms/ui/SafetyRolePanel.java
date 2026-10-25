@@ -55,6 +55,7 @@ public class SafetyRolePanel extends JPanel {
 	private final AppController.IncidentChangeSubscription subscription;
 	private boolean loadingFocusedEdits;
 	private boolean focusedEditsDirty;
+	private boolean disposed;
 
 	/**
 	 * Creates the Safety Officer panel.
@@ -75,7 +76,7 @@ public class SafetyRolePanel extends JPanel {
 		add(new JLabel("SAFETY OFFICER | Focused live view — not an authorization boundary"), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
 		installFocusedDraftListeners();
-		showAll.addActionListener(event -> rebuildWorklist());
+		showAll.addActionListener(event -> refreshFromModel());
 		worklist.addListSelectionListener(event -> {
 			if (!event.getValueIsAdjusting()) {
 				refreshSelectedItem();
@@ -83,18 +84,19 @@ public class SafetyRolePanel extends JPanel {
 		});
 		refreshFromModel();
 		subscription = controller.addIncidentChangeListener(change -> {
-			if (controller.isCurrent(binding)) {
-				refreshFromModel();
-				safetyPreview.markOutOfDate();
-				humanPreview.markOutOfDate();
-				caninePreview.markOutOfDate();
-			}
+			refreshFromModel();
 		});
 	}
 
 	/** Releases listener and preview resources. */
 	public void dispose() {
+		disposed = true;
 		subscription.close();
+		cancelPreviews();
+	}
+
+	/** Cancels outstanding PDF work when the panel closes or its incident changes. */
+	private void cancelPreviews() {
 		safetyPreview.cancel();
 		humanPreview.cancel();
 		caninePreview.cancel();
@@ -102,6 +104,10 @@ public class SafetyRolePanel extends JPanel {
 
 	/** Refreshes shared facts while preserving worklist selection. */
 	public void refreshFromModel() {
+		if (disposed || !controller.isCurrent(binding)) {
+			cancelPreviews();
+			return;
+		}
 		String selected = worklist.getSelectedValue();
 		if (!focusedEditsDirty) {
 			loadingFocusedEdits = true;
@@ -125,16 +131,19 @@ public class SafetyRolePanel extends JPanel {
 	/** Tracks unsaved focused edits so unrelated live updates cannot replace them. */
 	private void installFocusedDraftListeners() {
 		DocumentListener listener = new DocumentListener() {
+			/** {@inheritDoc} */
 			@Override
 			public void insertUpdate(DocumentEvent event) {
 				markFocusedEditsDirty();
 			}
 
+			/** {@inheritDoc} */
 			@Override
 			public void removeUpdate(DocumentEvent event) {
 				markFocusedEditsDirty();
 			}
 
+			/** {@inheritDoc} */
 			@Override
 			public void changedUpdate(DocumentEvent event) {
 				markFocusedEditsDirty();
@@ -179,12 +188,9 @@ public class SafetyRolePanel extends JPanel {
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
 		JButton apply = new JButton("Apply focused edits");
 		apply.addActionListener(event -> applyFocusedEdits());
-		JButton preview = new JButton("Preview selected plan");
-		preview.addActionListener(event -> previewSelected());
 		JButton source = new JButton("Open selected source");
 		source.addActionListener(event -> openSelectedSource());
 		actions.add(apply);
-		actions.add(preview);
 		actions.add(source);
 		JPanel reviews = new JPanel(new java.awt.GridLayout(0, 1));
 		reviews.add(safetyReview);
@@ -229,6 +235,10 @@ public class SafetyRolePanel extends JPanel {
 
 	/** Refreshes selected work detail and preview card. */
 	private void refreshSelectedItem() {
+		if (disposed || !controller.isCurrent(binding)) {
+			cancelPreviews();
+			return;
+		}
 		String selected = worklist.getSelectedValue();
 		if (selected == null) {
 			return;
@@ -254,6 +264,13 @@ public class SafetyRolePanel extends JPanel {
 		} else {
 			detail.setText(data.getForm202().getStructuredObjectives().size() + " objective(s) recorded.");
 		}
+		boolean planSelected = SAFETY_PLAN.equals(selected) || HUMAN_REVIEW.equals(selected) || CANINE_REVIEW.equals(selected);
+		previewCards.setVisible(planSelected);
+		if (planSelected) {
+			previewSelected();
+		} else {
+			cancelPreviews();
+		}
 	}
 
 	/** Applies focused safety values to their shared authoritative models. */
@@ -267,8 +284,12 @@ public class SafetyRolePanel extends JPanel {
 		controller.markDirty();
 	}
 
-	/** Requests the standard PDF for the selected responsible plan. */
+	/** Automatically requests the latest PDF for the selected responsible plan. */
 	private void previewSelected() {
+		if (disposed || !controller.isCurrent(binding)) {
+			cancelPreviews();
+			return;
+		}
 		String selected = worklist.getSelectedValue();
 		if (HUMAN_REVIEW.equals(selected)) {
 			humanPreview.requestPreview(controller.getData(),

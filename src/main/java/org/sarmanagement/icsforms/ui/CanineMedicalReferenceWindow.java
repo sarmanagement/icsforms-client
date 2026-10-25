@@ -38,7 +38,7 @@ public final class CanineMedicalReferenceWindow {
 		}
 		MedicalReferencePanel panel = new MedicalReferencePanel(controller, true, navigator);
 		JFrame frame = new JFrame(panel.referenceTitle());
-		ApplicationIcon.install(frame);
+		ApplicationIcon.install(frame, ApplicationIcon.Variant.CANINE_REFERENCE);
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.setContentPane(panel);
 		frame.setSize(1260, 820);

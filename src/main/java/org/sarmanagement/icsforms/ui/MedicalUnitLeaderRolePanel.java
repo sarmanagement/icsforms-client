@@ -53,6 +53,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 	private final AppController.IncidentChangeSubscription subscription;
 	private boolean loadingFocusedEdits;
 	private boolean focusedEditsDirty;
+	private boolean disposed;
 
 	/**
 	 * Creates the Medical Unit Leader panel.
@@ -70,7 +71,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		add(new JLabel("MEDICAL UNIT LEADER | Human and canine plans remain separate"), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
 		installFocusedDraftListeners();
-		showAll.addActionListener(event -> rebuildWorklist());
+		showAll.addActionListener(event -> refreshFromModel());
 		worklist.addListSelectionListener(event -> {
 			if (!event.getValueIsAdjusting()) {
 				refreshSelectedItem();
@@ -78,23 +79,29 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		});
 		refreshFromModel();
 		subscription = controller.addIncidentChangeListener(change -> {
-			if (controller.isCurrent(binding)) {
-				refreshFromModel();
-				humanPreview.markOutOfDate();
-				caninePreview.markOutOfDate();
-			}
+			refreshFromModel();
 		});
 	}
 
 	/** Releases listener and preview workers. */
 	public void dispose() {
+		disposed = true;
 		subscription.close();
+		cancelPreviews();
+	}
+
+	/** Cancels outstanding PDF work when the panel closes or its incident changes. */
+	private void cancelPreviews() {
 		humanPreview.cancel();
 		caninePreview.cancel();
 	}
 
 	/** Refreshes shared plan facts while preserving selection. */
 	public void refreshFromModel() {
+		if (disposed || !controller.isCurrent(binding)) {
+			cancelPreviews();
+			return;
+		}
 		String selected = worklist.getSelectedValue();
 		AppData data = controller.getData();
 		if (!focusedEditsDirty) {
@@ -121,16 +128,19 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 	/** Tracks unsaved focused edits so unrelated live updates cannot replace them. */
 	private void installFocusedDraftListeners() {
 		DocumentListener listener = new DocumentListener() {
+			/** {@inheritDoc} */
 			@Override
 			public void insertUpdate(DocumentEvent event) {
 				markFocusedEditsDirty();
 			}
 
+			/** {@inheritDoc} */
 			@Override
 			public void removeUpdate(DocumentEvent event) {
 				markFocusedEditsDirty();
 			}
 
+			/** {@inheritDoc} */
 			@Override
 			public void changedUpdate(DocumentEvent event) {
 				markFocusedEditsDirty();
@@ -177,12 +187,9 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
 		JButton apply = new JButton("Apply focused edits");
 		apply.addActionListener(event -> applyFocusedEdits());
-		JButton preview = new JButton("Preview selected plan");
-		preview.addActionListener(event -> previewSelected());
 		JButton source = new JButton("Open selected full editor");
 		source.addActionListener(event -> openSelectedSource());
 		actions.add(apply);
-		actions.add(preview);
 		actions.add(source);
 		JPanel reviews = new JPanel(new java.awt.GridLayout(0, 1));
 		reviews.add(humanReview);
@@ -227,6 +234,10 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 
 	/** Refreshes selected details without judging medical sufficiency. */
 	private void refreshSelectedItem() {
+		if (disposed || !controller.isCurrent(binding)) {
+			cancelPreviews();
+			return;
+		}
 		String selected = worklist.getSelectedValue();
 		if (selected == null) {
 			return;
@@ -249,6 +260,13 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 			detail.setText("Recorded plan information is displayed without an automatic sufficiency judgment.\n"
 					+ "Use the focused fields or open the comprehensive editor for extensive changes.");
 		}
+		boolean planSelected = HUMAN_PLAN.equals(selected) || CANINE_PLAN.equals(selected);
+		previewCards.setVisible(planSelected);
+		if (planSelected) {
+			previewSelected();
+		} else {
+			cancelPreviews();
+		}
 	}
 
 	/** Applies shared role contacts and separate human/canine instructions. */
@@ -264,8 +282,12 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		controller.markDirty();
 	}
 
-	/** Requests the standard selected medical PDF. */
+	/** Automatically requests the latest PDF for the selected medical plan. */
 	private void previewSelected() {
+		if (disposed || !controller.isCurrent(binding)) {
+			cancelPreviews();
+			return;
+		}
 		if (CANINE_PLAN.equals(worklist.getSelectedValue())) {
 			caninePreview.requestPreview(controller.getData(),
 					PlanReviewSupport.contentDigest(controller.getData(), PlanReviewArea.CANINE_MEDICAL));
