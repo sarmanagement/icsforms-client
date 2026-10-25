@@ -368,15 +368,16 @@ class Ics202PanelTest {
 		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
 		AppController controller = sampleController();
 		controller.getData().getForm202().setObjectives(List.of("An objective with editable text"));
+		var directory = Files.createTempDirectory("objective-default-width");
+		var repository = new LocalRepository(directory.resolve("incident.json"));
 		SwingUtilities.invokeAndWait(() -> {
-			javax.swing.JFrame window = new javax.swing.JFrame();
+			MainFrame window = new MainFrame(controller.getData(), repository, new PdfExportService(),
+					new IncidentValidator(), directory);
 			try {
-				Ics202Panel panel = new Ics202Panel(controller);
-				panel.refreshFromModel();
-				window.add(panel);
-				window.setSize(1120, 820);
+				window.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_202));
 				window.setVisible(true);
 				window.validate();
+				Ics202Panel panel = (Ics202Panel) fieldValue(window, "ics202Panel");
 				JTable table = (JTable) fieldValue(panel, "objectivesTable");
 				javax.swing.JScrollPane formScroll = (javax.swing.JScrollPane) panel.getComponent(0);
 				assertFalse(formScroll.getHorizontalScrollBar().isVisible());
@@ -384,7 +385,18 @@ class Ics202PanelTest {
 				assertEquals(45, table.getColumnModel().getColumn(0).getWidth());
 				assertTrue(table.getColumnModel().getColumn(1).getWidth() >= 600);
 				assertEquals(table.getWidth() - 45, table.getColumnModel().getColumn(1).getWidth());
+				JButton apply = findButton(panel, "Apply to assignments…");
+				java.awt.Container actions = apply.getParent();
+				for (java.awt.Component component : actions.getComponents()) {
+					if (component instanceof JButton button) {
+						assertEquals(apply.getY(), button.getY(), button.getText());
+						assertTrue(button.getX() >= 0 && button.getY() >= 0, button.getText());
+						assertTrue(button.getBounds().getMaxX() <= actions.getWidth(), button.getText());
+						assertTrue(button.getBounds().getMaxY() <= actions.getHeight(), button.getText());
+					}
+				}
 			} finally {
+				((javax.swing.Timer) fieldValue(fieldValue(window, "controller"), "autosaveTimer")).stop();
 				window.dispose();
 			}
 		});
