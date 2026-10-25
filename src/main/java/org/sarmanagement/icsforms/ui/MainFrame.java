@@ -361,10 +361,13 @@ public class MainFrame extends JFrame {
 		JMenuItem incidentCommandRolePanel = new JMenuItem("Incident Command");
 		incidentCommandRolePanel.addActionListener(
 				event -> RolePanelWindows.openIncidentCommand(this, controller, this::openWorkspace));
+		JMenuItem communicationsRolePanel = new JMenuItem("Communications Unit");
+		communicationsRolePanel.addActionListener(event -> openCommunicationsRolePanel());
 		rolePanelsMenu.add(incidentCommandRolePanel);
 		rolePanelsMenu.add(safetyRolePanel);
 		rolePanelsMenu.add(medicalRolePanel);
 		rolePanelsMenu.add(operationsRolePanel);
+		rolePanelsMenu.add(communicationsRolePanel);
 		viewMenu.add(rolePanelsMenu);
 		viewMenu.addSeparator();
 		JMenuItem humanMedicalReference = new JMenuItem("Human Medical Reference — ICS 206");
@@ -740,6 +743,13 @@ public class MainFrame extends JFrame {
 				clueLogPanel::openAddClueDialog, sarTaskPanel::openDebriefByAssignmentId,
 				() -> HumanMedicalReferenceWindow.open(this, controller, this::openWorkspace),
 				() -> CanineMedicalReferenceWindow.open(this, controller, this::openWorkspace));
+	}
+
+	/** Opens Communications while delegating import/export to established dialogs. */
+	private void openCommunicationsRolePanel() {
+		RolePanelWindows.openCommunications(this, controller, this::openWorkspace,
+				() -> new RadioChannelCsvDialogs(ics205Panel, controller).importCsv(),
+				() -> new RadioChannelCsvDialogs(ics205Panel, controller).exportCsv(false));
 	}
 
 	/**

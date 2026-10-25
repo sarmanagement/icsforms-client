@@ -50,6 +50,7 @@ import java.util.LinkedHashMap;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1342,6 +1343,69 @@ public class AppController {
 	public void approveCurrentObjectives(String approver, String signature, LocalDateTime approvedAt) {
 		data.getForm202().recordObjectiveApproval(approver, signature, approvedAt);
 		markDirty();
+	}
+
+	/**
+	 * Applies Communications Unit operational guidance and an explicit radio-check
+	 * assertion to one stable channel, rejecting stale same-field edits.
+	 *
+	 * @param channelId stable channel identity.
+	 * @param expected detached baseline used to detect concurrent focused edits.
+	 * @param coverageGuidance operator-entered coverage guidance.
+	 * @param relayGuidance operator-entered relay guidance.
+	 * @param checkStatus explicit check result.
+	 * @param checkedBy person recording the result.
+	 * @param checkedAt result time, or null for not recorded.
+	 * @param checkNotes operator-entered check notes.
+	 * @throws IllegalStateException when the channel disappeared, is ambiguous, or
+	 *             changed since it was loaded.
+	 * @throws IllegalArgumentException when a recorded result lacks checker or time.
+	 */
+	public void updateRadioChannelOperations(String channelId,
+			org.sarmanagement.icsforms.model.RadioChannel expected, String coverageGuidance, String relayGuidance,
+			org.sarmanagement.icsforms.model.RadioCheckStatus checkStatus, String checkedBy, LocalDateTime checkedAt,
+			String checkNotes) {
+		List<org.sarmanagement.icsforms.model.RadioChannel> matches = data.getForm205().getChannels().stream()
+				.filter(channel -> channelId != null && channelId.equals(channel.getChannelId())).toList();
+		if (matches.size() != 1) {
+			throw new IllegalStateException("The selected channel is missing or has an ambiguous identity.");
+		}
+		org.sarmanagement.icsforms.model.RadioChannel current = matches.get(0);
+		if (expected == null || !sameRadioOperations(current, expected)) {
+			throw new IllegalStateException("This channel changed in another view. Reload it before saving.");
+		}
+		org.sarmanagement.icsforms.model.RadioCheckStatus status = checkStatus == null
+				? org.sarmanagement.icsforms.model.RadioCheckStatus.NOT_RECORDED : checkStatus;
+		if (status != org.sarmanagement.icsforms.model.RadioCheckStatus.NOT_RECORDED
+				&& (checkedBy == null || checkedBy.isBlank() || checkedAt == null)) {
+			throw new IllegalArgumentException("Recorded radio checks require a checker and time.");
+		}
+		current.setCoverageGuidance(coverageGuidance);
+		current.setRelayGuidance(relayGuidance);
+		current.setRadioCheckStatus(status);
+		current.setRadioCheckedBy(status == org.sarmanagement.icsforms.model.RadioCheckStatus.NOT_RECORDED
+				? "" : checkedBy.trim());
+		current.setRadioCheckedAt(status == org.sarmanagement.icsforms.model.RadioCheckStatus.NOT_RECORDED
+				? null : checkedAt);
+		current.setRadioCheckNotes(checkNotes);
+		markDirty();
+	}
+
+	/**
+	 * Compares the focused Communications Unit fields used for optimistic editing.
+	 *
+	 * @param first current channel.
+	 * @param second detached baseline.
+	 * @return true when focused values are unchanged.
+	 */
+	private static boolean sameRadioOperations(org.sarmanagement.icsforms.model.RadioChannel first,
+			org.sarmanagement.icsforms.model.RadioChannel second) {
+		return Objects.equals(first.getCoverageGuidance(), second.getCoverageGuidance())
+				&& Objects.equals(first.getRelayGuidance(), second.getRelayGuidance())
+				&& first.getRadioCheckStatus() == second.getRadioCheckStatus()
+				&& Objects.equals(first.getRadioCheckedBy(), second.getRadioCheckedBy())
+				&& Objects.equals(first.getRadioCheckedAt(), second.getRadioCheckedAt())
+				&& Objects.equals(first.getRadioCheckNotes(), second.getRadioCheckNotes());
 	}
 
 	/**

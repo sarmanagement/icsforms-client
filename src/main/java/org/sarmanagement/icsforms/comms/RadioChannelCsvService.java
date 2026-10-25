@@ -32,17 +32,16 @@ import java.util.UUID;
 public class RadioChannelCsvService {
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
-	private static final List<String> FIELDS = List.of("channelId", "zoneGroup", "channelNumber", "function",
+	private static final List<String> LEGACY_FIELDS = List.of("channelId", "zoneGroup", "channelNumber", "function",
 			"channelName", "assignment", "rxFrequency", "rxBandwidth", "rxToneNac", "txFrequency",
 			"txBandwidth", "txToneNac", "mode", "digitalProtocol", "system", "remarks", "txPolicy",
 			"includeOnForm", "programmingMetadata");
-	private static final List<String> HEADERS;
-
-	static {
-		List<String> headers = new ArrayList<>(List.of("schemaVersion", "recordType", "formMetadata"));
-		headers.addAll(FIELDS);
-		HEADERS = List.copyOf(headers);
-	}
+	private static final List<String> FIELDS = java.util.stream.Stream
+			.concat(LEGACY_FIELDS.stream(), java.util.stream.Stream.of("coverageGuidance", "relayGuidance",
+					"radioCheckStatus", "radioCheckedBy", "radioCheckedAt", "radioCheckNotes"))
+			.toList();
+	private static final List<String> HEADERS = headers(FIELDS);
+	private static final List<String> LEGACY_HEADERS = headers(LEGACY_FIELDS);
 
 	/**
 	 * Reads a complete native plan.
@@ -100,7 +99,7 @@ public class RadioChannelCsvService {
 		metadata.remove("channels");
 		StringBuilder csv = new StringBuilder();
 		CsvTable.append(csv, HEADERS);
-		List<String> formRow = new ArrayList<>(List.of("1", "form", metadata.toString()));
+		List<String> formRow = new ArrayList<>(List.of("2", "form", metadata.toString()));
 		FIELDS.forEach(field -> formRow.add(""));
 		CsvTable.append(csv, formRow);
 		Set<String> ids = new HashSet<>();
@@ -110,7 +109,7 @@ public class RadioChannelCsvService {
 			}
 			UUID.fromString(channel.getChannelId());
 			JsonNode node = MAPPER.valueToTree(channel);
-			List<String> row = new ArrayList<>(List.of("1", "channel", ""));
+			List<String> row = new ArrayList<>(List.of("2", "channel", ""));
 			for (String field : FIELDS) {
 				row.add(node.path(field).toString());
 			}
@@ -126,7 +125,10 @@ public class RadioChannelCsvService {
 	 */
 	public Ics205Form importCsv(String csv) {
 		List<List<String>> parsed = CsvTable.parse(csv);
-		List<Map<String, String>> records = CsvTable.records(parsed, HEADERS);
+		boolean currentFormat = hasHeader(parsed, "radioCheckStatus");
+		List<String> fields = currentFormat ? FIELDS : LEGACY_FIELDS;
+		List<String> headers = currentFormat ? HEADERS : LEGACY_HEADERS;
+		List<Map<String, String>> records = CsvTable.records(parsed, headers);
 		List<Integer> recordNumbers = new ArrayList<>();
 		for (int i = 1; i < parsed.size(); i++) {
 			if (parsed.get(i).size() != 1 || !parsed.get(i).get(0).isBlank()) {
@@ -143,11 +145,11 @@ public class RadioChannelCsvService {
 			for (Map<String, String> row : records) {
 				recordNumber = recordNumbers.get(recordIndex++);
 				column = "headers";
-				if (row.size() != HEADERS.size()) {
+				if (row.size() != headers.size()) {
 					throw new IllegalArgumentException("Unknown native CSV columns; cannot import losslessly.");
 				}
 				column = "schemaVersion";
-				if (!"1".equals(row.get("schemaVersion"))) {
+				if (!(currentFormat ? "2" : "1").equals(row.get("schemaVersion"))) {
 					throw new IllegalArgumentException("Unsupported native CSV schema version.");
 				}
 				column = "recordType";
@@ -175,7 +177,7 @@ public class RadioChannelCsvService {
 						}
 					});
 					UUID.fromString(metadata.path("formId").asText());
-					for (String field : FIELDS) {
+					for (String field : fields) {
 						column = field;
 						if (!row.get(field).isEmpty()) {
 							throw new IllegalArgumentException("Form records cannot contain channel values.");
@@ -189,14 +191,16 @@ public class RadioChannelCsvService {
 						throw new IllegalArgumentException("Channel records cannot contain form metadata.");
 					}
 					ObjectNode node = MAPPER.createObjectNode();
-					for (String field : FIELDS) {
+					for (String field : fields) {
 						column = field;
 						JsonNode value = MAPPER.readTree(row.get(field));
 						if (value == null) {
 							throw new IllegalArgumentException("Missing channel value: " + field);
 						}
 						if ("includeOnForm".equals(field) ? !value.isBoolean()
-								: "programmingMetadata".equals(field) ? !value.isObject() : !value.isTextual()) {
+								: "programmingMetadata".equals(field) ? !value.isObject()
+								: "radioCheckedAt".equals(field) ? !value.isNull() && !value.isArray() && !value.isTextual()
+								: !value.isTextual()) {
 							throw new IllegalArgumentException("Incorrect native CSV value type: " + field);
 						}
 						if ("programmingMetadata".equals(field)) {
@@ -239,5 +243,29 @@ public class RadioChannelCsvService {
 		}
 		form.setChannels(channels);
 		return form;
+	}
+
+	/**
+	 * Builds the exact native header for one schema's channel fields.
+	 *
+	 * @param fields channel fields.
+	 * @return immutable header list.
+	 */
+	private static List<String> headers(List<String> fields) {
+		List<String> headers = new ArrayList<>(List.of("schemaVersion", "recordType", "formMetadata"));
+		headers.addAll(fields);
+		return List.copyOf(headers);
+	}
+
+	/**
+	 * Detects a version-specific header without assuming column order or case.
+	 *
+	 * @param rows parsed CSV rows.
+	 * @param expected expected header.
+	 * @return true when the first row contains the header.
+	 */
+	private static boolean hasHeader(List<List<String>> rows, String expected) {
+		return !rows.isEmpty() && rows.get(0).stream().map(String::trim)
+				.anyMatch(header -> expected.equalsIgnoreCase(header));
 	}
 }

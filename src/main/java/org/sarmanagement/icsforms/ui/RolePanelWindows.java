@@ -21,6 +21,7 @@ final class RolePanelWindows {
 	private static final Map<AppData, JFrame> MEDICAL_WINDOWS = new IdentityHashMap<>();
 	private static final Map<AppData, JFrame> OPERATIONS_WINDOWS = new IdentityHashMap<>();
 	private static final Map<AppData, JFrame> INCIDENT_COMMAND_WINDOWS = new IdentityHashMap<>();
+	private static final Map<AppData, JFrame> COMMUNICATIONS_WINDOWS = new IdentityHashMap<>();
 
 	/** Prevents utility construction. */
 	private RolePanelWindows() {
@@ -159,6 +160,40 @@ final class RolePanelWindows {
 		});
 		UiSupport.registerIncidentWindow(frame, incident);
 		INCIDENT_COMMAND_WINDOWS.put(incident, frame);
+		frame.setVisible(true);
+		return frame;
+	}
+
+	/**
+	 * Opens or focuses the Communications Unit panel.
+	 *
+	 * @param owner parent window.
+	 * @param controller incident controller.
+	 * @param navigator typed workspace navigator.
+	 * @param importCsv established communications import workflow.
+	 * @param exportCsv established communications export workflow.
+	 * @return role window.
+	 */
+	static JFrame openCommunications(Window owner, AppController controller,
+			Consumer<WorkspaceDestination> navigator, Runnable importCsv, Runnable exportCsv) {
+		AppData incident = controller.getData();
+		JFrame existing = COMMUNICATIONS_WINDOWS.get(incident);
+		if (existing != null && existing.isDisplayable()) {
+			existing.toFront();
+			return existing;
+		}
+		CommunicationsRolePanel panel = new CommunicationsRolePanel(controller, navigator, importCsv, exportCsv);
+		JFrame frame = createFrame("Communications Unit — " + incident.getIncidentContext().getIncidentName(), panel);
+		frame.addWindowListener(new java.awt.event.WindowAdapter() {
+			/** {@inheritDoc} */
+			@Override
+			public void windowClosed(java.awt.event.WindowEvent event) {
+				panel.dispose();
+				COMMUNICATIONS_WINDOWS.remove(incident);
+			}
+		});
+		UiSupport.registerIncidentWindow(frame, incident);
+		COMMUNICATIONS_WINDOWS.put(incident, frame);
 		frame.setVisible(true);
 		return frame;
 	}

@@ -215,6 +215,12 @@ public class Ics205Form {
 	public Ics205Form copyForNewPeriod() {
 		Ics205Form copy = deepCopy();
 		copy.setFormId(null);
+		for (RadioChannel channel : copy.getChannels()) {
+			channel.setRadioCheckStatus(RadioCheckStatus.NOT_RECORDED);
+			channel.setRadioCheckedBy("");
+			channel.setRadioCheckedAt(null);
+			channel.setRadioCheckNotes("");
+		}
 		copy.datePrepared = null;
 		copy.preparedDateTime = null;
 		copy.preparedBySignature = "";

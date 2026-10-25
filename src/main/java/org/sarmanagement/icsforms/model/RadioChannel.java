@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 /**
  * A radio channel in the communications plan. Radio settings remain raw strings
@@ -37,6 +38,12 @@ public class RadioChannel {
 	private String remarks = "";
 	private boolean includeOnForm = true;
 	private String txPolicy = TX_POLICY_UNKNOWN;
+	private String coverageGuidance = "";
+	private String relayGuidance = "";
+	private RadioCheckStatus radioCheckStatus = RadioCheckStatus.NOT_RECORDED;
+	private String radioCheckedBy = "";
+	private LocalDateTime radioCheckedAt;
+	private String radioCheckNotes = "";
 	private Map<String, String> programmingMetadata = new LinkedHashMap<>();
 
 	/**
@@ -328,6 +335,114 @@ public class RadioChannel {
 	}
 
 	/**
+	 * Returns operator-entered coverage guidance.
+	 *
+	 * @return coverage guidance.
+	 */
+	public String getCoverageGuidance() {
+		return coverageGuidance;
+	}
+
+	/**
+	 * Sets operator-entered coverage guidance.
+	 *
+	 * @param coverageGuidance coverage guidance; null becomes empty.
+	 */
+	public void setCoverageGuidance(String coverageGuidance) {
+		this.coverageGuidance = safe(coverageGuidance);
+	}
+
+	/**
+	 * Returns operator-entered relay guidance.
+	 *
+	 * @return relay guidance.
+	 */
+	public String getRelayGuidance() {
+		return relayGuidance;
+	}
+
+	/**
+	 * Sets operator-entered relay guidance.
+	 *
+	 * @param relayGuidance relay guidance; null becomes empty.
+	 */
+	public void setRelayGuidance(String relayGuidance) {
+		this.relayGuidance = safe(relayGuidance);
+	}
+
+	/**
+	 * Returns the explicit radio-check result.
+	 *
+	 * @return radio-check status, never null.
+	 */
+	public RadioCheckStatus getRadioCheckStatus() {
+		return radioCheckStatus == null ? RadioCheckStatus.NOT_RECORDED : radioCheckStatus;
+	}
+
+	/**
+	 * Sets the explicit radio-check result.
+	 *
+	 * @param radioCheckStatus result; null becomes not recorded.
+	 */
+	public void setRadioCheckStatus(RadioCheckStatus radioCheckStatus) {
+		this.radioCheckStatus = radioCheckStatus == null ? RadioCheckStatus.NOT_RECORDED : radioCheckStatus;
+	}
+
+	/**
+	 * Returns the person who recorded the radio check.
+	 *
+	 * @return checker name.
+	 */
+	public String getRadioCheckedBy() {
+		return radioCheckedBy;
+	}
+
+	/**
+	 * Sets the person who recorded the radio check.
+	 *
+	 * @param radioCheckedBy checker name; null becomes empty.
+	 */
+	public void setRadioCheckedBy(String radioCheckedBy) {
+		this.radioCheckedBy = safe(radioCheckedBy);
+	}
+
+	/**
+	 * Returns the radio-check time.
+	 *
+	 * @return check time, or null.
+	 */
+	public LocalDateTime getRadioCheckedAt() {
+		return radioCheckedAt;
+	}
+
+	/**
+	 * Sets the radio-check time.
+	 *
+	 * @param radioCheckedAt check time, or null.
+	 */
+	public void setRadioCheckedAt(LocalDateTime radioCheckedAt) {
+		this.radioCheckedAt = radioCheckedAt;
+	}
+
+	/**
+	 * Returns operator-entered radio-check notes.
+	 *
+	 * @return check notes.
+	 */
+	public String getRadioCheckNotes() {
+		return radioCheckNotes;
+	}
+
+	/**
+	 * Sets operator-entered radio-check notes.
+	 *
+	 * @param radioCheckNotes check notes; null becomes empty.
+	 */
+	public void setRadioCheckNotes(String radioCheckNotes) {
+		this.radioCheckNotes = safe(radioCheckNotes);
+	}
+
+	/**
 	 * Returns preserved radio-programming settings, including unknown columns.
 	 * @return mutable metadata map, never null
 	 */
@@ -368,6 +483,12 @@ public class RadioChannel {
 		copy.remarks = remarks;
 		copy.includeOnForm = includeOnForm;
 		copy.txPolicy = txPolicy;
+		copy.coverageGuidance = coverageGuidance;
+		copy.relayGuidance = relayGuidance;
+		copy.radioCheckStatus = radioCheckStatus;
+		copy.radioCheckedBy = radioCheckedBy;
+		copy.radioCheckedAt = radioCheckedAt;
+		copy.radioCheckNotes = radioCheckNotes;
 		copy.setProgrammingMetadata(programmingMetadata);
 		return copy;
 	}

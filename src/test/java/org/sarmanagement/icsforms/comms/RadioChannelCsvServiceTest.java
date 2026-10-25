@@ -6,6 +6,7 @@ package org.sarmanagement.icsforms.comms;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.Ics205Form;
 import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.model.RadioCheckStatus;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -56,6 +57,12 @@ class RadioChannelCsvServiceTest {
 		channel.setDigitalProtocol("DMR");
 		channel.setSystem("Trunked network");
 		channel.setRemarks("Radio-only, no form");
+		channel.setCoverageGuidance("Ridge shadow below sector three");
+		channel.setRelayGuidance("Relay through Base");
+		channel.setRadioCheckStatus(RadioCheckStatus.PARTIAL);
+		channel.setRadioCheckedBy("COML");
+		channel.setRadioCheckedAt(LocalDateTime.of(2026, 10, 25, 4, 30));
+		channel.setRadioCheckNotes("Intermittent at trailhead");
 		channel.setTxPolicy(RadioChannel.TX_POLICY_RECEIVE_ONLY);
 		channel.setIncludeOnForm(false);
 		channel.setProgrammingMetadata(new LinkedHashMap<>(Map.of("unknown", "001,\r\n\"x\"", "tone", "023")));
@@ -114,7 +121,7 @@ class RadioChannelCsvServiceTest {
 			List<List<String>> rows = original.stream().map(ArrayList::new).map(row -> (List<String>) row).toList();
 			int idIndex = rows.get(0).indexOf("channelId");
 			switch (mutation) {
-				case "version" -> rows.get(1).set(0, "2");
+				case "version" -> rows.get(1).set(0, "9");
 				case "duplicate" -> rows = new ArrayList<>(List.of(rows.get(0), rows.get(1), rows.get(2), rows.get(2)));
 				case "type" -> rows.get(2).set(rows.get(0).indexOf("rxFrequency"), "155.100");
 				case "id" -> rows.get(2).set(idIndex, "\"\"");
@@ -128,6 +135,36 @@ class RadioChannelCsvServiceTest {
 		}
 		assertThrows(IllegalArgumentException.class, () -> service.importCsv(""));
 		assertThrows(IllegalArgumentException.class, () -> service.importCsv("schemaVersion,recordType\n1,form"));
+	}
+
+	@Test
+	void importsLegacySchemaWithoutInventingRadioChecks() {
+		Ics205Form form = new Ics205Form();
+		RadioChannel channel = new RadioChannel();
+		channel.setChannelName("Legacy");
+		form.setChannels(List.of(channel));
+		List<List<String>> rows = CsvTable.parse(service.exportCsv(form));
+		List<String> removed = List.of("coverageGuidance", "relayGuidance", "radioCheckStatus", "radioCheckedBy",
+				"radioCheckedAt", "radioCheckNotes");
+		List<Integer> keep = new ArrayList<>();
+		for (int index = 0; index < rows.get(0).size(); index++) {
+			if (!removed.contains(rows.get(0).get(index))) {
+				keep.add(index);
+			}
+		}
+		StringBuilder legacy = new StringBuilder();
+		for (List<String> row : rows) {
+			List<String> cells = keep.stream().map(row::get).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+			if (cells.size() > 1 && ("form".equals(cells.get(1)) || "channel".equals(cells.get(1)))) {
+				cells.set(0, "1");
+			}
+			CsvTable.append(legacy, cells);
+		}
+
+		Ics205Form restored = service.importCsv(legacy.toString());
+
+		assertEquals("Legacy", restored.getChannels().get(0).getChannelName());
+		assertEquals(RadioCheckStatus.NOT_RECORDED, restored.getChannels().get(0).getRadioCheckStatus());
 	}
 
 	@Test
