@@ -57,6 +57,7 @@ final class UiSupport {
 	private static final String FORM_SPACER_PROPERTY = "uiSupport.formSpacer";
 	private static ZoneId dateTimeDisplayZone = ZoneId.systemDefault();
 	private static final java.util.Map<Window, AppData> INCIDENT_WINDOWS = new java.util.WeakHashMap<>();
+	private static final java.util.Map<Window, Boolean> INCIDENT_WINDOW_BLOCKING = new java.util.WeakHashMap<>();
 
 	private UiSupport() {
 	}
@@ -796,7 +797,20 @@ final class UiSupport {
 	 * @param data incident edited by the window.
 	 */
 	static void registerIncidentWindow(Window window, AppData data) {
+		registerIncidentWindow(window, data, true);
+	}
+
+	/**
+	 * Registers an independent incident window and whether its own visibility blocks
+	 * switching. Modal descendants always block switching.
+	 *
+	 * @param window independent document root.
+	 * @param data incident shown or edited by the window.
+	 * @param blocksSwitch true when uncommitted editor presentation may exist.
+	 */
+	static void registerIncidentWindow(Window window, AppData data, boolean blocksSwitch) {
 		INCIDENT_WINDOWS.put(window, data);
+		INCIDENT_WINDOW_BLOCKING.put(window, blocksSwitch);
 	}
 
 	/**
@@ -811,6 +825,7 @@ final class UiSupport {
 				.filter(Window::isShowing)
 				.filter(window -> window != mainWindow)
 				.filter(window -> INCIDENT_WINDOWS.get(window) == data
+						&& INCIDENT_WINDOW_BLOCKING.getOrDefault(window, true)
 						|| window instanceof java.awt.Dialog dialog
 						&& dialog.getModalityType() == java.awt.Dialog.ModalityType.DOCUMENT_MODAL
 						&& (documentRoot(window) == mainWindow
@@ -842,6 +857,7 @@ final class UiSupport {
 			if (INCIDENT_WINDOWS.get(window) == data) {
 				window.dispose();
 				INCIDENT_WINDOWS.remove(window);
+				INCIDENT_WINDOW_BLOCKING.remove(window);
 			}
 		}
 	}

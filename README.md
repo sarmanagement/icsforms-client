@@ -46,6 +46,8 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   - Medical Plan (ICS 206)
   - Canine Medical Plan (ICS 206CANINE, adapted; eligible in SAR mode or when a canine T-card exists)
   - Role-oriented dashboard ordering for IC/ICP, Safety Officer, Operations, and Communications
+  - Live responsibility-focused windows for Incident Command, Safety Officer, Medical Unit Leader,
+    Operations, and Communications Unit under **View → Role Panels**
   - SAR Tasks (SAR mode only)
   - Clue Log (SAR mode only)
   - Optional Incident Open Action Tracker (ICS 233-CG), available in both SAR and Generic modes as a separate tab.
@@ -53,6 +55,16 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   - Activity Logs (ICS 214)
 - SAR Task Assignment forms with debriefing and POD factoring support.
 - Assignment editors save and establish the linked SAR task before navigating to it. Save failures keep the entered values available for correction or retry.
+- ICS 202 objectives have stable identities, explicit order and assessment state, and may be linked
+  to multiple ICS 204 assignments. Deleting a linked objective requires an explicit unlink or
+  replacement choice. Incident Command approval is bound to the current objective wording and
+  order, so subsequent changes display the approval as stale rather than silently retaining it.
+  Edit objective wording directly in the ICS 202 table; use the objective editor for assessment
+  and notes. **Apply to assignments…** selects supporting assignments grouped by branch/division/group.
+  Assignment dialogs keep **Supporting Incident Objective(s)** at the bottom, empty until linked.
+- Safety, human medical, canine medical, and communications reviews are independent assertions
+  over substantive content. Generated page numbers do not invalidate review, but relevant plan
+  changes do.
 - **Add log entry…** is available from assignments, SAR tasks, and T-cards, including their editors. The shared entry dialog defaults to the ICP log and selected resource/task, but lets the operator change that context. New assignments must be saved before logging; cancelling the subsequent entry does not undo that save.
 - Detached ICS 214 windows remain usable while main-window operational editors are open. Incident switching or closing requires resolving outstanding editors; entries already logged are retained.
 - Safety workspace for ICS 215A hazard analysis and editable ICS 208 safety messages/plans. Hazard libraries can be loaded/saved as UTF-8 CSV; imported entries can be stored separately from incident analysis. SAR debrief hazard reports are reviewable from the Safety tab. Safety forms are available for individual export and are excluded from IAP bundles by default until selected.
@@ -63,9 +75,34 @@ File → New always creates a separate incident. File → Duplicate Incident cop
 - ICS 206 medical plans use the shared incident/operational-period context. Human plans support a simple emergency-instruction mode and detailed records. Human and adapted canine plans share the **Medical** tab, with aligned aid-station, transportation, hospital, and special-procedure sections; aviation coordination is under Transportation. Canine transportation uses editable structured service rows, can copy ambulance entries from the human Medical Plan, and can be explicitly imported/exported as a separate CSV (`service,location,contactNumbers,frequency,airOrGround,levelOfService`). Copied ambulance entries do not imply canine transport capability; confirm that capability before use. Existing free-text canine transport notes remain supported. Confirmed 24-hour veterinary contact numbers are bold red in the canine PDF. The canine subtab appears for eligible SAR/canine incidents and can also be opened from **View** for saved plans. Canine plans are explicitly adapted, not an official FEMA variant. IAP inclusion is selected only in ICS 202; medical-plan tabs do not have IAP inclusion toggles. Medical-plan signature lines are printed for signing and are not edited in the application.
 - The **Shared** tab stores incident-owned ICP, staging-area, base, and other addresses. The canine veterinary routing workspace can select one of those locations as its routing origin; address geocoding and coordinate confirmation remain available there.
 - **Safety Overview** includes a readiness summary and read-only PDF-like previews of the current ICS 208, ICS 206, and adapted ICS 206CANINE forms. The summary reports the shared Safety Officer and Medical Unit Leader assignments and recorded aid stations.
+- **Human Medical Reference** and **Canine Medical Reference** are separate nonmodal windows.
+  They automatically render the latest plan PDF, show recorded completion/review status, and never
+  mark a plan reviewed merely by opening it. Medical-event logging accepts optional task and
+  location context. Canine directory candidates remain distinct from facilities explicitly
+  accepted into the incident plan.
 - Canine veterinary directories are incident-owned copies, not live links to source files. JSON regional files use schema version 1 (`schemaVersion` and `facilities`). CSV imports accept the app's extended headers or a minimal hospital file with `Hospital Name,Address,City,State,Zip,Contact Number,Fax,Notes`; column names are case- and whitespace-insensitive. Imported street address, city, state, ZIP, contact number, and fax remain separate fields. `Notes` is retained as descriptive capabilities/notes and does not imply confirmed 24-hour availability. The app's UTF-8 CSV export uses `id,name,town,state,postalCode,address,contactNumbers,fax,available24Hours,availabilityNotes,capabilities,verifiedAt,latitude,longitude`; multiple contacts are semicolon-separated. Blank availability is unknown, not confirmation of 24-hour service. Directory edits require explicit export and do not overwrite sources implicitly.
 - Address geocoding and driving routes are separate services. HeiGIT-hosted openrouteservice is the default provider: geocoding uses `https://api.heigit.org/pelias/v1/search`, and driving matrices use `https://api.heigit.org/openrouteservice/v2/matrix/driving-car`. The veterinary routing tab guides the operator through loading a directory, confirming coordinates for the base and facilities, calculating road routes, then reviewing and adding the closest confirmed 24-hour facilities. Route calculation remains disabled until the base and at least one facility have valid coordinates; shortlist review remains disabled until a current road route exists for a confirmed 24-hour facility. Requests send entered addresses or coordinates to that third party. Configure the key in **Configuration > Medical Routing (OpenRouteService)…**, set `ORS_API_KEY`, or place the key in `~/.icsforms/ors-api-key`; the environment variable takes precedence, and credentials are not stored in incident JSON or regional files. Verify current [HeiGIT terms and restrictions](https://account.heigit.org/info/tos), quotas, and service limits before operational use. The tab displays **© openrouteservice by HeiGIT | Data from [OpenStreetMap](https://openstreetmap.org/copyright)**. Unresolved/unreachable locations remain visible for manual handling; any straight-line estimate is explicitly labeled and is not a driving time.
 - Role dashboards reorder the same editors; they do not duplicate incident data. Choose **View > Dashboard** (IC/ICP is the default). ICS 205 is the radio communications plan; ICS 205A remains a distinct communications/contact list.
+- **Configuration > Descriptive tab labels** optionally names the tabs **ICS-202 Objectives**,
+  **ICS-204 Assignments**, **ICS-205 Comms**, and **ICS-214 Log** followed by its existing owner/scope.
+  The choice is saved locally and does not change workspace navigation or incident data.
+- Role panels are focused live views of the same incident data, not new authorization boundaries.
+  Incident Command records an explicit IAP planning-cycle stage and objective approval; Operations
+  delegates assignment, task status, clue, log, and debrief actions to their established editors;
+  Safety and Medical Unit Leader use the shared role assignments and review records. Recorded
+  resource status is displayed as recorded and is not treated as a readiness or radio-check
+  certification.
+  The IC resource overview can break down recorded statuses by resource type. Plan-state badges
+  distinguish recorded content from explicit review/approval; counts are not sufficiency scores.
+  Its summary bar is red for missing required content, yellow when content is recorded but
+  approvals are pending or stale, and green when required content has current approvals.
+  Each compact section badge also uses these colors; an optional blank animal medical plan
+  is neutral. Assignment color reflects recorded rows and objective-link coverage, not approval.
+  Full badge facts, long incident names, and review provenance remain available through tooltips
+  and accessible descriptions. Role/reference headers and review actions use separate rows.
+  Canine/equine medical content is required only when animal resources are recorded.
+  Objective rows summarize linked assignment lifecycle states; canine ICS 219-7 equipment
+  is counted separately from other equipment. Role/reference windows use distinct themed icons.
 - **Export All PDFs** for individual per-form PDF files.
 - **Export IAP Bundle** for a single merged PDF bundle of selected forms with a cover page.
 - PDF export handles multiline text and tabs, and reports unwanted controls or unsupported characters with the affected form/field and correction guidance. Failed renders do not replace existing good PDFs or leave partial bundle files.
@@ -153,11 +190,14 @@ establishes a link automatically. This preserves older incidents and duplicate
 channel names without destructive rename-by-text replacement. Legacy fields are
 not all rewritten into references by this change.
 
-When advancing the operational period, explicitly select **Bring forward
-communications plan (ICS 205)** to copy the channel order, assignments, and special
-instructions. Otherwise the new plan starts empty. The previous plan is archived
-with its period context. Copies have independent mutable data, and preparation
-times, signature, and IAP page are cleared for the new period.
+Use **File > Bring Forward…**, or the action in a communications, safety, or medical
+plan panel, to reuse selected plans from an archived operational period. The same
+dialog can import plans from another saved incident without switching incidents.
+Only selected plans are replaced, after confirmation; incident identity and the
+active period remain unchanged. Copied plans require new review and do not retain
+signatures or approval claims. Communications copies include channel order,
+assignments, special instructions, and coverage/relay guidance, but clear
+per-channel radio-check assertions.
 
 Direct standalone ICS 205 exports default to native landscape. The PDF generation
 dialog offers matching **Portrait**, **Landscape**, and **Portrait-fit** options
@@ -170,19 +210,24 @@ between the two forms. Long content continues
 on additional pages with identifying context rather than being silently dropped.
 Configured paper size and minimum margins apply.
 
-Native plan CSV is the lossless interchange format; CHIRP CSV is not. Frequencies
+Native plan CSV is the lossless interchange format; CHIRP CSV is not. The
+Communications Unit role panel adds sortable/filterable channel access, stable
+current-period usage links, coverage/relay guidance, and explicit per-channel
+radio-check results. Frequencies
 are stored as text without reducing programming precision to the printed form's
 four decimal places. Tone/NAC leading zeros, unknown values, and unsupported
 programming information must survive native interchange. Unknown TX is not
 automatically simplex or receive-only. Use **Copy RX → TX** only when simplex
 transmission is actually intended.
 
-The versioned native CSV uses `schemaVersion=1`, a `recordType` column, and a
+The versioned native CSV uses `schemaVersion=2`, a `recordType` column, and a
 `formMetadata` column. There is exactly one `form` record, even for an empty plan;
 its metadata is a JSON object containing the plan's non-channel fields. Subsequent
 `channel` records retain list order. Their named columns cover channel identity,
 all form fields, TX policy, digital protocol, system, print selection, and
-programming metadata. Channel cell values are JSON-encoded inside normal CSV
+programming metadata, plus coverage/relay guidance and explicit radio-check
+details. Schema 1 native files remain importable and produce a **Not recorded**
+radio-check state rather than an inferred result. Channel cell values are JSON-encoded inside normal CSV
 quoting: for example a frequency string is `"155.1600125"` as a JSON value,
 not a spreadsheet number. This preserves leading zeros, exact strings, booleans,
 and metadata maps. Use the application's export as a template rather than
@@ -272,7 +317,7 @@ An incident has started. ICS 201 – Incident Briefing is the **primary capture 
 
 ### (c) Subsequent Operational Periods
 
-The incident has progressed beyond the initial response. ICS 201 is **locked (read-only)** and attached to the IAP bundle as the historical initial-response record. ICS 202 (Incident Objectives) and ICS 204 (Assignment List) become the primary forms for each subsequent operational period. When advancing to a new operational period the operational-period forms are cleared while the organizational chart and ICS 201 are preserved as historical context. ICS 205 starts empty unless its explicit bring-forward checkbox is selected; the completed period's communications plan is archived in either case.
+The incident has progressed beyond the initial response. ICS 201 is **locked (read-only)** and attached to the IAP bundle as the historical initial-response record. ICS 202 (Incident Objectives) and ICS 204 (Assignment List) become the primary forms for each subsequent operational period. When advancing to a new operational period the operational-period forms are cleared while the organizational chart and ICS 201 are preserved as historical context. Completed-period communications, safety, and medical plans are archived for selective reuse through **File > Bring Forward…**; there is no startup carry-forward checkbox. Older archives only offer the plan snapshots they contain.
 
 ## Repository structure
 

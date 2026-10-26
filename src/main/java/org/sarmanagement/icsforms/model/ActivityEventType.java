@@ -40,6 +40,10 @@ public class ActivityEventType {
 
 	/** Stable identifier for the built-in free-text "Note" type. */
 	public static final String ID_FREE_TEXT = "FREE_TEXT";
+	/** Stable identifier for an explicitly confirmed responder medical event. */
+	public static final String ID_RESPONDER_MEDICAL_EVENT = "RESPONDER_MEDICAL_EVENT";
+	/** Stable identifier for an explicitly confirmed response-canine medical event. */
+	public static final String ID_CANINE_MEDICAL_EVENT = "RESPONSE_CANINE_MEDICAL_EVENT";
 
 	private String id = "";
 	private String label = "";
@@ -75,6 +79,8 @@ public class ActivityEventType {
 	 */
 	public static List<ActivityEventType> defaultTypes() {
 		return List.of(new ActivityEventType(ID_FREE_TEXT, "Note", true),
+				new ActivityEventType(ID_RESPONDER_MEDICAL_EVENT, "Responder medical event", true),
+				new ActivityEventType(ID_CANINE_MEDICAL_EVENT, "Response canine medical event", true),
 				new ActivityEventType(ID_CLUE_DETECTED, "Clue Detected", true),
 				new ActivityEventType(ID_CLUE_REPORTED, "Clue Reported", true),
 				new ActivityEventType(ID_SUBJECT_FOUND, "Subject Found", true),

@@ -25,6 +25,8 @@ import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
+import org.sarmanagement.icsforms.model.PlanReuseService;
+import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
@@ -36,6 +38,7 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
 
 import javax.swing.Timer;
+import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.ZoneOffset;
@@ -49,7 +52,12 @@ import java.util.LinkedHashMap;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Coordinates UI edits, autosave, validation, and linked SAR task
@@ -57,6 +65,7 @@ import java.util.Set;
  */
 public class AppController {
 	private static final int AUTOSAVE_DELAY_MS = 750;
+	private static final Logger LOGGER = Logger.getLogger(AppController.class.getName());
 	private static final ObjectMapper INCIDENT_COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -70,6 +79,15 @@ public class AppController {
 	private boolean dirty;
 	private LinkSource activeLinkSource = LinkSource.NONE;
 	private PersonnelCardCreator personnelCardCreator;
+	private final List<IncidentChangeListener> incidentChangeListeners = new CopyOnWriteArrayList<>();
+	private long incidentGeneration = 1;
+	private long changeSequence;
+	private boolean suppressChangeNotifications;
+	private final Object incidentChangeDeliveryLock = new Object();
+	private IncidentChange pendingIncidentChange;
+	private boolean incidentChangeDeliveryScheduled;
+	private Runnable beforePlanReuse = () -> { };
+	private Runnable afterPlanReuse = () -> { };
 	private java.util.function.Consumer<RuntimeException> autosaveErrorHandler = exception -> {
 		throw exception;
 	};
@@ -84,6 +102,56 @@ public class AppController {
 	 */
 	public enum LinkSource {
 		NONE, SHARED, ORG_CHART, ICS202, ICS204, ICS214
+	}
+
+	/**
+	 * Describes why live incident views should update.
+	 */
+	public enum IncidentChangeKind {
+		MODEL_COMMITTED, INCIDENT_REPLACED, OPERATIONAL_PERIOD_CHANGED
+	}
+
+	/**
+	 * Immutable identity token used by detached editors and asynchronous work.
+	 *
+	 * @param dataIdentity incident model identity.
+	 * @param generation controller incident generation.
+	 */
+	public record IncidentBinding(AppData dataIdentity, long generation) {
+	}
+
+	/**
+	 * Immutable notification delivered after a shared-model commit.
+	 *
+	 * @param binding identity of the incident to which the change belongs.
+	 * @param sequence monotonically increasing controller-local change sequence.
+	 * @param kind change category.
+	 */
+	public record IncidentChange(IncidentBinding binding, long sequence, IncidentChangeKind kind) {
+	}
+
+	/**
+	 * Receives shared incident changes on the Swing event dispatch thread.
+	 */
+	@FunctionalInterface
+	public interface IncidentChangeListener {
+		/**
+		 * Handles one committed shared-model change.
+		 *
+		 * @param change immutable change notification.
+		 */
+		void incidentChanged(IncidentChange change);
+	}
+
+	/**
+	 * Idempotent listener registration returned to live views.
+	 */
+	public interface IncidentChangeSubscription extends AutoCloseable {
+		/**
+		 * Removes the registered listener.
+		 */
+		@Override
+		void close();
 	}
 
 	/**
@@ -205,6 +273,111 @@ public class AppController {
 	}
 
 	/**
+	 * Lists completed periods containing at least one reusable plan, newest first.
+	 *
+	 * @return detached period snapshots; absent legacy plan archives are not invented.
+	 */
+	public List<AppData.OperationalPeriodRecord> getPreviousPlanSources() {
+		List<AppData.OperationalPeriodRecord> sources = new ArrayList<>();
+		for (AppData.OperationalPeriodRecord period : data.getOperationalPeriodHistory()) {
+			if (!PlanReuseService.availablePlans(period).isEmpty()) {
+				sources.add(INCIDENT_COPIER.convertValue(period, AppData.OperationalPeriodRecord.class));
+			}
+		}
+		Collections.reverse(sources);
+		return sources;
+	}
+
+	/**
+	 * Determines whether previous-period bring-forward can be offered.
+	 *
+	 * @return true when at least one completed period has reusable plan content.
+	 */
+	public boolean hasPreviousPlans() {
+		return data.getOperationalPeriodHistory().stream()
+				.anyMatch(period -> !PlanReuseService.availablePlans(period).isEmpty());
+	}
+
+	/**
+	 * Determines whether plan reuse has a previous-period or cross-incident source.
+	 *
+	 * @return true when previous plans exist or another saved incident can be browsed.
+	 */
+	public boolean canReusePlans() {
+		return hasPreviousPlans() || store != null && store.list().stream()
+				.anyMatch(summary -> summary.incidentId() != null
+						&& !summary.incidentId().equals(activeIncidentId));
+	}
+
+	/**
+	 * Connects all editor flush and refresh operations to every plan-reuse launcher.
+	 * The callbacks run on the launcher's Swing event dispatch thread.
+	 *
+	 * @param before flushes all pending editor changes before opening the dialog.
+	 * @param after refreshes all editors after import or cancellation.
+	 */
+	public void setPlanReuseEditorCallbacks(Runnable before, Runnable after) {
+		beforePlanReuse = Objects.requireNonNull(before);
+		afterPlanReuse = Objects.requireNonNull(after);
+	}
+
+	/**
+	 * Runs a plan-reuse interaction between the configured editor flush and refresh.
+	 * Refresh also runs after cancellation or an unsuccessful interaction.
+	 *
+	 * @param interaction modal plan selection and import interaction.
+	 */
+	public void withPlanReuseEditors(Runnable interaction) {
+		beforePlanReuse.run();
+		try {
+			interaction.run();
+		} finally {
+			afterPlanReuse.run();
+		}
+	}
+
+	/**
+	 * Loads another saved incident's current and completed periods without opening it.
+	 *
+	 * @param incidentId source incident identifier.
+	 * @return detached nonempty plan snapshots, current period first then newest history.
+	 * @throws IllegalArgumentException when the source is the active incident or no store exists.
+	 */
+	public List<AppData.OperationalPeriodRecord> getImportPlanSources(IncidentId incidentId) {
+		if (store == null || incidentId == null || incidentId.equals(activeIncidentId)) {
+			throw new IllegalArgumentException("Choose another saved incident.");
+		}
+		AppData source = store.load(incidentId);
+		List<AppData.OperationalPeriodRecord> sources = new ArrayList<>();
+		AppData.OperationalPeriodRecord current = PlanReuseService.snapshot(source);
+		if (!PlanReuseService.availablePlans(current).isEmpty()) {
+			sources.add(current);
+		}
+		List<AppData.OperationalPeriodRecord> history = source.getOperationalPeriodHistory();
+		for (int index = history.size() - 1; index >= 0; index--) {
+			AppData.OperationalPeriodRecord period = history.get(index);
+			if (!PlanReuseService.availablePlans(period).isEmpty()) {
+				sources.add(INCIDENT_COPIER.convertValue(period, AppData.OperationalPeriodRecord.class));
+			}
+		}
+		return sources;
+	}
+
+	/**
+	 * Copies selected plan content into this incident and schedules persistence.
+	 *
+	 * @param source detached source-period snapshot.
+	 * @param areas explicitly selected plan areas.
+	 * @param crossIncident whether source identities belong to another incident.
+	 * @throws IllegalArgumentException when selected content is unavailable.
+	 */
+	public void bringForwardPlans(AppData.OperationalPeriodRecord source, Set<PlanReviewArea> areas,
+			boolean crossIncident) {
+		PlanReuseService.apply(data, source, areas, crossIncident);
+		markDirty();
+	}
+
+	/**
 	 * Describes where the active incident is stored without assuming a file path.
 	 *
 	 * @return store location and incident identifier, or the legacy workspace path.
@@ -234,6 +407,66 @@ public class AppController {
 	 */
 	public AppData getData() {
 		return data;
+	}
+
+	/**
+	 * Captures the active incident identity for a detached editor or asynchronous
+	 * operation.
+	 *
+	 * @return current incident binding.
+	 */
+	public IncidentBinding captureIncidentBinding() {
+		return new IncidentBinding(data, incidentGeneration);
+	}
+
+	/**
+	 * Tests whether a captured binding still names the active incident and period.
+	 *
+	 * @param binding binding to test.
+	 * @return true only while the exact incident generation remains active.
+	 */
+	public boolean isCurrent(IncidentBinding binding) {
+		return binding != null && binding.dataIdentity() == data && binding.generation() == incidentGeneration;
+	}
+
+	/**
+	 * Applies a synchronous shared-model edit only while its originating incident
+	 * binding remains current.
+	 *
+	 * @param binding originating incident binding.
+	 * @param edit synchronous edit that must not display a modal dialog.
+	 * @return true when the edit was applied; false when the incident or period changed.
+	 */
+	public boolean commitIfCurrent(IncidentBinding binding, Runnable edit) {
+		java.util.Objects.requireNonNull(edit, "edit");
+		if (!isCurrent(binding)) {
+			return false;
+		}
+		edit.run();
+		markDirty();
+		return true;
+	}
+
+	/**
+	 * Registers a listener for committed local model changes.
+	 *
+	 * <p>
+	 * Registration does not emit an initial event. The owner must close the returned
+	 * subscription when its window is disposed.
+	 * </p>
+	 *
+	 * @param listener listener to invoke on the Swing event dispatch thread.
+	 * @return idempotent subscription.
+	 */
+	public IncidentChangeSubscription addIncidentChangeListener(IncidentChangeListener listener) {
+		java.util.Objects.requireNonNull(listener, "listener");
+		incidentChangeListeners.add(listener);
+		AtomicBoolean closed = new AtomicBoolean();
+		return () -> {
+			if (closed.compareAndSet(false, true)) {
+				incidentChangeListeners.remove(listener);
+			}
+		};
 	}
 
 	/**
@@ -345,6 +578,8 @@ public class AppController {
 		syncSarTasks();
 		dirty = false;
 		activeLinkSource = LinkSource.NONE;
+		incidentGeneration++;
+		publishIncidentChange(IncidentChangeKind.INCIDENT_REPLACED);
 	}
 
 	/**
@@ -369,6 +604,7 @@ public class AppController {
 		syncSarTasks();
 		syncTCards();
 		autosaveTimer.restart();
+		publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
 	}
 
 	/**
@@ -391,11 +627,15 @@ public class AppController {
 		boolean previousDirty = dirty;
 		LinkSource previousSource = activeLinkSource;
 		boolean pendingAutosave = autosaveTimer.isRunning();
+		boolean previousSuppression = suppressChangeNotifications;
 		try {
+			suppressChangeNotifications = true;
 			edits.run();
 			markDirty();
 			save();
+			suppressChangeNotifications = previousSuppression;
 		} catch (RuntimeException exception) {
+			suppressChangeNotifications = previousSuppression;
 			autosaveTimer.stop();
 			snapshot.restore();
 			dirty = previousDirty;
@@ -404,6 +644,51 @@ public class AppController {
 				autosaveTimer.restart();
 			}
 			throw exception;
+		}
+		publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
+	}
+
+	/**
+	 * Schedules a coalesced live-view notification without asking full editors to
+	 * reload. Delivery never occurs synchronously inside a source Swing document
+	 * callback, and one failing presentation listener cannot affect persistence or
+	 * prevent other listeners from receiving the change.
+	 *
+	 * @param kind category of committed model change.
+	 */
+	private void publishIncidentChange(IncidentChangeKind kind) {
+		if (suppressChangeNotifications || incidentChangeListeners.isEmpty()) {
+			return;
+		}
+		synchronized (incidentChangeDeliveryLock) {
+			pendingIncidentChange = new IncidentChange(captureIncidentBinding(), ++changeSequence, kind);
+			if (incidentChangeDeliveryScheduled) {
+				return;
+			}
+			incidentChangeDeliveryScheduled = true;
+		}
+		SwingUtilities.invokeLater(this::deliverPendingIncidentChange);
+	}
+
+	/**
+	 * Delivers the latest pending presentation event and isolates listener failures.
+	 */
+	private void deliverPendingIncidentChange() {
+		IncidentChange change;
+		synchronized (incidentChangeDeliveryLock) {
+			change = pendingIncidentChange;
+			pendingIncidentChange = null;
+			incidentChangeDeliveryScheduled = false;
+		}
+		if (change == null) {
+			return;
+		}
+		for (IncidentChangeListener listener : incidentChangeListeners) {
+			try {
+				listener.incidentChanged(change);
+			} catch (RuntimeException exception) {
+				LOGGER.log(Level.WARNING, "Incident change listener failed; continuing delivery", exception);
+			}
 		}
 	}
 
@@ -750,6 +1035,8 @@ public class AppController {
 		dirty = true;
 		activeLinkSource = LinkSource.NONE;
 		autosaveTimer.restart();
+		incidentGeneration++;
+		publishIncidentChange(IncidentChangeKind.OPERATIONAL_PERIOD_CHANGED);
 	}
 
 	/**
@@ -1171,6 +1458,91 @@ public class AppController {
 	public void setIapPhase(org.sarmanagement.icsforms.model.IapPhase phase) {
 		data.setIapPhase(phase);
 		markDirty();
+	}
+
+	/**
+	 * Sets the operator-selected position in the IAP planning cycle.
+	 *
+	 * @param stage explicit planning-cycle stage.
+	 */
+	public void setIapPlanningStage(org.sarmanagement.icsforms.model.IapPlanningStage stage) {
+		data.setIapPlanningStage(stage);
+		markDirty();
+	}
+
+	/**
+	 * Records the Incident Commander's approval of the current ordered objectives.
+	 *
+	 * @param approver approving Incident Commander.
+	 * @param signature optional typed signature.
+	 * @param approvedAt approval time.
+	 */
+	public void approveCurrentObjectives(String approver, String signature, LocalDateTime approvedAt) {
+		data.getForm202().recordObjectiveApproval(approver, signature, approvedAt);
+		markDirty();
+	}
+
+	/**
+	 * Applies Communications Unit operational guidance and an explicit radio-check
+	 * assertion to one stable channel, rejecting stale same-field edits.
+	 *
+	 * @param channelId stable channel identity.
+	 * @param expected detached baseline used to detect concurrent focused edits.
+	 * @param coverageGuidance operator-entered coverage guidance.
+	 * @param relayGuidance operator-entered relay guidance.
+	 * @param checkStatus explicit check result.
+	 * @param checkedBy person recording the result.
+	 * @param checkedAt result time, or null for not recorded.
+	 * @param checkNotes operator-entered check notes.
+	 * @throws IllegalStateException when the channel disappeared, is ambiguous, or
+	 *             changed since it was loaded.
+	 * @throws IllegalArgumentException when a recorded result lacks checker or time.
+	 */
+	public void updateRadioChannelOperations(String channelId,
+			org.sarmanagement.icsforms.model.RadioChannel expected, String coverageGuidance, String relayGuidance,
+			org.sarmanagement.icsforms.model.RadioCheckStatus checkStatus, String checkedBy, LocalDateTime checkedAt,
+			String checkNotes) {
+		List<org.sarmanagement.icsforms.model.RadioChannel> matches = data.getForm205().getChannels().stream()
+				.filter(channel -> channelId != null && channelId.equals(channel.getChannelId())).toList();
+		if (matches.size() != 1) {
+			throw new IllegalStateException("The selected channel is missing or has an ambiguous identity.");
+		}
+		org.sarmanagement.icsforms.model.RadioChannel current = matches.get(0);
+		if (expected == null || !sameRadioOperations(current, expected)) {
+			throw new IllegalStateException("This channel changed in another view. Reload it before saving.");
+		}
+		org.sarmanagement.icsforms.model.RadioCheckStatus status = checkStatus == null
+				? org.sarmanagement.icsforms.model.RadioCheckStatus.NOT_RECORDED : checkStatus;
+		if (status != org.sarmanagement.icsforms.model.RadioCheckStatus.NOT_RECORDED
+				&& (checkedBy == null || checkedBy.isBlank() || checkedAt == null)) {
+			throw new IllegalArgumentException("Recorded radio checks require a checker and time.");
+		}
+		current.setCoverageGuidance(coverageGuidance);
+		current.setRelayGuidance(relayGuidance);
+		current.setRadioCheckStatus(status);
+		current.setRadioCheckedBy(status == org.sarmanagement.icsforms.model.RadioCheckStatus.NOT_RECORDED
+				? "" : checkedBy.trim());
+		current.setRadioCheckedAt(status == org.sarmanagement.icsforms.model.RadioCheckStatus.NOT_RECORDED
+				? null : checkedAt);
+		current.setRadioCheckNotes(checkNotes);
+		markDirty();
+	}
+
+	/**
+	 * Compares the focused Communications Unit fields used for optimistic editing.
+	 *
+	 * @param first current channel.
+	 * @param second detached baseline.
+	 * @return true when focused values are unchanged.
+	 */
+	private static boolean sameRadioOperations(org.sarmanagement.icsforms.model.RadioChannel first,
+			org.sarmanagement.icsforms.model.RadioChannel second) {
+		return Objects.equals(first.getCoverageGuidance(), second.getCoverageGuidance())
+				&& Objects.equals(first.getRelayGuidance(), second.getRelayGuidance())
+				&& first.getRadioCheckStatus() == second.getRadioCheckStatus()
+				&& Objects.equals(first.getRadioCheckedBy(), second.getRadioCheckedBy())
+				&& Objects.equals(first.getRadioCheckedAt(), second.getRadioCheckedAt())
+				&& Objects.equals(first.getRadioCheckNotes(), second.getRadioCheckNotes());
 	}
 
 	/**
@@ -2361,6 +2733,7 @@ public class AppController {
 			errors.add("No task provided.");
 			return errors;
 		}
+
 		if (!"returned".equalsIgnoreCase(task.getTaskLifecycleStatus())) {
 			errors.add("Task must be in 'returned' status before debriefing can be completed.");
 		}
@@ -2381,6 +2754,75 @@ public class AppController {
 			markDirty();
 		}
 		return errors;
+	}
+
+	/**
+	 * Records one explicitly confirmed medical event in the ICP activity log.
+	 * Merely opening or consulting a reference never calls this operation.
+	 *
+	 * @param canine true for a response-canine event; false for a responder event.
+	 * @param note minimal operator-entered event note.
+	 * @param assignmentId optional task assignment context.
+	 * @throws IllegalArgumentException when the note is blank.
+	 */
+	public void recordMedicalEvent(boolean canine, String note, String assignmentId) {
+		if (note == null || note.isBlank()) {
+			throw new IllegalArgumentException("A brief event note is required.");
+		}
+		String eventTypeId = canine
+				? ActivityEventType.ID_CANINE_MEDICAL_EVENT
+				: ActivityEventType.ID_RESPONDER_MEDICAL_EVENT;
+		Ics214Form log = data.getActivityLogs().stream()
+				.filter(candidate -> candidate.getLogScope() == ActivityLogScope.ICP).findFirst().orElseGet(() -> {
+					Ics214Form created = new Ics214Form();
+					created.setName("ICP Communications Log");
+					data.getActivityLogs().add(created);
+					return created;
+				});
+		ActivityLogEntry entry = new ActivityLogEntry();
+		entry.setTimestamp(LocalDateTime.now().withSecond(0).withNano(0));
+		entry.setEventTypeId(eventTypeId);
+		entry.setNotableActivity(note.trim());
+		if (assignmentId != null && !assignmentId.isBlank()) {
+			entry.setResourceIdentifier(data.getSarTaskAssignments().stream()
+					.filter(task -> assignmentId.equals(task.getAssignmentId()))
+					.map(SarTaskSupport::taskResourceDisplayLabel).findFirst().orElse(""));
+		}
+		log.getActivityLog().add(entry);
+		markDirty();
+	}
+
+	/**
+	 * Adds operator-selected recorded resources to a normal linked SAR task.
+	 *
+	 * @param assignmentId stable assignment identifier.
+	 * @param resourceIds stable T-card identifiers selected by the operator.
+	 */
+	public void assignRecordedResources(String assignmentId, List<String> resourceIds) {
+		if (assignmentId == null || assignmentId.isBlank() || resourceIds == null || resourceIds.isEmpty()) {
+			return;
+		}
+		SarTaskAssignment task = data.getSarTaskAssignments().stream()
+				.filter(candidate -> assignmentId.equals(candidate.getAssignmentId())).findFirst().orElse(null);
+		if (task == null) {
+			return;
+		}
+		Set<String> existing = task.getResourcesAssigned().stream().map(SarTaskResource::getResourceId)
+				.filter(id -> id != null && !id.isBlank()).collect(java.util.stream.Collectors.toSet());
+		for (String resourceId : resourceIds) {
+			TCard card = data.getTCards().stream().filter(candidate -> resourceId != null
+					&& resourceId.equals(candidate.peekResourceId())).findFirst().orElse(null);
+			if (card == null || !existing.add(resourceId)) {
+				continue;
+			}
+			SarTaskResource resource = new SarTaskResource();
+			resource.setResourceId(resourceId);
+			resource.setName(card.getDisplayLabel());
+			resource.setFunction(card.getCardType() == TCardType.PERSONNEL ? "Team member" : "Resource");
+			resource.setHomeAgency(card.getHomeAgency());
+			task.getResourcesAssigned().add(resource);
+		}
+		markDirty();
 	}
 
 	private void addOrgCard(Map<String, TCard> wanted, Map<String, TCard> existing, Map<String, TCard> byName,
@@ -2654,11 +3096,15 @@ public class AppController {
 		if (data.getForm202() == null) {
 			data.setForm202(new org.sarmanagement.icsforms.model.Ics202Form());
 		}
+		data.getForm202().normalizeObjectives();
 		if (data.getForm204() == null) {
 			data.setForm204(new Ics204Form());
 		}
 		if (data.getAdditionalForms204() == null) {
 			data.setAdditionalForms204(new ArrayList<>());
+		}
+		for (ResourceAssignment assignment : data.getAllAssignmentResources()) {
+			assignment.setObjectiveIds(assignment.getObjectiveIds());
 		}
 		if (data.getActivityLogs() == null) {
 			data.setActivityLogs(new ArrayList<>());

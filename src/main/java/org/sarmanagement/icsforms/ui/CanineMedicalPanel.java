@@ -26,6 +26,7 @@ import javax.swing.JComboBox;
 import javax.swing.JEditorPane;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
@@ -119,6 +120,7 @@ public class CanineMedicalPanel extends JPanel {
 	private final JTextArea aidStations = new JTextArea(2, 70);
 	private final JTextArea transportServices = new JTextArea(2, 40);
 	private final JTextField onsiteVet = new JTextField();
+	private final JList<PersonChoice> veterinaryPersonnel = new JList<>();
 	private final JTextArea capabilityNotes = new JTextArea(3, 50);
 	private final JTextArea procedures = new JTextArea(2, 70);
 	private final JCheckBox aviationUsed = new JCheckBox("Aviation assets are used; coordinate with Air Operations");
@@ -136,6 +138,7 @@ public class CanineMedicalPanel extends JPanel {
 	private Consumer<String> exportRequest = ignored -> { };
 	private boolean loading;
 	private boolean flushing;
+	private final JButton bringForward = new JButton("Bring Forward…");
 	private AppData lastLoadedIncident;
 	private SwingWorker<?, ?> activeWorker;
 
@@ -232,7 +235,15 @@ public class CanineMedicalPanel extends JPanel {
 		this.defaultDirectory = defaultDirectory;
 		this.geocoder = geocoder;
 		this.routeProvider = routeProvider;
-		add(buildTop(), BorderLayout.NORTH);
+		JPanel heading = new JPanel(new BorderLayout());
+		heading.add(buildTop(), BorderLayout.NORTH);
+		bringForward.addActionListener(event -> BringForwardDialog.showFromEditor(this, controller,
+				this::pushToModel, this::refreshFromModel));
+		heading.add(bringForward, BorderLayout.CENTER);
+		heading.add(new PlanReviewStrip(controller,
+				org.sarmanagement.icsforms.model.PlanReviewArea.CANINE_MEDICAL, this::pushToModel),
+				BorderLayout.SOUTH);
+		add(heading, BorderLayout.NORTH);
 		workspace.addTab("Canine ICS 206CANINE plan", buildPlanFields());
 		workspace.addTab("Veterinary facilities and routes", buildDirectoryArea());
 		add(workspace, BorderLayout.CENTER);
@@ -271,6 +282,7 @@ public class CanineMedicalPanel extends JPanel {
 	 * Refreshes the editor while retaining the model's directory and accepted snapshots.
 	 */
 	public void refreshFromModel() {
+		bringForward.setEnabled(controller.canReusePlans());
 		loading = true;
 		try {
 			AppData data = controller.getData();
@@ -295,6 +307,7 @@ public class CanineMedicalPanel extends JPanel {
 			loadTransport(plan.getTransportServiceEntries());
 			poisonContact.setText(plan.getPoisonControlContact());
 			onsiteVet.setText(plan.getOnsiteVeterinarian());
+			loadVeterinaryPersonnel(data, plan);
 			capabilityNotes.setText(plan.getVeterinaryCapabilityNotes());
 			procedures.setText(plan.getEmergencyProcedures());
 			aviationUsed.setSelected(plan.isAviationAssetsUsed());
@@ -348,6 +361,8 @@ public class CanineMedicalPanel extends JPanel {
 			saveTransport(data.getCanineMedicalPlan());
 			data.getCanineMedicalPlan().setPoisonControlContact(poisonContact.getText());
 			data.getCanineMedicalPlan().setOnsiteVeterinarian(onsiteVet.getText());
+			data.getCanineMedicalPlan().setVeterinaryPersonnelResourceIds(
+					veterinaryPersonnel.getSelectedValuesList().stream().map(PersonChoice::resourceId).toList());
 			data.getCanineMedicalPlan().setVeterinaryCapabilityNotes(capabilityNotes.getText());
 			data.getCanineMedicalPlan().setEmergencyProcedures(procedures.getText());
 			data.getCanineMedicalPlan().setAviationAssetsUsed(aviationUsed.isSelected());
@@ -643,6 +658,10 @@ public class CanineMedicalPanel extends JPanel {
 		JPanel details = new JPanel(new GridLayout(0, 2, 6, 4));
 		details.add(new JLabel("Onsite veterinarian"));
 		details.add(onsiteVet);
+		details.add(new JLabel("Linked veterinary personnel (recorded status/location only)"));
+		veterinaryPersonnel.setVisibleRowCount(4);
+		veterinaryPersonnel.getAccessibleContext().setAccessibleName("Linked veterinary personnel T-cards");
+		details.add(new JScrollPane(veterinaryPersonnel));
 		details.add(new JLabel("Veterinary capabilities / notes"));
 		details.add(new JScrollPane(capabilityNotes));
 		hospitals.add(details, BorderLayout.NORTH);
@@ -663,6 +682,42 @@ public class CanineMedicalPanel extends JPanel {
 		snapshots.add(controls, BorderLayout.SOUTH);
 		hospitals.add(snapshots, BorderLayout.CENTER);
 		return hospitals;
+	}
+
+	/**
+	 * Loads all personnel cards and selects the plan's stable veterinary links.
+	 *
+	 * @param data active incident.
+	 * @param plan canine medical plan.
+	 */
+	private void loadVeterinaryPersonnel(AppData data, CanineMedicalPlan plan) {
+		List<PersonChoice> people = data.getTCards().stream()
+				.filter(card -> card.getCardType() == null
+						|| card.getCardType() == org.sarmanagement.icsforms.model.TCardType.PERSONNEL)
+				.map(card -> new PersonChoice(card.getResourceId(), card.getPersonName(), card.getStatus(),
+						card.getLocation()))
+				.toList();
+		veterinaryPersonnel.setListData(people.toArray(PersonChoice[]::new));
+		int[] selected = java.util.stream.IntStream.range(0, people.size())
+				.filter(index -> plan.getVeterinaryPersonnelResourceIds().contains(people.get(index).resourceId()))
+				.toArray();
+		veterinaryPersonnel.setSelectedIndices(selected);
+	}
+
+	/**
+	 * Personnel T-card choice preserving status and location semantics.
+	 *
+	 * @param resourceId stable resource identifier.
+	 * @param name recorded person name.
+	 * @param status recorded status.
+	 * @param location recorded location.
+	 */
+	private record PersonChoice(String resourceId, String name, String status, String location) {
+		/** @return recorded card details without availability inference. */
+		@Override
+		public String toString() {
+			return name + " — recorded status: " + status + "; location: " + location;
+		}
 	}
 
 	/**

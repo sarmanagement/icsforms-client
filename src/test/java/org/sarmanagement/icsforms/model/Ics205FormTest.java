@@ -48,8 +48,8 @@ class Ics205FormTest {
 			assertNull(data.getForm205().getPreparedDateTime());
 			assertNotNull(UUID.fromString(data.getForm205().getFormId()));
 		}
-		assertEquals(12, AppData.CURRENT_SCHEMA_VERSION);
-		assertEquals(12, new AppData().getSchemaVersion());
+		assertEquals(15, AppData.CURRENT_SCHEMA_VERSION);
+		assertEquals(AppData.CURRENT_SCHEMA_VERSION, new AppData().getSchemaVersion());
 		AppData disabled = mapper.readValue("{\"ics205Enabled\":false}", AppData.class);
 		assertFalse(disabled.isIcs205Enabled());
 	}
@@ -205,6 +205,9 @@ class Ics205FormTest {
 		for (boolean carry : List.of(false, true)) {
 			AppData data = populatedDocument();
 			Ics205Form previous = data.getForm205();
+			previous.getChannels().get(0).setRadioCheckStatus(RadioCheckStatus.SUCCESSFUL);
+			previous.getChannels().get(0).setRadioCheckedBy("COML");
+			previous.getChannels().get(0).setRadioCheckedAt(LocalDateTime.of(2026, 10, 24, 9, 0));
 			String channelId = previous.getChannels().get(0).getChannelId();
 			LocalDateTime start = LocalDateTime.of(2026, 10, 24, 8, 0);
 			LocalDateTime end = start.plusHours(12);
@@ -235,6 +238,8 @@ class Ics205FormTest {
 			assertNull(current.getPreparedDateTime());
 			if (carry) {
 				assertEquals(channelId, current.getChannels().get(0).getChannelId());
+				assertEquals(RadioCheckStatus.NOT_RECORDED,
+						current.getChannels().get(0).getRadioCheckStatus());
 				assertEquals("Dispatch instructions", current.getSpecialInstructions());
 				assertEquals("Preparer", current.getPreparedByName());
 				assertNotSame(current.getChannels().get(0), archived.getChannels().get(0));
@@ -279,7 +284,7 @@ class Ics205FormTest {
 			Files.writeString(directory.resolve("incidents").resolve(legacyId.value() + ".json"),
 					"{\"schemaVersion\":11,\"incidentId\":\"" + legacyId.value() + "\"}");
 			AppData legacy = store.load(legacyId);
-			assertEquals(12, legacy.getSchemaVersion());
+			assertEquals(AppData.CURRENT_SCHEMA_VERSION, legacy.getSchemaVersion());
 			assertTrue(legacy.isIcs205Enabled());
 			assertTrue(legacy.getForm205().getChannels().isEmpty());
 			legacy.setForm205(populatedDocument().getForm205());
@@ -289,14 +294,14 @@ class Ics205FormTest {
 			store.save(legacyId, legacy);
 
 			AppData restored = store.load(legacyId);
-			assertEquals(12, restored.getSchemaVersion());
+			assertEquals(AppData.CURRENT_SCHEMA_VERSION, restored.getSchemaVersion());
 			assertEquals(2L, restored.getForm205().getChannels().stream()
 					.map(RadioChannel::getChannelId).distinct().count());
 			assertEquals("155.123456789000", restored.getForm205().getChannels().get(0).getRxFrequency());
 			assertEquals("Explicit signature",
 					restored.getOperationalPeriodHistory().get(0).getForm205().getPreparedBySignature());
 			assertEquals("", restored.getForm205().getPreparedBySignature());
-			assertEquals(12, mapper.readTree(directory.resolve("incidents")
+			assertEquals(AppData.CURRENT_SCHEMA_VERSION, mapper.readTree(directory.resolve("incidents")
 					.resolve(legacyId.value() + ".json").toFile()).get("schemaVersion").asInt());
 		}
 	}
@@ -308,7 +313,7 @@ class Ics205FormTest {
 		data.setIcs205Enabled(false);
 		repository.save(data);
 		AppData restored = repository.loadOrDefault();
-		assertEquals(12, restored.getSchemaVersion());
+		assertEquals(AppData.CURRENT_SCHEMA_VERSION, restored.getSchemaVersion());
 		assertFalse(restored.isIcs205Enabled());
 		assertEquals(mapper.valueToTree(data.getForm205()), mapper.valueToTree(restored.getForm205()));
 	}

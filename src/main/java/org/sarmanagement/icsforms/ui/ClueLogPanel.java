@@ -173,6 +173,7 @@ public class ClueLogPanel extends JPanel {
 				if (!label.isBlank()) {
 					labelToAssignmentId.putIfAbsent(label, t.getAssignmentId());
 				}
+
 				if (t.getResourcesAssigned() != null) {
 					for (var res : t.getResourcesAssigned()) {
 						String name = res.getName() == null ? "" : res.getName().trim();
@@ -262,6 +263,13 @@ public class ClueLogPanel extends JPanel {
 		controller.recordClueInIcpActivityLog(clue);
 		controller.propagateClueToActivityLog(clue);
 		controller.markDirty();
+	}
+
+	/**
+	 * Opens the established clue-entry workflow from another incident view.
+	 */
+	public void openAddClueDialog() {
+		addClueDialog();
 	}
 
 	/**

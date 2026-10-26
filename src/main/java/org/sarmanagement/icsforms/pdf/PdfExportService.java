@@ -743,6 +743,7 @@ public class PdfExportService {
 		copy.setConfiguredTimeZoneId(data.getConfiguredTimeZoneId());
 		copy.setIncidentMode(data.getIncidentMode());
 		copy.setIapPhase(data.getIapPhase());
+		copy.setIapPlanningStage(data.getIapPlanningStage());
 		copy.setOperationalPeriodHistory(data.getOperationalPeriodHistory());
 		copy.setIncidentContext(data.getIncidentContext());
 		copy.setOrganizationalChart(data.getOrganizationalChart());

@@ -208,13 +208,22 @@ public class Ics205Form {
 	}
 
 	/**
-	 * Carries inventory and instructions to a new form without carrying approval.
-	 * Stable channel identities survive so external links continue to resolve.
-	 * @return independent new-period form with blank dates, signature, and page
+	 * Carries inventory and instructions to a new form without carrying approval or
+	 * period-specific radio-check assertions. Stable channel identities survive so
+	 * external links continue to resolve.
+	 *
+	 * @return independent new-period form with blank dates, signature, page, and
+	 *         radio checks.
 	 */
 	public Ics205Form copyForNewPeriod() {
 		Ics205Form copy = deepCopy();
 		copy.setFormId(null);
+		for (RadioChannel channel : copy.getChannels()) {
+			channel.setRadioCheckStatus(RadioCheckStatus.NOT_RECORDED);
+			channel.setRadioCheckedBy("");
+			channel.setRadioCheckedAt(null);
+			channel.setRadioCheckNotes("");
+		}
 		copy.datePrepared = null;
 		copy.preparedDateTime = null;
 		copy.preparedBySignature = "";

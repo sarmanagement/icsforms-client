@@ -130,7 +130,8 @@ final class RadioChannelEditorPanel extends JPanel {
 				+ " An edited value overrides chirp.Power in the JSON metadata.");
 		policy.add(labeled("CHIRP power (watts)", chirpPower));
 		form.add(policy);
-		form.add(fieldGroup("Operational details", controls, 3, Field.ASSIGNMENT, Field.SYSTEM, Field.REMARKS));
+		form.add(fieldGroup("Operational details", controls, 3, Field.ASSIGNMENT, Field.SYSTEM, Field.REMARKS,
+				Field.COVERAGE, Field.RELAY));
 		try {
 			metadata.setText(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(channel.getProgrammingMetadata()));
 		} catch (JsonProcessingException exception) {
@@ -401,7 +402,9 @@ final class RadioChannelEditorPanel extends JPanel {
 		PROTOCOL("Digital protocol", RadioChannel::getDigitalProtocol, RadioChannel::setDigitalProtocol, false,
 				"", "P25", "DMR", "NXDN", "D-STAR", "C4FM"),
 		SYSTEM("System", RadioChannel::getSystem, RadioChannel::setSystem, true),
-		REMARKS("Remarks", RadioChannel::getRemarks, RadioChannel::setRemarks, true);
+		REMARKS("Remarks", RadioChannel::getRemarks, RadioChannel::setRemarks, true),
+		COVERAGE("Coverage guidance", RadioChannel::getCoverageGuidance, RadioChannel::setCoverageGuidance, true),
+		RELAY("Relay guidance", RadioChannel::getRelayGuidance, RadioChannel::setRelayGuidance, true);
 
 		final String label;
 		final Function<RadioChannel, String> getter;

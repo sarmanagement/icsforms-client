@@ -624,6 +624,7 @@ public class Ics214Panel extends JPanel {
 		}
 		String title = "ICS 214 – " + (form.getName().isBlank() ? "Activity Log" : form.getName());
 		JFrame frame = new JFrame(title);
+		ApplicationIcon.install(frame, ApplicationIcon.Variant.ACTIVITY_LOG);
 		frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		Ics214Panel popOut = new Ics214Panel(controller);
 		popOut.loadFromModel(form, data);

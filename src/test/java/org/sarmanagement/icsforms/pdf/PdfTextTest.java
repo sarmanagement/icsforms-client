@@ -22,7 +22,8 @@ import org.sarmanagement.icsforms.ui.Ics202Panel;
 import org.sarmanagement.icsforms.ui.MainFrame;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
-import javax.swing.JTextArea;
+import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.JLabel;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
@@ -262,10 +263,12 @@ class PdfTextTest {
 			Ics202Panel panel = new Ics202Panel(controller);
 			panel.refreshFromModel();
 			try {
-				JTextArea area = field(panel, "objectivesArea", JTextArea.class);
+				JTable table = field(panel, "objectivesTable", JTable.class);
+				assertTrue(table.editCellAt(0, 1));
+				JTextField area = (JTextField) table.getEditorComponent();
 				JLabel warning = field(panel, "objectiveWarning", JLabel.class);
 				Color originalBackground = area.getBackground();
-				area.append("\u96EA");
+				area.setText(area.getText() + "\u96EA");
 				assertTrue(warning.getText().contains("U+96EA"));
 				assertTrue(area.getToolTipText().contains("remove or replace"));
 				assertNotEquals(originalBackground, area.getBackground());
@@ -276,11 +279,11 @@ class PdfTextTest {
 				assertTrue(warning.getText().contains("U+0000"));
 				assertEquals(pasted, area.getText());
 				assertDoesNotThrow(panel::pushToModel);
-				assertEquals(List.of(" \u0000Changed objective\u0000 ", "\u000B", "\tTabbed objective\t"),
-						data.getForm202().getObjectives());
+				assertEquals(List.of(pasted), data.getForm202().getObjectives());
 				panel.refreshFromModel();
-				assertEquals(pasted, area.getText());
+				assertEquals(pasted, table.getValueAt(0, 1));
 				assertTrue(warning.getText().contains("U+0000"));
+				assertTrue(table.editCellAt(0, 1));
 				area.setText("Valid objective");
 				assertEquals(" ", warning.getText());
 				assertNull(area.getToolTipText());
@@ -296,6 +299,7 @@ class PdfTextTest {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		SwingUtilities.invokeAndWait(() -> {
 			AppData data = new AppData();
+			data.getForm202().setObjectives(List.of("Initial objective"));
 			LocalRepository repository = new LocalRepository(directory.resolve("incident.json"));
 			PdfExportService service = new PdfExportService(new Ics202PdfRenderer());
 			MainFrame frame = new MainFrame(data, repository, service, new IncidentValidator(), directory);
@@ -303,7 +307,9 @@ class PdfTextTest {
 				Ics202Panel panel = field(frame, "ics202Panel", Ics202Panel.class);
 				JTabbedPane tabs = field(frame, "tabs", JTabbedPane.class);
 				tabs.setSelectedComponent(panel);
-				JTextArea area = field(panel, "objectivesArea", JTextArea.class);
+				JTable table = field(panel, "objectivesTable", JTable.class);
+				assertTrue(table.editCellAt(0, 1));
+				JTextField area = (JTextField) table.getEditorComponent();
 				String objective = " \u0000Pasted \u96EA objective\u0000 ";
 				area.selectAll();
 				assertTrue(area.getTransferHandler().importData(area, new StringSelection(objective)));

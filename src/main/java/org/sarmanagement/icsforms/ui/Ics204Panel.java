@@ -5,6 +5,7 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 
@@ -12,6 +13,8 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.DefaultListModel;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
@@ -248,7 +251,21 @@ public class Ics204Panel extends JPanel {
 	 *         off to another editor.
 	 */
 	public ResourceAssignment openNewAssignmentEditor() {
+		return openNewAssignmentEditorForObjective("");
+	}
+
+	/**
+	 * Opens a normal new-assignment editor with one objective preselected.
+	 *
+	 * @param objectiveId stable objective identifier, or blank for no preselection.
+	 * @return saved assignment, or null when cancelled or handed off.
+	 */
+	public ResourceAssignment openNewAssignmentEditorForObjective(String objectiveId) {
+		UiSupport.commitTableEdits(communicationsTable);
 		ResourceAssignment row = new ResourceAssignment();
+		if (objectiveId != null && !objectiveId.isBlank()) {
+			row.setObjectiveIds(List.of(objectiveId));
+		}
 		ResourceAssignmentEditor editor = new ResourceAssignmentEditor(row, controller);
 		JPanel content = resourceAssignmentEditorDialogContent(row, editor);
 		if (confirmResourceAssignmentDialog("Create ICS 204 Assignment", row, editor, content,
@@ -653,6 +670,7 @@ public class Ics204Panel extends JPanel {
 
 	/** Opens the selected resource with save-before-navigation semantics. */
 	private void openSelectedResourceEditor() {
+		UiSupport.commitTableEdits(communicationsTable);
 		int viewRow = resourceTable.getSelectedRow();
 		if (viewRow < 0) {
 			return;
@@ -703,7 +721,11 @@ public class Ics204Panel extends JPanel {
 				options.add("Save assignment and add log entry…");
 			} else if (existing && onAddLogEntryRequest != null) {
 				JButton logButton = new JButton("Add log entry…");
-				logButton.addActionListener(event -> onAddLogEntryRequest.accept(content, assignment));
+				logButton.addActionListener(event -> {
+					if (controller.isCurrent(editor.incidentBinding)) {
+						onAddLogEntryRequest.accept(content, assignment);
+					}
+				});
 				options.add(logButton);
 			}
 			int okIndex = options.size();
@@ -712,7 +734,7 @@ public class Ics204Panel extends JPanel {
 			options.add("Cancel");
 			int choice = UiSupport.showResizableOptionDialog(this, title, content, preferredSize, options.toArray(),
 					"Save");
-			if (choice < 0 || choice == cancelIndex) {
+			if (choice < 0 || choice == cancelIndex || !controller.isCurrent(editor.incidentBinding)) {
 				return AssignmentEditorOutcome.CANCELLED;
 			}
 			try {
@@ -742,11 +764,18 @@ public class Ics204Panel extends JPanel {
 	 * @param assignment backing assignment.
 	 * @param editor field values to save.
 	 * @throws IllegalArgumentException if the assignment number is missing.
+	 * @throws IllegalStateException if the originating incident or period changed.
 	 */
 	private void saveAssignmentEditor(ResourceAssignment assignment, ResourceAssignmentEditor editor) {
+		if (!controller.isCurrent(editor.incidentBinding)) {
+			throw new IllegalStateException("The incident or operational period changed. Reopen the assignment.");
+		}
 		if (editor.assignmentTeamNumberField.getText().isBlank()) {
 			throw new IllegalArgumentException("Assignment/Team # is required.");
 		}
+		List<String> validObjectives = controller.getData().getForm202().getStructuredObjectives().stream()
+				.map(IncidentObjective::getObjectiveId).toList();
+		editor.objectiveIds.removeIf(id -> editor.knownObjectiveIds.contains(id) && !validObjectives.contains(id));
 		try {
 			controller.persistEditorChanges(() -> {
 				editor.applyTo(assignment);
@@ -981,6 +1010,7 @@ public class Ics204Panel extends JPanel {
 	private record LabeledComponent(String label, java.awt.Component component) {
 	}
 
+	/** Detached assignment fields, including optional supporting objective links. */
 	private static class ResourceAssignmentEditor {
 		private final JPanel panel = UiSupport.formPanel();
 		private final JTextField assignmentTeamNumberField = UiSupport.textField();
@@ -999,6 +1029,12 @@ public class Ics204Panel extends JPanel {
 		private final JScrollPane remarksField;
 		private final JScrollPane notesField;
 		private final JScrollPane assignmentField;
+		private final DefaultListModel<String> linkedObjectivesModel = new DefaultListModel<>();
+		private final JList<String> objectivesField = new JList<>(linkedObjectivesModel);
+		private final List<String> objectiveIds = new ArrayList<>();
+		private final java.util.Set<String> knownObjectiveIds = new java.util.HashSet<>();
+		private final AppController controller;
+		private final AppController.IncidentBinding incidentBinding;
 		private final String initialAssignment;
 		private final String initialEquipment;
 
@@ -1009,6 +1045,10 @@ public class Ics204Panel extends JPanel {
 		 * @param controller resource lookup controller.
 		 */
 		private ResourceAssignmentEditor(ResourceAssignment row, AppController controller) {
+			this.controller = controller;
+			incidentBinding = controller.captureIncidentBinding();
+			controller.getData().getForm202().getStructuredObjectives().stream()
+					.map(IncidentObjective::getObjectiveId).forEach(knownObjectiveIds::add);
 			initialAssignment = row.getAssignment();
 			initialEquipment = row.getSpecialEquipment();
 			resourceTypeField.setEditable(true);
@@ -1045,6 +1085,10 @@ public class Ics204Panel extends JPanel {
 			remarksField = textArea(row.getRemarks(), 2);
 			notesField = textArea(row.getNotes(), 2);
 			assignmentField = textArea(row.getAssignment(), 4);
+			objectiveIds.addAll(row.getObjectiveIds());
+			refreshLinkedObjectives();
+			objectivesField.setVisibleRowCount(2);
+			objectivesField.getAccessibleContext().setAccessibleName("Linked incident objectives");
 
 			// Autocomplete on leader field: selecting a known name auto-fills contact.
 			UiSupport.installNameAutocomplete(leaderField, controller::getPersonnelNames, selectedName -> {
@@ -1085,9 +1129,90 @@ public class Ics204Panel extends JPanel {
 			UiSupport.addRow(panel, rowIndex++, "Supplies", suppliesField);
 			UiSupport.addRow(panel, rowIndex++, "Remarks", remarksField);
 			UiSupport.addRow(panel, rowIndex++, "Notes", notesField);
-			UiSupport.addRow(panel, rowIndex, "Assignment", assignmentField);
+			UiSupport.addRow(panel, rowIndex++, "Assignment", assignmentField);
+			UiSupport.addRow(panel, rowIndex, "Supporting Incident Objective(s)", objectiveLinksPanel());
 		}
 
+		/**
+		 * Creates a linked-only list with explicit add and remove actions.
+		 *
+		 * @return compact supporting-objective controls.
+		 */
+		private JPanel objectiveLinksPanel() {
+			JPanel links = new JPanel(new BorderLayout(4, 4));
+			links.add(new JScrollPane(objectivesField), BorderLayout.CENTER);
+			JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEADING, 4, 0));
+			JButton add = new JButton("Add from list…");
+			JButton remove = new JButton("Remove");
+			add.addActionListener(event -> addObjectivesFromList());
+			remove.addActionListener(event -> removeSelectedObjectives());
+			actions.add(add);
+			actions.add(remove);
+			links.add(actions, BorderLayout.SOUTH);
+			return links;
+		}
+
+		/** Opens a cancellable multi-select picker without changing the backing assignment. */
+		private void addObjectivesFromList() {
+			if (!controller.isCurrent(incidentBinding)) {
+				return;
+			}
+			List<IncidentObjective> available = controller.getData().getForm202().getStructuredObjectives().stream()
+					.filter(objective -> !objectiveIds.contains(objective.getObjectiveId())).toList();
+			JList<IncidentObjective> picker = new JList<>(available.toArray(IncidentObjective[]::new));
+			picker.setVisibleRowCount(6);
+			picker.getAccessibleContext().setAccessibleName("Available supporting incident objectives");
+			int choice = UiSupport.showResizableOptionDialog(panel, "Add supporting incident objectives",
+					new JScrollPane(picker), new Dimension(600, 260), new Object[]{"Add", "Cancel"}, "Add");
+			if (choice == 0 && controller.isCurrent(incidentBinding)) {
+				addObjectives(picker.getSelectedValuesList());
+			}
+		}
+
+		/**
+		 * Adds selected objective identities once to this draft.
+		 *
+		 * @param selected chosen objectives.
+		 */
+		private void addObjectives(List<IncidentObjective> selected) {
+			if (!controller.isCurrent(incidentBinding)) {
+				return;
+			}
+			for (IncidentObjective objective : selected) {
+				if (!objectiveIds.contains(objective.getObjectiveId())
+						&& controller.getData().getForm202().getStructuredObjectives().contains(objective)) {
+					objectiveIds.add(objective.getObjectiveId());
+					knownObjectiveIds.add(objective.getObjectiveId());
+				}
+			}
+			refreshLinkedObjectives();
+		}
+
+		/** Removes selected supporting links from this draft only. */
+		private void removeSelectedObjectives() {
+			int[] indices = objectivesField.getSelectedIndices();
+			for (int index = indices.length - 1; index >= 0; index--) {
+				objectiveIds.remove(indices[index]);
+			}
+			refreshLinkedObjectives();
+		}
+
+		/** Shows only linked objectives; an unlinked assignment remains blank. */
+		private void refreshLinkedObjectives() {
+			linkedObjectivesModel.clear();
+			for (String id : objectiveIds) {
+				String label = controller.getData().getForm202().getStructuredObjectives().stream()
+						.filter(objective -> id.equals(objective.getObjectiveId())).map(IncidentObjective::toString)
+						.findFirst().orElse("Unavailable objective (" + id + ")");
+				linkedObjectivesModel.addElement(label);
+			}
+		}
+
+		/**
+		 * Describes the assignment being edited.
+		 *
+		 * @return editor title.
+		 */
 		private String dialogTitle() {
 			String teamNumber = assignmentTeamNumberField.getText().trim();
 			return teamNumber.isBlank() ? "Edit assignment" : "Edit assignment " + teamNumber;
@@ -1113,6 +1238,7 @@ public class Ics204Panel extends JPanel {
 			row.setRemarks(textAreaFrom(remarksField).getText().trim());
 			row.setNotes(textAreaFrom(notesField).getText().trim());
 			row.setAssignment(textAreaFrom(assignmentField).getText().trim());
+			row.setObjectiveIds(objectiveIds);
 		}
 
 		private static String selectedComboValue(JComboBox<String> comboBox) {

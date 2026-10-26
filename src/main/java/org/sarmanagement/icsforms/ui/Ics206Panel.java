@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.MedicalPlan;
+import org.sarmanagement.icsforms.model.PlanReviewArea;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -67,6 +68,7 @@ public class Ics206Panel extends JPanel {
 	private Consumer<String> exportRequest = ignored -> { };
 	private boolean loading;
 	private boolean flushing;
+	private final JButton bringForward = new JButton("Bring Forward…");
 
 	/**
 	 * Creates the editor and binds it to the active incident's human plan.
@@ -87,6 +89,10 @@ public class Ics206Panel extends JPanel {
 			exportRequest.accept("ICS 206");
 		});
 		header.add(export);
+		bringForward.addActionListener(event -> BringForwardDialog.showFromEditor(this, controller,
+				this::pushToModel, this::refreshFromModel));
+		header.add(bringForward);
+		header.add(new PlanReviewStrip(controller, PlanReviewArea.HUMAN_MEDICAL, this::pushToModel));
 		add(header, BorderLayout.NORTH);
 		add(buildEditor(), BorderLayout.CENTER);
 		add(validation, BorderLayout.SOUTH);
@@ -107,6 +113,7 @@ public class Ics206Panel extends JPanel {
 	 * Refreshes editor controls from the active incident without marking it dirty.
 	 */
 	public void refreshFromModel() {
+		bringForward.setEnabled(controller.canReusePlans());
 		loading = true;
 		try {
 			MedicalPlan plan = controller.getData().getMedicalPlan();

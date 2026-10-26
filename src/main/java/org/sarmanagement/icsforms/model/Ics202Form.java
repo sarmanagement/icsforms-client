@@ -1,7 +1,16 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 
 /**
@@ -10,6 +19,7 @@ import java.util.List;
  */
 public class Ics202Form {
 	private List<String> objectives = new ArrayList<>();
+	private List<IncidentObjective> structuredObjectives = new ArrayList<>();
 	private String commandEmphasis = "";
 	private String situationalAwareness = "";
 	private boolean siteSafetyPlanRequired;
@@ -20,6 +30,7 @@ public class Ics202Form {
 	private String approvedByIncidentCommanderName = "";
 	private String approvedBySignature = "";
 	private LocalDateTime approvedDateTime;
+	private String approvedObjectivesDigest = "";
 	private String formNumber = "ICS 202";
 	private String iapPage = "";
 
@@ -29,6 +40,7 @@ public class Ics202Form {
 	 * @return objectives list.
 	 */
 	public List<String> getObjectives() {
+		normalizeObjectives();
 		return objectives;
 	}
 
@@ -39,7 +51,75 @@ public class Ics202Form {
 	 *            objectives list.
 	 */
 	public void setObjectives(List<String> objectives) {
-		this.objectives = objectives == null ? new ArrayList<>() : objectives;
+		List<String> values = objectives == null ? new ArrayList<>() : new ArrayList<>(objectives);
+		normalizeObjectives();
+		for (int index = 0; index < values.size(); index++) {
+			if (index < structuredObjectives.size()) {
+				structuredObjectives.get(index).setText(values.get(index));
+			} else {
+				structuredObjectives.add(new IncidentObjective(values.get(index), index));
+			}
+		}
+		while (structuredObjectives.size() > values.size()) {
+			structuredObjectives.remove(structuredObjectives.size() - 1);
+		}
+		normalizeObjectiveOrder();
+	}
+
+	/**
+	 * Returns stable objective entities, migrating legacy objective strings without
+	 * guessing assignment links.
+	 *
+	 * @return mutable ordered objective list.
+	 */
+	public List<IncidentObjective> getStructuredObjectives() {
+		normalizeObjectives();
+		return structuredObjectives;
+	}
+
+	/**
+	 * Replaces stable objective entities and normalizes their display order.
+	 *
+	 * @param structuredObjectives objective entities; null becomes empty.
+	 */
+	public void setStructuredObjectives(List<IncidentObjective> structuredObjectives) {
+		this.structuredObjectives = structuredObjectives == null ? new ArrayList<>() : structuredObjectives;
+		normalizeObjectiveOrder();
+	}
+
+	/**
+	 * Migrates legacy strings and keeps the legacy PDF projection synchronized.
+	 */
+	public void normalizeObjectives() {
+		if (structuredObjectives == null) {
+			structuredObjectives = new ArrayList<>();
+		}
+		if (structuredObjectives.isEmpty() && objectives != null) {
+			for (int index = 0; index < objectives.size(); index++) {
+				structuredObjectives.add(new IncidentObjective(objectives.get(index), index));
+			}
+		}
+		normalizeObjectiveOrder();
+	}
+
+	/**
+	 * Applies list order and rebuilds the backward-compatible text projection.
+	 */
+	private void normalizeObjectiveOrder() {
+		if (structuredObjectives == null) {
+			structuredObjectives = new ArrayList<>();
+		}
+		objectives = new ArrayList<>();
+		for (int index = 0; index < structuredObjectives.size(); index++) {
+			IncidentObjective objective = structuredObjectives.get(index);
+			if (objective == null) {
+				objective = new IncidentObjective("", index);
+				structuredObjectives.set(index, objective);
+			}
+			objective.getObjectiveId();
+			objective.setDisplayOrder(index);
+			objectives.add(objective.getText());
+		}
 	}
 
 	/**
@@ -232,6 +312,101 @@ public class Ics202Form {
 	 */
 	public void setApprovedDateTime(LocalDateTime approvedDateTime) {
 		this.approvedDateTime = approvedDateTime;
+	}
+
+	/**
+	 * Returns the content digest captured with the objective approval.
+	 *
+	 * @return SHA-256 digest, or blank for untracked legacy approval.
+	 */
+	public String getApprovedObjectivesDigest() {
+		return approvedObjectivesDigest == null ? "" : approvedObjectivesDigest;
+	}
+
+	/**
+	 * Sets the content digest captured with the objective approval.
+	 *
+	 * @param approvedObjectivesDigest SHA-256 digest; null becomes blank.
+	 */
+	public void setApprovedObjectivesDigest(String approvedObjectivesDigest) {
+		this.approvedObjectivesDigest = approvedObjectivesDigest == null ? "" : approvedObjectivesDigest;
+	}
+
+	/**
+	 * Records an explicit Incident Commander approval of the current ordered
+	 * objectives.
+	 *
+	 * @param approver Incident Commander name.
+	 * @param signature typed signature, which may be blank.
+	 * @param approvedAt approval time.
+	 * @throws IllegalArgumentException when approver, time, or substantive
+	 *             objectives are absent.
+	 */
+	public void recordObjectiveApproval(String approver, String signature, LocalDateTime approvedAt) {
+		if (approver == null || approver.isBlank()) {
+			throw new IllegalArgumentException("Enter the approving Incident Commander.");
+		}
+		if (approvedAt == null) {
+			throw new IllegalArgumentException("Enter an objective approval time.");
+		}
+		if (getStructuredObjectives().stream().noneMatch(objective -> !objective.getText().isBlank())) {
+			throw new IllegalArgumentException("Enter at least one objective before approval.");
+		}
+		setApprovedByIncidentCommanderName(approver.trim());
+		setApprovedBySignature(signature);
+		setApprovedDateTime(approvedAt);
+		setApprovedObjectivesDigest(currentObjectivesDigest());
+	}
+
+	/**
+	 * Returns whether the approval matches current objective wording and order.
+	 *
+	 * @return objective approval status.
+	 */
+	@JsonIgnore
+	public ObjectiveApprovalStatus getObjectiveApprovalStatus() {
+		boolean approvalRecorded = approvedDateTime != null
+				|| (approvedByIncidentCommanderName != null && !approvedByIncidentCommanderName.isBlank())
+				|| (approvedBySignature != null && !approvedBySignature.isBlank());
+		if (!approvalRecorded) {
+			return ObjectiveApprovalStatus.NOT_APPROVED;
+		}
+		if (getApprovedObjectivesDigest().isBlank()) {
+			return ObjectiveApprovalStatus.LEGACY_UNVERIFIED;
+		}
+		return getApprovedObjectivesDigest().equals(currentObjectivesDigest())
+				? ObjectiveApprovalStatus.APPROVED_CURRENT
+				: ObjectiveApprovalStatus.CONTENT_CHANGED;
+	}
+
+	/**
+	 * Computes the stable digest of ordered objective identities and wording.
+	 *
+	 * @return lowercase SHA-256 hexadecimal digest.
+	 */
+	private String currentObjectivesDigest() {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			for (IncidentObjective objective : getStructuredObjectives()) {
+				updateDigest(digest, objective.getObjectiveId());
+				updateDigest(digest, objective.getText());
+			}
+			return HexFormat.of().formatHex(digest.digest());
+		} catch (NoSuchAlgorithmException exception) {
+			throw new IllegalStateException("SHA-256 is unavailable", exception);
+		}
+	}
+
+	/**
+	 * Adds one length-delimited value to an objective digest.
+	 *
+	 * @param digest digest receiving the value.
+	 * @param value value to add.
+	 */
+	private static void updateDigest(MessageDigest digest, String value) {
+		byte[] bytes = (value == null ? "" : value).getBytes(StandardCharsets.UTF_8);
+		digest.update(java.nio.ByteBuffer.allocate(Integer.BYTES).putInt(bytes.length).array());
+		digest.update(bytes);
 	}
 
 	/**

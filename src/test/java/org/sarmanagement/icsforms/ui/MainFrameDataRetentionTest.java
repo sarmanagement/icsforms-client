@@ -18,6 +18,7 @@ import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.IncidentLocation;
+import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.RadioChannel;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
@@ -220,6 +221,7 @@ class MainFrameDataRetentionTest {
 		data.getIncidentContext().setOperationalPeriodEnd(LocalDateTime.of(2026, 10, 25, 20, 0));
 		data.getForm201().getCurrentActions().add(new Ics201Form.ActionEntry());
 		data.getForm201().getResources().add(new Ics201Form.ResourceSummaryEntry());
+		data.getForm202().setStructuredObjectives(List.of(new IncidentObjective("Retain objective", 0)));
 		data.getMedicalPlan().getAidStations().add(new MedicalPlan.AidStation());
 		data.getMedicalPlan().getTransportServices().add(new MedicalPlan.TransportService());
 		data.getMedicalPlan().getHospitals().add(new MedicalPlan.Hospital());
@@ -294,7 +296,7 @@ class MainFrameDataRetentionTest {
 				new EditorCase("ics201Panel", WorkspaceDestination.of(WorkspaceId.ICS_201),
 						List.of("incidentNumberField", "mapSketchArea", "situationSummaryArea", "objectivesArea")),
 				new EditorCase("ics202Panel", WorkspaceDestination.of(WorkspaceId.ICS_202),
-						List.of("objectivesArea", "commandEmphasisArea", "situationalAwarenessArea", "additionalFormsArea")),
+						List.of("commandEmphasisArea", "situationalAwarenessArea", "additionalFormsArea")),
 				new EditorCase("ics204Panel", WorkspaceDestination.of(WorkspaceId.ICS_204),
 						List.of("sharedAssignmentArea", "specialInstructionsArea")),
 				new EditorCase("ics205Panel", WorkspaceDestination.of(WorkspaceId.ICS_205),
@@ -417,6 +419,7 @@ class MainFrameDataRetentionTest {
 	private enum InlineTable {
 		BRIEFING_ACTION("ics201Panel", "actionTable", 1, WorkspaceId.ICS_201),
 		BRIEFING_RESOURCE("ics201Panel", "resourceSummaryTable", 0, WorkspaceId.ICS_201),
+		OBJECTIVE("ics202Panel", "objectivesTable", 1, WorkspaceId.ICS_202),
 		COMMUNICATIONS("ics204Panel", "communicationsTable", 0, WorkspaceId.ICS_204),
 		AID_STATION("medicalPlanPanel", "aidTable", 0, WorkspaceId.HUMAN_MEDICAL_PLAN),
 		HUMAN_TRANSPORT("medicalPlanPanel", "transportTable", 0, WorkspaceId.HUMAN_MEDICAL_PLAN),
@@ -471,6 +474,7 @@ class MainFrameDataRetentionTest {
 			return switch (this) {
 				case BRIEFING_ACTION -> data.getForm201().getCurrentActions().get(0).getActions();
 				case BRIEFING_RESOURCE -> data.getForm201().getResources().get(0).getResource();
+				case OBJECTIVE -> data.getForm202().getStructuredObjectives().get(0).getText();
 				case COMMUNICATIONS -> data.getForm204().getCommunications().get(0).getName();
 				case AID_STATION -> data.getMedicalPlan().getAidStations().get(0).getName();
 				case HUMAN_TRANSPORT -> data.getMedicalPlan().getTransportServices().get(0).getService();
