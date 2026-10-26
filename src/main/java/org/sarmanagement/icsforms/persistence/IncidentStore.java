@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.persistence;
 
 import org.sarmanagement.icsforms.model.AppData;
@@ -57,8 +60,19 @@ public interface IncidentStore extends AutoCloseable {
 	 * @param jsonFile
 	 *            external document.
 	 * @return imported identifier, or empty if no document was selected.
+	 * @throws ImportValidationException
+	 *             when the external document fails validation.
 	 */
 	Optional<IncidentId> importFile(Path jsonFile);
+
+	/**
+	 * Returns warnings from the last successful import, or an empty list when none exist.
+	 *
+	 * @return immutable import diagnostic snapshot
+	 */
+	default List<ImportValidationException.Problem> getLastImportProblems() {
+		return List.of();
+	}
 
 	/**
 	 * Exports an incident document.

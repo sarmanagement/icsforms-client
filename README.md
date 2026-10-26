@@ -1,10 +1,15 @@
 # icsforms-client
 
+A fully fictional, importable [Maple Ridge SAR example](docs/examples/README.md)
+demonstrates an active dementia-search operational period and linked ICS forms,
+resources, safety reminders and PDF exports. It is illustrative, not an operational plan.
+Open it with **File → Import → Import Incident JSON…**.
+
 `icsforms-client` is a Java Swing desktop application for authoring Incident Command System (ICS) incident forms with local JSON persistence and PDF export. Development is ongoing and the application is still evolving as additional forms and functionality are added.
 
 This project is intended to support the **SAR** (Search and Rescue) community, but it is also useful for generic ICS incident planning and documentation. The application currently supports ICS 201, ICS 202, ICS 203, ICS 204, ICS 205, ICS 205A, ICS 206, an adapted canine ICS 206, ICS 207, ICS 208, ICS 214, and ICS 215A PDF forms, along with SAR task assignment forms, a clue log, T-cards, and an organizational chart.  I got tired of copying the same header information from one form to another by hand, and having to subject people to my handwriting in SAR Task Assignment Form Debriefing sections, so this tool is intended to make it easier to author ICS forms and share them with others in a clean, legible format.
 
-Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. Each incident is persisted locally at `~/.icsforms/incidents/<incidentId>.json`, with its own `.json.bak` backup; the install's node identity is kept in `~/.icsforms/node.json`. On first launch, an existing `~/.icsforms/incident.json` is imported as a new incident if no incidents exist yet. The original is left untouched and `incident.json.migrated` prevents repeat imports. File → Import JSON can also import an external workspace as a separate incident. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF. An H2-backed store and offline-to-remote synchronization are planned, but not yet implemented.
+Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. Each incident is persisted locally at `~/.icsforms/incidents/<incidentId>.json`, with its own `.json.bak` backup; the install's node identity is kept in `~/.icsforms/node.json`. On first launch, an existing `~/.icsforms/incident.json` is imported as a new incident if no incidents exist yet. The original is left untouched and `incident.json.migrated` prevents repeat imports. File → Import → Import Incident JSON… can also import an external workspace as a separate incident. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF. An H2-backed store and offline-to-remote synchronization are planned, but not yet implemented.
 
 This project is open source under the Apache 2.0 license. Contributions are welcome.
 
@@ -28,7 +33,7 @@ This project is open source under the Apache 2.0 license. Contributions are welc
 6. Save locally or allow autosave to persist the incident workspace.
 7. Export individual PDFs, all PDFs as separate files, or the merged **Export IAP Bundle** PDF.
 
-File → New always creates a separate incident. File → Duplicate Incident copies the current document under a new ID; File → Import JSON and Export JSON move portable copies between stores. The picker lists active incidents, and detects another editor's advisory lock rather than silently overwriting its work. A stale revision is rejected, with the option to duplicate unsaved work or reload.
+File → New always creates a separate incident. File → Duplicate Incident copies the current document under a new ID; File → Import → Import Incident JSON… and Export JSON move portable copies between stores. The picker lists active incidents, and detects another editor's advisory lock rather than silently overwriting its work. A stale revision is rejected, with the option to duplicate unsaved work or reload.
 
 ## Current features
 

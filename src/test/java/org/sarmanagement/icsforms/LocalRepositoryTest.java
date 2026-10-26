@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms;
 
 import org.junit.jupiter.api.Test;
@@ -49,6 +52,38 @@ import static org.junit.jupiter.api.Assertions.*;
  * exports.
  */
 class LocalRepositoryTest {
+
+	@Test
+	void unreadableExistingWorkspaceNeverSilentlyBecomesEmpty() throws Exception {
+		Path directory = Files.createTempDirectory("icsforms-invalid");
+		Path primary = directory.resolve("incident.json");
+		LocalRepository repository = new LocalRepository(primary);
+		assertNotNull(repository.loadOrDefault());
+		Files.createDirectory(primary);
+		assertThrows(IllegalStateException.class, repository::loadOrDefault);
+		Files.delete(primary);
+		Files.writeString(primary, "null");
+		assertThrows(IllegalStateException.class, repository::loadOrDefault);
+		Files.writeString(primary, "{broken");
+		IllegalStateException failure = assertThrows(IllegalStateException.class, repository::loadOrDefault);
+		assertNotNull(failure.getCause());
+		Files.writeString(directory.resolve("incident.json.bak"), "{also broken");
+		assertThrows(IllegalStateException.class, repository::loadOrDefault);
+		Files.writeString(directory.resolve("incident.json.bak"),
+				"{\"schemaVersion\":5,\"futureField\":true,\"incidentContext\":{\"incidentName\":\"Recovered\"}}");
+		assertEquals("Recovered", repository.loadOrDefault().getIncidentContext().getIncidentName());
+	}
+
+	@Test
+	void storedWorkspaceToleratesUnknownNestedProperties() throws Exception {
+		Path directory = Files.createTempDirectory("icsforms-compatible");
+		Path primary = directory.resolve("incident.json");
+		Files.writeString(primary, "{\"schemaVersion\":5,\"futureField\":true,"
+				+ "\"form202\":{\"commandEmphasis\":\"Retained\",\"futureNested\":true}}");
+		LocalRepository repository = new LocalRepository(primary);
+		assertEquals("Retained", repository.loadOrDefault().getForm202().getCommandEmphasis());
+		assertEquals(1, LocalRepository.listLocalIncidents(directory).size());
+	}
 
 	/**
 	 * Verifies that workspace JSON preserves schema version, shared context, and

@@ -33,6 +33,7 @@ import org.sarmanagement.icsforms.persistence.IncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentSummary;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
+import org.sarmanagement.icsforms.persistence.ImportValidationException;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.validation.ValidationMessage;
@@ -71,6 +72,7 @@ public class AppController {
 
 	private final LocalRepository repository;
 	private final IncidentStore store;
+	private List<ImportValidationException.Problem> lastImportProblems = List.of();
 	private IncidentId activeIncidentId;
 	private final PdfExportService exportService;
 	private final IncidentValidator validator;
@@ -847,14 +849,35 @@ public class AppController {
 	 *
 	 * @param path source file.
 	 * @return whether an incident was imported.
+	 * @throws ImportValidationException
+	 *             when the external document is invalid.
 	 */
 	public boolean importIncident(Path path) {
+		lastImportProblems = List.of();
+		if (store == null) {
+			if (path == null) {
+				return false;
+			}
+			FileIncidentStore.ImportResult result = FileIncidentStore.readImport(path);
+			setData(result.data());
+			lastImportProblems = result.problems();
+			return true;
+		}
 		IncidentId imported = store.importFile(path).orElse(null);
 		if (imported == null) {
 			return false;
 		}
 		open(imported);
 		return true;
+	}
+
+	/**
+	 * Returns warnings from the most recent import, including for legacy controllers.
+	 *
+	 * @return immutable validation problems from a successful import.
+	 */
+	public List<ImportValidationException.Problem> getLastImportProblems() {
+		return store == null ? lastImportProblems : store.getLastImportProblems();
 	}
 
 	/**
@@ -935,18 +958,16 @@ public class AppController {
 	}
 
 	/**
-	 * Imports a document from a specific path when store-backed; legacy
-	 * controllers load the file directly.
+	 * Imports an external document with strict validation before replacing the active
+	 * data, including when using a legacy controller.
 	 *
 	 * @param path
 	 *            source file path.
+	 * @throws ImportValidationException
+	 *             when the external document is invalid.
 	 */
 	public void open(Path path) {
-		if (store == null) {
-			setData(new LocalRepository(path).loadOrDefault());
-		} else {
-			importIncident(path);
-		}
+		importIncident(path);
 	}
 
 	/**

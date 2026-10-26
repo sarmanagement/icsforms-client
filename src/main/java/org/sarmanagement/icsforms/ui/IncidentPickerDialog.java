@@ -1,8 +1,12 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.persistence.IncidentSummary;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
+import org.sarmanagement.icsforms.persistence.ImportValidationException;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -90,9 +94,13 @@ public class IncidentPickerDialog extends JDialog {
 				try {
 					IncidentId imported = store.importFile(chooser.getSelectedFile().toPath()).orElse(null);
 					if (imported != null) {
+						ImportReportDialog.show(this, chooser.getSelectedFile().toPath(), true,
+								store.getLastImportProblems());
 						chosenIncidentId = imported;
 						dispose();
 					}
+				} catch (ImportValidationException exception) {
+					ImportReportDialog.show(this, exception.getSourceFile(), false, exception.getProblems());
 				} catch (RuntimeException exception) {
 					JOptionPane.showMessageDialog(this, exception.getMessage(), "Unable to import incident",
 							JOptionPane.ERROR_MESSAGE);
@@ -102,6 +110,11 @@ public class IncidentPickerDialog extends JDialog {
 
 		list.addListSelectionListener(e -> openButton.setEnabled(list.getSelectedIndex() >= 0));
 		list.addMouseListener(new java.awt.event.MouseAdapter() {
+			/**
+			 * Opens the selected stored incident on a double click.
+			 *
+			 * @param e mouse event.
+			 */
 			@Override
 			public void mouseClicked(java.awt.event.MouseEvent e) {
 				if (e.getClickCount() == 2) {

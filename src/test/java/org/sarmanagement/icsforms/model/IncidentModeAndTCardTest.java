@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -70,6 +73,20 @@ class IncidentModeAndTCardTest {
 	void tCardDefaultsToPersonnelType() {
 		TCard card = new TCard();
 		assertEquals(TCardType.PERSONNEL, card.getCardType());
+	}
+
+	@Test
+	void explicitCanineMarkerSurvivesExportWithoutRelyingOnLabelOrHandler() throws IOException {
+		TCard card = new TCard();
+		card.setCardType(TCardType.EQUIPMENT);
+		card.setResourceIdentifier("Fictional resource 4");
+		card.setCanineResource(true);
+		String json = mapper.writeValueAsString(card);
+		assertTrue(mapper.readTree(json).path("canineResource").asBoolean());
+		assertTrue(mapper.readValue(json, TCard.class).isCanineResourceCard());
+		assertFalse(mapper.readValue("{\"cardType\":\"EQUIPMENT\"}", TCard.class).isCanineResourceCard());
+		assertTrue(mapper.readValue("{\"cardType\":\"EQUIPMENT\",\"handlerName\":\"Fictional Handler\"}",
+				TCard.class).isCanineResourceCard());
 	}
 
 	@Test

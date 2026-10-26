@@ -14,6 +14,7 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
+import org.sarmanagement.icsforms.persistence.ImportValidationException;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -25,6 +26,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -174,6 +176,7 @@ class AppControllerStoreTest {
 	void exportsAndImportsWithoutRebindingTheActiveIncident() {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			AppData data = new AppData();
+			data.getIncidentContext().setIncidentName("Fictional export test");
 			IncidentId first = store.create(data);
 			AppController controller = controller(store, first, data);
 			Path exported = directory.resolve("export.json");
@@ -184,6 +187,54 @@ class AppControllerStoreTest {
 			assertNotEquals(first, controller.getActiveIncidentId());
 			assertEquals(2, store.list().size());
 		}
+	}
+
+	@Test
+	void failedImportLeavesActiveIncidentAndUnsavedContentIntact() throws Exception {
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			AppData initial = new AppData();
+			IncidentId id = store.create(initial);
+			AppController controller = controller(store, id, initial);
+			initial.getIncidentContext().setIncidentName("Unsaved fictional incident");
+			Path invalid = directory.resolve("wrong-shape.json");
+			for (String json : List.of("{\"incident\":{\"name\":\"Wrong shape\"},\"resources\":[]}",
+					"{\"schemaVersion\":15,\"incidentContext\":{\"incidentName\":\"Example\"},"
+							+ "\"sarTaskAssignments\":[null]}")) {
+				Files.writeString(invalid, json);
+				assertThrows(ImportValidationException.class, () -> controller.importIncident(invalid));
+				assertEquals(id, controller.getActiveIncidentId());
+				assertSame(initial, controller.getData());
+				assertEquals("Unsaved fictional incident", controller.getData().getIncidentContext().getIncidentName());
+				assertEquals(1, store.list().size());
+			}
+		}
+	}
+
+	@Test
+	void legacyControllerAlsoValidatesExternalFilesBeforeReplacingData() throws Exception {
+		AppData initial = new AppData();
+		initial.getIncidentContext().setIncidentName("Fictional legacy controller incident");
+		AppController controller = new AppController(initial,
+				new org.sarmanagement.icsforms.persistence.LocalRepository(directory.resolve("local.json")),
+				new PdfExportService(), new IncidentValidator());
+		Path source = directory.resolve("external.json");
+		Files.writeString(source, "{\"incident\":{\"name\":\"Wrong shape\"}}");
+
+		assertThrows(ImportValidationException.class, () -> controller.open(source));
+		assertSame(initial, controller.getData());
+
+		Files.writeString(source,
+				"{\"schemaVersion\":15,\"incidentContext\":{\"incidentName\":\"Fictional external incident\"}}");
+		controller.open(source);
+		assertEquals("Fictional external incident", controller.getData().getIncidentContext().getIncidentName());
+		assertTrue(controller.getLastImportProblems().isEmpty());
+
+		Files.writeString(source, "{\"form201\":{\"situationSummary\":\"Fictional legacy import\"}}");
+		assertTrue(controller.importIncident(source));
+		assertEquals(List.of("$.schemaVersion", "$.incidentContext.incidentName"),
+				controller.getLastImportProblems().stream().map(ImportValidationException.Problem::path).toList());
+		assertFalse(controller.importIncident(null));
+		assertTrue(controller.getLastImportProblems().isEmpty());
 	}
 
 	@Test

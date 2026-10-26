@@ -501,10 +501,13 @@ public class MainFrame extends JFrame {
 			try {
 				if (controller.importIncident(path)) {
 					refreshFromModel();
+					ImportReportDialog.show(this, path, true, controller.getLastImportProblems());
 				} else {
 					JOptionPane.showMessageDialog(this, "No incident was imported.", "Import Incident",
 							JOptionPane.WARNING_MESSAGE);
 				}
+			} catch (org.sarmanagement.icsforms.persistence.ImportValidationException exception) {
+				ImportReportDialog.show(this, exception.getSourceFile(), false, exception.getProblems());
 			} catch (RuntimeException exception) {
 				showSaveError(exception);
 			}
