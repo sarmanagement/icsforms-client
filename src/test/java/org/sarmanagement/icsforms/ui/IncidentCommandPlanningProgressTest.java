@@ -331,11 +331,11 @@ class IncidentCommandPlanningProgressTest {
 	}
 
 	/**
-	 * Reads a named badge's displayed text.
+	 * Reads a badge's full accessible facts; the visible badge abbreviates these.
 	 *
 	 * @param panel command panel.
 	 * @param title badge title.
-	 * @return displayed badge text.
+	 * @return full accessible badge facts.
 	 * @throws Exception if reflection fails.
 	 */
 	private String badge(IncidentCommandRolePanel panel, String title) throws Exception {
@@ -343,7 +343,7 @@ class IncidentCommandPlanningProgressTest {
 		for (java.awt.Component component : badges.getComponents()) {
 			JLabel badge = (JLabel) component;
 			if (badge.getAccessibleContext().getAccessibleName().startsWith(title + ":")) {
-				return badge.getText();
+				return badge.getAccessibleContext().getAccessibleName();
 			}
 		}
 		throw new AssertionError(title);

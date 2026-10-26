@@ -96,6 +96,10 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   distinguish recorded content from explicit review/approval; counts are not sufficiency scores.
   Its summary bar is red for missing required content, yellow when content is recorded but
   approvals are pending or stale, and green when required content has current approvals.
+  Each compact section badge also uses these colors; an optional blank animal medical plan
+  is neutral. Assignment color reflects recorded rows and objective-link coverage, not approval.
+  Full badge facts, long incident names, and review provenance remain available through tooltips
+  and accessible descriptions. Role/reference headers and review actions use separate rows.
   Canine/equine medical content is required only when animal resources are recorded.
   Objective rows summarize linked assignment lifecycle states; canine ICS 219-7 equipment
   is counted separately from other equipment. Role/reference windows use distinct themed icons.

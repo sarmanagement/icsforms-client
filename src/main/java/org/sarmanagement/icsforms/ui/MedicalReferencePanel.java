@@ -148,14 +148,15 @@ class MedicalReferencePanel extends JPanel {
 				? "unspecified"
 				: PERIOD_TIME.format(data.getIncidentContext().getOperationalPeriodEnd());
 		PlanReviewArea area = canine ? PlanReviewArea.CANINE_MEDICAL : PlanReviewArea.HUMAN_MEDICAL;
-		banner.setText("<html><b>" + referenceTitle() + "</b> | Incident: "
-				+ html(data.getIncidentContext().getIncidentName()) + " | Period: " + start + " — " + end
-				+ "</html>");
+		RolePanelSupport.banner(banner, referenceTitle(), data.getIncidentContext().getIncidentName(),
+				"Period: " + start + " — " + end);
 		PlanReviewStatus status = data.getPlanReviewStatus(area);
 		boolean recorded = IncidentCommandSummary.recordedContent(data, area) > 0;
 		boolean approved = recorded && status == PlanReviewStatus.REVIEWED_APPROVED;
 		completion.setText((approved ? "✓ Content recorded / reviewed-approved — " : "○ Incomplete — ")
 				+ (recorded ? "" : "No content recorded; ") + status.displayLabel());
+		RolePanelSupport.color(completion, !recorded ? RolePanelSupport.MISSING
+				: approved ? RolePanelSupport.CURRENT : RolePanelSupport.PENDING);
 		completion.setToolTipText("Recorded content with a current content-bound approval only — "
 				+ "not plan sufficiency or operational readiness.");
 		completion.getAccessibleContext().setAccessibleName(referenceTitle() + " completion and approval");
@@ -175,8 +176,8 @@ class MedicalReferencePanel extends JPanel {
 	 */
 	private JPanel buildHeader() {
 		JPanel panel = new JPanel(new BorderLayout(6, 4));
-		panel.add(banner, BorderLayout.CENTER);
-		panel.add(completion, BorderLayout.SOUTH);
+		panel.add(banner, BorderLayout.NORTH);
+		panel.add(completion, BorderLayout.CENTER);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JButton editor = new JButton("Open full editor");
 		editor.addActionListener(event -> navigator.accept(
@@ -185,7 +186,7 @@ class MedicalReferencePanel extends JPanel {
 		log.addActionListener(event -> logMedicalEvent());
 		actions.add(editor);
 		actions.add(log);
-		panel.add(actions, BorderLayout.EAST);
+		panel.add(actions, BorderLayout.SOUTH);
 		return panel;
 	}
 
@@ -535,16 +536,6 @@ class MedicalReferencePanel extends JPanel {
 	 */
 	private static String value(Boolean value) {
 		return value == null ? "Unknown" : value ? "Yes" : "No";
-	}
-
-	/**
-	 * Escapes banner text.
-	 *
-	 * @param value text.
-	 * @return basic HTML-safe text.
-	 */
-	private static String html(String value) {
-		return value == null ? "" : value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 
 	/**

@@ -184,7 +184,11 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		UiSupport.addRow(focused, 2, "Phone", leaderPhone);
 		UiSupport.addRow(focused, 3, "Human emergency instruction", new JScrollPane(humanInstruction));
 		UiSupport.addRow(focused, 4, "Canine emergency procedure", new JScrollPane(canineInstruction));
-		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
+		humanInstruction.setLineWrap(true);
+		humanInstruction.setWrapStyleWord(true);
+		canineInstruction.setLineWrap(true);
+		canineInstruction.setWrapStyleWord(true);
+		JPanel actions = new JPanel(new java.awt.GridLayout(0, 2, 4, 4));
 		JButton apply = new JButton("Apply focused edits");
 		apply.addActionListener(event -> applyFocusedEdits());
 		JButton source = new JButton("Open selected full editor");

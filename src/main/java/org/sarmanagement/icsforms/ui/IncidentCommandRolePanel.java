@@ -99,9 +99,9 @@ public class IncidentCommandRolePanel extends JPanel {
 	public void refreshFromModel() {
 		refreshing = true;
 		AppData data = controller.getData();
-		banner.setText("<html><b>INCIDENT COMMAND</b> | Incident: " + html(data.getIncidentContext().getIncidentName())
-				+ " | Operational period: " + html(periodLabel(data))
-				+ " | resource counts are recorded states, not readiness certification</html>");
+		RolePanelSupport.banner(banner, "INCIDENT COMMAND", data.getIncidentContext().getIncidentName(),
+				"Operational period: " + periodLabel(data)
+						+ " | Recorded resource states, not readiness certification");
 		planningStage.setSelectedItem(data.getIapPlanningStage());
 		rebuildObjectives(data);
 		rebuildResources(data);
@@ -111,7 +111,9 @@ public class IncidentCommandRolePanel extends JPanel {
 			approval += " by " + data.getForm202().getApprovedByIncidentCommanderName() + " at "
 					+ APPROVAL_TIME.format(data.getForm202().getApprovedDateTime());
 		}
-		approvalStatus.setText(approval);
+		approvalStatus.setText(data.getForm202().getObjectiveApprovalStatus().displayLabel());
+		approvalStatus.setToolTipText(approval);
+		approvalStatus.getAccessibleContext().setAccessibleDescription(approval);
 		approvalStatus.getAccessibleContext().setAccessibleName("Objective approval status");
 		if (!approvalDraftDirty) {
 			loadingApprovalDraft = true;
@@ -191,7 +193,7 @@ public class IncidentCommandRolePanel extends JPanel {
 		resourcesButton.addActionListener(event -> navigator.accept(WorkspaceDestination.of(WorkspaceId.TCARDS)));
 		actions.add(objectivesButton);
 		actions.add(resourcesButton);
-		header.add(actions, BorderLayout.EAST);
+		header.add(actions, BorderLayout.SOUTH);
 		return header;
 	}
 
@@ -238,7 +240,8 @@ public class IncidentCommandRolePanel extends JPanel {
 		progress.add(planProgress, BorderLayout.CENTER);
 		JSplitPane objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(objectives),
 				new JScrollPane(progress));
-		objectiveSplit.setResizeWeight(0.6);
+		objectiveSplit.setResizeWeight(0.5);
+		objectiveSplit.setDividerLocation(210);
 		planning.add(objectiveSplit, BorderLayout.CENTER);
 		planning.add(buildApprovalPanel(), BorderLayout.SOUTH);
 
@@ -254,11 +257,12 @@ public class IncidentCommandRolePanel extends JPanel {
 		grouping.add(resourceGrouping);
 		resourcePanel.add(grouping, BorderLayout.NORTH);
 		resourcePanel.add(new JScrollPane(resources), BorderLayout.CENTER);
-		resourcePanel.add(new JLabel("Unspecified is not treated as Available; no radio check or readiness is inferred."),
+		resourcePanel.add(new JLabel("<html>Unspecified is not Available.<br>No radio check or readiness is inferred.</html>"),
 				BorderLayout.SOUTH);
 
 		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, planning, resourcePanel);
 		split.setResizeWeight(0.7);
+		split.setDividerLocation(760);
 		split.setPreferredSize(new Dimension(1120, 680));
 		return split;
 	}
@@ -382,12 +386,22 @@ public class IncidentCommandRolePanel extends JPanel {
 		boolean approved = objectivesApproved;
 		boolean animalRequired = IncidentCommandSummary.requiresAnimalMedicalPlan(data);
 		updateBadge("Objectives", mark(objectivesRecorded) + objectiveIds.size() + " recorded",
-				mark(objectivesApproved) + data.getForm202().getObjectiveApprovalStatus().displayLabel());
+				mark(objectivesApproved) + data.getForm202().getObjectiveApprovalStatus().displayLabel(),
+				mark(objectivesRecorded) + objectiveIds.size() + " recorded",
+				mark(objectivesApproved) + data.getForm202().getObjectiveApprovalStatus().displayLabel(),
+				!objectivesRecorded ? RolePanelSupport.MISSING
+						: objectivesApproved ? RolePanelSupport.CURRENT : RolePanelSupport.PENDING);
 		int assignmentCount = controller.getAssignmentResources().size();
 		updateBadge("Assignment coverage", mark(populatedAssignments > 0) + populatedAssignments
 				+ " populated assignment rows; " + mark(assignmentCount > 0 && linkedAssignments == assignmentCount)
 				+ linkedAssignments + "/" + assignmentCount + " assignments linked to recorded objectives",
-				"Links only — not an assessment or approval");
+				"Links only — not an assessment or approval",
+				mark(populatedAssignments > 0) + populatedAssignments + " populated rows",
+				mark(assignmentCount > 0 && linkedAssignments == assignmentCount)
+						+ linkedAssignments + "/" + assignmentCount + " linked · not approval",
+				populatedAssignments == 0 ? RolePanelSupport.MISSING
+						: assignmentCount > 0 && linkedAssignments == assignmentCount
+								? RolePanelSupport.CURRENT : RolePanelSupport.PENDING);
 		for (PlanReviewArea area : PlanReviewArea.values()) {
 			String title = switch (area) {
 				case SAFETY -> "Safety";
@@ -411,15 +425,23 @@ public class IncidentCommandRolePanel extends JPanel {
 					: contentItems + " content items recorded"),
 					mark(current) + review + (area == PlanReviewArea.CANINE_MEDICAL
 							? required ? " (required — animal resources recorded)" : " (optional — no animal resources recorded)"
-							: ""));
+							: ""),
+					(contentItems == 0 ? "No content recorded" : contentItems + " content items recorded")
+							+ (area == PlanReviewArea.CANINE_MEDICAL
+							? required ? " · required" : " · optional" : ""),
+					mark(current) + review,
+					contentItems == 0 ? required ? RolePanelSupport.MISSING : RolePanelSupport.OPTIONAL
+							: current ? RolePanelSupport.CURRENT : RolePanelSupport.PENDING);
 		}
 		String state = missing ? "RED — Required planning content missing"
 				: !approved ? "YELLOW — Required content recorded; approval pending or stale"
 				: "GREEN — Required content recorded and current approvals";
-		overallProgress.setText("<html><b>" + state + "</b><br>Recorded content and approvals only — "
+		overallProgress.setText("<html><b>" + (missing ? "RED — Required content missing"
+				: !approved ? "YELLOW — Approval pending or stale" : "GREEN — Content recorded / approvals current")
+				+ "</b><br>Recorded content and approvals only —<br>"
 				+ "not plan sufficiency or operational readiness.</html>");
-		overallProgress.setBackground(missing ? new Color(255, 170, 170)
-				: !approved ? new Color(255, 230, 140) : new Color(165, 225, 165));
+		overallProgress.setBackground(missing ? RolePanelSupport.MISSING
+				: !approved ? RolePanelSupport.PENDING : RolePanelSupport.CURRENT);
 		overallProgress.getAccessibleContext().setAccessibleName("Overall planning status: " + state);
 		overallProgress.setToolTipText("Required: objectives, ICS 204 assignment plan, safety, human medical, communications; canine/equine "
 				+ "medical only when animal resources are recorded. Approvals must match current content. "
@@ -447,12 +469,21 @@ public class IncidentCommandRolePanel extends JPanel {
 	 * @param title badge heading.
 	 * @param content recorded quantity.
 	 * @param state explicit review or approval state.
+	 * @param compactContent short recorded quantity.
+	 * @param compactState short textual state.
+	 * @param color presence and explicit review color, not readiness.
 	 */
-	private void updateBadge(String title, String content, String state) {
+	private void updateBadge(String title, String content, String state, String compactContent,
+			String compactState, Color color) {
 		JLabel badge = progressBadges.get(title);
-		badge.setText("<html><b>" + html(title) + "</b><br>" + html(content) + "<br>" + html(state) + "</html>");
+		badge.setText("<html><b>" + html(title) + "</b><br>" + html(compactContent)
+				+ "<br>" + html(compactState) + "</html>");
+		badge.setOpaque(true);
+		badge.setForeground(Color.BLACK);
+		badge.setBackground(color);
 		badge.getAccessibleContext().setAccessibleName(title + ": " + content + "; " + state);
-		badge.setToolTipText("Recorded content and explicit review only; not sufficiency or operational readiness. "
+		badge.setToolTipText(title + ": " + content + "; " + state
+				+ ". Recorded content and explicit review only; not sufficiency or operational readiness. "
 				+ "A content checkmark means presence, not validated plan completeness. "
 				+ "Blank rows, default settings, signatures and page metadata do not count as plan content. "
 				+ "Content items are populated plan rows or narrative sections."

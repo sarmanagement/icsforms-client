@@ -257,7 +257,8 @@ class IncidentCommandRolePanelTest {
 		data.getForm204().getResourcesAssigned().addAll(List.of(linked, staleLink, new ResourceAssignment()));
 		IncidentCommandRolePanel panel = panel(controller(data));
 		assertTrue(badge(panel, "Objectives").getText().contains("1 recorded"));
-		assertTrue(badge(panel, "Assignment coverage").getText().contains("1/3 assignments linked"));
+		assertTrue(badge(panel, "Assignment coverage").getAccessibleContext().getAccessibleName()
+				.contains("1/3 assignments linked"));
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
 

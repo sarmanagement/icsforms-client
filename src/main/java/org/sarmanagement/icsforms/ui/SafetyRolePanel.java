@@ -185,7 +185,7 @@ public class SafetyRolePanel extends JPanel {
 		safetyMessage.setLineWrap(true);
 		safetyMessage.setWrapStyleWord(true);
 		UiSupport.addRow(focused, 1, "Focused safety message", new JScrollPane(safetyMessage));
-		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
+		JPanel actions = new JPanel(new java.awt.GridLayout(0, 2, 4, 4));
 		JButton apply = new JButton("Apply focused edits");
 		apply.addActionListener(event -> applyFocusedEdits());
 		JButton source = new JButton("Open selected source");

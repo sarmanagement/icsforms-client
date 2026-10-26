@@ -116,9 +116,9 @@ public class OperationsRolePanel extends JPanel {
 		String end = data.getIncidentContext().getOperationalPeriodEnd() == null
 				? "unspecified"
 				: PERIOD_TIME.format(data.getIncidentContext().getOperationalPeriodEnd());
-		banner.setText("<html><b>OPERATIONS</b> | Incident: " + html(data.getIncidentContext().getIncidentName())
-				+ " | Operational period: " + start + " — " + end
-				+ " | recorded status/location are not readiness confirmation</html>");
+		RolePanelSupport.banner(banner, "OPERATIONS", data.getIncidentContext().getIncidentName(),
+				"Operational period: " + start + " — " + end
+						+ " | Recorded status/location, not readiness confirmation");
 		taskModel.clear();
 		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
 			taskModel.addElement(new TaskChoice(task));
@@ -174,7 +174,7 @@ public class OperationsRolePanel extends JPanel {
 		actions.add(create);
 		actions.add(human);
 		actions.add(canine);
-		header.add(actions, BorderLayout.EAST);
+		header.add(actions, BorderLayout.SOUTH);
 		return header;
 	}
 
@@ -193,7 +193,7 @@ public class OperationsRolePanel extends JPanel {
 		detail.setLineWrap(true);
 		detail.setWrapStyleWord(true);
 		right.add(new JScrollPane(detail), BorderLayout.CENTER);
-		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
+		JPanel actions = new JPanel(new java.awt.GridLayout(0, 2, 4, 4));
 		button(actions, "Edit assignment…", () -> withTask(task -> editTask.accept(task.getAssignmentId())));
 		button(actions, "Change status…", () -> withTask(task -> changeStatus.accept(task.getAssignmentId())));
 		button(actions, "Add log entry…", () -> withTask(addLog));
@@ -204,9 +204,9 @@ public class OperationsRolePanel extends JPanel {
 		tasks.setResizeWeight(0.35);
 		tasks.setDividerLocation(380);
 		JPanel resources = new JPanel(new BorderLayout(4, 4));
-		resources.setBorder(javax.swing.BorderFactory.createTitledBorder(
-				"Recorded available resources — select for New assignment; operator must confirm readiness"));
+		resources.setBorder(javax.swing.BorderFactory.createTitledBorder("Recorded available resources"));
 		resources.add(new JScrollPane(availableResources), BorderLayout.CENTER);
+		resources.add(new JLabel("Select for New assignment; operator must confirm readiness."), BorderLayout.SOUTH);
 		JSplitPane body = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tasks, resources);
 		body.setResizeWeight(0.72);
 		body.setDividerLocation(540);
@@ -300,16 +300,6 @@ public class OperationsRolePanel extends JPanel {
 	private SarTaskAssignment selectedTask() {
 		TaskChoice choice = taskBoard.getSelectedValue();
 		return choice == null ? null : choice.task();
-	}
-
-	/**
-	 * Escapes banner text.
-	 *
-	 * @param value text.
-	 * @return HTML-safe text.
-	 */
-	private static String html(String value) {
-		return value == null ? "" : value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 
 	/**

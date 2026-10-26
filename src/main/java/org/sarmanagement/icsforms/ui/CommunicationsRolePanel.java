@@ -110,9 +110,8 @@ public class CommunicationsRolePanel extends JPanel {
 		if (selectedId.isBlank()) {
 			selectedId = loadedChannelId;
 		}
-		banner.setText("<html><b>COMMUNICATIONS UNIT</b> | Incident: "
-				+ html(data.getIncidentContext().getIncidentName())
-				+ " | radio checks are explicit operator assertions; programming and coverage are not inferred</html>");
+		RolePanelSupport.banner(banner, "COMMUNICATIONS UNIT", data.getIncidentContext().getIncidentName(),
+				"Radio checks are explicit operator assertions; programming and coverage are not inferred");
 		channelModel.setRows(data.getForm205().getChannels());
 		restoreSelection(selectedId);
 		review.refreshFromModel();
@@ -164,7 +163,7 @@ public class CommunicationsRolePanel extends JPanel {
 		actions.add(fullPlan);
 		actions.add(importButton);
 		actions.add(exportButton);
-		header.add(actions, BorderLayout.EAST);
+		header.add(actions, BorderLayout.SOUTH);
 		return header;
 	}
 
@@ -411,16 +410,6 @@ public class CommunicationsRolePanel extends JPanel {
 		JTextArea area = editableArea(accessibleName);
 		area.setEditable(false);
 		return area;
-	}
-
-	/**
-	 * Escapes text embedded in a Swing HTML label.
-	 *
-	 * @param value plain text.
-	 * @return escaped text.
-	 */
-	private static String html(String value) {
-		return value == null ? "" : value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 
 	/**
