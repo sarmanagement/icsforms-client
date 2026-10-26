@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.sarmanagement</groupId>
     <artifactId>icsforms-client</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.2-SNAPSHOT</version>
 	<!-- TODO on release, remove snapshot and change the tag HEAD (in the scm section below) to the release tag, e.g. v0.1.1 -->
     <name>icsforms-client</name>
 
@@ -39,7 +39,7 @@
         <developerConnection>scm:git:ssh://git@github.com/sarmanagement/icsforms-client.git</developerConnection>
         <url>https://github.com/sarmanagement/icsforms-client</url>
 		<!-- TODO: After a release, after going back to a -SNAPSHOT, change the tag back to HEAD -->
-        <tag>v0.1.1</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <properties>
