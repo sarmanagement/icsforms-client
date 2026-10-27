@@ -49,8 +49,12 @@ public class IncidentManagerDialog extends JDialog {
 	};
 	private final JButton backupButton = new JButton("Backup JSON…");
 	private final JButton deleteButton = new JButton("Delete…");
+	private final JButton openButton = new JButton("Open");
 	private final JLabel hint = new JLabel();
 	private List<IncidentSummary> summaries = List.of();
+	private StartupDialog.StartupAction chosenAction;
+	private IncidentId chosenIncidentId;
+	private org.sarmanagement.icsforms.model.IncidentMode chosenMode;
 
 	/**
 	 * Creates a modal manager using desktop prompts.
@@ -82,11 +86,19 @@ public class IncidentManagerDialog extends JDialog {
 		table.getSelectionModel().addListSelectionListener(event -> updateButtons());
 		backupButton.addActionListener(event -> backupSelected());
 		deleteButton.addActionListener(event -> deleteSelected());
+		openButton.addActionListener(event -> openSelected());
 		JButton refreshButton = new JButton("Refresh");
 		refreshButton.addActionListener(event -> refresh());
+		JButton importButton = new JButton("Load JSON…");
+		importButton.addActionListener(event -> importIncident());
+		JButton newButton = new JButton("New…");
+		newButton.addActionListener(event -> newIncident());
 		JButton closeButton = new JButton("Close");
 		closeButton.addActionListener(event -> dispose());
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+		buttons.add(openButton);
+		buttons.add(newButton);
+		buttons.add(importButton);
 		buttons.add(backupButton);
 		buttons.add(deleteButton);
 		buttons.add(refreshButton);
@@ -120,11 +132,13 @@ public class IncidentManagerDialog extends JDialog {
 	/** Enables actions only for a selection and a supported backup backend. */
 	private void updateButtons() {
 		boolean selected = table.getSelectedRow() >= 0;
+		IncidentSummary summary = selected();
+		openButton.setEnabled(selected && !summary.incidentId().equals(activeId));
 		backupButton.setEnabled(selected && store.supportsBackup());
 		backupButton.setToolTipText(store.supportsBackup()
 				? "Create a new JSON file outside the live store; existing files are never overwritten."
 				: "This store does not support safe incident backups.");
-		deleteButton.setEnabled(selected);
+		deleteButton.setEnabled(selected && !summary.incidentId().equals(activeId));
 	}
 
 	/** Refreshes atomically, retaining the selection and previous rows on failure. */
@@ -155,7 +169,8 @@ public class IncidentManagerDialog extends JDialog {
 					}
 				}
 			}
-			hint.setText(summaries.isEmpty() ? "No saved incidents." : "Select one incident to back up or delete.");
+			hint.setText(summaries.isEmpty() ? "No saved incidents. Create one or load JSON."
+					: "Open, back up, or delete a saved incident. The active incident cannot be deleted.");
 		} catch (RuntimeException failure) {
 			dialogs.message(this, "Unable to refresh incidents: " + failure.getMessage(), true);
 		}
@@ -177,6 +192,82 @@ public class IncidentManagerDialog extends JDialog {
 		} catch (RuntimeException failure) {
 			dialogs.message(this, "Unable to back up incident: " + failure.getMessage(), true);
 		}
+	}
+
+	/**
+	 * Opens the selected saved incident and returns its identity to the caller.
+	 */
+	private void openSelected() {
+		IncidentSummary summary = selected();
+		if (summary != null && !summary.incidentId().equals(activeId)) {
+			chosenIncidentId = summary.incidentId();
+			chosenAction = StartupDialog.StartupAction.OPEN_EXISTING;
+			dispose();
+		}
+	}
+
+	/**
+	 * Opens a new-incident workflow and returns its selected phase and mode.
+	 */
+	private void newIncident() {
+		StartupDialog startup = new StartupDialog(this, store, false, false);
+		startup.setVisible(true);
+		StartupDialog.StartupAction action = startup.getChosenAction();
+		if (action != null) {
+			chosenAction = action;
+			chosenMode = startup.getChosenMode();
+			dispose();
+		}
+	}
+
+	/**
+	 * Imports a strictly validated external incident and selects it for opening.
+	 */
+	private void importIncident() {
+		try {
+			Path source = dialogs.chooseImport(this);
+			if (source == null) {
+				return;
+			}
+			IncidentId imported = store.importFile(source).orElse(null);
+			if (imported != null) {
+				ImportReportDialog.show(this, source, true, store.getLastImportProblems());
+				chosenIncidentId = imported;
+				chosenAction = StartupDialog.StartupAction.OPEN_EXISTING;
+				dispose();
+			}
+		} catch (org.sarmanagement.icsforms.persistence.ImportValidationException exception) {
+			ImportReportDialog.show(this, exception.getSourceFile(), false, exception.getProblems());
+		} catch (RuntimeException failure) {
+			dialogs.message(this, "Unable to import incident: " + failure.getMessage(), true);
+		}
+	}
+
+	/**
+	 * Returns the action chosen in this dialog.
+	 *
+	 * @return selected startup action, or null when dismissed.
+	 */
+	public StartupDialog.StartupAction getChosenAction() {
+		return chosenAction;
+	}
+
+	/**
+	 * Returns the selected incident identity.
+	 *
+	 * @return selected incident, or null when the operator chose to create a new incident.
+	 */
+	public IncidentId getChosenIncidentId() {
+		return chosenIncidentId;
+	}
+
+	/**
+	 * Returns the mode selected for a new incident.
+	 *
+	 * @return selected mode, or null when no new incident was chosen.
+	 */
+	public org.sarmanagement.icsforms.model.IncidentMode getChosenMode() {
+		return chosenMode;
 	}
 
 	/** Confirms a soft deletion, forbidding deletion of the active editor. */
@@ -205,6 +296,14 @@ public class IncidentManagerDialog extends JDialog {
 
 	/** Desktop interactions isolated from management behavior for automated tests. */
 	interface Dialogs {
+		/**
+		 * Chooses an external JSON document to import.
+		 *
+		 * @param owner parent window.
+		 * @return source file, or null on cancellation.
+		 */
+		Path chooseImport(Window owner);
+
 		/**
 		 * Chooses a new external backup filename.
 		 *
@@ -237,6 +336,16 @@ public class IncidentManagerDialog extends JDialog {
 	private static final class NativeDialogs implements Dialogs {
 		/** Creates the desktop prompt implementation. */
 		private NativeDialogs() {
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Path chooseImport(Window owner) {
+			JFileChooser chooser = new JFileChooser();
+			chooser.setDialogTitle("Load incident JSON");
+			chooser.setFileFilter(new FileNameExtensionFilter("Incident JSON (*.json)", "json"));
+			return chooser.showOpenDialog(owner) == JFileChooser.APPROVE_OPTION
+					? chooser.getSelectedFile().toPath() : null;
 		}
 
 		/** {@inheritDoc} */

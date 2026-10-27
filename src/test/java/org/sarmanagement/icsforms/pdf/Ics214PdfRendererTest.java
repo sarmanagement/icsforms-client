@@ -5,6 +5,7 @@ import org.apache.pdfbox.contentstream.operator.Operator;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.pdfbox.text.TextPosition;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
@@ -12,6 +13,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -75,6 +77,58 @@ class Ics214PdfRendererTest {
 			String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
 			assertTrue(text.contains("ICS 214"));
 			assertFalse(text.contains("ICS 214, Page 1 of 1"));
+		}
+	}
+
+	@Test
+	void incidentNameWrapsAndNameBlockShowsLogKeeperRatherThanLogTitle() throws Exception {
+		Path outputDir = Path.of("target", "test-output", "ics214");
+		Files.createDirectories(outputDir);
+		Path outputFile = outputDir.resolve("wrapped-name-ics-214-" + System.nanoTime() + ".pdf");
+		String incidentName = "Fictional Maple Ridge missing person search exercise with a deliberately long incident name";
+		AppData data = new AppData();
+		data.getIncidentContext().setIncidentName(incidentName);
+		Ics214Form form = new Ics214Form();
+		form.setName("Morgan Vale");
+		form.setIcsPosition("Operations Section Chief");
+		form.setHomeAgency("Fictional Maple Ridge Volunteer SAR");
+		data.getActivityLogs().add(form);
+
+		new Ics214PdfRenderer().render(data, outputFile);
+
+		try (org.apache.pdfbox.pdmodel.PDDocument pdf = Loader.loadPDF(outputFile.toFile())) {
+			double blockRightEdge = pdf.getPage(0).getMediaBox().getWidth() / 2d;
+			List<Double> incidentNameLineEnds = new ArrayList<>();
+			List<String> incidentNameRenderedLines = new ArrayList<>();
+			PDFTextStripper stripper = new PDFTextStripper() {
+				/**
+				 * Records rendered incident-name line extents for the block-width assertion.
+				 *
+				 * @param text extracted line.
+				 * @param positions character positions.
+				 * @throws IOException when PDF text extraction fails.
+				 */
+				@Override
+				protected void writeString(String text, List<TextPosition> positions) throws IOException {
+					if (text.contains("Fictional Maple Ridge missing person")
+							|| text.contains("with a deliberately long incident name")) {
+						incidentNameRenderedLines.add(text);
+						incidentNameLineEnds.add(positions.stream()
+								.mapToDouble(position -> position.getXDirAdj() + position.getWidthDirAdj())
+								.filter(rightEdge -> rightEdge <= blockRightEdge + 1d)
+								.max().orElse(0));
+					}
+					super.writeString(text, positions);
+				}
+			};
+			String text = stripper.getText(pdf).replaceAll("\\s+", " ");
+			assertTrue(text.contains(incidentName));
+			assertTrue(text.contains("ICP COMMUNICATIONS LOG"));
+			assertTrue(text.contains("3. Name Morgan Vale"));
+			assertFalse(text.contains("3. Name " + incidentName));
+			assertTrue(incidentNameLineEnds.size() > 1, incidentNameLineEnds.toString());
+			assertTrue(incidentNameLineEnds.stream().allMatch(rightEdge -> rightEdge <= blockRightEdge + 1d),
+					incidentNameRenderedLines + " " + incidentNameLineEnds);
 		}
 	}
 

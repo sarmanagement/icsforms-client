@@ -16,8 +16,11 @@ import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.JButton;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.GraphicsEnvironment;
 import java.awt.Window;
 import java.lang.reflect.Field;
@@ -140,6 +143,62 @@ class MainFrameIncidentManagementTest {
 		}
 	}
 
+	@Test
+	void managerOpenSwitchesTheActiveIncident() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (FileIncidentStore store = new FileIncidentStore(directory.resolve("store"))) {
+			AppData current = new AppData();
+			current.getIncidentContext().setIncidentName("Current incident");
+			var currentId = store.create(current);
+			AppData next = new AppData();
+			next.getIncidentContext().setIncidentName("Next incident");
+			var nextId = store.create(next);
+			AtomicReference<Throwable> failure = new AtomicReference<>();
+			AtomicBoolean switched = new AtomicBoolean();
+			SwingUtilities.invokeAndWait(() -> {
+				MainFrame frame = new MainFrame(current, store, currentId, new PdfExportService(),
+						new IncidentValidator(), directory);
+				Timer chooseIncident = new Timer(150, event -> {
+					for (Window window : Window.getWindows()) {
+						if (window instanceof IncidentManagerDialog manager && manager.isVisible()) {
+							try {
+								JTable table = descendants(manager).stream().filter(JTable.class::isInstance)
+										.map(JTable.class::cast).findFirst().orElseThrow();
+								for (int row = 0; row < table.getRowCount(); row++) {
+									if (nextId.value().equals(table.getValueAt(row, 1))) {
+										table.setRowSelectionInterval(row, row);
+										break;
+									}
+								}
+								descendants(manager).stream().filter(JButton.class::isInstance)
+										.map(JButton.class::cast).filter(button -> "Open".equals(button.getText()))
+										.findFirst().orElseThrow().doClick();
+								switched.set(true);
+							} catch (Throwable problem) {
+								failure.set(problem);
+							}
+						}
+					}
+				});
+				chooseIncident.setRepeats(false);
+				try {
+					chooseIncident.start();
+					manageItem(frame).doClick();
+					assertTrue(switched.get());
+					AppController controller = (AppController) field(frame, "controller");
+					assertEquals(nextId, controller.getActiveIncidentId());
+					assertEquals("Next incident", controller.getData().getIncidentContext().getIncidentName());
+				} finally {
+					chooseIncident.stop();
+					stop(frame);
+				}
+			});
+			if (failure.get() != null) {
+				throw new AssertionError(failure.get());
+			}
+		}
+	}
+
 	/**
 	 * Finds the File-menu management entry.
 	 *
@@ -172,6 +231,23 @@ class MainFrameIncidentManagementTest {
 		} catch (ReflectiveOperationException failure) {
 			throw new AssertionError(failure);
 		}
+	}
+
+	/**
+	 * Collects nested Swing components from a window.
+	 *
+	 * @param parent container to inspect.
+	 * @return all descendants.
+	 */
+	private static java.util.List<Component> descendants(Container parent) {
+		java.util.List<Component> result = new java.util.ArrayList<>();
+		for (Component child : parent.getComponents()) {
+			result.add(child);
+			if (child instanceof Container container) {
+				result.addAll(descendants(container));
+			}
+		}
+		return result;
 	}
 
 	/**

@@ -381,6 +381,13 @@ public class MainFrame extends JFrame {
 		rolePanelsMenu.add(communicationsRolePanel);
 		viewMenu.add(rolePanelsMenu);
 		viewMenu.addSeparator();
+		JMenuItem activityTimelineItem = new JMenuItem("ICP Activity Timeline…");
+		activityTimelineItem.addActionListener(event -> {
+			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			new IcpActivityTimelineDialog(this, controller, this::showAddLogEntry).setVisible(true);
+		});
+		viewMenu.add(activityTimelineItem);
+		viewMenu.addSeparator();
 		JMenuItem humanMedicalReference = new JMenuItem("Human Medical Reference — ICS 206");
 		humanMedicalReference.setMnemonic(KeyEvent.VK_H);
 		humanMedicalReference.addActionListener(
@@ -432,30 +439,10 @@ public class MainFrame extends JFrame {
 
 		JMenuItem openItem = new JMenuItem("Open…");
 		openItem.setMnemonic(KeyEvent.VK_O);
-		openItem.addActionListener(event -> {
-			if (controller.getStore() == null || !saveBeforeSwitch()) {
-				return;
-			}
-			IncidentPickerDialog picker = new IncidentPickerDialog(MainFrame.this, controller.getStore());
-			picker.setVisible(true);
-			IncidentId chosen = picker.getChosenIncidentId();
-			if (chosen != null) {
-				try {
-					controller.open(chosen);
-					refreshFromModel();
-				} catch (RuntimeException exception) {
-					showSaveError(exception);
-				}
-			}
-		});
+		openItem.addActionListener(event -> showIncidentManager());
 
 		JMenuItem manageIncidentsItem = new JMenuItem("Manage Incidents…");
-		manageIncidentsItem.addActionListener(event -> {
-			if (controller.getStore() == null || !saveBeforeSwitch()) {
-				return;
-			}
-			new IncidentManagerDialog(this, controller.getStore(), controller.getActiveIncidentId()).setVisible(true);
-		});
+		manageIncidentsItem.addActionListener(event -> showIncidentManager());
 
 		JMenuItem saveItem = new JMenuItem("Save");
 		saveItem.setMnemonic(KeyEvent.VK_S);
@@ -758,6 +745,39 @@ public class MainFrame extends JFrame {
 		bar.add(logsMenu);
 		bar.add(configMenu);
 		return bar;
+	}
+
+	/**
+	 * Opens the shared incident manager and applies its open or new-incident action.
+	 */
+	private void showIncidentManager() {
+		if (controller.getStore() == null || !saveBeforeSwitch()) {
+			return;
+		}
+		IncidentManagerDialog manager = new IncidentManagerDialog(this, controller.getStore(),
+				controller.getActiveIncidentId());
+		manager.setVisible(true);
+		try {
+			StartupDialog.StartupAction action = manager.getChosenAction();
+			if (action == null) {
+				return;
+			}
+			switch (action) {
+				case OPEN_EXISTING -> controller.open(manager.getChosenIncidentId());
+				case OPEN_NEW_PERIOD -> {
+					controller.open(manager.getChosenIncidentId());
+					controller.newOperationalPeriod();
+				}
+				case NEW_PRE_OP -> controller.newDocument(IapPhase.PRE_OP, manager.getChosenMode());
+				case NEW_INITIAL_RESPONSE ->
+					controller.newDocument(IapPhase.INITIAL_RESPONSE, manager.getChosenMode());
+				case NEW_OPERATIONAL_PERIOD ->
+					controller.newDocument(IapPhase.DURING_OP, manager.getChosenMode());
+			}
+			refreshFromModel();
+		} catch (RuntimeException exception) {
+			showSaveError(exception);
+		}
 	}
 
 	/** Opens Operations while delegating every direct action to established editors. */

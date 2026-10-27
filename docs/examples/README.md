@@ -16,6 +16,9 @@ resources, permissions and a locally approved safety/medical/communications plan
    External imports are checked strictly. A rejected file opens an errors/warnings
    report with JSON property paths and a **Copy Report** action; the active incident
    remains unchanged. This example is tested to import without errors or warnings.
+   At startup or through **File → Open… / Manage Incidents…**, the combined incident
+   manager can open or import an incident, start a new one, back up stored JSON, and
+   delete inactive incidents; it prevents deleting the active incident.
 2. The incident opens in **SAR**, **DURING_OP**, with
    **Operational period active** recorded. The summer operational period is
    July 18, 2026, **0700–1900 America/New_York**. Entries represent an **0815
@@ -25,7 +28,9 @@ resources, permissions and a locally approved safety/medical/communications plan
    conversion keeps the forms aligned with the local-time objectives/reminders.
 3. Review ICS 202 objectives, the flat organization, primary ICS 204, linked SAR
    tasks, T-cards, ICS 205/205A, human ICS 206 and adapted ICS 206CANINE,
-   ICS 215A/208, ICS 214 and ICS 233-CG.
+   ICS 215A/208, ICS 214 and ICS 233-CG. **View → ICP Activity Timeline…**
+   displays the ICP log in assignment lanes with lifecycle/clue markers and
+   provides the shared add-entry workflow.
    Export individual PDFs or the IAP bundle to inspect their relationships.
 
 ### Scenario and deliberate limits
@@ -98,6 +103,9 @@ ICS 214 records **24 chronological entries**, beginning with **0630 command
 established and all 42 people checked in, including six IMT**. Each of the seven
 on-task assignments has its own assignment-linked **departed staging** and
 **on task** entries: S1/S2/S3 and R1/R2 at **0710/0715**, K1/K2 at **0725/0730**.
+The ICP-scoped log identifies **Ops Morgan Vale** as the log keeper and lists all
+six overhead staff plus the people and canine resources assigned to each active
+or completed task.
 T1 has separate departure, on-task, clue, completion/returning, returned and
 debrief entries matching the times above. Event types use the model's built-in
 identities and resource labels match their linked tasks. Planned tasks have **no

@@ -10,6 +10,7 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
+import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
@@ -153,6 +154,23 @@ class MapleRidgeExampleTest {
 			assertEquals(6, staff.size());
 			assertTrue(staff.stream().allMatch(c -> ICP.equals(c.getLocation())));
 			assertTrue(staff.stream().allMatch(c -> "ICP".equals(c.getStatus())));
+			Ics214Form icpLog = data.getActivityLogs().stream()
+					.filter(log -> log.getLogScope() == ActivityLogScope.ICP)
+					.findFirst().orElseThrow();
+			assertEquals(OPS, icpLog.getName());
+			assertEquals("Operations Section Chief", icpLog.getIcsPosition());
+			assertEquals("", icpLog.getLinkedIcs204FormId());
+			assertEquals("", icpLog.getLinkedSarTaskAssignmentId());
+			Set<String> loggedResources = icpLog.getResourcesAssigned().stream()
+					.map(SarTaskResource::getName).collect(Collectors.toSet());
+			assertTrue(staff.stream().allMatch(card -> loggedResources.contains(card.getPersonName())));
+			for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+				if (!"planned".equals(task.getTaskLifecycleStatus())) {
+					assertTrue(task.getResourcesAssigned().stream()
+							.allMatch(resource -> loggedResources.contains(resource.getName())),
+							() -> "Missing resources for assigned task " + task.getAssignmentTeamNumber());
+				}
+			}
 			Set<String> supportedStaffRefs = Set.of("org:ic:0", "org:operationsChief", "org:planningChief",
 					"org:safetyOfficer", "org:commUnitLeader");
 			assertTrue(staff.stream().allMatch(c -> c.getSourceRef().isBlank()
@@ -1451,13 +1469,27 @@ class MapleRidgeExampleTest {
 			data.getOpenActionItems().add(action);
 		}
 		Ics214Form log = new Ics214Form();
-		log.setLinkedIcs204FormId(data.getForm204().getFormId());
-		log.setName("Maple Ridge Operations - fictional exercise");
+		log.setName(OPS);
 		log.setIcsPosition("Operations Section Chief");
 		log.setHomeAgency(AGENCY);
 		log.setPreparedByName(OPS);
 		log.setPreparedByPositionTitle("Operations Section Chief");
 		log.setPreparedDateTime(time(8, 15));
+		data.getTCards().stream().filter(card -> "ICP".equals(card.getStatus()))
+				.forEach(card -> log.getResourcesAssigned().add(taskResource(card, "ICP overhead")));
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			if (!"planned".equals(task.getTaskLifecycleStatus())) {
+				for (SarTaskResource assigned : task.getResourcesAssigned()) {
+					SarTaskResource resource = new SarTaskResource();
+					resource.setResourceId(assigned.getResourceId());
+					resource.setCardType(assigned.getCardType());
+					resource.setName(assigned.getName());
+					resource.setHomeAgency(assigned.getHomeAgency());
+					resource.setFunction("Team " + task.getAssignmentTeamNumber() + " — " + assigned.getFunction());
+					log.getResourcesAssigned().add(resource);
+				}
+			}
+		}
 		addActivity(log, "command", ActivityEventType.ID_FREE_TEXT, time(6, 30), null,
 				"0630 command established at " + ICP + "; all 42 people checked in: 36 field including four handlers "
 						+ "and six IMT (IC, Ops, Planning, Safety, COML, MEDL); four dogs checked in as equipment.");

@@ -567,13 +567,258 @@
   "ics205Enabled" : true,
   "additionalForms204" : [ ],
   "activityLogs" : [ {
-    "linkedIcs204FormId" : "49fee19d-d066-30c8-959b-0cc646778e4f",
+    "linkedIcs204FormId" : "",
     "linkedSarTaskAssignmentId" : "",
     "linkedResourceId" : "",
-    "name" : "Maple Ridge Operations - fictional exercise",
+    "name" : "Morgan Vale",
     "icsPosition" : "Operations Section Chief",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
-    "resourcesAssigned" : [ ],
+    "resourcesAssigned" : [ {
+      "function" : "ICP overhead",
+      "icsPosition" : "ICP overhead",
+      "homeAgency" : "Fictional Pine County Sheriff's Office",
+      "name" : "Avery Wren",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "a7d7fc5f-9fd4-36be-b474-0d3b377720b9"
+    }, {
+      "function" : "ICP overhead",
+      "icsPosition" : "ICP overhead",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Morgan Vale",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "f52f18dc-2c17-3a7e-9662-21f3259cec85"
+    }, {
+      "function" : "ICP overhead",
+      "icsPosition" : "ICP overhead",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Rowan Ellis",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "d8eeb297-9d98-37fd-8541-3f8135bc8d65"
+    }, {
+      "function" : "ICP overhead",
+      "icsPosition" : "ICP overhead",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Jordan Reed",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "64302216-a2b8-341f-9a17-96d17f27fe36"
+    }, {
+      "function" : "ICP overhead",
+      "icsPosition" : "ICP overhead",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Taylor Brook",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "d577d03d-7a7d-356a-930e-98f83b157b3c"
+    }, {
+      "function" : "ICP overhead",
+      "icsPosition" : "ICP overhead",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Quinn Alder",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "1c9e6db6-da51-3b02-9003-1af9b9066e66"
+    }, {
+      "function" : "Team S1 — Leader",
+      "icsPosition" : "Team S1 — Leader",
+      "homeAgency" : "Fictional Cedar Valley SAR",
+      "name" : "Casey Finch",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6"
+    }, {
+      "function" : "Team S1 — Ground Searcher",
+      "icsPosition" : "Team S1 — Ground Searcher",
+      "homeAgency" : "Fictional Cedar Valley SAR",
+      "name" : "Alex Fern",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb"
+    }, {
+      "function" : "Team S1 — Ground Searcher",
+      "icsPosition" : "Team S1 — Ground Searcher",
+      "homeAgency" : "Fictional Cedar Valley SAR",
+      "name" : "Blair Moss",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153"
+    }, {
+      "function" : "Team S1 — Ground Searcher",
+      "icsPosition" : "Team S1 — Ground Searcher",
+      "homeAgency" : "Fictional Cedar Valley SAR",
+      "name" : "Cameron Lark",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697"
+    }, {
+      "function" : "Team S2 — Leader",
+      "icsPosition" : "Team S2 — Leader",
+      "homeAgency" : "Fictional Cedar Valley SAR",
+      "name" : "Dana Birch",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717"
+    }, {
+      "function" : "Team S2 — Ground Searcher",
+      "icsPosition" : "Team S2 — Ground Searcher",
+      "homeAgency" : "Fictional Cedar Valley SAR",
+      "name" : "Elliot Pine",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527"
+    }, {
+      "function" : "Team S2 — Ground Searcher",
+      "icsPosition" : "Team S2 — Ground Searcher",
+      "homeAgency" : "Fictional Cedar Valley SAR",
+      "name" : "Frankie Cove",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3"
+    }, {
+      "function" : "Team S2 — Ground Searcher",
+      "icsPosition" : "Team S2 — Ground Searcher",
+      "homeAgency" : "Fictional Cedar Valley SAR",
+      "name" : "Gray Rowan",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e"
+    }, {
+      "function" : "Team S3 — Leader",
+      "icsPosition" : "Team S3 — Leader",
+      "homeAgency" : "Fictional Lake Hollow SAR",
+      "name" : "Harper Glen",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "bdedd84f-dd65-3b83-937b-10617106c57a"
+    }, {
+      "function" : "Team S3 — Ground Searcher",
+      "icsPosition" : "Team S3 — Ground Searcher",
+      "homeAgency" : "Fictional Lake Hollow SAR",
+      "name" : "Indigo Lake",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "d2da7418-90c7-3427-b463-f884113e2279"
+    }, {
+      "function" : "Team S3 — Ground Searcher",
+      "icsPosition" : "Team S3 — Ground Searcher",
+      "homeAgency" : "Fictional Lake Hollow SAR",
+      "name" : "Jules Meadow",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "ac05e257-0729-3cde-81bf-88f82cc760e5"
+    }, {
+      "function" : "Team S3 — Ground Searcher",
+      "icsPosition" : "Team S3 — Ground Searcher",
+      "homeAgency" : "Fictional Lake Hollow SAR",
+      "name" : "Kai Willow",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "7c0a05fe-39f8-3691-91e7-97d259b854b8"
+    }, {
+      "function" : "Team R1 — Leader",
+      "icsPosition" : "Team R1 — Leader",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Parker Elm",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "d450225e-9ba5-3fda-bdee-64dfcd332418"
+    }, {
+      "function" : "Team R1 — Ground Searcher",
+      "icsPosition" : "Team R1 — Ground Searcher",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Remy Shore",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "60b0d207-257e-32c3-aee7-f1b54a5d1194"
+    }, {
+      "function" : "Team R2 — Leader",
+      "icsPosition" : "Team R2 — Leader",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Sage Linden",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "3f18ee65-4e2c-3baf-8b3a-8d743ade9cc6"
+    }, {
+      "function" : "Team R2 — Ground Searcher",
+      "icsPosition" : "Team R2 — Ground Searcher",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Toby Flint",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "45cf31f7-b054-351b-9443-ee072f9bb4ff"
+    }, {
+      "function" : "Team K1 — Leader/Handler",
+      "icsPosition" : "Team K1 — Leader/Handler",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Val Aspen",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "53912e25-ff2a-3bcc-8534-867d769eb113"
+    }, {
+      "function" : "Team K1 — Communications",
+      "icsPosition" : "Team K1 — Communications",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Winter Dell",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "5e479160-5830-3a9e-95f0-42a8939dcdbe"
+    }, {
+      "function" : "Team K1 — Navigation",
+      "icsPosition" : "Team K1 — Navigation",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Wynn Hazel",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "b2d669bd-8189-3993-bc42-8efcdd1f905d"
+    }, {
+      "function" : "Team K1 — Ground Searcher",
+      "icsPosition" : "Team K1 — Ground Searcher",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Yael Frost",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "6d073402-f21d-36f8-93a5-bc3fa00ebaa3"
+    }, {
+      "function" : "Team K1 — Live Find K9",
+      "icsPosition" : "Team K1 — Live Find K9",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "MR-K9-1",
+      "cardType" : "EQUIPMENT",
+      "resourceId" : "3f3a976b-91f1-3903-a0c3-7bd7e567c001"
+    }, {
+      "function" : "Team K2 — Leader/Handler",
+      "icsPosition" : "Team K2 — Leader/Handler",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Zion Clover",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "f9378e49-56da-3217-bdbd-d904bbb683cc"
+    }, {
+      "function" : "Team K2 — Communications",
+      "icsPosition" : "Team K2 — Communications",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Robin Field",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "01f6a5aa-3edc-3131-b0c0-d3886bb1dc39"
+    }, {
+      "function" : "Team K2 — Navigation",
+      "icsPosition" : "Team K2 — Navigation",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Arden Fox",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "56634ec9-5293-3129-8b90-628cfa2089fb"
+    }, {
+      "function" : "Team K2 — Ground Searcher",
+      "icsPosition" : "Team K2 — Ground Searcher",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "Briar Snow",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "45826bda-f44a-3194-9808-f1b0f407e067"
+    }, {
+      "function" : "Team K2 — Live Find K9",
+      "icsPosition" : "Team K2 — Live Find K9",
+      "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
+      "name" : "MR-K9-2",
+      "cardType" : "EQUIPMENT",
+      "resourceId" : "eb1de76e-f8eb-3bb2-a409-e87d98cdc934"
+    }, {
+      "function" : "Team T1 — Leader",
+      "icsPosition" : "Team T1 — Leader",
+      "homeAgency" : "Fictional Lake Hollow SAR",
+      "name" : "Lane Cedar",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "152379a5-1884-3538-822c-9254139d9dad"
+    }, {
+      "function" : "Team T1 — Ground Searcher",
+      "icsPosition" : "Team T1 — Ground Searcher",
+      "homeAgency" : "Fictional Lake Hollow SAR",
+      "name" : "Micah Ash",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "39c9e0e7-5877-35fa-b1e1-ab1458037071"
+    }, {
+      "function" : "Team T1 — Ground Searcher",
+      "icsPosition" : "Team T1 — Ground Searcher",
+      "homeAgency" : "Fictional Lake Hollow SAR",
+      "name" : "Noel Spruce",
+      "cardType" : "PERSONNEL",
+      "resourceId" : "fc761268-10f8-34db-b17e-9fc96a6f6769"
+    } ],
     "activityLog" : [ {
       "entryId" : "7f6e6349-c47b-3293-a9a3-7680408cf158",
       "timestamp" : "2026-07-18T10:30:00",
@@ -772,7 +1017,7 @@
     "preparedBySignature" : "",
     "preparedDateTime" : "2026-07-18T12:15:00",
     "iapPage" : "",
-    "logScope" : "ASSIGNMENT_LIST"
+    "logScope" : "ICP"
   } ],
   "activityEventTypes" : [ {
     "id" : "FREE_TEXT",
