@@ -90,8 +90,12 @@ final class Ics233PdfLayout extends AbstractPdfRenderer {
 						stream.transform(new Matrix(0, 1, -1, 0, paper.getWidth(), 0));
 					}
 					float top = size.getHeight() - margin;
-					for (int line = 0; line < titleLines.size(); line++) {
-						text(stream, bold, titleLines.get(line), bodyMargin, top - FONT_SIZE - line * LEADING);
+					if (index == 0) {
+						for (int line = 0; line < titleLines.size(); line++) {
+							text(stream, bold, titleLines.get(line), bodyMargin, top - FONT_SIZE - line * LEADING);
+						}
+					} else {
+						drawContinuationHeader(stream, bold, title, index + 1, bodyMargin, top, width);
 					}
 					drawCell(stream, regular, incidentLines, bodyMargin, top - titleHeight, width, incidentHeight);
 					drawRow(stream, bold, headings, bodyMargin, gridTop + headerHeight, width, headerHeight);
@@ -114,6 +118,30 @@ final class Ics233PdfLayout extends AbstractPdfRenderer {
 				}
 			}
 			document.save(outputFile.toFile());
+		}
+	}
+
+	/**
+	 * Draws the canonical tracker title and local page number above the grid.
+	 *
+	 * @param stream destination page stream
+	 * @param font heading font
+	 * @param title primary title with its leading form identifier
+	 * @param pageNumber one-based local page number
+	 * @param x heading left edge
+	 * @param top heading top edge
+	 * @param width available heading width
+	 * @throws IOException when font metrics or PDF output fail
+	 */
+	private void drawContinuationHeader(PDPageContentStream stream, PDType1Font font, String title, int pageNumber,
+			float x, float top, float width) throws IOException {
+		String canonicalTitle = title.startsWith("ICS 233-CG ") ? title.substring("ICS 233-CG ".length()) : title;
+		String header = canonicalTitle + " (ICS 233-CG) Page " + pageNumber;
+		float fontSize = Math.min(FONT_SIZE, width * 1000f / Math.max(1f, font.getStringWidth(header)));
+		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+			stream.setFont(font, fontSize);
+			stream.newLineAtOffset(x, top - FONT_SIZE);
+			stream.showText(PdfText.singleLine(header));
 		}
 	}
 

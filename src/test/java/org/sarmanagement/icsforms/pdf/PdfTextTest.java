@@ -198,9 +198,13 @@ class PdfTextTest {
 		task.setLeader("Unprinted unlabeled supervisor \u96EA");
 		data.getSarTaskAssignments().add(task);
 		for (PdfFormRenderer renderer : List.of(new Ics201PdfRenderer(), new Ics203PdfRenderer(),
-				new Ics205aPdfRenderer(), new Ics207PdfRenderer())) {
+				new Ics205aPdfRenderer())) {
 			renderer.render(data, directory.resolve(renderer.getClass().getSimpleName() + ".pdf"));
 		}
+		IllegalArgumentException chartException = assertThrows(IllegalArgumentException.class,
+				() -> new Ics207PdfRenderer().render(data, directory.resolve("invalid207.pdf")));
+		assertTrue(chartException.getMessage().contains("sarTaskAssignments[1].leader"));
+		assertTrue(chartException.getMessage().contains("U+96EA"));
 		task.setDivision("Alpha");
 		IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
 				() -> new Ics203PdfRenderer().render(data, directory.resolve("invalid203.pdf")));

@@ -348,18 +348,34 @@ public class SarTaskAssignmentPdfRenderer extends AbstractPdfRenderer implements
 		}
 	}
 
+	/**
+	 * Draws actual assignment dates and times only after the task has returned.
+	 * Planned and active tasks retain blank fields without hiding editable debrief notes.
+	 *
+	 * @param stream page stream.
+	 * @param bold label font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width cell width.
+	 * @param height cell height.
+	 * @param task source assignment and lifecycle.
+	 * @param data export timezone settings.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawTimeOnAssignmentSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, float width, float height, SarTaskAssignment task, AppData data) throws IOException {
 		drawHeading(stream, bold, x, y + height, "13. Time On Assignment");
 		float labelY = y + height - CELL_PADDING - HEADING_FONT_SIZE - 14f;
+		boolean returned = "returned".equals(task.getTaskLifecycleStatus());
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY, "Date From",
-				formatDate(data, task.getAssignmentStart()));
+				returned ? formatDate(data, task.getAssignmentStart()) : "");
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY, "Date To",
-				formatDate(data, task.getAssignmentEnd()));
+				returned ? formatDate(data, task.getAssignmentEnd()) : "");
 		drawInlinePair(stream, bold, regular, x + CELL_PADDING, labelY - 16f, "Time From",
-				formatTime(data, task.getAssignmentStart()));
+				returned ? formatTime(data, task.getAssignmentStart()) : "");
 		drawInlinePair(stream, bold, regular, x + (width / 2f), labelY - 16f, "Time To",
-				formatTime(data, task.getAssignmentEnd()));
+				returned ? formatTime(data, task.getAssignmentEnd()) : "");
 	}
 
 	/**

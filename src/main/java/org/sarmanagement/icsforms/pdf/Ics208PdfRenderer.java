@@ -209,7 +209,7 @@ public class Ics208PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
 			String title = form.getMessageType() == Ics208Form.MessageType.HAZARDOUS_MATERIALS_SITE_SAFETY_PLAN
 					? "SITE SAFETY AND CONTROL PLAN (ICS 208)" : "SAFETY MESSAGE/PLAN (ICS 208)";
-			drawIcs208Header(stream, bold, layout, continuation ? title + " (CONTINUED)" : title);
+			drawIcs208Header(stream, bold, layout, continuation ? title + " Page " + pageNumber : title);
 			drawFormFrame(stream, layout);
 			float left = layout.x();
 			float right = left + layout.width();

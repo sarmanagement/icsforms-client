@@ -39,6 +39,8 @@ staging, residence/IPP (Other), and a **supply / recovery Base colocated at ICP*
 for water resupply and recovery coordination. Staff retain their organizational
 roles and ICP address; status **ICP** puts them in the **ICP rack column**, not
 Assigned (status matches the existing board header before location).
+Assignment team leaders are not duplicated as additional organizational positions;
+ICS 207 derives their boxes from the linked assignments.
 All addresses are fictional. A Koster **hub/spokes/rim** approach
 protects that residence/last-known-point hub, rapidly checks three travel
 spokes, observes two likely rim exits, and
@@ -62,7 +64,15 @@ eight simultaneously active teams is not assumed manageable. Seven teams are ini
 active (G1-A, G1-B, G2-A, two posts, K1 and K2). G1 splits into **four-person
 G1-A (S1, route A, MR-P01–04)** and **four-person G1-B (S2, route B, MR-P05–08)**;
 **four-person G2-A (S3, route C, MR-P09–12)** covers the third route. All three
-routes run **0715–1000 concurrently**. G2's **MR-P13–15 are Available at staging**
+routes run **0715–1000 concurrently**. G2's **MR-P13–15 completed visual tracker
+task T1 around IPP 0635–0655**, after their 0630 check-in and before this
+operational period; the returned task is retained in the IAP. Their **0700 debrief**
+records an actual **definitely human sign line leading north**, but **no clear
+prints or sole pattern** and no verified association with the missing adult.
+The potential clue was **flagged on Ops instruction** and is linked to T1 in
+the clue log; follow-up is **pending, not yet undertaken at 0800**. Its limited
+coverage and observed hazards are recorded, not extrapolated to an area search.
+These three trackers are now **Available at staging**
 for handler **MR-P29 (Devon Heath)** on planned K3 at 1030; they are actual K3
 task members, not merely mentioned in prose. K3's original support **MR-P30–32**
 are explicitly released to staging reserve; G2's eighth member **MR-P16** also
@@ -71,6 +81,12 @@ G1 reassembles its original **eight** for attractor searches 1030–1200 then
 grid subsegments 1230–1700. G2's **eight-person grid**, 1030–1700, comprises
 MR-P09–12, MR-P16 and released support MR-P30–32; MR-P13–15 stay with K3.
 No member has overlapping tasks, including planned tasks.
+There are **13 linked task/ICS 204 rows**: one returned tracker task, seven
+on-task assignments and five planned tasks. Only the returned task has a
+completed debrief and named debrief supervisor. Start/end times on other tasks
+are planned schedule times, not completed actual time on assignment.
+Each canine task assigns **Leader/Handler, Communications, Navigation and
+Searcher / flanker** to its four people, and **Live Find K9** to its equipment card.
 
 Measurable objectives address the required responder/public safety wording,
 spoke completion by 1000, containment of both likely egress points by 0800
@@ -86,6 +102,9 @@ from overlapping tasks. Task timing, actual coverage and
 canine welfare require reassessment. The single illustrative **155.160 MHz VHF
 simplex analog FM** channel is linked by identity to T-cards, ICS 204/SAR contacts
 and the generated ICS 205A directory. No aircraft are assigned.
+Each SAR task and the primary ICS 204 have two named contacts: **IC Avery Wren**
+at the IC T-card's fictional phone **202-555-0101**, and **Ops Morgan Vale**
+on **MR SAR 1 / 155.160 MHz**, linked to the ICS 205 channel by identity.
 
 ICS 215A and ICS 208 carry linked tick, fall and heat mitigations. The fictional
 ground-only medical plan includes an aid post, ambulance service and hospital.

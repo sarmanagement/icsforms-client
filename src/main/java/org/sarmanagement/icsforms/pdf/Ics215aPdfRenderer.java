@@ -158,7 +158,7 @@ public class Ics215aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 			FormLayout layout = formLayout(page, data);
 			try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
 				drawFormHeader(stream, bold, layout, "ICS 215A",
-						"INCIDENT ACTION PLAN SAFETY ANALYSIS" + (pageNumber == 1 ? "" : " (CONTINUED)"));
+						"INCIDENT ACTION PLAN SAFETY ANALYSIS", pageNumber);
 				drawFormFrame(stream, layout);
 				drawMetadata(stream, bold, regular, layout, data);
 				float[] widths = columnWidths(layout);

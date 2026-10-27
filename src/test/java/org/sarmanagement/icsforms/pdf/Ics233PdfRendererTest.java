@@ -203,8 +203,10 @@ class Ics233PdfRendererTest {
 		for (int index = 0; index < 100; index++) {
 			assertTrue(pocs.contains("Assignee" + index));
 		}
-		for (String page : pdf.pageTexts()) {
-			assertTrue(normalized(page).contains("ICS 233-CG INCIDENT OPEN ACTION TRACKER Adapted as a Clue Log"));
+		for (int index = 0; index < pdf.pageTexts().size(); index++) {
+			String expected = index == 0 ? "ICS 233-CG INCIDENT OPEN ACTION TRACKER Adapted as a Clue Log"
+					: "INCIDENT OPEN ACTION TRACKER Adapted as a Clue Log (ICS 233-CG) Page " + (index + 1);
+			assertTrue(normalized(pdf.pageTexts().get(index)).contains(expected));
 		}
 		assertRepeatedHeaders(pdf);
 	}

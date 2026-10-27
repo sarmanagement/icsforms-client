@@ -74,6 +74,20 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		}
 	}
 
+	/**
+	 * Draws an activity-log page with a locally numbered continuation title.
+	 *
+	 * @param document destination document
+	 * @param data incident and layout preferences
+	 * @param context incident metadata
+	 * @param form source activity log
+	 * @param eventTypes event labels
+	 * @param entries entries assigned to this page
+	 * @param pageNumber one-based page within this log
+	 * @param totalPages page count for this log
+	 * @param isFirstPage whether to include assigned resources
+	 * @throws IOException when PDF drawing fails
+	 */
 	private void renderPage(PDDocument document, AppData data, IncidentContext context, Ics214Form form,
 			List<ActivityEventType> eventTypes, List<ActivityLogEntry> entries, int pageNumber, int totalPages,
 			boolean isFirstPage) throws IOException {
@@ -84,7 +98,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 			FormLayout layout = formLayout(page, data);
 
-			drawFormHeader(stream, bold, layout, "ICS 214", "ACTIVITY LOG");
+			drawFormHeader(stream, bold, layout, "ICS 214", "ACTIVITY LOG", pageNumber);
 			drawFormFrame(stream, layout);
 
 			float gridTop = layout.top();

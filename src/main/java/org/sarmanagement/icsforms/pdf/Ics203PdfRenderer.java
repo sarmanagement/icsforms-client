@@ -457,7 +457,7 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 		FormLayout layout = plan.layout();
 		float width = layout.width() / 2f;
-		drawFormHeader(stream, bold, layout, "ICS 203", "ORGANIZATION ASSIGNMENT LIST");
+		drawFormHeader(stream, bold, layout, "ICS 203", "ORGANIZATION ASSIGNMENT LIST", index + 1);
 		drawFormFrame(stream, layout);
 		stream.addRect(layout.x(), layout.top() - TOP_HEIGHT, width, TOP_HEIGHT);
 		stream.addRect(layout.x() + width, layout.top() - TOP_HEIGHT, width, TOP_HEIGHT);
@@ -491,6 +491,14 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			for (int slot = 0; slot < block.slots() - 1; slot++) {
 				int rowIndex = slot < block.fixed() ? slot : block.fixed() + index * extraSlots
 						+ slot - block.fixed();
+				if (block == plan.blocks().get(4)) {
+					// Keep generic operations rows above, not inside, the air branch.
+					int airStart = block.fixed() - 2;
+					int airSlot = block.slots() - 3;
+					rowIndex = slot < airStart ? slot
+							: slot >= airSlot ? airStart + slot - airSlot
+									: block.fixed() + index * extraSlots + slot - airStart;
+				}
 				Row row = rowIndex < block.rows().size() ? block.rows().get(rowIndex) : new Row("", "");
 				if (rowIndex >= block.rows().size()) {
 					row.prepare(width, plan.size());
@@ -513,7 +521,7 @@ public class Ics203PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 					stream.setLineWidth(1f);
 				}
 				stream.stroke();
-				int fragmentIndex = slot < block.fixed() ? index : 0;
+				int fragmentIndex = rowIndex < block.fixed() ? index : 0;
 				text(stream, bold, plan.size(), x + PADDING, rowTop - plan.size() - PADDING,
 						row.label(fragmentIndex));
 				text(stream, regular, plan.size(), x + width * .53f + PADDING,

@@ -40,6 +40,186 @@ abstract class AbstractPdfRenderer {
 	private static final DateTimeFormatter PDF_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
 	/**
+	 * Wraps validated text using actual font advances, including oversized tokens.
+	 * @param text source text.
+	 * @param font measuring font.
+	 * @param fontSize font size in points.
+	 * @param width available width in points.
+	 * @return lines fitting the available width.
+	 * @throws IOException when font metrics fail.
+	 */
+	protected List<String> wrapText(String text, PDType1Font font, float fontSize, float width) throws IOException {
+		if (width <= 0f || fontSize <= 0f) {
+			throw new IllegalArgumentException("PDF text width and size must be positive");
+		}
+		PdfText.validate(text, "PDF", "text");
+		List<String> lines = new ArrayList<>();
+		for (String paragraph : PdfText.normalize(text).split("\n", -1)) {
+			String remaining = paragraph.strip();
+			while (!remaining.isEmpty()) {
+				int end = 0;
+				int lastSpace = -1;
+				while (end < remaining.length()) {
+					int next = remaining.offsetByCodePoints(end, 1);
+					if (font.getStringWidth(remaining.substring(0, next)) * fontSize / 1000f > width) {
+						break;
+					}
+					if (remaining.charAt(end) == ' ') {
+						lastSpace = end;
+					}
+					end = next;
+				}
+				if (end == remaining.length()) {
+					lines.add(remaining);
+					remaining = "";
+				} else {
+					if (end == 0) {
+						throw new IllegalArgumentException("PDF text width cannot fit a character");
+					}
+					int split = lastSpace > 0 ? lastSpace : end;
+					lines.add(remaining.substring(0, split).stripTrailing());
+					remaining = remaining.substring(split).stripLeading();
+				}
+			}
+			if (paragraph.isBlank()) {
+				lines.add("");
+			}
+		}
+		return lines;
+	}
+
+	/**
+	 * Draws a bounded section while retaining entries that fit a fresh page intact.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width section width.
+	 * @param height section height.
+	 * @param heading numbered block heading.
+	 * @param entries logical entries, not prewrapped lines.
+	 * @param freshCapacity line capacity of a fresh continuation page.
+	 * @return undrawn logical entries.
+	 * @throws IOException when drawing fails.
+	 */
+	protected List<String> drawFlowSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+			float x, float y, float width, float height, String heading, List<String> entries, int freshCapacity)
+			throws IOException {
+		int capacity = Math.max(0, 1 + (int) Math.floor((height - 30f) / 12f));
+		List<String> visible = new ArrayList<>();
+		List<String> pending = new ArrayList<>();
+		List<String> source = entries == null ? List.of() : entries;
+		for (int index = 0; index < source.size(); index++) {
+			List<String> lines = wrapText(source.get(index), regular, 10f, width - 8f);
+			int available = capacity - visible.size();
+			if (lines.size() <= available) {
+				visible.addAll(lines);
+			} else {
+				int take = lines.size() > freshCapacity ? Math.max(0, available - 1) : 0;
+				visible.addAll(lines.subList(0, take));
+				pending.add(String.join("\n", lines.subList(take, lines.size())));
+				pending.addAll(source.subList(index + 1, source.size()));
+				break;
+			}
+		}
+		if (!pending.isEmpty() && visible.size() < capacity) {
+			visible.add("See next page");
+		}
+		try (PdfText.TextBlock block = PdfText.begin(stream)) {
+			stream.setFont(bold, 10f);
+			stream.newLineAtOffset(x + 4f, y + height - 14f);
+			stream.showText(PdfText.singleLine(heading));
+			stream.setFont(regular, 10f);
+			stream.newLineAtOffset(0, -12f);
+			for (String line : visible) {
+				stream.showText(PdfText.singleLine(line));
+				stream.newLineAtOffset(0, -12f);
+			}
+		}
+		return pending;
+	}
+
+	/**
+	 * Paginates a numbered block within the printable frame.
+	 * @param document target document.
+	 * @param data page settings.
+	 * @param formNumber form identifier.
+	 * @param title canonical form title.
+	 * @param heading numbered block heading.
+	 * @param entries logical entries.
+	 * @throws IOException when drawing fails.
+	 */
+	protected void writeContinuationPages(PDDocument document, AppData data, String formNumber, String title,
+			String heading, List<String> entries) throws IOException {
+		List<String> remaining = new ArrayList<>(entries);
+		PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+		PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+		while (!remaining.isEmpty()) {
+			PDPage page = newPage(data);
+			document.addPage(page);
+			FormLayout layout = formLayout(page, data);
+			try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+				drawFormHeader(stream, bold, layout, formNumber, title, document.getNumberOfPages());
+				drawFormFrame(stream, layout);
+				remaining = drawFlowSection(stream, bold, regular, layout.x(), layout.y(), layout.width(),
+						layout.height(), heading, remaining, Math.max(1, 1 + (int) ((layout.height() - 30f) / 12f)));
+			}
+		}
+	}
+
+	/**
+	 * Draws a complete incident name, wrapping and reducing its size only as needed.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width cell width.
+	 * @param height cell height.
+	 * @param name incident name.
+	 * @throws IOException when drawing fails.
+	 */
+	protected void drawIncidentName(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
+			float y, float width, float height, String name) throws IOException {
+		drawFittedSection(stream, bold, regular, x, y, width, height, "1. Incident Name", name);
+	}
+
+	/**
+	 * Draws a complete bounded value below its heading, shrinking only as needed.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width cell width.
+	 * @param height cell height.
+	 * @param heading numbered block heading.
+	 * @param value complete cell value.
+	 * @throws IOException when drawing fails.
+	 */
+	protected void drawFittedSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
+			float y, float width, float height, String heading, String value) throws IOException {
+		float size = 10f;
+		List<String> lines = wrapText(value, regular, size, width - 8f);
+		while (lines.size() * size * 1.2f > height - 24f) {
+			size *= 0.9f;
+			lines = wrapText(value, regular, size, width - 8f);
+		}
+		try (PdfText.TextBlock block = PdfText.begin(stream)) {
+			stream.setFont(bold, 10f);
+			stream.newLineAtOffset(x + 4f, y + height - 14f);
+			stream.showText(PdfText.singleLine(heading));
+			stream.setFont(regular, size);
+			stream.newLineAtOffset(0, -12f);
+			for (String line : lines) {
+				stream.showText(PdfText.singleLine(line));
+				stream.newLineAtOffset(0, -size * 1.2f);
+			}
+		}
+	}
+
+	/**
 	 * Writes a centered header line plus bordered content blocks across one or more
 	 * pages.
 	 *
@@ -76,7 +256,8 @@ abstract class AbstractPdfRenderer {
 		PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 		PDPageContentStream stream = new PDPageContentStream(document, page);
 		float pageWidth = page.getMediaBox().getWidth();
-		float y = page.getMediaBox().getHeight() - MARGIN;
+		float margin = Math.max(MARGIN, pageMargin(data));
+		float y = page.getMediaBox().getHeight() - margin;
 		String header = (formNumber + " " + title).toUpperCase();
 		float headerWidth = bold.getStringWidth(PdfText.singleLine(header)) / 1000f * HEADER_FONT_SIZE;
 		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
@@ -89,30 +270,42 @@ abstract class AbstractPdfRenderer {
 		for (List<String> block : blocks) {
 			List<String> wrapped = new ArrayList<>();
 			for (String rawLine : block) {
-				wrapped.addAll(wrap(rawLine, 88));
+				wrapped.addAll(wrapText(rawLine, font, BODY_FONT_SIZE, pageWidth - margin * 2f - BLOCK_PADDING * 2f));
 			}
-			float blockHeight = Math.max(LEADING + (BLOCK_PADDING * 2), wrapped.size() * LEADING + (BLOCK_PADDING * 2));
-			if (y - blockHeight < MARGIN) {
-				stream.close();
-				page = newPage(data);
-				document.addPage(page);
-				stream = new PDPageContentStream(document, page);
-				y = page.getMediaBox().getHeight() - MARGIN;
-			}
-			float boxTop = y;
-			float boxBottom = y - blockHeight;
-			stream.addRect(MARGIN, boxBottom, pageWidth - (MARGIN * 2), blockHeight);
-			stream.stroke();
-
-			try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
-				stream.setFont(font, BODY_FONT_SIZE);
-				stream.newLineAtOffset(MARGIN + BLOCK_PADDING, boxTop - BLOCK_PADDING - BODY_FONT_SIZE);
-				for (String line : wrapped) {
-					stream.showText(PdfText.singleLine(line));
-					stream.newLineAtOffset(0, -LEADING);
+			int offset = 0;
+			do {
+				int available = Math.max(0, (int) ((y - margin - BLOCK_PADDING * 2f) / LEADING));
+				if (available == 0 || (offset == 0 && wrapped.size() > available
+						&& wrapped.size() <= (int) ((page.getMediaBox().getHeight() - margin * 2f - LEADING * 2f
+								- BLOCK_PADDING * 2f) / LEADING))) {
+					stream.close();
+					page = newPage(data);
+					document.addPage(page);
+					stream = new PDPageContentStream(document, page);
+					FormLayout headerLayout = new FormLayout(margin, margin, pageWidth - margin * 2f, 0f,
+							page.getMediaBox().getHeight() - margin, pageWidth, page.getMediaBox().getHeight(), margin);
+					drawFormHeader(stream, bold, headerLayout, formNumber, title, document.getNumberOfPages());
+					y = page.getMediaBox().getHeight() - margin - LEADING * 2f;
+					available = Math.max(1, (int) ((y - margin - BLOCK_PADDING * 2f) / LEADING));
 				}
-			}
-			y = boxBottom - BLOCK_SPACING;
+				int count = Math.min(available, wrapped.size() - offset);
+				float blockHeight = Math.max(LEADING, count * LEADING) + BLOCK_PADDING * 2f;
+				float boxTop = y;
+				float boxBottom = y - blockHeight;
+				stream.addRect(margin, boxBottom, pageWidth - (margin * 2), blockHeight);
+				stream.stroke();
+
+				try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
+					stream.setFont(font, BODY_FONT_SIZE);
+					stream.newLineAtOffset(margin + BLOCK_PADDING, boxTop - BLOCK_PADDING - BODY_FONT_SIZE);
+					for (String line : wrapped.subList(offset, offset + count)) {
+						stream.showText(PdfText.singleLine(line));
+						stream.newLineAtOffset(0, -LEADING);
+					}
+				}
+				y = boxBottom - BLOCK_SPACING;
+				offset += count;
+			} while (offset < wrapped.size());
 		}
 		stream.close();
 	}
@@ -352,6 +545,33 @@ abstract class AbstractPdfRenderer {
 		try (PdfText.TextBlock textBlock = PdfText.begin(stream)) {
 			stream.setFont(bold, HEADER_FONT_SIZE);
 			stream.newLineAtOffset((layout.pageWidth() - headerWidth) / 2f, layout.headerBaseline());
+			stream.showText(PdfText.singleLine(header));
+		}
+	}
+
+	/**
+	 * Draws a canonical form title and continuation page number above the frame.
+	 * @param stream page stream.
+	 * @param bold title font.
+	 * @param layout printable bounds.
+	 * @param formNumber form identifier.
+	 * @param title canonical form title.
+	 * @param pageNumber one-based document page.
+	 * @throws IOException when drawing fails.
+	 */
+	protected void drawFormHeader(PDPageContentStream stream, PDType1Font bold, FormLayout layout, String formNumber,
+			String title, int pageNumber) throws IOException {
+		if (pageNumber <= 1) {
+			drawFormHeader(stream, bold, layout, formNumber, title);
+			return;
+		}
+		String header = title + " (" + formNumber + ") Page " + pageNumber;
+		float size = Math.min(HEADER_FONT_SIZE,
+				layout.width() * 1000f / Math.max(1f, bold.getStringWidth(PdfText.singleLine(header))));
+		float width = bold.getStringWidth(PdfText.singleLine(header)) * size / 1000f;
+		try (PdfText.TextBlock block = PdfText.begin(stream)) {
+			stream.setFont(bold, size);
+			stream.newLineAtOffset((layout.pageWidth() - width) / 2f, layout.headerBaseline());
 			stream.showText(PdfText.singleLine(header));
 		}
 	}

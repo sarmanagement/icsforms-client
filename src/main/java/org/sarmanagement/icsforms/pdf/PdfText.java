@@ -244,7 +244,7 @@ public final class PdfText {
 					if (task != null) {
 						String field = task.getResourceIdentifier().isBlank() ? "assignmentTeamNumber" : "resourceIdentifier";
 						validateFields(root.get("sarTaskAssignments").get(index), form,
-								"sarTaskAssignments[" + (index + 1) + "]", false, field);
+								"sarTaskAssignments[" + (index + 1) + "]", false, field, "leader");
 					}
 				}
 				validateFields(root.get("organizationalChart"), form, "organizationalChart", false, "incidentCommanders");
