@@ -99,9 +99,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 			FormLayout layout = formLayout(page, data);
 
-			String logTitle = form.getLogScope() == ActivityLogScope.ICP
-					? "ICP COMMUNICATIONS LOG" : "ACTIVITY LOG";
-			drawFormHeader(stream, bold, layout, "ICS 214", logTitle, pageNumber);
+			drawFormHeader(stream, bold, layout, "ICS 214", "ACTIVITY LOG", pageNumber);
 			drawFormFrame(stream, layout);
 
 			float gridTop = layout.top();
@@ -226,7 +224,9 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	private void drawActivityLogSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, float width, float height, List<ActivityLogEntry> entries, List<ActivityEventType> eventTypes,
 			Ics214Form form, AppData data) throws IOException {
-		drawHeading(stream, bold, x, y + height, "7. Activity Log");
+		String heading = form.getLogScope() == ActivityLogScope.ICP
+				? "7. Activity Log — ICP Communications Log" : "7. Activity Log";
+		drawHeading(stream, bold, x, y + height, heading);
 		float tableTop = y + height - 18f;
 		float headerHeight = 24f;
 		float headerBottom = tableTop - headerHeight;

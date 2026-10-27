@@ -123,7 +123,7 @@ class Ics214PdfRendererTest {
 			};
 			String text = stripper.getText(pdf).replaceAll("\\s+", " ");
 			assertTrue(text.contains(incidentName));
-			assertTrue(text.contains("ICP COMMUNICATIONS LOG"));
+			assertTrue(text.contains("7. Activity Log — ICP Communications Log"));
 			assertTrue(text.contains("3. Name Morgan Vale"));
 			assertFalse(text.contains("3. Name " + incidentName));
 			assertTrue(incidentNameLineEnds.size() > 1, incidentNameLineEnds.toString());
