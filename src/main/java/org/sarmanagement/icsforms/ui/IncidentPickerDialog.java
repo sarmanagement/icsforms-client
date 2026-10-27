@@ -25,6 +25,7 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Window;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -35,7 +36,7 @@ public class IncidentPickerDialog extends JDialog {
 	private IncidentId chosenIncidentId;
 
 	/**
-	 * Creates the incident picker dialog.
+	 * Creates the incident picker with access to saved-incident management.
 	 *
 	 * @param owner
 	 *            owning window (may be {@code null}).
@@ -45,7 +46,7 @@ public class IncidentPickerDialog extends JDialog {
 		super(owner, "Open Incident", ModalityType.APPLICATION_MODAL);
 		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
-		List<IncidentSummary> summaries = store.list();
+		List<IncidentSummary> summaries = new ArrayList<>(store.list());
 
 		JPanel content = new JPanel(new BorderLayout(8, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(12, 12, 10, 12));
@@ -85,6 +86,31 @@ public class IncidentPickerDialog extends JDialog {
 
 		JButton cancelButton = new JButton("Cancel");
 		cancelButton.addActionListener(e -> dispose());
+
+		JButton manageButton = new JButton("Manage Incidents…");
+		manageButton.addActionListener(e -> {
+			IncidentManagerDialog manager = new IncidentManagerDialog(this, store, null);
+			manager.setVisible(true);
+			try {
+				int selected = list.getSelectedIndex();
+				IncidentId previous = selected < 0 ? null : summaries.get(selected).incidentId();
+				List<IncidentSummary> updated = store.list();
+				summaries.clear();
+				summaries.addAll(updated);
+				list.setListData(summaries.stream().map(this::buildLabel).toArray(String[]::new));
+				for (int index = 0; index < summaries.size(); index++) {
+					if (summaries.get(index).incidentId().equals(previous)) {
+						list.setSelectedIndex(index);
+						break;
+					}
+				}
+				hint.setText((summaries.isEmpty() ? "No saved incidents in " : "Select an incident from ")
+						+ location + ", or browse for JSON.");
+			} catch (RuntimeException failure) {
+				JOptionPane.showMessageDialog(this, failure.getMessage(), "Unable to refresh incidents",
+						JOptionPane.ERROR_MESSAGE);
+			}
+		});
 
 		JButton browseButton = new JButton("Browse…");
 		browseButton.addActionListener(e -> {
@@ -130,6 +156,7 @@ public class IncidentPickerDialog extends JDialog {
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
 		buttons.add(openButton);
 		buttons.add(browseButton);
+		buttons.add(manageButton);
 		buttons.add(cancelButton);
 		content.add(buttons, BorderLayout.SOUTH);
 

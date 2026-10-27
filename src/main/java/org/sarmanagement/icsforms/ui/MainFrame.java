@@ -331,7 +331,7 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Builds the application menu for file and export workflows.
+	 * Builds the application menu for file, saved-incident management and export workflows.
 	 *
 	 * @param defaultDirectory
 	 *            default chooser directory.
@@ -447,6 +447,14 @@ public class MainFrame extends JFrame {
 					showSaveError(exception);
 				}
 			}
+		});
+
+		JMenuItem manageIncidentsItem = new JMenuItem("Manage Incidents…");
+		manageIncidentsItem.addActionListener(event -> {
+			if (controller.getStore() == null || !saveBeforeSwitch()) {
+				return;
+			}
+			new IncidentManagerDialog(this, controller.getStore(), controller.getActiveIncidentId()).setVisible(true);
 		});
 
 		JMenuItem saveItem = new JMenuItem("Save");
@@ -592,6 +600,7 @@ public class MainFrame extends JFrame {
 
 		fileMenu.add(newItem);
 		fileMenu.add(openItem);
+		fileMenu.add(manageIncidentsItem);
 		fileMenu.add(saveItem);
 		fileMenu.add(saveAsItem);
 		fileMenu.add(duplicateItem);
@@ -1668,7 +1677,8 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Saves pending edits before changing incidents so failed saves cannot discard them.
+	 * Saves pending edits before switching or managing incidents so rejected edits
+	 * and failed saves cannot discard them or expose stale management backups.
 	 *
 	 * @return {@code true} if it is safe to switch incidents.
 	 */
@@ -1677,8 +1687,8 @@ public class MainFrame extends JFrame {
 			return false;
 		}
 		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-		pushToModel(source);
 		try {
+			pushToModel(source);
 			controller.save(source);
 			return true;
 		} catch (RuntimeException exception) {

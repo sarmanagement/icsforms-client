@@ -47,7 +47,8 @@ public interface IncidentStore extends AutoCloseable {
 	List<IncidentSummary> list();
 
 	/**
-	 * Tombstones an incident.
+	 * Tombstones an incident without erasing retained backups. Implementations must
+	 * reject deletion while the incident is locked for editing, including local locks.
 	 *
 	 * @param id
 	 *            incident identifier.
@@ -83,6 +84,28 @@ public interface IncidentStore extends AutoCloseable {
 	 *            target JSON file.
 	 */
 	void exportFile(IncidentId id, Path target);
+
+	/**
+	 * Reports whether this store supports safe, non-overwriting backups.
+	 *
+	 * @return true when {@link #backupFile} is supported.
+	 */
+	default boolean supportsBackup() {
+		return false;
+	}
+
+	/**
+	 * Backs up stored content to a new external file without changing the incident.
+	 * Existing targets must never be replaced. Unsupported backends retain their
+	 * existing export API but do not expose management backups.
+	 *
+	 * @param id incident identifier.
+	 * @param target new external JSON file.
+	 * @throws UnsupportedOperationException when safe backups are not implemented.
+	 */
+	default void backupFile(IncidentId id, Path target) {
+		throw new UnsupportedOperationException("This store does not support safe incident backups.");
+	}
 
 	/**
 	 * Describes the store.

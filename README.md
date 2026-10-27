@@ -11,6 +11,33 @@ This project is intended to support the **SAR** (Search and Rescue) community, b
 
 Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. Each incident is persisted locally at `~/.icsforms/incidents/<incidentId>.json`, with its own `.json.bak` backup; the install's node identity is kept in `~/.icsforms/node.json`. On first launch, an existing `~/.icsforms/incident.json` is imported as a new incident if no incidents exist yet. The original is left untouched and `incident.json.migrated` prevents repeat imports. File → Import → Import Incident JSON… can also import an external workspace as a separate incident. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF. An H2-backed store and offline-to-remote synchronization are planned, but not yet implemented.
 
+### Managing saved incidents
+
+Open **File → Manage Incidents…**, or **Manage Incidents…** in the **Open Incident**
+picker (also available during startup). The manager lists saved incident names, IDs,
+operational periods, update times and store files. Select one incident to **Backup JSON…**
+or **Delete…**; **Refresh** reloads the list. Pending editor changes are saved before
+opening the manager from the File menu; invalid edits must be resolved first.
+
+Backups require a **new filename outside the live store**; existing files are never
+overwritten, including through symbolic-link aliases of the store. File-store backups
+preserve the stored JSON bytes, identity, revision and unknown fields. If the primary
+is corrupt, the readable automatic `.json.bak` is copied instead; neither source is
+changed. Backups respect other editors' locks and retain any existing local edit lock.
+Other store implementations must explicitly support safe backups; otherwise the
+backup button is disabled.
+
+Switch to another incident before deleting the active one. Both local and other
+editors' locks block deletion, including when managing from the picker. Deletion is
+**not secure erasure**: it removes the incident from the list by moving its primary
+to `.json.deleted`, while retaining its automatic `.json.bak`. Back up first.
+
+Restore compatible JSON with **Import → Import Incident JSON…** (in the Import menu);
+the existing strict importer creates a **new incident ID**. A full-fidelity raw backup
+with unknown fields may not satisfy that importer. Retain such backups for manual
+offline recovery with the application closed, rather than expecting automatic
+restoration or bypassing import validation.
+
 This project is open source under the Apache 2.0 license. Contributions are welcome.
 
 ## Current UI workflow
