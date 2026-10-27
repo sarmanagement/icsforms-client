@@ -137,7 +137,7 @@ class MapleRidgeExampleTest {
 					data.getIncidentLocations().stream().map(IncidentLocation::getType).toList());
 			assertEquals(List.of("icp", "staging", "base", "ipp").stream().map(s -> id("location-" + s)).toList(),
 					data.getIncidentLocations().stream().map(IncidentLocation::getId).toList());
-			assertEquals(List.of(ICP, STAGING, "Supply / recovery base colocated with " + ICP, IPP),
+			assertEquals(List.of(ICP, STAGING, "Base (supply and rehab) colocated with " + ICP, IPP),
 					data.getIncidentLocations().stream().map(IncidentLocation::getName).toList());
 			assertEquals(List.of("50 Civic Road, fictional Maple Ridge, MA", "20 Park Road, fictional Maple Ridge, MA",
 					"50 Civic Road, fictional Maple Ridge, MA", "1 Trail Lane, fictional Maple Ridge, MA"),
@@ -257,7 +257,7 @@ class MapleRidgeExampleTest {
 					assertEquals(5, task.getResourcesAssigned().size());
 					assertEquals("Leader/Handler", task.getLeaderRole());
 					assertEquals("Leader/Handler", row.getLeaderRole());
-					assertEquals(List.of("Leader/Handler", "Communications", "Navigation", "Searcher / flanker",
+					assertEquals(List.of("Leader/Handler", "Communications", "Navigation", "Ground Searcher",
 							"Live Find K9"), task.getResourcesAssigned().stream().map(SarTaskResource::getFunction).toList());
 				}
 				if (!"returned".equals(task.getTaskLifecycleStatus())) {
@@ -801,7 +801,7 @@ class MapleRidgeExampleTest {
 							+ "Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact "
 							+ "and uninterrupted observation. Both stay on this task; no borrowed search-team relief. "
 							+ "If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. "
-							+ "1830 demob preparations do not authorize leaving before 1900.",
+							+ "1830  preparations do not authorize leaving before 1900.",
 					2, time(7, 15), time(19, 0), "on task", -1);
 		}
 		for (int i = 0; i < 4; i++) {
@@ -981,7 +981,7 @@ class MapleRidgeExampleTest {
 			}
 			String function = i == first ? task.getLeaderRole()
 					: dogIndex >= 0 && i == members.get(1) ? "Communications"
-							: dogIndex >= 0 && i == members.get(2) ? "Navigation" : "Searcher / flanker";
+							: dogIndex >= 0 && i == members.get(2) ? "Navigation" : "Ground Searcher";
 			task.getResourcesAssigned().add(taskResource(card, function));
 		}
 		if (dogIndex >= 0) {
@@ -1042,7 +1042,7 @@ class MapleRidgeExampleTest {
 		List<String> hazards = List.of("Ticks / tick-borne illness", "Falls / uneven terrain / creek edges",
 				"Summer heat / dehydration / canine heat stress");
 		List<String> mitigations = List.of(
-				"Use repellent per label, long trousers and buddy tick checks at 1000 and demob; "
+				"Use repellent per label, long trousers and buddy tick checks at 1000 and ; "
 						+ "promptly remove attached ticks with proper tool and report exposures to MEDL.",
 				"Maintain buddy contact, deliberate footing and suitable boots; avoid unstable banks and water entry. "
 						+ "Stop and report unsafe crossings; use an alternate route authorized by Ops.",
@@ -1147,7 +1147,7 @@ class MapleRidgeExampleTest {
 				"MANDATORY shaded rest break and heat-illness check from 1300 for all field teams, "
 						+ "supervised remotely by Safety/MEDL at ICP; observation buddies alternate rest "
 						+ "1300-1320/1320-1340 in adjacent shade with continuous observation and buddy contact.",
-				"End-shift demob: Safety begins tick/hydration checks at 1830 and verifies completion before release; "
+				"End-shift : Safety begins tick/hydration checks at 1830 and verifies completion before release; "
 						+ "account for all 42 people and four canines, complete task debriefs, equipment return "
 						+ "and safe-travel checks. Maintain paired containment posts through 1900; "
 						+ "verify continuing containment/relief needs with Ops before releasing anyone.");

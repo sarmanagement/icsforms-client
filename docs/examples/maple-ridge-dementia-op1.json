@@ -203,7 +203,7 @@
       "entryId" : "b92e5c56-38cd-347c-a55d-2c00e9663f32",
       "incidentArea" : "All Maple Ridge field assignments",
       "hazardsRisks" : "Ticks / tick-borne illness",
-      "mitigations" : "Use repellent per label, long trousers and buddy tick checks at 1000 and demob; promptly remove attached ticks with proper tool and report exposures to MEDL.",
+      "mitigations" : "Use repellent per label, long trousers and buddy tick checks at 1000 and ; promptly remove attached ticks with proper tool and report exposures to MEDL.",
       "equipmentPpe" : "Repellent, tick-removal kit"
     }, {
       "entryId" : "2d4f6ece-3a16-3ed2-b47d-751df1dbd8dc",
@@ -230,7 +230,7 @@
     "hazardBlocks" : [ {
       "hazard" : "Ticks / tick-borne illness",
       "incidentArea" : "All Maple Ridge field assignments",
-      "precautions" : "Use repellent per label, long trousers and buddy tick checks at 1000 and demob; promptly remove attached ticks with proper tool and report exposures to MEDL.",
+      "precautions" : "Use repellent per label, long trousers and buddy tick checks at 1000 and ; promptly remove attached ticks with proper tool and report exposures to MEDL.",
       "sourceEntryIds" : [ "b92e5c56-38cd-347c-a55d-2c00e9663f32" ],
       "needsReview" : false
     }, {
@@ -350,7 +350,7 @@
       "supplies" : "Water, sun protection, repellent per label, tick-removal kit",
       "remarks" : "FICTIONAL EXERCISE; directly supervised by Ops; on task",
       "notes" : "",
-      "assignment" : "Establish observation at R1 north gate by 0800, maintain through 1900; report sightings. Not an impermeable perimeter. Parker Elm observes while Remy Shore rests in adjacent shaded shelter 1300-1320; reverse roles 1320-1340. Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact and uninterrupted observation. Both stay on this task; no borrowed search-team relief. If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. 1830 demob preparations do not authorize leaving before 1900.",
+      "assignment" : "Establish observation at R1 north gate by 0800, maintain through 1900; report sightings. Not an impermeable perimeter. Parker Elm observes while Remy Shore rests in adjacent shaded shelter 1300-1320; reverse roles 1320-1340. Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact and uninterrupted observation. Both stay on this task; no borrowed search-team relief. If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. 1830  preparations do not authorize leaving before 1900.",
       "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "481a1f2a-bc26-341e-8fc7-60b4ebf0f153" ]
     }, {
       "assignmentId" : "a9f45271-df3c-358c-86e1-d7571f439cd5",
@@ -367,7 +367,7 @@
       "supplies" : "Water, sun protection, repellent per label, tick-removal kit",
       "remarks" : "FICTIONAL EXERCISE; directly supervised by Ops; on task",
       "notes" : "",
-      "assignment" : "Establish observation at R2 east footbridge by 0800, maintain through 1900; report sightings. Not an impermeable perimeter. Sage Linden observes while Toby Flint rests in adjacent shaded shelter 1300-1320; reverse roles 1320-1340. Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact and uninterrupted observation. Both stay on this task; no borrowed search-team relief. If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. 1830 demob preparations do not authorize leaving before 1900.",
+      "assignment" : "Establish observation at R2 east footbridge by 0800, maintain through 1900; report sightings. Not an impermeable perimeter. Sage Linden observes while Toby Flint rests in adjacent shaded shelter 1300-1320; reverse roles 1320-1340. Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact and uninterrupted observation. Both stay on this task; no borrowed search-team relief. If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. 1830  preparations do not authorize leaving before 1900.",
       "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "481a1f2a-bc26-341e-8fc7-60b4ebf0f153" ]
     }, {
       "assignmentId" : "ae28f7f2-ea1e-3605-afa5-854db77e537a",
@@ -653,22 +653,22 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Alex Fern",
       "cardType" : "PERSONNEL",
       "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Blair Moss",
       "cardType" : "PERSONNEL",
       "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Cameron Lark",
       "cardType" : "PERSONNEL",
@@ -747,22 +747,22 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Elliot Pine",
       "cardType" : "PERSONNEL",
       "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Frankie Cove",
       "cardType" : "PERSONNEL",
       "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Gray Rowan",
       "cardType" : "PERSONNEL",
@@ -841,22 +841,22 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "bdedd84f-dd65-3b83-937b-10617106c57a"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Indigo Lake",
       "cardType" : "PERSONNEL",
       "resourceId" : "d2da7418-90c7-3427-b463-f884113e2279"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Jules Meadow",
       "cardType" : "PERSONNEL",
       "resourceId" : "ac05e257-0729-3cde-81bf-88f82cc760e5"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Kai Willow",
       "cardType" : "PERSONNEL",
@@ -915,7 +915,7 @@
     "resourceIdentifier" : "Observation 1",
     "leaderRole" : "Leader",
     "leader" : "Parker Elm",
-    "assignment" : "Establish observation at R1 north gate by 0800, maintain through 1900; report sightings. Not an impermeable perimeter. Parker Elm observes while Remy Shore rests in adjacent shaded shelter 1300-1320; reverse roles 1320-1340. Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact and uninterrupted observation. Both stay on this task; no borrowed search-team relief. If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. 1830 demob preparations do not authorize leaving before 1900.",
+    "assignment" : "Establish observation at R1 north gate by 0800, maintain through 1900; report sightings. Not an impermeable perimeter. Parker Elm observes while Remy Shore rests in adjacent shaded shelter 1300-1320; reverse roles 1320-1340. Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact and uninterrupted observation. Both stay on this task; no borrowed search-team relief. If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. 1830  preparations do not authorize leaving before 1900.",
     "contact" : "MR SAR 1",
     "branch" : "",
     "division" : "",
@@ -935,8 +935,8 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "d450225e-9ba5-3fda-bdee-64dfcd332418"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Remy Shore",
       "cardType" : "PERSONNEL",
@@ -995,7 +995,7 @@
     "resourceIdentifier" : "Observation 2",
     "leaderRole" : "Leader",
     "leader" : "Sage Linden",
-    "assignment" : "Establish observation at R2 east footbridge by 0800, maintain through 1900; report sightings. Not an impermeable perimeter. Sage Linden observes while Toby Flint rests in adjacent shaded shelter 1300-1320; reverse roles 1320-1340. Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact and uninterrupted observation. Both stay on this task; no borrowed search-team relief. If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. 1830 demob preparations do not authorize leaving before 1900.",
+    "assignment" : "Establish observation at R2 east footbridge by 0800, maintain through 1900; report sightings. Not an impermeable perimeter. Sage Linden observes while Toby Flint rests in adjacent shaded shelter 1300-1320; reverse roles 1320-1340. Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact and uninterrupted observation. Both stay on this task; no borrowed search-team relief. If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. 1830  preparations do not authorize leaving before 1900.",
     "contact" : "MR SAR 1",
     "branch" : "",
     "division" : "",
@@ -1015,8 +1015,8 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "3f18ee65-4e2c-3baf-8b3a-8d743ade9cc6"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Toby Flint",
       "cardType" : "PERSONNEL",
@@ -1109,8 +1109,8 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "b2d669bd-8189-3993-bc42-8efcdd1f905d"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Yael Frost",
       "cardType" : "PERSONNEL",
@@ -1210,8 +1210,8 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "56634ec9-5293-3129-8b90-628cfa2089fb"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Briar Snow",
       "cardType" : "PERSONNEL",
@@ -1311,8 +1311,8 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "39c9e0e7-5877-35fa-b1e1-ab1458037071"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Noel Spruce",
       "cardType" : "PERSONNEL",
@@ -1412,8 +1412,8 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "e4180476-0446-3bcf-b92a-7873b3734af0"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Nico Dawn",
       "cardType" : "PERSONNEL",
@@ -1499,50 +1499,50 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Alex Fern",
       "cardType" : "PERSONNEL",
       "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Blair Moss",
       "cardType" : "PERSONNEL",
       "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Cameron Lark",
       "cardType" : "PERSONNEL",
       "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Dana Birch",
       "cardType" : "PERSONNEL",
       "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Elliot Pine",
       "cardType" : "PERSONNEL",
       "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Frankie Cove",
       "cardType" : "PERSONNEL",
       "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Gray Rowan",
       "cardType" : "PERSONNEL",
@@ -1621,50 +1621,50 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Alex Fern",
       "cardType" : "PERSONNEL",
       "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Blair Moss",
       "cardType" : "PERSONNEL",
       "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Cameron Lark",
       "cardType" : "PERSONNEL",
       "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Dana Birch",
       "cardType" : "PERSONNEL",
       "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Elliot Pine",
       "cardType" : "PERSONNEL",
       "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Frankie Cove",
       "cardType" : "PERSONNEL",
       "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Gray Rowan",
       "cardType" : "PERSONNEL",
@@ -1743,50 +1743,50 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "bdedd84f-dd65-3b83-937b-10617106c57a"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Indigo Lake",
       "cardType" : "PERSONNEL",
       "resourceId" : "d2da7418-90c7-3427-b463-f884113e2279"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Jules Meadow",
       "cardType" : "PERSONNEL",
       "resourceId" : "ac05e257-0729-3cde-81bf-88f82cc760e5"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Kai Willow",
       "cardType" : "PERSONNEL",
       "resourceId" : "7c0a05fe-39f8-3691-91e7-97d259b854b8"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Oakley Rain",
       "cardType" : "PERSONNEL",
       "resourceId" : "53228caf-ae83-3650-8b4b-d171dd44aea5"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Emery Reed",
       "cardType" : "PERSONNEL",
       "resourceId" : "d4e8580a-6603-3608-bf9a-043b56ca6654"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Finley Stone",
       "cardType" : "PERSONNEL",
       "resourceId" : "a10b3686-aecf-303d-8665-a49e45d2af3e"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Hayden Marsh",
       "cardType" : "PERSONNEL",
@@ -1865,15 +1865,15 @@
       "cardType" : "PERSONNEL",
       "resourceId" : "152379a5-1884-3538-822c-9254139d9dad"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Micah Ash",
       "cardType" : "PERSONNEL",
       "resourceId" : "39c9e0e7-5877-35fa-b1e1-ab1458037071"
     }, {
-      "function" : "Searcher / flanker",
-      "icsPosition" : "Searcher / flanker",
+      "function" : "Ground Searcher",
+      "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Noel Spruce",
       "cardType" : "PERSONNEL",
@@ -1971,7 +1971,7 @@
     "status" : "Open"
   }, {
     "number" : 4,
-    "item" : "End-shift demob: Safety begins tick/hydration checks at 1830 and verifies completion before release; account for all 42 people and four canines, complete task debriefs, equipment return and safe-travel checks. Maintain paired containment posts through 1900; verify continuing containment/relief needs with Ops before releasing anyone.",
+    "item" : "End-shift : Safety begins tick/hydration checks at 1830 and verifies completion before release; account for all 42 people and four canines, complete task debriefs, equipment return and safe-travel checks. Maintain paired containment posts through 1900; verify continuing containment/relief needs with Ops before releasing anyone.",
     "poc" : "Jordan Reed (Safety)",
     "briefedToPoc" : true,
     "startDate" : "2026-07-18T11:00:00",
