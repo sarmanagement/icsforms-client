@@ -137,7 +137,7 @@ class MapleRidgeExampleTest {
 					data.getIncidentLocations().stream().map(IncidentLocation::getType).toList());
 			assertEquals(List.of("icp", "staging", "base", "ipp").stream().map(s -> id("location-" + s)).toList(),
 					data.getIncidentLocations().stream().map(IncidentLocation::getId).toList());
-			assertEquals(List.of(ICP, STAGING, "Base (supply and rehab) colocated with " + ICP, IPP),
+			assertEquals(List.of(ICP, STAGING, "Supply / recovery base colocated with " + ICP, IPP),
 					data.getIncidentLocations().stream().map(IncidentLocation::getName).toList());
 			assertEquals(List.of("50 Civic Road, fictional Maple Ridge, MA", "20 Park Road, fictional Maple Ridge, MA",
 					"50 Civic Road, fictional Maple Ridge, MA", "1 Trail Lane, fictional Maple Ridge, MA"),
