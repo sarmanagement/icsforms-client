@@ -304,7 +304,7 @@ class LocalRepositoryTest {
 	}
 
 	/**
-	 * Verifies structured PDF exports are generated and non-empty.
+	 * Verifies structured PDF exports include a returned task's debrief and are non-empty.
 	 *
 	 * @throws Exception
 	 *             when temp file setup fails.
@@ -312,6 +312,7 @@ class LocalRepositoryTest {
 	@Test
 	void pdfExportsAreGenerated() throws Exception {
 		AppData data = sampleData();
+		data.getSarTaskAssignments().get(0).setTaskLifecycleStatus("returned");
 		PdfExportService exportService = new PdfExportService(new Ics201PdfRenderer(), new Ics202PdfRenderer(),
 				new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer());
 		Path outputDir = Files.createTempDirectory("icsforms-pdf");
