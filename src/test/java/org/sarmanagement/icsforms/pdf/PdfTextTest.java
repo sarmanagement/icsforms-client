@@ -217,6 +217,7 @@ class PdfTextTest {
 		AppData data = new AppData();
 		SarTaskAssignment task = new SarTaskAssignment();
 		task.setAssignmentId("task-a");
+		task.setTaskLifecycleStatus("returned");
 		data.getSarTaskAssignments().add(task);
 		ClueLogEntry clue = new ClueLogEntry();
 		clue.setAssignmentId("other-task");

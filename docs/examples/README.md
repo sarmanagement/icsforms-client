@@ -18,25 +18,28 @@ resources, permissions and a locally approved safety/medical/communications plan
    remains unchanged. This example is tested to import without errors or warnings.
 2. The incident opens in **SAR**, **DURING_OP**, with
    **Operational period active** recorded. The summer operational period is
-   July 18, 2026, **0700–1900 America/New_York**. Entries represent an **0800
+   July 18, 2026, **0700–1900 America/New_York**. Entries represent an **0815
    exercise snapshot**: later work and reminders are planned, not accomplished.
    JSON timestamps follow the application's UTC storage convention (the
    operational period is stored as 1100–2300 UTC); configured display-timezone
    conversion keeps the forms aligned with the local-time objectives/reminders.
 3. Review ICS 202 objectives, the flat organization, primary ICS 204, linked SAR
-   tasks, T-cards, ICS 205/205A, ICS 206, ICS 215A/208, ICS 214 and ICS 233-CG.
+   tasks, T-cards, ICS 205/205A, human ICS 206 and adapted ICS 206CANINE,
+   ICS 215A/208, ICS 214 and ICS 233-CG.
    Export individual PDFs or the IAP bundle to inspect their relationships.
 
 ### Scenario and deliberate limits
 
 The fictional missing adult has dementia and wandered from the residence/IPP
-at **1 Trail Lane**. Staging and the aid-supply/rendezvous post are at the
+at **1 Trail Lane**. Staging and the ground ambulance rendezvous are at the
 community park pavilion, **20 Park Road, 0.8 km west of IPP**. All six command
 staff work at the separate **ICP, county community center, 50 Civic Road,
 1.5 km west of IPP**; MEDL coordinates medical requests from ICP rather than
 staffing an additional field post. Shared incident locations include the ICP,
-staging, residence/IPP (Other), and a **supply / recovery Base colocated at ICP**
-for water resupply and recovery coordination. Staff retain their organizational
+staging, residence/IPP (Other), and **Base (supply and rehab) colocated with ICP**
+at the same **50 Civic Road** address. Base provides water resupply, heat rehab
+coordination and the human first-aid supplies/cache, **not a staffed medical
+team**; the human aid station is not at staging. Staff retain their organizational
 roles and ICP address; status **ICP** puts them in the **ICP rack column**, not
 Assigned (status matches the existing board header before location).
 Assignment team leaders are not duplicated as additional organizational positions;
@@ -65,12 +68,15 @@ active (G1-A, G1-B, G2-A, two posts, K1 and K2). G1 splits into **four-person
 G1-A (S1, route A, MR-P01–04)** and **four-person G1-B (S2, route B, MR-P05–08)**;
 **four-person G2-A (S3, route C, MR-P09–12)** covers the third route. All three
 routes run **0715–1000 concurrently**. G2's **MR-P13–15 completed visual tracker
-task T1 around IPP 0635–0655**, after their 0630 check-in and before this
-operational period; the returned task is retained in the IAP. Their **0700 debrief**
+task T1 around IPP 0700–0800**, after their 0630 check-in;
+the returned task retains its stable **T1** label and task/assignment identities in the IAP.
+They **departed staging at 0700**, were **on task at 0705**, reported a clue at
+**0730**, **completed the task and began returning at 0750**, and **returned to
+staging at 0800**. Their **0810 debrief**
 records an actual **definitely human sign line leading north**, but **no clear
 prints or sole pattern** and no verified association with the missing adult.
 The potential clue was **flagged on Ops instruction** and is linked to T1 in
-the clue log; follow-up is **pending, not yet undertaken at 0800**. Its limited
+the clue log; follow-up is **pending, not yet undertaken at 0815**. Its limited
 coverage and observed hazards are recorded, not extrapolated to an area search.
 These three trackers are now **Available at staging**
 for handler **MR-P29 (Devon Heath)** on planned K3 at 1030; they are actual K3
@@ -83,8 +89,19 @@ MR-P09–12, MR-P16 and released support MR-P30–32; MR-P13–15 stay with K3.
 No member has overlapping tasks, including planned tasks.
 There are **13 linked task/ICS 204 rows**: one returned tracker task, seven
 on-task assignments and five planned tasks. Only the returned task has a
-completed debrief and named debrief supervisor. Start/end times on other tasks
-are planned schedule times, not completed actual time on assignment.
+completed debrief and named debrief supervisor. All other tasks have blank
+debrief notes, POD, coverage gaps, observed hazards, supervisor, debrief preparer
+and debrief timestamp; front-side preparation and planned assignment times remain.
+Start/end times are assignment windows, not a claim that unfinished work is
+complete; T1's 0700–0800 window includes travel.
+ICS 214 records **24 chronological entries**, beginning with **0630 command
+established and all 42 people checked in, including six IMT**. Each of the seven
+on-task assignments has its own assignment-linked **departed staging** and
+**on task** entries: S1/S2/S3 and R1/R2 at **0710/0715**, K1/K2 at **0725/0730**.
+T1 has separate departure, on-task, clue, completion/returning, returned and
+debrief entries matching the times above. Event types use the model's built-in
+identities and resource labels match their linked tasks. Planned tasks have **no
+invented actual departure or on-task events**. The final snapshot is at **0815**.
 Each canine task assigns **Leader/Handler, Communications, Navigation and
 Searcher / flanker** to its four people, and **Live Find K9** to its equipment card.
 
@@ -107,14 +124,38 @@ at the IC T-card's fictional phone **202-555-0101**, and **Ops Morgan Vale**
 on **MR SAR 1 / 155.160 MHz**, linked to the ICS 205 channel by identity.
 
 ICS 215A and ICS 208 carry linked tick, fall and heat mitigations. The fictional
-ground-only medical plan includes an aid post, ambulance service and hospital.
+ground-only human medical plan includes the **unstaffed Base aid-supply cache**,
+a simulated ambulance service, a community hospital and an additional **fictional
+regional trauma center** marked as a trauma center. MEDL coordinates from ICP;
+the cache is not an extra staffed resource. Ground extraction and the ambulance
+rendezvous at staging are arranged by Ops/MEDL, distinct from the Base cache.
+
+The **active adapted ICS 206CANINE is included in the IAP**. Existing **MR-P25
+Zion Clover**, K2's **Leader/Handler**, is also the explicitly linked **onsite
+DVM**; their personnel card carries the fictional credential and notes. They
+remain tasked on K2, **not an extra person or dedicated veterinary post**:
+Ops must release or retask them before veterinary assistance. There is **no
+canine aid station or canine transport service** (both free-text fields and
+structured transport entries remain empty). The emergency process is limited
+to **canine first aid within training, contact Ops, Ops contacts the DVM, and
+Ops arranges care and transport**. Two fictional **24-hour** receiving facilities,
+Cedar Vale Emergency Veterinary Hospital and Oak Hollow Veterinary Emergency
+Center, have stable identities and fictional 555 numbers. Their **25- and
+45-mile** distances from staging are stored as **40,233.6 and 72,420.48 meters**
+and explicitly labeled hypothetical exercise assumptions, **not real route
+measurements, verified availability or operational medical advice**.
+
 The enabled ICS 233-CG action tracker uses actual item/POC/briefing/start/target/
 status fields for **first tick checks for ALL teams by 1000 (Safety), hourly
-hydration/electrolyte checks and ICP water resupply by 0900 (Planning/Safety),
-mandatory shaded rest and heat-illness checks from 1300 (Safety/MEDL; observation
-buddies alternate 1300–1320 and 1320–1340), and
+hydration/electrolyte checks and Base water resupply by 0900 (Planning/Safety),
+mandatory Base heat rehab with shaded rest and heat-illness checks from 1300
+(Safety/MEDL; Ops staggers search-team returns), and
 end-shift tick/hydration demobilization preparations from 1830 (Safety)**;
-rim posts remain staffed through 1900. Blank completion dates intentionally
+observation buddies alternate local shaded rest **1300–1320 and 1320–1340**,
+maintaining buddy contact and uninterrupted observation. Ops must arrange
+qualified relief **before post pairs travel to Base**; never send both observers
+away and leave a post unstaffed. Rim posts remain staffed through 1900.
+Blank completion dates intentionally
 mean these future reminders are still open.
 
 ### Rebuild and verify

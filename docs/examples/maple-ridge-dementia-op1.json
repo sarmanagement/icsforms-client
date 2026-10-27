@@ -119,7 +119,7 @@
     "dateInitiated" : null,
     "timeInitiated" : null,
     "mapSketch" : "",
-    "situationSummary" : "FICTIONAL ILLUSTRATION ONLY; not an operational plan. Ellis Linden, fictional 74-year-old adult with dementia, wandered from a residence at Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA; last seen there at 0600 July 18. Staging: Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP). Command staff: ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP). Wearing a blue shirt and tan trousers; may not respond to calls. Returned three-person visual tracker task T1 (0635-0655) reported a definitely human sign line north from IPP, with no clear prints or sole pattern; potential clue flagged on Ops instruction, subject association unverified and follow-up not yet undertaken at 0800. Summer forecast 27-31 C, humid, light wind; shaded woodland, uneven trails, creek edges and ticks. No aircraft. Koster hub/spokes/rim: protect the residence/last-known-point hub; stage away from the IPP; search travel spokes promptly; observe likely rim exits, then search bounded areas and familiar attractors. G1 splits into four-person G1-A/G1-B on routes A/B; four-person G2-A takes route C, all 0715-1000. Returned trackers MR-P13/MR-P14/MR-P15 await K3 at staging; one G2 member and three released K3 support remain reserve until the eight-person G2 grid reassembles at 1030. G1 reassembles eight for attractors then grid. All names, agencies, geography, contacts, capabilities and approvals are invented.",
+    "situationSummary" : "FICTIONAL ILLUSTRATION ONLY; not an operational plan. Ellis Linden, fictional 74-year-old adult with dementia, wandered from a residence at Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA; last seen there at 0600 July 18. Staging: Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP). Command staff: ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP). Wearing a blue shirt and tan trousers; may not respond to calls. Returned three-person visual tracker task T1 (0700-0800), debriefed at 0810, reported a definitely human sign line north from IPP, with no clear prints or sole pattern; potential clue flagged on Ops instruction, subject association unverified and follow-up not yet undertaken at the 0815 snapshot. Summer forecast 27-31 C, humid, light wind; shaded woodland, uneven trails, creek edges and ticks. No aircraft. Koster hub/spokes/rim: protect the residence/last-known-point hub; stage away from the IPP; search travel spokes promptly; observe likely rim exits, then search bounded areas and familiar attractors. G1 splits into four-person G1-A/G1-B on routes A/B; four-person G2-A takes route C, all 0715-1000. Returned trackers MR-P13/MR-P14/MR-P15 await K3 at staging; one G2 member and three released K3 support remain reserve until the eight-person G2 grid reassembles at 1030. G1 reassembles eight for attractors then grid. All names, agencies, geography, contacts, capabilities and approvals are invented.",
     "currentObjectives" : [ ],
     "currentActions" : [ ],
     "resources" : [ ],
@@ -178,9 +178,9 @@
       "predecessorObjectiveId" : ""
     } ],
     "commandEmphasis" : "FICTIONAL EXERCISE ONLY. Prioritize responder/public safety and protect IPP scent. Hasty-search likely travel corridors and familiar attractors; maintain containment. Search the high-probability inner 25% zone to coverage approximately 1; reassess heat and tick hazards.",
-    "situationalAwareness" : "0800 July 18, 2026 exercise snapshot. Fictional Ellis Linden, 74-year-old adult with dementia, last seen 0600 July 18 at Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA. Wearing a blue shirt and tan trousers; may hide or not answer. T1's three visual trackers returned after 0635-0655 work around IPP: a definitely human sign line led north, with no clear prints or sole pattern. This potential clue was flagged on Ops instruction; subject association remains unverified and follow-up has not yet been undertaken. Forecast 27-31 C, humid, light wind; shaded woodland, uneven trails and creek edges. Staging: Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP). Separate command post: ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP). Supply / recovery base colocated at ICP for water resupply and recovery coordination. All teams report directly to Ops; no branches, divisions or groups. 36 human field searchers INCLUDE four handlers; four dogs are equipment, not people. Six IMT at ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); IC Avery Wren is Sheriff of Fictional Pine County Sheriff's Office. No aircraft. Seven teams active at 0800; returned trackers are available at staging for K3 at 1030. Ops must reassess span before later launches and stagger/pause work if direct supervision becomes unsafe; eight teams is not assumed manageable. Koster hub/spokes/rim guides prioritization, not a guarantee of containment. No negative search guarantees absence. Summer heat and ticks require continuous reassessment.",
+    "situationalAwareness" : "0815 July 18, 2026 exercise snapshot. Fictional Ellis Linden, 74-year-old adult with dementia, last seen 0600 July 18 at Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA. Wearing a blue shirt and tan trousers; may hide or not answer. T1's three visual trackers returned at 0800 after 0700-0800 work around IPP, debriefed at 0810: a definitely human sign line led north, with no clear prints or sole pattern. This potential clue was flagged on Ops instruction; subject association remains unverified and follow-up has not yet been undertaken. Forecast 27-31 C, humid, light wind; shaded woodland, uneven trails and creek edges. Staging: Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP). Separate command post: ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP). Base (supply and rehab) colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP) provides water resupply, an unstaffed human aid-supply cache and heat rehab coordination. All teams report directly to Ops; no branches, divisions or groups. 36 human field searchers INCLUDE four handlers; four dogs are equipment, not people. Six IMT at ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); IC Avery Wren is Sheriff of Fictional Pine County Sheriff's Office. No aircraft. Seven teams active at 0815; returned trackers are available at staging for K3 at 1030. Ops must reassess span before later launches and stagger/pause work if direct supervision becomes unsafe; eight teams is not assumed manageable. Koster hub/spokes/rim guides prioritization, not a guarantee of containment. No negative search guarantees absence. Summer heat and ticks require continuous reassessment.",
     "siteSafetyPlanRequired" : false,
-    "incidentActionPlanAttachments" : [ "ICS 203", "ICS 204", "ICS 205", "ICS 205A", "ICS 206", "ICS 207", "ICS 208", "ICS 214", "ICS 215A", "ICS 233-CG", "SAR Task Assignment" ],
+    "incidentActionPlanAttachments" : [ "ICS 203", "ICS 204", "ICS 205", "ICS 205A", "ICS 206", "ICS 206CANINE", "ICS 207", "ICS 208", "ICS 214", "ICS 215A", "ICS 233-CG", "SAR Task Assignment" ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
     "preparedBySignature" : "",
@@ -215,7 +215,7 @@
       "entryId" : "80546642-d7b4-3256-b0d4-f6e2c334a503",
       "incidentArea" : "All Maple Ridge field assignments",
       "hazardsRisks" : "Summer heat / dehydration / canine heat stress",
-      "mitigations" : "ICP water resupply by 0900; hourly hydration/electrolyte checks for all field teams. Mandatory shaded rest and heat-illness checks from 1300, plus rest as needed; observation buddies alternate 1300-1320/1320-1340 in adjacent shade, retaining buddy contact and uninterrupted observation; repeat at least hourly. Canine 20-minute work/cooling cycles; handlers monitor dogs continuously. Stop work for heat illness signs; notify MEDL, cool safely and request assistance.",
+      "mitigations" : "Water resupply at Base (supply and rehab) colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP) by 0900; hourly hydration/electrolyte checks for all field teams. Mandatory heat rehab with shaded rest and heat-illness checks from 1300 at Base, plus rest as needed; Ops staggers search-team returns to Base. Containment posts remain staffed: observation buddies alternate 1300-1320/1320-1340 in adjacent shade, retaining buddy contact and uninterrupted observation; repeat at least hourly. Ops must arrange qualified relief before either post pair travels to Base; never send both observers away without relief. Canine 20-minute work/cooling cycles; handlers monitor dogs continuously. Stop work for heat illness signs; notify MEDL, cool safely and request assistance.",
       "equipmentPpe" : "Water, shade, canine cooling supplies"
     } ],
     "includeInIap" : true,
@@ -226,7 +226,7 @@
     "authorRole" : "SAFETY_OFFICER",
     "messageMode" : "HAZARD_PRECAUTIONS",
     "freeText" : "",
-    "generalRequirements" : "FICTIONAL EXERCISE ONLY. All personnel briefed at 0700. Stop work for unsafe conditions; immediately notify Ops and Safety. 30-minute radio/accountability checks. MEDL coordinates from ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); aid supplies at staging. Emergency traffic takes priority.",
+    "generalRequirements" : "FICTIONAL EXERCISE ONLY. All personnel briefed at 0700. Stop work for unsafe conditions; immediately notify Ops and Safety. 30-minute radio/accountability checks. MEDL coordinates from ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); human aid supplies and heat rehab at Base (supply and rehab) colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP), not staging. The aid-supply cache is unstaffed; no dedicated medical post. Emergency traffic takes priority.",
     "hazardBlocks" : [ {
       "hazard" : "Ticks / tick-borne illness",
       "incidentArea" : "All Maple Ridge field assignments",
@@ -242,7 +242,7 @@
     }, {
       "hazard" : "Summer heat / dehydration / canine heat stress",
       "incidentArea" : "All Maple Ridge field assignments",
-      "precautions" : "ICP water resupply by 0900; hourly hydration/electrolyte checks for all field teams. Mandatory shaded rest and heat-illness checks from 1300, plus rest as needed; observation buddies alternate 1300-1320/1320-1340 in adjacent shade, retaining buddy contact and uninterrupted observation; repeat at least hourly. Canine 20-minute work/cooling cycles; handlers monitor dogs continuously. Stop work for heat illness signs; notify MEDL, cool safely and request assistance.",
+      "precautions" : "Water resupply at Base (supply and rehab) colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP) by 0900; hourly hydration/electrolyte checks for all field teams. Mandatory heat rehab with shaded rest and heat-illness checks from 1300 at Base, plus rest as needed; Ops staggers search-team returns to Base. Containment posts remain staffed: observation buddies alternate 1300-1320/1320-1340 in adjacent shade, retaining buddy contact and uninterrupted observation; repeat at least hourly. Ops must arrange qualified relief before either post pair travels to Base; never send both observers away without relief. Canine 20-minute work/cooling cycles; handlers monitor dogs continuously. Stop work for heat illness signs; notify MEDL, cool safely and request assistance.",
       "sourceEntryIds" : [ "80546642-d7b4-3256-b0d4-f6e2c334a503" ],
       "needsReview" : false
     } ],
@@ -503,11 +503,11 @@
       "supplies" : "Water, sun protection, repellent per label, tick-removal kit",
       "remarks" : "FICTIONAL EXERCISE; directly supervised by Ops; returned",
       "notes" : "",
-      "assignment" : "Three-person visual tracker examination around residence/IPP to establish direction of travel. Protect sign and scent, avoid trampling, report potential clues to Ops; return to staging for debrief before further tasking. Completed pre-period task carried into this IAP.",
+      "assignment" : "Three-person visual tracker examination around residence/IPP to establish direction of travel. Protect sign and scent, avoid trampling, report potential clues to Ops; return to staging for debrief before further tasking. Completed task retained in this IAP.",
       "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "87676fc3-e4d5-30f6-86eb-a876c3222e9b" ]
     } ],
-    "sharedWorkAssignment" : "Koster hub/spokes/rim. All teams report directly to Ops; protect the hub. No aircraft. Human field strength 36 including four canine handlers; dogs do not add personnel. G1-A/G1-B search routes A/B concurrently; G2-A searches C, four people each, 0715-1000. MR-P13/MR-P14/MR-P15 completed visual tracker task T1 around IPP 0635-0655, debriefed at 0700, and are available at staging for K3 at 1030 with handler MR-P29. Released K3 support MR-P30/MR-P31/MR-P32 and G2 member MR-P16 remain staging reserve until joining MR-P09 through MR-P12 for eight-person G2 grid at 1030. G1 reassembles eight for attractors at 1030 and grid at 1230. IPP: Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA. ICP: ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP). Staging is separate from both.",
-    "specialInstructions" : "FICTIONAL EXERCISE ONLY. Calm approach to vulnerable adult; do not chase. Preserve clues, report location immediately, avoid contaminating scent articles. T1 reported a definitely human sign line north of IPP, with no clear prints or sole pattern; Ops instructed trackers to flag the potential clue and return. Subject association unverified; follow-up not yet undertaken at 0800. Preserve the flagged location pending Ops direction. Check in every 30 minutes. Buddy contact, tick checks, water and shaded rest per ICS 208. Seven teams initially active; Ops reassesses span before later launches and staggers/pauses work rather than assuming eight active teams manageable. No simultaneous tasks for any member.",
+    "sharedWorkAssignment" : "Koster hub/spokes/rim. All teams report directly to Ops; protect the hub. No aircraft. Human field strength 36 including four canine handlers; dogs do not add personnel. G1-A/G1-B search routes A/B concurrently; G2-A searches C, four people each, 0715-1000. MR-P13/MR-P14/MR-P15 completed visual tracker task T1 around IPP 0700-0800, debriefed at 0810, and are available at staging for K3 at 1030 with handler MR-P29. Released K3 support MR-P30/MR-P31/MR-P32 and G2 member MR-P16 remain staging reserve until joining MR-P09 through MR-P12 for eight-person G2 grid at 1030. G1 reassembles eight for attractors at 1030 and grid at 1230. IPP: Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA. ICP: ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP). Staging is separate from both.",
+    "specialInstructions" : "FICTIONAL EXERCISE ONLY. Calm approach to vulnerable adult; do not chase. Preserve clues, report location immediately, avoid contaminating scent articles. T1 reported a definitely human sign line north of IPP, with no clear prints or sole pattern; Ops instructed trackers to flag the potential clue and return. Subject association unverified; follow-up not yet undertaken at 0815. Preserve the flagged location pending Ops direction. Check in every 30 minutes. Buddy contact, tick checks, water and shaded rest per ICS 208. Seven teams initially active; Ops reassesses span before later launches and staggers/pauses work rather than assuming eight active teams manageable. No simultaneous tasks for any member.",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
@@ -575,54 +575,246 @@
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
     "resourcesAssigned" : [ ],
     "activityLog" : [ {
-      "entryId" : "4b17ddc6-a5b1-362c-9c12-2727e830c379",
+      "entryId" : "7f6e6349-c47b-3293-a9a3-7680408cf158",
+      "timestamp" : "2026-07-18T10:30:00",
+      "eventTypeId" : "FREE_TEXT",
+      "resourceIdentifier" : "Ops",
+      "assignmentId" : "",
+      "notableActivity" : "0630 command established at ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); all 42 people checked in: 36 field including four handlers and six IMT (IC, Ops, Planning, Safety, COML, MEDL); four dogs checked in as equipment.",
+      "struckOut" : false
+    }, {
+      "entryId" : "bb374e96-8780-3f11-b5b2-9c2210fe3211",
       "timestamp" : "2026-07-18T11:00:00",
+      "eventTypeId" : "FREE_TEXT",
+      "resourceIdentifier" : "Ops",
+      "assignmentId" : "",
+      "notableActivity" : "0700 exercise briefing: objectives, dementia-aware approach, tick/fall/heat controls; human aid cache and heat rehab at Base (supply and rehab) colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP). All field teams report directly to Ops.",
+      "struckOut" : false
+    }, {
+      "entryId" : "a7653f19-31cc-3a65-aa30-310166a23430",
+      "timestamp" : "2026-07-18T11:00:00",
+      "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
+      "resourceIdentifier" : "Visual trackers",
+      "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
+      "notableActivity" : "0700 T1 visual trackers MR-P13/MR-P14/MR-P15 departed staging for the residence/IPP.",
+      "struckOut" : false
+    }, {
+      "entryId" : "29017e13-14f5-33a4-abff-2b37d3cf753b",
+      "timestamp" : "2026-07-18T11:05:00",
+      "eventTypeId" : "RESOURCE_ON_TASK",
+      "resourceIdentifier" : "Visual trackers",
+      "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
+      "notableActivity" : "0705 T1 on task around residence/IPP; all three trackers accounted for.",
+      "struckOut" : false
+    }, {
+      "entryId" : "199ca71d-cb6c-3e09-af14-ffa1c01a8cdb",
+      "timestamp" : "2026-07-18T11:10:00",
+      "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
+      "resourceIdentifier" : "G1-A",
+      "assignmentId" : "66f31202-4151-3cb9-9f78-32960ef8c534",
+      "notableActivity" : "0710 S1 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel.",
+      "struckOut" : false
+    }, {
+      "entryId" : "d6ea2879-f7d0-325a-8bb3-2a745dad1627",
+      "timestamp" : "2026-07-18T11:10:00",
+      "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
+      "resourceIdentifier" : "G1-B",
+      "assignmentId" : "6db03356-9c41-3d65-980d-bf901ff49f86",
+      "notableActivity" : "0710 S2 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel.",
+      "struckOut" : false
+    }, {
+      "entryId" : "be0b5f78-86ba-30a8-b702-9a4d6a7129b3",
+      "timestamp" : "2026-07-18T11:10:00",
+      "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
+      "resourceIdentifier" : "G2-A",
+      "assignmentId" : "eed3e57a-36b3-3c4c-b829-6d07c54a5f6a",
+      "notableActivity" : "0710 S3 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel.",
+      "struckOut" : false
+    }, {
+      "entryId" : "eacf9569-cdba-3bc9-869f-ab9dc1d39117",
+      "timestamp" : "2026-07-18T11:10:00",
+      "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
+      "resourceIdentifier" : "Observation 1",
+      "assignmentId" : "0742c0fb-deae-388a-8da4-f7dbacf4e5dc",
+      "notableActivity" : "0710 R1 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel.",
+      "struckOut" : false
+    }, {
+      "entryId" : "4eb58ff8-45b7-33b0-bdab-2d6a669dda17",
+      "timestamp" : "2026-07-18T11:10:00",
+      "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
+      "resourceIdentifier" : "Observation 2",
+      "assignmentId" : "a9f45271-df3c-358c-86e1-d7571f439cd5",
+      "notableActivity" : "0710 R2 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel.",
+      "struckOut" : false
+    }, {
+      "entryId" : "8bdca13c-46d4-3591-8164-31582b517bfa",
+      "timestamp" : "2026-07-18T11:15:00",
+      "eventTypeId" : "RESOURCE_ON_TASK",
+      "resourceIdentifier" : "G1-A",
+      "assignmentId" : "66f31202-4151-3cb9-9f78-32960ef8c534",
+      "notableActivity" : "0715 S1 on task; all assigned resources accounted for. Search commenced; report actual coverage and gaps to Ops.",
+      "struckOut" : false
+    }, {
+      "entryId" : "f8db4c9e-38bc-3f5a-a2f3-796f3acae5f8",
+      "timestamp" : "2026-07-18T11:15:00",
+      "eventTypeId" : "RESOURCE_ON_TASK",
+      "resourceIdentifier" : "G1-B",
+      "assignmentId" : "6db03356-9c41-3d65-980d-bf901ff49f86",
+      "notableActivity" : "0715 S2 on task; all assigned resources accounted for. Search commenced; report actual coverage and gaps to Ops.",
+      "struckOut" : false
+    }, {
+      "entryId" : "ce429870-fb36-35b9-b223-3130236057bb",
+      "timestamp" : "2026-07-18T11:15:00",
+      "eventTypeId" : "RESOURCE_ON_TASK",
+      "resourceIdentifier" : "G2-A",
+      "assignmentId" : "eed3e57a-36b3-3c4c-b829-6d07c54a5f6a",
+      "notableActivity" : "0715 S3 on task; all assigned resources accounted for. Search commenced; report actual coverage and gaps to Ops.",
+      "struckOut" : false
+    }, {
+      "entryId" : "6a53d96a-3fb7-3579-bde6-5f3e5b00d75f",
+      "timestamp" : "2026-07-18T11:15:00",
+      "eventTypeId" : "RESOURCE_ON_TASK",
+      "resourceIdentifier" : "Observation 1",
+      "assignmentId" : "0742c0fb-deae-388a-8da4-f7dbacf4e5dc",
+      "notableActivity" : "0715 R1 on task; all assigned resources accounted for. Containment observation established; maintain through 1900.",
+      "struckOut" : false
+    }, {
+      "entryId" : "c4f39644-d867-37ad-aa4b-2be5c956c5e4",
+      "timestamp" : "2026-07-18T11:15:00",
+      "eventTypeId" : "RESOURCE_ON_TASK",
+      "resourceIdentifier" : "Observation 2",
+      "assignmentId" : "a9f45271-df3c-358c-86e1-d7571f439cd5",
+      "notableActivity" : "0715 R2 on task; all assigned resources accounted for. Containment observation established; maintain through 1900.",
+      "struckOut" : false
+    }, {
+      "entryId" : "24774cee-4578-346d-8762-553ee34cfab6",
+      "timestamp" : "2026-07-18T11:25:00",
+      "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
+      "resourceIdentifier" : "Canine 1",
+      "assignmentId" : "ae28f7f2-ea1e-3605-afa5-854db77e537a",
+      "notableActivity" : "0725 K1 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel and dog.",
+      "struckOut" : false
+    }, {
+      "entryId" : "60202487-f193-3e72-8be1-70c533f50c54",
+      "timestamp" : "2026-07-18T11:25:00",
+      "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
+      "resourceIdentifier" : "Canine 2",
+      "assignmentId" : "ac274954-b5aa-3b4d-9851-5bbc7141beb4",
+      "notableActivity" : "0725 K2 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel and dog.",
+      "struckOut" : false
+    }, {
+      "entryId" : "75d16e89-a2ae-3939-b6b0-bbeaecb67290",
+      "timestamp" : "2026-07-18T11:30:00",
+      "eventTypeId" : "RESOURCE_ON_TASK",
+      "resourceIdentifier" : "Canine 1",
+      "assignmentId" : "ae28f7f2-ea1e-3605-afa5-854db77e537a",
+      "notableActivity" : "0730 K1 on task; all assigned resources accounted for. Search commenced; report actual coverage and gaps to Ops.",
+      "struckOut" : false
+    }, {
+      "entryId" : "44ae0946-9bff-3743-9edb-01856e90796f",
+      "timestamp" : "2026-07-18T11:30:00",
+      "eventTypeId" : "RESOURCE_ON_TASK",
+      "resourceIdentifier" : "Canine 2",
+      "assignmentId" : "ac274954-b5aa-3b4d-9851-5bbc7141beb4",
+      "notableActivity" : "0730 K2 on task; all assigned resources accounted for. Search commenced; report actual coverage and gaps to Ops.",
+      "struckOut" : false
+    }, {
+      "entryId" : "98f3391f-3ab9-3b80-b17d-73074b8acd84",
+      "timestamp" : "2026-07-18T11:30:00",
+      "eventTypeId" : "CLUE_DETECTED",
+      "resourceIdentifier" : "Visual trackers",
+      "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
+      "notableActivity" : "0730 T1 reported a definitely human sign line north, with no clear prints or sole pattern. Potential clue flagged on Ops instruction; subject association unverified, follow-up pending.",
+      "struckOut" : false
+    }, {
+      "entryId" : "89d8ecaa-ae13-3238-8671-33a5aae4af1b",
+      "timestamp" : "2026-07-18T11:50:00",
+      "eventTypeId" : "TASK_COMPLETED",
+      "resourceIdentifier" : "Visual trackers",
+      "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
+      "notableActivity" : "0750 T1 task completed; all three trackers returning to staging for debrief.",
+      "struckOut" : false
+    }, {
+      "entryId" : "71ba9d85-bba1-306b-aff3-3066877f50d1",
+      "timestamp" : "2026-07-18T12:00:00",
+      "eventTypeId" : "RESOURCE_RETURNED_STAGING",
+      "resourceIdentifier" : "Visual trackers",
+      "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
+      "notableActivity" : "0800 T1 MR-P13/MR-P14/MR-P15 returned to staging; all three accounted for, awaiting debrief.",
+      "struckOut" : false
+    }, {
+      "entryId" : "f6a06f1d-0251-3495-8017-09e1d51c0b18",
+      "timestamp" : "2026-07-18T12:00:00",
+      "eventTypeId" : "FREE_TEXT",
+      "resourceIdentifier" : "Ops",
+      "assignmentId" : "",
+      "notableActivity" : "0800 R1/R2 confirm continuing observation at north gate and east footbridge; both established at 0715. Seven teams remain on task; T1 returned. Planned tasks have not departed staging.",
+      "struckOut" : false
+    }, {
+      "entryId" : "8d09695d-8d04-37c2-927e-00550be107e5",
+      "timestamp" : "2026-07-18T12:10:00",
       "eventTypeId" : "FREE_TEXT",
       "resourceIdentifier" : "Visual trackers",
       "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
-      "notableActivity" : "0700 T1 debrief: three visual trackers MR-P13/MR-P14/MR-P15 returned after 0635-0655 examination around IPP. At 0645 reported a definitely human sign line north, with no clear prints or sole pattern. Potential clue flagged on Ops instruction; subject association unverified, follow-up not yet undertaken. Trackers available at staging for K3 at 1030.",
+      "notableActivity" : "0810 T1 debrief completed with Ops Morgan Vale. Actual assignment 07:00-08:00: departed staging at 07:00, on task at IPP at 07:05. At 07:30, a definitely human sign line led north from the residence/IPP; no clear prints or sole pattern and no subject identification. Potential clue flagged on Ops instruction; no follow-up yet. Task completed at 07:50, returning to staging; all three returned at 08:00. Debrief completed 08:10 and available for later K3 at 1030.",
       "struckOut" : false
     }, {
-      "entryId" : "790fb74b-2362-3fa0-bc24-77d0b83ef5b0",
-      "timestamp" : "2026-07-18T11:00:00",
+      "entryId" : "add8376b-d71b-30ae-82d0-d0b49798d566",
+      "timestamp" : "2026-07-18T12:15:00",
       "eventTypeId" : "FREE_TEXT",
       "resourceIdentifier" : "Ops",
       "assignmentId" : "",
-      "notableActivity" : "0700 exercise briefing: objectives, dementia-aware approach, tick/fall/heat controls; 42 people checked in: 36 field including four handlers, six IMT at ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); four canine cards.",
-      "struckOut" : false
-    }, {
-      "entryId" : "cfa07dd8-faca-3fd7-ac8e-eb5507643ba9",
-      "timestamp" : "2026-07-18T11:15:00",
-      "eventTypeId" : "FREE_TEXT",
-      "resourceIdentifier" : "Ops",
-      "assignmentId" : "",
-      "notableActivity" : "0715 four-person G1-A on S1 (A), four-person G1-B on S2 (B), four-person G2-A on S3 (C), all routes concurrent through 1000; two two-person observation teams on R1/R2. MR-P13/MR-P14/MR-P15 available at staging for K3; MR-P16 and released K3 support MR-P30/MR-P31/MR-P32 remain staging reserve until G2 grid. Residence IPP protected: Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA.",
-      "struckOut" : false
-    }, {
-      "entryId" : "247ba4ff-eedb-36d9-bc01-3f8263d54c03",
-      "timestamp" : "2026-07-18T11:30:00",
-      "eventTypeId" : "FREE_TEXT",
-      "resourceIdentifier" : "Ops",
-      "assignmentId" : "",
-      "notableActivity" : "0730 K1/K2 deployed; K3/K4 available at Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) pending 1030 launch and Ops span/heat reassessment. Seven teams active. K3 will pair handler MR-P29 with three available G2 support, not its released support.",
-      "struckOut" : false
-    }, {
-      "entryId" : "62a1412a-3ba8-3b52-891e-06239e1a0c6d",
-      "timestamp" : "2026-07-18T12:00:00",
-      "eventTypeId" : "FREE_TEXT",
-      "resourceIdentifier" : "Observation 1",
-      "assignmentId" : "0742c0fb-deae-388a-8da4-f7dbacf4e5dc",
-      "notableActivity" : "0800 R1/R2 report established at north gate and east footbridge. T1 potential clue remains flagged, subject association unverified and follow-up pending; seven teams active, T1 returned. Eight-person G1 reassembles for attractor search 1030-1200 then grid 1230-1700; eight-person G2 grid 1030-1700 planned with G2-A, MR-P16 and three released K3 support. Planning acknowledges 0900 ICP water reminder.",
+      "notableActivity" : "0815 snapshot: T1 debriefed and available at staging for K3 at 1030; clue follow-up not yet undertaken. K3/K4 remain planned pending Ops span/heat reassessment. MR-P16 and released K3 support MR-P30/MR-P31/MR-P32 remain reserve for G2 grid at 1030. G1 attractors 1030-1200 and grid 1230-1700 remain planned. Planning acknowledges 0900 water resupply at Base (supply and rehab) colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP).",
       "struckOut" : false
     } ],
     "preparedByName" : "Morgan Vale",
     "preparedByPositionTitle" : "Operations Section Chief",
     "preparedBySignature" : "",
-    "preparedDateTime" : "2026-07-18T12:00:00",
+    "preparedDateTime" : "2026-07-18T12:15:00",
     "iapPage" : "",
     "logScope" : "ASSIGNMENT_LIST"
   } ],
-  "activityEventTypes" : [ ],
+  "activityEventTypes" : [ {
+    "id" : "FREE_TEXT",
+    "label" : "Note",
+    "builtIn" : true
+  }, {
+    "id" : "RESPONDER_MEDICAL_EVENT",
+    "label" : "Responder medical event",
+    "builtIn" : true
+  }, {
+    "id" : "RESPONSE_CANINE_MEDICAL_EVENT",
+    "label" : "Response canine medical event",
+    "builtIn" : true
+  }, {
+    "id" : "CLUE_DETECTED",
+    "label" : "Clue Detected",
+    "builtIn" : true
+  }, {
+    "id" : "CLUE_REPORTED",
+    "label" : "Clue Reported",
+    "builtIn" : true
+  }, {
+    "id" : "SUBJECT_FOUND",
+    "label" : "Subject Found",
+    "builtIn" : true
+  }, {
+    "id" : "RESOURCE_ON_TASK",
+    "label" : "Resource Going on Task",
+    "builtIn" : true
+  }, {
+    "id" : "TASK_COMPLETED",
+    "label" : "Task Completed",
+    "builtIn" : true
+  }, {
+    "id" : "RESOURCE_DEPARTED_STAGING",
+    "label" : "Resource Departed Staging",
+    "builtIn" : true
+  }, {
+    "id" : "RESOURCE_RETURNED_STAGING",
+    "label" : "Resource Returned to Staging",
+    "builtIn" : true
+  } ],
   "sarTaskAssignments" : [ {
     "taskId" : "b8f63755-5e44-38b4-ac44-98adbc42cb70",
     "assignmentId" : "66f31202-4151-3cb9-9f78-32960ef8c534",
@@ -1845,7 +2037,7 @@
     "resourceIdentifier" : "Visual trackers",
     "leaderRole" : "Leader",
     "leader" : "Lane Cedar",
-    "assignment" : "Three-person visual tracker examination around residence/IPP to establish direction of travel. Protect sign and scent, avoid trampling, report potential clues to Ops; return to staging for debrief before further tasking. Completed pre-period task carried into this IAP.",
+    "assignment" : "Three-person visual tracker examination around residence/IPP to establish direction of travel. Protect sign and scent, avoid trampling, report potential clues to Ops; return to staging for debrief before further tasking. Completed task retained in this IAP.",
     "contact" : "MR SAR 1",
     "branch" : "",
     "division" : "",
@@ -1899,10 +2091,10 @@
     "preparedDateTime" : "2026-07-18T10:32:00",
     "debriefingSupervisor" : "Morgan Vale",
     "debriefingSupervisorResourceId" : "f52f18dc-2c17-3a7e-9662-21f3259cec85",
-    "assignmentStart" : "2026-07-18T10:35:00",
-    "assignmentEnd" : "2026-07-18T10:55:00",
+    "assignmentStart" : "2026-07-18T11:00:00",
+    "assignmentEnd" : "2026-07-18T12:00:00",
     "vehicleMiles" : "",
-    "debriefNotes" : "Actual task time 0635-0655. At 0645, a definitely human sign line led north from the residence/IPP; no clear prints or sole pattern and no subject identification. Potential clue flagged on Ops instruction; no follow-up yet. All three returned to staging; debrief completed 0700 and available for later K3.",
+    "debriefNotes" : "Actual assignment 07:00-08:00: departed staging at 07:00, on task at IPP at 07:05. At 07:30, a definitely human sign line led north from the residence/IPP; no clear prints or sole pattern and no subject identification. Potential clue flagged on Ops instruction; no follow-up yet. Task completed at 07:50, returning to staging; all three returned at 08:00. Debrief completed 08:10 and available for later K3 at 1030.",
     "reportedPod" : "Not estimated; directional sign examination only, not a systematic area search.",
     "areasNotCovered" : "Only immediate IPP ground examined; northbound sign beyond the flagged location and the wider woodland were not followed or searched by T1.",
     "hazardsObserved" : "Uneven ground, ticks and creek-edge footing; buddy contact maintained, no injuries reported.",
@@ -1918,7 +2110,7 @@
     "qualitativePodFactors" : [ ],
     "debriefPreparedByName" : "Lane Cedar",
     "debriefPreparedByPositionTitle" : "Visual tracker team leader",
-    "debriefPreparedDateTime" : "2026-07-18T11:00:00",
+    "debriefPreparedDateTime" : "2026-07-18T12:10:00",
     "taskLifecycleStatus" : "returned",
     "debriefingCompleted" : true,
     "iapPage" : ""
@@ -1930,11 +2122,11 @@
     "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
     "detectingTask" : "T1",
     "detectedBy" : "Lane Cedar",
-    "dateTimeCollected" : "2026-07-18T10:45:00",
+    "dateTimeCollected" : "2026-07-18T11:30:00",
     "location" : "North edge of Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA; flag T1-1 on exercise sketch MR-EX-01",
     "description" : "A definitely human sign line leads north from IPP; no clear prints or sole pattern. Potential clue only; association with Ellis Linden is unverified.",
     "immediateAction" : "Potential clue flagged in place on Ops instruction; location reported to Morgan Vale; no physical evidence collected.",
-    "followUp" : "Pending Ops assessment and direction; follow-up not yet undertaken at the 0800 snapshot.",
+    "followUp" : "Pending Ops assessment and direction; follow-up not yet undertaken at the 0815 snapshot.",
     "possibleDuplicate" : false,
     "followUpAssignments" : [ ],
     "followUpBriefed" : false,
@@ -1953,7 +2145,7 @@
     "status" : "Open"
   }, {
     "number" : 2,
-    "item" : "Hourly hydration/electrolyte checks for all field teams; replenish ICP drinking water by 0900 and arrange field/canine water delivery requests through simulated support service. Planning and Safety verify every team.",
+    "item" : "Hourly hydration/electrolyte checks for all field teams; replenish drinking water at Base (supply and rehab) colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP) by 0900 and arrange field/canine water delivery requests through simulated support service. Planning and Safety verify every team.",
     "poc" : "Rowan Ellis (Planning) / Jordan Reed (Safety)",
     "briefedToPoc" : true,
     "startDate" : "2026-07-18T11:00:00",
@@ -1962,7 +2154,7 @@
     "status" : "Open"
   }, {
     "number" : 3,
-    "item" : "MANDATORY shaded rest break and heat-illness check from 1300 for all field teams, supervised remotely by Safety/MEDL at ICP; observation buddies alternate rest 1300-1320/1320-1340 in adjacent shade with continuous observation and buddy contact.",
+    "item" : "MANDATORY heat rehab with shaded rest and heat-illness checks from 1300 at Base (supply and rehab) colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); Ops staggers search-team returns, coordinated by Safety/MEDL at ICP. Observation buddies alternate rest 1300-1320/1320-1340 in adjacent shade with continuous observation and buddy contact; Ops arranges qualified relief before post pairs travel to Base. Never leave a containment post unstaffed for rehab.",
     "poc" : "Jordan Reed (Safety) / Quinn Alder (MEDL)",
     "briefedToPoc" : true,
     "startDate" : "2026-07-18T11:00:00",
@@ -1994,8 +2186,8 @@
     "designatedMedicalUnitName" : "Quinn Alder",
     "designatedMedicalUnitContact" : "MR SAR 1; 202-555-0107 (fictional)",
     "aidStations" : [ {
-      "name" : "Exercise pavilion first-aid post (fictional)",
-      "location" : "Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP)",
+      "name" : "Exercise Base human first-aid supplies/cache (fictional, unstaffed)",
+      "location" : "Base (supply and rehab) colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP)",
       "contactNumbers" : "202-555-0107 (fictional)",
       "frequency" : "MR SAR 1 / 155.160 simplex",
       "paramedicsOnSite" : false
@@ -2025,8 +2217,25 @@
       "traumaLevel" : "",
       "burnCenter" : false,
       "helipad" : false
+    }, {
+      "name" : "Fictional Pine County Regional Trauma Center",
+      "address" : "200 Example Boulevard, fictional Pine County, MA",
+      "contactNumbers" : "202-555-0112 (fictional, non-operational)",
+      "frequency" : "",
+      "latitude" : null,
+      "longitude" : null,
+      "coordinateFormat" : "",
+      "helipadCoordinates" : "",
+      "airTravelTime" : "",
+      "groundTravelTime" : "45 minutes - hypothetical exercise assumption; verify route and receiving capability",
+      "airTravelProvenance" : "",
+      "groundTravelProvenance" : "",
+      "traumaCenter" : true,
+      "traumaLevel" : "",
+      "burnCenter" : false,
+      "helipad" : false
     } ],
-    "emergencyProcedures" : "FICTIONAL EXERCISE ONLY; do not call example numbers. For a real emergency use the actual local emergency number. Exercise: announce emergency traffic on MR SAR 1, give task/location, injury and access; MEDL coordinates from ICP; staging aid post is a supplies/cache and rendezvous location, not an additional staffed team. Ops alerts MEDL, pauses nearby work, requests the simulated BLS service and arranges ground extraction and ambulance rendezvous at staging. No aircraft assigned. Do not move a patient unless needed for immediate safety.",
+    "emergencyProcedures" : "FICTIONAL EXERCISE ONLY; do not call example numbers. For a real emergency use the actual local emergency number. Exercise: announce emergency traffic on MR SAR 1, give task/location, injury and access; MEDL coordinates from ICP; the human aid station at Base (supply and rehab) colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP) is an unstaffed supplies/cache, not an additional staffed team or a staging aid post. Ops alerts MEDL, pauses nearby work, requests the simulated BLS service and arranges ground extraction and ambulance rendezvous at staging. No aircraft assigned. Do not move a patient unless needed for immediate safety.",
     "aviationAssetsUsed" : false,
     "airOperationsReminder" : "",
     "preparedByMedicalUnitLeader" : "Quinn Alder",
@@ -2038,24 +2247,72 @@
     "iapPage" : ""
   },
   "canineMedicalPlan" : {
-    "active" : false,
+    "active" : true,
     "aidStationInformation" : "",
     "transportServices" : "",
     "transportServiceEntries" : [ ],
     "poisonControlContact" : "",
-    "onsiteVeterinarian" : "",
-    "veterinarianDvm" : "",
-    "veterinaryPersonnelResourceIds" : [ ],
-    "veterinaryCapabilityNotes" : "",
-    "emergencyProcedures" : "",
+    "onsiteVeterinarian" : "Zion Clover",
+    "veterinarianDvm" : "Zion Clover, DVM (fictional exercise credential)",
+    "veterinaryPersonnelResourceIds" : [ "f9378e49-56da-3217-bdbd-d904bbb683cc" ],
+    "veterinaryCapabilityNotes" : "FICTIONAL EXERCISE ONLY. Zion Clover is the existing MR-P25 handler on K2, also an onsite DVM; not an extra person or dedicated veterinary post. Ops must release or retask K2 before veterinary assistance. No canine aid station or canine transport service is assigned. Facility availability and 25/45-mile distances are hypothetical, not verified services or measured routes.",
+    "emergencyProcedures" : "FICTIONAL EXERCISE ONLY; do not call example numbers. Provide canine first aid only within training and contact Ops on MR SAR 1. Ops contacts Zion Clover, the onsite DVM tasked on K2, releases or retasks the handler as necessary, then arranges veterinary care and transport. No dedicated canine transport service or aid station; no aircraft assigned.",
     "aviationAssetsUsed" : false,
-    "selectedFacilities" : [ ],
-    "preparedByMedicalUnitLeader" : "",
+    "selectedFacilities" : [ {
+      "id" : "d16b5d2d-4813-3aaa-9bb2-304724f84bbf",
+      "name" : "Fictional Cedar Vale Emergency Veterinary Hospital",
+      "town" : "Fictional Cedar Vale",
+      "state" : "MA",
+      "postalCode" : "",
+      "address" : "25 Imaginary Veterinary Lane (fictional)",
+      "contactNumbers" : [ "202-555-0121 (fictional, non-operational)" ],
+      "fax" : "",
+      "available24Hours" : true,
+      "availabilityNotes" : "Fictional 25-mile estimate from staging; not verified. Hypothetical 24-hour exercise facility; availability unverified, not a real service.",
+      "capabilities" : "Fictional emergency veterinary receiving facility; verify care and transport with Ops.",
+      "verifiedAt" : null,
+      "latitude" : null,
+      "longitude" : null,
+      "geocodingProvider" : "",
+      "geocodingProvenance" : "",
+      "distanceMeters" : 40233.6,
+      "durationSeconds" : "NaN",
+      "distanceMethod" : "Hypothetical exercise distance",
+      "distanceProvenance" : "Invented 25-mile assumption from staging; not a real route measurement.",
+      "calculatedAt" : null,
+      "stagingGeneration" : 1,
+      "sourceName" : "Maple Ridge fictional exercise"
+    }, {
+      "id" : "d41667b7-ca6d-3591-aa0f-72cbb75a8998",
+      "name" : "Fictional Oak Hollow Veterinary Emergency Center",
+      "town" : "Fictional Oak Hollow",
+      "state" : "MA",
+      "postalCode" : "",
+      "address" : "45 Imaginary Veterinary Lane (fictional)",
+      "contactNumbers" : [ "202-555-0122 (fictional, non-operational)" ],
+      "fax" : "",
+      "available24Hours" : true,
+      "availabilityNotes" : "Fictional 45-mile estimate from staging; not verified. Hypothetical 24-hour exercise facility; availability unverified, not a real service.",
+      "capabilities" : "Fictional emergency veterinary receiving facility; verify care and transport with Ops.",
+      "verifiedAt" : null,
+      "latitude" : null,
+      "longitude" : null,
+      "geocodingProvider" : "",
+      "geocodingProvenance" : "",
+      "distanceMeters" : 72420.48,
+      "durationSeconds" : "NaN",
+      "distanceMethod" : "Hypothetical exercise distance",
+      "distanceProvenance" : "Invented 45-mile assumption from staging; not a real route measurement.",
+      "calculatedAt" : null,
+      "stagingGeneration" : 1,
+      "sourceName" : "Maple Ridge fictional exercise"
+    } ],
+    "preparedByMedicalUnitLeader" : "Quinn Alder",
     "preparerSignature" : "",
-    "preparedAt" : null,
-    "reviewedBySafetyOfficer" : "",
+    "preparedAt" : "2026-07-18T10:40:00",
+    "reviewedBySafetyOfficer" : "Jordan Reed",
     "safetyOfficerSignature" : "",
-    "reviewStatus" : "Not reviewed",
+    "reviewStatus" : "Reviewed - fictional exercise only",
     "iapPage" : ""
   },
   "vetDirectory" : {
@@ -2086,7 +2343,7 @@
   }, {
     "id" : "4393af13-8694-389a-a095-2eb9f7a0dc45",
     "type" : "Base",
-    "name" : "Supply / recovery base colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP)",
+    "name" : "Base (supply and rehab) colocated with ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP)",
     "address" : "50 Civic Road, fictional Maple Ridge, MA"
   }, {
     "id" : "968271a6-f043-3d40-b059-826cc79289f1",
@@ -2368,7 +2625,7 @@
     "resourceIdentifier" : "MR-P13",
     "location" : "Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP)",
     "status" : "Available",
-    "notes" : "Fictional visual tracker returned from T1 (0635-0655), debriefed at 0700; G2 support available at staging for K3 handler Devon Heath at 1030; not on hasty route or G2 grid.",
+    "notes" : "Fictional visual tracker returned from T1 (0700-0800), debriefed at 0810; G2 support available at staging for K3 handler Devon Heath at 1030; not on hasty route or G2 grid.",
     "sourceRef" : "sar:47ebf0c0-cd26-3432-bcb1-937a1c8fc630:resource:152379a5-1884-3538-822c-9254139d9dad",
     "handlerName" : "",
     "numberOfPersons" : 1,
@@ -2388,7 +2645,7 @@
     "resourceIdentifier" : "MR-P14",
     "location" : "Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP)",
     "status" : "Available",
-    "notes" : "Fictional visual tracker returned from T1 (0635-0655), debriefed at 0700; G2 support available at staging for K3 handler Devon Heath at 1030; not on hasty route or G2 grid.",
+    "notes" : "Fictional visual tracker returned from T1 (0700-0800), debriefed at 0810; G2 support available at staging for K3 handler Devon Heath at 1030; not on hasty route or G2 grid.",
     "sourceRef" : "sar:47ebf0c0-cd26-3432-bcb1-937a1c8fc630:resource:39c9e0e7-5877-35fa-b1e1-ab1458037071",
     "handlerName" : "",
     "numberOfPersons" : 1,
@@ -2408,7 +2665,7 @@
     "resourceIdentifier" : "MR-P15",
     "location" : "Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP)",
     "status" : "Available",
-    "notes" : "Fictional visual tracker returned from T1 (0635-0655), debriefed at 0700; G2 support available at staging for K3 handler Devon Heath at 1030; not on hasty route or G2 grid.",
+    "notes" : "Fictional visual tracker returned from T1 (0700-0800), debriefed at 0810; G2 support available at staging for K3 handler Devon Heath at 1030; not on hasty route or G2 grid.",
     "sourceRef" : "sar:47ebf0c0-cd26-3432-bcb1-937a1c8fc630:resource:fc761268-10f8-34db-b17e-9fc96a6f6769",
     "handlerName" : "",
     "numberOfPersons" : 1,
@@ -2608,7 +2865,7 @@
     "resourceIdentifier" : "MR-P25",
     "location" : "K2",
     "status" : "Assigned",
-    "notes" : "Fictional field searcher; canine handler",
+    "notes" : "Fictional canine handler and Doctor of Veterinary Medicine (DVM); onsite veterinary personnel MR-P25, tasked on K2 search, not a dedicated medical post. Ops must release or retask this handler before veterinary assistance; credentials are exercise assumptions only.",
     "sourceRef" : "sar:ac274954-b5aa-3b4d-9851-5bbc7141beb4:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,

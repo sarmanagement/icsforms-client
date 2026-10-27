@@ -5,6 +5,7 @@ package org.sarmanagement.icsforms.pdf;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -15,6 +16,7 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -140,6 +142,7 @@ public final class PdfText {
 
 	/**
 	 * Validates the source fields used by a form, retaining actionable model paths.
+	 * Nonreturned SAR debriefs are omitted from this print-only projection.
 	 *
 	 * @param data source document, or null for a blank form.
 	 * @param form form identifier.
@@ -172,6 +175,21 @@ public final class PdfText {
 			default -> new String[0];
 		};
 		for (String field : fields) {
+			if ("SAR Task Assignment".equals(form) && "sarTaskAssignments".equals(field)) {
+				for (int index = 0; index < data.getSarTaskAssignments().size(); index++) {
+					SarTaskAssignment task = data.getSarTaskAssignments().get(index);
+					if (task != null && !"returned".equals(task.getTaskLifecycleStatus())) {
+						ObjectNode printed = (ObjectNode) root.get(field).get(index);
+						// Only the serialized print projection changes; editable model data remains intact.
+						printed.remove(List.of("debriefingSupervisor", "debriefingSupervisorResourceId",
+								"assignmentStart", "assignmentEnd", "vehicleMiles", "debriefNotes", "reportedPod",
+								"areasNotCovered", "hazardsObserved", "canineSearchType", "canineImprint",
+								"canineSunAngle", "canineDayNight", "canineCloudCover", "canineWindSpeed",
+								"qualitativePodFactors", "debriefPreparedByName", "debriefPreparedByPositionTitle",
+								"debriefPreparedDateTime"));
+					}
+				}
+			}
 			validateNode(root.get(field), form, field, escapeUnsupported);
 		}
 		validateSupportingFields(data, root, form);
@@ -261,6 +279,7 @@ public final class PdfText {
 			for (int index = 0; index < data.getClueLogEntries().size(); index++) {
 				var clue = data.getClueLogEntries().get(index);
 				if (clue != null && data.getSarTaskAssignments().stream().anyMatch(task -> task != null
+						&& "returned".equals(task.getTaskLifecycleStatus())
 						&& (!task.getAssignmentId().isBlank() && task.getAssignmentId().equals(clue.getAssignmentId())
 						|| task.getAssignmentId().isBlank() && !task.getAssignmentTeamNumber().isBlank()
 						&& task.getAssignmentTeamNumber().equals(clue.getDetectingTask())))) {
