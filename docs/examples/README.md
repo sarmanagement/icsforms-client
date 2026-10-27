@@ -34,7 +34,12 @@ at **1 Trail Lane**. Staging and the aid-supply/rendezvous post are at the
 community park pavilion, **20 Park Road, 0.8 km west of IPP**. All six command
 staff work at the separate **ICP, county community center, 50 Civic Road,
 1.5 km west of IPP**; MEDL coordinates medical requests from ICP rather than
-staffing an additional field post. All addresses are fictional. A Koster **hub/spokes/rim** approach
+staffing an additional field post. Shared incident locations include the ICP,
+staging, residence/IPP (Other), and a **supply / recovery Base colocated at ICP**
+for water resupply and recovery coordination. Staff retain their organizational
+roles and ICP address; status **ICP** puts them in the **ICP rack column**, not
+Assigned (status matches the existing board header before location).
+All addresses are fictional. A Koster **hub/spokes/rim** approach
 protects that residence/last-known-point hub, rapidly checks three travel
 spokes, observes two likely rim exits, and
 follows with bounded area searches and familiar-attractor checks. It does not
@@ -47,23 +52,31 @@ Pine County Sheriff's Office. Field cards include Fictional Maple Ridge Voluntee
 SAR, Fictional Cedar Valley SAR and Fictional Lake Hollow SAR personnel.
 There is no Logistics Chief; Casey Finch leads ground team G1.
 Exactly **four canine equipment T-cards** link to named handlers; dogs are not
-counted as people. Two eight-person ground teams, two two-person observation teams
-and four four-person canine teams account for all 36 field people. Teams
+counted as people. Two nominal eight-person ground teams, two two-person observation teams
+and four handler groups account for all 36 field people, with support reassigned
+as follows. Every tasked canine team has **one handler and three support searchers**. Teams
 report directly to Ops; there are no branches, divisions or groups and no
 additional ICS 204s. Two canine launches are deferred to 1030; Ops must reassess
 active span and conditions before launch, staggering or pausing work if necessary;
-eight simultaneously active teams is not assumed manageable. Six teams are initially
-active (G1, G2, two posts, K1 and K2). G1 searches route A 0715–0830, then
-route B 0845–1000; G2 searches route C 0715–1000. G1 checks attractors
-1030–1200 then searches area subsegments 1230–1700; G2 searches area
-subsegments 1030–1700. No member has overlapping tasks, including planned tasks.
+eight simultaneously active teams is not assumed manageable. Seven teams are initially
+active (G1-A, G1-B, G2-A, two posts, K1 and K2). G1 splits into **four-person
+G1-A (S1, route A, MR-P01–04)** and **four-person G1-B (S2, route B, MR-P05–08)**;
+**four-person G2-A (S3, route C, MR-P09–12)** covers the third route. All three
+routes run **0715–1000 concurrently**. G2's **MR-P13–15 are Available at staging**
+for handler **MR-P29 (Devon Heath)** on planned K3 at 1030; they are actual K3
+task members, not merely mentioned in prose. K3's original support **MR-P30–32**
+are explicitly released to staging reserve; G2's eighth member **MR-P16** also
+remains reserve until 1030. K1, K2 and K4 retain their original memberships.
+G1 reassembles its original **eight** for attractor searches 1030–1200 then
+grid subsegments 1230–1700. G2's **eight-person grid**, 1030–1700, comprises
+MR-P09–12, MR-P16 and released support MR-P30–32; MR-P13–15 stay with K3.
+No member has overlapping tasks, including planned tasks.
 
 Measurable objectives address the required responder/public safety wording,
 spoke completion by 1000, containment of both likely egress points by 0800
 **through 1900**, searching the high-probability inner **25% zone** to coverage
-approximately **1 by 1700**, and three attractor/hazard-point checks
-within **1 km of the residence/IPP** by 1200. Coverage 1 is not POD 1:
-probability of detection is always less than 100%. The four 15-hectare zones
+approximately **1 by 1700**, and searching all three familiar attractors and associated hazard points
+within **1 km of the residence/IPP** by 1200. The four 15-hectare zones
 total 60 hectares; ground/canine subsegments, GPS tracks and gaps are coordinated
 in assignments, not presumed searched. Downwind priorities, short canine
 work/cooling cycles and tactical instructions stay in assignments/safety.
