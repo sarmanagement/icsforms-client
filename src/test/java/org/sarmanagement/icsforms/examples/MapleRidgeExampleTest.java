@@ -67,23 +67,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MapleRidgeExampleTest {
 	private static final Path FIXTURE = Path.of("docs/examples/maple-ridge-dementia-op1.json");
 	private static final String INCIDENT = "FICTIONAL EXERCISE - Maple Ridge missing adult with dementia";
-	private static final String HUB = "Maple Ridge pavilion staging beside PLS residence (fictional hub)";
+	private static final String IPP = "Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA";
+	private static final String STAGING = "Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP)";
+	private static final String ICP = "ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP)";
 	private static final String CHANNEL = "MR SAR 1";
 	private static final String AGENCY = "Fictional Maple Ridge Volunteer SAR";
 	private static final String IC = "Avery Wren";
 	private static final String OPS = "Morgan Vale";
 	private static final String PLANNING = "Rowan Ellis";
-	private static final String LOGISTICS = "Casey Finch";
+	private static final String SHERIFF_AGENCY = "Fictional Pine County Sheriff's Office";
 	private static final String SAFETY = "Jordan Reed";
 	private static final String COML = "Taylor Brook";
 	private static final String MEDL = "Quinn Alder";
 	private static final List<String> FORMS = List.of("ICS 202", "ICS 203", "ICS 204", "ICS 205", "ICS 205A",
 			"ICS 206", "ICS 207", "ICS 208", "ICS 214", "ICS 215A", "ICS 233-CG", "SAR Task Assignment");
-	private static final List<String> FIELD_NAMES = List.of("Alex Fern", "Blair Moss", "Cameron Lark",
+	private static final List<String> FIELD_NAMES = List.of("Casey Finch", "Alex Fern", "Blair Moss", "Cameron Lark",
 			"Dana Birch", "Elliot Pine", "Frankie Cove", "Gray Rowan", "Harper Glen", "Indigo Lake",
 			"Jules Meadow", "Kai Willow", "Lane Cedar", "Micah Ash", "Noel Spruce", "Oakley Rain",
 			"Parker Elm", "Remy Shore", "Sage Linden", "Toby Flint", "Val Aspen", "Winter Dell",
-			"Wynn Hazel", "Yael Frost", "Zion Clover", "Robin Field");
+			"Wynn Hazel", "Yael Frost", "Zion Clover", "Robin Field", "Arden Fox", "Briar Snow",
+			"Devon Heath", "Emery Reed", "Finley Stone", "Hayden Marsh", "Kit Laurel", "Linden Gale",
+			"Marin Coast", "Nico Dawn");
 
 	@Test
 	void portableExampleImportsWithLinkedOperationalContent() throws Exception {
@@ -101,18 +105,19 @@ class MapleRidgeExampleTest {
 					() -> new IncidentValidator().validate(data).toString());
 			assertEquals(5, data.getForm202().getStructuredObjectives().size());
 			List<String> objectives = data.getForm202().getObjectives();
-			assertTrue(objectives.get(0).startsWith("Mitigate all hazards to responders and the general public "
+			assertEquals(List.of("Mitigate all hazards to responders and the general public "
 					+ "to an acceptable level, with particular attention to heat stress and tick exposure, "
-					+ "throughout the entire duration of the incident."));
-			assertTrue(objectives.get(1).contains("By 1000"));
-			assertTrue(objectives.get(2).contains("paired observation posts"));
-			assertTrue(objectives.get(3).contains("60 hectares total"));
-			assertTrue(objectives.get(4).contains("all three familiar attractors"));
-			assertEquals(32, data.getTCards().stream().filter(c -> c.getCardType() == TCardType.PERSONNEL).count());
-			assertEquals(25, data.getTCards().stream().filter(c -> c.getResourceIdentifier().startsWith("MR-P")).count());
+					+ "throughout the entire duration of the incident.",
+					"By 1000, complete hasty searches of the three most likely travel corridors from IPP to containment boundary at least once.",
+					"By 0800, establish containment of both likely egress points and maintain it through 1900.",
+					"By 1700, search the high-probability inner 25% zone to a coverage target of approximately 1.",
+					"By 1200, check and document all three familiar attractors and associated hazard points within 1 km of IPP."),
+					objectives);
+			assertEquals(42, data.getTCards().stream().filter(c -> c.getCardType() == TCardType.PERSONNEL).count());
+			assertEquals(36, data.getTCards().stream().filter(c -> c.getResourceIdentifier().startsWith("MR-P")).count());
 			assertEquals(4, data.getTCards().stream().filter(TCard::isCanineResourceCard).count());
-			assertEquals(36, data.getTCards().size());
-			assertEquals(36, data.getTCards().stream().map(TCard::getResourceId).distinct().count());
+			assertEquals(46, data.getTCards().size());
+			assertEquals(46, data.getTCards().stream().map(TCard::getResourceId).distinct().count());
 			int explicitCanineMarkers = 0;
 			for (var card : new ObjectMapper().readTree(FIXTURE.toFile()).path("tcards")) {
 				if (card.path("canineResource").asBoolean()) {
@@ -121,6 +126,32 @@ class MapleRidgeExampleTest {
 				}
 			}
 			assertEquals(4, explicitCanineMarkers);
+			assertEquals("", data.getOrganizationalChart().getLogisticsSectionChiefName());
+			assertEquals(3, Set.of(IPP, STAGING, ICP).size());
+			assertEquals(STAGING, data.getStagingLocation().getLabel());
+			assertEquals(STAGING, data.getForm204().getStagingArea());
+			List<TCard> staff = data.getTCards().stream()
+					.filter(c -> c.getResourceIdentifier().startsWith("MR-IMT-")).toList();
+			assertEquals(6, staff.size());
+			assertTrue(staff.stream().allMatch(c -> ICP.equals(c.getLocation())));
+			Set<String> supportedStaffRefs = Set.of("org:ic:0", "org:operationsChief", "org:planningChief",
+					"org:safetyOfficer", "org:commUnitLeader");
+			assertTrue(staff.stream().allMatch(c -> c.getSourceRef().isBlank()
+					|| supportedStaffRefs.contains(c.getSourceRef())));
+			TCard sheriff = staff.stream().filter(c -> IC.equals(c.getPersonName())).findFirst().orElseThrow();
+			assertEquals(SHERIFF_AGENCY, sheriff.getHomeAgency());
+			assertTrue(sheriff.getNotes().contains("Sheriff"));
+			assertTrue(data.getForm202().getCommandEmphasis().contains("Sheriff of " + SHERIFF_AGENCY));
+			assertEquals(Set.of(AGENCY, "Fictional Cedar Valley SAR", "Fictional Lake Hollow SAR"),
+					data.getTCards().stream().filter(c -> FIELD_NAMES.contains(c.getPersonName()))
+							.map(TCard::getHomeAgency).collect(Collectors.toSet()));
+			TCard casey = data.getTCards().stream().filter(c -> "Casey Finch".equals(c.getPersonName()))
+					.findFirst().orElseThrow();
+			assertTrue(casey.getResourceIdentifier().startsWith("MR-P"));
+			assertTrue(casey.getSourceRef().startsWith("sar:"));
+			assertFalse(Files.readString(FIXTURE).toLowerCase(java.util.Locale.ROOT).contains("cleared"));
+			assertTrue(data.getForm202().getSituationalAwareness().contains("coverage 1 is not POD 1"));
+			assertTrue(data.getForm202().getSituationalAwareness().contains("always less than 100%"));
 			for (TCard card : data.getTCards()) {
 				assertFalse(card.getResourceIdentifier().isBlank());
 				assertFalse(card.getHomeAgency().isBlank());
@@ -145,7 +176,10 @@ class MapleRidgeExampleTest {
 			assertEquals("FM", channel.getMode());
 			assertEquals(RadioCheckStatus.SUCCESSFUL, channel.getRadioCheckStatus());
 			var directory = ResourceDirectorySource.build(data);
-			assertEquals(32, directory.size());
+			assertEquals(42, directory.size());
+			assertTrue(directory.stream().filter(r -> staff.stream()
+					.anyMatch(c -> !c.getSourceRef().isBlank() && c.getPersonName().equals(r.name())))
+					.allMatch(r -> !r.assignedPosition().isBlank() && ICP.equals(r.assignment())));
 			assertTrue(directory.stream().allMatch(r -> r.contactMethods().contains(CHANNEL)));
 			assertTrue(directory.stream().filter(r -> FIELD_NAMES.contains(r.name()))
 					.allMatch(r -> !r.assignment().isBlank() && !r.assignedPosition().isBlank()));
@@ -156,7 +190,7 @@ class MapleRidgeExampleTest {
 			assertEquals("", data.getForm204().getDivision());
 			assertEquals("", data.getForm204().getGroup());
 			assertTrue(data.getAdditionalForms204().isEmpty());
-			assertEquals(9, data.getForm204().getResourcesAssigned().size());
+			assertEquals(12, data.getForm204().getResourcesAssigned().size());
 			Set<String> objectiveIds = data.getForm202().getStructuredObjectives().stream()
 					.map(IncidentObjective::getObjectiveId).collect(Collectors.toSet());
 			Set<String> resourceIds = data.getTCards().stream().map(TCard::getResourceId).collect(Collectors.toSet());
@@ -173,6 +207,47 @@ class MapleRidgeExampleTest {
 						.filter(r -> r.getCardType() == TCardType.PERSONNEL).count());
 				assertTrue(task.getResourcesAssigned().stream().allMatch(r -> resourceIds.contains(r.getResourceId())));
 				assertEquals(id("channel"), task.getCommunications().get(0).getRadioChannelId());
+				assertEquals(STAGING, task.getStagingArea());
+				assertEquals(STAGING, row.getReportingLocation());
+				assertEquals(row.getLeader(), task.getLeader());
+				int expectedPeople = task.getResourceType().equals("Canine") ? 4
+						: task.getResourceIdentifier().startsWith("Observation") ? 2 : 8;
+				assertEquals(expectedPeople, row.getNumberOfPersons());
+				if (task.getResourceType().equals("Canine")) {
+					SarTaskResource dog = task.getResourcesAssigned().stream()
+							.filter(r -> r.getCardType() == TCardType.EQUIPMENT).findFirst().orElseThrow();
+					assertEquals(task.getLeader(), data.getTCards().stream()
+							.filter(c -> c.getResourceId().equals(dog.getResourceId())).findFirst().orElseThrow().getHandlerName());
+					assertEquals(5, task.getResourcesAssigned().size());
+				}
+			}
+			assertEquals(8, data.getSarTaskAssignments().stream().map(SarTaskAssignment::getResourceIdentifier).distinct().count());
+			assertEquals(4, data.getSarTaskAssignments().stream().filter(t -> t.getResourceType().equals("Canine")).count());
+			assertEquals(2, data.getSarTaskAssignments().stream()
+					.filter(t -> t.getResourceIdentifier().startsWith("Observation")).count());
+			assertEquals(Set.of("G1", "G2"), data.getSarTaskAssignments().stream()
+					.filter(t -> t.getResourceType().equals("Ground") && !t.getResourceIdentifier().startsWith("Observation"))
+					.map(SarTaskAssignment::getResourceIdentifier).collect(Collectors.toSet()));
+			for (String team : List.of("G1", "G2")) {
+				List<Set<String>> memberships = data.getSarTaskAssignments().stream()
+						.filter(t -> team.equals(t.getResourceIdentifier()))
+						.map(t -> t.getResourcesAssigned().stream().map(SarTaskResource::getResourceId).collect(Collectors.toSet()))
+						.toList();
+				assertEquals(team.equals("G1") ? 4 : 2, memberships.size());
+				assertEquals(8, memberships.get(0).size());
+				assertTrue(memberships.stream().allMatch(m -> m.equals(memberships.get(0))));
+			}
+			assertEquals(6, data.getSarTaskAssignments().stream()
+					.filter(t -> t.getTaskLifecycleStatus().equals("assigned - on task")).count());
+			for (TCard person : data.getTCards().stream().filter(c -> FIELD_NAMES.contains(c.getPersonName())).toList()) {
+				List<SarTaskAssignment> tasks = data.getSarTaskAssignments().stream()
+						.filter(t -> t.getResourcesAssigned().stream().anyMatch(r -> r.getResourceId().equals(person.getResourceId())))
+						.sorted(Comparator.comparing(SarTaskAssignment::getAssignmentStart)).toList();
+				assertFalse(tasks.isEmpty(), person.getPersonName());
+				for (int i = 1; i < tasks.size(); i++) {
+					assertFalse(tasks.get(i).getAssignmentStart().isBefore(tasks.get(i - 1).getAssignmentEnd()),
+							person.getPersonName());
+				}
 			}
 			assertEquals(Set.of("Route", "Area", "Point"), data.getSarTaskAssignments().stream()
 					.map(SarTaskAssignment::getTaskType).collect(Collectors.toSet()));
@@ -201,6 +276,7 @@ class MapleRidgeExampleTest {
 			}
 			assertFalse(data.getMedicalPlan().isAviationAssetsUsed());
 			assertEquals(1, data.getMedicalPlan().getAidStations().size());
+			assertEquals(STAGING, data.getMedicalPlan().getAidStations().get(0).getLocation());
 			assertEquals(1, data.getMedicalPlan().getTransportServices().size());
 			assertEquals(1, data.getMedicalPlan().getHospitals().size());
 		} finally {
@@ -243,6 +319,16 @@ class MapleRidgeExampleTest {
 					if ("ICS 202".equals(form)) {
 						assertTrue(text.contains("07:00"), text);
 						assertTrue(text.contains("19:00"), text);
+						assertTrue(text.contains("By 1700"), text);
+						assertTrue(text.replaceAll("\\s+", " ").contains("coverage target of approximately 1"), text);
+						assertTrue(text.contains("50 Civic Road"), text);
+					}
+					if ("ICS 203".equals(form) || "ICS 207".equals(form)) {
+						assertTrue(text.contains(IC), text);
+					}
+					if ("ICS 206".equals(form)) {
+						assertTrue(text.contains("20 Park Road"), text);
+						assertTrue(text.contains("ICP"), text);
 					}
 					if ("ICS 233-CG".equals(form)) {
 						assertTrue(text.contains("tick"), form);
@@ -277,17 +363,17 @@ class MapleRidgeExampleTest {
 		data.setIapPlanningStage(IapPlanningStage.OPERATIONAL_PERIOD_ACTIVE);
 		data.setIncidentContext(new IncidentContext(INCIDENT, time(7, 0), time(19, 0), PLANNING,
 				"Planning Section Chief - fictional exercise"));
-		data.getIncidentContext().setTaskMap("MR-EX-01: fictional hub, spokes A/B/C, rim R1/R2, zones K1-K4");
-		data.getStagingLocation().setLabel(HUB);
-		data.getStagingLocation().setAddress("1 Exercise Lane, fictional Maple Ridge, MA (not a real location)");
+		data.getIncidentContext().setTaskMap("MR-EX-01: fictional residence IPP, separate staging and ICP, spokes A/B/C, rim R1/R2, zones K1-K4");
+		data.getStagingLocation().setLabel(STAGING);
+		data.getStagingLocation().setAddress("20 Park Road, fictional Maple Ridge, MA");
 		data.getForm201().setIncidentName(INCIDENT);
 		data.getForm201().setIncidentNumber("EXERCISE-MR-2026-01");
 		data.getForm201().setSituationSummary("FICTIONAL ILLUSTRATION ONLY; not an operational plan. "
 				+ "Ellis Linden, fictional 74-year-old adult with dementia, wandered from a residence "
-				+ "beside the pavilion and trail junction; last seen at that residence at 0600. "
+				+ "at " + IPP + "; last seen there at 0600. Staging: " + STAGING + ". Command staff: " + ICP + ". "
 				+ "Wearing a blue shirt and tan trousers; may not respond to calls. No verified clues at 0800. "
 				+ "Summer forecast 27-31 C, humid; shaded woodland, uneven trails and ticks. No aircraft. "
-				+ "Koster hub/spokes/rim: protect the residence/last-known-point hub, stage at the adjacent pavilion; "
+				+ "Koster hub/spokes/rim: protect the residence/last-known-point hub; stage away from the IPP; "
 				+ "search travel spokes promptly; "
 				+ "observe likely rim exits, then search bounded areas and familiar attractors. "
 				+ "All names, agencies, geography, contacts, capabilities and approvals are invented.");
@@ -304,7 +390,7 @@ class MapleRidgeExampleTest {
 	}
 
 	/**
-	 * Adds seven overhead personnel and a flat set of eight teams reporting to Operations.
+	 * Adds six ICP personnel and a flat set of eight teams reporting to Operations.
 	 *
 	 * @param data example document.
 	 */
@@ -316,8 +402,6 @@ class MapleRidgeExampleTest {
 		org.setOperationsSectionChiefRadio(CHANNEL);
 		org.setPlanningSectionChiefName(PLANNING);
 		org.setPlanningSectionChiefRadio(CHANNEL);
-		org.setLogisticsSectionChiefName(LOGISTICS);
-		org.setLogisticsSectionChiefRadio(CHANNEL);
 		org.setSafetyOfficerName(SAFETY);
 		org.setSafetyOfficerRadio(CHANNEL);
 		org.setCommunicationsUnitLeaderName(COML);
@@ -331,8 +415,9 @@ class MapleRidgeExampleTest {
 		for (int i = 0; i < 8; i++) {
 			OrgChartEntry entry = new OrgChartEntry();
 			entry.setSection(OrgChartEntry.Section.OPERATIONS);
-			entry.setTitle(i < 3 ? "Spoke " + (i + 1) + " team leader" : i == 3 ? "Rim team leader" : "K" + (i - 3) + " handler");
-			entry.setName(FIELD_NAMES.get(i < 3 ? i * 4 : i == 3 ? 12 : 17 + (i - 4) * 2));
+			entry.setTitle(i < 2 ? "G" + (i + 1) + " ground team leader"
+					: i < 4 ? "R" + (i - 1) + " observation team leader" : "K" + (i - 3) + " handler");
+			entry.setName(FIELD_NAMES.get(i < 2 ? i * 8 : i < 4 ? 16 + (i - 2) * 2 : 20 + (i - 4) * 4));
 			entry.setRadio(CHANNEL);
 			org.getAdditionalPositions().add(entry);
 		}
@@ -361,11 +446,12 @@ class MapleRidgeExampleTest {
 		channel.setSystem("VHF simplex analog FM");
 		channel.setTxPolicy(RadioChannel.TX_POLICY_TRANSMIT);
 		channel.setCoverageGuidance("Illustrative local simplex only; terrain may block coverage.");
-		channel.setRelayGuidance("If no contact, move safely to last working point with buddy; relay through rim team.");
+		channel.setRelayGuidance("If no contact, ground/canine teams move safely with buddies to last working point; "
+				+ "observation teams retain posts and use the other radio or relay through another team.");
 		channel.setRadioCheckStatus(RadioCheckStatus.SUCCESSFUL);
 		channel.setRadioCheckedBy(COML);
 		channel.setRadioCheckedAt(time(6, 50));
-		channel.setRadioCheckNotes("Simulated exercise check at hub and rim; not a real coverage survey.");
+		channel.setRadioCheckNotes("Simulated exercise check at ICP, staging, IPP and rim; not a real coverage survey.");
 		channel.setRemarks("Fictional example, not permission to transmit. Verify license, bandwidth and local plan.");
 		data.getForm205().setFormId(id("205"));
 		data.getForm205().setChannels(List.of(channel));
@@ -385,25 +471,11 @@ class MapleRidgeExampleTest {
 		List<String> objectives = List.of(
 				"Mitigate all hazards to responders and the general public to an acceptable level, "
 						+ "with particular attention to heat stress and tick exposure, "
-						+ "throughout the entire duration of the incident. "
-						+ "Brief all personnel before deployment, maintain buddy contact, perform tick checks at 1000, "
-						+ "replenish ICP drinking water by 0900, conduct hourly hydration/electrolyte checks "
-						+ "for all field teams, and require shaded rest plus heat-illness checks at 1300.",
-				"By 1000, document rapid route searches of spokes A (north footpath, 1.2 km), B (east lane, 1.0 km) "
-						+ "and C (south creek trail, 0.8 km) from the hub to the rim; report tracks, clues and gaps to Ops.",
-				"By 0800, establish two paired observation posts at rim exits R1 north gate and R2 east footbridge; "
-						+ "maintain observation through period end at 1900 with paired relief from returning spoke teams, "
-						+ "report sightings immediately, and verify accountability and any continuing containment need with Ops.",
-				"By 1500, four canine teams will search and document coverage of bounded 15-hectare priority zones K1-K4 "
-						+ "(60 hectares total coverage target) in the high-probability inner-ring (25% zone) "
-						+ "around the residence/IPP, prioritizing downwind segments as wind is assessed on site; "
-						+ "use short work/rest cycles, "
-						+ "report actual GPS coverage and gaps, and reassess for heat, wind and canine welfare; "
-						+ "coverage is a target, not an asserted POD or guaranteed completion.",
-				"By 1200, Spoke 1 will check and document all three familiar attractors within 1 km of the residence/IPP "
-						+ "after its route search: fictional former bus stop, garden pond/shelter and creek crossing "
-						+ "beside the old meeting hall, including hazard/water points observed from safe ground; "
-						+ "use calm introductions and obtain permission before entering buildings.");
+						+ "throughout the entire duration of the incident.",
+				"By 1000, complete hasty searches of the three most likely travel corridors from IPP to containment boundary at least once.",
+				"By 0800, establish containment of both likely egress points and maintain it through 1900.",
+				"By 1700, search the high-probability inner 25% zone to a coverage target of approximately 1.",
+				"By 1200, check and document all three familiar attractors and associated hazard points within 1 km of IPP.");
 		List<IncidentObjective> structured = new ArrayList<>();
 		for (int i = 0; i < objectives.size(); i++) {
 			IncidentObjective objective = new IncidentObjective(objectives.get(i), i + 1);
@@ -413,11 +485,14 @@ class MapleRidgeExampleTest {
 		data.getForm202().setStructuredObjectives(structured);
 		data.getForm202().setCommandEmphasis("FICTIONAL EXERCISE ONLY. Life safety; protect the hub from scent contamination. "
 				+ "All eight teams report directly to Ops; no branches, divisions or groups. "
-				+ "25 human field searchers INCLUDE four handlers; four dogs are equipment, not people. "
-				+ "Seven IMT overhead; no aircraft. Stagger canine launches to preserve manageable active span.");
+				+ "36 human field searchers INCLUDE four handlers; four dogs are equipment, not people. "
+				+ "Six IMT at " + ICP + "; IC " + IC + " is Sheriff of " + SHERIFF_AGENCY + ". No aircraft. "
+				+ "Six teams initially active; Ops must reassess span before later launches and stagger/pause work "
+				+ "if direct supervision becomes unsafe; eight teams is not assumed manageable.");
 		data.getForm202().setSituationalAwareness("0800 exercise snapshot. Subject may hide or not answer. "
 				+ "Koster hub/spokes/rim guides prioritization, not a guarantee of containment. "
-				+ "Do not presume an unsearched area cleared. Summer heat and ticks require continuous reassessment.");
+				+ "Probability of detection is always less than 100%; coverage 1 is not POD 1. "
+				+ "No negative search guarantees absence. Summer heat and ticks require continuous reassessment.");
 		data.getForm202().setPreparedByName(PLANNING);
 		data.getForm202().setPreparedByPositionTitle("Planning Section Chief");
 		data.getForm202().setSiteSafetyPlanRequired(false);
@@ -426,7 +501,8 @@ class MapleRidgeExampleTest {
 	}
 
 	/**
-	 * Adds 25 human field personnel, seven overhead and exactly four handler-linked canine equipment cards.
+	 * Adds 36 field personnel, six ICP staff and four handler-linked canine equipment cards.
+	 * MEDL is a manual staff card because directory source references do not support that role.
 	 *
 	 * @param data example document.
 	 */
@@ -434,33 +510,39 @@ class MapleRidgeExampleTest {
 		for (int i = 0; i < FIELD_NAMES.size(); i++) {
 			TCard card = card("MR-P%02d".formatted(i + 1), FIELD_NAMES.get(i), TCardType.PERSONNEL);
 			card.setNumberOfPersons(1);
-			card.setStatus(i >= 21 ? "Available" : "Assigned");
-			card.setLocation(i < 12 ? "Spoke " + (i / 4 + 1) : i < 17 ? "Rim R1/R2 and hub lead" : i < 21 ? "K1/K2" : HUB);
-			card.setNotes("Fictional field searcher" + (i >= 17 && i % 2 == 1 ? "; canine handler" : "; buddy-system assignment"));
+			card.setStatus(i >= 28 ? "Available" : "Assigned");
+			card.setLocation(i < 8 ? "Spoke A" : i < 16 ? "Spoke C" : i < 20 ? "Rim R" + (1 + (i - 16) / 2)
+					: i < 28 ? "K" + (1 + (i - 20) / 4) : STAGING);
+			card.setHomeAgency(i < 8 ? "Fictional Cedar Valley SAR" : i < 16 ? "Fictional Lake Hollow SAR" : AGENCY);
+			card.setNotes("Fictional field searcher" + (i >= 20 && (i - 20) % 4 == 0 ? "; canine handler" : "; buddy-system assignment"));
 			data.getTCards().add(card);
 		}
-		List<String> overhead = List.of(IC, OPS, PLANNING, LOGISTICS, SAFETY, COML, MEDL);
-		List<String> roles = List.of("IC", "Ops", "Planning", "Logistics", "Safety", "COML", "MEDL");
+		List<String> overhead = List.of(IC, OPS, PLANNING, SAFETY, COML, MEDL);
+		List<String> roles = List.of("IC", "Ops", "Planning", "Safety", "COML", "MEDL");
 		List<String> sourceRefs = List.of("org:ic:0", "org:operationsChief", "org:planningChief",
-				"org:logisticsChief", "org:safetyOfficer", "org:commUnitLeader", "org:medicalUnitLeader");
+				"org:safetyOfficer", "org:commUnitLeader", "");
 		for (int i = 0; i < overhead.size(); i++) {
 			TCard card = card("MR-IMT-" + roles.get(i), overhead.get(i), TCardType.PERSONNEL);
 			card.setSourceRef(sourceRefs.get(i));
 			card.setNumberOfPersons(1);
-			card.setLocation(HUB);
-			card.setPhoneNumber("202-555-010" + (i + 1));
-			card.setNotes("Fictional IMT overhead, not counted among 25 field searchers; " + roles.get(i));
+			card.setLocation(ICP);
+			card.setPhoneNumber("202-555-010" + (i == 5 ? 7 : i + 1));
+			card.setNotes("Fictional ICP staff, separate from 36 field searchers; " + roles.get(i)
+					+ (i == 0 ? "; Sheriff of " + SHERIFF_AGENCY : ""));
+			if (i == 0) {
+				card.setHomeAgency(SHERIFF_AGENCY);
+			}
 			data.getTCards().add(card);
 		}
 		for (int i = 0; i < 4; i++) {
 			TCard dog = card("MR-K9-" + (i + 1), "", TCardType.EQUIPMENT);
 			dog.setCanineResource(true);
-			dog.setHandlerName(FIELD_NAMES.get(17 + i * 2));
+			dog.setHandlerName(FIELD_NAMES.get(20 + i * 4));
 			dog.setNumberOfPersons(0);
 			dog.setStatus(i < 2 ? "Assigned" : "Available");
-			dog.setLocation(i < 2 ? "K" + (i + 1) : HUB);
+			dog.setLocation(i < 2 ? "K" + (i + 1) : STAGING);
 			dog.setNotes("Fictional live-find area-search dog " + List.of("Bramble", "Cedar", "Pebble", "Thistle").get(i)
-					+ "; handler MR-P%02d; no implied certification.".formatted(18 + i * 2));
+					+ "; handler MR-P%02d; no implied certification.".formatted(21 + i * 4));
 			data.getTCards().add(dog);
 		}
 	}
@@ -496,16 +578,17 @@ class MapleRidgeExampleTest {
 	private static void addAssignments(AppData data) {
 		var form = data.getForm204();
 		form.setFormId(id("204"));
-		form.setStagingArea(HUB);
+		form.setStagingArea(STAGING);
 		form.setOperationsSectionChiefName(OPS);
 		form.setOperationsSectionChiefContact(CHANNEL);
 		form.setSharedWorkAssignment("Koster hub/spokes/rim. All teams report directly to Ops; protect the hub. "
-				+ "No aircraft. Human field strength 25 including four canine handlers; dogs do not add personnel.");
+				+ "No aircraft. Human field strength 36 including four canine handlers; dogs do not add personnel. "
+				+ "IPP: " + IPP + ". ICP: " + ICP + ". Staging is separate from both.");
 		form.setSpecialInstructions("FICTIONAL EXERCISE ONLY. Calm approach to vulnerable adult; do not chase. "
 				+ "Preserve clues, report location immediately, avoid contaminating scent articles. "
 				+ "Check in every 30 minutes. Buddy contact, tick checks, water and shaded rest per ICS 208. "
-				+ "Only six teams initially active; Ops reassesses span before later launches; "
-				+ "no simultaneous assignment of the follow-on point team.");
+				+ "Six teams initially active; Ops reassesses span before later launches and staggers/pauses work "
+				+ "rather than assuming eight active teams manageable. No simultaneous tasks for any member.");
 		form.setCommunications(List.of(contact("Ops / all teams", "Command and tactical")));
 		form.setPreparedByName(PLANNING);
 		form.setPreparedByPositionTitle("Planning Section Chief");
@@ -513,35 +596,55 @@ class MapleRidgeExampleTest {
 		for (int i = 0; i < 3; i++) {
 			String route = List.of("A north footpath 1.2 km to north gate R1", "B east lane 1.0 km to footbridge R2",
 					"C south creek trail 0.8 km to rim marker C").get(i);
-			addTask(data, "S" + (i + 1), "Spoke " + (i + 1), "Ground", "Route", i * 4, 4,
+			addTask(data, "S" + (i + 1), i < 2 ? "G1" : "G2", "Ground", "Route", i < 2 ? 0 : 8, 8,
 					"Rapid hasty route search of spoke " + route + "; inspect adjacent hazards from safe ground. "
-							+ "Report GPS track, clues and unsearched gaps to Ops by 1000; return to hub for debrief.",
-					1, time(7, 15), time(10, 0), "on task", -1);
+							+ "Report GPS track, clues and unsearched gaps to Ops at task end; debrief by radio, "
+							+ "take water/rest before next task; do not contaminate the residence IPP.",
+					1, i == 1 ? time(8, 45) : time(7, 15), i == 0 ? time(8, 30) : time(10, 0),
+					i == 1 ? "planned" : "on task", -1);
 		}
-		addTask(data, "R1", "Rim team", "Ground", "Route", 12, 5,
-				"Place two buddy pairs at R1 north gate and R2 east footbridge by 0800; fifth member leads from hub. "
-						+ "Observe likely exit routes, not an impermeable perimeter. Maintain posts through 1900; "
-						+ "Ops assigns paired relief from returning S2/S3 teams for rest/water without abandoning "
-						+ "observation; report sightings. Demob preparation at 1830 is not permission to leave posts.",
-				2, time(7, 15), time(19, 0), "on task", -1);
+		for (int i = 0; i < 2; i++) {
+			int first = 16 + i * 2;
+			addTask(data, "R" + (i + 1), "Observation " + (i + 1), "Ground", "Point", first, 2,
+					"Establish observation at " + (i == 0 ? "R1 north gate" : "R2 east footbridge")
+							+ " by 0800, maintain through 1900; report sightings. Not an impermeable perimeter. "
+							+ FIELD_NAMES.get(first) + " observes while " + FIELD_NAMES.get(first + 1)
+							+ " rests in adjacent shaded shelter 1300-1320; reverse roles 1320-1340. "
+							+ "Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact "
+							+ "and uninterrupted observation. Both stay on this task; no borrowed search-team relief. "
+							+ "If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. "
+							+ "1830 demob preparations do not authorize leaving before 1900.",
+					2, time(7, 15), time(19, 0), "on task", -1);
+		}
 		for (int i = 0; i < 4; i++) {
-			addTask(data, "K" + (i + 1), "Canine " + (i + 1), "Canine", "Area", 17 + i * 2, 2,
+			addTask(data, "K" + (i + 1), "Canine " + (i + 1), "Canine", "Area", 20 + i * 4, 4,
 					"Search bounded high-probability inner-ring (25% zone) K" + (i + 1)
 							+ " (15-hectare coverage target) beside spoke " + (char) ('A' + i % 3)
-							+ "; prioritize downwind segments after checking wind; target completion by 1500. "
-							+ "Handler and flanker work live-find area search "
+							+ "; coordinate nonoverlapping ground subsegments with G1/G2 toward coverage approximately 1 "
+							+ "over the 60-hectare zone, not repeated sweeps of the same tracks. "
+							+ "Prioritize downwind segments after checking wind; target completion by 1700. "
+							+ "Handler and three support searchers work live-find area search "
 							+ "in 20-minute bouts with at least 20-minute shaded cooling/water breaks. "
 							+ "Reassess at each break; stop for heat distress, unsafe footing or loss of radio contact. "
 							+ "Report actual GPS coverage and gaps; no assumed POD. Rest rotation at 1300.",
-					3, time(i < 2 ? 7 : 10, 30), time(15, 0), i < 2 ? "on task" : "planned", i);
+					3, time(i < 2 ? 7 : 10, 30), time(17, 0), i < 2 ? "on task" : "planned", i);
 		}
-		addTask(data, "P1", "Spoke 1 follow-on", "Ground", "Point", 0, 4,
-				"After S1 debrief and water/rest, check all three attractors within 1 km of residence/IPP by 1200: "
+		addTask(data, "P1", "G1", "Ground", "Point", 0, 8,
+				"After S2 debrief and water/rest, check all three attractors within 1 km of residence/IPP by 1200: "
 						+ "former bus stop, garden pond/shelter and creek crossing beside old meeting hall. "
 						+ "Inspect hazard/water points from safe ground, no water entry. "
 						+ "Ask permission before entry, use calm introductions, document each check and negative result; "
-						+ "report gaps and return to Ops. Do not depart while S1 remains active.",
+						+ "report gaps to Ops. Do not depart while S2 remains active.",
 				4, time(10, 30), time(12, 0), "planned", -1);
+		for (int i = 0; i < 2; i++) {
+			addTask(data, "G" + (i + 1) + "-AREA", "G" + (i + 1), "Ground", "Area", i * 8, 8,
+					"After prior tasks and water/rest, grid assigned subsegments of the high-probability inner 25% zone "
+							+ "(K1/K2 for G1; K3/K4 for G2). Ops coordinates boundaries with canine teams. "
+							+ "Target zone coverage approximately 1 by 1700; record actual GPS tracks, spacing and gaps, "
+							+ "reassess detection estimates rather than assuming success. Take shaded rest/heat checks at 1300 "
+							+ "and as needed; hourly hydration checks. No water entry.",
+					3, i == 0 ? time(12, 30) : time(10, 30), time(17, 0), "planned", -1);
+		}
 	}
 
 	/**
@@ -573,7 +676,7 @@ class MapleRidgeExampleTest {
 		row.setLeader(FIELD_NAMES.get(first));
 		row.setNumberOfPersons(count);
 		row.setContact(CHANNEL);
-		row.setReportingLocation(HUB);
+		row.setReportingLocation(STAGING);
 		row.setAssignment(assignment);
 		row.setObjectiveIds(List.of(id("objective-0"), id("objective-" + objective)));
 		row.setSpecialEquipment(dogIndex < 0 ? "Radio, map, GPS, first-aid kit" : "Live-find canine, radio, GPS, canine water");
@@ -591,7 +694,7 @@ class MapleRidgeExampleTest {
 		task.setLeader(row.getLeader());
 		task.setAssignment(assignment);
 		task.setContact(CHANNEL);
-		task.setStagingArea(HUB);
+		task.setStagingArea(STAGING);
 		task.setTaskMap(data.getIncidentContext().getTaskMap());
 		task.setOperationsSectionChiefName(OPS);
 		task.setOperationsSectionChiefContact(CHANNEL);
@@ -599,7 +702,7 @@ class MapleRidgeExampleTest {
 		task.setAssignmentEnd(end);
 		task.setTaskLifecycleStatus(status);
 		task.setSpecialEquipment(row.getSpecialEquipment());
-		task.setTransportationInstructions("Ground/foot only; sign out and back in at hub. No aircraft.");
+		task.setTransportationInstructions("Ground/foot only; sign out and back in at staging, not IPP. No aircraft.");
 		task.setCommunications(List.of(contact("Ops", "Command and tactical")));
 		task.setPreparedByName(PLANNING);
 		task.setPreparedByPositionTitle("Planning Section Chief");
@@ -614,7 +717,9 @@ class MapleRidgeExampleTest {
 			task.getResourcesAssigned().add(taskResource(card, i == first ? "Leader" : "Searcher / flanker"));
 		}
 		if (dogIndex >= 0) {
-			task.getResourcesAssigned().add(taskResource(data.getTCards().get(32 + dogIndex), "Live-find canine"));
+			TCard dog = data.getTCards().stream()
+					.filter(c -> c.getResourceIdentifier().equals("MR-K9-" + (dogIndex + 1))).findFirst().orElseThrow();
+			task.getResourcesAssigned().add(taskResource(dog, "Live-find canine"));
 			task.setCanineSearchType("Area / live find");
 			task.setCanineDayNight("Day");
 			task.setCanineCloudCover("Partly cloudy (fictional forecast)");
@@ -670,8 +775,9 @@ class MapleRidgeExampleTest {
 				"Maintain buddy contact, deliberate footing and suitable boots; avoid unstable banks and water entry. "
 						+ "Stop and report unsafe crossings; use an alternate route authorized by Ops.",
 				"ICP water resupply by 0900; hourly hydration/electrolyte checks for all field teams. "
-						+ "Mandatory shaded rest and heat-illness checks at 1300, plus rest as needed; "
-						+ "stage paired relief to preserve rim observation. "
+						+ "Mandatory shaded rest and heat-illness checks from 1300, plus rest as needed; "
+						+ "observation buddies alternate 1300-1320/1320-1340 in adjacent shade, retaining buddy contact "
+						+ "and uninterrupted observation; repeat at least hourly. "
 						+ "Canine 20-minute work/cooling cycles; handlers monitor dogs continuously. "
 						+ "Stop work for heat illness signs; notify MEDL, cool safely and request assistance.");
 		for (int i = 0; i < hazards.size(); i++) {
@@ -698,7 +804,8 @@ class MapleRidgeExampleTest {
 		data.getForm208().setIncludeInIap(true);
 		data.getForm208().setGeneralRequirements("FICTIONAL EXERCISE ONLY. All personnel briefed at 0700. "
 				+ "Stop work for unsafe conditions; immediately notify Ops and Safety. "
-				+ "30-minute radio/accountability checks. MEDL at hub; emergency traffic takes priority.");
+				+ "30-minute radio/accountability checks. MEDL coordinates from " + ICP
+				+ "; aid supplies at staging. Emergency traffic takes priority.");
 		data.getForm208().setPreparedByName(SAFETY);
 		data.getForm208().setPreparedByPositionTitle("Safety Officer");
 		data.getForm208().setPreparedDateTime(time(6, 45));
@@ -718,7 +825,7 @@ class MapleRidgeExampleTest {
 		plan.setDesignatedMedicalUnitContact(CHANNEL + "; 202-555-0107 (fictional)");
 		MedicalPlan.AidStation aid = new MedicalPlan.AidStation();
 		aid.setName("Exercise pavilion first-aid post (fictional)");
-		aid.setLocation(HUB);
+		aid.setLocation(STAGING);
 		aid.setContactNumbers("202-555-0107 (fictional)");
 		aid.setFrequency(CHANNEL + " / 155.160 simplex");
 		aid.setParamedicsOnSite(false);
@@ -743,7 +850,9 @@ class MapleRidgeExampleTest {
 		plan.setEmergencyProcedures("FICTIONAL EXERCISE ONLY; do not call example numbers. "
 				+ "For a real emergency use the actual local emergency number. "
 				+ "Exercise: announce emergency traffic on MR SAR 1, give task/location, injury and access; "
-				+ "Ops alerts MEDL, pauses nearby work, arranges ground extraction and ambulance rendezvous at hub. "
+				+ "MEDL coordinates from ICP; staging aid post is a supplies/cache and rendezvous location, "
+				+ "not an additional staffed team. Ops alerts MEDL, pauses nearby work, "
+				+ "requests the simulated BLS service and arranges ground extraction and ambulance rendezvous at staging. "
 				+ "No aircraft assigned. Do not move a patient unless needed for immediate safety.");
 		plan.setAviationAssetsUsed(false);
 		plan.setPreparedByMedicalUnitLeader(MEDL);
@@ -762,14 +871,15 @@ class MapleRidgeExampleTest {
 		List<String> items = List.of("First tick check: ALL teams complete and report buddy tick checks by 1000; "
 				+ "Safety verifies completion; MEDL tracks exposures.",
 				"Hourly hydration/electrolyte checks for all field teams; replenish ICP drinking water by 0900 "
-						+ "and arrange field/canine water delivery. Logistics and Safety verify every team.",
-				"MANDATORY shaded rest break and heat-illness check at 1300 for all field teams, "
-						+ "supervised by Safety/MEDL; stage paired relief so rim observation continues.",
+						+ "and arrange field/canine water delivery requests through simulated support service. Planning and Safety verify every team.",
+				"MANDATORY shaded rest break and heat-illness check from 1300 for all field teams, "
+						+ "supervised remotely by Safety/MEDL at ICP; observation buddies alternate rest "
+						+ "1300-1320/1320-1340 in adjacent shade with continuous observation and buddy contact.",
 				"End-shift demob: Safety begins tick/hydration checks at 1830 and verifies completion before release; "
-						+ "account for all 32 people and four canines, complete task debriefs, equipment return "
+						+ "account for all 42 people and four canines, complete task debriefs, equipment return "
 						+ "and safe-travel checks. Maintain paired containment posts through 1900; "
 						+ "verify continuing containment/relief needs with Ops before releasing anyone.");
-		List<String> pocs = List.of(SAFETY + " (Safety)", LOGISTICS + " (Logistics) / " + SAFETY + " (Safety)",
+		List<String> pocs = List.of(SAFETY + " (Safety)", PLANNING + " (Planning) / " + SAFETY + " (Safety)",
 				SAFETY + " (Safety) / " + MEDL + " (MEDL)", SAFETY + " (Safety)");
 		List<LocalDateTime> due = List.of(time(10, 0), time(9, 0), time(13, 0), time(18, 30));
 		for (int i = 0; i < items.size(); i++) {
@@ -792,16 +902,19 @@ class MapleRidgeExampleTest {
 		log.setPreparedByPositionTitle("Operations Section Chief");
 		log.setPreparedDateTime(time(8, 0));
 		List<String> notes = List.of("0700 exercise briefing: objectives, dementia-aware approach, tick/fall/heat controls; "
-				+ "32 people checked in: 25 field including four handlers, seven IMT; four canine equipment cards.",
-				"0715 spokes S1-S3 and rim R1 deployed; Ops retains direct supervision. Hub protected from contamination.",
-				"0730 K1/K2 deployed; K3/K4 remain available at hub pending 1030 launch and span/heat reassessment.",
-				"0800 paired rim posts report established at north gate and east footbridge; "
-						+ "no verified subject clues; 0900 water delivery reminder acknowledged.");
+				+ "42 people checked in: 36 field including four handlers, six IMT at " + ICP + "; four canine cards.",
+				"0715 G1 on S1 (A), G2 on S3 (C), two two-person observation teams on R1/R2; "
+						+ "G1 S2 (B) planned 0845-1000. Residence IPP protected: " + IPP + ".",
+				"0730 K1/K2 deployed; K3/K4 available at " + STAGING
+						+ " pending 1030 launch and Ops span/heat reassessment. Six teams active.",
+				"0800 R1/R2 report established at north gate and east footbridge; no verified clues. "
+						+ "G1 point task 1030-1200 then area 1230-1700; G2 area 1030-1700 planned. "
+						+ "Planning acknowledges 0900 ICP water reminder.");
 		for (int i = 0; i < notes.size(); i++) {
 			ActivityLogEntry entry = new ActivityLogEntry();
 			entry.setEntryId(id("activity-" + i));
 			entry.setTimestamp(List.of(time(7, 0), time(7, 15), time(7, 30), time(8, 0)).get(i));
-			entry.setResourceIdentifier(i == 3 ? "Rim team" : "Ops");
+			entry.setResourceIdentifier(i == 3 ? "Observation 1" : "Ops");
 			entry.setAssignmentId(i == 3 ? id("assignment-R1") : "");
 			entry.setNotableActivity(notes.get(i));
 			log.getActivityLog().add(entry);

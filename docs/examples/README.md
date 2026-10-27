@@ -29,30 +29,47 @@ resources, permissions and a locally approved safety/medical/communications plan
 
 ### Scenario and deliberate limits
 
-The fictional missing adult has dementia and wandered from a residence beside
-the community pavilion and trail junction. That residence is the point last
-seen; the adjacent pavilion is staging. A Koster **hub/spokes/rim** approach
+The fictional missing adult has dementia and wandered from the residence/IPP
+at **1 Trail Lane**. Staging and the aid-supply/rendezvous post are at the
+community park pavilion, **20 Park Road, 0.8 km west of IPP**. All six command
+staff work at the separate **ICP, county community center, 50 Civic Road,
+1.5 km west of IPP**; MEDL coordinates medical requests from ICP rather than
+staffing an additional field post. All addresses are fictional. A Koster **hub/spokes/rim** approach
 protects that residence/last-known-point hub, rapidly checks three travel
 spokes, observes two likely rim exits, and
-follows with bounded canine areas and familiar-attractor checks. It does not
+follows with bounded area searches and familiar-attractor checks. It does not
 claim an impermeable perimeter, a guaranteed detection probability or a real map.
 
-There are **25 human field searchers, including four canine handlers**, plus
-**seven IMT overhead** (IC, Ops, Planning, Logistics, Safety, COML and MEDL).
+There are **36 human field searchers, including four canine handlers**, plus
+**six ICP staff** (IC, Ops, Planning, Safety, COML and MEDL): **42 people and
+46 T-cards including four dogs**. IC Avery Wren is Sheriff of the Fictional
+Pine County Sheriff's Office. Field cards include Fictional Maple Ridge Volunteer
+SAR, Fictional Cedar Valley SAR and Fictional Lake Hollow SAR personnel.
+There is no Logistics Chief; Casey Finch leads ground team G1.
 Exactly **four canine equipment T-cards** link to named handlers; dogs are not
-counted as people. Three four-person spoke teams, a five-person rim team and
-four two-person handler/flanker teams account for all 25 field people. Teams
+counted as people. Two eight-person ground teams, two two-person observation teams
+and four four-person canine teams account for all 36 field people. Teams
 report directly to Ops; there are no branches, divisions or groups and no
 additional ICS 204s. Two canine launches are deferred to 1030; Ops must reassess
-active span, conditions and relief before launch. The point assignment reuses
-Spoke 1 only after its route task ends.
+active span and conditions before launch, staggering or pausing work if necessary;
+eight simultaneously active teams is not assumed manageable. Six teams are initially
+active (G1, G2, two posts, K1 and K2). G1 searches route A 0715–0830, then
+route B 0845–1000; G2 searches route C 0715–1000. G1 checks attractors
+1030–1200 then searches area subsegments 1230–1700; G2 searches area
+subsegments 1030–1700. No member has overlapping tasks, including planned tasks.
 
 Measurable objectives address the required responder/public safety wording,
-spoke completion by 1000, paired rim observation **through 1900** with relief
-from returning spoke teams, four 15-hectare canine zones in the high-probability
-inner-ring **25% zone**, prioritizing assessed downwind segments (a 60-hectare
-target, not a coverage claim), and three attractor/hazard/water-point checks
-within **1 km of the residence/IPP** by 1200. Task timing, actual coverage and
+spoke completion by 1000, containment of both likely egress points by 0800
+**through 1900**, searching the high-probability inner **25% zone** to coverage
+approximately **1 by 1700**, and three attractor/hazard-point checks
+within **1 km of the residence/IPP** by 1200. Coverage 1 is not POD 1:
+probability of detection is always less than 100%. The four 15-hectare zones
+total 60 hectares; ground/canine subsegments, GPS tracks and gaps are coordinated
+in assignments, not presumed searched. Downwind priorities, short canine
+work/cooling cycles and tactical instructions stay in assignments/safety.
+Each observation pair alternates watcher/rest roles in adjacent shade while
+retaining buddy contact and uninterrupted observation; no searchers are borrowed
+from overlapping tasks. Task timing, actual coverage and
 canine welfare require reassessment. The single illustrative **155.160 MHz VHF
 simplex analog FM** channel is linked by identity to T-cards, ICS 204/SAR contacts
 and the generated ICS 205A directory. No aircraft are assigned.
@@ -61,8 +78,9 @@ ICS 215A and ICS 208 carry linked tick, fall and heat mitigations. The fictional
 ground-only medical plan includes an aid post, ambulance service and hospital.
 The enabled ICS 233-CG action tracker uses actual item/POC/briefing/start/target/
 status fields for **first tick checks for ALL teams by 1000 (Safety), hourly
-hydration/electrolyte checks and ICP water resupply by 0900 (Logistics/Safety),
-mandatory shaded rest and heat-illness checks at 1300 (Safety/MEDL), and
+hydration/electrolyte checks and ICP water resupply by 0900 (Planning/Safety),
+mandatory shaded rest and heat-illness checks from 1300 (Safety/MEDL; observation
+buddies alternate 1300–1320 and 1320–1340), and
 end-shift tick/hydration demobilization preparations from 1830 (Safety)**;
 rim posts remain staffed through 1900. Blank completion dates intentionally
 mean these future reminders are still open.
