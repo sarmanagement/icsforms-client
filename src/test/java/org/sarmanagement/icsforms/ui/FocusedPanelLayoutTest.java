@@ -240,9 +240,10 @@ class FocusedPanelLayoutTest {
 						progress.getVerticalScrollBar().isVisible(), "Planning vertical scrollbar matches available height");
 				for (JLabel badge : badges) {
 					assertTextFits(badge);
-					Rectangle bounds = SwingUtilities.convertRectangle(badge.getParent(), badge.getBounds(),
-							progress.getViewport());
-					assertTrue(new Rectangle(progress.getViewport().getExtentSize()).contains(bounds), badge.getText());
+					Rectangle bounds = SwingUtilities.convertRectangle(badge.getParent(), badge.getBounds(), content);
+					assertTrue(new Rectangle(content.getSize()).contains(bounds), badge.getText());
+					content.scrollRectToVisible(bounds);
+					assertTrue(content.getVisibleRect().contains(bounds), badge.getText());
 				}
 				assertTextFits((JLabel) content.getComponent(0));
 				assertControls(frame[0]);

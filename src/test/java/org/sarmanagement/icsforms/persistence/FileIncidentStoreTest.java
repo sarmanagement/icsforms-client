@@ -115,6 +115,20 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		}
 	}
 
+	@Test
+	void lockIoFailureIncludesPathAndCause() throws Exception {
+		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+			IncidentId id = store.create(new AppData());
+			Path lockPath = tempDir.resolve("incidents").resolve(id.value() + ".lock");
+			Files.createDirectory(lockPath);
+
+			IllegalStateException failure = assertThrows(IllegalStateException.class, () -> store.lock(id));
+
+			assertTrue(failure.getMessage().contains(lockPath.toAbsolutePath().toString()));
+			assertTrue(failure.getMessage().contains(failure.getCause().getMessage()));
+		}
+	}
+
 	/** Store restarts preserve the installation's origin node identity. */
 	@Test
 	void nodeIdentityPersistsAcrossStoreInstances() {

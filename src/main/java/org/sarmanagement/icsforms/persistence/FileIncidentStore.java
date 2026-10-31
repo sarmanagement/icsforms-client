@@ -127,9 +127,9 @@ public class FileIncidentStore implements IncidentStore {
 			return true;
 		}
 
+		Path lockPath = incidents.resolve(id.value() + ".lock");
 		try {
-			FileChannel channel = FileChannel.open(incidents.resolve(id.value() + ".lock"),
-					StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+			FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
 			FileLock lock;
 			try {
 				lock = channel.tryLock();
@@ -144,7 +144,8 @@ public class FileIncidentStore implements IncidentStore {
 			locks.put(id, lock);
 			return true;
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot lock incident: " + id, e);
+			throw new IllegalStateException(
+					"Cannot lock incident: " + id + " at " + lockPath + ": " + e.getMessage(), e);
 		}
 	}
 
