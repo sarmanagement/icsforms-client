@@ -634,7 +634,7 @@ public class Ics215Panel extends JPanel {
 	 * @return calculated quantity display.
 	 */
 	private JTextField calculatedCountField() {
-		JTextField field = new JTextField(8);
+		JTextField field = new JTextField(4);
 		field.setEditable(false);
 		return field;
 	}
@@ -1133,7 +1133,7 @@ public class Ics215Panel extends JPanel {
 	 * @return formatted field.
 	 */
 	private JTextField countField(Integer value) {
-		return new JTextField(value == null ? "" : value.toString(), 8);
+		return new JTextField(value == null ? "" : value.toString(), 4);
 	}
 
 	/**

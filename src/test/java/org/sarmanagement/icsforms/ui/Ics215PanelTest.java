@@ -48,6 +48,22 @@ class Ics215PanelTest {
 		assertEquals(new Dimension(1, 1), Ics215Panel.assignmentEditorPreferredSize(new Dimension(48, 80)));
 	}
 
+	@Test
+	void resourceCountInputsUseCompactWidths() throws Exception {
+		AppData data = new AppData();
+		AppController controller = new AppController(data, new LocalRepository(directory.resolve("count-width.json")),
+				new PdfExportService(), new IncidentValidator());
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				Ics215Panel panel = new Ics215Panel(controller);
+				assertEquals(4, invokeCountField(panel).getColumns());
+				assertEquals(4, invokeCalculatedCountField(panel).getColumns());
+			});
+		} finally {
+			SwingUtilities.invokeAndWait(() -> field(controller, "autosaveTimer", Timer.class).stop());
+		}
+	}
+
 	@TempDir
 	Path directory;
 
@@ -300,6 +316,38 @@ class Ics215PanelTest {
 			method.setAccessible(true);
 			return (JPanel) method.invoke(target, new JTextField(), new JTextField(), new JTextField(),
 					new JTextField(), new JTextField(), new JTextField());
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
+		}
+	}
+
+	/**
+	 * Creates a regular optional count field using the editor's configured width.
+	 *
+	 * @param target ICS 215 editor.
+	 * @return count field.
+	 */
+	private static JTextField invokeCountField(Object target) {
+		try {
+			var method = target.getClass().getDeclaredMethod("countField", Integer.class);
+			method.setAccessible(true);
+			return (JTextField) method.invoke(target, 1);
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
+		}
+	}
+
+	/**
+	 * Creates a calculated count field using the editor's configured width.
+	 *
+	 * @param target ICS 215 editor.
+	 * @return calculated count field.
+	 */
+	private static JTextField invokeCalculatedCountField(Object target) {
+		try {
+			var method = target.getClass().getDeclaredMethod("calculatedCountField");
+			method.setAccessible(true);
+			return (JTextField) method.invoke(target);
 		} catch (ReflectiveOperationException exception) {
 			throw new IllegalStateException(exception);
 		}
