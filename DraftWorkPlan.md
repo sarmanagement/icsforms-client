@@ -640,4 +640,3 @@ documented.
 - Make authority, sync status, role, and data freshness visible to users.
 - Test with fixture incidents and realistic field constraints; do not use real sensitive incident data in public test fixtures.
 - Revisit estimates and assumptions after each stage and field exercise. Defer work that is not necessary to prove the current stage's exit criteria.
-
