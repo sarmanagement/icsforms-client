@@ -150,9 +150,9 @@ public class IncidentManagerDialog extends JDialog {
 				IncidentSummary summary = updated.get(row);
 				var context = store.load(summary.incidentId()).getIncidentContext();
 				String period = context.getOperationalPeriodStart() == null ? "not set"
-						: UiSupport.formatDateTime(context.getOperationalPeriodStart());
+						: UiSupport.formatIsoDateTime(context.getOperationalPeriodStart());
 				period += " — " + (context.getOperationalPeriodEnd() == null ? "not set"
-						: UiSupport.formatDateTime(context.getOperationalPeriodEnd()));
+						: UiSupport.formatIsoDateTime(context.getOperationalPeriodEnd()));
 				rows[row] = new Object[]{summary.displayLabel(), summary.incidentId().value(), period,
 						summary.lastModified(), summary.path()};
 			}

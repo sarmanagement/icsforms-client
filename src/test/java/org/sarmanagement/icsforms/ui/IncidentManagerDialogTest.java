@@ -24,6 +24,8 @@ import java.awt.Window;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -39,6 +41,21 @@ class IncidentManagerDialogTest {
 	@Test
 	void noSelectionAndCancelledPromptsLeaveSelectionAndStoreUnchanged() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
+		ZoneId previousZone = UiSupport.getDateTimeDisplayZone();
+		try {
+			UiSupport.setDateTimeDisplayZone(ZoneOffset.UTC);
+			noSelectionAndCancelledPromptsLeaveSelectionAndStoreUnchangedInUtc();
+		} finally {
+			UiSupport.setDateTimeDisplayZone(previousZone);
+		}
+	}
+
+	/**
+	 * Checks incident-manager behavior with an explicitly selected UTC display zone.
+	 *
+	 * @throws Exception if dialog interaction or store access fails.
+	 */
+	private void noSelectionAndCancelledPromptsLeaveSelectionAndStoreUnchangedInUtc() throws Exception {
 		try (TestStore store = new TestStore(directory.resolve("store"))) {
 			IncidentId id = store.create(named());
 			SwingUtilities.invokeAndWait(() -> {
