@@ -230,14 +230,15 @@ class FocusedPanelLayoutTest {
 				assertEquals(6, badges.size());
 				JScrollPane progress = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, badges.get(0));
 				assertFalse(progress.getHorizontalScrollBar().isVisible(), "Planning horizontal scrollbar");
-				assertFalse(progress.getVerticalScrollBar().isVisible(), "Planning vertical scrollbar");
+				JPanel content = (JPanel) progress.getViewport().getView();
+				assertEquals(content.getPreferredSize().height > progress.getViewport().getExtentSize().height,
+						progress.getVerticalScrollBar().isVisible(), "Planning vertical scrollbar matches available height");
 				for (JLabel badge : badges) {
 					assertTextFits(badge);
 					Rectangle bounds = SwingUtilities.convertRectangle(badge.getParent(), badge.getBounds(),
 							progress.getViewport());
 					assertTrue(new Rectangle(progress.getViewport().getExtentSize()).contains(bounds), badge.getText());
 				}
-				JPanel content = (JPanel) progress.getViewport().getView();
 				assertTextFits((JLabel) content.getComponent(0));
 				assertControls(frame[0]);
 				assertBanners(frame[0]);

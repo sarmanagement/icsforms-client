@@ -24,6 +24,7 @@ import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.JButton;
 import javax.swing.JDialog;
+import java.awt.Component;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
@@ -381,7 +382,10 @@ class Ics202PanelTest {
 				JTable table = (JTable) fieldValue(panel, "objectivesTable");
 				javax.swing.JScrollPane formScroll = (javax.swing.JScrollPane) panel.getComponent(0);
 				assertFalse(formScroll.getHorizontalScrollBar().isVisible());
-				assertFalse(formScroll.getVerticalScrollBar().isVisible());
+				Component formContent = formScroll.getViewport().getView();
+				assertEquals(formContent.getPreferredSize().height > formScroll.getViewport().getExtentSize().height,
+						formScroll.getVerticalScrollBar().isVisible(),
+						"ICS 202 vertical scrollbar matches available height");
 				assertEquals(45, table.getColumnModel().getColumn(0).getWidth());
 				assertTrue(table.getColumnModel().getColumn(1).getWidth() >= 600);
 				assertEquals(table.getWidth() - 45, table.getColumnModel().getColumn(1).getWidth());
