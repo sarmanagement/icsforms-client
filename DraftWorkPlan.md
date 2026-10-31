@@ -1,11 +1,88 @@
 # Draft Work Plan
 
-**Status date:** 2026-10-31. This document is the single forward plan for
-`icsforms-client`. It records (1) what has been delivered, (2) the design
-invariants that remain binding, (3) the remaining role-panel work, and (4) the
-staged path from today's single-device application to a networked, multi-client
-system with a device trust boundary. Status entries are taken from the merged
-source tree, not from issue or PR closure state.
+## Big picture
+
+### What the system is for
+
+`icsforms-client` supports the command post of a search and rescue (SAR)
+incident run under the Incident Command System. It lets a small team produce
+and keep current the documents an incident actually runs on — ICS 201–208,
+214, 215/215A, SAR task assignments and debriefs, T-cards, clue log, medical and
+communications plans — and print them individually or as a combined Incident
+Action Plan. Incidents are often rural, intermittent-connectivity events staffed
+by volunteers who arrive at different times, work shifts, share laptops, and
+carry their own phones.
+
+### Where it is today
+
+A single-user Java Swing desktop application. One operator, one laptop, one
+incident at a time, saved as local JSON files with revision checks, backups and
+an advisory edit lock. The core SAR form set is complete. Focused role panels
+(Safety, Medical Unit Leader, Operations, Incident Command, Communications) and
+separate human/canine medical reference windows exist alongside the full editor
+workspace, though some of that agreed scope is still outstanding (Part I).
+
+### Where it is going
+
+The same application, unchanged for the solo user, grows into a system that can
+run in four topologies without ever removing the earlier ones:
+
+```text
+T0  Standalone        one laptop, local files                         (today)
+T1  Local host        several workstations on incident Wi-Fi; one of
+                      them hosts the incident service and store        (Stage 2)
+T2  Networked store   a field or site server; single-user phones and
+                      multi-user shared workstations as clients         (Stage 3-4)
+T3  Hosted            cloud service, remote access, read-only mirrors,
+                      planned authority transfer with the field         (Stage 5-7)
+```
+
+Three ideas carry the whole design:
+
+1. **One authority per incident.** A single host owns the record at any moment.
+   Clients keep a working copy and an outbox; they never write to a database
+   directly and never act as independent masters.
+2. **A device trust boundary, not a shared password.** A device is admitted once,
+   in person, by redeeming an administrator-issued, short-lived invitation
+   (QR/short code) for an individually revocable device credential. Switching
+   operators at a shared workstation is then a frictionless, attributed *claim*
+   from the ICS 211 roster, not a login. Outsiders on the same Wi-Fi get nothing;
+   responders join in under a minute; lost devices are revoked individually.
+3. **Stable identity and provenance everywhere.** Every record has a durable
+   UUID; every append-style entry records who entered it, from which station,
+   and when (UTC), with room for when the host accepted it. This is what makes
+   per-record concurrency, sync and audit possible later without a rewrite.
+
+### How we get there
+
+Work proceeds in two independent streams, then converges:
+
+- **Role-panel completion** (Part I): finish the outstanding #33 scope in the
+  standalone application — no network, no authentication.
+- **Persistence foundation** (Part IV, Stage 1): make the existing `IncidentStore`
+  seam backend-neutral and asynchronous, with contract tests, strict imports,
+  durable identity migration, UTC time and a provenance seam — still no network
+  code. Tracked by #37, #39–#44. Its exit test is that a remote store stub drops
+  into the controller with no UI change.
+- **Then** Stage 2 adds the incident API and the first local host (T1); Stage 3
+  adds the trust boundary, operator claim, roles and audit (T2); Stages 4–7 add
+  offline sync, field-host packaging, hosted deployment and a mobile client (T3).
+
+Every stage ends with a usable, recoverable standalone application. Nothing in
+the later stages is allowed to make the solo-laptop case harder.
+
+### How to read this document
+
+**Status date:** 2026-10-31. Status entries are taken from the merged source
+tree, not from issue or PR closure state.
+
+- **Part I — Current status:** what is delivered, what remains of the role-panel
+  plan, and where each open issue sits.
+- **Part II — Design contracts:** binding invariants for all role-panel and
+  persistence work.
+- **Part III — Architecture and topologies:** target architecture, the device
+  trust boundary, and engineering requirements for the shared system.
+- **Part IV — Staged work plan:** gates, dependencies, exit criteria and sizes.
 
 ## Part I — Current status
 
