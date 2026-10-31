@@ -187,16 +187,16 @@ and visible unresolved state. Channel assignment is not a radio check.
 
 | Phase | Scope | Required exit evidence | Current status |
 | --- | --- | --- | --- |
-| 1 — Baseline/design | Inspect instructions/current master/merged prerequisites; record ownership, contracts, layouts and scenarios; reconcile gaps. | Baseline results and technical contract in this document and PR; prerequisite reconciliation decided. | Inspection and baseline recorded; gaps identified, implementation reconciliation pending. |
-| 2 — Live multi-view | Committed notifications/shared operations, validation/commit lifecycle, partial text/focus/selection retention, stale-write prevention, listener disposal and incident isolation. | Cross-view tests pass before adding windows; invalid input blocks action without loss; stale callbacks rejected. | Not implemented. |
-| 3 — Objectives/linkage | Entities, legacy migration, ordered/focused ICS 202 editor, compact assignment picker, assessments, authoritative links, history, deduplicated totals and debrief context. | Reorder/edit/delete-resolution, multi-objective assignment, migration/save/reload and independent archival tests. | Not implemented. |
-| 4 — Review tracking | Content boundaries, substantive/shared-change invalidation, explicit re-review, legacy treatment and fresh-period review. | Navigation/page/preview do not invalidate; content/shared edits do; persistence/rollover copies remain independent. | Not implemented. |
-| 5 — Reference vertical slice | Modular medical tools, distinct nonmodal references, cached async snapshot previews, facility presentation, veterinary links, task context and confirmed logging. | Both windows open with no cross-type leakage; lookup has no effects; failure/cancellation/staleness leaves structured data usable. Validate before role expansion. | Not implemented. |
-| 6 — Safety/MUL | Responsibility-filtered worklists, detail/preview, focused edits/review and full-editor links. | Preparation/review workflows work without tab hunting or access restrictions, including simple plans. | Not implemented. |
-| 7 — Operations | Task board, every agreed direct action, recorded resources, objective/member/hazard/comms/results context. | Representative task creation/status/log/clue/debrief/resource scenarios preserve existing lifecycle rules and selection. | Not implemented. |
-| 8 — IC | Agreed objective-centered layout, explicit assessments, linked effort, results and observational attention. | Normal prelinked assignment creation/linking works; no calculated achievement, request queue or duplicate allocation count. | Not implemented. |
-| 9 — Communications | Full workflow on PR31's model/accessor/editor/import/PDF. | Resolved/unresolved/broken-link cases preserve recorded semantics; focused edits, review and full tools work live. | Not implemented. |
-| 10 — Consolidation/hardening | Discoverable Panels entry points, stable full workspace/log instances, accessibility/keyboard/resizing/second-screen/offline behavior, lifecycle robustness and docs. | All migrations, save/reload, standard exports, full tests, Spotless and Checkstyle pass; manual desktop scenarios recorded. | Not implemented. |
+| 1 — Baseline/design | Inspect instructions/current master/merged prerequisites; record ownership, contracts, layouts and scenarios; reconcile gaps. | Baseline results and technical contract in this document and PR; prerequisite reconciliation decided. | Baseline and contracts recorded; remaining implementation gaps identified. |
+| 2 — Live multi-view | Committed notifications/shared operations, validation/commit lifecycle, partial text/focus/selection retention, stale-write prevention, listener disposal and incident isolation. | Cross-view tests pass before adding windows; invalid input blocks action without loss; stale callbacks rejected. | Controller bindings, committed notifications, and role-panel listener disposal exist. Full-editor bulk flushes can still write stale values; cross-view editor coverage remains incomplete. |
+| 3 — Objectives/linkage | Entities, legacy migration, ordered/focused ICS 202 editor, compact assignment picker, assessments, authoritative links, history, deduplicated totals and debrief context. | Reorder/edit/delete-resolution, multi-objective assignment, migration/save/reload and independent archival tests. | Stable objectives, assessments, links, legacy migration, and deep-copied period records exist. Archive round-trip coverage is extended in this change; role-panel assignment workflow and full phase evidence remain incomplete. |
+| 4 — Review tracking | Content boundaries, substantive/shared-change invalidation, explicit re-review, legacy treatment and fresh-period review. | Navigation/page/preview do not invalidate; content/shared edits do; persistence/rollover copies remain independent. | Review assertions and content-bound staleness exist; full lifecycle acceptance evidence remains pending. |
+| 5 — Reference vertical slice | Modular medical tools, distinct nonmodal references, cached async snapshot previews, facility presentation, veterinary links, task context and confirmed logging. | Both windows open with no cross-type leakage; lookup has no effects; failure/cancellation/staleness leaves structured data usable. Validate before role expansion. | Separate human/canine reference windows and the medical workspace exist. Canine-tool extraction and complete concurrency/preview evidence remain incomplete. |
+| 6 — Safety/MUL | Responsibility-filtered worklists, detail/preview, focused edits/review and full-editor links. | Preparation/review workflows work without tab hunting or access restrictions, including simple plans. | Safety and Medical Unit Leader panels exist; full acceptance evidence remains pending. |
+| 7 — Operations | Task board, every agreed direct action, recorded resources, objective/member/hazard/comms/results context. | Representative task creation/status/log/clue/debrief/resource scenarios preserve existing lifecycle rules and selection. | Operations panel exists; complete action and lifecycle acceptance evidence remains pending. |
+| 8 — IC | Agreed objective-centered layout, explicit assessments, linked effort, results and observational attention. | Normal prelinked assignment creation/linking works; no calculated achievement, request queue or duplicate allocation count. | Current panel is a read-only objective/resource overview with planning-stage and approval controls. The focused objective editor, assignment actions, reported-result sources, and attention list remain incomplete. |
+| 9 — Communications | Full workflow on PR31's model/accessor/editor/import/PDF. | Resolved/unresolved/broken-link cases preserve recorded semantics; focused edits, review and full tools work live. | Communications role panel, explicit radio-check data, channel links, CSV import/export, and PDF workflows exist; full acceptance evidence remains pending. |
+| 10 — Consolidation/hardening | Discoverable Panels entry points, stable full workspace/log instances, accessibility/keyboard/resizing/second-screen/offline behavior, lifecycle robustness and docs. | All migrations, save/reload, standard exports, full tests, Spotless and Checkstyle pass; manual desktop scenarios recorded. | Role Panels entry points and typed workspace navigation exist. Superseded View > Dashboard tab ordering is removed here; documentation and desktop acceptance evidence remain pending. |
 
 ### Acceptance and regression matrix
 
@@ -232,6 +232,19 @@ Existing test infrastructure is Maven/JUnit, Swing desktop tests under Xvfb,
 PDFBox PDF regressions and persistence round trips. Extend those suites rather
 than introducing test frameworks. Baseline success is not final acceptance.
 
+### Reconciliation of PR #32 additions
+
+| Addition | Decision and rationale |
+| --- | --- |
+| Planning stage | Accepted as an explicitly recorded planning-cycle fact; it does not gate assignment creation, status changes, or deployment. |
+| Objective approval | Accepted as a content-bound human assertion separate from plan review; it is not authentication, an electronic signature, or a readiness gate. |
+| Radio-check status | Accepted only as an explicit operator-recorded check with person/time; channel assignment, availability, and task status never imply a check. |
+| Versioned native CSV | Accepted as a lossless, validated interchange format for channel records; CSV schema version is not a radio check or a new workflow gate. |
+
+These are retained in code for backward compatibility and because they represent
+distinct recorded facts or safe interchange behavior. The binding boundaries
+remain: channel assignment is not a radio check, and review is not approval.
+
 ### Exclusions and scope boundary
 
 No permissions/authentication/e-signatures, automatic events, clinical support,
@@ -240,7 +253,10 @@ request/approval/ordering queue, structured meeting workflow, mobile application
 remote persistence/sync/concurrency, combined-role widget builder, cross-period
 panel, simultaneous next-period planning, or blanket legacy-frequency replacement.
 Do not reinterpret assignments as resource requests. The future multi-user
-proposal below does not become a prerequisite or part of issue #33.
+proposal below does not become a prerequisite or part of issue #33. The retired
+`workspace-dashboard` user preference is ignored; the main workspace keeps its
+stable default order, and role-specific entry points remain under View > Role
+Panels.
 
 ---
 
