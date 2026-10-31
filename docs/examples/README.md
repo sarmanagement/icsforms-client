@@ -43,7 +43,7 @@ community park pavilion, **20 Park Road, 0.8 km west of IPP**. All six command
 staff work at the separate **ICP, county community center, 50 Civic Road,
 1.5 km west of IPP**; MEDL coordinates medical requests from ICP rather than
 staffing an additional field post. Shared incident locations include the ICP,
-staging, residence/IPP (Other), and **Base (supply and rehab) colocated with ICP**
+staging, residence/IPP (Other), and **Base (supply and rehab) colocated with staging**
 at the same **20 Park Road** address. Base provides water resupply, heat rehab
 coordination and the human first-aid supplies/cache, **not a staffed medical
 team or aid post**. Staff retain their organizational roles and ICP address;

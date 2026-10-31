@@ -267,7 +267,7 @@
     "authorRole" : "SAFETY_OFFICER",
     "messageMode" : "HAZARD_PRECAUTIONS",
     "freeText" : "",
-    "generalRequirements" : "FICTIONAL EXERCISE ONLY. All personnel briefed at 0700. Stop work for unsafe conditions; immediately notify Ops and Safety. 30-minute radio/accountability checks. MEDL coordinates from ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); human aid supplies and heat rehab at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP), not staging. The aid-supply cache is unstaffed; no dedicated medical post. Emergency traffic takes priority.",
+    "generalRequirements" : "FICTIONAL EXERCISE ONLY. All personnel briefed at 0700. Stop work for unsafe conditions; immediately notify Ops and Safety. 30-minute radio/accountability checks. MEDL coordinates from ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); human aid supplies and heat rehab at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP). The aid-supply cache is unstaffed; no dedicated medical post. Emergency traffic takes priority.",
     "hazardBlocks" : [ {
       "hazard" : "Ticks / tick-borne illness",
       "incidentArea" : "All Maple Ridge field assignments",
@@ -2521,7 +2521,7 @@
       "burnCenter" : false,
       "helipad" : false
     } ],
-    "emergencyProcedures" : "FICTIONAL EXERCISE ONLY; do not call example numbers. For a real emergency use the actual local emergency number. Exercise: announce emergency traffic on MR SAR 1, give task/location, injury and access; MEDL coordinates from ICP; the human aid station at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) is an unstaffed supplies/cache, not an additional staffed team or a staging aid post. Ops alerts MEDL, pauses nearby work, requests the simulated BLS service and arranges ground extraction and ambulance rendezvous at staging. No aircraft assigned. Do not move a patient unless needed for immediate safety.",
+    "emergencyProcedures" : "FICTIONAL EXERCISE ONLY; do not call example numbers. For a real emergency use the actual local emergency number. Exercise: announce emergency traffic on MR SAR 1, give task/location, injury and access; MEDL coordinates from ICP; the human aid station at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) is an unstaffed supplies/cache, not an additional staffed medical team. Ops alerts MEDL, pauses nearby work, requests the simulated BLS service and arranges ground extraction and ambulance rendezvous at staging. No aircraft assigned. Do not move a patient unless needed for immediate safety.",
     "aviationAssetsUsed" : false,
     "airOperationsReminder" : "",
     "preparedByMedicalUnitLeader" : "Quinn Alder",

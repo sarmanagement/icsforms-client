@@ -1326,7 +1326,7 @@ class MapleRidgeExampleTest {
 		data.getForm208().setGeneralRequirements("FICTIONAL EXERCISE ONLY. All personnel briefed at 0700. "
 				+ "Stop work for unsafe conditions; immediately notify Ops and Safety. "
 				+ "30-minute radio/accountability checks. MEDL coordinates from " + ICP
-				+ "; human aid supplies and heat rehab at " + BASE + ", not staging. "
+				+ "; human aid supplies and heat rehab at " + BASE + ". "
 				+ "The aid-supply cache is unstaffed; no dedicated medical post. Emergency traffic takes priority.");
 		data.getForm208().setPreparedByName(SAFETY);
 		data.getForm208().setPreparedByPositionTitle("Safety Officer");
@@ -1382,7 +1382,7 @@ class MapleRidgeExampleTest {
 				+ "For a real emergency use the actual local emergency number. "
 				+ "Exercise: announce emergency traffic on MR SAR 1, give task/location, injury and access; "
 				+ "MEDL coordinates from ICP; the human aid station at " + BASE
-				+ " is an unstaffed supplies/cache, not an additional staffed team or a staging aid post. "
+				+ " is an unstaffed supplies/cache, not an additional staffed medical team. "
 				+ "Ops alerts MEDL, pauses nearby work, "
 				+ "requests the simulated BLS service and arranges ground extraction and ambulance rendezvous at staging. "
 				+ "No aircraft assigned. Do not move a patient unless needed for immediate safety.");
