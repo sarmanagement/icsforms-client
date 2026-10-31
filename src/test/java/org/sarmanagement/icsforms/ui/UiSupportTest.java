@@ -13,6 +13,9 @@ import java.awt.Component;
 import java.awt.Rectangle;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -192,6 +195,23 @@ class UiSupportTest {
 		assertTrue(label.startsWith("America/Denver (UTC-"));
 		assertTrue(label.endsWith(")"));
 		assertTrue(label.contains("MST") || label.contains("MDT"));
+	}
+
+	@Test
+	void timestampFormattingAndParsingUseTheConfiguredDisplayZone() {
+		ZoneId previousZone = UiSupport.getDateTimeDisplayZone();
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+		try {
+			UiSupport.setDateTimeDisplayZone(ZoneId.of("America/Los_Angeles"));
+
+			LocalDateTime utc = LocalDateTime.of(2024, 1, 1, 1, 30);
+			String displayed = UiSupport.formatDateTime(utc, formatter);
+
+			assertEquals("2023-12-31 17:30", displayed);
+			assertEquals(utc, UiSupport.parseDateTime(displayed, formatter));
+		} finally {
+			UiSupport.setDateTimeDisplayZone(previousZone);
+		}
 	}
 
 	@Test

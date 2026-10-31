@@ -38,7 +38,10 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -83,6 +86,32 @@ final class UiSupport {
 
 	static void setDateTimeDisplayZone(ZoneId zoneId) {
 		dateTimeDisplayZone = zoneId == null ? ZoneId.systemDefault() : zoneId;
+	}
+
+	/**
+	 * Formats a UTC timestamp in the active display timezone.
+	 *
+	 * @param value UTC timestamp.
+	 * @param formatter timestamp formatter.
+	 * @return formatted timestamp, or an empty string when the value is null.
+	 */
+	static String formatDateTime(LocalDateTime value, DateTimeFormatter formatter) {
+		return value == null ? "" : value.atOffset(ZoneOffset.UTC).atZoneSameInstant(dateTimeDisplayZone).format(formatter);
+	}
+
+	/**
+	 * Parses a timestamp entered in the active display timezone into UTC.
+	 *
+	 * @param value displayed timestamp.
+	 * @param formatter timestamp formatter.
+	 * @return UTC timestamp, or null when the value is blank.
+	 */
+	static LocalDateTime parseDateTime(String value, DateTimeFormatter formatter) {
+		if (value == null || value.isBlank()) {
+			return null;
+		}
+		LocalDateTime displayed = LocalDateTime.parse(value.trim(), formatter);
+		return displayed.atZone(dateTimeDisplayZone).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
 	}
 
 	static void applyDateTimeDisplayZone(Component root) {
