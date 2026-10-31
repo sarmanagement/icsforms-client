@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -13,6 +14,8 @@ import java.awt.Component;
 import java.awt.Rectangle;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -210,6 +213,33 @@ class UiSupportTest {
 			assertEquals("2023-12-31 17:30", displayed);
 			assertEquals(utc, UiSupport.parseDateTime(displayed, formatter));
 		} finally {
+			UiSupport.setDateTimeDisplayZone(previousZone);
+		}
+	}
+
+	@Test
+	void generatedTimestampsStayUtcAcrossClientAndDaylightSavingTransitions() {
+		ZoneId previousZone = UiSupport.getDateTimeDisplayZone();
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+		try {
+			UiSupport.setDateTimeDisplayZone(ZoneId.of("America/Los_Angeles"));
+			UtcTimestamp.setClock(Clock.fixed(Instant.parse("2024-03-10T09:59:00Z"), ZoneId.of("Asia/Tokyo")));
+			LocalDateTime beforeTransition = UtcTimestamp.now();
+
+			UtcTimestamp.setClock(Clock.fixed(Instant.parse("2024-03-10T10:00:00Z"), ZoneId.of("Asia/Tokyo")));
+			LocalDateTime afterTransition = UtcTimestamp.now();
+
+			assertEquals(LocalDateTime.of(2024, 3, 10, 9, 59), beforeTransition);
+			assertEquals(LocalDateTime.of(2024, 3, 10, 10, 0), afterTransition);
+			assertTrue(afterTransition.isAfter(beforeTransition));
+			assertEquals("2024-03-10 01:59", UiSupport.formatDateTime(beforeTransition, formatter));
+			assertEquals("2024-03-10 03:00", UiSupport.formatDateTime(afterTransition, formatter));
+			assertEquals(beforeTransition,
+					UiSupport.parseDateTime(UiSupport.formatDateTime(beforeTransition, formatter), formatter));
+			assertEquals(afterTransition,
+					UiSupport.parseDateTime(UiSupport.formatDateTime(afterTransition, formatter), formatter));
+		} finally {
+			UtcTimestamp.resetClock();
 			UiSupport.setDateTimeDisplayZone(previousZone);
 		}
 	}
