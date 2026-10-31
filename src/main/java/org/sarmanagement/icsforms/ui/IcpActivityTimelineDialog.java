@@ -44,6 +44,8 @@ import java.util.function.Consumer;
  * Proof-of-concept timeline for ICP activity, grouped by assignment.
  */
 public final class IcpActivityTimelineDialog extends JDialog {
+	private static final int TIMELINE_LEFT = 240;
+	private static final int TIMELINE_HOUR_WIDTH = 100;
 	private final AppController controller;
 	private final Consumer<LogEntryContext> addEntry;
 	private final TimelineCanvas canvas = new TimelineCanvas();
@@ -268,25 +270,59 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	 */
 	static List<TimelineSegment> onTaskSegments(List<TimelineMarker> markers, LocalDateTime timelineEnd) {
 		List<TimelineSegment> segments = new ArrayList<>();
-		LocalDateTime onTaskAt = null;
+		TimelineMarker onTaskMarker = null;
 		for (TimelineMarker marker : markers) {
 			if (marker.struckOut()) {
 				continue;
 			}
 			if (ActivityEventType.ID_RESOURCE_ON_TASK.equals(marker.eventTypeId())) {
-				if (onTaskAt == null) {
-					onTaskAt = marker.timestamp();
+				if (onTaskMarker == null) {
+					onTaskMarker = marker;
 				}
-			} else if (onTaskAt != null && (ActivityEventType.ID_TASK_COMPLETED.equals(marker.eventTypeId())
+			} else if (onTaskMarker != null && (ActivityEventType.ID_TASK_COMPLETED.equals(marker.eventTypeId())
 					|| ActivityEventType.ID_RESOURCE_RETURNED_STAGING.equals(marker.eventTypeId()))) {
-				segments.add(new TimelineSegment(onTaskAt, marker.timestamp()));
-				onTaskAt = null;
+				segments.add(new TimelineSegment(onTaskMarker.timestamp(), marker.timestamp(), onTaskMarker, marker));
+				onTaskMarker = null;
 			}
 		}
-		if (onTaskAt != null && timelineEnd != null && timelineEnd.isAfter(onTaskAt)) {
-			segments.add(new TimelineSegment(onTaskAt, timelineEnd));
+		if (onTaskMarker != null && timelineEnd != null && timelineEnd.isAfter(onTaskMarker.timestamp())) {
+			segments.add(new TimelineSegment(onTaskMarker.timestamp(), timelineEnd, onTaskMarker, null));
 		}
 		return List.copyOf(segments);
+	}
+
+	/**
+	 * Computes the vertical offset used to separate markers at the same pixel.
+	 *
+	 * @param markers markers in their painted order.
+	 * @param target marker whose offset is needed.
+	 * @param timelineStart horizontal-axis origin.
+	 * @return the target marker's vertical offset.
+	 */
+	static int markerVerticalOffset(List<TimelineMarker> markers, TimelineMarker target, LocalDateTime timelineStart) {
+		int targetX = timelineX(target.timestamp(), timelineStart);
+		int overlap = 0;
+		for (TimelineMarker marker : markers) {
+			if (marker == target) {
+				return (overlap % 3 - 1) * 10;
+			}
+			if (timelineX(marker.timestamp(), timelineStart) == targetX) {
+				overlap++;
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * Converts a timeline timestamp to its horizontal pixel coordinate.
+	 *
+	 * @param timestamp plotted time.
+	 * @param start horizontal-axis origin.
+	 * @return horizontal pixel coordinate.
+	 */
+	private static int timelineX(LocalDateTime timestamp, LocalDateTime start) {
+		long minutes = Duration.between(start, timestamp).toMinutes();
+		return TIMELINE_LEFT + (int) (minutes * TIMELINE_HOUR_WIDTH / 60f);
 	}
 
 	/**
@@ -349,8 +385,11 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	 *
 	 * @param start interval start.
 	 * @param end interval end.
+	 * @param startMarker marker at the interval start.
+	 * @param endMarker marker at the interval end, or null for a still-active interval.
 	 */
-	record TimelineSegment(LocalDateTime start, LocalDateTime end) {
+	record TimelineSegment(LocalDateTime start, LocalDateTime end, TimelineMarker startMarker,
+			TimelineMarker endMarker) {
 	}
 
 	/**
@@ -383,10 +422,10 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	 * Scrollable chart that paints lanes, hourly guides, and event symbols.
 	 */
 	private final class TimelineCanvas extends JPanel {
-		private static final int LEFT = 240;
+		private static final int LEFT = TIMELINE_LEFT;
 		private static final int TOP = 42;
 		private static final int ROW_HEIGHT = 52;
-		private static final int HOUR_WIDTH = 100;
+		private static final int HOUR_WIDTH = TIMELINE_HOUR_WIDTH;
 		private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
 		private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("MMM d");
 		private final List<MarkerHit> hits = new ArrayList<>();
@@ -509,13 +548,10 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		 * @param start horizontal-axis origin.
 		 */
 		private void drawMarkers(Graphics2D g, TimelineLane lane, int laneIndex, LocalDateTime start) {
-			Map<Integer, Integer> offsets = new LinkedHashMap<>();
 			for (TimelineMarker marker : lane.markers()) {
-				long minutes = Duration.between(start, marker.timestamp()).toMinutes();
-				int x = LEFT + (int) (minutes * HOUR_WIDTH / 60f);
+				int x = markerX(marker.timestamp(), start);
 				int centerY = TOP + laneIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
-				int overlap = offsets.merge(x, 1, Integer::sum) - 1;
-				int y = centerY + (overlap % 3 - 1) * 10;
+				int y = centerY + markerVerticalOffset(lane.markers(), marker, start);
 				Color color = markerColor(marker.eventTypeId());
 				g.setColor(color);
 				g.fillOval(x - 8, y - 8, 16, 16);
@@ -548,7 +584,10 @@ public final class IcpActivityTimelineDialog extends JDialog {
 			for (TimelineSegment segment : onTaskSegments(lane.markers(), end)) {
 				int fromX = markerX(segment.start(), start);
 				int toX = markerX(segment.end(), start);
-				g.drawLine(fromX, centerY, toX, centerY);
+				int fromY = centerY + markerVerticalOffset(lane.markers(), segment.startMarker(), start);
+				int toY = segment.endMarker() == null ? centerY
+						: centerY + markerVerticalOffset(lane.markers(), segment.endMarker(), start);
+				g.drawLine(fromX, fromY, toX, toY);
 			}
 		}
 

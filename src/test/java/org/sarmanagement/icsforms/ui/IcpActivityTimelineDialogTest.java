@@ -82,19 +82,35 @@ class IcpActivityTimelineDialogTest {
 	@Test
 	void onTaskSegmentsConnectOnTaskToCompletionAndIgnoreStruckOutEvents() {
 		LocalDateTime start = LocalDateTime.of(2026, 10, 27, 8, 0);
+		var onTask = marker(start, ActivityEventType.ID_RESOURCE_ON_TASK, false);
+		var completion = marker(start.plusMinutes(40), ActivityEventType.ID_TASK_COMPLETED, false);
+		var activeOnTask = marker(start.plusHours(2).plusMinutes(10), ActivityEventType.ID_RESOURCE_ON_TASK, false);
 		List<IcpActivityTimelineDialog.TimelineMarker> markers = new ArrayList<>(List.of(
-				marker(start, ActivityEventType.ID_RESOURCE_ON_TASK, false),
+				onTask,
 				marker(start.plusMinutes(20), ActivityEventType.ID_CLUE_DETECTED, false),
-				marker(start.plusMinutes(40), ActivityEventType.ID_TASK_COMPLETED, false),
+				completion,
 				marker(start.plusMinutes(50), ActivityEventType.ID_RESOURCE_RETURNED_STAGING, false),
 				marker(start.plusHours(1), ActivityEventType.ID_RESOURCE_ON_TASK, true),
 				marker(start.plusHours(2), ActivityEventType.ID_RESOURCE_RETURNED_STAGING, false),
-				marker(start.plusHours(2).plusMinutes(10), ActivityEventType.ID_RESOURCE_ON_TASK, false)));
+				activeOnTask));
 
-		assertEquals(List.of(new IcpActivityTimelineDialog.TimelineSegment(start, start.plusMinutes(40)),
-				new IcpActivityTimelineDialog.TimelineSegment(start.plusHours(2).plusMinutes(10),
-						start.plusHours(2).plusMinutes(30))),
+		assertEquals(List.of(new IcpActivityTimelineDialog.TimelineSegment(start, start.plusMinutes(40), onTask,
+				completion), new IcpActivityTimelineDialog.TimelineSegment(start.plusHours(2).plusMinutes(10),
+						start.plusHours(2).plusMinutes(30), activeOnTask, null)),
 				IcpActivityTimelineDialog.onTaskSegments(markers, start.plusHours(2).plusMinutes(30)));
+	}
+
+	@Test
+	void connectorEndpointsUseTheSameVerticalOffsetsAsMarkersAtOverlappingTimes() {
+		LocalDateTime start = LocalDateTime.of(2026, 10, 27, 8, 0);
+		var first = marker(start, ActivityEventType.ID_RESOURCE_ON_TASK, false);
+		var second = marker(start, ActivityEventType.ID_CLUE_DETECTED, false);
+		var third = marker(start.plusSeconds(1), ActivityEventType.ID_TASK_COMPLETED, false);
+		List<IcpActivityTimelineDialog.TimelineMarker> markers = List.of(first, second, third);
+
+		assertEquals(-10, IcpActivityTimelineDialog.markerVerticalOffset(markers, first, start));
+		assertEquals(0, IcpActivityTimelineDialog.markerVerticalOffset(markers, second, start));
+		assertEquals(10, IcpActivityTimelineDialog.markerVerticalOffset(markers, third, start));
 	}
 
 	@Test
