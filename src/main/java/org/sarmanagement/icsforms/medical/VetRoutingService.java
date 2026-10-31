@@ -6,6 +6,7 @@ package org.sarmanagement.icsforms.medical;
 import org.sarmanagement.icsforms.model.StagingLocation;
 import org.sarmanagement.icsforms.model.VetDirectory;
 import org.sarmanagement.icsforms.model.VetFacility;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -82,7 +83,7 @@ public class VetRoutingService {
 					continue;
 				}
 				facility.setDistance(result.distanceMeters(), result.durationSeconds(), result.method(),
-						"ground driving route from staging/base", Instant.now(), staging.getGeneration());
+						"ground driving route from staging/base", UtcTimestamp.nowInstant(), staging.getGeneration());
 				calculated++;
 			} catch (IOException exception) {
 				warnings.add(facility.getName() + ": " + exception.getMessage());
@@ -124,7 +125,7 @@ public class VetRoutingService {
 		double meters = straightLineEstimator.estimateMeters(new GeoPoint(staging.getLatitude(), staging.getLongitude()),
 				new GeoPoint(facility.getLatitude(), facility.getLongitude()));
 		facility.setDistance(meters, Double.NaN, "straight-line estimate", "Haversine; not a driving route",
-				Instant.now(), staging.getGeneration());
+				UtcTimestamp.nowInstant(), staging.getGeneration());
 	}
 
 	/**

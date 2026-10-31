@@ -9,6 +9,7 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.ResourceDirectoryEntry;
 import org.sarmanagement.icsforms.model.ResourceDirectorySource;
@@ -58,7 +59,7 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		List<ResourceDirectoryEntry> entries = ResourceDirectorySource.build(safeData).stream()
 				.sorted(ResourceDirectorySource.byLastName()).toList();
 		String preparedAt = DATE_TIME_FORMATTER
-				.format(ZonedDateTime.now(pdfZoneId(safeData)).withSecond(0).withNano(0));
+				.format(UtcTimestamp.nowInstant().atZone(pdfZoneId(safeData)).withSecond(0).withNano(0));
 		try (PDDocument document = new PDDocument()) {
 			List<List<List<List<String>>>> pages = paginateDirectory(safeData, entries);
 			int totalPages = pages.size();

@@ -7,6 +7,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics215Form;
 import org.sarmanagement.icsforms.model.Ics215ResourceReview;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -554,7 +555,7 @@ public class Ics215Panel extends JPanel {
 						values[1].singleResources, values[1].teams);
 				allocation.linkedResourceIds.clear();
 				allocation.linkedResources.clear();
-				allocation.acceptedAt = LocalDateTime.now(ZoneOffset.UTC);
+				allocation.acceptedAt = UtcTimestamp.now();
 				allocation.manualOverride = true;
 			}
 		}
@@ -1031,7 +1032,7 @@ public class Ics215Panel extends JPanel {
 				allocation.acceptedHave.singleResources, allocation.acceptedHave.teams);
 		allocation.linkedResourceIds.clear();
 		allocation.linkedResources.clear();
-		allocation.acceptedAt = LocalDateTime.now(ZoneOffset.UTC);
+		allocation.acceptedAt = UtcTimestamp.now();
 		allocation.manualOverride = true;
 	}
 
@@ -1122,11 +1123,11 @@ public class Ics215Panel extends JPanel {
 		String target = (String) targetRow.getSelectedItem();
 		if (target.startsWith("Incident-wide")) {
 			Ics215ResourceReview.acceptOnHand(controller.getData(), form, heading.id, links, manual,
-					LocalDateTime.now(ZoneOffset.UTC));
+					UtcTimestamp.now());
 		} else {
 			String rowId = target.substring(0, target.indexOf(" — "));
 			Ics215ResourceReview.acceptRowHave(controller.getData(), form, rowId, heading.id, links,
-					manual, LocalDateTime.now(ZoneOffset.UTC));
+					manual, UtcTimestamp.now());
 		}
 	}
 

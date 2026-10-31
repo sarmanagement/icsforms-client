@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.SafetyHazardReport;
 import org.sarmanagement.icsforms.model.SafetyMessageBlock;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SiteSafetyPlan;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.safety.SafetyHazardCsvService;
 import org.sarmanagement.icsforms.safety.SafetyHazardLibraryService;
 import org.sarmanagement.icsforms.safety.SafetyMessageComposer;
@@ -40,6 +41,7 @@ import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -805,10 +807,10 @@ public class SafetyPanel extends JPanel {
 		HazardReportSource source = reportSources.get(row);
 		if (source.task() != null) {
 			source.task().setSafetyHazardNotedBy(name.trim());
-			source.task().setSafetyHazardNotedDateTime(LocalDateTime.now());
+			source.task().setSafetyHazardNotedDateTime(UtcTimestamp.now());
 		} else {
 			source.archivedReport().setNotedBySafetyOfficer(name.trim());
-			source.archivedReport().setNotedDateTime(LocalDateTime.now());
+			source.archivedReport().setNotedDateTime(UtcTimestamp.now());
 		}
 		controller.markDirty();
 		refreshReportedHazards(controller.getData());
@@ -994,7 +996,7 @@ public class SafetyPanel extends JPanel {
 			return null;
 		}
 		try {
-			return LocalDateTime.parse(value.trim());
+			return UiSupport.parseDateTime(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
 		} catch (java.time.format.DateTimeParseException exception) {
 			return null;
 		}
@@ -1007,7 +1009,7 @@ public class SafetyPanel extends JPanel {
 	 * @return ISO local date/time text, or blank.
 	 */
 	private static String isoDateTime(LocalDateTime dateTime) {
-		return dateTime == null ? "" : dateTime.toString();
+		return UiSupport.formatDateTime(dateTime, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
 	}
 
 	/**

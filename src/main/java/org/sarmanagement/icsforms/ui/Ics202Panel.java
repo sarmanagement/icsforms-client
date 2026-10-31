@@ -9,6 +9,7 @@ import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.ObjectiveAssessment;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.pdf.PdfText;
 
 import javax.swing.BorderFactory;
@@ -297,7 +298,7 @@ public class Ics202Panel extends JPanel {
 		if (previous != objective.getAssessment()
 				|| !java.util.Objects.equals(previousNote, objective.getAssessmentNote())) {
 			objective.setAssessedBy(controller.getData().getIncidentContext().getCurrentUser());
-			objective.setAssessedAt(java.time.LocalDateTime.now().withSecond(0).withNano(0));
+			objective.setAssessedAt(UtcTimestamp.now().withSecond(0).withNano(0));
 		}
 		controller.getData().getForm202().setStructuredObjectives(modelObjectives());
 		int row = objectives.indexOf(objective);

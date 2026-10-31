@@ -7,6 +7,7 @@ import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -78,7 +79,7 @@ public class ClueLogPanel extends JPanel {
 				|| "followed up".equalsIgnoreCase(status) || clue.getFollowUpTargetDate() == null) {
 			return normal;
 		}
-		LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
+		LocalDateTime now = UtcTimestamp.now();
 		if (clue.getFollowUpTargetDate().isBefore(now)) {
 			return new java.awt.Color(255, 225, 210);
 		}
@@ -228,7 +229,7 @@ public class ClueLogPanel extends JPanel {
 		if (spinnerValue instanceof Date) {
 			clue.setDateTimeCollected(AppController.toLocalDateTime((Date) spinnerValue));
 		} else {
-			clue.setDateTimeCollected(LocalDateTime.now().withSecond(0).withNano(0));
+			clue.setDateTimeCollected(UtcTimestamp.now().withSecond(0).withNano(0));
 		}
 
 		Object selectedTask = taskCombo.getSelectedItem();
@@ -290,7 +291,8 @@ public class ClueLogPanel extends JPanel {
 		detectedByField.setText(clue.getDetectedBy());
 		JSpinner dateField = UiSupport.dateTimeSpinner();
 		dateField.setValue(
-				clue.getDateTimeCollected() == null ? new Date() : AppController.toDate(clue.getDateTimeCollected()));
+				clue.getDateTimeCollected() == null ? Date.from(UtcTimestamp.nowInstant())
+						: AppController.toDate(clue.getDateTimeCollected()));
 
 		JTextField locationField = UiSupport.textField();
 		locationField.setText(clue.getLocation());

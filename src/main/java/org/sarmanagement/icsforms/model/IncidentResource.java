@@ -86,10 +86,10 @@ public abstract class IncidentResource {
 	private String notes = "";
 
 	/** Instant at which this resource record was first created. */
-	private Instant createdAt = Instant.now();
+	private Instant createdAt = UtcTimestamp.nowInstant();
 
 	/** Instant of the most recent edit to this resource record. */
-	private Instant updatedAt = Instant.now();
+	private Instant updatedAt = UtcTimestamp.nowInstant();
 
 	/** Monotonically increasing edit counter used for optimistic concurrency. */
 	private long revision = 1;
@@ -312,7 +312,7 @@ public abstract class IncidentResource {
 	 */
 	public void bumpRevision() {
 		this.revision++;
-		this.updatedAt = Instant.now();
+		this.updatedAt = UtcTimestamp.nowInstant();
 	}
 
 	// -----------------------------------------------------------------------

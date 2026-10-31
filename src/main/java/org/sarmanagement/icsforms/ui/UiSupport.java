@@ -38,6 +38,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -51,11 +52,13 @@ import javax.swing.text.JTextComponent;
 
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 /**
  * Shared Swing layout helpers for compact form editing panels.
  */
 final class UiSupport {
+	private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	static final Color REQUIRED_FIELD_BACKGROUND = new Color(255, 248, 225);
 	private static final String FORM_SPACER_PROPERTY = "uiSupport.formSpacer";
 	private static ZoneId dateTimeDisplayZone = ZoneId.systemDefault();
@@ -96,7 +99,28 @@ final class UiSupport {
 	 * @return formatted timestamp, or an empty string when the value is null.
 	 */
 	static String formatDateTime(LocalDateTime value, DateTimeFormatter formatter) {
-		return value == null ? "" : value.atOffset(ZoneOffset.UTC).atZoneSameInstant(dateTimeDisplayZone).format(formatter);
+		return value == null ? ""
+				: value.atOffset(ZoneOffset.UTC).atZoneSameInstant(dateTimeDisplayZone).format(formatter);
+	}
+
+	/**
+	 * Formats a UTC timestamp in the active display timezone.
+	 *
+	 * @param value UTC timestamp.
+	 * @return formatted timestamp, or an empty string when the value is null.
+	 */
+	static String formatDateTime(LocalDateTime value) {
+		return formatDateTime(value, DATE_TIME_FORMATTER);
+	}
+
+	/**
+	 * Formats an instant in the active display timezone.
+	 *
+	 * @param value instant.
+	 * @return formatted timestamp, or an empty string when the value is null.
+	 */
+	static String formatInstant(Instant value) {
+		return value == null ? "" : DATE_TIME_FORMATTER.withZone(dateTimeDisplayZone).format(value);
 	}
 
 	/**
@@ -112,6 +136,16 @@ final class UiSupport {
 		}
 		LocalDateTime displayed = LocalDateTime.parse(value.trim(), formatter);
 		return displayed.atZone(dateTimeDisplayZone).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+	}
+
+	/**
+	 * Parses a timestamp entered in the active display timezone into UTC.
+	 *
+	 * @param value displayed timestamp.
+	 * @return UTC timestamp, or null when the value is blank.
+	 */
+	static LocalDateTime parseDateTime(String value) {
+		return parseDateTime(value, DATE_TIME_FORMATTER);
 	}
 
 	static void applyDateTimeDisplayZone(Component root) {
@@ -310,7 +344,7 @@ final class UiSupport {
 			editor.getFormat().setTimeZone(java.util.TimeZone.getTimeZone(dateTimeDisplayZone));
 		}
 		spinner.setToolTipText("Displayed in " + dateTimeDisplayZone + "; stored in UTC");
-		spinner.setValue(new Date());
+		spinner.setValue(Date.from(UtcTimestamp.nowInstant()));
 		spinner.setPreferredSize(new Dimension(180, spinner.getPreferredSize().height));
 		return spinner;
 	}

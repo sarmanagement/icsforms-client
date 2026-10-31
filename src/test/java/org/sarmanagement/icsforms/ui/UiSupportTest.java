@@ -225,6 +225,7 @@ class UiSupportTest {
 			UiSupport.setDateTimeDisplayZone(ZoneId.of("America/Los_Angeles"));
 			UtcTimestamp.setClock(Clock.fixed(Instant.parse("2024-03-10T09:59:00Z"), ZoneId.of("Asia/Tokyo")));
 			LocalDateTime beforeTransition = UtcTimestamp.now();
+			assertEquals(Instant.parse("2024-03-10T09:59:00Z"), UtcTimestamp.nowInstant());
 
 			UtcTimestamp.setClock(Clock.fixed(Instant.parse("2024-03-10T10:00:00Z"), ZoneId.of("Asia/Tokyo")));
 			LocalDateTime afterTransition = UtcTimestamp.now();

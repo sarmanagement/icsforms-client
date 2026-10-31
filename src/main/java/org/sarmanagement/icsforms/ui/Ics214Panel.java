@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -301,7 +302,7 @@ public class Ics214Panel extends JPanel {
 		int result = JOptionPane.showConfirmDialog(this, choices, "Classify Note Entry",
 				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 		if (result == JOptionPane.OK_OPTION && choices.getSelectedItem() instanceof ActivityEventType selected) {
-			applyNoteClassification(entry, selected.getId(), LocalDateTime.now());
+			applyNoteClassification(entry, selected.getId(), UtcTimestamp.now());
 		}
 	}
 
@@ -1730,7 +1731,7 @@ public class Ics214Panel extends JPanel {
 		public Object getValueAt(int row, int col) {
 			ActivityLogEntry entry = rows.get(row);
 			return switch (col) {
-				case 0 -> entry.getTimestamp() == null ? "" : DATE_TIME_FORMATTER.format(entry.getTimestamp());
+				case 0 -> UiSupport.formatDateTime(entry.getTimestamp(), DATE_TIME_FORMATTER);
 				case 1 -> resolveLabel(entry.getEventTypeId());
 				case 2 -> displayedResourceIdentifier(entry);
 				default -> entry.getNotableActivity();

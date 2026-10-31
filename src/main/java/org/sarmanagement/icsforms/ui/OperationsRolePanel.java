@@ -137,10 +137,10 @@ public class OperationsRolePanel extends JPanel {
 		AppData data = controller.getData();
 		String start = data.getIncidentContext().getOperationalPeriodStart() == null
 				? "unspecified"
-				: PERIOD_TIME.format(data.getIncidentContext().getOperationalPeriodStart());
+				: UiSupport.formatDateTime(data.getIncidentContext().getOperationalPeriodStart(), PERIOD_TIME);
 		String end = data.getIncidentContext().getOperationalPeriodEnd() == null
 				? "unspecified"
-				: PERIOD_TIME.format(data.getIncidentContext().getOperationalPeriodEnd());
+				: UiSupport.formatDateTime(data.getIncidentContext().getOperationalPeriodEnd(), PERIOD_TIME);
 		RolePanelSupport.banner(banner, "OPERATIONS", data.getIncidentContext().getIncidentName(),
 				"Operational period: " + start + " — " + end
 						+ " | Recorded status/location, not readiness confirmation");

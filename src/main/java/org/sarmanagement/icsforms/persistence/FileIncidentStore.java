@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -185,7 +186,7 @@ public class FileIncidentStore implements IncidentStore {
 				data.setRevision(0);
 				data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
 				if (data.getCreatedAt() == null) {
-					data.setCreatedAt(Instant.now());
+					data.setCreatedAt(UtcTimestamp.nowInstant());
 				}
 				data.setUpdatedAt(data.getCreatedAt());
 				if (data.getOriginNodeId() == null || data.getOriginNodeId().isBlank()) {
@@ -237,7 +238,7 @@ public class FileIncidentStore implements IncidentStore {
 		long revision = data.getRevision();
 		Instant updated = data.getUpdatedAt();
 		data.setRevision(revision + 1);
-		data.setUpdatedAt(Instant.now());
+		data.setUpdatedAt(UtcTimestamp.nowInstant());
 		data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
 		data.normalizeIdentity();
 		Path temp = path.resolveSibling(path.getFileName() + ".tmp");

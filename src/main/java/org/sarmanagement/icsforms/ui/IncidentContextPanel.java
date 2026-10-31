@@ -313,7 +313,7 @@ public class IncidentContextPanel extends JPanel {
 	 * @return formatted timestamp or blank when absent.
 	 */
 	private String formatDateTime(LocalDateTime value) {
-		return value == null ? "" : value.format(DT_FMT);
+		return UiSupport.formatDateTime(value, DT_FMT);
 	}
 
 	/**

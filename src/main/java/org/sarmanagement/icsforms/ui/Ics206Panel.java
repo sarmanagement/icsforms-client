@@ -126,7 +126,8 @@ public class Ics206Panel extends JPanel {
 			aviationUsed.setSelected(plan.isAviationAssetsUsed());
 			airOperations.setText(plan.getAirOperationsReminder());
 			preparedBy.setText(MedicalRoleSupport.medicalUnitLeaderName(controller.getData()));
-			preparedAt.setText(plan.getPreparedAt() == null ? "" : plan.getPreparedAt().toString());
+			preparedAt.setText(UiSupport.formatDateTime(plan.getPreparedAt(),
+					java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME));
 			reviewedBy.setText(MedicalRoleSupport.safetyOfficerName(controller.getData()));
 			reviewStatus.setSelectedItem(plan.getReviewStatus());
 			loadAidStations(plan);
@@ -580,7 +581,7 @@ public class Ics206Panel extends JPanel {
 			return;
 		}
 		try {
-			plan.setPreparedAt(LocalDateTime.parse(text));
+			plan.setPreparedAt(UiSupport.parseDateTime(text, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME));
 		} catch (RuntimeException exception) {
 			validation.setText("Preparation date/time must use yyyy-MM-ddTHH:mm.");
 		}

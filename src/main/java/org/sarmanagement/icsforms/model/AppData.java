@@ -739,7 +739,7 @@ public class AppData {
 			incidentId = UUID.randomUUID().toString();
 		}
 		if (createdAt == null) {
-			createdAt = updatedAt == null ? Instant.now() : updatedAt;
+			createdAt = updatedAt == null ? UtcTimestamp.nowInstant() : updatedAt;
 		}
 		if (updatedAt == null) {
 			updatedAt = createdAt;
@@ -1779,7 +1779,7 @@ public class AppData {
 		}
 		PlanReviewAssertion assertion = getReviewAssertion(area);
 		assertion.setReviewedBy(person.trim());
-		assertion.setReviewedAt(reviewedAt == null ? LocalDateTime.now().withSecond(0).withNano(0) : reviewedAt);
+		assertion.setReviewedAt(reviewedAt == null ? UtcTimestamp.now().withSecond(0).withNano(0) : reviewedAt);
 		assertion.setReviewedContentDigest(PlanReviewSupport.contentDigest(this, area));
 	}
 
