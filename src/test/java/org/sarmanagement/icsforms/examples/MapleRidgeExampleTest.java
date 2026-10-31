@@ -78,7 +78,7 @@ class MapleRidgeExampleTest {
 	private static final String IPP = "Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA";
 	private static final String STAGING = "Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP)";
 	private static final String ICP = "ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP)";
-	private static final String BASE = "Base (supply and rehab) colocated with " + ICP;
+	private static final String BASE = "Base (supply and rehab) colocated with " + STAGING;
 	private static final String CHANNEL = "MR SAR 1";
 	private static final String AGENCY = "Fictional Maple Ridge Volunteer SAR";
 	private static final String IC = "Avery Wren";
@@ -147,8 +147,13 @@ class MapleRidgeExampleTest {
 			assertEquals(List.of(ICP, STAGING, BASE, IPP),
 					data.getIncidentLocations().stream().map(IncidentLocation::getName).toList());
 			assertEquals(List.of("50 Civic Road, fictional Maple Ridge, MA", "20 Park Road, fictional Maple Ridge, MA",
-					"50 Civic Road, fictional Maple Ridge, MA", "1 Trail Lane, fictional Maple Ridge, MA"),
+					"20 Park Road, fictional Maple Ridge, MA", "1 Trail Lane, fictional Maple Ridge, MA"),
 					data.getIncidentLocations().stream().map(IncidentLocation::getAddress).toList());
+			assertEquals(data.getStagingLocation().getAddress(), data.getIncidentLocations().stream()
+					.filter(location -> "Base".equals(location.getType())).findFirst().orElseThrow().getAddress());
+			assertTrue(data.getSarTaskAssignments().stream().allMatch(task -> task.getTransportationInstructions()
+					.equals("Walk from staging or drive a personal vehicle from staging. "
+							+ "No ground support unit or aircraft is assigned.")));
 			List<TCard> staff = data.getTCards().stream()
 					.filter(c -> c.getResourceIdentifier().startsWith("MR-IMT-")).toList();
 			assertEquals(6, staff.size());
@@ -505,7 +510,7 @@ class MapleRidgeExampleTest {
 					}
 					if ("ICS 206".equals(form)) {
 						String normalized = text.replaceAll("\\s+", " ");
-						assertTrue(normalized.contains("50 Civic Road"), text);
+						assertTrue(normalized.contains("20 Park Road"), text);
 						assertTrue(normalized.contains(BASE), text);
 						assertTrue(normalized.contains("unstaffed supplies/cache"), text);
 						assertTrue(normalized.contains("Fictional Pine County Regional Trauma Center"), text);
@@ -747,7 +752,7 @@ class MapleRidgeExampleTest {
 		addLocation(data, "icp", "ICP", ICP, "50 Civic Road, fictional Maple Ridge, MA");
 		addLocation(data, "staging", "Staging Area", STAGING, "20 Park Road, fictional Maple Ridge, MA");
 		addLocation(data, "base", "Base", BASE,
-				"50 Civic Road, fictional Maple Ridge, MA");
+				"20 Park Road, fictional Maple Ridge, MA");
 		addLocation(data, "ipp", "Other", IPP, "1 Trail Lane, fictional Maple Ridge, MA");
 		data.getForm201().setIncidentName(INCIDENT);
 		data.getForm201().setIncidentNumber("EXERCISE-MR-2026-01");
@@ -1210,7 +1215,8 @@ class MapleRidgeExampleTest {
 		task.setAssignmentEnd(end);
 		task.setTaskLifecycleStatus(status);
 		task.setSpecialEquipment(row.getSpecialEquipment());
-		task.setTransportationInstructions("Ground/foot only; sign out and back in at staging, not IPP. No aircraft.");
+		task.setTransportationInstructions(
+				"Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.");
 		task.setCommunications(contacts(data));
 		task.setPreparedByName(PLANNING);
 		task.setPreparedByPositionTitle("Planning Section Chief");

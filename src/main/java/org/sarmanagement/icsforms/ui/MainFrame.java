@@ -390,7 +390,8 @@ public class MainFrame extends JFrame {
 		JMenuItem activityTimelineItem = new JMenuItem("ICP Activity Timeline…");
 		activityTimelineItem.addActionListener(event -> {
 			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
-			new IcpActivityTimelineDialog(this, controller, this::showAddLogEntry).setVisible(true);
+			new IcpActivityTimelineDialog(this, controller, this::showAddLogEntry,
+					this::openTimelineAssignment).setVisible(true);
 		});
 		viewMenu.add(activityTimelineItem);
 		viewMenu.addSeparator();
@@ -2122,6 +2123,21 @@ public class MainFrame extends JFrame {
 			panel.refreshActivityEntries();
 		}
 		clueLogPanel.refreshFromModel();
+	}
+
+	/**
+	 * Opens the best available task or assignment editor for a timeline row.
+	 *
+	 * @param assignmentId stable task/assignment identity.
+	 */
+	private void openTimelineAssignment(String assignmentId) {
+		boolean hasSarTask = controller.getData().getSarTaskAssignments().stream()
+				.anyMatch(task -> assignmentId.equals(task.getAssignmentId()));
+		if (hasSarTask) {
+			openSarTaskEditorForAssignment(assignmentId);
+		} else {
+			openIcs204EditorForAssignment(assignmentId);
+		}
 	}
 
 	/** Creates an activity log using the selected scope and linked document. */

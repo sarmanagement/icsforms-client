@@ -8,7 +8,9 @@ import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 
 import javax.swing.BorderFactory;
@@ -16,7 +18,9 @@ import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -48,8 +52,11 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	private static final int TIMELINE_HOUR_WIDTH = 100;
 	private final AppController controller;
 	private final Consumer<LogEntryContext> addEntry;
+	private final Consumer<String> openAssignment;
 	private final TimelineCanvas canvas = new TimelineCanvas();
 	private final JLabel selectionLabel = new JLabel("Select an assignment lane or add an ICP entry.");
+	private final JButton detailsButton = new JButton("Event Details…");
+	private final JButton openAssignmentButton = new JButton("Open Task / Assignment…");
 	private List<TimelineLane> lanes = List.of();
 	private int selectedLane = -1;
 
@@ -61,9 +68,23 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	 * @param addEntry shared activity entry action.
 	 */
 	public IcpActivityTimelineDialog(Window owner, AppController controller, Consumer<LogEntryContext> addEntry) {
+		this(owner, controller, addEntry, assignmentId -> { });
+	}
+
+	/**
+	 * Creates a modeless ICP timeline with contextual entry and assignment actions.
+	 *
+	 * @param owner parent window.
+	 * @param controller active incident controller.
+	 * @param addEntry shared activity entry action.
+	 * @param openAssignment action for opening the selected assignment or task form.
+	 */
+	public IcpActivityTimelineDialog(Window owner, AppController controller, Consumer<LogEntryContext> addEntry,
+			Consumer<String> openAssignment) {
 		super(owner, "ICP Activity Timeline", ModalityType.MODELESS);
 		this.controller = Objects.requireNonNull(controller);
 		this.addEntry = Objects.requireNonNull(addEntry);
+		this.openAssignment = Objects.requireNonNull(openAssignment);
 		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 		JPanel content = new JPanel(new BorderLayout(8, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -80,10 +101,16 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
 		JButton addButton = new JButton("Add ICP Activity…");
 		addButton.addActionListener(event -> addSelectedEntry());
+		detailsButton.addActionListener(event -> showSelectedDetails());
+		openAssignmentButton.addActionListener(event -> openSelectedAssignment());
+		detailsButton.setEnabled(false);
+		openAssignmentButton.setEnabled(false);
 		JButton refreshButton = new JButton("Refresh");
 		refreshButton.addActionListener(event -> refresh());
 		JButton closeButton = new JButton("Close");
 		closeButton.addActionListener(event -> dispose());
+		buttons.add(detailsButton);
+		buttons.add(openAssignmentButton);
 		buttons.add(addButton);
 		buttons.add(refreshButton);
 		buttons.add(closeButton);
@@ -143,13 +170,139 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	}
 
 	/**
+	 * Returns whether event details are available for the selected lane.
+	 *
+	 * @return true when a timeline lane is selected.
+	 */
+	boolean hasSelectedLane() {
+		return selectedLane >= 0 && selectedLane < lanes.size();
+	}
+
+	/**
+	 * Returns whether the selected lane is linked to an editable task or assignment.
+	 *
+	 * @return true when the assignment exists in the incident.
+	 */
+	boolean canOpenSelectedAssignment() {
+		if (!hasSelectedLane()) {
+			return false;
+		}
+		String assignmentId = lanes.get(selectedLane).assignmentId();
+		return !assignmentId.isBlank() && (controller.getData().getSarTaskAssignments().stream()
+				.anyMatch(task -> assignmentId.equals(task.getAssignmentId()))
+				|| controller.getData().getAllAssignmentResources().stream()
+						.anyMatch(resource -> assignmentId.equals(resource.getAssignmentId())));
+	}
+
+	/**
 	 * Adds an activity entry associated with the selected assignment, when any.
 	 */
 	private void addSelectedEntry() {
-		TimelineLane lane = selectedLane < 0 ? null : lanes.get(selectedLane);
-		addEntry.accept(new LogEntryContext(this, lane == null ? "" : lane.taskId(),
-				lane == null ? "" : lane.assignmentId(), lane == null ? "" : lane.resourceIdentifier()));
+		addEntry.accept(hasSelectedLane() ? contextFor(lanes.get(selectedLane))
+				: new LogEntryContext(this, "", "", ""));
 		refresh();
+	}
+
+	/**
+	 * Shows selected lane event/resource details and offers a task-context log action.
+	 */
+	private void showSelectedDetails() {
+		if (!hasSelectedLane()) {
+			return;
+		}
+		TimelineLane lane = lanes.get(selectedLane);
+		JPanel details = new JPanel(new BorderLayout(8, 8));
+		details.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+		JTextArea resources = readOnlyText(lane.assignedResources().isEmpty()
+				? "No resources are listed on this assignment."
+				: String.join("\n", lane.assignedResources()));
+		JTextArea events = readOnlyText(lane.markers().isEmpty()
+				? "No ICP events are recorded for this assignment."
+				: lane.markers().stream().map(marker -> marker.timestamp().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+						+ " — " + marker.eventLabel()
+						+ (marker.resourceIdentifier().isBlank() ? "" : " — " + marker.resourceIdentifier())
+						+ (marker.struckOut() ? " [struck out]" : "")
+						+ "\n" + safe(marker.activity()))
+						.collect(java.util.stream.Collectors.joining("\n\n")));
+		JPanel content = new JPanel(new BorderLayout(6, 6));
+		content.add(new JLabel("Resources assigned"), BorderLayout.NORTH);
+		content.add(new JScrollPane(resources), BorderLayout.CENTER);
+		JPanel eventContent = new JPanel(new BorderLayout(6, 6));
+		eventContent.add(new JLabel("Timeline events — " + lane.label()), BorderLayout.NORTH);
+		eventContent.add(new JScrollPane(events), BorderLayout.CENTER);
+		details.add(content, BorderLayout.NORTH);
+		details.add(eventContent, BorderLayout.CENTER);
+		int choice = UiSupport.showResizableOptionDialog(this, "Timeline Details", details,
+				new Dimension(650, 520), new Object[]{"Add ICP Log Entry…", "Close"}, "Close");
+		if (choice == 0) {
+			addEntry.accept(contextFor(lane));
+			refresh();
+		}
+	}
+
+	/**
+	 * Creates a non-editable text area for detail content.
+	 *
+	 * @param text displayed detail.
+	 * @return read-only text area.
+	 */
+	private JTextArea readOnlyText(String text) {
+		JTextArea area = new JTextArea(text, 4, 48);
+		area.setEditable(false);
+		area.setLineWrap(true);
+		area.setWrapStyleWord(true);
+		return area;
+	}
+
+	/**
+	 * Opens the task or ICS 204 assignment for the selected lane.
+	 */
+	private void openSelectedAssignment() {
+		if (canOpenSelectedAssignment()) {
+			openAssignment.accept(lanes.get(selectedLane).assignmentId());
+		}
+	}
+
+	/**
+	 * Builds the shared activity-entry context for one timeline lane.
+	 *
+	 * @param lane selected assignment lane.
+	 * @return context defaulting the entry to that assignment.
+	 */
+	private LogEntryContext contextFor(TimelineLane lane) {
+		return new LogEntryContext(this, lane.taskId(), lane.assignmentId(), lane.resourceIdentifier());
+	}
+
+	/**
+	 * Selects a lane and updates the enabled row actions.
+	 *
+	 * @param laneIndex lane index under the pointer.
+	 */
+	private void selectLane(int laneIndex) {
+		selectedLane = laneIndex >= 0 && laneIndex < lanes.size() ? laneIndex : -1;
+		updateSelectionLabel();
+		canvas.repaint();
+	}
+
+	/**
+	 * Creates a context menu for the selected row.
+	 *
+	 * @return row actions with availability matching the selection.
+	 */
+	private JPopupMenu createRowPopup() {
+		JPopupMenu popup = new JPopupMenu();
+		javax.swing.JMenuItem details = new javax.swing.JMenuItem("Event Details…");
+		details.setEnabled(hasSelectedLane());
+		details.addActionListener(event -> showSelectedDetails());
+		javax.swing.JMenuItem addLog = new javax.swing.JMenuItem("Add ICP Log Entry…");
+		addLog.addActionListener(event -> addSelectedEntry());
+		javax.swing.JMenuItem open = new javax.swing.JMenuItem("Open Task / Assignment…");
+		open.setEnabled(canOpenSelectedAssignment());
+		open.addActionListener(event -> openSelectedAssignment());
+		popup.add(details);
+		popup.add(addLog);
+		popup.add(open);
+		return popup;
 	}
 
 	/**
@@ -158,9 +311,11 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	private void updateSelectionLabel() {
 		if (selectedLane < 0) {
 			selectionLabel.setText("Select an assignment lane or add an ICP entry.");
-			return;
+		} else {
+			selectionLabel.setText("Selected: " + lanes.get(selectedLane).label());
 		}
-		selectionLabel.setText("Selected: " + lanes.get(selectedLane).label());
+		detailsButton.setEnabled(hasSelectedLane());
+		openAssignmentButton.setEnabled(canOpenSelectedAssignment());
 	}
 
 	/**
@@ -179,8 +334,38 @@ public final class IcpActivityTimelineDialog extends JDialog {
 				continue;
 			}
 			String assignmentId = safe(task.getAssignmentId());
-			grouped.putIfAbsent(assignmentId, new MutableLane(assignmentId,
+			MutableLane lane = grouped.computeIfAbsent(assignmentId, ignored -> new MutableLane(assignmentId,
 					task.getTaskId(), SarTaskSupport.taskResourceDisplayLabel(task), task.getResourceIdentifier()));
+			for (SarTaskResource resource : task.getResourcesAssigned()) {
+				String name = safe(resource.getName());
+				if (!name.isBlank()) {
+					String role = safe(resource.getFunction());
+					lane.assignedResources.add(role.isBlank() ? name : name + " — " + role);
+				}
+			}
+		}
+		for (ResourceAssignment assignment : data.getAllAssignmentResources()) {
+			if (assignment == null) {
+				continue;
+			}
+			String assignmentId = safe(assignment.getAssignmentId());
+			String resource = safe(assignment.getResourceIdentifier());
+			String teamNumber = safe(assignment.getAssignmentTeamNumber());
+			String label = teamNumber.isBlank() ? resource : teamNumber + ": " + resource;
+			MutableLane lane = grouped.computeIfAbsent(assignmentId, ignored ->
+					new MutableLane(assignmentId, "", label, resource));
+			if (lane.assignedResources.isEmpty()) {
+				if (!resource.isBlank()) {
+					lane.assignedResources.add(resource);
+				}
+				String leader = safe(assignment.getLeader());
+				if (!leader.isBlank()) {
+					lane.assignedResources.add(leader + " — " + safe(assignment.getLeaderRole()));
+				}
+				if (assignment.getNumberOfPersons() > 0) {
+					lane.assignedResources.add("Personnel count: " + assignment.getNumberOfPersons());
+				}
+			}
 		}
 		grouped.put("", new MutableLane("", "", "ICP / Unassigned", ""));
 		Map<String, String> eventLabels = new LinkedHashMap<>();
@@ -211,6 +396,7 @@ public final class IcpActivityTimelineDialog extends JDialog {
 				String typeId = entry.getEventTypeId();
 				lane.markers.add(new TimelineMarker(entry.getTimestamp(), typeId,
 						eventLabels.getOrDefault(typeId, "Activity"), entry.getNotableActivity(),
+						safe(entry.getResourceIdentifier()),
 						entry.isStruckOut()));
 			}
 		}
@@ -218,7 +404,7 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		for (MutableLane lane : grouped.values()) {
 			lane.markers.sort(Comparator.comparing(TimelineMarker::timestamp));
 			result.add(new TimelineLane(lane.assignmentId, lane.taskId, lane.label, lane.resourceIdentifier,
-					List.copyOf(lane.markers)));
+					List.copyOf(lane.assignedResources), List.copyOf(lane.markers)));
 		}
 		return List.copyOf(result);
 	}
@@ -239,6 +425,11 @@ public final class IcpActivityTimelineDialog extends JDialog {
 			if (resource.equals(task.getResourceIdentifier())
 					|| resource.equals(SarTaskSupport.taskResourceDisplayLabel(task))) {
 				return task.getAssignmentId();
+			}
+		}
+		for (ResourceAssignment assignment : data.getAllAssignmentResources()) {
+			if (resource.equals(assignment.getResourceIdentifier())) {
+				return assignment.getAssignmentId();
 			}
 		}
 		return "";
@@ -266,6 +457,7 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	 * Finds intervals during which an assignment was logged as on task.
 	 *
 	 * @param markers chronologically ordered lane markers.
+	 * @param timelineEnd end of the visible timeline, used for active assignments.
 	 * @return on-task intervals terminated by a completion or return marker.
 	 */
 	static List<TimelineSegment> onTaskSegments(List<TimelineMarker> markers, LocalDateTime timelineEnd) {
@@ -292,37 +484,15 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	}
 
 	/**
-	 * Computes the vertical offset used to separate markers at the same pixel.
+	 * Returns the zero vertical offset that keeps all event markers on the lane center.
 	 *
-	 * @param markers markers in their painted order.
-	 * @param target marker whose offset is needed.
-	 * @param timelineStart horizontal-axis origin.
+	 * @param markers lane markers, retained for call-site compatibility.
+	 * @param target marker, retained for call-site compatibility.
+	 * @param timelineStart horizontal-axis origin, retained for call-site compatibility.
 	 * @return the target marker's vertical offset.
 	 */
 	static int markerVerticalOffset(List<TimelineMarker> markers, TimelineMarker target, LocalDateTime timelineStart) {
-		int targetX = timelineX(target.timestamp(), timelineStart);
-		int overlap = 0;
-		for (TimelineMarker marker : markers) {
-			if (marker == target) {
-				return (overlap % 3 - 1) * 10;
-			}
-			if (timelineX(marker.timestamp(), timelineStart) == targetX) {
-				overlap++;
-			}
-		}
 		return 0;
-	}
-
-	/**
-	 * Converts a timeline timestamp to its horizontal pixel coordinate.
-	 *
-	 * @param timestamp plotted time.
-	 * @param start horizontal-axis origin.
-	 * @return horizontal pixel coordinate.
-	 */
-	private static int timelineX(LocalDateTime timestamp, LocalDateTime start) {
-		long minutes = Duration.between(start, timestamp).toMinutes();
-		return TIMELINE_LEFT + (int) (minutes * TIMELINE_HOUR_WIDTH / 60f);
 	}
 
 	/**
@@ -355,16 +525,27 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	}
 
 	/**
+	 * Escapes untrusted activity text before it is returned as Swing tooltip HTML.
+	 *
+	 * @param value text to escape.
+	 * @return escaped text.
+	 */
+	private static String escapeHtml(String value) {
+		return safe(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+	}
+
+	/**
 	 * Assignment lane and its event markers.
 	 *
 	 * @param assignmentId stable assignment identity.
 	 * @param taskId task identity.
 	 * @param label visible lane label.
 	 * @param resourceIdentifier resource display name.
+	 * @param assignedResources resource names and functions on this assignment.
 	 * @param markers chronologically ordered activity markers.
 	 */
 	record TimelineLane(String assignmentId, String taskId, String label, String resourceIdentifier,
-			List<TimelineMarker> markers) {
+			List<String> assignedResources, List<TimelineMarker> markers) {
 	}
 
 	/**
@@ -374,10 +555,11 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	 * @param eventTypeId stable event type identity.
 	 * @param eventLabel configured event label.
 	 * @param activity notable activity text.
+	 * @param resourceIdentifier resource associated with the event.
 	 * @param struckOut whether the source entry is struck out.
 	 */
 	record TimelineMarker(LocalDateTime timestamp, String eventTypeId, String eventLabel, String activity,
-			boolean struckOut) {
+			String resourceIdentifier, boolean struckOut) {
 	}
 
 	/**
@@ -400,6 +582,7 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		private final String taskId;
 		private final String label;
 		private final String resourceIdentifier;
+		private final List<String> assignedResources = new ArrayList<>();
 		private final List<TimelineMarker> markers = new ArrayList<>();
 
 		/**
@@ -447,12 +630,47 @@ public final class IcpActivityTimelineDialog extends JDialog {
 				public void mouseClicked(MouseEvent event) {
 					int laneIndex = event.getY() < TOP ? -1 : (event.getY() - TOP) / ROW_HEIGHT;
 					if (laneIndex >= 0 && laneIndex < lanes.size()) {
-						selectedLane = laneIndex;
-						updateSelectionLabel();
-						repaint();
+						selectLane(laneIndex);
 					}
 				}
+
+				/**
+				 * Opens the selected row menu when this platform triggers popups on press.
+				 *
+				 * @param event pointer event.
+				 */
+				@Override
+				public void mousePressed(MouseEvent event) {
+					showRowPopup(event);
+				}
+
+				/**
+				 * Opens the selected row menu when this platform triggers popups on release.
+				 *
+				 * @param event pointer event.
+				 */
+				@Override
+				public void mouseReleased(MouseEvent event) {
+					showRowPopup(event);
+				}
 			});
+		}
+
+		/**
+		 * Selects the row under a platform popup trigger and opens its actions.
+		 *
+		 * @param event pointer event.
+		 */
+		private void showRowPopup(MouseEvent event) {
+			if (!event.isPopupTrigger()) {
+				return;
+			}
+			int laneIndex = event.getY() < TOP ? -1 : (event.getY() - TOP) / ROW_HEIGHT;
+			if (laneIndex < 0 || laneIndex >= lanes.size()) {
+				return;
+			}
+			selectLane(laneIndex);
+			createRowPopup().show(this, event.getX(), event.getY());
 		}
 
 		/** {@inheritDoc} */
@@ -562,8 +780,11 @@ public final class IcpActivityTimelineDialog extends JDialog {
 					g.setColor(Color.BLACK);
 					g.drawLine(x - 8, y, x + 8, y);
 				}
-				String text = marker.timestamp().format(TIME) + " — " + marker.eventLabel() + ": "
-						+ safe(marker.activity()).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+				String resource = marker.resourceIdentifier().isBlank() ? ""
+						: " — " + escapeHtml(marker.resourceIdentifier());
+				String text = marker.timestamp().format(TIME) + " — " + escapeHtml(marker.eventLabel()) + resource + ": "
+						+ escapeHtml(marker.activity())
+						+ (marker.struckOut() ? " [struck out]" : "");
 				hits.add(new MarkerHit(x - 10, y - 10, x + 10, y + 10, text));
 			}
 		}
@@ -585,8 +806,8 @@ public final class IcpActivityTimelineDialog extends JDialog {
 				int fromX = markerX(segment.start(), start);
 				int toX = markerX(segment.end(), start);
 				int fromY = centerY + markerVerticalOffset(lane.markers(), segment.startMarker(), start);
-				int toY = segment.endMarker() == null ? centerY
-						: centerY + markerVerticalOffset(lane.markers(), segment.endMarker(), start);
+				int toY = centerY + (segment.endMarker() == null ? 0
+						: markerVerticalOffset(lane.markers(), segment.endMarker(), start));
 				g.drawLine(fromX, fromY, toX, toY);
 			}
 		}

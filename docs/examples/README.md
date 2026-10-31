@@ -29,8 +29,10 @@ resources, permissions and a locally approved safety/medical/communications plan
 3. Review ICS 202 objectives, the flat organization, primary ICS 204, linked SAR
    tasks, T-cards, ICS 205/205A, human ICS 206 and adapted ICS 206CANINE,
    ICS 215A/208, ICS 214 and ICS 233-CG. **View → ICP Activity Timeline…**
-   displays the ICP log in assignment lanes with lifecycle/clue markers and
-   provides the shared add-entry workflow.
+   displays the ICP log in assignment lanes with centered lifecycle/clue markers.
+   Select or right-click a row to inspect its events and assigned resources, add
+   an ICP log entry for that task, or open its task/assignment form; hover over a
+   marker for event details.
    Export individual PDFs or the IAP bundle to inspect their relationships.
 
 ### Scenario and deliberate limits
@@ -42,11 +44,14 @@ staff work at the separate **ICP, county community center, 50 Civic Road,
 1.5 km west of IPP**; MEDL coordinates medical requests from ICP rather than
 staffing an additional field post. Shared incident locations include the ICP,
 staging, residence/IPP (Other), and **Base (supply and rehab) colocated with ICP**
-at the same **50 Civic Road** address. Base provides water resupply, heat rehab
+at the same **20 Park Road** address. Base provides water resupply, heat rehab
 coordination and the human first-aid supplies/cache, **not a staffed medical
-team**; the human aid station is not at staging. Staff retain their organizational
-roles and ICP address; status **ICP** puts them in the **ICP rack column**, not
-Assigned (status matches the existing board header before location).
+team or aid post**. Staff retain their organizational roles and ICP address;
+status **ICP** puts them in the **ICP rack column**, not Assigned (status matches
+the existing board header before location).
+Assigned teams travel from staging on foot or in personal vehicles; no ground
+support transport unit is staffed, and teams do not sign in and out at staging
+for individual accountability checks.
 Assignment team leaders are not duplicated as additional organizational positions;
 ICS 207 derives their boxes from the linked assignments.
 All addresses are fictional. A Koster **hub/spokes/rim** approach
