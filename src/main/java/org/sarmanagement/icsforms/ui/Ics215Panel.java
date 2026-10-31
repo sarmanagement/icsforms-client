@@ -30,6 +30,7 @@ import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -519,9 +520,9 @@ public class Ics215Panel extends JPanel {
 		filler.fill = GridBagConstraints.BOTH;
 		fields.add(new JPanel(), filler);
 		JScrollPane editorScroll = new JScrollPane(fields);
-		editorScroll.setPreferredSize(new Dimension(760, 460));
-		if (JOptionPane.showConfirmDialog(this, editorScroll, "Edit assignment and resource counts — ICS 215",
-				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
+		if (!UiSupport.showResizableConfirmDialog(this, "Edit assignment and resource counts — ICS 215",
+				editorScroll, assignmentEditorPreferredSize(
+						GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds().getSize()))) {
 			return;
 		}
 		LocalDateTime requestedArrival = parseDate(arrival.getText(), "requested arrival");
@@ -557,6 +558,17 @@ public class Ics215Panel extends JPanel {
 				allocation.manualOverride = true;
 			}
 		}
+	}
+
+	/**
+	 * Chooses a larger initial editor size that leaves room for window decorations.
+	 *
+	 * @param available maximum usable screen dimensions.
+	 * @return preferred scroll-pane size.
+	 */
+	static Dimension assignmentEditorPreferredSize(Dimension available) {
+		return new Dimension(Math.max(1, Math.min(1100, available.width - 48)),
+				Math.max(1, Math.min(760, available.height - 80)));
 	}
 
 	/**

@@ -24,6 +24,7 @@ import javax.swing.Timer;
 import java.lang.reflect.Field;
 import java.awt.GridLayout;
 import java.awt.GridBagLayout;
+import java.awt.Dimension;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -40,6 +41,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Verifies ICS 215 editor date isolation, matrix expansion, and rejected input retention. */
 class Ics215PanelTest {
+	@Test
+	void assignmentEditorUsesLargerResizableDialogDimensionsWithinScreenBounds() {
+		assertEquals(new Dimension(1100, 760), Ics215Panel.assignmentEditorPreferredSize(new Dimension(1920, 1080)));
+		assertEquals(new Dimension(952, 688), Ics215Panel.assignmentEditorPreferredSize(new Dimension(1000, 768)));
+		assertEquals(new Dimension(1, 1), Ics215Panel.assignmentEditorPreferredSize(new Dimension(48, 80)));
+	}
+
 	@TempDir
 	Path directory;
 
