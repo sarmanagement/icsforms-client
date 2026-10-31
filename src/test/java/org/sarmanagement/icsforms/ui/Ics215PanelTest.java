@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
 import javax.swing.JButton;
+import javax.swing.border.TitledBorder;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -24,6 +25,7 @@ import javax.swing.Timer;
 import java.lang.reflect.Field;
 import java.awt.GridLayout;
 import java.awt.GridBagLayout;
+import java.awt.GridBagConstraints;
 import java.awt.Dimension;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -222,6 +224,18 @@ class Ics215PanelTest {
 						countFields.get(secondHeading.id).subList(0, 4).stream().map(JTextField::getText).toList());
 				assertEquals(List.of("?", "?"),
 						countFields.get(secondHeading.id).subList(4, 6).stream().map(JTextField::getText).toList());
+				JPanel counts = (JPanel) java.util.Arrays.stream(assignmentEditor.getComponents())
+						.filter(JPanel.class::isInstance).findFirst().orElseThrow();
+				assertTrue(counts.getLayout() instanceof GridBagLayout);
+				assertEquals("Resource counts by heading", ((TitledBorder) counts.getBorder()).getTitle());
+				GridBagConstraints countGridConstraints = ((GridBagLayout) assignmentEditor.getLayout())
+						.getConstraints(counts);
+				assertEquals(2, countGridConstraints.gridwidth);
+				assertEquals(1, countGridConstraints.weightx);
+				counts.setSize(1000, counts.getPreferredSize().height);
+				counts.doLayout();
+				assertTrue(countFields.values().stream().flatMap(List::stream)
+						.allMatch(field -> field.getWidth() <= 70));
 				JPanel singleHeadingCounts = countEditor(panel[0]);
 				assertEquals(12, singleHeadingCounts.getComponentCount());
 				assertEquals("Required", ((javax.swing.JLabel) singleHeadingCounts.getComponent(3)).getText());

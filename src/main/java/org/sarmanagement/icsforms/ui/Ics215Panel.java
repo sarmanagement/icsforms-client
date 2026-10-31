@@ -587,14 +587,9 @@ public class Ics215Panel extends JPanel {
 			return addAssignmentField(fields, line, "",
 					new JLabel("Add a resource heading before creating assignment rows."));
 		}
-		JPanel counts = new JPanel(new GridLayout(0, 7, 4, 4));
-		counts.add(new JLabel("Resource heading"));
-		counts.add(new JLabel("Req. resources"));
-		counts.add(new JLabel("Req. teams"));
-		counts.add(new JLabel("Have resources"));
-		counts.add(new JLabel("Have teams"));
-		counts.add(new JLabel("Need resources"));
-		counts.add(new JLabel("Need teams"));
+		JPanel counts = new JPanel(new GridBagLayout());
+		addResourceCountHeader(counts);
+		int gridRow = 1;
 		for (Ics215Form.ResourceHeading heading : formData.getResourceHeadings()) {
 			Ics215Form.ResourceAllocation allocation = row.resourceAllocations.get(heading.id);
 			Ics215Form.CountPair required = allocation == null || allocation.required == null
@@ -611,21 +606,117 @@ public class Ics215Panel extends JPanel {
 					List.of(requiredSingles, requiredTeams, haveSingles, haveTeams, needSingles, needTeams));
 			updateNeedFields(requiredSingles, requiredTeams, haveSingles, haveTeams, needSingles, needTeams);
 			listenForNeedUpdates(requiredSingles, requiredTeams, haveSingles, haveTeams, needSingles, needTeams);
-			counts.add(new JLabel(heading.category + " / " + heading.kind + " / " + heading.type
-					+ " (" + heading.countingUnit + ")"));
-			counts.add(requiredSingles);
-			counts.add(requiredTeams);
-			counts.add(haveSingles);
-			counts.add(haveTeams);
-			counts.add(needSingles);
-			counts.add(needTeams);
+			addResourceCountRow(counts, gridRow++, heading, requiredSingles, requiredTeams, haveSingles, haveTeams,
+					needSingles, needTeams);
 		}
-		counts.setBorder(BorderFactory.createTitledBorder(
-				"Resource counts by heading — same Required/Have fields as Edit counts"));
-		line = addAssignmentField(fields, line, "Required / Have / calculated Need:", counts);
+		counts.setBorder(BorderFactory.createTitledBorder("Resource counts by heading"));
+		line = addFullWidthAssignmentField(fields, line, counts);
 		return addAssignmentField(fields, line, "",
 				new JLabel("<html>Leave blank for unknown; Need is calculated. Have entries are manual snapshots.<br>"
 						+ "Changing Have replaces any linked T-card snapshot with these manual counts.</html>"));
+	}
+
+	/**
+	 * Adds compact column headings for the per-resource count grid.
+	 *
+	 * @param counts count grid.
+	 */
+	private void addResourceCountHeader(JPanel counts) {
+		addCountGridCell(counts, new JLabel("Resource heading"), 0, 0, true);
+		addCountGridCell(counts, countHeader("Required", "resources"), 1, 0, false);
+		addCountGridCell(counts, countHeader("Required", "teams"), 2, 0, false);
+		addCountGridCell(counts, countHeader("Have", "resources"), 3, 0, false);
+		addCountGridCell(counts, countHeader("Have", "teams"), 4, 0, false);
+		addCountGridCell(counts, countHeader("Need", "resources"), 5, 0, false);
+		addCountGridCell(counts, countHeader("Need", "teams"), 6, 0, false);
+	}
+
+	/**
+	 * Adds one operator-defined resource heading and its count fields.
+	 *
+	 * @param counts count grid.
+	 * @param row grid row.
+	 * @param heading resource heading.
+	 * @param requiredSingles Required resource count.
+	 * @param requiredTeams Required team count.
+	 * @param haveSingles Have resource count.
+	 * @param haveTeams Have team count.
+	 * @param needSingles calculated resource Need.
+	 * @param needTeams calculated team Need.
+	 */
+	private void addResourceCountRow(JPanel counts, int row, Ics215Form.ResourceHeading heading,
+			JTextField requiredSingles, JTextField requiredTeams, JTextField haveSingles, JTextField haveTeams,
+			JTextField needSingles, JTextField needTeams) {
+		addCountGridCell(counts, new JLabel("<html>" + escapeHtml(heading.category) + " / "
+				+ escapeHtml(heading.kind) + " / " + escapeHtml(heading.type) + "<br>("
+				+ escapeHtml(heading.countingUnit) + ")</html>"), 0, row, true);
+		addCountGridCell(counts, requiredSingles, 1, row, false);
+		addCountGridCell(counts, requiredTeams, 2, row, false);
+		addCountGridCell(counts, haveSingles, 3, row, false);
+		addCountGridCell(counts, haveTeams, 4, row, false);
+		addCountGridCell(counts, needSingles, 5, row, false);
+		addCountGridCell(counts, needTeams, 6, row, false);
+	}
+
+	/**
+	 * Adds one cell to the compact count grid.
+	 *
+	 * @param panel grid panel.
+	 * @param component cell content.
+	 * @param column grid column.
+	 * @param row grid row.
+	 * @param expand whether the cell should absorb available horizontal space.
+	 */
+	private void addCountGridCell(JPanel panel, java.awt.Component component, int column, int row, boolean expand) {
+		GridBagConstraints constraints = new GridBagConstraints();
+		constraints.gridx = column;
+		constraints.gridy = row;
+		constraints.weightx = expand ? 1 : 0;
+		constraints.fill = expand ? GridBagConstraints.HORIZONTAL : GridBagConstraints.NONE;
+		constraints.anchor = GridBagConstraints.LINE_START;
+		constraints.insets = new Insets(2, 3, 2, 3);
+		panel.add(component, constraints);
+	}
+
+	/**
+	 * Builds a wrapped label for a compact Required / Have / Need count column.
+	 *
+	 * @param measure count category.
+	 * @param unit resource or team unit.
+	 * @return wrapped count header.
+	 */
+	private JLabel countHeader(String measure, String unit) {
+		return new JLabel("<html><center>" + measure + "<br>" + unit + "</center></html>");
+	}
+
+	/**
+	 * Escapes user-entered text before embedding it in a Swing HTML label.
+	 *
+	 * @param value untrusted text.
+	 * @return text safe to display as HTML content.
+	 */
+	private String escapeHtml(String value) {
+		return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+	}
+
+	/**
+	 * Adds a component spanning both columns of the assignment dialog.
+	 *
+	 * @param panel dialog content.
+	 * @param row grid row.
+	 * @param component full-width content.
+	 * @return next free grid row.
+	 */
+	private int addFullWidthAssignmentField(JPanel panel, int row, java.awt.Component component) {
+		GridBagConstraints constraints = new GridBagConstraints();
+		constraints.gridx = 0;
+		constraints.gridy = row;
+		constraints.gridwidth = 2;
+		constraints.weightx = 1;
+		constraints.fill = GridBagConstraints.HORIZONTAL;
+		constraints.insets = new Insets(3, 4, 3, 4);
+		panel.add(component, constraints);
+		return row + 1;
 	}
 
 	/**

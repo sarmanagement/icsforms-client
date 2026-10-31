@@ -1486,6 +1486,18 @@ public class MainFrame extends JFrame {
 				ordered.add(panel);
 			}
 		}
+		Component ics215 = workspaces.get(WorkspaceId.ICS_215).component();
+		int ics215Index = ordered.indexOf(ics215);
+		int lastActivityLogIndex = -1;
+		for (int index = 0; index < ordered.size(); index++) {
+			if (ordered.get(index) instanceof Ics214Panel) {
+				lastActivityLogIndex = index;
+			}
+		}
+		if (ics215Index >= 0 && lastActivityLogIndex >= 0 && ics215Index < lastActivityLogIndex) {
+			ordered.remove(ics215Index);
+			ordered.add(lastActivityLogIndex, ics215);
+		}
 		return ordered;
 	}
 
