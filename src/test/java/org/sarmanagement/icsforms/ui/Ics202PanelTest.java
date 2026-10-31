@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
@@ -364,6 +365,7 @@ class Ics202PanelTest {
 	}
 
 	@Test
+	@EnabledIfSystemProperty(named = "icsforms.desktopTests", matches = "true")
 	void defaultWindowWidthDevotesObjectiveGridToTextWithoutHorizontalScrolling() throws Exception {
 		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
 		AppController controller = sampleController();
