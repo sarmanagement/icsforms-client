@@ -104,12 +104,24 @@ class MapleRidgeExampleTest {
 		Path work = Files.createTempDirectory(Path.of("target"), "maple-import-");
 		try (FileIncidentStore store = new FileIncidentStore(work)) {
 			AppData data = store.load(store.importFile(FIXTURE).orElseThrow());
+			var fixture = new ObjectMapper().readTree(FIXTURE.toFile());
 			assertTrue(store.getLastImportProblems().isEmpty(), () -> store.getLastImportProblems().toString());
 			assertEquals(INCIDENT, data.getIncidentContext().getIncidentName());
 			assertEquals(IncidentMode.SAR, data.getIncidentMode());
 			assertEquals(IapPhase.DURING_OP, data.getIapPhase());
 			assertEquals(IapPlanningStage.OPERATIONAL_PERIOD_ACTIVE, data.getIapPlanningStage());
+			assertFalse(data.isUseSystemTimeZone());
+			assertEquals("America/New_York", data.getConfiguredTimeZoneId());
+			assertEquals("2026-07-18T11:00:00",
+					fixture.path("incidentContext").path("operationalPeriodStart").asText());
+			assertEquals("2026-07-18T10:30:00",
+					fixture.path("activityLogs").get(0).path("activityLog").get(0).path("timestamp").asText());
 			assertEquals(time(7, 0), data.getIncidentContext().getOperationalPeriodStart());
+			assertEquals(time(6, 30), data.getActivityLogs().get(0).getActivityLog().get(0).getTimestamp());
+			assertEquals(LocalDateTime.of(2026, 7, 18, 6, 30),
+					LocalDateTime.ofInstant(Instant.parse(fixture.path("createdAt").asText()),
+							ZoneId.of("America/New_York")));
+			assertTrue(data.getForm201().getSituationSummary().contains("last seen there at 0500 EDT July 18"));
 			assertEquals(time(19, 0), data.getIncidentContext().getOperationalPeriodEnd());
 			assertTrue(new IncidentValidator().validate(data).isEmpty(),
 					() -> new IncidentValidator().validate(data).toString());
@@ -197,7 +209,7 @@ class MapleRidgeExampleTest {
 			assertTrue(casey.getSourceRef().startsWith("sar:"));
 			assertFalse(Files.readString(FIXTURE).toLowerCase(java.util.Locale.ROOT).contains("cleared"));
 			for (String detail : List.of("Ellis Linden", "74-year-old", "dementia", "blue shirt", "tan trousers",
-					"0500", "July 18", "0815", "27-31 C", "humid", "light wind", IPP, STAGING, ICP)) {
+					"0500 EDT", "July 18", "0815", "27-31 C", "humid", "light wind", IPP, STAGING, ICP)) {
 				assertTrue(data.getForm202().getSituationalAwareness().contains(detail), detail);
 			}
 			assertFalse(data.getForm202().getSituationalAwareness().contains("four dogs are equipment, not people"));
@@ -758,7 +770,7 @@ class MapleRidgeExampleTest {
 		data.getForm201().setIncidentNumber("EXERCISE-MR-2026-01");
 		data.getForm201().setSituationSummary("FICTIONAL ILLUSTRATION ONLY; not an operational plan. "
 				+ "Ellis Linden, fictional 74-year-old adult with dementia, wandered from a residence "
-				+ "at " + IPP + "; last seen there at 0500 July 18. Staging: " + STAGING + ". Command staff: " + ICP + ". "
+				+ "at " + IPP + "; last seen there at 0500 EDT July 18. Staging: " + STAGING + ". Command staff: " + ICP + ". "
 				+ "Wearing a blue shirt and tan trousers; may not respond to calls. "
 				+ "Returned three-person visual tracker task T1 (0700-0800), debriefed at 0810, reported a definitely human sign line north "
 				+ "from IPP, with no clear prints or sole pattern; potential clue flagged on Ops instruction, "
@@ -890,7 +902,7 @@ class MapleRidgeExampleTest {
 				+ "Hasty-search likely travel corridors and familiar attractors; maintain containment. "
 				+ "Search the high-probability inner 25% zone to coverage approximately 1; reassess heat and tick hazards.");
 		data.getForm202().setSituationalAwareness("0815 July 18, 2026 exercise snapshot. Fictional Ellis Linden, "
-				+ "74-year-old adult with dementia, last seen 0500 July 18 at " + IPP + ". "
+				+ "74-year-old adult with dementia, last seen 0500 EDT July 18 at " + IPP + ". "
 				+ "Wearing a blue shirt and tan trousers; may hide or not answer. "
 				+ "T1's three visual trackers returned at 0800 after 0700-0800 work around IPP, debriefed at 0810: a definitely human sign line "
 				+ "led north, with no clear prints or sole pattern. This potential clue was flagged on Ops instruction; "

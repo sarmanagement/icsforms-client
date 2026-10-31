@@ -17,6 +17,7 @@ import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.StagingLocation;
 import org.sarmanagement.icsforms.model.VetDirectory;
 import org.sarmanagement.icsforms.model.VetFacility;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.BorderFactory;
 import javax.swing.DefaultCellEditor;
@@ -52,8 +53,6 @@ import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
-import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -312,7 +311,7 @@ public class CanineMedicalPanel extends JPanel {
 			procedures.setText(plan.getEmergencyProcedures());
 			aviationUsed.setSelected(plan.isAviationAssetsUsed());
 			preparedBy.setText(MedicalRoleSupport.medicalUnitLeaderName(data));
-			preparedAt.setText(plan.getPreparedAt() == null ? "" : plan.getPreparedAt().toString());
+			preparedAt.setText(UiSupport.formatIsoDateTime(plan.getPreparedAt()));
 			safetyOfficer.setText(MedicalRoleSupport.safetyOfficerName(data));
 			reviewStatus.setSelectedItem(plan.getReviewStatus());
 			loadDirectory(data.getVetDirectory());
@@ -354,7 +353,7 @@ public class CanineMedicalPanel extends JPanel {
 			} else if (latitude != null && longitude != null
 					&& (!latitude.equals(staging.getLatitude()) || !longitude.equals(staging.getLongitude()))) {
 				staging.setResolution(stagingAddress.getText(), latitude, longitude, "manual",
-						"Operator-entered coordinates", Instant.now());
+						"Operator-entered coordinates", UtcTimestamp.nowInstant());
 			}
 			data.getCanineMedicalPlan().setAidStationInformation(aidStations.getText());
 			data.getCanineMedicalPlan().setTransportServices(transportServices.getText());
@@ -1181,7 +1180,7 @@ public class CanineMedicalPanel extends JPanel {
 		return new Object[] {facility.getId(), facility.getName(), facility.getTown(), facility.getAddress(),
 				String.join(";", facility.getContactNumbers()), availability(facility.getAvailable24Hours()),
 				facility.getAvailabilityNotes(), facility.getCapabilities(),
-				facility.getVerifiedAt() == null ? "" : facility.getVerifiedAt().toString(),
+				UiSupport.formatInstant(facility.getVerifiedAt()),
 				value(facility.getLatitude()), value(facility.getLongitude()), facility.getSourceName(),
 				facility.getState(), facility.getPostalCode(), facility.getFax(), facility.copy(),
 				distanceMiles(facility), durationMinutes(facility)};
@@ -1736,7 +1735,8 @@ public class CanineMedicalPanel extends JPanel {
 					if (candidate != null) {
 						incident.getStagingLocation().setResolution(candidate.label(), candidate.point().latitude(),
 								candidate.point().longitude(), "openrouteservice-geocoder",
-								"Operator-confirmed candidate; confidence " + candidate.confidence(), Instant.now());
+								"Operator-confirmed candidate; confidence " + candidate.confidence(),
+								UtcTimestamp.nowInstant());
 						refreshFromModel();
 						controller.markDirty();
 						status.setText("Confirmed base coordinates from ORS geocoding.");
@@ -1983,7 +1983,7 @@ public class CanineMedicalPanel extends JPanel {
 			return;
 		}
 		controller.getData().getStagingLocation().setResolution(stagingAddress.getText(), latitude, longitude,
-				"manual", "Operator-entered coordinates", Instant.now());
+				"manual", "Operator-entered coordinates", UtcTimestamp.nowInstant());
 		refreshFromModel();
 		controller.markDirty();
 	}
@@ -2176,7 +2176,7 @@ public class CanineMedicalPanel extends JPanel {
 			return;
 		}
 		try {
-			plan.setPreparedAt(LocalDateTime.parse(preparedAt.getText().trim()));
+			plan.setPreparedAt(UiSupport.parseIsoDateTime(preparedAt.getText().trim()));
 		} catch (RuntimeException exception) {
 			status.setText("Preparation date/time must use yyyy-MM-ddTHH:mm.");
 		}

@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.StagingLocation;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.VetDirectory;
 import org.sarmanagement.icsforms.model.VetFacility;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -78,7 +79,7 @@ public class VetDirectoryFileService {
 			VetDirectory.Source source = new VetDirectory.Source();
 			source.setName(file.getFileName().toString());
 			source.setFormat(format.toUpperCase(Locale.ROOT));
-			source.setImportedAt(Instant.now());
+			source.setImportedAt(UtcTimestamp.nowInstant());
 			merged.getSources().add(source);
 			for (VetFacility facility : parsed) {
 				String existingId = merged.getFacilities().stream()

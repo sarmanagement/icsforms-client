@@ -11,6 +11,7 @@ import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.model.PlanReviewStatus;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -109,7 +110,7 @@ public class IncidentCommandRolePanel extends JPanel {
 		String approval = data.getForm202().getObjectiveApprovalStatus().displayLabel();
 		if (data.getForm202().getApprovedDateTime() != null) {
 			approval += " by " + data.getForm202().getApprovedByIncidentCommanderName() + " at "
-					+ APPROVAL_TIME.format(data.getForm202().getApprovedDateTime());
+					+ UiSupport.formatDateTime(data.getForm202().getApprovedDateTime(), APPROVAL_TIME);
 		}
 		approvalStatus.setText(data.getForm202().getObjectiveApprovalStatus().displayLabel());
 		approvalStatus.setToolTipText(approval);
@@ -297,7 +298,7 @@ public class IncidentCommandRolePanel extends JPanel {
 	private void approveObjectives() {
 		try {
 			controller.approveCurrentObjectives(approver.getText(), signature.getText(),
-					LocalDateTime.now().withSecond(0).withNano(0));
+					UtcTimestamp.now().withSecond(0).withNano(0));
 			approvalDraftDirty = false;
 			refreshFromModel();
 		} catch (IllegalArgumentException exception) {
@@ -528,8 +529,8 @@ public class IncidentCommandRolePanel extends JPanel {
 	private static String periodLabel(AppData data) {
 		LocalDateTime start = data.getIncidentContext().getOperationalPeriodStart();
 		LocalDateTime end = data.getIncidentContext().getOperationalPeriodEnd();
-		return (start == null ? "unspecified" : APPROVAL_TIME.format(start)) + " — "
-				+ (end == null ? "unspecified" : APPROVAL_TIME.format(end));
+		return (start == null ? "unspecified" : UiSupport.formatDateTime(start, APPROVAL_TIME)) + " — "
+				+ (end == null ? "unspecified" : UiSupport.formatDateTime(end, APPROVAL_TIME));
 	}
 
 	/**

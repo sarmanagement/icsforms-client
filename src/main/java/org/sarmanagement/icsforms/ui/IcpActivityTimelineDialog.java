@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -35,6 +36,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -218,7 +221,7 @@ public final class IcpActivityTimelineDialog extends JDialog {
 				: String.join("\n", lane.assignedResources()));
 		JTextArea events = readOnlyText(lane.markers().isEmpty()
 				? "No ICP events are recorded for this assignment."
-				: lane.markers().stream().map(marker -> marker.timestamp().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+				: lane.markers().stream().map(marker -> UiSupport.formatDateTime(marker.timestamp())
 						+ " — " + marker.eventLabel()
 						+ (marker.resourceIdentifier().isBlank() ? "" : " — " + marker.resourceIdentifier())
 						+ (marker.struckOut() ? " [struck out]" : "")
@@ -728,12 +731,15 @@ public final class IcpActivityTimelineDialog extends JDialog {
 			for (long hour = 0; hour <= hours; hour++) {
 				int x = LEFT + (int) (hour * HOUR_WIDTH);
 				LocalDateTime tick = start.plusHours(hour);
+				ZonedDateTime displayedTick = tick.atOffset(ZoneOffset.UTC)
+						.atZoneSameInstant(UiSupport.getDateTimeDisplayZone());
 				g.setColor(new Color(215, 220, 225));
 				g.setStroke(new BasicStroke(1f));
 				g.drawLine(x, TOP - 10, x, TOP + lanes.size() * ROW_HEIGHT);
 				g.setColor(new Color(70, 70, 70));
 				g.setFont(getFont().deriveFont(Font.PLAIN, 11f));
-				g.drawString(tick.getHour() == 0 ? tick.format(DATE) : tick.format(TIME), x + 3, 24);
+				g.drawString(displayedTick.getHour() == 0 ? displayedTick.format(DATE) : displayedTick.format(TIME),
+						x + 3, 24);
 			}
 			hits.clear();
 			for (int laneIndex = 0; laneIndex < lanes.size(); laneIndex++) {
@@ -782,7 +788,8 @@ public final class IcpActivityTimelineDialog extends JDialog {
 				}
 				String resource = marker.resourceIdentifier().isBlank() ? ""
 						: " — " + escapeHtml(marker.resourceIdentifier());
-				String text = marker.timestamp().format(TIME) + " — " + escapeHtml(marker.eventLabel()) + resource + ": "
+				String text = UiSupport.formatDateTime(marker.timestamp(), TIME) + " — "
+						+ escapeHtml(marker.eventLabel()) + resource + ": "
 						+ escapeHtml(marker.activity())
 						+ (marker.struckOut() ? " [struck out]" : "");
 				hits.add(new MarkerHit(x - 10, y - 10, x + 10, y + 10, text));
@@ -856,7 +863,8 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		 */
 		private LocalDateTime timelineStart(List<TimelineMarker> markers) {
 			return markers.stream().map(TimelineMarker::timestamp).min(LocalDateTime::compareTo)
-					.map(value -> value.withMinute(0).withSecond(0).withNano(0)).orElse(LocalDateTime.now().withMinute(0));
+					.map(value -> value.withMinute(0).withSecond(0).withNano(0))
+					.orElse(UtcTimestamp.now().withMinute(0));
 		}
 
 		/**

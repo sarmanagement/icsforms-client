@@ -37,8 +37,8 @@ public final class Ics215PromotionDialog {
 			return false;
 		}
 		String preview = "Promote the planned ICS 215 worksheet and apply these dates to Shared?\n\n"
-				+ "From: " + DATE_TIME.format(form.getTargetPeriodStart()) + "\n"
-				+ "To: " + DATE_TIME.format(form.getTargetPeriodEnd()) + "\n\n"
+				+ "From: " + UiSupport.formatDateTime(form.getTargetPeriodStart(), DATE_TIME) + "\n"
+				+ "To: " + UiSupport.formatDateTime(form.getTargetPeriodEnd(), DATE_TIME) + "\n\n"
 				+ "Accepted Have snapshots will be retained and linked T-cards flagged for review.";
 		return JOptionPane.showConfirmDialog(owner, preview, "Confirm ICS 215 period promotion",
 				JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;

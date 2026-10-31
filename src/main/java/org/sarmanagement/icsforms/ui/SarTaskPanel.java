@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListSelectionModel;
@@ -602,7 +603,7 @@ public class SarTaskPanel extends JPanel {
 	}
 
 	static String formatDateTimeValue(LocalDateTime value) {
-		return value == null ? "" : DATE_TIME_FORMATTER.format(value);
+		return UiSupport.formatDateTime(value, DATE_TIME_FORMATTER);
 	}
 
 	static LocalDateTime parseDateTimeValue(String value) {
@@ -610,7 +611,7 @@ public class SarTaskPanel extends JPanel {
 			return null;
 		}
 		try {
-			return LocalDateTime.parse(value.trim(), DATE_TIME_FORMATTER);
+			return UiSupport.parseDateTime(value.trim(), DATE_TIME_FORMATTER);
 		} catch (DateTimeParseException exception) {
 			return null;
 		}
@@ -853,7 +854,7 @@ public class SarTaskPanel extends JPanel {
 			controller.applyReturnedResourceStatuses(task, promptResourceDispositionOnReturn(task));
 		}
 		AppController.TaskLifecycleChangeResult result = controller.recordTaskLifecycleTransition(task, previous, updated,
-				LocalDateTime.now().withSecond(0).withNano(0));
+				UtcTimestamp.now().withSecond(0).withNano(0));
 		showLifecycleWarning(result);
 		controller.syncIcs204ResourcesFromSarTasks();
 		tableModel.setRows(controller.getData().getSarTaskAssignments(), controller.getData().getClueLogEntries(),
@@ -980,7 +981,7 @@ public class SarTaskPanel extends JPanel {
 				controller.applyReturnedResourceStatuses(row, returnedStatuses);
 			}
 			result = controller.recordTaskLifecycleTransition(row, previousLifecycleStatus, newLifecycleStatus,
-					LocalDateTime.now().withSecond(0).withNano(0));
+					UtcTimestamp.now().withSecond(0).withNano(0));
 		}
 		if (mode == EditorMode.ASSIGNMENT) {
 			updateLinkedResourcePersonCount(row, editor.resourceCount());

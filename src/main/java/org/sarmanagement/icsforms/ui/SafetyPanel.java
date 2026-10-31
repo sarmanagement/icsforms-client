@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.SafetyHazardReport;
 import org.sarmanagement.icsforms.model.SafetyMessageBlock;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SiteSafetyPlan;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.safety.SafetyHazardCsvService;
 import org.sarmanagement.icsforms.safety.SafetyHazardLibraryService;
 import org.sarmanagement.icsforms.safety.SafetyMessageComposer;
@@ -805,10 +806,10 @@ public class SafetyPanel extends JPanel {
 		HazardReportSource source = reportSources.get(row);
 		if (source.task() != null) {
 			source.task().setSafetyHazardNotedBy(name.trim());
-			source.task().setSafetyHazardNotedDateTime(LocalDateTime.now());
+			source.task().setSafetyHazardNotedDateTime(UtcTimestamp.now());
 		} else {
 			source.archivedReport().setNotedBySafetyOfficer(name.trim());
-			source.archivedReport().setNotedDateTime(LocalDateTime.now());
+			source.archivedReport().setNotedDateTime(UtcTimestamp.now());
 		}
 		controller.markDirty();
 		refreshReportedHazards(controller.getData());
@@ -984,7 +985,7 @@ public class SafetyPanel extends JPanel {
 	}
 
 	/**
-	 * Parses an ISO local date/time entered in the safety form.
+	 * Parses an ISO local date/time entered in the active display timezone.
 	 *
 	 * @param value ISO date/time text.
 	 * @return parsed time, or null when blank/invalid.
@@ -994,7 +995,7 @@ public class SafetyPanel extends JPanel {
 			return null;
 		}
 		try {
-			return LocalDateTime.parse(value.trim());
+			return UiSupport.parseIsoDateTime(value.trim());
 		} catch (java.time.format.DateTimeParseException exception) {
 			return null;
 		}
@@ -1007,7 +1008,7 @@ public class SafetyPanel extends JPanel {
 	 * @return ISO local date/time text, or blank.
 	 */
 	private static String isoDateTime(LocalDateTime dateTime) {
-		return dateTime == null ? "" : dateTime.toString();
+		return UiSupport.formatIsoDateTime(dateTime);
 	}
 
 	/**

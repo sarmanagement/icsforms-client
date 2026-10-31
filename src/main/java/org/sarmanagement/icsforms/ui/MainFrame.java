@@ -14,6 +14,7 @@ import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.medical.OrsApiKeyStore;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.persistence.IncidentId;
@@ -1454,7 +1455,7 @@ public class MainFrame extends JFrame {
 	 */
 	static String humanReadableTimeZone(ZoneId zoneId) {
 		ZoneId resolved = zoneId == null ? ZoneId.systemDefault() : zoneId;
-		java.time.ZonedDateTime now = java.time.ZonedDateTime.now(resolved);
+		java.time.ZonedDateTime now = UtcTimestamp.nowInstant().atZone(resolved);
 		return resolved.getId() + " (UTC" + now.getOffset() + ", " + now.format(java.time.format.DateTimeFormatter.ofPattern("z"))
 				+ ")";
 	}
