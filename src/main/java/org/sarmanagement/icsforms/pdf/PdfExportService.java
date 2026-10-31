@@ -751,6 +751,9 @@ public class PdfExportService {
 		copy.setForm202(data.getForm202());
 		copy.setForm205(data.getForm205());
 		copy.setForm215a(data.getForm215a());
+		copy.setForm215(data.getForm215());
+		copy.setNextPeriodForm215(data.getNextPeriodForm215());
+		copy.setIcs215Enabled(data.isIcs215Enabled());
 		copy.setForm208(data.getForm208());
 		copy.setForm205aIapPage(data.getForm205aIapPage());
 		copy.setForm207(data.getForm207());

@@ -23,7 +23,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 15;
+	public static final int CURRENT_SCHEMA_VERSION = 16;
 	private static final ObjectMapper MEDICAL_PLAN_COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -41,6 +41,8 @@ public class AppData {
 		private CanineMedicalPlan canineMedicalPlan;
 		private Ics205Form form205;
 		private Ics215aForm form215a;
+		private Ics215Form form215;
+		private Ics215Form nextPeriodForm215;
 		private Ics208Form form208;
 		private Ics202Form form202;
 		private List<Ics204Form> forms204 = new ArrayList<>();
@@ -188,6 +190,26 @@ public class AppData {
 			this.form215a = form215a;
 		}
 
+		/** @return archived active-period ICS 215 worksheet. */
+		public Ics215Form getForm215() {
+			return form215 == null ? new Ics215Form() : form215;
+		}
+
+		/** @param form215 archived active-period ICS 215 worksheet. */
+		public void setForm215(Ics215Form form215) {
+			this.form215 = form215;
+		}
+
+		/** @return archived next-period ICS 215 worksheet. */
+		public Ics215Form getNextPeriodForm215() {
+			return nextPeriodForm215 == null ? new Ics215Form() : nextPeriodForm215;
+		}
+
+		/** @param nextPeriodForm215 archived next-period ICS 215 worksheet. */
+		public void setNextPeriodForm215(Ics215Form nextPeriodForm215) {
+			this.nextPeriodForm215 = nextPeriodForm215;
+		}
+
 		/** @return archived safety message and site plan, or null for legacy records. */
 		public Ics208Form getForm208() {
 			return form208;
@@ -287,6 +309,9 @@ public class AppData {
 	private Ics201Form form201 = new Ics201Form();
 	private Ics202Form form202 = new Ics202Form();
 	private Ics215aForm form215a = new Ics215aForm();
+	private Ics215Form form215 = new Ics215Form();
+	private Ics215Form nextPeriodForm215 = new Ics215Form();
+	private boolean ics215Enabled;
 	private Ics208Form form208 = new Ics208Form();
 	private String form205aIapPage = "";
 	private Ics207Form form207 = new Ics207Form();
@@ -448,6 +473,28 @@ public class AppData {
 	 *            always cleared in the new period.
 	 */
 	public void advanceToNewOperationalPeriod(boolean bringForwardCommunicationsPlan) {
+		advanceToNewOperationalPeriod(bringForwardCommunicationsPlan, false);
+	}
+
+	/**
+	 * Advances to a subsequent period and optionally promotes the planned ICS 215 worksheet.
+	 *
+	 * <p>Promotion is explicit. It validates target dates before changing the incident,
+	 * archives detached outgoing worksheets, applies target dates to Shared context,
+	 * and retains accepted Have snapshots while marking linked resources for review.</p>
+	 *
+	 * @param bringForwardCommunicationsPlan true to copy channels and instructions.
+	 * @param promotePlannedIcs215 true to promote the next-period worksheet.
+	 * @throws IllegalArgumentException when worksheet promotion has invalid target dates or data.
+	 */
+	public void advanceToNewOperationalPeriod(boolean bringForwardCommunicationsPlan,
+			boolean promotePlannedIcs215) {
+		Ics215Form promotedWorksheet = null;
+		if (promotePlannedIcs215) {
+			validateIcs215Promotion();
+			promotedWorksheet = getNextPeriodForm215().copy();
+			promotedWorksheet.markLinkedResourcesForReview();
+		}
 		// Capture the current operational period context before clearing.
 		OperationalPeriodRecord record = new OperationalPeriodRecord();
 		if (incidentContext != null) {
@@ -461,6 +508,8 @@ public class AppData {
 		record.setCanineMedicalPlan(copyCanineMedicalPlan(getCanineMedicalPlan()));
 		record.setForm205(getForm205().deepCopy());
 		record.setForm215a(MEDICAL_PLAN_COPIER.convertValue(getForm215a(), Ics215aForm.class));
+		record.setForm215(getForm215().copy());
+		record.setNextPeriodForm215(getNextPeriodForm215().copy());
 		record.setForm208(MEDICAL_PLAN_COPIER.convertValue(getForm208(), Ics208Form.class));
 		record.setIapPlanningStage(getIapPlanningStage());
 		record.setForm202(MEDICAL_PLAN_COPIER.convertValue(getForm202(), Ics202Form.class));
@@ -485,6 +534,12 @@ public class AppData {
 		this.form202 = new Ics202Form();
 		this.form205aIapPage = "";
 		this.form205 = bringForwardCommunicationsPlan ? record.getForm205().copyForNewPeriod() : new Ics205Form();
+		this.form215 = promotedWorksheet == null ? new Ics215Form() : promotedWorksheet;
+		if (promotedWorksheet != null) {
+			incidentContext.setOperationalPeriodStart(promotedWorksheet.getTargetPeriodStart());
+			incidentContext.setOperationalPeriodEnd(promotedWorksheet.getTargetPeriodEnd());
+			this.nextPeriodForm215 = new Ics215Form();
+		}
 		this.form204 = new Ics204Form();
 		this.additionalForms204 = new ArrayList<>();
 		this.sarTaskAssignments = new ArrayList<>();
@@ -499,6 +554,22 @@ public class AppData {
 		this.humanMedicalReview = new PlanReviewAssertion();
 		this.canineMedicalReview = new PlanReviewAssertion();
 		this.communicationsReview = new PlanReviewAssertion();
+	}
+
+	/**
+	 * Validates the planned worksheet before the period transition mutates any incident data.
+	 *
+	 * @throws IllegalArgumentException when target dates or worksheet values are invalid.
+	 */
+	public void validateIcs215Promotion() {
+		Ics215Form planned = getNextPeriodForm215();
+		planned.validateOrThrow();
+		if (planned.getTargetPeriodStart() == null || planned.getTargetPeriodEnd() == null) {
+			throw new IllegalArgumentException("ICS 215 promotion requires target start and end date/time.");
+		}
+		if (planned.getTargetPeriodStart().isAfter(planned.getTargetPeriodEnd())) {
+			throw new IllegalArgumentException("ICS 215 target start must not be after its end.");
+		}
 	}
 
 	/**
@@ -1007,6 +1078,66 @@ public class AppData {
 	 */
 	public void setForm215a(Ics215aForm form215a) {
 		this.form215a = form215a == null ? new Ics215aForm() : form215a;
+	}
+
+	/**
+	 * Returns the active-period ICS 215 operational planning worksheet.
+	 *
+	 * @return active-period worksheet.
+	 */
+	public Ics215Form getForm215() {
+		if (form215 == null) {
+			form215 = new Ics215Form();
+		}
+		return form215;
+	}
+
+	/**
+	 * Sets the active-period ICS 215 worksheet.
+	 *
+	 * @param form215 active-period worksheet; null resets it.
+	 */
+	public void setForm215(Ics215Form form215) {
+		this.form215 = form215 == null ? new Ics215Form() : form215;
+	}
+
+	/**
+	 * Returns the independently planned next-period ICS 215 worksheet.
+	 *
+	 * @return next-period worksheet.
+	 */
+	public Ics215Form getNextPeriodForm215() {
+		if (nextPeriodForm215 == null) {
+			nextPeriodForm215 = new Ics215Form();
+		}
+		return nextPeriodForm215;
+	}
+
+	/**
+	 * Sets the independently planned next-period ICS 215 worksheet.
+	 *
+	 * @param nextPeriodForm215 next-period worksheet; null resets it.
+	 */
+	public void setNextPeriodForm215(Ics215Form nextPeriodForm215) {
+		this.nextPeriodForm215 = nextPeriodForm215 == null ? new Ics215Form() : nextPeriodForm215;
+	}
+
+	/**
+	 * Returns whether the optional ICS 215 workspace is enabled for this incident.
+	 *
+	 * @return true when ICS 215 is visible.
+	 */
+	public boolean isIcs215Enabled() {
+		return ics215Enabled;
+	}
+
+	/**
+	 * Sets the persisted per-incident ICS 215 workspace visibility preference.
+	 *
+	 * @param ics215Enabled true to show the optional workspace.
+	 */
+	public void setIcs215Enabled(boolean ics215Enabled) {
+		this.ics215Enabled = ics215Enabled;
 	}
 
 	/**
