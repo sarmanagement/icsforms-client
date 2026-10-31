@@ -225,23 +225,15 @@ class PdfPrintOptionsTest {
 	}
 
 	@Test
-<<<<<<< HEAD
-	void startupHasActionAndModeControlsWithoutPlanReuseCheckbox() throws Exception {
-=======
 	void startupOffersExplicitIcs215PromotionAlongsideModeControls() throws Exception {
->>>>>>> origin/master
 		Assumptions.assumeFalse(GraphicsEnvironment.isHeadless());
 		SwingUtilities.invokeAndWait(() -> {
 			StartupDialog startup = new StartupDialog(null, null, false);
 			try {
 				List<JCheckBox> checkboxes = components(startup, JCheckBox.class);
-<<<<<<< HEAD
-				assertTrue(checkboxes.isEmpty());
-=======
 				assertEquals(1, checkboxes.size());
 				assertEquals("Promote planned ICS 215 target period when advancing", checkboxes.get(0).getText());
 				assertFalse(checkboxes.get(0).isSelected());
->>>>>>> origin/master
 				assertTrue(components(startup, JComboBox.class).isEmpty());
 				assertTrue(components(startup, ActionTrackerSettingsPanel.class).isEmpty());
 				assertEquals(org.sarmanagement.icsforms.model.IncidentMode.SAR, startup.getChosenMode());

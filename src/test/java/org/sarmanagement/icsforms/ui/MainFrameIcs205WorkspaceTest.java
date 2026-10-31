@@ -166,28 +166,20 @@ class MainFrameIcs205WorkspaceTest {
 	}
 
 	@Test
-<<<<<<< HEAD
-	void startupDoesNotOfferPlanReuseCheckbox() throws Exception {
-=======
-	void plannedIcs215PromotionCheckboxIsExplicitAndUnchecked() throws Exception {
->>>>>>> origin/master
+	void startupOffersIcs215PromotionWithoutPlanReuseCheckbox() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		Path directory = Files.createDirectories(Path.of("target", "ics205-startup-" + UUID.randomUUID()));
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			SwingUtilities.invokeAndWait(() -> {
 				StartupDialog dialog = new StartupDialog(null, store, false);
 				try {
-<<<<<<< HEAD
 					assertFalse(dialog.isBringForwardCommunicationsPlan());
-					assertNull(carryForwardCheckbox(dialog));
-=======
 					assertFalse(dialog.isPromotePlannedIcs215());
 					JCheckBox checkbox = promoteIcs215Checkbox(dialog);
 					assertNotNull(checkbox);
 					assertEquals("Promote planned ICS 215 target period when advancing", checkbox.getText());
 					checkbox.doClick();
 					assertTrue(dialog.isPromotePlannedIcs215());
->>>>>>> origin/master
 				} finally {
 					dialog.dispose();
 				}

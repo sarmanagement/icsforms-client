@@ -731,6 +731,8 @@ class MapleRidgeExampleTest {
 		AppData data = new AppData();
 		data.setIncidentId(id("incident"));
 		data.setOriginNodeId(id("origin"));
+		data.getForm215().setWorksheetId(id("ics215-current"));
+		data.getNextPeriodForm215().setWorksheetId(id("ics215-next"));
 		data.setCreatedAt(Instant.parse("2026-07-18T10:30:00Z"));
 		data.setUseSystemTimeZone(false);
 		data.setConfiguredTimeZoneId("America/New_York");
