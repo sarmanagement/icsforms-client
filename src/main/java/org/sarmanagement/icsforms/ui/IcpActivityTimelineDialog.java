@@ -261,6 +261,35 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	}
 
 	/**
+	 * Finds intervals during which an assignment was logged as on task.
+	 *
+	 * @param markers chronologically ordered lane markers.
+	 * @return on-task intervals terminated by a completion or return marker.
+	 */
+	static List<TimelineSegment> onTaskSegments(List<TimelineMarker> markers, LocalDateTime timelineEnd) {
+		List<TimelineSegment> segments = new ArrayList<>();
+		LocalDateTime onTaskAt = null;
+		for (TimelineMarker marker : markers) {
+			if (marker.struckOut()) {
+				continue;
+			}
+			if (ActivityEventType.ID_RESOURCE_ON_TASK.equals(marker.eventTypeId())) {
+				if (onTaskAt == null) {
+					onTaskAt = marker.timestamp();
+				}
+			} else if (onTaskAt != null && (ActivityEventType.ID_TASK_COMPLETED.equals(marker.eventTypeId())
+					|| ActivityEventType.ID_RESOURCE_RETURNED_STAGING.equals(marker.eventTypeId()))) {
+				segments.add(new TimelineSegment(onTaskAt, marker.timestamp()));
+				onTaskAt = null;
+			}
+		}
+		if (onTaskAt != null && timelineEnd != null && timelineEnd.isAfter(onTaskAt)) {
+			segments.add(new TimelineSegment(onTaskAt, timelineEnd));
+		}
+		return List.copyOf(segments);
+	}
+
+	/**
 	 * Returns the marker color for a built-in activity type.
 	 *
 	 * @param eventTypeId stable event type ID.
@@ -313,6 +342,15 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	 */
 	record TimelineMarker(LocalDateTime timestamp, String eventTypeId, String eventLabel, String activity,
 			boolean struckOut) {
+	}
+
+	/**
+	 * Time interval showing an assignment's logged on-task period.
+	 *
+	 * @param start interval start.
+	 * @param end interval end.
+	 */
+	record TimelineSegment(LocalDateTime start, LocalDateTime end) {
 	}
 
 	/**
@@ -424,6 +462,8 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		private void drawTimeline(Graphics2D g) {
 			List<TimelineMarker> markers = allMarkers();
 			LocalDateTime start = timelineStart(markers);
+			LocalDateTime end = markers.stream().map(TimelineMarker::timestamp).max(LocalDateTime::compareTo)
+					.orElse(start);
 			long hours = timelineHours(markers);
 			g.setColor(new Color(80, 80, 80));
 			g.setFont(getFont().deriveFont(Font.BOLD, 12f));
@@ -451,6 +491,7 @@ public final class IcpActivityTimelineDialog extends JDialog {
 				g.setColor(new Color(45, 50, 55));
 				g.setFont(getFont().deriveFont(Font.PLAIN, 12f));
 				g.drawString(trim(lane.label(), 32), 8, top + ROW_HEIGHT / 2 + 4);
+				drawOnTaskSegments(g, lane, laneIndex, start, end);
 				drawMarkers(g, lane, laneIndex, start);
 			}
 			if (lanes.isEmpty()) {
@@ -489,6 +530,38 @@ public final class IcpActivityTimelineDialog extends JDialog {
 						+ safe(marker.activity()).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 				hits.add(new MarkerHit(x - 10, y - 10, x + 10, y + 10, text));
 			}
+		}
+
+		/**
+		 * Draws a connector across each logged on-task interval in the lane.
+		 *
+		 * @param g drawing context.
+		 * @param lane assignment row.
+		 * @param laneIndex row number.
+		 * @param start horizontal-axis origin.
+		 */
+		private void drawOnTaskSegments(Graphics2D g, TimelineLane lane, int laneIndex, LocalDateTime start,
+				LocalDateTime end) {
+			int centerY = TOP + laneIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+			g.setColor(new Color(29, 95, 155, 150));
+			g.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+			for (TimelineSegment segment : onTaskSegments(lane.markers(), end)) {
+				int fromX = markerX(segment.start(), start);
+				int toX = markerX(segment.end(), start);
+				g.drawLine(fromX, centerY, toX, centerY);
+			}
+		}
+
+		/**
+		 * Converts a timeline timestamp to its horizontal pixel coordinate.
+		 *
+		 * @param timestamp plotted time.
+		 * @param start horizontal-axis origin.
+		 * @return horizontal pixel coordinate.
+		 */
+		private int markerX(LocalDateTime timestamp, LocalDateTime start) {
+			long minutes = Duration.between(start, timestamp).toMinutes();
+			return LEFT + (int) (minutes * HOUR_WIDTH / 60f);
 		}
 
 		/**

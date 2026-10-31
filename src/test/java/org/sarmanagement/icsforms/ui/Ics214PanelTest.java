@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package org.sarmanagement.icsforms.ui;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
@@ -277,8 +279,8 @@ class Ics214PanelTest {
 
 	@Test
 	void contextMenuEnablesActionsOnlyWhenRowSelected() throws Exception {
-		Ics214Panel panel = new Ics214Panel(sampleController());
 		AppData data = sampleDataWithTaskLog(2);
+		Ics214Panel panel = new Ics214Panel(sampleController(data));
 		Ics214Form form = data.getActivityLogs().get(0);
 		SwingUtilities.invokeAndWait(() -> panel.loadFromModel(form, data));
 
@@ -287,17 +289,21 @@ class Ics214PanelTest {
 		assertTrue(popup != null);
 
 		JMenuItem detailsItem = null;
+		JMenuItem classifyItem = null;
 		JMenuItem strikeOutItem = null;
 		for (Component comp : popup.getComponents()) {
 			if (comp instanceof JMenuItem item) {
 				if ("View details".equals(item.getText())) {
 					detailsItem = item;
+				} else if ("Classify Note…".equals(item.getText())) {
+					classifyItem = item;
 				} else if ("Strike out entry".equals(item.getText())) {
 					strikeOutItem = item;
 				}
 			}
 		}
 		assertTrue(detailsItem != null, "View details menu item should exist");
+		assertTrue(classifyItem != null, "Classify Note menu item should exist");
 		assertTrue(strikeOutItem != null, "Strike out entry menu item should exist");
 
 		SwingUtilities.invokeAndWait(table::clearSelection);
@@ -305,6 +311,7 @@ class Ics214PanelTest {
 			listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(popup));
 		}
 		assertFalse(detailsItem.isEnabled());
+		assertFalse(classifyItem.isEnabled());
 		assertFalse(strikeOutItem.isEnabled());
 
 		SwingUtilities.invokeAndWait(() -> table.setRowSelectionInterval(0, 0));
@@ -312,7 +319,32 @@ class Ics214PanelTest {
 			listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(popup));
 		}
 		assertTrue(detailsItem.isEnabled());
+		assertTrue(classifyItem.isEnabled());
 		assertTrue(strikeOutItem.isEnabled());
+	}
+
+	@Test
+	void classifiesNoteAndPersistsTheTypeChangeAudit() throws Exception {
+		AppData data = sampleDataWithTaskLog(1);
+		Ics214Panel panel = new Ics214Panel(sampleController(data));
+		Ics214Form form = data.getActivityLogs().get(0);
+		ActivityLogEntry entry = form.getActivityLog().get(0);
+		panel.loadFromModel(form, data);
+		LocalDateTime changedAt = LocalDateTime.of(2026, 10, 27, 9, 15);
+
+		assertTrue(panel.applyNoteClassification(entry, ActivityEventType.ID_CLUE_REPORTED, changedAt));
+		assertEquals(ActivityEventType.ID_CLUE_REPORTED, entry.getEventTypeId());
+		assertEquals(1, entry.getEventTypeChangeHistory().size());
+		var change = entry.getEventTypeChangeHistory().get(0);
+		assertEquals(ActivityEventType.ID_FREE_TEXT, change.previousEventTypeId());
+		assertEquals(ActivityEventType.ID_CLUE_REPORTED, change.newEventTypeId());
+		assertEquals(changedAt, change.changedAt());
+
+		ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+		ActivityLogEntry restored = mapper.readValue(mapper.writeValueAsString(entry), ActivityLogEntry.class);
+		assertEquals(entry.getEventTypeId(), restored.getEventTypeId());
+		assertEquals(entry.getEventTypeChangeHistory(), restored.getEventTypeChangeHistory());
+		assertFalse(panel.applyNoteClassification(entry, ActivityEventType.ID_CLUE_DETECTED, changedAt.plusMinutes(1)));
 	}
 
 	@Test

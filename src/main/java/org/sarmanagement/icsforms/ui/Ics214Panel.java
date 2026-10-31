@@ -75,6 +75,7 @@ public class Ics214Panel extends JPanel {
 	private final JButton syncResourcesBtn = new JButton("Sync resources…");
 	private final JButton viewDetailsActivityBtn = new JButton("View Details");
 	private final JButton strikeOutActivityBtn = new JButton("Strike Out Entry");
+	private final JButton classifyActivityBtn = new JButton("Classify Note…");
 	private final ResourcesTableModel resourcesTableModel = new ResourcesTableModel();
 	private final ActivityLogTableModel activityLogTableModel = new ActivityLogTableModel();
 	private final JTable resourcesTable = new JTable(resourcesTableModel);
@@ -190,8 +191,10 @@ public class Ics214Panel extends JPanel {
 		javax.swing.JPopupMenu popup = new javax.swing.JPopupMenu();
 		javax.swing.JMenuItem details = new javax.swing.JMenuItem("View details");
 		javax.swing.JMenuItem another = new javax.swing.JMenuItem("Add another entry");
+		javax.swing.JMenuItem classify = new javax.swing.JMenuItem("Classify Note…");
 		javax.swing.JMenuItem strikeOut = new javax.swing.JMenuItem("Strike out entry");
 		details.addActionListener(event -> showSelectedActivityDetails());
+		classify.addActionListener(event -> classifySelectedNote());
 		another.addActionListener(event -> {
 			ActivityLogEntry entry = selectedActivityEntry();
 			if (entry != null && new ActivityEntryDialog(controller,
@@ -208,13 +211,16 @@ public class Ics214Panel extends JPanel {
 		});
 		popup.add(details);
 		popup.add(another);
+		popup.add(classify);
 		popup.add(strikeOut);
 		popup.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
 			@Override
 			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
 				boolean hasSelection = activityLogTable.getSelectedRow() >= 0;
+				ActivityLogEntry selected = selectedActivityEntry();
 				details.setEnabled(hasSelection);
 				another.setEnabled(hasSelection);
+				classify.setEnabled(isNoteEntry(selected));
 				strikeOut.setEnabled(hasSelection);
 			}
 
@@ -276,6 +282,57 @@ public class Ics214Panel extends JPanel {
 		if (entry != null && ActivityEntryDialog.showDetails(activityLogTable, controller, currentForm, entry)) {
 			refreshActivityEntries();
 		}
+	}
+
+	/** Prompts for a new event type for the selected Note entry. */
+	private void classifySelectedNote() {
+		ActivityLogEntry entry = selectedActivityEntry();
+		if (!isNoteEntry(entry) || currentData == null) {
+			return;
+		}
+		ActivityEventType[] types = resolvedEventTypes().stream()
+				.filter(type -> !ActivityEventType.ID_FREE_TEXT.equals(type.getId()))
+				.toArray(ActivityEventType[]::new);
+		if (types.length == 0) {
+			return;
+		}
+		JComboBox<ActivityEventType> choices = new JComboBox<>(types);
+		UiSupport.configureDialogComboBox(choices, 280);
+		int result = JOptionPane.showConfirmDialog(this, choices, "Classify Note Entry",
+				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+		if (result == JOptionPane.OK_OPTION && choices.getSelectedItem() instanceof ActivityEventType selected) {
+			applyNoteClassification(entry, selected.getId(), LocalDateTime.now());
+		}
+	}
+
+	/**
+	 * Reclassifies a Note entry and refreshes the table after recording its audit history.
+	 *
+	 * @param entry existing Note entry.
+	 * @param eventTypeId replacement event type identifier.
+	 * @param changedAt time of the classification change.
+	 * @return true if the entry was reclassified.
+	 */
+	boolean applyNoteClassification(ActivityLogEntry entry, String eventTypeId, LocalDateTime changedAt) {
+		if (currentForm == null || currentData != controller.getData() || entry == null
+				|| !currentForm.getActivityLog().contains(entry) || !isNoteEntry(entry)) {
+			return false;
+		}
+		entry.reclassifyEventType(eventTypeId, changedAt);
+		activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
+		controller.markDirty();
+		updateActivityButtonsState();
+		return true;
+	}
+
+	/**
+	 * Checks whether an activity entry is currently classified as a Note.
+	 *
+	 * @param entry activity entry to inspect.
+	 * @return true if the entry can be classified.
+	 */
+	private boolean isNoteEntry(ActivityLogEntry entry) {
+		return entry != null && ActivityEventType.ID_FREE_TEXT.equals(entry.getEventTypeId());
 	}
 
 	/**
@@ -951,6 +1008,9 @@ public class Ics214Panel extends JPanel {
 		if (strikeOutActivityBtn != null) {
 			strikeOutActivityBtn.setEnabled(hasSelection);
 		}
+		if (classifyActivityBtn != null) {
+			classifyActivityBtn.setEnabled(isNoteEntry(selectedActivityEntry()));
+		}
 	}
 
 	/**
@@ -967,10 +1027,13 @@ public class Ics214Panel extends JPanel {
 			int row = activityLogTable.getSelectedRow();
 			removeSelectedActivityEntry(row < 0 ? -1 : activityLogTable.convertRowIndexToModel(row));
 		});
+		classifyActivityBtn.addActionListener(event -> classifySelectedNote());
 		viewDetailsActivityBtn.setEnabled(false);
 		strikeOutActivityBtn.setEnabled(false);
+		classifyActivityBtn.setEnabled(false);
 		panel.add(add);
 		panel.add(viewDetailsActivityBtn);
+		panel.add(classifyActivityBtn);
 		panel.add(strikeOutActivityBtn);
 		return panel;
 	}

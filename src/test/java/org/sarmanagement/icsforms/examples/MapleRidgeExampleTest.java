@@ -192,9 +192,10 @@ class MapleRidgeExampleTest {
 			assertTrue(casey.getSourceRef().startsWith("sar:"));
 			assertFalse(Files.readString(FIXTURE).toLowerCase(java.util.Locale.ROOT).contains("cleared"));
 			for (String detail : List.of("Ellis Linden", "74-year-old", "dementia", "blue shirt", "tan trousers",
-					"0600", "July 18", "0815", "27-31 C", "humid", "light wind", IPP, STAGING, ICP)) {
+					"0500", "July 18", "0815", "27-31 C", "humid", "light wind", IPP, STAGING, ICP)) {
 				assertTrue(data.getForm202().getSituationalAwareness().contains(detail), detail);
 			}
+			assertFalse(data.getForm202().getSituationalAwareness().contains("four dogs are equipment, not people"));
 			String fixtureText = Files.readString(FIXTURE);
 			assertFalse(fixtureText.contains("coverage 1 is not POD 1"));
 			assertFalse(fixtureText.contains("always less than 100%"));
@@ -750,7 +751,7 @@ class MapleRidgeExampleTest {
 		data.getForm201().setIncidentNumber("EXERCISE-MR-2026-01");
 		data.getForm201().setSituationSummary("FICTIONAL ILLUSTRATION ONLY; not an operational plan. "
 				+ "Ellis Linden, fictional 74-year-old adult with dementia, wandered from a residence "
-				+ "at " + IPP + "; last seen there at 0600 July 18. Staging: " + STAGING + ". Command staff: " + ICP + ". "
+				+ "at " + IPP + "; last seen there at 0500 July 18. Staging: " + STAGING + ". Command staff: " + ICP + ". "
 				+ "Wearing a blue shirt and tan trousers; may not respond to calls. "
 				+ "Returned three-person visual tracker task T1 (0700-0800), debriefed at 0810, reported a definitely human sign line north "
 				+ "from IPP, with no clear prints or sole pattern; potential clue flagged on Ops instruction, "
@@ -882,7 +883,7 @@ class MapleRidgeExampleTest {
 				+ "Hasty-search likely travel corridors and familiar attractors; maintain containment. "
 				+ "Search the high-probability inner 25% zone to coverage approximately 1; reassess heat and tick hazards.");
 		data.getForm202().setSituationalAwareness("0815 July 18, 2026 exercise snapshot. Fictional Ellis Linden, "
-				+ "74-year-old adult with dementia, last seen 0600 July 18 at " + IPP + ". "
+				+ "74-year-old adult with dementia, last seen 0500 July 18 at " + IPP + ". "
 				+ "Wearing a blue shirt and tan trousers; may hide or not answer. "
 				+ "T1's three visual trackers returned at 0800 after 0700-0800 work around IPP, debriefed at 0810: a definitely human sign line "
 				+ "led north, with no clear prints or sole pattern. This potential clue was flagged on Ops instruction; "
@@ -891,7 +892,7 @@ class MapleRidgeExampleTest {
 				+ "Staging: " + STAGING + ". Separate command post: " + ICP + ". "
 				+ BASE + " provides water resupply, an unstaffed human aid-supply cache and heat rehab coordination. "
 				+ "All teams report directly to Ops; no branches, divisions or groups. "
-				+ "36 human field searchers INCLUDE four handlers; four dogs are equipment, not people. "
+				+ "36 human field searchers INCLUDE four handlers. "
 				+ "Six IMT at " + ICP + "; IC " + IC + " is Sheriff of " + SHERIFF_AGENCY + ". No aircraft. "
 				+ "Seven teams active at 0815; returned trackers are available at staging for K3 at 1030. "
 				+ "Ops must reassess span before later launches and stagger/pause work "

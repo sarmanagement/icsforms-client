@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.nio.file.Path;
+import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -79,6 +80,24 @@ class IcpActivityTimelineDialogTest {
 	}
 
 	@Test
+	void onTaskSegmentsConnectOnTaskToCompletionAndIgnoreStruckOutEvents() {
+		LocalDateTime start = LocalDateTime.of(2026, 10, 27, 8, 0);
+		List<IcpActivityTimelineDialog.TimelineMarker> markers = new ArrayList<>(List.of(
+				marker(start, ActivityEventType.ID_RESOURCE_ON_TASK, false),
+				marker(start.plusMinutes(20), ActivityEventType.ID_CLUE_DETECTED, false),
+				marker(start.plusMinutes(40), ActivityEventType.ID_TASK_COMPLETED, false),
+				marker(start.plusMinutes(50), ActivityEventType.ID_RESOURCE_RETURNED_STAGING, false),
+				marker(start.plusHours(1), ActivityEventType.ID_RESOURCE_ON_TASK, true),
+				marker(start.plusHours(2), ActivityEventType.ID_RESOURCE_RETURNED_STAGING, false),
+				marker(start.plusHours(2).plusMinutes(10), ActivityEventType.ID_RESOURCE_ON_TASK, false)));
+
+		assertEquals(List.of(new IcpActivityTimelineDialog.TimelineSegment(start, start.plusMinutes(40)),
+				new IcpActivityTimelineDialog.TimelineSegment(start.plusHours(2).plusMinutes(10),
+						start.plusHours(2).plusMinutes(30))),
+				IcpActivityTimelineDialog.onTaskSegments(markers, start.plusHours(2).plusMinutes(30)));
+	}
+
+	@Test
 	void addActivityActionUsesSelectedAssignmentLane() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (FileIncidentStore store = new FileIncidentStore(directory.resolve("store"))) {
@@ -130,6 +149,19 @@ class IcpActivityTimelineDialogTest {
 		entry.setTimestamp(LocalDateTime.of(2026, 10, 27, 8, 0));
 		entry.setNotableActivity("Test event");
 		return entry;
+	}
+
+	/**
+	 * Creates a timeline marker for one test.
+	 *
+	 * @param timestamp event time.
+	 * @param eventTypeId event category.
+	 * @param struckOut whether the source entry is struck out.
+	 * @return configured marker.
+	 */
+	private static IcpActivityTimelineDialog.TimelineMarker marker(LocalDateTime timestamp, String eventTypeId,
+			boolean struckOut) {
+		return new IcpActivityTimelineDialog.TimelineMarker(timestamp, eventTypeId, eventTypeId, "", struckOut);
 	}
 
 	/**
