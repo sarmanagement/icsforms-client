@@ -57,6 +57,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -65,7 +66,7 @@ import java.util.logging.Logger;
  * Coordinates UI edits, autosave, validation, and linked SAR task
  * synchronization.
  */
-public class AppController {
+public class AppController implements AutoCloseable {
 	private static final int AUTOSAVE_DELAY_MS = 750;
 	private static final Logger LOGGER = Logger.getLogger(AppController.class.getName());
 	private static final ObjectMapper INCIDENT_COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
@@ -80,6 +81,7 @@ public class AppController {
 	private final Timer autosaveTimer;
 	private AppData data;
 	private boolean dirty;
+	private volatile boolean closed;
 	private LinkSource activeLinkSource = LinkSource.NONE;
 	private PersonnelCardCreator personnelCardCreator;
 	private final List<IncidentChangeListener> incidentChangeListeners = new CopyOnWriteArrayList<>();
@@ -444,7 +446,8 @@ public class AppController {
 	 * @return true only while the exact incident generation remains active.
 	 */
 	public boolean isCurrent(IncidentBinding binding) {
-		return binding != null && binding.dataIdentity() == data && binding.generation() == incidentGeneration;
+		return !closed && binding != null && binding.dataIdentity() == data
+				&& binding.generation() == incidentGeneration;
 	}
 
 	/**
@@ -478,6 +481,10 @@ public class AppController {
 	 */
 	public IncidentChangeSubscription addIncidentChangeListener(IncidentChangeListener listener) {
 		java.util.Objects.requireNonNull(listener, "listener");
+		if (closed) {
+			return () -> {
+			};
+		}
 		incidentChangeListeners.add(listener);
 		AtomicBoolean closed = new AtomicBoolean();
 		return () -> {
@@ -614,6 +621,9 @@ public class AppController {
 	 *            source tab for linked role values.
 	 */
 	public void markDirty(LinkSource source) {
+		if (closed) {
+			return;
+		}
 		dirty = true;
 		if (source != LinkSource.NONE) {
 			activeLinkSource = source;
@@ -629,7 +639,65 @@ public class AppController {
 	 * Saves the active document immediately.
 	 */
 	public void save() {
+		if (closed) {
+			return;
+		}
 		save(activeLinkSource);
+	}
+
+	/**
+	 * Reports whether this controller has changes that have not been persisted.
+	 *
+	 * <p>Closing a controller does not save or discard its data. Callers must inspect
+	 * this value and decide whether to save before closing.</p>
+	 *
+	 * @return true when the active incident has unsaved changes.
+	 */
+	public boolean hasUnsavedChanges() {
+		return dirty;
+	}
+
+	/**
+	 * Stops autosave, invalidates pending incident callbacks, releases listeners, and
+	 * relinquishes any file-store edit lock. Closing does not save or discard dirty
+	 * data; callers should inspect {@link #hasUnsavedChanges()} before closing.
+	 *
+	 * <p>This method is safe to call from any thread and is idempotent.</p>
+	 */
+	@Override
+	public void close() {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			try {
+				SwingUtilities.invokeAndWait(this::close);
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+				throw new IllegalStateException("Interrupted while closing incident controller", exception);
+			} catch (InvocationTargetException exception) {
+				Throwable cause = exception.getCause();
+				if (cause instanceof RuntimeException runtimeException) {
+					throw runtimeException;
+				}
+				if (cause instanceof Error error) {
+					throw error;
+				}
+				throw new IllegalStateException("Unable to close incident controller", cause);
+			}
+			return;
+		}
+		if (closed) {
+			return;
+		}
+		closed = true;
+		autosaveTimer.stop();
+		incidentGeneration++;
+		synchronized (incidentChangeDeliveryLock) {
+			pendingIncidentChange = null;
+			incidentChangeDeliveryScheduled = false;
+		}
+		incidentChangeListeners.clear();
+		if (store instanceof FileIncidentStore fileStore && activeIncidentId != null) {
+			fileStore.unlock(activeIncidentId);
+		}
 	}
 
 	/**
@@ -675,7 +743,7 @@ public class AppController {
 	 * @param kind category of committed model change.
 	 */
 	private void publishIncidentChange(IncidentChangeKind kind) {
-		if (suppressChangeNotifications || incidentChangeListeners.isEmpty()) {
+		if (closed || suppressChangeNotifications || incidentChangeListeners.isEmpty()) {
 			return;
 		}
 		synchronized (incidentChangeDeliveryLock) {
@@ -698,7 +766,7 @@ public class AppController {
 			pendingIncidentChange = null;
 			incidentChangeDeliveryScheduled = false;
 		}
-		if (change == null) {
+		if (closed || change == null || !isCurrent(change.binding())) {
 			return;
 		}
 		for (IncidentChangeListener listener : incidentChangeListeners) {

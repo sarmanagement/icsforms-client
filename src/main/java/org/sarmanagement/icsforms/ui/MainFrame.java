@@ -184,7 +184,13 @@ public class MainFrame extends JFrame {
 		ApplicationIcon.install(this);
 		this.controller = controller;
 		this.lastData = controller.getData();
-		this.controller.setAutosaveErrorHandler(exception -> showSaveError(exception));
+		if (Boolean.getBoolean("icsforms.testMode")) {
+			this.controller.setAutosaveErrorHandler(exception -> {
+				throw new IllegalStateException("Unexpected autosave persistence failure", exception);
+			});
+		} else {
+			this.controller.setAutosaveErrorHandler(exception -> showSaveError(exception));
+		}
 		this.incidentContextPanel = new IncidentContextPanel(controller);
 		this.organizationalChartPanel = new OrganizationalChartPanel(controller);
 		this.ics201Panel = new Ics201Panel(controller);
@@ -252,9 +258,16 @@ public class MainFrame extends JFrame {
 		registerWorkspace(WorkspaceId.TCARDS, tCardPanel, AppController.LinkSource.NONE, T_CARDS_GROUP);
 		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		addWindowListener(new java.awt.event.WindowAdapter() {
+			/** {@inheritDoc} */
 			@Override
 			public void windowClosing(java.awt.event.WindowEvent event) {
 				closeAfterSave();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void windowClosed(java.awt.event.WindowEvent event) {
+				controller.close();
 			}
 		});
 		setPreferredSize(new Dimension(1120, 820));
@@ -1832,6 +1845,7 @@ public class MainFrame extends JFrame {
 		if (!saveBeforeSwitch()) {
 			return;
 		}
+		controller.close();
 		if (controller.getStore() != null) {
 			controller.getStore().close();
 		}

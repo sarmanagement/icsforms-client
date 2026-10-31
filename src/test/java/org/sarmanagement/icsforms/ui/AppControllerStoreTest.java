@@ -214,9 +214,9 @@ class AppControllerStoreTest {
 	void legacyControllerAlsoValidatesExternalFilesBeforeReplacingData() throws Exception {
 		AppData initial = new AppData();
 		initial.getIncidentContext().setIncidentName("Fictional legacy controller incident");
-		AppController controller = new AppController(initial,
+		AppController controller = SwingTestLifecycleExtension.track(new AppController(initial,
 				new org.sarmanagement.icsforms.persistence.LocalRepository(directory.resolve("local.json")),
-				new PdfExportService(), new IncidentValidator());
+				new PdfExportService(), new IncidentValidator()));
 		Path source = directory.resolve("external.json");
 		Files.writeString(source, "{\"incident\":{\"name\":\"Wrong shape\"}}");
 
@@ -299,6 +299,27 @@ class AppControllerStoreTest {
 		}
 	}
 
+	@Test
+	void closePreservesDirtyEditsAndReleasesTheActiveEditLock() {
+		try (FileIncidentStore store = new FileIncidentStore(directory);
+				FileIncidentStore otherStore = new FileIncidentStore(directory)) {
+			AppData data = new AppData();
+			IncidentId id = store.create(data);
+			AppController controller = controller(store, id, data);
+			assertFalse(controller.hasUnsavedChanges());
+
+			data.getIncidentContext().setIncidentName("Unsaved close test");
+			controller.markDirty();
+			controller.close();
+			controller.close();
+
+			assertTrue(controller.hasUnsavedChanges());
+			assertEquals("", store.load(id).getIncidentContext().getIncidentName());
+			assertTrue(otherStore.lock(id));
+			otherStore.unlock(id);
+		}
+	}
+
 	/**
 	 * Creates a controller for a previously persisted incident.
 	 *
@@ -308,6 +329,7 @@ class AppControllerStoreTest {
 	 * @return initialized controller.
 	 */
 	private AppController controller(FileIncidentStore store, IncidentId id, AppData data) {
-		return new AppController(data, store, id, new PdfExportService(), new IncidentValidator());
+		return SwingTestLifecycleExtension.track(
+				new AppController(data, store, id, new PdfExportService(), new IncidentValidator()));
 	}
 }

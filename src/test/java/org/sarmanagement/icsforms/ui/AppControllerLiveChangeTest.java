@@ -112,6 +112,29 @@ class AppControllerLiveChangeTest {
 	}
 
 	@Test
+	void closeInvalidatesPendingNotificationsAndRetainsDirtyState() throws Exception {
+		AppController controller = controller(new AppData());
+		AtomicInteger deliveries = new AtomicInteger();
+		AppController.IncidentBinding binding = controller.captureIncidentBinding();
+		controller.addIncidentChangeListener(change -> deliveries.incrementAndGet());
+
+		SwingUtilities.invokeAndWait(() -> {
+			controller.markDirty();
+			controller.close();
+			controller.close();
+		});
+		SwingUtilities.invokeAndWait(() -> {
+		});
+
+		assertTrue(controller.hasUnsavedChanges());
+		assertTrue(controller.isDirty());
+		assertFalse(controller.isCurrent(binding));
+		assertEquals(0, deliveries.get());
+		controller.markDirty();
+		assertTrue(controller.hasUnsavedChanges());
+	}
+
+	@Test
 	void isolatesListenerFailureAfterPersistingEditorChanges() throws Exception {
 		Path incident = directory.resolve("persisted-incident.json");
 		LocalRepository repository = new LocalRepository(incident);
@@ -181,7 +204,8 @@ class AppControllerLiveChangeTest {
 	}
 
 	private AppController controller(AppData data) {
-		return new AppController(data, new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
-				new IncidentValidator());
+		return SwingTestLifecycleExtension.track(new AppController(data,
+				new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
+				new IncidentValidator()));
 	}
 }
