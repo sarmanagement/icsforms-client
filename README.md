@@ -375,27 +375,35 @@ All production source lives under `src/main/java/org/sarmanagement/icsforms/`, w
 mvn package
 ```
 
-### Desktop integration test
+`mvn package` runs the full default test suite before creating the application
+JAR. Use `mvn -B -ntp verify` to run the same tests plus the Spotless and
+Checkstyle checks used by GitHub Actions. `-B` enables Maven batch mode and
+`-ntp` disables transfer-progress output.
 
-Normal builds retain the modality and window-ownership assertions in
-`UiSupportModalityTest`, but skip the workstation-dependent native mouse-input
-check. To explicitly enable that check on an unobstructed desktop where Java
-`Robot` can inject mouse input:
+### Desktop and Xvfb tests
 
-```sh
+The native desktop integration test is opt-in. The `icsforms.desktopTests=true`
+system property enables it, and `java.awt.headless=false` allows Swing and
+`Robot` input. To run that test alone on a desktop:
+
+```bash
 mvn -Dicsforms.desktopTests=true -Djava.awt.headless=false -Dtest=UiSupportDesktopIntegrationTest test
 ```
 
-On Linux, a dedicated virtual display can isolate the test from other windows
-and user input:
+`-Dtest=...` is a Surefire filter: it runs only the named test class (or
+selected method), not the full suite. For the complete test suite, including
+the opt-in desktop test, followed by packaging the application, run:
 
-```sh
-xvfb-run -a -s '-screen 0 1280x800x24' mvn -Dicsforms.desktopTests=true -Djava.awt.headless=false -Dtest=UiSupportDesktopIntegrationTest test
+```bash
+./xvfb_build.sh
 ```
 
-A headless skipped run does not validate native input. This opt-in test still
-depends on desktop input delivery; it does not resolve the unconfirmed cause of
-workstation-specific failures.
+The script uses `xvfb-run` with a 1280×800×24 virtual screen, enables the
+desktop test switches above, first runs `mvn clean test` for the full suite,
+then runs `mvn -DskipTests package` to avoid repeating the suite while creating
+the application JAR. Packaging is attempted even if tests fail, but the script
+still returns a nonzero test status; a generated JAR does not indicate that
+tests passed. A headless skipped run does not validate native input.
 
 ## Run
 
