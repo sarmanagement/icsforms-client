@@ -12,19 +12,25 @@ import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
+import javax.swing.JButton;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.lang.reflect.Field;
+import java.awt.GridLayout;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Verifies ICS 215 editor date isolation, matrix expansion, and rejected input retention. */
 class Ics215PanelTest {
@@ -60,8 +66,8 @@ class Ics215PanelTest {
 				JTextField start = field(panel[0], "targetStart", JTextField.class);
 				JTextField end = field(panel[0], "targetEnd", JTextField.class);
 				JTable matrix = field(panel[0], "matrix", JTable.class);
-				assertEquals(5, matrix.getColumnCount());
-				assertEquals("R 2/1 / H 1/0 / N 1/1", matrix.getValueAt(0, 4));
+				assertEquals(4, matrix.getColumnCount());
+				assertEquals("R 2/1 / H 1/0 / N 1/1", matrix.getValueAt(0, 3));
 				start.setText("2026-10-31 18:00");
 				end.setText("2026-11-01 06:00");
 				panel[0].pushToModel();
@@ -81,6 +87,84 @@ class Ics215PanelTest {
 			});
 		} finally {
 			SwingUtilities.invokeAndWait(() -> field(controller, "autosaveTimer", Timer.class).stop());
+		}
+	}
+
+	@Test
+	void actionButtonsFollowMatrixSelectionAndLayoutUsesAvailableWidth() throws Exception {
+		AppData data = new AppData();
+		Ics215Form.ResourceHeading heading = new Ics215Form.ResourceHeading();
+		heading.category = "Ground";
+		heading.type = "Type 1";
+		data.getForm215().getResourceHeadings().add(heading);
+		Ics215Form.WorkRow row = new Ics215Form.WorkRow();
+		row.assignment = "Search sector";
+		data.getForm215().getWorkRows().add(row);
+		AppController controller = new AppController(data, new LocalRepository(directory.resolve("layout.json")),
+				new PdfExportService(), new IncidentValidator());
+		Ics215Panel[] panel = new Ics215Panel[1];
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				panel[0] = new Ics215Panel(controller);
+				JTable matrix = field(panel[0], "matrix", JTable.class);
+				JButton editRow = field(panel[0], "editAssignmentButton", JButton.class);
+				JButton editCounts = field(panel[0], "editCountsButton", JButton.class);
+				JButton editHeading = field(panel[0], "editHeadingButton", JButton.class);
+				assertFalse(editRow.isEnabled());
+				assertFalse(editCounts.isEnabled());
+				assertFalse(editHeading.isEnabled());
+
+				matrix.changeSelection(0, 0, false, false);
+				assertTrue(editRow.isEnabled());
+				assertFalse(editCounts.isEnabled());
+				matrix.changeSelection(0, 3, false, false);
+				assertTrue(editCounts.isEnabled());
+				assertTrue(editHeading.isEnabled());
+
+				panel[0].setSize(1100, 700);
+				layoutRecursively(panel[0]);
+				JScrollPane matrixScroll = field(panel[0], "matrixScroll", JScrollPane.class);
+				assertTrue(matrixScroll.getViewport().getExtentSize().width > 0);
+				invoke(panel[0], "configureMatrixColumns");
+				assertTrue(matrix.getColumnModel().getColumn(2).getWidth() > 380);
+				JPanel matrixPanel = (JPanel) matrixScroll.getParent();
+				JPanel actions = (JPanel) ((java.awt.BorderLayout) matrixPanel.getLayout())
+						.getLayoutComponent(java.awt.BorderLayout.SOUTH);
+				assertEquals(GridLayout.class, actions.getLayout().getClass());
+				assertEquals(15, actions.getComponentCount());
+			});
+		} finally {
+			SwingUtilities.invokeAndWait(() -> field(controller, "autosaveTimer", Timer.class).stop());
+		}
+	}
+
+	/**
+	 * Lays out a component subtree as a containing frame would.
+	 *
+	 * @param component component to lay out.
+	 */
+	private static void layoutRecursively(java.awt.Container component) {
+		component.doLayout();
+		for (java.awt.Component child : component.getComponents()) {
+			if (child instanceof java.awt.Container container) {
+				layoutRecursively(container);
+			}
+		}
+	}
+
+	/**
+	 * Invokes a private layout helper after sizing the editor fixture.
+	 *
+	 * @param target editor instance.
+	 * @param name helper method name.
+	 */
+	private static void invoke(Object target, String name) {
+		try {
+			var method = target.getClass().getDeclaredMethod(name);
+			method.setAccessible(true);
+			method.invoke(target);
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
 		}
 	}
 

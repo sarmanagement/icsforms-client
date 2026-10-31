@@ -21,8 +21,11 @@ import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -49,6 +52,19 @@ public class Ics215Panel extends JPanel {
 	private final JLabel contextLabel = new JLabel();
 	private final JLabel totalsLabel = new JLabel();
 	private final JTable matrix;
+	private final JScrollPane matrixScroll;
+	private final JButton editAssignmentButton = new JButton("Edit assignment…");
+	private final JButton removeAssignmentButton = new JButton("Remove assignment");
+	private final JButton moveAssignmentUpButton = new JButton("Move up");
+	private final JButton moveAssignmentDownButton = new JButton("Move down");
+	private final JButton editHeadingButton = new JButton("Edit heading…");
+	private final JButton moveHeadingLeftButton = new JButton("Move heading left");
+	private final JButton moveHeadingRightButton = new JButton("Move heading right");
+	private final JButton removeHeadingButton = new JButton("Remove heading");
+	private final JButton editCountsButton = new JButton("Edit counts…");
+	private final JButton reviewTCardsButton = new JButton("Review T-cards…");
+	private final JButton reviewAcceptedHaveButton = new JButton("Review accepted Have…");
+	private final JButton createIcs204Button = new JButton("Create ICS 204 draft…");
 	private final JTextArea detail = new JTextArea();
 	private String selectedRowId = "";
 	private int editorPeriodIndex;
@@ -63,17 +79,30 @@ public class Ics215Panel extends JPanel {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
 		this.matrix = new JTable(new MatrixModel());
+		this.matrixScroll = new JScrollPane(matrix);
 		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 		add(buildHeader(), BorderLayout.NORTH);
 		add(buildMatrix(), BorderLayout.CENTER);
 		add(buildDetail(), BorderLayout.SOUTH);
 		periodSelector.addActionListener(event -> changePeriod());
 		matrix.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		matrix.setCellSelectionEnabled(true);
 		matrix.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 		matrix.setFillsViewportHeight(true);
 		matrix.getSelectionModel().addListSelectionListener(event -> {
 			if (!event.getValueIsAdjusting()) {
 				selectRowFromTable();
+			}
+		});
+		matrix.getColumnModel().getSelectionModel().addListSelectionListener(event -> {
+			if (!event.getValueIsAdjusting()) {
+				refreshActionAvailability();
+			}
+		});
+		matrixScroll.getViewport().addComponentListener(new ComponentAdapter() {
+			@Override
+			public void componentResized(ComponentEvent event) {
+				configureMatrixColumns();
 			}
 		});
 		refreshFromModel();
@@ -119,9 +148,11 @@ public class Ics215Panel extends JPanel {
 			detail.setText("");
 			MatrixModel model = (MatrixModel) matrix.getModel();
 			model.fireTableStructureChanged();
+			configureMatrixColumns();
 			restoreSelection(form);
 			refreshDetail(form);
 			refreshTotals(form);
+			refreshActionAvailability();
 		} finally {
 			refreshing = false;
 		}
@@ -160,24 +191,24 @@ public class Ics215Panel extends JPanel {
 		JPanel panel = new JPanel(new BorderLayout(4, 4));
 		panel.setBorder(BorderFactory.createTitledBorder("Assignments and resource counts (Req / Have / Need)"));
 		panel.add(totalsLabel, BorderLayout.NORTH);
-		panel.add(new JScrollPane(matrix), BorderLayout.CENTER);
-		JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEADING));
+		panel.add(matrixScroll, BorderLayout.CENTER);
+		JPanel actions = new JPanel(new GridLayout(0, 4, 4, 4));
 		addButton(actions, "Add assignment", this::addRow);
-		addButton(actions, "Edit assignment…", this::editSelectedRow);
-		addButton(actions, "Remove assignment", this::removeRow);
-		addButton(actions, "Move up", () -> moveRow(-1));
-		addButton(actions, "Move down", () -> moveRow(1));
+		addButton(actions, editAssignmentButton, this::editSelectedRow);
+		addButton(actions, removeAssignmentButton, this::removeRow);
+		addButton(actions, moveAssignmentUpButton, () -> moveRow(-1));
+		addButton(actions, moveAssignmentDownButton, () -> moveRow(1));
 		addButton(actions, "Add resource heading…", this::addHeading);
-		addButton(actions, "Edit heading…", this::editHeading);
-		addButton(actions, "Move heading left", () -> moveHeading(-1));
-		addButton(actions, "Move heading right", () -> moveHeading(1));
-		addButton(actions, "Remove heading", this::removeHeading);
-		addButton(actions, "Edit counts…", this::editCounts);
-		addButton(actions, "Review T-cards…", this::reviewTCards);
-		addButton(actions, "Review accepted Have…", this::reviewAcceptedHave);
-		addButton(actions, "Create ICS 204 draft…", this::createIcs204Draft);
+		addButton(actions, editHeadingButton, this::editHeading);
+		addButton(actions, moveHeadingLeftButton, () -> moveHeading(-1));
+		addButton(actions, moveHeadingRightButton, () -> moveHeading(1));
+		addButton(actions, removeHeadingButton, this::removeHeading);
+		addButton(actions, editCountsButton, this::editCounts);
+		addButton(actions, reviewTCardsButton, this::reviewTCards);
+		addButton(actions, reviewAcceptedHaveButton, this::reviewAcceptedHave);
+		addButton(actions, createIcs204Button, this::createIcs204Draft);
 		addButton(actions, "Preparation details…", this::editPreparationDetails);
-		panel.add(new JScrollPane(actions), BorderLayout.SOUTH);
+		panel.add(actions, BorderLayout.SOUTH);
 		return panel;
 	}
 
@@ -204,9 +235,68 @@ public class Ics215Panel extends JPanel {
 	 * @param action action to execute.
 	 */
 	private void addButton(JPanel panel, String label, Runnable action) {
-		JButton button = new JButton(label);
+		addButton(panel, new JButton(label), action);
+	}
+
+	/**
+	 * Adds a reusable action button to the worksheet controls.
+	 *
+	 * @param panel panel receiving the button.
+	 * @param button button whose enabled state follows matrix selection.
+	 * @param action action to execute.
+	 */
+	private void addButton(JPanel panel, JButton button, Runnable action) {
 		button.addActionListener(event -> runEditorAction(action));
 		panel.add(button);
+	}
+
+	/**
+	 * Fits the assignment column to remaining viewport width while retaining readable resource columns.
+	 */
+	private void configureMatrixColumns() {
+		if (matrix.getColumnModel().getColumnCount() == 0) {
+			return;
+		}
+		int fixedWidth = 90 + 160 + selectedForm().getResourceHeadings().size() * 130;
+		int assignmentWidth = Math.max(380, matrixScroll.getViewport().getExtentSize().width - fixedWidth);
+		matrix.getColumnModel().getColumn(0).setPreferredWidth(90);
+		matrix.getColumnModel().getColumn(0).setWidth(90);
+		matrix.getColumnModel().getColumn(1).setPreferredWidth(160);
+		matrix.getColumnModel().getColumn(1).setWidth(160);
+		matrix.getColumnModel().getColumn(2).setPreferredWidth(assignmentWidth);
+		matrix.getColumnModel().getColumn(2).setWidth(assignmentWidth);
+		for (int column = 3; column < matrix.getColumnModel().getColumnCount(); column++) {
+			matrix.getColumnModel().getColumn(column).setPreferredWidth(130);
+			matrix.getColumnModel().getColumn(column).setWidth(130);
+		}
+		int tableWidth = Math.max(matrixScroll.getViewport().getExtentSize().width, fixedWidth + assignmentWidth);
+		matrix.setPreferredScrollableViewportSize(new Dimension(tableWidth,
+				matrix.getPreferredScrollableViewportSize().height));
+		matrix.revalidate();
+	}
+
+	/**
+	 * Enables each contextual action only when its required selected row or resource heading exists.
+	 */
+	private void refreshActionAvailability() {
+		Ics215Form form = selectedForm();
+		boolean hasRow = selectedRow(form) != null;
+		int headingIndex = selectedHeadingIndex();
+		boolean hasHeading = headingIndex >= 0 && headingIndex < form.getResourceHeadings().size();
+		boolean hasCell = hasRow && hasHeading;
+		editAssignmentButton.setEnabled(hasRow);
+		removeAssignmentButton.setEnabled(hasRow);
+		moveAssignmentUpButton.setEnabled(hasRow && indexOfSelectedRow(form) > 0);
+		moveAssignmentDownButton.setEnabled(hasRow && indexOfSelectedRow(form) < form.getWorkRows().size() - 1);
+		editHeadingButton.setEnabled(hasHeading);
+		moveHeadingLeftButton.setEnabled(hasHeading && headingIndex > 0);
+		moveHeadingRightButton.setEnabled(hasHeading && headingIndex < form.getResourceHeadings().size() - 1);
+		removeHeadingButton.setEnabled(hasHeading);
+		editCountsButton.setEnabled(hasCell);
+		reviewTCardsButton.setEnabled(hasHeading);
+		reviewAcceptedHaveButton.setEnabled(hasCell);
+		createIcs204Button.setEnabled(hasRow);
+		detail.setEnabled(hasRow);
 	}
 
 	/**
@@ -799,7 +889,7 @@ public class Ics215Panel extends JPanel {
 	 */
 	private Ics215Form.ResourceHeading selectedHeading() {
 		int column = matrix.getSelectedColumn();
-		int headingIndex = column - 4;
+		int headingIndex = column - 3;
 		List<Ics215Form.ResourceHeading> headings = selectedForm().getResourceHeadings();
 		return headingIndex < 0 || headingIndex >= headings.size() ? null : headings.get(headingIndex);
 	}
@@ -810,7 +900,7 @@ public class Ics215Panel extends JPanel {
 	 * @return heading index or -1.
 	 */
 	private int selectedHeadingIndex() {
-		return matrix.getSelectedColumn() - 4;
+		return matrix.getSelectedColumn() - 3;
 	}
 
 	/**
@@ -857,6 +947,7 @@ public class Ics215Panel extends JPanel {
 		selectedRowId = rowIndex < 0 || rowIndex >= form.getWorkRows().size()
 				? "" : form.getWorkRows().get(rowIndex).id;
 		refreshDetail(form);
+		refreshActionAvailability();
 	}
 
 	/**
@@ -956,7 +1047,7 @@ public class Ics215Panel extends JPanel {
 		/** {@inheritDoc} */
 		@Override
 		public int getColumnCount() {
-			return 4 + selectedForm().getResourceHeadings().size();
+			return 3 + selectedForm().getResourceHeadings().size();
 		}
 
 		/** {@inheritDoc} */
@@ -969,12 +1060,9 @@ public class Ics215Panel extends JPanel {
 				return "4. Division / Group / Other";
 			}
 			if (column == 2) {
-				return "5. Work Assignment";
+				return "5. Work Assignment / Instructions";
 			}
-			if (column == 3) {
-				return "Selected row details";
-			}
-			Ics215Form.ResourceHeading heading = selectedForm().getResourceHeadings().get(column - 4);
+			Ics215Form.ResourceHeading heading = selectedForm().getResourceHeadings().get(column - 3);
 			return "6. " + heading.category + " / " + heading.kind + " / " + heading.type
 					+ " (" + heading.countingUnit + ")";
 		}
@@ -987,8 +1075,7 @@ public class Ics215Panel extends JPanel {
 				case 0 -> row.branch;
 				case 1 -> selectedContextValue(row);
 				case 2 -> row.assignment;
-				case 3 -> row.specialInstructions;
-				default -> cellText(row, selectedForm().getResourceHeadings().get(columnIndex - 4));
+				default -> cellText(row, selectedForm().getResourceHeadings().get(columnIndex - 3));
 			};
 		}
 
