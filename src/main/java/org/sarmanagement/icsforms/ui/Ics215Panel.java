@@ -7,7 +7,6 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics215Form;
 import org.sarmanagement.icsforms.model.Ics215ResourceReview;
-import org.sarmanagement.icsforms.model.TCard;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -22,7 +21,6 @@ import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.time.LocalDateTime;
@@ -45,6 +43,7 @@ public class Ics215Panel extends JPanel {
 			Ics204Form.MANAGEMENT_BRANCH, Ics204Form.MANAGEMENT_DIVISION, Ics204Form.MANAGEMENT_GROUP};
 	private final AppController controller;
 	private final JComboBox<String> periodSelector = new JComboBox<>(new String[] {"Active period", "Next period"});
+	private final JComboBox<Ics215Form.PaperSize> paperSize = new JComboBox<>(Ics215Form.PaperSize.values());
 	private final JTextField targetStart = new JTextField(16);
 	private final JTextField targetEnd = new JTextField(16);
 	private final JLabel contextLabel = new JLabel();
@@ -93,6 +92,7 @@ public class Ics215Panel extends JPanel {
 		Ics215Form form = selectedForm();
 		form.setTargetPeriodStart(parseDate(targetStart.getText(), "target start"));
 		form.setTargetPeriodEnd(parseDate(targetEnd.getText(), "target end"));
+		form.setPaperSize((Ics215Form.PaperSize) paperSize.getSelectedItem());
 		Ics215Form.WorkRow row = selectedRow(form);
 		if (row != null) {
 			row.specialInstructions = detail.getText();
@@ -115,6 +115,7 @@ public class Ics215Panel extends JPanel {
 					? data.getIncidentContext().getOperationalPeriodStart() : form.getTargetPeriodStart()));
 			targetEnd.setText(formatDate(form.getTargetPeriodEnd() == null
 					? data.getIncidentContext().getOperationalPeriodEnd() : form.getTargetPeriodEnd()));
+			paperSize.setSelectedItem(form.getPaperSize());
 			detail.setText("");
 			MatrixModel model = (MatrixModel) matrix.getModel();
 			model.fireTableStructureChanged();
@@ -144,6 +145,8 @@ public class Ics215Panel extends JPanel {
 		period.add(targetStart);
 		period.add(new JLabel("To:"));
 		period.add(targetEnd);
+		period.add(new JLabel("PDF paper:"));
+		period.add(paperSize);
 		header.add(period, BorderLayout.SOUTH);
 		return header;
 	}

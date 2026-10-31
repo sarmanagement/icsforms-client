@@ -279,6 +279,7 @@ public class Ics215Form {
 	private String preparerPositionTitle = "";
 	private String preparerSignature = "";
 	private LocalDateTime preparedDateTime;
+	private String iapPage = "";
 	private PaperSize paperSize = PaperSize.LETTER;
 	private List<ResourceHeading> resourceHeadings = new ArrayList<>();
 	private List<WorkRow> workRows = new ArrayList<>();
@@ -442,6 +443,16 @@ public class Ics215Form {
 	/** @param preparedDateTime preparation date/time. */
 	public void setPreparedDateTime(LocalDateTime preparedDateTime) {
 		this.preparedDateTime = preparedDateTime;
+	}
+
+	/** @return bundle page number, or blank when not assigned. */
+	public String getIapPage() {
+		return iapPage == null ? "" : iapPage;
+	}
+
+	/** @param iapPage bundle page number. */
+	public void setIapPage(String iapPage) {
+		this.iapPage = iapPage == null ? "" : iapPage;
 	}
 
 	/** @return ICS-215-specific page size. */
@@ -616,6 +627,7 @@ public class Ics215Form {
 		copy.setPreparerPositionTitle("");
 		copy.setPreparerSignature("");
 		copy.setPreparedDateTime(null);
+		copy.setIapPage("");
 		Map<String, String> headingIds = new LinkedHashMap<>();
 		for (ResourceHeading heading : copy.getResourceHeadings()) {
 			String oldId = heading.id;

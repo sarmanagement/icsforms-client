@@ -166,19 +166,19 @@ class MainFrameIcs205WorkspaceTest {
 	}
 
 	@Test
-	void startupCarryForwardCheckboxIsExplicitAndUnchecked() throws Exception {
+	void plannedIcs215PromotionCheckboxIsExplicitAndUnchecked() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		Path directory = Files.createDirectories(Path.of("target", "ics205-startup-" + UUID.randomUUID()));
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			SwingUtilities.invokeAndWait(() -> {
 				StartupDialog dialog = new StartupDialog(null, store, false);
 				try {
-					assertFalse(dialog.isBringForwardCommunicationsPlan());
-					JCheckBox checkbox = carryForwardCheckbox(dialog);
+					assertFalse(dialog.isPromotePlannedIcs215());
+					JCheckBox checkbox = promoteIcs215Checkbox(dialog);
 					assertNotNull(checkbox);
-					assertEquals("Bring forward communications plan (ICS 205)", checkbox.getText());
+					assertEquals("Promote planned ICS 215 target period when advancing", checkbox.getText());
 					checkbox.doClick();
-					assertTrue(dialog.isBringForwardCommunicationsPlan());
+					assertTrue(dialog.isPromotePlannedIcs215());
 				} finally {
 					dialog.dispose();
 				}
@@ -204,18 +204,18 @@ class MainFrameIcs205WorkspaceTest {
 	}
 
 	/**
-	 * Finds the carry-forward checkbox without opening startup dialogs.
+	 * Finds the worksheet-promotion checkbox without opening startup dialogs.
 	 *
 	 * @param component component tree.
 	 * @return checkbox or null.
 	 */
-	private static JCheckBox carryForwardCheckbox(Component component) {
-		if (component instanceof JCheckBox box && box.getText().contains("ICS 205")) {
+	private static JCheckBox promoteIcs215Checkbox(Component component) {
+		if (component instanceof JCheckBox box && box.getText().contains("ICS 215")) {
 			return box;
 		}
 		if (component instanceof Container container) {
 			for (Component child : container.getComponents()) {
-				JCheckBox result = carryForwardCheckbox(child);
+				JCheckBox result = promoteIcs215Checkbox(child);
 				if (result != null) {
 					return result;
 				}

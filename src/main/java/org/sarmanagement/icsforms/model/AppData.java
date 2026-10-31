@@ -192,7 +192,10 @@ public class AppData {
 
 		/** @return archived active-period ICS 215 worksheet. */
 		public Ics215Form getForm215() {
-			return form215 == null ? new Ics215Form() : form215;
+			if (form215 == null) {
+				form215 = new Ics215Form();
+			}
+			return form215;
 		}
 
 		/** @param form215 archived active-period ICS 215 worksheet. */
@@ -202,7 +205,10 @@ public class AppData {
 
 		/** @return archived next-period ICS 215 worksheet. */
 		public Ics215Form getNextPeriodForm215() {
-			return nextPeriodForm215 == null ? new Ics215Form() : nextPeriodForm215;
+			if (nextPeriodForm215 == null) {
+				nextPeriodForm215 = new Ics215Form();
+			}
+			return nextPeriodForm215;
 		}
 
 		/** @param nextPeriodForm215 archived next-period ICS 215 worksheet. */
@@ -311,6 +317,8 @@ public class AppData {
 	private Ics215aForm form215a = new Ics215aForm();
 	private Ics215Form form215 = new Ics215Form();
 	private Ics215Form nextPeriodForm215 = new Ics215Form();
+	@JsonIgnore
+	private transient boolean ics215ExportNextPeriod;
 	private boolean ics215Enabled;
 	private Ics208Form form208 = new Ics208Form();
 	private String form205aIapPage = "";
@@ -1120,6 +1128,26 @@ public class AppData {
 	 */
 	public void setNextPeriodForm215(Ics215Form nextPeriodForm215) {
 		this.nextPeriodForm215 = nextPeriodForm215 == null ? new Ics215Form() : nextPeriodForm215;
+	}
+
+	/**
+	 * Returns whether the current PDF export should use the planned worksheet.
+	 *
+	 * @return true for the next-period worksheet, false for the active-period worksheet.
+	 */
+	@JsonIgnore
+	public boolean isIcs215ExportNextPeriod() {
+		return ics215ExportNextPeriod;
+	}
+
+	/**
+	 * Selects the worksheet used for one transient PDF export.
+	 *
+	 * @param ics215ExportNextPeriod true to export the planned worksheet.
+	 */
+	@JsonIgnore
+	public void setIcs215ExportNextPeriod(boolean ics215ExportNextPeriod) {
+		this.ics215ExportNextPeriod = ics215ExportNextPeriod;
 	}
 
 	/**

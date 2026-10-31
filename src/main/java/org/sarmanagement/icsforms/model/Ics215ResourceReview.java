@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,13 +19,31 @@ import java.util.Set;
  * classifications. The operator supplies both the target and counting unit.</p>
  */
 public final class Ics215ResourceReview {
-	/** Immutable candidate summary for the T-card review dialog. */
+	/**
+	 * Immutable candidate summary for the T-card review dialog.
+	 *
+	 * @param resourceId stable T-card identity, or blank when missing.
+	 * @param displayName operator-facing card label.
+	 * @param cardCategory recorded card discriminator label.
+	 * @param status status recorded on the card.
+	 * @param location location recorded on the card.
+	 * @param assignmentContext assignment context recorded on the card.
+	 * @param missingIdentity true when the card has no usable stable identity.
+	 * @param ambiguousIdentity true when another card has the same identity.
+	 * @param crewMemberOverlapNeedsReview true when a crew's personnel count may overlap other cards.
+	 */
 	public record Candidate(String resourceId, String displayName, String cardCategory,
 			String status, String location, String assignmentContext, boolean missingIdentity,
 			boolean ambiguousIdentity, boolean crewMemberOverlapNeedsReview) {
 	}
 
-	/** Result of refreshing a previously accepted Have snapshot. */
+	/**
+	 * Result of refreshing a previously accepted Have snapshot.
+	 *
+	 * @param observed newly observed resource counts.
+	 * @param manualOverrideRetained true when accepted manual counts remain distinct.
+	 * @param discrepancies differences from the previously accepted evidence.
+	 */
 	public record RefreshResult(Ics215Form.CountPair observed, boolean manualOverrideRetained,
 			List<String> discrepancies) {
 	}

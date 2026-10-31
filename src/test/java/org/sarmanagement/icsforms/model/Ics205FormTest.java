@@ -48,7 +48,7 @@ class Ics205FormTest {
 			assertNull(data.getForm205().getPreparedDateTime());
 			assertNotNull(UUID.fromString(data.getForm205().getFormId()));
 		}
-		assertEquals(15, AppData.CURRENT_SCHEMA_VERSION);
+		assertEquals(16, AppData.CURRENT_SCHEMA_VERSION);
 		assertEquals(AppData.CURRENT_SCHEMA_VERSION, new AppData().getSchemaVersion());
 		AppData disabled = mapper.readValue("{\"ics205Enabled\":false}", AppData.class);
 		assertFalse(disabled.isIcs205Enabled());

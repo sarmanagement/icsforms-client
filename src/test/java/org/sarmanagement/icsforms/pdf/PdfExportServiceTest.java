@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.Ics215Form;
 import org.sarmanagement.icsforms.model.IapPhase;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
@@ -115,6 +116,27 @@ class PdfExportServiceTest {
 		assertEquals("2", data.getForm207().getIapPage());
 		assertEquals(List.of("ICS 202", "ICS 203", "ICS 205A", "ICS 207"),
 				PdfExportService.orderForIapBundle(List.of("ICS 207", "ICS 203", "ICS 205A", "ICS 202")));
+	}
+
+	@Test
+	void ics215RequiresExplicitIapInclusionAndConsumesItsExactPageCount() throws Exception {
+		AppData data = new AppData();
+		PdfExportService service = new PdfExportService(new Ics215PdfRenderer());
+		assertTrue(service.exportAll(data, outputDirectory).isEmpty());
+
+		data.getForm215().getResourceHeadings().add(new Ics215Form.ResourceHeading());
+		data.getNextPeriodForm215().getResourceHeadings()
+				.add(new Ics215Form.ResourceHeading());
+		data.getNextPeriodForm215().getResourceHeadings()
+				.add(new Ics215Form.ResourceHeading());
+		data.setIcs215ExportNextPeriod(true);
+		int worksheetPages = Ics215PdfRenderer.pageCount(data);
+
+		PdfExportService.assignIapPageNumbers(data, List.of("ICS 202", "ICS 215", "ICS 207"), true);
+
+		assertEquals("2", data.getNextPeriodForm215().getIapPage());
+		assertEquals("", data.getForm215().getIapPage());
+		assertEquals(String.valueOf(2 + worksheetPages), data.getForm207().getIapPage());
 	}
 
 	@Test

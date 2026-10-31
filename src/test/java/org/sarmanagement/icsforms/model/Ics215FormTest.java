@@ -79,14 +79,18 @@ class Ics215FormTest {
 		source.getForm215().setBranch("Current");
 		source.getNextPeriodForm215().setBranch("Planned");
 		source.getNextPeriodForm215().setTargetPeriodStart(LocalDateTime.of(2026, 11, 1, 6, 0));
+		source.setIcs215ExportNextPeriod(true);
 
-		AppData restored = mapper.readValue(mapper.writeValueAsBytes(source), AppData.class);
+		byte[] json = mapper.writeValueAsBytes(source);
+		AppData restored = mapper.readValue(json, AppData.class);
 
 		assertEquals("Current", restored.getForm215().getBranch());
 		assertEquals("Planned", restored.getNextPeriodForm215().getBranch());
 		assertEquals(LocalDateTime.of(2026, 11, 1, 6, 0),
 				restored.getNextPeriodForm215().getTargetPeriodStart());
 		assertFalse(restored.isIcs215Enabled());
+		assertFalse(restored.isIcs215ExportNextPeriod());
+		assertFalse(new String(json, java.nio.charset.StandardCharsets.UTF_8).contains("ics215ExportNextPeriod"));
 		assertEquals("", mapper.readValue("{\"schemaVersion\":15}", AppData.class)
 				.getNextPeriodForm215().getBranch());
 	}

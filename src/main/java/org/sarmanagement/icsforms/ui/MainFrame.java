@@ -838,10 +838,41 @@ public class MainFrame extends JFrame {
 		controls.add(selectNone);
 		ExportModeControls exportModeControls = createExportModeControls();
 		PdfPrintOptionsPanel printOptions = new PdfPrintOptionsPanel(formKeys);
+		JComboBox<String> ics215Period = new JComboBox<>(
+				new String[] {"Active-period worksheet", "Next-period worksheet"});
+		JLabel ics215PeriodNotice = new JLabel(" ");
+		ics215PeriodNotice.setForeground(new java.awt.Color(150, 70, 0));
+		Runnable refreshIcs215PeriodNotice = () -> {
+			javax.swing.JCheckBox ics215Check = selectors.get("ICS 215");
+			if (ics215Check == null || !ics215Check.isSelected()) {
+				ics215PeriodNotice.setText(" ");
+				return;
+			}
+			AppData current = controller.getData();
+			boolean nextPeriod = ics215Period.getSelectedIndex() == 1;
+			org.sarmanagement.icsforms.model.Ics215Form worksheet = nextPeriod
+					? current.getNextPeriodForm215() : current.getForm215();
+			if (!java.util.Objects.equals(worksheet.getTargetPeriodStart(),
+					current.getIncidentContext().getOperationalPeriodStart())
+					|| !java.util.Objects.equals(worksheet.getTargetPeriodEnd(),
+							current.getIncidentContext().getOperationalPeriodEnd())) {
+				ics215PeriodNotice.setText("<html>Warning: ICS 215 target dates differ from Shared context; "
+						+ "the worksheet dates will print without changing Shared.</html>");
+			} else {
+				ics215PeriodNotice.setText(" ");
+			}
+		};
+		ics215Period.addActionListener(event -> refreshIcs215PeriodNotice.run());
+		if (selectors.containsKey("ICS 215")) {
+			selectors.get("ICS 215").addActionListener(event -> refreshIcs215PeriodNotice.run());
+		}
 		UiSupport.addWideRow(form, 0, checksPanel);
 		UiSupport.addRow(form, 1, "", controls);
 		UiSupport.addRow(form, 2, "Output", exportModeControls.panel());
 		UiSupport.addRow(form, 3, "Print options", printOptions);
+		UiSupport.addRow(form, 4, "ICS 215 worksheet", ics215Period);
+		UiSupport.addRow(form, 5, "Period check", ics215PeriodNotice);
+		refreshIcs215PeriodNotice.run();
 		if (!UiSupport.showResizableConfirmDialog(this, "Export forms as PDF", form, null)) {
 			return;
 		}
@@ -853,6 +884,7 @@ public class MainFrame extends JFrame {
 					JOptionPane.WARNING_MESSAGE);
 			return;
 		}
+		boolean ics215NextPeriod = ics215Period.getSelectedIndex() == 1;
 		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
 		chooseDirectory(defaultDirectory, directory -> {
 			try {
@@ -863,7 +895,7 @@ public class MainFrame extends JFrame {
 				addSelectedFormsToIcs202Attachments(selected);
 				if (exportModeControls.combined().isSelected()) {
 					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source,
-							printOptions.ics205Orientation(), printOptions.ics233Orientation());
+							printOptions.ics205Orientation(), printOptions.ics233Orientation(), ics215NextPeriod);
 					JPanel completion = new JPanel(new BorderLayout(0, 8));
 					JTextArea summary = new JTextArea(controller.getLastPdfBundleSummary(), 3, 50);
 					summary.setEditable(false);
@@ -875,7 +907,7 @@ public class MainFrame extends JFrame {
 							JOptionPane.INFORMATION_MESSAGE);
 				} else {
 					Map<String, Path> exported = controller.exportSelectedForms(selected, directory, source,
-							printOptions.ics205Orientation(), printOptions.ics233Orientation());
+							printOptions.ics205Orientation(), printOptions.ics233Orientation(), ics215NextPeriod);
 					JOptionPane.showMessageDialog(this, createExportCompletePanel(new ArrayList<>(exported.values())), "Export complete",
 							JOptionPane.INFORMATION_MESSAGE);
 				}

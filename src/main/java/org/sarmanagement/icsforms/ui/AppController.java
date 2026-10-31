@@ -1248,9 +1248,28 @@ public class AppController {
 	 */
 	public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory,
 			LinkSource source, PdfOrientation ics205Orientation, PdfOrientation ics233Orientation) throws IOException {
+		return exportSelectedForms(formKeys, outputDirectory, source, ics205Orientation, ics233Orientation, false);
+	}
+
+	/**
+	 * Exports selected forms using the explicitly selected active- or next-period ICS 215 worksheet.
+	 *
+	 * @param formKeys selected renderer keys.
+	 * @param outputDirectory destination directory.
+	 * @param source authoritative linked-field source.
+	 * @param ics205Orientation ICS 205 media and content orientation.
+	 * @param ics233Orientation ICS 233 and adapted clue-log orientation.
+	 * @param ics215NextPeriod true to select the planned worksheet.
+	 * @return published PDFs by form key.
+	 * @throws IOException when copying or exporting fails.
+	 */
+	public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory,
+			LinkSource source, PdfOrientation ics205Orientation, PdfOrientation ics233Orientation,
+			boolean ics215NextPeriod) throws IOException {
 		java.util.Objects.requireNonNull(ics205Orientation, "ics205Orientation");
 		java.util.Objects.requireNonNull(ics233Orientation, "ics233Orientation");
 		AppData snapshot = createPrintSnapshot(source, ics233Orientation == PdfOrientation.PORTRAIT);
+		snapshot.setIcs215ExportNextPeriod(ics215NextPeriod);
 		List<String> supported = formKeys == null ? List.of()
 				: formKeys.stream().distinct().filter(exportService::supports).toList();
 		return supported.isEmpty() ? new LinkedHashMap<>()
@@ -1311,11 +1330,30 @@ public class AppController {
 	 */
 	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source,
 			PdfOrientation ics205Orientation, PdfOrientation ics233Orientation) throws IOException {
+		return exportSelectedIapBundle(formKeys, outputDirectory, source, ics205Orientation, ics233Orientation,
+				false);
+	}
+
+	/**
+	 * Exports a bundle with a specific ICS 215 worksheet period.
+	 *
+	 * @param formKeys selected keys, or null/empty for defaults.
+	 * @param outputDirectory destination directory.
+	 * @param source authoritative linked-field source.
+	 * @param ics205Orientation ICS 205 media and content orientation.
+	 * @param ics233Orientation ICS 233 and adapted clue-log orientation.
+	 * @param ics215NextPeriod true to select the planned worksheet.
+	 * @return published bundle PDF.
+	 * @throws IOException when copying, rendering, or merging fails.
+	 */
+	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source,
+			PdfOrientation ics205Orientation, PdfOrientation ics233Orientation, boolean ics215NextPeriod)
+			throws IOException {
 		java.util.Objects.requireNonNull(ics205Orientation, "ics205Orientation");
 		java.util.Objects.requireNonNull(ics233Orientation, "ics233Orientation");
-		return exportService.exportIapBundle(
-				createPrintSnapshot(source, ics233Orientation == PdfOrientation.PORTRAIT), outputDirectory, formKeys,
-				ics205Orientation, ics233Orientation);
+		AppData snapshot = createPrintSnapshot(source, ics233Orientation == PdfOrientation.PORTRAIT);
+		snapshot.setIcs215ExportNextPeriod(ics215NextPeriod);
+		return exportService.exportIapBundle(snapshot, outputDirectory, formKeys, ics205Orientation, ics233Orientation);
 	}
 
 	/**
