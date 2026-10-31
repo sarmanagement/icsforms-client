@@ -62,7 +62,8 @@ Work proceeds in two independent streams, then converges:
 - **Persistence foundation** (Part IV, Stage 1): make the existing `IncidentStore`
   seam backend-neutral and asynchronous, with contract tests, strict imports,
   durable identity migration, UTC time and a provenance seam — still no network
-  code. Tracked by #37, #39–#44. Its exit test is that a remote store stub drops
+  code. Tracked by #39–#44 (#37, UTC timestamps, is already closed). Its exit
+  test is that a remote store stub drops
   into the controller with no UI change.
 - **Then** Stage 2 adds the incident API and the first local host (T1); Stage 3
   adds the trust boundary, operator claim, roles and audit (T2); Stages 4–7 add
@@ -148,7 +149,7 @@ remote persistence features.
 
 | Issue | Title (short) | Plan location |
 | --- | --- | --- |
-| #37 | Timestamps are not consistent (PR #38 open) | Part IV, Stage 1, gate T1 — time/provenance |
+| #37 | Timestamps are not consistent — **closed by PR #38** | Part IV, Stage 1, gate T1 — complete |
 | #39 | Persistence contract coverage; fake `IncidentStore` | Part IV, Stage 1, gate P1 |
 | #40 | External validation vs. tolerant load; durable identity migration; entity ID audit | Part IV, Stage 1, gate P3 |
 | #41 | Backend-neutral `IncidentStore` concurrency/failure semantics | Part IV, Stage 1, gate P2 |
@@ -532,12 +533,12 @@ except where noted.
 | **P1** | #39 | Contract test suite for `IncidentStore`; controllable fake store with deterministic failures and delays; controller/UI tests moved off deprecated `LocalRepository`. | P0 | Contract suite covers durability, detached loads, identity, stale writes, deletion conflicts, failures; fake store used by controller tests. |
 | **P2** | #41 | Backend-neutral `IncidentStore` semantics: opaque revision token, optional edit-lock capability (UI never requires a lock to edit), revision-protected delete, path-free `IncidentSummary`, distinct conflict / validation / not-found / duplicate / unavailable / failed outcomes. No `instanceof FileIncidentStore` in UI. | P1 | A lock-less stub store with server-issued tokens substitutes into `AppController` without controller/UI changes; contract tests pass for both. |
 | **P3** | #40 | Strict external import vs. tolerant stored load; durable, repeatable identity migration; **entity ID audit** confirming every list-held record has a stable UUID and no form identifies rows by index/text. | P1 | Fixtures for missing IDs, legacy aliases, unknown fields, malformed versions; repeated loads yield identical IDs; invalid imports leave the store unchanged. |
-| **T1** | #37 (PR #38) | All timestamps generated and stored in UTC through an injectable clock; displayed and printed in the configured zone. | — (may run any time) | No path generates local-time values; PDFs and UI honour the selected zone. |
+| **T1** | #37 — **complete** (PR #38) | All timestamps generated and stored in UTC through `model/UtcTimestamp` injectable clock; displayed and printed in the configured zone. | — | Delivered 2026-10-31; `UtcTimestamp` is the only timestamp source. |
 | **T2** | #44 | `Provenance` (operator name, station ID, entered-at UTC, reserved accepted-at) on append-style records; injected `OperatorContext` in `AppController`; one schema bump with fixtures. | P3, T1 | Legacy documents load unchanged; new entries carry provenance from context; ICS 214 "prepared by" prefilled only when blank. |
 | **P4** | #42 | Asynchronous persistence coordinator on detached snapshots with an abstract unit of work; "replace active document from store" path; two-dimension status (local durability vs. future sync state); failure retention and retry policy. | P0, P1, P2, P3 | Deterministic tests for out-of-order completion, incident switch during save, edits during save, failure→retry, unavailable→available; second unit type substitutes without coordinator changes. |
 
-Parallelism: T1 can proceed immediately. P2 and P3 can proceed in parallel once
-P1 lands. T2 follows P3 and T1. P4 is last and is the gate for Stage 2.
+Parallelism: T1 is done. P2 and P3 can proceed in parallel once
+P1 lands. T2 follows P3. P4 is last and is the gate for Stage 2.
 
 **Stage exit criteria:** all gates closed; released-format fixtures load and
 round-trip; migrations preserve data and identity; exports unchanged; the
@@ -625,7 +626,7 @@ documented.
 
 | Step | Where | What |
 | --- | --- | --- |
-| 1 | Stage 1 gate T1 (#37) | UTC generation and storage; zone-aware display and print. |
+| 1 | Stage 1 gate T1 (#37, done) | UTC generation and storage; zone-aware display and print. |
 | 2 | Stage 1 gate T2 (#44) | `Provenance` on append-style records; injected `OperatorContext`; `acceptedAt` reserved and unused locally. |
 | 3 | Stage 2 | Host records receive time; device clocks treated as untrusted for ordering. |
 | 4 | Stage 3 | Host populates `acceptedAt`; operator claim fills `operatorName`/`stationId`; audit history keyed by device and operator. |
