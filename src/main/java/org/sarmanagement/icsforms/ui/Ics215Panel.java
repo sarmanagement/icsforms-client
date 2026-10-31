@@ -7,6 +7,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics215Form;
 import org.sarmanagement.icsforms.model.Ics215ResourceReview;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -37,10 +38,8 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -554,7 +553,7 @@ public class Ics215Panel extends JPanel {
 						values[1].singleResources, values[1].teams);
 				allocation.linkedResourceIds.clear();
 				allocation.linkedResources.clear();
-				allocation.acceptedAt = LocalDateTime.now(ZoneOffset.UTC);
+				allocation.acceptedAt = UtcTimestamp.now();
 				allocation.manualOverride = true;
 			}
 		}
@@ -1031,7 +1030,7 @@ public class Ics215Panel extends JPanel {
 				allocation.acceptedHave.singleResources, allocation.acceptedHave.teams);
 		allocation.linkedResourceIds.clear();
 		allocation.linkedResources.clear();
-		allocation.acceptedAt = LocalDateTime.now(ZoneOffset.UTC);
+		allocation.acceptedAt = UtcTimestamp.now();
 		allocation.manualOverride = true;
 	}
 
@@ -1122,11 +1121,11 @@ public class Ics215Panel extends JPanel {
 		String target = (String) targetRow.getSelectedItem();
 		if (target.startsWith("Incident-wide")) {
 			Ics215ResourceReview.acceptOnHand(controller.getData(), form, heading.id, links, manual,
-					LocalDateTime.now(ZoneOffset.UTC));
+					UtcTimestamp.now());
 		} else {
 			String rowId = target.substring(0, target.indexOf(" — "));
 			Ics215ResourceReview.acceptRowHave(controller.getData(), form, rowId, heading.id, links,
-					manual, LocalDateTime.now(ZoneOffset.UTC));
+					manual, UtcTimestamp.now());
 		}
 	}
 
@@ -1343,9 +1342,7 @@ public class Ics215Panel extends JPanel {
 			return null;
 		}
 		try {
-			LocalDateTime displayed = LocalDateTime.parse(value.trim(), DATE_TIME);
-			return LocalDateTime.ofInstant(displayed.atZone(UiSupport.getDateTimeDisplayZone()).toInstant(),
-					ZoneOffset.UTC);
+			return UiSupport.parseDateTime(value.trim(), DATE_TIME);
 		} catch (DateTimeParseException exception) {
 			throw new IllegalStateException("Enter " + label + " as yyyy-MM-dd HH:mm.");
 		}
@@ -1361,8 +1358,7 @@ public class Ics215Panel extends JPanel {
 		if (value == null) {
 			return "";
 		}
-		Instant instant = value.toInstant(ZoneOffset.UTC);
-		return DATE_TIME.format(LocalDateTime.ofInstant(instant, UiSupport.getDateTimeDisplayZone()));
+		return UiSupport.formatDateTime(value, DATE_TIME);
 	}
 
 	/**

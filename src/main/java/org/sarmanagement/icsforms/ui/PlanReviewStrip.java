@@ -60,7 +60,8 @@ public class PlanReviewStrip extends JPanel {
 		PlanReviewAssertion assertion = controller.getData().getReviewAssertion(area);
 		String detail = "";
 		if (assertion.isRecorded()) {
-			detail = " by " + assertion.getReviewedBy() + " at " + REVIEW_TIME.format(assertion.getReviewedAt());
+			detail = " by " + assertion.getReviewedBy() + " at "
+					+ UiSupport.formatDateTime(assertion.getReviewedAt(), REVIEW_TIME);
 		}
 		status.setText(reviewStatus.displayLabel());
 		status.setToolTipText(reviewStatus.displayLabel() + detail);

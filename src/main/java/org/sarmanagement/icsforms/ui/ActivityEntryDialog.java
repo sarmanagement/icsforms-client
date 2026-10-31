@@ -316,7 +316,7 @@ final class ActivityEntryDialog {
 	 */
 	static JPanel buildDetailsPanel(AppData incident, ActivityLogEntry entry) {
 		JPanel details = UiSupport.formPanel();
-		UiSupport.addRow(details, 0, "Date/time", new JLabel(String.valueOf(entry.getTimestamp())));
+		UiSupport.addRow(details, 0, "Date/time", new JLabel(UiSupport.formatDateTime(entry.getTimestamp())));
 		UiSupport.addRow(details, 1, "Event type",
 				new JLabel(resolvedEventTypeLabel(incident, entry.getEventTypeId())));
 		UiSupport.addRow(details, 2, "Resource", new JLabel(entry.getResourceIdentifier()));

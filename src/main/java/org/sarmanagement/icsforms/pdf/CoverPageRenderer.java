@@ -9,6 +9,7 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.model.IncidentContext;
 
 import java.io.IOException;
@@ -56,7 +57,8 @@ public class CoverPageRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 				String incidentName = context == null ? "" : safe(context.getIncidentName());
 				String operationalPeriod = formatOperationalPeriod(data, context);
-				String datePrepared = DATE_FORMATTER.format(java.time.LocalDate.now(pdfZoneId(data)));
+				String datePrepared = DATE_FORMATTER
+						.format(UtcTimestamp.nowInstant().atZone(pdfZoneId(data)).toLocalDate());
 				String preparedWith = applicationMetadata.preparedWithValue();
 				String allTimesIn = pdfTimeZoneLabel(data);
 

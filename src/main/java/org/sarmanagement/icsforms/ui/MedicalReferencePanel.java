@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.VetFacility;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.pdf.Ics206CaninePdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics206PdfRenderer;
 
@@ -31,7 +32,6 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -143,10 +143,10 @@ class MedicalReferencePanel extends JPanel {
 		AppData data = controller.getData();
 		String start = data.getIncidentContext().getOperationalPeriodStart() == null
 				? "unspecified"
-				: PERIOD_TIME.format(data.getIncidentContext().getOperationalPeriodStart());
+				: UiSupport.formatDateTime(data.getIncidentContext().getOperationalPeriodStart(), PERIOD_TIME);
 		String end = data.getIncidentContext().getOperationalPeriodEnd() == null
 				? "unspecified"
-				: PERIOD_TIME.format(data.getIncidentContext().getOperationalPeriodEnd());
+				: UiSupport.formatDateTime(data.getIncidentContext().getOperationalPeriodEnd(), PERIOD_TIME);
 		PlanReviewArea area = canine ? PlanReviewArea.CANINE_MEDICAL : PlanReviewArea.HUMAN_MEDICAL;
 		RolePanelSupport.banner(banner, referenceTitle(), data.getIncidentContext().getIncidentName(),
 				"Period: " + start + " — " + end);
@@ -347,7 +347,7 @@ class MedicalReferencePanel extends JPanel {
 				: "duration unknown";
 		String age = facility.getCalculatedAt() == null
 				? "age unknown"
-				: Duration.between(facility.getCalculatedAt(), Instant.now()).toHours() + " h old";
+				: Duration.between(facility.getCalculatedAt(), UtcTimestamp.nowInstant()).toHours() + " h old";
 		String current = facility.hasCurrentDistance(data.getStagingLocation().getGeneration())
 				? "current origin generation"
 				: "stale/other origin";
@@ -356,7 +356,8 @@ class MedicalReferencePanel extends JPanel {
 				+ facility.getTown() + ", " + facility.getState() + " " + facility.getPostalCode()
 				+ "\nContacts: " + String.join(", ", facility.getContactNumbers()) + "\nAvailability: "
 				+ value(facility.getAvailable24Hours()) + " 24-hour; " + facility.getAvailabilityNotes()
-				+ "\nCapabilities: " + facility.getCapabilities() + "\nVerified: " + facility.getVerifiedAt()
+				+ "\nCapabilities: " + facility.getCapabilities() + "\nVerified: "
+				+ UiSupport.formatInstant(facility.getVerifiedAt())
 				+ "\nOrigin: " + origin + "\nRoute: " + distance + ", " + duration + " | "
 				+ facility.getDistanceMethod() + " | " + facility.getDistanceProvenance() + " | " + age + " | "
 				+ current;

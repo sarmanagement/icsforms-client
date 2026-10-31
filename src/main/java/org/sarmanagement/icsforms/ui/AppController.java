@@ -25,6 +25,7 @@ import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.model.PlanReuseService;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
@@ -1492,7 +1493,8 @@ public class AppController {
 	 * @return converted date.
 	 */
 	public static Date toDate(LocalDateTime value) {
-		return value == null ? new Date() : Date.from(value.atOffset(ZoneOffset.UTC).toInstant());
+		return value == null ? Date.from(UtcTimestamp.nowInstant())
+				: Date.from(value.atOffset(ZoneOffset.UTC).toInstant());
 	}
 
 	/**
@@ -2450,7 +2452,7 @@ public class AppController {
 	 */
 	public TaskLifecycleChangeResult recordTaskLifecycleTransition(SarTaskAssignment task, String newStatus) {
 		return recordTaskLifecycleTransition(task, task == null ? "" : task.getTaskLifecycleStatus(), newStatus,
-				LocalDateTime.now().withSecond(0).withNano(0));
+				UtcTimestamp.now().withSecond(0).withNano(0));
 	}
 
 	/**
@@ -2720,7 +2722,7 @@ public class AppController {
 		};
 		String taskReference = SarTaskSupport.taskResourceDisplayLabel(task);
 		String taskLogReference = taskReference.isBlank() ? safe(task.getLeader()) : taskReference;
-		return new TransitionRecord(effectiveTime == null ? LocalDateTime.now().withSecond(0).withNano(0) : effectiveTime,
+		return new TransitionRecord(effectiveTime == null ? UtcTimestamp.now().withSecond(0).withNano(0) : effectiveTime,
 				eventTypeId, "Task status changed to " + normalizedStatus, taskReference, taskLogReference);
 	}
 
@@ -2864,7 +2866,7 @@ public class AppController {
 					return created;
 				});
 		ActivityLogEntry entry = new ActivityLogEntry();
-		entry.setTimestamp(LocalDateTime.now().withSecond(0).withNano(0));
+		entry.setTimestamp(UtcTimestamp.now().withSecond(0).withNano(0));
 		entry.setEventTypeId(eventTypeId);
 		entry.setNotableActivity(note.trim());
 		if (assignmentId != null && !assignmentId.isBlank()) {
@@ -3235,7 +3237,7 @@ public class AppController {
 	private AppData createDefaultData() {
 		AppData document = new AppData();
 		IncidentContext context = document.getIncidentContext();
-		context.setOperationalPeriodStart(LocalDateTime.now().withSecond(0).withNano(0));
+		context.setOperationalPeriodStart(UtcTimestamp.now().withSecond(0).withNano(0));
 		context.setOperationalPeriodEnd(context.getOperationalPeriodStart().plusHours(12));
 		return document;
 	}
@@ -3322,7 +3324,7 @@ public class AppController {
 			if (clue.getAssignmentId().equals(log.getLinkedSarTaskAssignmentId())) {
 				LocalDateTime ts = clue.getDateTimeCollected() != null
 						? clue.getDateTimeCollected()
-						: LocalDateTime.now().withSecond(0).withNano(0);
+						: UtcTimestamp.now().withSecond(0).withNano(0);
 				// Avoid duplicating entries already propagated with the same timestamp and clue
 				// type.
 				boolean alreadyPresent = log.getActivityLog().stream()
@@ -3367,7 +3369,7 @@ public class AppController {
 				});
 		LocalDateTime ts = clue.getDateTimeCollected() != null
 				? clue.getDateTimeCollected()
-				: LocalDateTime.now().withSecond(0).withNano(0);
+				: UtcTimestamp.now().withSecond(0).withNano(0);
 		String location = safe(clue.getLocation());
 		String description = safe(clue.getDescription());
 		String activity = location.isBlank()

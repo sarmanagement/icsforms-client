@@ -53,8 +53,6 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -2079,6 +2077,7 @@ public class TCardPanel extends JPanel {
 		SpinnerDateModel checkInModel = new SpinnerDateModel();
 		JSpinner checkInSpinner = new JSpinner(checkInModel);
 		checkInSpinner.setEditor(new JSpinner.DateEditor(checkInSpinner, "yyyy-MM-dd HH:mm"));
+		UiSupport.applyDateTimeDisplayZone(checkInSpinner);
 
 		personNameField.setText(card.getPersonName());
 		homeAgencyField.setText(card.getHomeAgency());
@@ -2091,7 +2090,7 @@ public class TCardPanel extends JPanel {
 		personnelStatusCombo.setSelectedItem(card.getStatus());
 		personnelNotesField.setText(card.getNotes());
 		if (card.getCheckInDateTime() != null) {
-			checkInModel.setValue(Date.from(card.getCheckInDateTime().atZone(ZoneId.systemDefault()).toInstant()));
+			checkInModel.setValue(AppController.toDate(card.getCheckInDateTime()));
 		}
 
 		// ── OTHER resource sub-form fields ────────────────────────────────
@@ -2239,7 +2238,7 @@ public class TCardPanel extends JPanel {
 				card.setRadioChannelId(RadioChannelPicker.referenceId(radioChannelField));
 				Object spinnerVal = checkInSpinner.getValue();
 				if (spinnerVal instanceof Date d) {
-					card.setCheckInDateTime(LocalDateTime.ofInstant(d.toInstant(), ZoneId.systemDefault()));
+					card.setCheckInDateTime(AppController.toLocalDateTime(d));
 				}
 				card.setResourceIdentifier(personnelResIdField.getText().trim());
 				card.setLocation(personnelLocField.getText().trim());
@@ -2624,7 +2623,7 @@ public class TCardPanel extends JPanel {
 				case 3 -> card.getHomeState();
 				case 4 -> card.getPhoneNumber();
 				case 5 ->
-					card.getCheckInDateTime() != null ? card.getCheckInDateTime().toString().replace('T', ' ') : "";
+					UiSupport.formatDateTime(card.getCheckInDateTime());
 				case 6 -> card.getLocation();
 				case 7 -> card.getStatus();
 				case 8 -> {

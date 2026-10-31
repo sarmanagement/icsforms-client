@@ -16,6 +16,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -479,7 +481,7 @@ public class PdfExportService {
 						orientation205, orientation233));
 			}
 			current = "bundle merge";
-			String bundleName = iapBundleFileName(data.getIncidentContext());
+			String bundleName = iapBundleFileName(data);
 			Path bundlePath = outputDirectory.resolve(bundleName);
 			Path temporaryBundle = staging.resolve("merged.pdf");
 			PDFMergerUtility merger = new PDFMergerUtility();
@@ -857,18 +859,36 @@ public class PdfExportService {
 	/**
 	 * Generates the IAP bundle file name from incident context metadata.
 	 *
-	 * @param context
-	 *            incident context.
+	 * @param data incident document containing the timezone preference.
 	 * @return sanitised PDF file name.
 	 */
-	private static String iapBundleFileName(IncidentContext context) {
+	private static String iapBundleFileName(AppData data) {
+		IncidentContext context = data == null ? null : data.getIncidentContext();
 		String name = context == null || context.getIncidentName() == null ? "" : context.getIncidentName();
 		String period = "";
 		if (context != null && context.getOperationalPeriodStart() != null) {
-			period = context.getOperationalPeriodStart().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"));
+			period = context.getOperationalPeriodStart().atOffset(ZoneOffset.UTC).atZoneSameInstant(exportZoneId(data))
+					.format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"));
 		}
 		String base = (name.isBlank() ? "incident" : name) + (period.isBlank() ? "" : "_" + period) + "_IAP";
 		// Replace characters that are unsafe on common filesystems.
 		return base.replaceAll("[^A-Za-z0-9_\\-]", "_") + ".pdf";
+	}
+
+	/**
+	 * Resolves the timezone used to label an IAP bundle filename.
+	 *
+	 * @param data incident document containing the timezone preference.
+	 * @return configured timezone or the system timezone when unset or invalid.
+	 */
+	private static ZoneId exportZoneId(AppData data) {
+		if (data == null || data.isUseSystemTimeZone()) {
+			return ZoneId.systemDefault();
+		}
+		try {
+			return ZoneId.of(data.getConfiguredTimeZoneId());
+		} catch (RuntimeException exception) {
+			return ZoneId.systemDefault();
+		}
 	}
 }

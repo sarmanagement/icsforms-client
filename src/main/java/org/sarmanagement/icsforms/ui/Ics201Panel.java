@@ -526,7 +526,7 @@ public class Ics201Panel extends JPanel {
 		}
 
 		private static String formatDateTime(LocalDateTime value) {
-			return value == null ? "" : DATE_TIME_FORMATTER.format(value);
+			return UiSupport.formatDateTime(value, DATE_TIME_FORMATTER);
 		}
 
 		private static LocalDateTime parseDateTime(String value) {
@@ -534,7 +534,7 @@ public class Ics201Panel extends JPanel {
 				return null;
 			}
 			try {
-				return LocalDateTime.parse(value.trim(), DATE_TIME_FORMATTER);
+				return UiSupport.parseDateTime(value.trim(), DATE_TIME_FORMATTER);
 			} catch (DateTimeParseException exception) {
 				return null;
 			}
