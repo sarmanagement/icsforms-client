@@ -37,7 +37,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
-/** Display-backed optional workspace and explicit carry-forward control regressions. */
+/** Display-backed optional workspace and plan reuse workflow regressions. */
 class MainFrameIcs205WorkspaceTest {
 	@Test
 	void workspaceToggleKeepsDataInSarAndGenericAndTypedNavigationReopensIt() throws Exception {
@@ -166,13 +166,14 @@ class MainFrameIcs205WorkspaceTest {
 	}
 
 	@Test
-	void plannedIcs215PromotionCheckboxIsExplicitAndUnchecked() throws Exception {
+	void startupOffersIcs215PromotionWithoutPlanReuseCheckbox() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		Path directory = Files.createDirectories(Path.of("target", "ics205-startup-" + UUID.randomUUID()));
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			SwingUtilities.invokeAndWait(() -> {
 				StartupDialog dialog = new StartupDialog(null, store, false);
 				try {
+					assertFalse(dialog.isBringForwardCommunicationsPlan());
 					assertFalse(dialog.isPromotePlannedIcs215());
 					JCheckBox checkbox = promoteIcs215Checkbox(dialog);
 					assertNotNull(checkbox);

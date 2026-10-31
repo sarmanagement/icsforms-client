@@ -20,11 +20,13 @@ import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.PdfLayoutSettings;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Layout regression coverage for inline ICS 207 command-staff assignments. */
+/** Layout coverage for inline command staff and assignment leaders inside ICS 207 nodes. */
 class Ics207PdfRendererTest {
 	@TempDir
 	Path directory;
@@ -96,6 +98,166 @@ class Ics207PdfRendererTest {
 			assertTrue(text.contains("Medical Unit Ldr"));
 			assertTrue(text.contains("Fictional Medical Leader"));
 		}
+	}
+
+	@Test
+	void thirteenTaskLeadersStayInsideTheirOwnAssignmentNodesWithoutSeparateOverheadBoxes() throws Exception {
+		for (PdfLayoutSettings.PaperSize paper : PdfLayoutSettings.PaperSize.values()) {
+			AppData data = tasks(13);
+			data.getPdfLayoutSettings().setPaperSize(paper);
+			data.getOrganizationalChart().setStagingAreaManagerName("Staging Manager");
+			Path file = directory.resolve("task-leaders-" + paper + ".pdf");
+			new Ics207PdfRenderer().render(data, file);
+			try (PDDocument pdf = Loader.loadPDF(file.toFile())) {
+				assertEquals(1, pdf.getNumberOfPages());
+				assertEquals(Ics207PdfRenderer.pageCount(data), pdf.getNumberOfPages());
+				StaffPositions positions = new StaffPositions();
+				String text = positions.getText(pdf).replaceAll("\\s+", " ");
+				for (int index = 0; index < 13; index++) {
+					String title = String.format("Assignment %02d", index);
+					String leader = String.format("Leader: Task Leader %02d", index);
+					assertTrue(text.contains(title), title);
+					assertTrue(text.contains(leader), leader);
+					assertEquals(1, occurrences(text, leader));
+					assertAssignmentNode(pdf.getPage(0), positions.find(title, false),
+							positions.find(leader, false), positions.find(leader, true));
+				}
+				TextPosition leader = positions.find("Leader: Task Leader 00", false);
+				TextPosition people = positions.find("1 person", false);
+				assertTrue(people.getYDirAdj() > leader.getYDirAdj());
+				assertTrue(people.getYDirAdj() - leader.getYDirAdj() < 9f);
+				assertTrue(text.contains("Staging Manager"));
+			}
+		}
+	}
+
+	@Test
+	void assignmentAndOtherSectionOverflowContinueWithoutLosingNodesOnLetterAndA4() throws Exception {
+		for (PdfLayoutSettings.PaperSize paper : PdfLayoutSettings.PaperSize.values()) {
+			AppData data = tasks(40);
+			data.getPdfLayoutSettings().setPaperSize(paper);
+			data.getPdfLayoutSettings().setPageMarginPoints(108f);
+			data.getForm207().setIapPage("10");
+			OrgChartEntry lastRole = new OrgChartEntry();
+			lastRole.setSection(OrgChartEntry.Section.OPERATIONS);
+			lastRole.setTitle("Custom Operations Role");
+			lastRole.setName("Last Operations Person");
+			data.getOrganizationalChart().getAdditionalPositions().add(lastRole);
+			data.getOrganizationalChart().setDocumentationUnitLeaderName("Planning Person");
+			data.getOrganizationalChart().setMedicalUnitLeaderName("Medical Person");
+			data.getOrganizationalChart().setCostUnitLeaderName("Finance Person");
+			Path file = directory.resolve("overflow-" + paper + ".pdf");
+			new Ics207PdfRenderer().render(data, file);
+			try (PDDocument pdf = Loader.loadPDF(file.toFile())) {
+				assertTrue(pdf.getNumberOfPages() > 1);
+				assertEquals(Ics207PdfRenderer.pageCount(data), pdf.getNumberOfPages());
+				String all = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
+				for (int index = 0; index < 40; index++) {
+					String leader = String.format("Task Leader %02d", index);
+					assertTrue(all.contains(leader), leader);
+					assertEquals(1, occurrences(all, leader));
+				}
+				for (String person : List.of("Planning Person", "Medical Person", "Finance Person",
+						"Last Operations Person")) {
+					assertTrue(all.contains(person), person);
+				}
+				for (int page = 2; page <= pdf.getNumberOfPages(); page++) {
+					PDFTextStripper stripper = new PDFTextStripper();
+					stripper.setStartPage(page);
+					stripper.setEndPage(page);
+					String text = stripper.getText(pdf);
+					assertTrue(text.contains("INCIDENT ORGANIZATION CHART (ICS 207) Page " + page));
+					for (String block : List.of("1. Incident Name", "2. Operational Period",
+							"3. Organization Chart", "4. Prepared By")) {
+						assertTrue(text.contains(block), block);
+					}
+					assertTrue(text.contains("IAP Page " + (9 + page)));
+				}
+			}
+		}
+	}
+
+	@Test
+	void longAssignmentLabelsAndLeaderNamesWrapWithoutTruncationOrAdditionalLeaderNodes() throws Exception {
+		AppData data = tasks(1);
+		SarTaskAssignment task = data.getSarTaskAssignments().get(0);
+		task.setResourceIdentifier("Very Long Assignment Identifier Without Truncation");
+		task.setLeader("Elizabeth Montgomery / Alexander Robertson (T)");
+		Path file = directory.resolve("long-task-leader.pdf");
+		new Ics207PdfRenderer().render(data, file);
+		try (PDDocument pdf = Loader.loadPDF(file.toFile())) {
+			String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
+			assertTrue(text.contains(task.getResourceIdentifier()));
+			assertTrue(text.contains("Leader: " + task.getLeader()));
+			assertEquals(1, occurrences(text, task.getLeader()));
+			assertTrue(text.contains("1 person"));
+		}
+	}
+
+	/**
+	 * Builds assignments with distinct leaders and one personnel entry each.
+	 *
+	 * @param count requested assignment count.
+	 * @return source incident without duplicate additional leader positions.
+	 */
+	private AppData tasks(int count) {
+		AppData data = new AppData();
+		for (int index = 0; index < count; index++) {
+			SarTaskAssignment task = new SarTaskAssignment();
+			task.setResourceIdentifier(String.format("Assignment %02d", index));
+			task.setLeader(String.format("Task Leader %02d", index));
+			SarTaskResource person = new SarTaskResource();
+			person.setName(task.getLeader());
+			task.getResourcesAssigned().add(person);
+			data.getSarTaskAssignments().add(task);
+		}
+		return data;
+	}
+
+	/**
+	 * Counts non-overlapping appearances of one rendered value.
+	 *
+	 * @param text complete PDF text.
+	 * @param value value to count.
+	 * @return number of occurrences.
+	 */
+	private int occurrences(String text, String value) {
+		return (text.length() - text.replace(value, "").length()) / value.length();
+	}
+
+	/**
+	 * Confirms a task title and complete leader share a single three-line node rectangle.
+	 *
+	 * @param page rendered chart page.
+	 * @param title title's first glyph.
+	 * @param leader leader label's first glyph.
+	 * @param leaderEnd leader value's last glyph.
+	 * @throws IOException when reading the page stream fails.
+	 */
+	private void assertAssignmentNode(PDPage page, TextPosition title, TextPosition leader,
+			TextPosition leaderEnd) throws IOException {
+		List<Object> tokens = new PDFStreamParser(page).parse();
+		float pageHeight = page.getMediaBox().getHeight();
+		for (int index = 4; index < tokens.size(); index++) {
+			if (tokens.get(index) instanceof Operator operator && "re".equals(operator.getName())) {
+				float x = ((COSNumber) tokens.get(index - 4)).floatValue();
+				float y = ((COSNumber) tokens.get(index - 3)).floatValue();
+				float width = ((COSNumber) tokens.get(index - 2)).floatValue();
+				float height = ((COSNumber) tokens.get(index - 1)).floatValue();
+				if (width < 180f && height >= 28f && height < 60f
+						&& title.getXDirAdj() >= x && title.getXDirAdj() < x + width
+						&& pageHeight - title.getYDirAdj() > y
+						&& pageHeight - title.getYDirAdj() < y + height) {
+					assertTrue(leader.getXDirAdj() >= x);
+					assertTrue(leaderEnd.getXDirAdj() + leaderEnd.getWidthDirAdj() <= x + width);
+					assertTrue(pageHeight - leader.getYDirAdj() > y);
+					assertTrue(pageHeight - leader.getYDirAdj() < y + height);
+					assertTrue(leader.getYDirAdj() > title.getYDirAdj());
+					return;
+				}
+			}
+		}
+		throw new AssertionError("Assignment title and leader do not share a node");
 	}
 
 	/**

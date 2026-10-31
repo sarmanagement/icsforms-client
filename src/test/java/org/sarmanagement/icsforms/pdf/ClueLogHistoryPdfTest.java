@@ -85,7 +85,9 @@ class ClueLogHistoryPdfTest {
 			try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
 				assertTrue(document.getNumberOfPages() > 2);
 				String text = new VisibleTextStripper().getText(document);
-				String compact = text.replace("Clue #1 (continued)", "").replaceAll("\\s+", "");
+				String compact = text.replace("Clue #1 (continued)", "")
+						.replaceAll("CLUE LOG \\(SAR\\) Page \\d+", "").replaceAll("\\s+", "");
+				assertTrue(text.contains("CLUE LOG (SAR) Page 2"));
 				for (int index = 0; index < 700; index++) {
 					assertTrue(compact.contains("DescriptionSentinel" + index));
 				}

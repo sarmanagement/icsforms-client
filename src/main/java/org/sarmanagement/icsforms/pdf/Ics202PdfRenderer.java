@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -48,6 +49,26 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		}
 	}
 
+	/**
+	 * Counts every page using the export layout without writing an output file.
+	 * @param data incident data, or null for a blank form.
+	 * @return primary and continuation page count.
+	 */
+	public static int pageCount(AppData data) {
+		try (PDDocument document = new PDDocument()) {
+			new Ics202PdfRenderer().renderDocument(document, data == null ? new AppData() : data);
+			return document.getNumberOfPages();
+		} catch (IOException exception) {
+			throw new UncheckedIOException(exception);
+		}
+	}
+
+	/**
+	 * Draws the primary form and paginated overflow blocks.
+	 * @param document target PDF.
+	 * @param data incident data.
+	 * @throws IOException when drawing fails.
+	 */
 	private void renderDocument(PDDocument document, AppData data) throws IOException {
 		IncidentContext context = data.getIncidentContext();
 		Ics202Form form = data.getForm202();
@@ -72,7 +93,7 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			float row5 = 34f;
 			float row7 = 34f;
 			float row8 = 80f;
-			List<String> formsLines = includedFormsLines(form.getIncidentActionPlanAttachments());
+			List<String> formsLines = includedFormsLines(form.getIncidentActionPlanAttachments(), regular, pageWidth);
 			float otherRowsHeight = row1 + 110f + 80f + row4 + row5 + row7 + row8;
 			float row6 = Math.min(Math.max(40f, 31f + (formsLines.size() * LINE_HEIGHT)),
 					Math.max(40f, gridHeight - otherRowsHeight));
@@ -86,8 +107,8 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 			drawCell(stream, layout.x(), y - row1, halfWidth, row1);
 			drawCell(stream, layout.x() + halfWidth, y - row1, halfWidth, row1);
-			overflowSections.addAll(drawSection(stream, bold, regular, layout.x(), y - row1, halfWidth, row1,
-					"1. Incident Name", List.of(safe(context.getIncidentName())), "1. Incident Name"));
+			drawIncidentName(stream, bold, regular, layout.x(), y - row1, halfWidth, row1,
+					context.getIncidentName());
 			drawOperationalPeriodSection(stream, bold, regular, layout.x() + halfWidth, y - row1, halfWidth, row1,
 					context, data);
 			y -= row1;
@@ -103,13 +124,13 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 			drawCell(stream, layout.x(), y - row3, pageWidth, row3);
 			overflowSections.addAll(drawSection(stream, bold, regular, layout.x(), y - row3, pageWidth, row3,
-					"4. Operational Period Command Emphasis", wrap(form.getCommandEmphasis(), 92),
+					"4. Operational Period Command Emphasis", List.of(safe(form.getCommandEmphasis())),
 					"4. Operational Period Command Emphasis"));
 			y -= row3;
 
 			drawCell(stream, layout.x(), y - row4, pageWidth, row4);
 			overflowSections.addAll(drawSection(stream, bold, regular, layout.x(), y - row4, pageWidth, row4,
-					"4. General Situational Awareness", wrap(form.getSituationalAwareness(), 92),
+					"4. General Situational Awareness", List.of(safe(form.getSituationalAwareness())),
 					"4. General Situational Awareness"));
 			y -= row4;
 
@@ -153,18 +174,15 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		}
 	}
 
+	/**
+	 * Paginates a continuation block without splitting ordinary objectives.
+	 * @param document target PDF.
+	 * @param data page settings.
+	 * @param overflow logical overflow entries.
+	 * @throws IOException when drawing fails.
+	 */
 	private void renderOverflowPage(PDDocument document, AppData data, OverflowSection overflow) throws IOException {
-		PDPage page = newPage(data);
-		document.addPage(page);
-		try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
-			PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-			PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-			FormLayout layout = formLayout(page, data);
-			drawFormHeader(stream, bold, layout, "ICS 202", overflow.heading);
-			drawFormFrame(stream, layout);
-			drawTextBlock(stream, bold, regular, layout.x(), layout.y(), layout.width(), layout.height(),
-					overflow.heading, overflow.lines);
-		}
+		writeContinuationPages(document, data, "ICS 202", "Incident Objectives", overflow.heading, overflow.lines);
 	}
 
 	private void drawOperationalPeriodSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
@@ -219,34 +237,27 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 	}
 
+	/**
+	 * Draws measured entries and returns the undrawn continuation content.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width cell width.
+	 * @param height cell height.
+	 * @param heading block heading.
+	 * @param lines logical entries.
+	 * @param overflowHeading continuation block heading.
+	 * @return overflow blocks.
+	 * @throws IOException when drawing fails.
+	 */
 	private List<OverflowSection> drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
 			float x, float y, float width, float height, String heading, List<String> lines, String overflowHeading)
 			throws IOException {
-		float contentTop = writeHeadingWithInlineContent(stream, bold, regular, x, y, width, height, heading, lines);
-		int capacity = contentCapacity(height, contentTop - y);
-		List<String> normalized = lines == null || lines.isEmpty() ? List.of("") : lines;
-		List<OverflowSection> overflowSections = new ArrayList<>();
-		if (capacity >= normalized.size()) {
-			if (usesInlineHeadingContent(heading, normalized)) {
-				if (normalized.size() > 1) {
-					writeLines(stream, regular, x + CELL_PADDING, contentTop, normalized.subList(1, normalized.size()));
-				}
-			} else {
-				writeLines(stream, regular, x + CELL_PADDING, contentTop, normalized);
-			}
-			return overflowSections;
-		}
-		int startIndex = usesInlineHeadingContent(heading, normalized) ? 1 : 0;
-		int visibleCapacity = Math.max(1, capacity - startIndex);
-		List<String> visible = new ArrayList<>(
-				normalized.subList(startIndex, Math.min(startIndex + visibleCapacity, normalized.size())));
-		if (overflowHeading != null && (normalized.size() - startIndex) > visibleCapacity && !visible.isEmpty()) {
-			visible.set(visible.size() - 1, "See next page");
-			overflowSections.add(new OverflowSection(overflowHeading,
-					normalized.subList(startIndex + visibleCapacity - 1, normalized.size())));
-		}
-		writeLines(stream, regular, x + CELL_PADDING, contentTop, visible);
-		return overflowSections;
+		List<String> pending = drawFlowSection(stream, bold, regular, x, y, width, height, heading, lines,
+				Integer.MAX_VALUE);
+		return pending.isEmpty() ? List.of() : List.of(new OverflowSection(overflowHeading, pending));
 	}
 
 	private void drawTextBlock(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
@@ -393,12 +404,17 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		}
 	}
 
+	/**
+	 * Numbers objectives without imposing a character-count wrap.
+	 * @param values objectives.
+	 * @return intact numbered objectives.
+	 */
 	private List<String> numberedLines(List<String> values) {
 		List<String> lines = new ArrayList<>();
 		int index = 1;
 		for (String value : values) {
 			if (value != null && !value.isBlank()) {
-				lines.addAll(prefixWrapped(index++ + ". ", wrap(value, 90)));
+				lines.add(index++ + ". " + value);
 			}
 		}
 		return lines;
@@ -417,7 +433,15 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return lines;
 	}
 
-	private List<String> includedFormsLines(List<String> attachments) {
+	/**
+	 * Packs included-form checkboxes using the actual printable text width.
+	 * @param attachments selected form labels.
+	 * @param font measuring font.
+	 * @param width cell width.
+	 * @return checkbox rows.
+	 * @throws IOException when font metrics fail.
+	 */
+	private List<String> includedFormsLines(List<String> attachments, PDType1Font font, float width) throws IOException {
 		List<String> supported = new ArrayList<>(FormOrder.formKeys());
 		supported.add("Map packet");
 		List<String> checks = new ArrayList<>();
@@ -432,7 +456,8 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		List<String> lines = new ArrayList<>();
 		StringBuilder line = new StringBuilder();
 		for (String check : checks) {
-			if (!line.isEmpty() && line.length() + check.length() + 2 > 108) {
+			if (!line.isEmpty()
+					&& font.getStringWidth(PdfText.singleLine(line + "  " + check)) * BODY_FONT_SIZE / 1000f > width - 8f) {
 				lines.add(line.toString());
 				line.setLength(0);
 			}
@@ -483,6 +508,11 @@ public class Ics202PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return PdfText.normalize(value);
 	}
 
+	/**
+	 * Undrawn logical entries belonging to one numbered block.
+	 * @param heading numbered block heading.
+	 * @param lines remaining logical entries.
+	 */
 	private record OverflowSection(String heading, List<String> lines) {
 	}
 }

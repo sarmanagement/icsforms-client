@@ -538,7 +538,8 @@ public class PdfExportService {
 	}
 
 	/**
-	 * Assigns bundle labels accounting for orientation-specific radio-plan pagination.
+	 * Assigns bundle labels accounting for orientation-specific pagination and
+	 * measured objectives, assignment and organization-chart continuation pages.
 	 *
 	 * @param data export document
 	 * @param includedFormKeys selected keys, or null for all
@@ -582,7 +583,8 @@ public class PdfExportService {
 				}
 				case "ICS 202" -> {
 					if (includedOrAll(included, formKey)) {
-						data.getForm202().setIapPage(String.valueOf(page++));
+						data.getForm202().setIapPage(String.valueOf(page));
+						page += Ics202PdfRenderer.pageCount(data);
 					}
 				}
 				case "ICS 203" -> {
@@ -593,9 +595,11 @@ public class PdfExportService {
 				}
 				case "ICS 204" -> {
 					if (includedOrAll(included, formKey)) {
-						data.getForm204().setIapPage(String.valueOf(page++));
+						data.getForm204().setIapPage(String.valueOf(page));
+						page += Ics204PdfRenderer.pageCount(data);
 						for (Ics204Form form : data.getAdditionalForms204()) {
-							form.setIapPage(String.valueOf(page++));
+							form.setIapPage(String.valueOf(page));
+							page += Ics204PdfRenderer.pageCount(data, form);
 						}
 					}
 				}
@@ -649,7 +653,8 @@ public class PdfExportService {
 				}
 				case "ICS 207" -> {
 					if (includedOrAll(included, formKey)) {
-						data.getForm207().setIapPage(String.valueOf(page++));
+						data.getForm207().setIapPage(String.valueOf(page));
+						page += Ics207PdfRenderer.pageCount(data);
 					}
 				}
 				case "ICS 208" -> {

@@ -16,6 +16,7 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -47,15 +48,46 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		PdfText.validateForm(data, getFormKey());
 		Files.createDirectories(outputFile.getParent());
 		try (PDDocument document = new PDDocument()) {
-			renderDocument(document, data);
+			renderDocument(document, data, data.getForm204());
 			document.save(outputFile.toFile());
 		}
 	}
 
-	private void renderDocument(PDDocument document, AppData data) throws IOException {
+	/**
+	 * Counts the primary assignment and its continuations without writing a file.
+	 * @param data incident data.
+	 * @return primary and continuation page count.
+	 */
+	public static int pageCount(AppData data) {
+		return pageCount(data, data.getForm204());
+	}
+
+	/**
+	 * Counts an assignment with the shared layout without replacing the primary form.
+	 * @param data incident context, resources and layout settings.
+	 * @param form assignment form to count.
+	 * @return primary and continuation page count.
+	 */
+	public static int pageCount(AppData data, Ics204Form form) {
+		try (PDDocument document = new PDDocument()) {
+			new Ics204PdfRenderer().renderDocument(document, data, form);
+			return document.getNumberOfPages();
+		} catch (IOException exception) {
+			throw new UncheckedIOException(exception);
+		}
+	}
+
+	/**
+	 * Draws the assignment form and its table and text continuations.
+	 * @param document target PDF.
+	 * @param data incident data.
+	 * @param form assignment form to render.
+	 * @throws IOException when drawing fails.
+	 */
+	private void renderDocument(PDDocument document, AppData data, Ics204Form form) throws IOException {
 		IncidentContext context = data.getIncidentContext();
-		Ics204Form form = data.getForm204();
 		List<OverflowSection> overflowSections = new ArrayList<>();
+		List<List<List<String>>> resourceOverflow = new ArrayList<>();
 
 		// Build task map for accurate person count (excludes canines/equipment)
 		Map<String, SarTaskAssignment> tasksByAssignmentId = new LinkedHashMap<>();
@@ -81,10 +113,10 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			float gridHeight = layout.height();
 			float pageWidth = layout.width();
 
-			float[] rows = expandRowToFill(gridHeight, 3, 60f, 64f, 282f, 84f, 60f, 84f, 72f);
+			float[] rows = expandRowToFill(gridHeight, 3, 60f, 64f, Math.min(282f, gridHeight - 424f), 84f, 60f, 84f, 72f);
 			float row1 = rows[0];
 			float row2 = rows[1];
-			SectionHeights sectionHeights = adjustedSectionHeights(form, rows[2], rows[3], rows[4]);
+			SectionHeights sectionHeights = adjustedSectionHeights(form, rows[2], rows[3], rows[4], pageWidth);
 			float row5 = sectionHeights.resourcesHeight();
 			float row6 = sectionHeights.workAssignmentHeight();
 			float row7 = sectionHeights.specialInstructionsHeight();
@@ -97,8 +129,8 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 			drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row1);
 			drawVerticalLine(stream, layout.x() + halfWidth, y - row1, y);
-			drawSection(stream, bold, regular, layout.x(), y - row1, halfWidth, row1, "1. Incident Name",
-					List.of(safe(context.getIncidentName())), null);
+			drawIncidentName(stream, bold, regular, layout.x(), y - row1, halfWidth, row1,
+					context.getIncidentName());
 			drawOperationalPeriodSection(stream, bold, regular, layout.x() + halfWidth, y - row1, halfWidth, row1, data,
 					context);
 			y -= row1;
@@ -112,7 +144,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 			drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row5);
 			overflowSections.addAll(drawResourcesSection(stream, bold, regular, layout.x(), y - row5, pageWidth, row5,
-					form, tasksByAssignmentId, sectionHeights.resourceRowCount()));
+					form, tasksByAssignmentId, sectionHeights.resourceRowCount(), resourceOverflow));
 			y -= row5;
 
 			drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row6);
@@ -122,43 +154,50 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 			drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row7);
 			overflowSections.addAll(drawSection(stream, bold, regular, layout.x(), y - row7, pageWidth, row7,
-					"7. Special Instructions", wrap(form.getSpecialInstructions(), 92), "7. Special Instructions"));
+					"7. Special Instructions", List.of(safe(form.getSpecialInstructions())), "7. Special Instructions"));
 			y -= row7;
 
 			drawHorizontalLine(stream, layout.x(), layout.x() + pageWidth, y - row8);
-			drawCommunicationsSection(stream, bold, regular, layout.x(), y - row8, pageWidth, row8, form);
+			overflowSections.addAll(drawCommunicationsSection(stream, bold, regular, layout.x(), y - row8, pageWidth,
+					row8, form));
 			y -= row8;
 
 			drawPreparedBySection(stream, bold, regular, layout.x(), y - row9, pageWidth, row9, 24f, data, form);
 		}
 
+		renderResourceContinuation(document, data, resourceOverflow);
 		for (OverflowSection overflow : overflowSections) {
 			renderOverflowPage(document, data, overflow);
 		}
 	}
 
+	/**
+	 * Paginates a text continuation block.
+	 * @param document target PDF.
+	 * @param data page settings.
+	 * @param overflow logical entries.
+	 * @throws IOException when drawing fails.
+	 */
 	private void renderOverflowPage(PDDocument document, AppData data, OverflowSection overflow) throws IOException {
-		PDPage page = newPage(data);
-		document.addPage(page);
-		try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
-			PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-			PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-			FormLayout layout = formLayout(page, data);
-			drawFormHeader(stream, bold, layout, "ICS 204", overflow.heading);
-			drawFormFrame(stream, layout);
-			drawTextBlock(stream, bold, regular, layout.x(), layout.y(), layout.width(), layout.height(),
-					overflow.heading, overflow.lines);
-		}
+		writeContinuationPages(document, data, "ICS 204", "Assignment List", overflow.heading, overflow.lines);
 	}
 
+	/**
+	 * Fits the complete assignment context without creating discarded overflow.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width cell width.
+	 * @param height cell height.
+	 * @param form assignment form.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawAssignmentContextSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
 			float x, float y, float width, float height, Ics204Form form) throws IOException {
 		String heading = "3. " + form.getSelectedContextHeading();
-		List<String> lines = wrap(form.getSelectedContextValue(), Math.max(10, (int) (width / 6f)));
-		if (lines.isEmpty()) {
-			lines = List.of("");
-		}
-		drawSection(stream, bold, regular, x, y, width, height, heading, lines, null);
+		drawFittedSection(stream, bold, regular, x, y, width, height, heading, form.getSelectedContextValue());
 	}
 
 	private void drawManagementSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
@@ -191,16 +230,37 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @param specialInstructionsHeight
 	 *            default section 7 height.
 	 * @return resolved section heights plus the visible section-5 row count.
+	 * @throws IOException when font metrics fail.
 	 */
 	private SectionHeights adjustedSectionHeights(Ics204Form form, float resourcesHeight, float workAssignmentHeight,
-			float specialInstructionsHeight) {
+			float specialInstructionsHeight) throws IOException {
+		return adjustedSectionHeights(form, resourcesHeight, workAssignmentHeight, specialInstructionsHeight, 540f);
+	}
+
+	/**
+	 * Reclaims unused rows using the actual printable text width.
+	 * @param form assignment form.
+	 * @param resourcesHeight initial resource height.
+	 * @param workAssignmentHeight initial work height.
+	 * @param specialInstructionsHeight initial instructions height.
+	 * @param width printable width.
+	 * @return adjusted section heights.
+	 * @throws IOException when font metrics fail.
+	 */
+	private SectionHeights adjustedSectionHeights(Ics204Form form, float resourcesHeight, float workAssignmentHeight,
+			float specialInstructionsHeight, float width) throws IOException {
 		int preferredResourceRowCount = preferredResourceRowCount(form);
 		float baseResourceRowHeight = (resourcesHeight - RESOURCE_HEADER_HEIGHT) / RESOURCE_ROW_COUNT;
 		float minimumResourcesHeight = RESOURCE_HEADER_HEIGHT + (baseResourceRowHeight * preferredResourceRowCount);
 		float availableReclaim = Math.max(0f, resourcesHeight - minimumResourcesHeight);
-		int workOverflowLines = overflowLineCount(workAssignmentHeight, "6. Work Assignment", workAssignmentLines(form));
+		PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+		List<String> workLines = new ArrayList<>();
+		for (String entry : workAssignmentLines(form)) {
+			workLines.addAll(wrapText(entry, font, BODY_FONT_SIZE, width - CELL_PADDING * 2f));
+		}
+		int workOverflowLines = overflowLineCount(workAssignmentHeight, "6. Work Assignment", workLines);
 		int specialOverflowLines = overflowLineCount(specialInstructionsHeight, "7. Special Instructions",
-				wrap(form.getSpecialInstructions(), 92));
+				wrapText(form.getSpecialInstructions(), font, BODY_FONT_SIZE, width - CELL_PADDING * 2f));
 		float workNeeded = workOverflowLines * LINE_HEIGHT;
 		float workGranted = Math.min(availableReclaim, workNeeded);
 		availableReclaim -= workGranted;
@@ -244,9 +304,26 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return Math.max(0, normalized.size() - startIndex - visibleCapacity);
 	}
 
+	/**
+	 * Draws the initial resource table and collects undrawn table cells in order.
+	 * @param stream page stream.
+	 * @param bold header font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width table width.
+	 * @param height table height.
+	 * @param form assignment form.
+	 * @param tasksByAssignmentId linked tasks for personnel counts.
+	 * @param resourceRowCount visible row count.
+	 * @param pending undrawn table rows.
+	 * @return text overflow blocks, always empty for the resource table.
+	 * @throws IOException when drawing fails.
+	 */
 	private List<OverflowSection> drawResourcesSection(PDPageContentStream stream, PDType1Font bold,
 			PDType1Font regular, float x, float y, float width, float height, Ics204Form form,
-			Map<String, SarTaskAssignment> tasksByAssignmentId, int resourceRowCount) throws IOException {
+			Map<String, SarTaskAssignment> tasksByAssignmentId, int resourceRowCount,
+			List<List<List<String>>> pending) throws IOException {
 		List<OverflowSection> overflowSections = new ArrayList<>();
 		drawHeading(stream, bold, x, y + height, "5. Resources Assigned");
 		float tableTop = y + height - 18f;
@@ -275,31 +352,134 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		}
 
 		List<ResourceAssignment> resources = form.getResourcesAssigned();
-		int visibleCount = Math.min(resources.size(), visibleRowCount);
-		for (int rowIndex = 0; rowIndex < visibleRowCount; rowIndex++) {
-			float rowTop = headerBottom - (rowIndex * rowHeight);
-			float rowBottom = Math.max(y, rowTop - rowHeight);
-			drawHorizontalLine(stream, x, x + width, rowBottom);
-
-			if (rowIndex >= visibleCount) {
-				continue;
-			}
-
-			ResourceAssignment resource = resources.get(rowIndex);
+		int visibleCount = 0;
+		float rowTop = headerBottom;
+		while (visibleCount < Math.min(resources.size(), visibleRowCount)) {
+			ResourceAssignment resource = resources.get(visibleCount);
 			SarTaskAssignment linkedTask = tasksByAssignmentId.get(resource.getAssignmentId());
-			List<List<String>> columns = resourceColumns(resource, linkedTask,
-					rowIndex == (visibleCount - 1) && resources.size() > RESOURCE_ROW_COUNT);
+			List<List<String>> columns = measuredResourceColumns(resource, linkedTask, regular, width);
+			int needed = columns.stream().mapToInt(List::size).max().orElse(1);
+			float requiredHeight = Math.max(rowHeight, needed * LINE_HEIGHT + CELL_PADDING * 2f);
+			if (rowTop - requiredHeight < y - 0.01f) {
+				break;
+			}
+			float rowBottom = Math.max(y, rowTop - requiredHeight);
+			drawHorizontalLine(stream, x, x + width, rowBottom);
 			for (int col = 0; col < columns.size(); col++) {
 				writeWrappedCellText(stream, regular, starts[col], rowBottom, width * widths[col], rowTop - rowBottom,
 						columns.get(col));
 			}
+			rowTop = rowBottom;
+			visibleCount++;
+		}
+		while (rowTop > y + 0.01f) {
+			rowTop = Math.max(y, rowTop - rowHeight);
+			drawHorizontalLine(stream, x, x + width, rowTop);
 		}
 
 		if (resources.size() > visibleCount) {
-			overflowSections.add(new OverflowSection("5. Resources Assigned",
-					flattenOverflowResources(resources.subList(visibleCount, resources.size()), form)));
+			for (ResourceAssignment resource : resources.subList(visibleCount, resources.size())) {
+				pending.add(measuredResourceColumns(resource, tasksByAssignmentId.get(resource.getAssignmentId()),
+						regular, width));
+			}
 		}
 		return overflowSections;
+	}
+
+	/**
+	 * Builds measured table columns without duplicating assignment prose.
+	 * @param resource resource row.
+	 * @param linkedTask linked task for personnel counts.
+	 * @param font measuring font.
+	 * @param width table width.
+	 * @return wrapped resource columns.
+	 * @throws IOException when font metrics fail.
+	 */
+	private List<List<String>> measuredResourceColumns(ResourceAssignment resource, SarTaskAssignment linkedTask,
+			PDType1Font font, float width) throws IOException {
+		int count = linkedTask == null ? resource.getNumberOfPersons() : countPeople(linkedTask);
+		List<String> values = List.of(resourceIdentifierLabel(resource), safe(resource.getLeader()),
+				count > 0 ? Integer.toString(count) : "", safe(resource.getContact()),
+				String.join("\n", combineLines(safe(resource.getReportingLocation()),
+						labelValue("Equipment", resource.getSpecialEquipment()), labelValue("Supplies", resource.getSupplies()),
+						labelValue("Remarks", resource.getRemarks()), labelValue("Notes", resource.getNotes()))));
+		float[] fractions = {4f / 18f, 4f / 18f, 1f / 18f, 5f / 18f, 4f / 18f};
+		List<List<String>> columns = new ArrayList<>();
+		for (int col = 0; col < values.size(); col++) {
+			columns.add(wrapText(values.get(col), font, BODY_FONT_SIZE, width * fractions[col] - CELL_PADDING * 2f));
+		}
+		return columns;
+	}
+
+	/**
+	 * Paginates resource rows exclusively as ruled tables with repeated headers.
+	 * @param document target PDF.
+	 * @param data page settings.
+	 * @param rows undrawn resource cells in source order.
+	 * @throws IOException when drawing fails.
+	 */
+	private void renderResourceContinuation(PDDocument document, AppData data, List<List<List<String>>> rows)
+			throws IOException {
+		int index = 0;
+		PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+		PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+		float[] fractions = {4f / 18f, 4f / 18f, 1f / 18f, 5f / 18f, 4f / 18f};
+		String[] headings = {"Resource Identifier", "Leader", "# of\nPer-\nsons", "Contact\n(Radio/Phone)",
+				"Reporting Location,\nSpecial Equipment\nand Supplies,\nRemarks, Notes,\nInformation"};
+		while (index < rows.size()) {
+			PDPage page = newPage(data);
+			document.addPage(page);
+			FormLayout layout = formLayout(page, data);
+			try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+				drawFormHeader(stream, bold, layout, "ICS 204", "Assignment List", document.getNumberOfPages());
+				drawFormFrame(stream, layout);
+				drawHeading(stream, bold, layout.x(), layout.top(), "5. Resources Assigned");
+				float tableTop = layout.top() - 18f;
+				float top = tableTop - RESOURCE_HEADER_HEIGHT;
+				float[] starts = columnStarts(layout.x(), layout.width(), fractions);
+				drawHorizontalLine(stream, layout.x(), layout.x() + layout.width(), tableTop);
+				drawHorizontalLine(stream, layout.x(), layout.x() + layout.width(), top);
+				for (int col = 0; col < fractions.length; col++) {
+					if (col > 0) {
+						drawVerticalLine(stream, starts[col], layout.y(), tableTop);
+					}
+					writeWrappedCellTextFont(stream, bold, col == 4 ? SMALL_FONT_SIZE : BODY_FONT_SIZE,
+							starts[col], top, layout.width() * fractions[col], RESOURCE_HEADER_HEIGHT,
+							List.of(headings[col].split("\n")));
+				}
+				int freshCapacity = Math.max(1,
+						(int) ((top - layout.y() - CELL_PADDING * 2f) / LINE_HEIGHT));
+				while (index < rows.size()) {
+					List<List<String>> columns = rows.get(index);
+					int needed = columns.stream().mapToInt(List::size).max().orElse(1);
+					int capacity = Math.max(0,
+							(int) ((top - layout.y() - CELL_PADDING * 2f) / LINE_HEIGHT));
+					if (capacity == 0 || (needed > capacity && needed <= freshCapacity)) {
+						break;
+					}
+					int count = Math.min(needed, capacity);
+					float height = count * LINE_HEIGHT + CELL_PADDING * 2f;
+					float bottom = top - height;
+					List<List<String>> rest = new ArrayList<>();
+					for (int col = 0; col < columns.size(); col++) {
+						List<String> cell = columns.get(col);
+						writeWrappedCellText(stream, regular, starts[col], bottom, layout.width() * fractions[col],
+								height, cell.subList(0, Math.min(count, cell.size())));
+						rest.add(new ArrayList<>(cell.subList(Math.min(count, cell.size()), cell.size())));
+					}
+					drawHorizontalLine(stream, layout.x(), layout.x() + layout.width(), bottom);
+					top = bottom;
+					if (rest.stream().anyMatch(cell -> !cell.isEmpty())) {
+						if (rest.get(0).isEmpty() && !columns.get(0).isEmpty()) {
+							rest.set(0, new ArrayList<>(columns.get(0)));
+						}
+						rows.set(index, rest);
+						break;
+					}
+					index++;
+				}
+			}
+		}
 	}
 
 	private void drawPreparedBySection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
@@ -324,43 +504,52 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				formatPdfTime(data, context.getOperationalPeriodEnd()));
 	}
 
+	/**
+	 * Draws measured logical entries and retains overflow entries intact.
+	 * @param stream page stream.
+	 * @param bold heading font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width block width.
+	 * @param height block height.
+	 * @param heading block heading.
+	 * @param lines logical entries.
+	 * @param overflowHeading continuation heading.
+	 * @return undrawn blocks.
+	 * @throws IOException when drawing fails.
+	 */
 	private List<OverflowSection> drawSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
 			float x, float y, float width, float height, String heading, List<String> lines, String overflowHeading)
 			throws IOException {
-		float contentTop = writeHeadingWithInlineContent(stream, bold, regular, x, y, width, height, heading, lines);
-		int capacity = contentCapacity(height, contentTop - y);
-		List<String> normalized = lines == null || lines.isEmpty() ? List.of("") : lines;
-		List<OverflowSection> overflowSections = new ArrayList<>();
-		if (capacity >= normalized.size()) {
-			if (usesInlineHeadingContent(heading, normalized)) {
-				if (normalized.size() > 1) {
-					writeLines(stream, regular, x + CELL_PADDING, contentTop, normalized.subList(1, normalized.size()));
-				}
-			} else {
-				writeLines(stream, regular, x + CELL_PADDING, contentTop, normalized);
-			}
-			return overflowSections;
-		}
-		int startIndex = usesInlineHeadingContent(heading, normalized) ? 1 : 0;
-		int visibleCapacity = Math.max(1, capacity - startIndex);
-		List<String> visible = new ArrayList<>(
-				normalized.subList(startIndex, Math.min(startIndex + visibleCapacity, normalized.size())));
-		if (overflowHeading != null && (normalized.size() - startIndex) > visibleCapacity && !visible.isEmpty()) {
-			visible.set(visible.size() - 1, "See next page");
-			overflowSections.add(new OverflowSection(overflowHeading,
-					normalized.subList(startIndex + visibleCapacity - 1, normalized.size())));
-		}
-		writeLines(stream, regular, x + CELL_PADDING, contentTop, visible);
-		return overflowSections;
+		List<String> pending = drawFlowSection(stream, bold, regular, x, y, width, height, heading, lines,
+				Integer.MAX_VALUE);
+		return pending.isEmpty() || overflowHeading == null
+				? List.of()
+				: List.of(new OverflowSection(overflowHeading, pending));
 	}
 
-	private void drawCommunicationsSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
+	/**
+	 * Draws communications rows and preserves every undrawn entry for continuation.
+	 * @param stream page stream.
+	 * @param bold header font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width table width.
+	 * @param height table height.
+	 * @param form assignment form.
+	 * @return undrawn communications entries.
+	 * @throws IOException when drawing fails.
+	 */
+	private List<OverflowSection> drawCommunicationsSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, float width, float height, Ics204Form form) throws IOException {
+		List<String> pending = new ArrayList<>();
 		drawHeading(stream, bold, x, y + height,
 				"8. Communications (radio and/or phone contact numbers needed for this assignment):");
 		float tableTop = y + height - 18f;
 		float halfW = width / 2f;
-		float colHeadH = 22f;
+		float colHeadH = 26f;
 
 		// Column headers
 		drawHorizontalLine(stream, x, x + width, tableTop);
@@ -375,8 +564,8 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		List<CommunicationEntry> comms = form.getCommunications();
 		float dataH = dataTop - y;
 		int commsCount = comms == null ? 0 : comms.size();
-		int maxVisibleRows = Math.max(3, (int) Math.floor(dataH / 18f));
-		int visibleRows = Math.max(3, Math.min(maxVisibleRows, commsCount <= 0 ? 3 : commsCount));
+		int maxVisibleRows = Math.max(1, (int) Math.floor(dataH / (LINE_HEIGHT + CELL_PADDING * 2f)));
+		int visibleRows = Math.min(maxVisibleRows, Math.max(3, commsCount));
 		float rowH = dataH / visibleRows;
 
 		for (int i = 0; i < visibleRows; i++) {
@@ -384,11 +573,6 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			float rowBot = Math.max(y, rowTop - rowH);
 			drawHorizontalLine(stream, x, x + width, rowBot);
 			if (comms != null && i < commsCount) {
-				if (i == visibleRows - 1 && commsCount > visibleRows) {
-					writeWrappedCellTextFont(stream, regular, BODY_FONT_SIZE, x, rowBot, halfW, rowH,
-							List.of("Additional entries not shown on this page"));
-					continue;
-				}
 				CommunicationEntry entry = comms.get(i);
 				String nameFunc = safe(entry.getName());
 				if (!safe(entry.getFunction()).isBlank()) {
@@ -396,11 +580,24 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 							? safe(entry.getFunction())
 							: nameFunc + " / " + safe(entry.getFunction());
 				}
-				writeWrappedCellTextFont(stream, regular, BODY_FONT_SIZE, x, rowBot, halfW, rowH, wrap(nameFunc, 24));
-				writeWrappedCellTextFont(stream, regular, BODY_FONT_SIZE, x + halfW, rowBot, halfW, rowH,
-						wrap(safe(entry.getPrimaryContact()), 36));
+				List<String> names = wrapText(nameFunc, regular, BODY_FONT_SIZE, halfW - CELL_PADDING * 2f);
+				List<String> contacts = wrapText(entry.getPrimaryContact(), regular, BODY_FONT_SIZE,
+						halfW - CELL_PADDING * 2f);
+				int capacity = Math.max(1, (int) ((rowH - CELL_PADDING * 2f) / LINE_HEIGHT));
+				if (Math.max(names.size(), contacts.size()) > capacity) {
+					pending.add(nameFunc + ": " + safe(entry.getPrimaryContact()));
+					writeWrappedCellTextFont(stream, regular, BODY_FONT_SIZE, x, rowBot, halfW, rowH,
+							List.of("See next page"));
+				} else {
+					writeWrappedCellTextFont(stream, regular, BODY_FONT_SIZE, x, rowBot, halfW, rowH, names);
+					writeWrappedCellTextFont(stream, regular, BODY_FONT_SIZE, x + halfW, rowBot, halfW, rowH, contacts);
+				}
 			}
 		}
+		if (commsCount > visibleRows) {
+			pending.addAll(communicationLines(comms.subList(visibleRows, commsCount)));
+		}
+		return pending.isEmpty() ? List.of() : List.of(new OverflowSection("8. Communications", pending));
 	}
 
 	private void drawTextBlock(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
@@ -688,6 +885,11 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return lines;
 	}
 
+	/**
+	 * Groups matching work assignments as intact full-width logical entries.
+	 * @param form assignment form.
+	 * @return grouped work entries in identifier order.
+	 */
 	private List<String> workAssignmentLines(Ics204Form form) {
 		List<String> lines = new ArrayList<>();
 		Map<String, List<String>> identifiersByAssignment = new LinkedHashMap<>();
@@ -705,15 +907,19 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		for (List<String> identifiers : identifiersByAssignment.values()) {
 			identifiers.sort(this::compareAssignmentIdentifiers);
 		}
+		String shared = normalizeAssignmentText(form.getSharedWorkAssignment());
+		if (!shared.isBlank() && !identifiersByAssignment.containsKey(shared)) {
+			lines.add(shared);
+		}
 		List<Map.Entry<String, List<String>>> groupedAssignments = new ArrayList<>(identifiersByAssignment.entrySet());
 		groupedAssignments.sort((left, right) -> compareAssignmentIdentifiers(left.getValue().isEmpty() ? "" : left.getValue().get(0),
 				right.getValue().isEmpty() ? "" : right.getValue().get(0)));
 		for (Map.Entry<String, List<String>> entry : groupedAssignments) {
-			lines.addAll(prefixWrapped(String.join("; ", entry.getValue()) + ": ",
-					wrap(displayAssignmentByKey.getOrDefault(entry.getKey(), entry.getKey()), 72)));
+			lines.add(String.join("; ", entry.getValue()) + ": "
+					+ displayAssignmentByKey.getOrDefault(entry.getKey(), entry.getKey()));
 		}
 		if (lines.isEmpty() && !safe(form.getSharedWorkAssignment()).isBlank()) {
-			return wrap(form.getSharedWorkAssignment(), 92);
+			return List.of(safe(form.getSharedWorkAssignment()));
 		}
 		return lines.isEmpty() ? List.of("") : lines;
 	}
@@ -786,6 +992,11 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		}
 	}
 
+	/**
+	 * Combines communications fields as intact logical entries.
+	 * @param communications source communications.
+	 * @return complete entries without character-count wrapping.
+	 */
 	private List<String> communicationLines(List<CommunicationEntry> communications) {
 		List<String> lines = new ArrayList<>();
 		if (communications != null) {
@@ -800,7 +1011,7 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 						? safe(entry.getPrimaryContact())
 						: prefix + ": " + safe(entry.getPrimaryContact());
 				if (!line.isBlank()) {
-					lines.addAll(wrap(line, 42));
+					lines.add(line);
 				}
 			}
 		}
@@ -865,6 +1076,11 @@ public class Ics204PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return PdfText.normalize(value);
 	}
 
+	/**
+	 * Undrawn logical entries belonging to one numbered block.
+	 * @param heading numbered block heading.
+	 * @param lines remaining logical entries.
+	 */
 	private record OverflowSection(String heading, List<String> lines) {
 	}
 

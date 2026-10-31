@@ -1,12 +1,45 @@
 # icsforms-client
 
+A fully fictional, importable [Maple Ridge SAR example](docs/examples/README.md)
+demonstrates an active dementia-search operational period and linked ICS forms,
+resources, safety reminders and PDF exports. It is illustrative, not an operational plan.
+Open it with **File → Import → Import Incident JSON…**.
+
 `icsforms-client` is a Java Swing desktop application for authoring Incident Command System (ICS) incident forms with local JSON persistence and PDF export. Development is ongoing and the application is still evolving as additional forms and functionality are added.
 
-This project is intended to support the **SAR** (Search and Rescue) community, but it is also useful for generic ICS incident planning and documentation. The application currently supports ICS 201, ICS 202, ICS 203, ICS 204, ICS 205, ICS 205A, ICS 206, an adapted canine ICS 206, ICS 207, ICS 208, ICS 214, ICS 215, and ICS 215A PDF forms, along with SAR task assignment forms, a clue log, T-cards, and an organizational chart.  I got tired of copying the same header information from one form to another by hand, and having to subject people to my handwriting in SAR Task Assignment Form Debriefing sections, so this tool is intended to make it easier to author ICS forms and share them with others in a clean, legible format.
+This project supports the **SAR (Search and Rescue)** community and generic ICS incident planning. It can author and export PDFs for ICS 201, 202, 203, 204, 205, 205A, 206, adapted canine ICS 206, 207, 208, 214, 215, 215A, and 233-CG, as well as SAR task assignments and the SAR clue log. T-cards and an organizational chart help manage personnel and structure. Shared incident data populates form headers, while individual PDFs and selected-form IAP bundles provide legible outputs. The adapted canine medical plan and clue-log ICS 233 layout are application adaptations, not official FEMA variants.
 
-Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. Each incident is persisted locally at `~/.icsforms/incidents/<incidentId>.json`, with its own `.json.bak` backup; the install's node identity is kept in `~/.icsforms/node.json`. On first launch, an existing `~/.icsforms/incident.json` is imported as a new incident if no incidents exist yet. The original is left untouched and `incident.json.migrated` prevents repeat imports. File → Import JSON can also import an external workspace as a separate incident. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF. An H2-backed store and offline-to-remote synchronization are planned, but not yet implemented.
+Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. Each incident is persisted locally at `~/.icsforms/incidents/<incidentId>.json`, with its own `.json.bak` backup; the install's node identity is kept in `~/.icsforms/node.json`. On first launch, an existing `~/.icsforms/incident.json` is imported as a new incident if no incidents exist yet. The original is left untouched and `incident.json.migrated` prevents repeat imports. File → Import → Import Incident JSON… can also import an external workspace as a separate incident. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF. An H2-backed store and offline-to-remote synchronization are planned, but not yet implemented.
 
-This project is open source under the Apache 2.0 license. Contributions are welcome.
+### Managing saved incidents
+
+Open **File → Manage Incidents…**, or **Manage Incidents…** in the **Open Incident**
+picker (also available during startup). The manager lists saved incident names, IDs,
+operational periods, update times and store files. Select one incident to **Backup JSON…**
+or **Delete…**; **Refresh** reloads the list. Pending editor changes are saved before
+opening the manager from the File menu; invalid edits must be resolved first.
+
+Backups require a **new filename outside the live store**; existing files are never
+overwritten, including through symbolic-link aliases of the store. File-store backups
+preserve the stored JSON bytes, identity, revision and unknown fields. If the primary
+is corrupt, the readable automatic `.json.bak` is copied instead; neither source is
+changed. Backups respect other editors' locks and retain any existing local edit lock.
+Other store implementations must explicitly support safe backups; otherwise the
+backup button is disabled.
+
+Switch to another incident before deleting the active one. Both local and other
+editors' locks block deletion, including when managing from the picker. Deletion is
+**not secure erasure**: it removes the incident from the list by moving its primary
+to `.json.deleted`, while retaining its automatic `.json.bak`. Back up first.
+
+Restore compatible JSON with **Import → Import Incident JSON…** (in the Import menu);
+the existing strict importer creates a **new incident ID**. A full-fidelity raw backup
+with unknown fields may not satisfy that importer. Retain such backups for manual
+offline recovery with the application closed, rather than expecting automatic
+restoration or bypassing import validation.
+
+This project is open source under the GNU General Public License, version 3 or later
+(see [LICENSE](LICENSE)). Contributions are welcome.
 
 ## Current UI workflow
 
@@ -15,7 +48,7 @@ This project is open source under the Apache 2.0 license. Contributions are welc
    - **New incident — Initial Incident Response:** an incident has started; ICS 201 is the primary capture tool.
    - **New incident — Subsequent Operational Period:** open a fresh workspace for a new operational period, with ICS 201 read-only.
    - **Open existing incident:** continue working on a previously saved incident.
-   - **Open existing incident and add a new operational period:** load an existing workspace and advance it to the next operational period, preserving the org chart and ICS 201 history while clearing the operational-period forms. ICS 205 can optionally be brought forward using the explicit checkbox.
+   - **Open existing incident and add a new operational period:** load an existing workspace and advance it to the next operational period, preserving the org chart and ICS 201 history while clearing operational-period forms. After opening it, use **File → Bring Forward…** to select ICS 205 or other plans to reuse.
 2. Select the incident mode: **SAR** (default) or **Generic**.
    - SAR mode enables SAR Task Assignment forms that provide further detail for each Assignment listed on a ICS 204 and a clue log.
    - SAR Task Assignment forms support debriefing, including structured capture of POD factors for SAR operations.
@@ -28,7 +61,7 @@ This project is open source under the Apache 2.0 license. Contributions are welc
 6. Save locally or allow autosave to persist the incident workspace.
 7. Export individual PDFs, all PDFs as separate files, or the merged **Export IAP Bundle** PDF.
 
-File → New always creates a separate incident. File → Duplicate Incident copies the current document under a new ID; File → Import JSON and Export JSON move portable copies between stores. The picker lists active incidents, and detects another editor's advisory lock rather than silently overwriting its work. A stale revision is rejected, with the option to duplicate unsaved work or reload.
+File → New always creates a separate incident. File → Duplicate Incident copies the current document under a new ID; File → Import → Import Incident JSON… and Export JSON move portable copies between stores. The picker lists active incidents, and detects another editor's advisory lock rather than silently overwriting its work. A stale revision is rejected, with the option to duplicate unsaved work or reload.
 
 ## Current features
 
@@ -66,6 +99,7 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   over substantive content. Generated page numbers do not invalidate review, but relevant plan
   changes do.
 - **Add log entry…** is available from assignments, SAR tasks, and T-cards, including their editors. The shared entry dialog defaults to the ICP log and selected resource/task, but lets the operator change that context. New assignments must be saved before logging; cancelling the subsequent entry does not undo that save.
+- The ICP activity timeline groups log events into assignment lanes, marks departures, on-task events, clues, subject locations, completion, and returns, and connects markers across on-task intervals. Add ICP activity from the timeline. Existing Note entries can be reclassified; the previous and new types and change time remain in the entry’s classification history.
 - Detached ICS 214 windows remain usable while main-window operational editors are open. Incident switching or closing requires resolving outstanding editors; entries already logged are retained.
 - Safety workspace for ICS 215A hazard analysis and editable ICS 208 safety messages/plans. Hazard libraries can be loaded/saved as UTF-8 CSV; imported entries can be stored separately from incident analysis. SAR debrief hazard reports are reviewable from the Safety tab. Safety forms are available for individual export and are excluded from IAP bundles by default until selected.
 - **Operational Planning / ICS 215** is an optional worksheet workspace, hidden by default in SAR and Generic incidents. It keeps active- and next-period worksheets independent from Shared dates; choose the worksheet explicitly when exporting. Resource headings and assignments are editable, and accepted T-card counts require operator review rather than being inferred from card categories or status. ICS 215 is excluded from default exports and IAP bundles; its PDF offers Letter, A4, Legal, and 11×17 landscape output with continuation pages.
@@ -340,36 +374,69 @@ All production source lives under `src/main/java/org/sarmanagement/icsforms/`, w
 
 ## Build
 
+The project targets Java 17 and uses Maven. From the repository root:
+
+```bash
+mvn test
+```
+
+The JUnit 5 suite covers model behavior, persistence and import validation,
+Swing workflows, communications, safety, and PDF rendering/export. `test` runs
+the complete default test suite. Display-dependent Swing tests use assumptions
+and are skipped when Java is headless; the native mouse-input integration test
+is separately opt-in, as described below.
+
 ```bash
 mvn package
 ```
 
-### Desktop integration test
+The Maven `package` lifecycle compiles the application, runs the test phase,
+then shades runtime dependencies into an executable JAR with
+`org.sarmanagement.icsforms.App` as its main class. The output is written under
+`target/`.
 
-Normal builds retain the modality and window-ownership assertions in
-`UiSupportModalityTest`, but skip the workstation-dependent native mouse-input
-check. To explicitly enable that check on an unobstructed desktop where Java
-`Robot` can inject mouse input:
+```bash
+mvn -B -ntp verify
+```
 
-```sh
+`verify` runs the tests and package lifecycle, then checks Java formatting with
+Spotless and source/test style with Checkstyle. These are the checks run by the
+GitHub Actions Style workflow. For only those checks, use
+`mvn spotless:check checkstyle:check`. `-B` enables Maven batch mode and
+`-ntp` disables transfer-progress output. Add `clean` before a lifecycle goal
+(for example, `mvn clean package`) to remove stale files from `target/`.
+
+### Desktop and Xvfb tests
+
+The native desktop integration test exercises actual mouse input with
+`java.awt.Robot` while Swing windows are open. It is gated by the JUnit
+`icsforms.desktopTests=true` system property and requires a non-headless display;
+it does not run in ordinary `mvn test` or `mvn verify`. To run that test alone
+on a desktop:
+
+```bash
 mvn -Dicsforms.desktopTests=true -Djava.awt.headless=false -Dtest=UiSupportDesktopIntegrationTest test
 ```
 
-On Linux, a dedicated virtual display can isolate the test from other windows
-and user input:
+`-Djava.awt.headless=false` allows Swing to connect to the display.
+`-Dtest=...` is a Surefire filter: it runs only the named test class (or
+selected method), not the full suite. On Linux, run all tests—including the
+opt-in native-input test—then package the application using the repository
+script:
 
-```sh
-xvfb-run -a -s '-screen 0 1280x800x24' mvn -Dicsforms.desktopTests=true -Djava.awt.headless=false -Dtest=UiSupportDesktopIntegrationTest test
+```bash
+./xvfb_build.sh
 ```
 
-A headless skipped run does not validate native input. This opt-in test still
-depends on desktop input delivery; it does not resolve the unconfirmed cause of
-workstation-specific failures.
+The script uses `xvfb-run` with a 1280×800×24 virtual screen and enables the
+desktop test switches above. A single `mvn clean package` runs the full test
+suite once and creates the application JAR only if tests pass. A headless
+skipped run does not validate native input.
 
 ## Run
 
 ```bash
-java -jar target/icsforms-client-0.1.1-SNAPSHOT.jar
+java -jar target/icsforms-client-0.1.2-SNAPSHOT.jar
 ```
 
 ## Notes

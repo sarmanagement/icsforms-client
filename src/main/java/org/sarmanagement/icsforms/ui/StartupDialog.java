@@ -21,7 +21,7 @@ import javax.swing.JSeparator;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Frame;
+import java.awt.Window;
 
 /**
  * Modal startup dialog presented when the application launches or when File →
@@ -63,6 +63,7 @@ public class StartupDialog extends JDialog {
 	private StartupAction chosenAction;
 	private IncidentMode chosenMode = IncidentMode.SAR;
 	private IncidentId chosenIncidentId;
+	private final boolean includeOpenActions;
 	private final JCheckBox promotePlannedIcs215 = new JCheckBox(
 			"Promote planned ICS 215 target period when advancing");
 
@@ -76,10 +77,23 @@ public class StartupDialog extends JDialog {
 	 *            retained for startup caller compatibility; closing without a
 	 *            selection always disposes the dialog so its caller can clean up.
 	 */
-	public StartupDialog(Frame owner, IncidentStore store, boolean exitOnClose) {
-		super(owner, "ICS Forms Desktop — Start", true);
+	public StartupDialog(Window owner, IncidentStore store, boolean exitOnClose) {
+		this(owner, store, exitOnClose, true);
+	}
+
+	/**
+	 * Creates a startup dialog that can optionally limit choices to new incidents.
+	 *
+	 * @param owner owning window.
+	 * @param store incident store used for opening incidents.
+	 * @param exitOnClose retained for caller compatibility.
+	 * @param includeOpenActions whether to show open-existing options.
+	 */
+	public StartupDialog(Window owner, IncidentStore store, boolean exitOnClose, boolean includeOpenActions) {
+		super(owner, "ICS Forms Desktop — Start", ModalityType.APPLICATION_MODAL);
 		ApplicationIcon.install(this);
 		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+		this.includeOpenActions = includeOpenActions;
 
 		JPanel content = new JPanel(new BorderLayout(12, 12));
 		content.setBorder(BorderFactory.createEmptyBorder(16, 16, 12, 16));
@@ -171,23 +185,23 @@ public class StartupDialog extends JDialog {
 				"<html>Start a fresh workspace for a new operational period.<br>"
 						+ "ICS 202 and ICS 204 are the primary forms; ICS 201 is read-only.</html>",
 				StartupAction.NEW_OPERATIONAL_PERIOD, store));
-		panel.add(Box.createVerticalStrut(10));
-		panel.add(new JSeparator());
-		panel.add(Box.createVerticalStrut(10));
-
-		panel.add(buildActionRow("Open existing incident…",
-				"<html>Continue working on a previously saved incident workspace.</html>", StartupAction.OPEN_EXISTING,
-				store));
-		panel.add(Box.createVerticalStrut(6));
-
-		panel.add(buildActionRow("Open existing incident and add a new operational period…",
-				"<html>Load an existing workspace and advance it to the next<br>"
-						+ "operational period, clearing operational forms while keeping<br>"
-						+ "the ICS 201 and org chart as historical context.</html>",
-				StartupAction.OPEN_NEW_PERIOD, store));
-		panel.add(Box.createVerticalStrut(4));
-		promotePlannedIcs215.setAlignmentX(LEFT_ALIGNMENT);
-		panel.add(promotePlannedIcs215);
+		if (includeOpenActions) {
+			panel.add(Box.createVerticalStrut(10));
+			panel.add(new JSeparator());
+			panel.add(Box.createVerticalStrut(10));
+			panel.add(buildActionRow("Open existing incident…",
+					"<html>Continue working on a previously saved incident workspace.</html>",
+					StartupAction.OPEN_EXISTING, store));
+			panel.add(Box.createVerticalStrut(6));
+			panel.add(buildActionRow("Open existing incident and add a new operational period…",
+					"<html>Load an existing workspace and advance it to the next<br>"
+							+ "operational period, clearing operational forms while keeping<br>"
+							+ "the ICS 201 and org chart as historical context.</html>",
+					StartupAction.OPEN_NEW_PERIOD, store));
+			panel.add(Box.createVerticalStrut(4));
+			promotePlannedIcs215.setAlignmentX(LEFT_ALIGNMENT);
+			panel.add(promotePlannedIcs215);
+		}
 
 		return panel;
 	}
@@ -206,13 +220,20 @@ public class StartupDialog extends JDialog {
 		button.setAlignmentX(LEFT_ALIGNMENT);
 		button.addActionListener(event -> {
 			if (action == StartupAction.OPEN_EXISTING || action == StartupAction.OPEN_NEW_PERIOD) {
-				IncidentId chosen = pickIncident(store);
-				if (chosen == null) {
+				IncidentManagerDialog manager = pickIncident(store);
+				if (manager.getChosenAction() == null) {
 					return;
 				}
-				chosenIncidentId = chosen;
+				if (isNewAction(manager.getChosenAction())) {
+					chosenAction = manager.getChosenAction();
+					chosenMode = manager.getChosenMode();
+				} else {
+					chosenIncidentId = manager.getChosenIncidentId();
+					chosenAction = action;
+				}
+			} else {
+				chosenAction = action;
 			}
-			chosenAction = action;
 			dispose();
 		});
 
@@ -229,15 +250,26 @@ public class StartupDialog extends JDialog {
 	}
 
 	/**
-	 * Presents the incident picker.
+	 * Presents the combined incident manager and picker.
 	 *
 	 * @param store incident store to browse.
-	 * @return selected identifier, or {@code null}.
+	 * @return manager containing the operator's selection.
 	 */
-	private IncidentId pickIncident(IncidentStore store) {
-		IncidentPickerDialog picker = new IncidentPickerDialog(this, store);
-		picker.setVisible(true);
-		return picker.getChosenIncidentId();
+	private IncidentManagerDialog pickIncident(IncidentStore store) {
+		IncidentManagerDialog manager = new IncidentManagerDialog(this, store, null);
+		manager.setVisible(true);
+		return manager;
+	}
+
+	/**
+	 * Identifies new incident actions returned from the manager's creation flow.
+	 *
+	 * @param action candidate startup action.
+	 * @return true when the action creates a new incident.
+	 */
+	private boolean isNewAction(StartupAction action) {
+		return action == StartupAction.NEW_PRE_OP || action == StartupAction.NEW_INITIAL_RESPONSE
+				|| action == StartupAction.NEW_OPERATIONAL_PERIOD;
 	}
 
 	/**

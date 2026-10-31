@@ -337,7 +337,7 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Builds the application menu for file and export workflows.
+	 * Builds the application menu for file, saved-incident management and export workflows.
 	 *
 	 * @param defaultDirectory
 	 *            default chooser directory.
@@ -386,6 +386,14 @@ public class MainFrame extends JFrame {
 		rolePanelsMenu.add(operationsRolePanel);
 		rolePanelsMenu.add(communicationsRolePanel);
 		viewMenu.add(rolePanelsMenu);
+		viewMenu.addSeparator();
+		JMenuItem activityTimelineItem = new JMenuItem("ICP Activity Timeline…");
+		activityTimelineItem.addActionListener(event -> {
+			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			new IcpActivityTimelineDialog(this, controller, this::showAddLogEntry,
+					this::openTimelineAssignment).setVisible(true);
+		});
+		viewMenu.add(activityTimelineItem);
 		viewMenu.addSeparator();
 		JMenuItem humanMedicalReference = new JMenuItem("Human Medical Reference — ICS 206");
 		humanMedicalReference.setMnemonic(KeyEvent.VK_H);
@@ -441,22 +449,10 @@ public class MainFrame extends JFrame {
 
 		JMenuItem openItem = new JMenuItem("Open…");
 		openItem.setMnemonic(KeyEvent.VK_O);
-		openItem.addActionListener(event -> {
-			if (controller.getStore() == null || !saveBeforeSwitch()) {
-				return;
-			}
-			IncidentPickerDialog picker = new IncidentPickerDialog(MainFrame.this, controller.getStore());
-			picker.setVisible(true);
-			IncidentId chosen = picker.getChosenIncidentId();
-			if (chosen != null) {
-				try {
-					controller.open(chosen);
-					refreshFromModel();
-				} catch (RuntimeException exception) {
-					showSaveError(exception);
-				}
-			}
-		});
+		openItem.addActionListener(event -> showIncidentManager());
+
+		JMenuItem manageIncidentsItem = new JMenuItem("Manage Incidents…");
+		manageIncidentsItem.addActionListener(event -> showIncidentManager());
 
 		JMenuItem saveItem = new JMenuItem("Save");
 		saveItem.setMnemonic(KeyEvent.VK_S);
@@ -510,10 +506,13 @@ public class MainFrame extends JFrame {
 			try {
 				if (controller.importIncident(path)) {
 					refreshFromModel();
+					ImportReportDialog.show(this, path, true, controller.getLastImportProblems());
 				} else {
 					JOptionPane.showMessageDialog(this, "No incident was imported.", "Import Incident",
 							JOptionPane.WARNING_MESSAGE);
 				}
+			} catch (org.sarmanagement.icsforms.persistence.ImportValidationException exception) {
+				ImportReportDialog.show(this, exception.getSourceFile(), false, exception.getProblems());
 			} catch (RuntimeException exception) {
 				showSaveError(exception);
 			}
@@ -610,6 +609,7 @@ public class MainFrame extends JFrame {
 
 		fileMenu.add(newItem);
 		fileMenu.add(openItem);
+		fileMenu.add(manageIncidentsItem);
 		fileMenu.add(saveItem);
 		fileMenu.add(saveAsItem);
 		fileMenu.add(duplicateItem);
@@ -767,6 +767,39 @@ public class MainFrame extends JFrame {
 		bar.add(logsMenu);
 		bar.add(configMenu);
 		return bar;
+	}
+
+	/**
+	 * Opens the shared incident manager and applies its open or new-incident action.
+	 */
+	private void showIncidentManager() {
+		if (controller.getStore() == null || !saveBeforeSwitch()) {
+			return;
+		}
+		IncidentManagerDialog manager = new IncidentManagerDialog(this, controller.getStore(),
+				controller.getActiveIncidentId());
+		manager.setVisible(true);
+		try {
+			StartupDialog.StartupAction action = manager.getChosenAction();
+			if (action == null) {
+				return;
+			}
+			switch (action) {
+				case OPEN_EXISTING -> controller.open(manager.getChosenIncidentId());
+				case OPEN_NEW_PERIOD -> {
+					controller.open(manager.getChosenIncidentId());
+					controller.newOperationalPeriod();
+				}
+				case NEW_PRE_OP -> controller.newDocument(IapPhase.PRE_OP, manager.getChosenMode());
+				case NEW_INITIAL_RESPONSE ->
+					controller.newDocument(IapPhase.INITIAL_RESPONSE, manager.getChosenMode());
+				case NEW_OPERATIONAL_PERIOD ->
+					controller.newDocument(IapPhase.DURING_OP, manager.getChosenMode());
+			}
+			refreshFromModel();
+		} catch (RuntimeException exception) {
+			showSaveError(exception);
+		}
 	}
 
 	/** Opens Operations while delegating every direct action to established editors. */
@@ -1743,7 +1776,8 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Saves pending edits before changing incidents so failed saves cannot discard them.
+	 * Saves pending edits before switching or managing incidents so rejected edits
+	 * and failed saves cannot discard them or expose stale management backups.
 	 *
 	 * @return {@code true} if it is safe to switch incidents.
 	 */
@@ -1752,8 +1786,8 @@ public class MainFrame extends JFrame {
 			return false;
 		}
 		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-		pushToModel(source);
 		try {
+			pushToModel(source);
 			controller.save(source);
 			return true;
 		} catch (RuntimeException exception) {
@@ -2089,6 +2123,21 @@ public class MainFrame extends JFrame {
 			panel.refreshActivityEntries();
 		}
 		clueLogPanel.refreshFromModel();
+	}
+
+	/**
+	 * Opens the best available task or assignment editor for a timeline row.
+	 *
+	 * @param assignmentId stable task/assignment identity.
+	 */
+	private void openTimelineAssignment(String assignmentId) {
+		boolean hasSarTask = controller.getData().getSarTaskAssignments().stream()
+				.anyMatch(task -> assignmentId.equals(task.getAssignmentId()));
+		if (hasSarTask) {
+			openSarTaskEditorForAssignment(assignmentId);
+		} else {
+			openIcs204EditorForAssignment(assignmentId);
+		}
 	}
 
 	/** Creates an activity log using the selected scope and linked document. */

@@ -10,6 +10,7 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
+import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
@@ -74,6 +75,20 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		}
 	}
 
+	/**
+	 * Draws an activity-log page with a locally numbered continuation title.
+	 *
+	 * @param document destination document
+	 * @param data incident and layout preferences
+	 * @param context incident metadata
+	 * @param form source activity log
+	 * @param eventTypes event labels
+	 * @param entries entries assigned to this page
+	 * @param pageNumber one-based page within this log
+	 * @param totalPages page count for this log
+	 * @param isFirstPage whether to include assigned resources
+	 * @throws IOException when PDF drawing fails
+	 */
 	private void renderPage(PDDocument document, AppData data, IncidentContext context, Ics214Form form,
 			List<ActivityEventType> eventTypes, List<ActivityLogEntry> entries, int pageNumber, int totalPages,
 			boolean isFirstPage) throws IOException {
@@ -84,7 +99,7 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 			FormLayout layout = formLayout(page, data);
 
-			drawFormHeader(stream, bold, layout, "ICS 214", "ACTIVITY LOG");
+			drawFormHeader(stream, bold, layout, "ICS 214", "ACTIVITY LOG", pageNumber);
 			drawFormFrame(stream, layout);
 
 			float gridTop = layout.top();
@@ -209,7 +224,9 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	private void drawActivityLogSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
 			float y, float width, float height, List<ActivityLogEntry> entries, List<ActivityEventType> eventTypes,
 			Ics214Form form, AppData data) throws IOException {
-		drawHeading(stream, bold, x, y + height, "7. Activity Log");
+		String heading = form.getLogScope() == ActivityLogScope.ICP
+				? "7. Activity Log — ICP Communications Log" : "7. Activity Log";
+		drawHeading(stream, bold, x, y + height, heading);
 		float tableTop = y + height - 18f;
 		float headerHeight = 24f;
 		float headerBottom = tableTop - headerHeight;
@@ -252,8 +269,15 @@ public class Ics214PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	private void drawSimpleSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
 			float width, float height, String heading, List<String> lines) throws IOException {
 		drawHeading(stream, bold, x, y + height, heading);
-		writeLines(stream, regular, x + CELL_PADDING, y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f,
-				lines == null || lines.isEmpty() ? List.of("") : lines);
+		List<String> wrapped = new ArrayList<>();
+		for (String line : lines == null || lines.isEmpty() ? List.of("") : lines) {
+			wrapped.addAll(wrapText(safe(line), regular, BODY_FONT_SIZE, width - CELL_PADDING * 2f));
+		}
+		float firstBaseline = y + height - CELL_PADDING - HEADING_FONT_SIZE - 12f;
+		int visibleLines = Math.max(1,
+				(int) ((firstBaseline - y - CELL_PADDING + BODY_FONT_SIZE) / LINE_HEIGHT));
+		writeLines(stream, regular, x + CELL_PADDING, firstBaseline,
+				wrapped.subList(0, Math.min(visibleLines, wrapped.size())));
 	}
 
 	private int activityRowsPerPage() {

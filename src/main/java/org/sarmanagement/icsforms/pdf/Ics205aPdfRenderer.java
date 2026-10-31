@@ -14,12 +14,14 @@ import org.sarmanagement.icsforms.model.ResourceDirectoryEntry;
 import org.sarmanagement.icsforms.model.ResourceDirectorySource;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.ArrayList;
 
 /**
  * Structured PDF renderer for the Communications List (ICS 205A) form.
@@ -38,11 +40,13 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 	private static final float SECTION_HEADING_HEIGHT = 18f;
 	private static final float TABLE_HEADER_HEIGHT = 28f;
 
+	/** {@inheritDoc} */
 	@Override
 	public String getFormKey() {
 		return "ICS 205A";
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
 		PdfText.validateForm(data, getFormKey());
@@ -56,19 +60,27 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		String preparedAt = DATE_TIME_FORMATTER
 				.format(ZonedDateTime.now(pdfZoneId(safeData)).withSecond(0).withNano(0));
 		try (PDDocument document = new PDDocument()) {
-			int rowsPerPage = defaultRowsPerPage();
-			int totalPages = pageCount(entries.size(), rowsPerPage);
+			List<List<List<List<String>>>> pages = paginateDirectory(safeData, entries);
+			int totalPages = pages.size();
 			for (int pageIndex = 0; pageIndex < totalPages; pageIndex++) {
-				int start = pageIndex * rowsPerPage;
-				int end = Math.min(entries.size(), start + rowsPerPage);
-				List<ResourceDirectoryEntry> pageEntries = start < end ? entries.subList(start, end) : List.of();
-				renderPage(document, safeData, pageEntries, pageIndex + 1, totalPages, preparedAt, rowsPerPage);
+				renderPage(document, safeData, pages.get(pageIndex), pageIndex + 1, totalPages, preparedAt, 0);
 			}
 			document.save(outputFile.toFile());
 		}
 	}
 
-	private void renderPage(PDDocument document, AppData data, List<ResourceDirectoryEntry> entries, int pageNumber,
+	/**
+	 * Draws a communications page with a bounded incident heading.
+	 * @param document target PDF.
+	 * @param data incident data.
+	 * @param entries page entries.
+	 * @param pageNumber one-based page number.
+	 * @param totalPages page count.
+	 * @param preparedAt formatted preparation time.
+	 * @param rowsPerPage visible table rows.
+	 * @throws IOException when drawing fails.
+	 */
+	private void renderPage(PDDocument document, AppData data, List<List<List<String>>> entries, int pageNumber,
 			int totalPages, String preparedAt, int rowsPerPage) throws IOException {
 		IncidentContext context = data.getIncidentContext() == null ? new IncidentContext() : data.getIncidentContext();
 		PDPage page = newPage(data);
@@ -78,15 +90,16 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 			PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 			FormLayout layout = formLayout(page, data);
 
-			drawFormHeader(stream, bold, layout, "ICS 205A", "COMMUNICATIONS LIST");
+			drawFormHeader(stream, bold, layout, "ICS 205A",
+					pageNumber == 1 ? "COMMUNICATIONS LIST" : "Communications List", pageNumber);
 			drawFormFrame(stream, layout);
 
 			float y = layout.top();
 			float halfWidth = layout.width() / 2f;
 			drawHorizontalLine(stream, layout.x(), layout.x() + layout.width(), y - TOP_SECTION_HEIGHT);
 			drawVerticalLine(stream, layout.x() + halfWidth, y - TOP_SECTION_HEIGHT, y);
-			drawSimpleSection(stream, bold, regular, layout.x(), y - TOP_SECTION_HEIGHT, halfWidth, TOP_SECTION_HEIGHT,
-					"1. Incident Name", List.of(safe(context.getIncidentName())));
+			drawIncidentName(stream, bold, regular, layout.x(), y - TOP_SECTION_HEIGHT, halfWidth, TOP_SECTION_HEIGHT,
+					context.getIncidentName());
 			drawOperationalPeriodSection(stream, bold, regular, layout.x() + halfWidth, y - TOP_SECTION_HEIGHT,
 					halfWidth, TOP_SECTION_HEIGHT, context, data);
 			y -= TOP_SECTION_HEIGHT;
@@ -103,10 +116,62 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		}
 	}
 
+	/**
+	 * Computes the page count using the same measured rows as rendering.
+	 * @param data incident data.
+	 * @return communications page count.
+	 */
 	static int pageCount(AppData data) {
 		AppData safeData = data == null ? new AppData() : data;
-		int entryCount = ResourceDirectorySource.build(safeData).size();
-		return pageCount(entryCount, defaultRowsPerPage());
+		try {
+			return new Ics205aPdfRenderer().paginateDirectory(safeData,
+					ResourceDirectorySource.build(safeData).stream().sorted(ResourceDirectorySource.byLastName()).toList()).size();
+		} catch (IOException exception) {
+			throw new UncheckedIOException(exception);
+		}
+	}
+
+	/**
+	 * Packs measured directory rows and splits only rows larger than a page.
+	 * @param data page settings.
+	 * @param entries sorted directory entries.
+	 * @return pages containing rows of wrapped cells.
+	 * @throws IOException when font metrics fail.
+	 */
+	private List<List<List<List<String>>>> paginateDirectory(AppData data, List<ResourceDirectoryEntry> entries)
+			throws IOException {
+		FormLayout layout = formLayout(newPage(data), data);
+		float available = layout.height() - TOP_SECTION_HEIGHT - FOOTER_HEIGHT - SECTION_HEADING_HEIGHT
+				- TABLE_HEADER_HEIGHT;
+		int maximumLines = Math.max(1, (int) ((available - CELL_PADDING * 2f) / LINE_HEIGHT));
+		PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+		List<List<List<List<String>>>> pages = new ArrayList<>();
+		List<List<List<String>>> page = new ArrayList<>();
+		pages.add(page);
+		float used = 0f;
+		for (ResourceDirectoryEntry entry : entries) {
+			List<List<String>> cells = List.of(
+					wrapText(entry.assignedPosition(), font, BODY_FONT_SIZE, layout.width() * 0.28f - 8f),
+					wrapText(entry.name(), font, BODY_FONT_SIZE, layout.width() * 0.27f - 8f),
+					wrapText(entry.contactMethods(), font, BODY_FONT_SIZE, layout.width() * 0.45f - 8f));
+			int lineCount = cells.stream().mapToInt(List::size).max().orElse(1);
+			for (int offset = 0; offset < lineCount; offset += maximumLines) {
+				int count = Math.min(maximumLines, lineCount - offset);
+				float height = Math.max(24f, count * LINE_HEIGHT + CELL_PADDING * 2f);
+				if (used + height > available && !page.isEmpty()) {
+					page = new ArrayList<>();
+					pages.add(page);
+					used = 0f;
+				}
+				List<List<String>> row = new ArrayList<>();
+				for (List<String> cell : cells) {
+					row.add(cell.subList(Math.min(offset, cell.size()), Math.min(offset + count, cell.size())));
+				}
+				page.add(row);
+				used += height;
+			}
+		}
+		return pages;
 	}
 
 	private int rowsPerPage() {
@@ -137,8 +202,21 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 				formatTime(data, context.getOperationalPeriodEnd()));
 	}
 
+	/**
+	 * Draws measured directory rows with repeated column headings.
+	 * @param stream page stream.
+	 * @param bold header font.
+	 * @param regular body font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width table width.
+	 * @param height table height.
+	 * @param entries wrapped directory rows.
+	 * @param rowsPerPage unused legacy row-count hint.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawCommunicationsSection(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x,
-			float y, float width, float height, List<ResourceDirectoryEntry> entries, int rowsPerPage)
+			float y, float width, float height, List<List<List<String>>> entries, int rowsPerPage)
 			throws IOException {
 		// The shared directory model carries extra directory-only fields such as unit,
 		// state,
@@ -164,21 +242,20 @@ public class Ics205aPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 		writeWrappedCellText(stream, bold, starts[2], headerBottom, width * widths[2], TABLE_HEADER_HEIGHT,
 				List.of("Method(s) of Contact"));
 
-		float rowHeight = (headerBottom - y) / rowsPerPage;
-		for (int rowIndex = 0; rowIndex < rowsPerPage; rowIndex++) {
-			float rowTop = headerBottom - (rowIndex * rowHeight);
+		float rowTop = headerBottom;
+		int rowIndex = 0;
+		while (rowTop > y + 0.1f) {
+			List<List<String>> cells = rowIndex < entries.size() ? entries.get(rowIndex) : List.of();
+			int lines = cells.stream().mapToInt(List::size).max().orElse(1);
+			float rowHeight = Math.max(24f, lines * LINE_HEIGHT + CELL_PADDING * 2f);
 			float rowBottom = Math.max(y, rowTop - rowHeight);
 			drawHorizontalLine(stream, x, x + width, rowBottom);
-			if (rowIndex >= entries.size()) {
-				continue;
+			for (int col = 0; col < cells.size(); col++) {
+				writeWrappedCellText(stream, regular, starts[col], rowBottom, width * widths[col], rowTop - rowBottom,
+						cells.get(col));
 			}
-			ResourceDirectoryEntry entry = entries.get(rowIndex);
-			writeWrappedCellText(stream, regular, starts[0], rowBottom, width * widths[0], rowTop - rowBottom,
-					wrap(safe(entry.assignedPosition()), 18));
-			writeWrappedCellText(stream, regular, starts[1], rowBottom, width * widths[1], rowTop - rowBottom,
-					wrap(safe(entry.name()), 18));
-			writeWrappedCellText(stream, regular, starts[2], rowBottom, width * widths[2], rowTop - rowBottom,
-					wrap(safe(entry.contactMethods()), 30));
+			rowTop = rowBottom;
+			rowIndex++;
 		}
 	}
 

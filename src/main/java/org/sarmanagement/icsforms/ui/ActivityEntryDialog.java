@@ -324,6 +324,16 @@ final class ActivityEntryDialog {
 		text.setText(entry.getNotableActivity());
 		text.setEditable(false);
 		UiSupport.addRow(details, 3, "Notable activity", new JScrollPane(text));
+		if (!entry.getEventTypeChangeHistory().isEmpty()) {
+			javax.swing.JTextArea history = UiSupport.textArea(3);
+			history.setEditable(false);
+			history.setText(entry.getEventTypeChangeHistory().stream()
+					.map(change -> String.valueOf(change.changedAt()) + ": "
+							+ resolvedEventTypeLabel(incident, change.previousEventTypeId()) + " → "
+							+ resolvedEventTypeLabel(incident, change.newEventTypeId()))
+					.collect(java.util.stream.Collectors.joining("\n")));
+			UiSupport.addRow(details, 4, "Classification history", new JScrollPane(history));
+		}
 		return details;
 	}
 

@@ -256,9 +256,62 @@ class Ics203PdfRendererTest {
 			assertTrue(positions.x("8. Finance/Administration Section") > 306f);
 			assertTrue(positions.x("Specialist Person") < 306f);
 			assertTrue(positions.x("CustomPerson1") > 306f);
+			assertTrue(positions.y("CustomPerson1") < positions.y("Air Operations Branch"));
 			String text = text(pdf);
 			for (Section section : Section.values()) {
 				assertTrue(text.contains("CustomPerson" + section.ordinal()));
+			}
+		}
+	}
+
+	@Test
+	void operationsOverflowRetainsRoleOrderOutsideTheAirBranchOnEveryPage() throws Exception {
+		for (PaperSize paper : PaperSize.values()) {
+			AppData data = new AppData();
+			data.getPdfLayoutSettings().setPaperSize(paper);
+			data.getOrganizationalChart().getAssignmentList()
+					.setPosition(Position.AIR_OPERATIONS_BRANCH_DIRECTOR, "Actual Air Director");
+			for (int index = 0; index < 19; index++) {
+				OrgChartEntry role = entry("Operations Role " + index, "OperationsPerson" + index);
+				role.setSection(Section.OPERATIONS);
+				data.getOrganizationalChart().getAdditionalPositions().add(role);
+			}
+			OrgChartEntry airNamedGeneric = entry("Air liaison (operations)", "Generic Air Named Person");
+			airNamedGeneric.setSection(Section.OPERATIONS);
+			data.getOrganizationalChart().getAdditionalPositions().add(airNamedGeneric);
+			try (PDDocument pdf = render(data)) {
+				assertEquals(Ics203PdfRenderer.pageCount(data), pdf.getNumberOfPages());
+				assertTrue(pdf.getNumberOfPages() > 1);
+				String content = text(pdf);
+				int previous = -1;
+				for (int index = 0; index < 19; index++) {
+					String name = "OperationsPerson" + index;
+					int current = content.indexOf(name + " ");
+					assertTrue(current > previous, name);
+					previous = current;
+				}
+				assertTrue(content.contains("Generic Air Named Person"));
+				for (int page = 1; page <= pdf.getNumberOfPages(); page++) {
+					Positions positions = new Positions();
+					positions.setStartPage(page);
+					positions.setEndPage(page);
+					String pageText = positions.getText(pdf);
+					float airY = positions.y("Air Operations Branch");
+					assertTrue(positions.y("Actual Air Director") > airY);
+					for (int index = 0; index < 19; index++) {
+						String name = "OperationsPerson" + index;
+						if (pageText.contains(name + "\n") || pageText.contains(name + " ")) {
+							assertTrue(positions.y(name) < airY, name);
+						}
+					}
+					if (pageText.contains("Generic Air Named Person")) {
+						assertTrue(positions.y("Generic Air Named Person") < airY);
+					}
+					if (page > 1) {
+						assertTrue(pageText.contains("ORGANIZATION ASSIGNMENT LIST (ICS 203) Page " + page));
+						assertTrue(positions.y("ORGANIZATION ASSIGNMENT LIST") < positions.y("1. Incident Name"));
+					}
+				}
 			}
 		}
 	}

@@ -300,7 +300,7 @@ public class Ics205PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				stream.transform(new Matrix(0, 1, -1, 0, page.getMediaBox().getWidth(), 0));
 			}
 			drawFormHeader(stream, bold, layout, "ICS 205",
-					"INCIDENT RADIO COMMUNICATIONS PLAN" + (index == 0 ? "" : " (CONTINUED)"));
+					"INCIDENT RADIO COMMUNICATIONS PLAN", index + 1);
 			float y = layout.top();
 			cells(stream, font, layout.x(), y, new float[]{layout.width() / 2, layout.width() / 2},
 					plan.metadataHeight(), plan.metadata());

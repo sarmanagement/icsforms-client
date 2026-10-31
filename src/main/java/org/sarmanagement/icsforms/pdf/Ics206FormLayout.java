@@ -31,7 +31,7 @@ final class Ics206FormLayout {
 	private static final float CELL_PADDING = 3f;
 	private static final float SECTION_HEIGHT = 15f;
 	private static final float TABLE_HEADER_HEIGHT = 24f;
-	private static final float CONTEXT_HEIGHT = 38f;
+	private static final float CONTEXT_HEIGHT = 48f;
 	private static final float FOOTER_HEIGHT = 34f;
 	private static final float METADATA_HEIGHT = 48f;
 	private static final float SECTION_GAP = 2f;
@@ -218,8 +218,7 @@ final class Ics206FormLayout {
 			String iapPage, LocalDateTime preparedAt, FooterMetadata metadata, int pageNumber, int totalPages)
 			throws IOException {
 		try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
-			renderer.drawFormHeader(stream, bold, layout, formKey,
-					title + (pageNumber == 1 ? "" : " (CONTINUED)"));
+			renderer.drawFormHeader(stream, bold, layout, formKey, title, pageNumber);
 			renderer.drawFormFrame(stream, layout);
 			drawContext(renderer, stream, regular, bold, layout, data);
 			if (pageNumber == totalPages) {
@@ -355,7 +354,8 @@ final class Ics206FormLayout {
 	}
 
 	/**
-	 * Draws incident name and operational period in adjacent header cells.
+	 * Draws incident name beside separate date and time operational-period rows.
+	 * All four period values use the configured export timezone.
 	 *
 	 * @param stream page content stream.
 	 * @param regular regular font.
@@ -373,10 +373,19 @@ final class Ics206FormLayout {
 		float nameWidth = layout.width() * 0.38f;
 		drawContextCell(stream, regular, bold, layout.x(), y, nameWidth, "1. INCIDENT NAME",
 				incident.getIncidentName());
-		drawContextCell(stream, regular, bold, layout.x() + nameWidth, y, layout.width() - nameWidth,
-				"2. OPERATIONAL PERIOD", "From: "
-						+ renderer.formatPdfDateTime(data, incident.getOperationalPeriodStart()) + "  To: "
-						+ renderer.formatPdfDateTime(data, incident.getOperationalPeriodEnd()));
+		float periodX = layout.x() + nameWidth;
+		float periodWidth = layout.width() - nameWidth;
+		stream.addRect(periodX, y, periodWidth, CONTEXT_HEIGHT);
+		stream.stroke();
+		write(stream, bold, FONT_SIZE, periodX + CELL_PADDING, top - 11f, "2. OPERATIONAL PERIOD");
+		write(stream, regular, FONT_SIZE, periodX + CELL_PADDING, top - 25f,
+				"Date From: " + renderer.formatPdfDate(data, incident.getOperationalPeriodStart()));
+		write(stream, regular, FONT_SIZE, periodX + periodWidth / 2f + CELL_PADDING, top - 25f,
+				"Date To: " + renderer.formatPdfDate(data, incident.getOperationalPeriodEnd()));
+		write(stream, regular, FONT_SIZE, periodX + CELL_PADDING, top - 39f,
+				"Time From: " + renderer.formatPdfTime(data, incident.getOperationalPeriodStart()));
+		write(stream, regular, FONT_SIZE, periodX + periodWidth / 2f + CELL_PADDING, top - 39f,
+				"Time To: " + renderer.formatPdfTime(data, incident.getOperationalPeriodEnd()));
 	}
 
 	/**
@@ -399,7 +408,8 @@ final class Ics206FormLayout {
 		write(stream, bold, FONT_SIZE, x + CELL_PADDING, y + CONTEXT_HEIGHT - 11f, label);
 		List<String> lines = wrap(value, regular, width - CELL_PADDING * 2f);
 		for (int index = 0; index < Math.min(2, lines.size()); index++) {
-			write(stream, regular, FONT_SIZE, x + CELL_PADDING, y + 19f - index * LINE_HEIGHT, lines.get(index));
+			write(stream, regular, FONT_SIZE, x + CELL_PADDING, y + CONTEXT_HEIGHT - 25f - index * LINE_HEIGHT,
+					lines.get(index));
 		}
 	}
 

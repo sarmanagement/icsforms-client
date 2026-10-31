@@ -5,6 +5,7 @@ package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentMode;
@@ -16,11 +17,11 @@ import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
+import javax.swing.Timer;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import java.awt.GraphicsEnvironment;
 import java.lang.reflect.Field;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,10 +30,13 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Display-backed smoke coverage for independent tracker tab visibility. */
 class MainFrameTrackerTest {
+	@TempDir
+	Path directory;
+
 	@Test
 void typedWorkspaceApiOpensNestedMedicalPlansAndSafetyOverview() throws Exception {
 	Assumptions.assumeFalse(GraphicsEnvironment.isHeadless());
-	Path path = Path.of("target/main-frame-workspace-navigation-store");
+	Path path = directory.resolve("workspace-navigation-store");
 	AppData data = new AppData();
 	data.setIncidentMode(IncidentMode.GENERIC);
 	data.getCanineMedicalPlan().setAidStationInformation("Saved canine aid station");
@@ -68,18 +72,16 @@ void typedWorkspaceApiOpensNestedMedicalPlansAndSafetyOverview() throws Exceptio
 			} catch (Throwable exception) {
 				throw new AssertionError(exception);
 			} finally {
-				frame.dispose();
+				stop(frame);
 			}
 		});
-	} finally {
-		deleteTree(path);
 	}
 }
 
 @Test
 void trackerSurvivesSarGenericDisableAndPersistence() throws Exception {
 		Assumptions.assumeFalse(GraphicsEnvironment.isHeadless());
-		Path path = Path.of("target/main-frame-tracker-store");
+	Path path = directory.resolve("tracker-store");
 		AppData data = new AppData();
 		OpenActionItem item = new OpenActionItem();
 		item.setNumber(1);
@@ -118,7 +120,7 @@ void trackerSurvivesSarGenericDisableAndPersistence() throws Exception {
 				} catch (ReflectiveOperationException exception) {
 					throw new AssertionError(exception);
 				} finally {
-					frame.dispose();
+					stop(frame);
 				}
 			});
 			data.setOpenActionTrackerEnabled(false);
@@ -126,21 +128,13 @@ void trackerSurvivesSarGenericDisableAndPersistence() throws Exception {
 			AppData restored = store.load(id);
 			assertFalse(restored.isOpenActionTrackerEnabled());
 			assertEquals("Preserved action", restored.getOpenActionItems().get(0).getItem());
-		} finally {
-			if (Files.exists(path)) {
-				try (var files = Files.walk(path)) {
-					for (Path file : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
-						Files.deleteIfExists(file);
-					}
-				}
-			}
 		}
 	}
 
 	@Test
 	void logsMenuOrganizationAndRemovalLifecycle() throws Exception {
 		Assumptions.assumeFalse(GraphicsEnvironment.isHeadless());
-		Path path = Path.of("target/main-frame-logs-menu-store");
+		Path path = directory.resolve("logs-menu-store");
 		AppData data = new AppData();
 		Ics214Form icpLog = new Ics214Form();
 		icpLog.setName("ICP");
@@ -212,11 +206,9 @@ void trackerSurvivesSarGenericDisableAndPersistence() throws Exception {
 				} catch (Throwable exception) {
 					throw new AssertionError(exception);
 				} finally {
-					frame.dispose();
+					stop(frame);
 				}
 			});
-		} finally {
-			deleteTree(path);
 		}
 	}
 
@@ -228,25 +220,24 @@ void trackerSurvivesSarGenericDisableAndPersistence() throws Exception {
 	 * @return field value.
 	 * @throws ReflectiveOperationException when the field is unavailable.
 	 */
-	private static Object field(MainFrame frame, String fieldName) throws ReflectiveOperationException {
-		Field field = MainFrame.class.getDeclaredField(fieldName);
+	private static Object field(Object target, String fieldName) throws ReflectiveOperationException {
+		Field field = target.getClass().getDeclaredField(fieldName);
 		field.setAccessible(true);
-		return field.get(frame);
+		return field.get(target);
 	}
 
 	/**
-	 * Removes a temporary test store and all of its contents.
+	 * Stops background saves before disposing a frame backed by a temporary store.
 	 *
-	 * @param path root path to remove.
-	 * @throws Exception when cleanup fails.
+	 * @param frame editor frame to dispose.
 	 */
-	private static void deleteTree(Path path) throws Exception {
-		if (Files.exists(path)) {
-			try (var paths = Files.walk(path)) {
-				for (Path file : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
-					Files.deleteIfExists(file);
-				}
-			}
+	private static void stop(MainFrame frame) {
+		try {
+			Object controller = field(frame, "controller");
+			((Timer) field(controller, "autosaveTimer")).stop();
+		} catch (ReflectiveOperationException exception) {
+			throw new AssertionError(exception);
 		}
+		frame.dispose();
 	}
 }

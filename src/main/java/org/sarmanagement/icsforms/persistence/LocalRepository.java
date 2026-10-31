@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -7,6 +10,7 @@ import org.sarmanagement.icsforms.model.AppData;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
@@ -97,29 +101,30 @@ public class LocalRepository {
 	 *
 	 * @return loaded or default incident document.
 	 * @throws IllegalStateException
-	 *             when both primary and backup files are unreadable.
+	 *             when an existing primary is unreadable and no readable backup exists.
 	 */
 	public AppData loadOrDefault() {
-		if (!Files.exists(filePath)) {
+		if (Files.notExists(filePath, LinkOption.NOFOLLOW_LINKS)) {
 			return new AppData();
 		}
 		try {
-			AppData data = objectMapper.readValue(filePath.toFile(), AppData.class);
+			AppData data = new IncidentDocumentReader().readStored(filePath);
 			data.normalizeIdentity();
 			data.reconcileMedicalUnitLeaderAssignment();
 			return data;
 		} catch (IOException primaryFailure) {
 			if (Files.exists(backupPath)) {
 				try {
-					AppData data = objectMapper.readValue(backupPath.toFile(), AppData.class);
+					AppData data = new IncidentDocumentReader().readStored(backupPath);
 					data.normalizeIdentity();
 					data.reconcileMedicalUnitLeaderAssignment();
 					return data;
 				} catch (IOException backupFailure) {
+					backupFailure.addSuppressed(primaryFailure);
 					throw new IllegalStateException("Failed to load local data or backup", backupFailure);
 				}
 			}
-			return new AppData();
+			throw new IllegalStateException("Failed to load existing local data", primaryFailure);
 		}
 	}
 
@@ -155,15 +160,14 @@ public class LocalRepository {
 			stream.filter(p -> p.toString().endsWith(".json")).forEach(p -> {
 				try {
 					Instant modified = Files.getLastModifiedTime(p).toInstant();
-					org.sarmanagement.icsforms.model.AppData data = SHARED_MAPPER.readValue(p.toFile(),
-							org.sarmanagement.icsforms.model.AppData.class);
+					org.sarmanagement.icsforms.model.AppData data = new IncidentDocumentReader().readStored(p);
 					String name = "";
 					if (data.getIncidentContext() != null) {
 						name = data.getIncidentContext().getIncidentName();
 					}
 					org.sarmanagement.icsforms.model.IapPhase phase = data.getIapPhase();
 					results.add(new IncidentSummary(p, name, phase, modified));
-				} catch (IOException ignored) {
+				} catch (IOException | IllegalStateException ignored) {
 					// skip unreadable or non-incident files
 				}
 			});

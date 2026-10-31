@@ -6,7 +6,6 @@ package org.sarmanagement.icsforms.pdf;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
-import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.sarmanagement.icsforms.model.AppData;
@@ -17,6 +16,7 @@ import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -28,7 +28,7 @@ import java.util.List;
  * Structured PDF renderer for the Incident Organization Chart (ICS 207) form.
  *
  * <p>
- * Produces a single {@link PDRectangle#LETTER} page containing:
+ * Produces organization-chart pages using the configured paper and margins:
  * <ol>
  * <li>Section 1 — Incident Name</li>
  * <li>Section 2 — Operational Period</li>
@@ -52,6 +52,56 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return "ICS 207";
 	}
 
+	/**
+	 * Counts the complete chart pages using the same node measurements as rendering.
+	 *
+	 * @param data source incident, or null for a blank chart.
+	 * @return number of organization-chart pages.
+	 */
+	public static int pageCount(AppData data) {
+		try {
+			return new Ics207PdfRenderer().countPages(data == null ? new AppData() : data);
+		} catch (IOException exception) {
+			throw new UncheckedIOException(exception);
+		}
+	}
+
+	/**
+	 * Measures pagination without creating PDF content streams or rendering the form.
+	 *
+	 * @param data incident organization and layout settings.
+	 * @return largest page count among the four section columns.
+	 * @throws IOException when font measurement fails.
+	 */
+	private int countPages(AppData data) throws IOException {
+		FormLayout layout = formLayout(newPage(data), data);
+		PDType1Font regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+		PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+		float chartTop = layout.top() - 50f - CELL_PADDING - HEADING_FONT_SIZE - 8f;
+		float nodeTop = sectionBarY(chartTop, buildCmdStaff(data.getOrganizationalChart()).size()) - 50f;
+		float bottom = layout.y() + 50f + 4f;
+		float width = (layout.width() - 2f * CELL_PADDING) / 4f - 8f;
+		int result = 1;
+		for (List<String[]> section : sectionNodes(data)) {
+			int pages = 1;
+			float top = nodeTop;
+			for (String[] unit : section) {
+				Node node = measureNode(unit, bold, regular, width, 18f);
+				if (node.height() > nodeTop - bottom) {
+					throw new IllegalArgumentException("PDF margins or organization content leave insufficient space "
+							+ "for an ICS 207 assignment node");
+				}
+				if (top - node.height() < bottom) {
+					pages++;
+					top = nodeTop;
+				}
+				top -= node.height() + 2f;
+			}
+			result = Math.max(result, pages);
+		}
+		return result;
+	}
+
 	/** {@inheritDoc} */
 	@Override
 	public void render(AppData data, Path outputFile) throws IOException {
@@ -59,16 +109,60 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		Files.createDirectories(outputFile.getParent());
 		AppData safeData = data == null ? new AppData() : data;
 		try (PDDocument document = new PDDocument()) {
-			renderPage(document, safeData);
+			renderPages(document, safeData);
 			document.save(outputFile.toFile());
 		}
 	}
 
-	private void renderPage(PDDocument document, AppData data) throws IOException {
+	/**
+	 * Renders every section node without retaining pagination state on the renderer.
+	 *
+	 * @param document destination PDF.
+	 * @param data incident organization and assignments.
+	 * @throws IOException when drawing fails.
+	 */
+	private void renderPages(PDDocument document, AppData data) throws IOException {
+		List<List<String[]>> remaining = sectionNodes(data);
+		int pageNumber = 1;
+		do {
+			int before = remaining.stream().mapToInt(List::size).sum();
+			remaining = renderPage(document, data, remaining, pageNumber++);
+			int after = remaining.stream().mapToInt(List::size).sum();
+			if (after > 0 && after == before) {
+				throw new IllegalArgumentException("PDF margins or organization content leave insufficient space "
+						+ "for an ICS 207 assignment node");
+			}
+		} while (remaining.stream().anyMatch(section -> !section.isEmpty()));
+	}
+
+	/**
+	 * Builds the four ordered section columns independently of PDF output.
+	 *
+	 * @param data incident organization and assignments.
+	 * @return operations, planning, logistics and finance node lists.
+	 */
+	private List<List<String[]>> sectionNodes(AppData data) {
+		OrganizationalChart chart = data.getOrganizationalChart();
+		return List.of(buildOpsSubUnits(chart, data.getSarTaskAssignments()), buildPlanningSubUnits(chart),
+				buildLogisticsSubUnits(chart, data.getMedicalUnitLeaderAssignment().getName()),
+				buildFinanceSubUnits(chart));
+	}
+
+	/**
+	 * Draws a complete numbered chart form and the section nodes fitting this page.
+	 *
+	 * @param document destination PDF.
+	 * @param data incident organization and layout settings.
+	 * @param subUnits remaining nodes in operations, planning, logistics and finance order.
+	 * @param pageNumber one-based form page.
+	 * @return section nodes that require another chart page.
+	 * @throws IOException when drawing fails.
+	 */
+	private List<List<String[]>> renderPage(PDDocument document, AppData data, List<List<String[]>> subUnits,
+			int pageNumber) throws IOException {
 		IncidentContext context = data.getIncidentContext();
 		OrganizationalChart chart = data.getOrganizationalChart();
 		Ics207Form form = data.getForm207();
-		List<SarTaskAssignment> tasks = data.getSarTaskAssignments() == null ? List.of() : data.getSarTaskAssignments();
 
 		PDPage page = newPage(data);
 		document.addPage(page);
@@ -77,7 +171,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 			FormLayout layout = formLayout(page, data);
 
-			drawFormHeader(stream, bold, layout, "ICS 207", "INCIDENT ORGANIZATION CHART");
+			drawFormHeader(stream, bold, layout, "ICS 207", "INCIDENT ORGANIZATION CHART", pageNumber);
 			drawFormFrame(stream, layout);
 
 			float y = layout.top();
@@ -102,11 +196,12 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 			// Row 2 (middle): org chart
 			float chartH = y - footerY - footerH;
-			drawOrgChart(stream, bold, regular, x, footerY + footerH, fullW, chartH, chart, tasks,
-					data.getMedicalUnitLeaderAssignment().getName());
+			List<List<String[]>> remaining = drawOrgChart(stream, bold, regular, x, footerY + footerH, fullW,
+					chartH, chart, subUnits);
 
 			// Footer: Prepared by
-			drawFooter(stream, bold, regular, x, footerY, fullW, footerH, form, data);
+			drawFooter(stream, bold, regular, x, footerY, fullW, footerH, form, data, pageNumber);
+			return remaining;
 		}
 	}
 
@@ -129,11 +224,27 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 				formatTime(data, ctx == null ? null : ctx.getOperationalPeriodEnd()));
 	}
 
+	/**
+	 * Draws preparation metadata and the continuation-adjusted IAP page.
+	 *
+	 * @param stream page stream.
+	 * @param bold label font.
+	 * @param regular value font.
+	 * @param x left edge.
+	 * @param y bottom edge.
+	 * @param width footer width.
+	 * @param height footer height.
+	 * @param form preparation metadata.
+	 * @param data timezone settings.
+	 * @param pageNumber one-based form page.
+	 * @throws IOException when drawing fails.
+	 */
 	private void drawFooter(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float x, float y,
-			float width, float height, Ics207Form form, AppData data) throws IOException {
+			float width, float height, Ics207Form form, AppData data, int pageNumber) throws IOException {
 		drawPreparedByMetadataSection(stream, bold, regular, BODY_FONT_SIZE, HEADING_FONT_SIZE, CELL_PADDING, x, y,
 				width, height, 18f, 8f, "4. Prepared By", safe(form.getPreparedByName()),
-				safe(form.getPreparedByPositionTitle()), "____________________", "ICS 207", safe(form.getIapPage()),
+				safe(form.getPreparedByPositionTitle()), "____________________", "ICS 207",
+				addPageOffset(form.getIapPage(), pageNumber - 1),
 				formatDateTime(data, form.getPreparedDateTime()));
 	}
 
@@ -152,12 +263,13 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @param width chart width.
 	 * @param height chart height.
 	 * @param chart organization assignments.
-	 * @param tasks operations task assignments.
+	 * @param subUnits remaining section nodes in column order.
+	 * @return nodes that did not fit below their section chief on this page.
 	 * @throws IOException when PDF drawing fails.
 	 */
-	private void drawOrgChart(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float sX, float sY,
-			float width, float height, OrganizationalChart chart, List<SarTaskAssignment> tasks,
-			String medicalUnitLeaderName) throws IOException {
+	private List<List<String[]>> drawOrgChart(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+			float sX, float sY, float width, float height, OrganizationalChart chart, List<List<String[]>> subUnits)
+			throws IOException {
 		drawCell(stream, sX, sY, width, height);
 		drawHeading(stream, bold, sX, sY + height, "3. Organization Chart");
 
@@ -194,11 +306,9 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		float sLeft = icCX + 20f;
 		float sBoxW = ((LEFT + CWIDTH) - icCX - 12f) * 2f / 3f;
 
-		float cmdBot = icBot;
 		for (int i = 0; i < cmdStaff.size(); i++) {
 			float sTop = icBot - 4f - i * (sBoxH + sGap);
 			float sBotY = sTop - sBoxH;
-			cmdBot = Math.min(cmdBot, sBotY);
 			float midY = sTop - sBoxH / 2f;
 			// Horizontal connector from vertical stem (icCX) rightward to staff box left
 			// edge.
@@ -219,7 +329,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		drawCentered(stream, regular, 7f, truncate(icNameLine, (int) (icBoxW / 4.5f)), icLeft, icTop - 18f, icBoxW);
 
 		// --- Vertical stem from IC box bottom to section bar ---
-		float sBarY = Math.min(cmdBot, icBot) - 14f;
+		float sBarY = sectionBarY(TOP, cmdStaff.size());
 		stream.moveTo(icCX, icBot);
 		stream.lineTo(icCX, sBarY);
 		stream.stroke();
@@ -260,31 +370,83 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		float subGap = 2f;
 		float subTopStart = secBoxBot - 6f;
 
-		// Operations sub-units
-		drawSubUnits(stream, bold, regular, LEFT, secCX[0], secBoxBot, secW, subTopStart, subH, subGap,
-				buildOpsSubUnits(chart, tasks), sY);
-
-		// Planning sub-units
-		drawSubUnits(stream, bold, regular, LEFT + secW, secCX[1], secBoxBot, secW, subTopStart, subH, subGap,
-				buildPlanningSubUnits(chart), sY);
-
-		// Logistics sub-units
-		drawSubUnits(stream, bold, regular, LEFT + 2f * secW, secCX[2], secBoxBot, secW, subTopStart, subH, subGap,
-				buildLogisticsSubUnits(chart, medicalUnitLeaderName), sY);
-
-		// Finance/Admin sub-units
-		drawSubUnits(stream, bold, regular, LEFT + 3f * secW, secCX[3], secBoxBot, secW, subTopStart, subH, subGap,
-				buildFinanceSubUnits(chart), sY);
+		List<List<String[]>> remaining = new ArrayList<>();
+		for (int section = 0; section < subUnits.size(); section++) {
+			remaining.add(drawSubUnits(stream, bold, regular, LEFT + section * secW, secCX[section],
+					secBoxBot, secW, subTopStart, subH, subGap, subUnits.get(section), sY));
+		}
+		return remaining;
 	}
 
 	/**
-	 * Draws vertically-stacked sub-unit boxes connected to the section box above.
+	 * Locates the section connector bar below the incident commander and command staff.
+	 *
+	 * @param chartTop chart content top.
+	 * @param staffCount number of command-staff boxes.
+	 * @return section bar vertical coordinate.
 	 */
-	private void drawSubUnits(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float sectionLeft,
+	private float sectionBarY(float chartTop, int staffCount) {
+		float commanderBottom = chartTop - 4f - 32f;
+		float staffBottom = staffCount == 0 ? commanderBottom
+				: commanderBottom - 4f - (staffCount - 1) * 21f - 18f;
+		return Math.min(commanderBottom, staffBottom) - 14f;
+	}
+
+	/**
+	 * Wraps every node field and measures its complete height without truncation.
+	 *
+	 * @param unit node title followed by its value fields.
+	 * @param bold title font.
+	 * @param regular value font.
+	 * @param width node width.
+	 * @param minimumHeight minimum box height.
+	 * @return wrapped fields and required box height.
+	 * @throws IOException when font measurement fails.
+	 */
+	private Node measureNode(String[] unit, PDType1Font bold, PDType1Font regular, float width,
+			float minimumHeight) throws IOException {
+		List<String> labels = wrapText(unit[0], bold, 6.5f, width - 4f);
+		List<String> values = new ArrayList<>();
+		for (int field = 1; field < unit.length; field++) {
+			values.addAll(wrapText(unit[field], regular, 6.5f, width - 4f));
+		}
+		return new Node(labels, values, Math.max(minimumHeight, 4f + 8f * (labels.size() + values.size())));
+	}
+
+	/**
+	 * Measured content of one assignment or section-role box.
+	 *
+	 * @param labels wrapped bold title lines.
+	 * @param values wrapped regular value lines.
+	 * @param height complete required box height.
+	 */
+	private record Node(List<String> labels, List<String> values, float height) {
+	}
+
+	/**
+	 * Draws measured, wrapped nodes connected to their section chief. Assignment
+	 * leaders and personnel counts remain inside the assignment's own node.
+	 *
+	 * @param stream page stream.
+	 * @param bold node title font.
+	 * @param regular node value font.
+	 * @param sectionLeft section column's left edge.
+	 * @param sectionCX connector center.
+	 * @param sectionBoxBot section chief box bottom.
+	 * @param secW section column width.
+	 * @param subTopStart first node top.
+	 * @param subH minimum node height.
+	 * @param subGap gap between nodes.
+	 * @param subUnits remaining nodes with title followed by value fields.
+	 * @param minY section bottom.
+	 * @return all nodes not fitting this page, in their original order.
+	 * @throws IOException when measuring or drawing fails.
+	 */
+	private List<String[]> drawSubUnits(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float sectionLeft,
 			float sectionCX, float sectionBoxBot, float secW, float subTopStart, float subH, float subGap,
 			List<String[]> subUnits, float minY) throws IOException {
 		if (subUnits.isEmpty())
-			return;
+			return List.of();
 		float bL = sectionLeft + 4f, bW = secW - 8f;
 		float connectorTop = subTopStart;
 		stream.moveTo(sectionCX, sectionBoxBot);
@@ -293,14 +455,22 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 		float curTop = connectorTop;
 		for (int i = 0; i < subUnits.size(); i++) {
-			String[] unit = subUnits.get(i);
-			float botY = curTop - subH;
-			if (botY < minY + 4f)
-				break; // don't draw below section bottom
-			stream.addRect(bL, botY, bW, subH);
+			Node node = measureNode(subUnits.get(i), bold, regular, bW, subH);
+			float botY = curTop - node.height();
+			if (botY < minY + 4f) {
+				return subUnits.subList(i, subUnits.size());
+			}
+			stream.addRect(bL, botY, bW, node.height());
 			stream.stroke();
-			drawCentered(stream, bold, 6.5f, unit[0], bL, curTop - 8f, bW);
-			drawCentered(stream, regular, 6.5f, truncate(unit[1], (int) (bW / 3.9f)), bL, curTop - 15f, bW);
+			float baseline = curTop - 8f;
+			for (String line : node.labels()) {
+				drawCentered(stream, bold, 6.5f, line, bL, baseline, bW);
+				baseline -= 8f;
+			}
+			for (String line : node.values()) {
+				drawCentered(stream, regular, 6.5f, line, bL, baseline, bW);
+				baseline -= 8f;
+			}
 			if (i < subUnits.size() - 1) {
 				stream.moveTo(sectionCX, botY);
 				stream.lineTo(sectionCX, botY - subGap);
@@ -308,6 +478,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 			}
 			curTop = botY - subGap;
 		}
+		return List.of();
 	}
 
 	// -----------------------------------------------------------------------
@@ -327,15 +498,27 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		return list;
 	}
 
+	/**
+	 * Builds operations nodes with each task leader inside the associated assignment.
+	 *
+	 * @param chart shared operations positions.
+	 * @param tasks task assignments, or null for none.
+	 * @return staging, assignment and additional operations nodes in source order.
+	 */
 	private List<String[]> buildOpsSubUnits(OrganizationalChart chart, List<SarTaskAssignment> tasks) {
 		List<String[]> list = new ArrayList<>();
 		addIfNamed(list, "Staging Area Mgr", chart.getStagingAreaManagerName());
-		for (SarTaskAssignment t : tasks) {
+		for (SarTaskAssignment t : tasks == null ? List.<SarTaskAssignment>of() : tasks) {
+			if (t == null) {
+				continue;
+			}
 			String label = safe(t.getResourceIdentifier()).isBlank()
 					? (safe(t.getAssignmentTeamNumber()).isBlank() ? "Task" : safe(t.getAssignmentTeamNumber()))
 					: safe(t.getResourceIdentifier());
 			int people = countPeople(t);
-			list.add(new String[]{truncate(label, 14), people == 1 ? "1 person" : people + " people"});
+			String count = people == 1 ? "1 person" : people + " people";
+			list.add(safe(t.getLeader()).isBlank() ? new String[]{label, count}
+					: new String[]{label, "Leader: " + safe(t.getLeader()), count});
 		}
 		for (OrgChartEntry e : chart.getAdditionalPositions()) {
 			if (e.getSection() == OrgChartEntry.Section.OPERATIONS) {

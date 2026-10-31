@@ -1,6 +1,9 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -92,6 +95,7 @@ public class TCard {
 	 * Explicit canine marker because ICS 219 represents canines and ordinary
 	 * equipment with the same EQUIPMENT card type.
 	 */
+	@JsonProperty("canineResource")
 	private boolean canineResource;
 
 	/**

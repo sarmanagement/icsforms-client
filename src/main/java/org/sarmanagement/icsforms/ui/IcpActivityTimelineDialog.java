@@ -1,0 +1,895 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+package org.sarmanagement.icsforms.ui;
+
+import org.sarmanagement.icsforms.model.ActivityEventType;
+import org.sarmanagement.icsforms.model.ActivityLogEntry;
+import org.sarmanagement.icsforms.model.ActivityLogScope;
+import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.SarTaskSupport;
+
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import java.awt.BasicStroke;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.Window;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Consumer;
+
+/**
+ * Proof-of-concept timeline for ICP activity, grouped by assignment.
+ */
+public final class IcpActivityTimelineDialog extends JDialog {
+	private static final int TIMELINE_LEFT = 240;
+	private static final int TIMELINE_HOUR_WIDTH = 100;
+	private final AppController controller;
+	private final Consumer<LogEntryContext> addEntry;
+	private final Consumer<String> openAssignment;
+	private final TimelineCanvas canvas = new TimelineCanvas();
+	private final JLabel selectionLabel = new JLabel("Select an assignment lane or add an ICP entry.");
+	private final JButton detailsButton = new JButton("Event Details…");
+	private final JButton openAssignmentButton = new JButton("Open Task / Assignment…");
+	private List<TimelineLane> lanes = List.of();
+	private int selectedLane = -1;
+
+	/**
+	 * Creates a modeless ICP timeline with the shared activity-entry workflow.
+	 *
+	 * @param owner parent window.
+	 * @param controller active incident controller.
+	 * @param addEntry shared activity entry action.
+	 */
+	public IcpActivityTimelineDialog(Window owner, AppController controller, Consumer<LogEntryContext> addEntry) {
+		this(owner, controller, addEntry, assignmentId -> { });
+	}
+
+	/**
+	 * Creates a modeless ICP timeline with contextual entry and assignment actions.
+	 *
+	 * @param owner parent window.
+	 * @param controller active incident controller.
+	 * @param addEntry shared activity entry action.
+	 * @param openAssignment action for opening the selected assignment or task form.
+	 */
+	public IcpActivityTimelineDialog(Window owner, AppController controller, Consumer<LogEntryContext> addEntry,
+			Consumer<String> openAssignment) {
+		super(owner, "ICP Activity Timeline", ModalityType.MODELESS);
+		this.controller = Objects.requireNonNull(controller);
+		this.addEntry = Objects.requireNonNull(addEntry);
+		this.openAssignment = Objects.requireNonNull(openAssignment);
+		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+		JPanel content = new JPanel(new BorderLayout(8, 8));
+		content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+		content.add(new JLabel("ICP activity by assignment. Markers show staging, task, clue, subject, completion, and return events."),
+				BorderLayout.NORTH);
+		JScrollPane scroll = new JScrollPane(canvas);
+		scroll.setPreferredSize(new Dimension(1000, 540));
+		JPanel timelineView = new JPanel(new BorderLayout(0, 4));
+		timelineView.add(buildLegend(), BorderLayout.NORTH);
+		timelineView.add(scroll, BorderLayout.CENTER);
+		content.add(timelineView, BorderLayout.CENTER);
+		JPanel controls = new JPanel(new BorderLayout());
+		controls.add(selectionLabel, BorderLayout.CENTER);
+		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+		JButton addButton = new JButton("Add ICP Activity…");
+		addButton.addActionListener(event -> addSelectedEntry());
+		detailsButton.addActionListener(event -> showSelectedDetails());
+		openAssignmentButton.addActionListener(event -> openSelectedAssignment());
+		detailsButton.setEnabled(false);
+		openAssignmentButton.setEnabled(false);
+		JButton refreshButton = new JButton("Refresh");
+		refreshButton.addActionListener(event -> refresh());
+		JButton closeButton = new JButton("Close");
+		closeButton.addActionListener(event -> dispose());
+		buttons.add(detailsButton);
+		buttons.add(openAssignmentButton);
+		buttons.add(addButton);
+		buttons.add(refreshButton);
+		buttons.add(closeButton);
+		controls.add(buttons, BorderLayout.EAST);
+		content.add(controls, BorderLayout.SOUTH);
+		setContentPane(content);
+		refresh();
+		pack();
+		setMinimumSize(new Dimension(760, 420));
+		setLocationRelativeTo(owner);
+	}
+
+	/**
+	 * Builds a legend for the timeline's compact event symbols.
+	 *
+	 * @return legend row.
+	 */
+	private JPanel buildLegend() {
+		JPanel legend = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+		addLegendItem(legend, "D", "Depart", markerColor(ActivityEventType.ID_RESOURCE_DEPARTED_STAGING));
+		addLegendItem(legend, "T", "On task", markerColor(ActivityEventType.ID_RESOURCE_ON_TASK));
+		addLegendItem(legend, "C", "Clue", markerColor(ActivityEventType.ID_CLUE_DETECTED));
+		addLegendItem(legend, "S", "Subject located", markerColor(ActivityEventType.ID_SUBJECT_FOUND));
+		addLegendItem(legend, "✓", "Complete", markerColor(ActivityEventType.ID_TASK_COMPLETED));
+		addLegendItem(legend, "R", "Return to staging/base",
+				markerColor(ActivityEventType.ID_RESOURCE_RETURNED_STAGING));
+		addLegendItem(legend, "•", "Note", markerColor(ActivityEventType.ID_FREE_TEXT));
+		return legend;
+	}
+
+	/**
+	 * Adds one colored marker description to the timeline legend.
+	 *
+	 * @param legend containing panel.
+	 * @param marker compact symbol.
+	 * @param description event category.
+	 * @param color marker color.
+	 */
+	private void addLegendItem(JPanel legend, String marker, String description, Color color) {
+		JLabel label = new JLabel(marker + " " + description);
+		label.setForeground(color);
+		label.setFont(label.getFont().deriveFont(Font.BOLD, 11f));
+		legend.add(label);
+	}
+
+	/**
+	 * Reloads assignment lanes and event markers from the active incident.
+	 */
+	private void refresh() {
+		lanes = buildLanes(controller.getData());
+		if (selectedLane >= lanes.size()) {
+			selectedLane = -1;
+		}
+		canvas.revalidate();
+		canvas.repaint();
+		updateSelectionLabel();
+	}
+
+	/**
+	 * Returns whether event details are available for the selected lane.
+	 *
+	 * @return true when a timeline lane is selected.
+	 */
+	boolean hasSelectedLane() {
+		return selectedLane >= 0 && selectedLane < lanes.size();
+	}
+
+	/**
+	 * Returns whether the selected lane is linked to an editable task or assignment.
+	 *
+	 * @return true when the assignment exists in the incident.
+	 */
+	boolean canOpenSelectedAssignment() {
+		if (!hasSelectedLane()) {
+			return false;
+		}
+		String assignmentId = lanes.get(selectedLane).assignmentId();
+		return !assignmentId.isBlank() && (controller.getData().getSarTaskAssignments().stream()
+				.anyMatch(task -> assignmentId.equals(task.getAssignmentId()))
+				|| controller.getData().getAllAssignmentResources().stream()
+						.anyMatch(resource -> assignmentId.equals(resource.getAssignmentId())));
+	}
+
+	/**
+	 * Adds an activity entry associated with the selected assignment, when any.
+	 */
+	private void addSelectedEntry() {
+		addEntry.accept(hasSelectedLane() ? contextFor(lanes.get(selectedLane))
+				: new LogEntryContext(this, "", "", ""));
+		refresh();
+	}
+
+	/**
+	 * Shows selected lane event/resource details and offers a task-context log action.
+	 */
+	private void showSelectedDetails() {
+		if (!hasSelectedLane()) {
+			return;
+		}
+		TimelineLane lane = lanes.get(selectedLane);
+		JPanel details = new JPanel(new BorderLayout(8, 8));
+		details.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+		JTextArea resources = readOnlyText(lane.assignedResources().isEmpty()
+				? "No resources are listed on this assignment."
+				: String.join("\n", lane.assignedResources()));
+		JTextArea events = readOnlyText(lane.markers().isEmpty()
+				? "No ICP events are recorded for this assignment."
+				: lane.markers().stream().map(marker -> marker.timestamp().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+						+ " — " + marker.eventLabel()
+						+ (marker.resourceIdentifier().isBlank() ? "" : " — " + marker.resourceIdentifier())
+						+ (marker.struckOut() ? " [struck out]" : "")
+						+ "\n" + safe(marker.activity()))
+						.collect(java.util.stream.Collectors.joining("\n\n")));
+		JPanel content = new JPanel(new BorderLayout(6, 6));
+		content.add(new JLabel("Resources assigned"), BorderLayout.NORTH);
+		content.add(new JScrollPane(resources), BorderLayout.CENTER);
+		JPanel eventContent = new JPanel(new BorderLayout(6, 6));
+		eventContent.add(new JLabel("Timeline events — " + lane.label()), BorderLayout.NORTH);
+		eventContent.add(new JScrollPane(events), BorderLayout.CENTER);
+		details.add(content, BorderLayout.NORTH);
+		details.add(eventContent, BorderLayout.CENTER);
+		int choice = UiSupport.showResizableOptionDialog(this, "Timeline Details", details,
+				new Dimension(650, 520), new Object[]{"Add ICP Log Entry…", "Close"}, "Close");
+		if (choice == 0) {
+			addEntry.accept(contextFor(lane));
+			refresh();
+		}
+	}
+
+	/**
+	 * Creates a non-editable text area for detail content.
+	 *
+	 * @param text displayed detail.
+	 * @return read-only text area.
+	 */
+	private JTextArea readOnlyText(String text) {
+		JTextArea area = new JTextArea(text, 4, 48);
+		area.setEditable(false);
+		area.setLineWrap(true);
+		area.setWrapStyleWord(true);
+		return area;
+	}
+
+	/**
+	 * Opens the task or ICS 204 assignment for the selected lane.
+	 */
+	private void openSelectedAssignment() {
+		if (canOpenSelectedAssignment()) {
+			openAssignment.accept(lanes.get(selectedLane).assignmentId());
+		}
+	}
+
+	/**
+	 * Builds the shared activity-entry context for one timeline lane.
+	 *
+	 * @param lane selected assignment lane.
+	 * @return context defaulting the entry to that assignment.
+	 */
+	private LogEntryContext contextFor(TimelineLane lane) {
+		return new LogEntryContext(this, lane.taskId(), lane.assignmentId(), lane.resourceIdentifier());
+	}
+
+	/**
+	 * Selects a lane and updates the enabled row actions.
+	 *
+	 * @param laneIndex lane index under the pointer.
+	 */
+	private void selectLane(int laneIndex) {
+		selectedLane = laneIndex >= 0 && laneIndex < lanes.size() ? laneIndex : -1;
+		updateSelectionLabel();
+		canvas.repaint();
+	}
+
+	/**
+	 * Creates a context menu for the selected row.
+	 *
+	 * @return row actions with availability matching the selection.
+	 */
+	private JPopupMenu createRowPopup() {
+		JPopupMenu popup = new JPopupMenu();
+		javax.swing.JMenuItem details = new javax.swing.JMenuItem("Event Details…");
+		details.setEnabled(hasSelectedLane());
+		details.addActionListener(event -> showSelectedDetails());
+		javax.swing.JMenuItem addLog = new javax.swing.JMenuItem("Add ICP Log Entry…");
+		addLog.addActionListener(event -> addSelectedEntry());
+		javax.swing.JMenuItem open = new javax.swing.JMenuItem("Open Task / Assignment…");
+		open.setEnabled(canOpenSelectedAssignment());
+		open.addActionListener(event -> openSelectedAssignment());
+		popup.add(details);
+		popup.add(addLog);
+		popup.add(open);
+		return popup;
+	}
+
+	/**
+	 * Updates the selected-lane prompt.
+	 */
+	private void updateSelectionLabel() {
+		if (selectedLane < 0) {
+			selectionLabel.setText("Select an assignment lane or add an ICP entry.");
+		} else {
+			selectionLabel.setText("Selected: " + lanes.get(selectedLane).label());
+		}
+		detailsButton.setEnabled(hasSelectedLane());
+		openAssignmentButton.setEnabled(canOpenSelectedAssignment());
+	}
+
+	/**
+	 * Builds ICP lanes, retaining assignments that do not yet have logged events.
+	 *
+	 * @param data active incident snapshot.
+	 * @return ordered lanes with their timestamped markers.
+	 */
+	static List<TimelineLane> buildLanes(AppData data) {
+		Map<String, MutableLane> grouped = new LinkedHashMap<>();
+		if (data == null) {
+			return List.of();
+		}
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			if (task == null) {
+				continue;
+			}
+			String assignmentId = safe(task.getAssignmentId());
+			MutableLane lane = grouped.computeIfAbsent(assignmentId, ignored -> new MutableLane(assignmentId,
+					task.getTaskId(), SarTaskSupport.taskResourceDisplayLabel(task), task.getResourceIdentifier()));
+			for (SarTaskResource resource : task.getResourcesAssigned()) {
+				String name = safe(resource.getName());
+				if (!name.isBlank()) {
+					String role = safe(resource.getFunction());
+					lane.assignedResources.add(role.isBlank() ? name : name + " — " + role);
+				}
+			}
+		}
+		for (ResourceAssignment assignment : data.getAllAssignmentResources()) {
+			if (assignment == null) {
+				continue;
+			}
+			String assignmentId = safe(assignment.getAssignmentId());
+			String resource = safe(assignment.getResourceIdentifier());
+			String teamNumber = safe(assignment.getAssignmentTeamNumber());
+			String label = teamNumber.isBlank() ? resource : teamNumber + ": " + resource;
+			MutableLane lane = grouped.computeIfAbsent(assignmentId, ignored ->
+					new MutableLane(assignmentId, "", label, resource));
+			if (lane.assignedResources.isEmpty()) {
+				if (!resource.isBlank()) {
+					lane.assignedResources.add(resource);
+				}
+				String leader = safe(assignment.getLeader());
+				if (!leader.isBlank()) {
+					lane.assignedResources.add(leader + " — " + safe(assignment.getLeaderRole()));
+				}
+				if (assignment.getNumberOfPersons() > 0) {
+					lane.assignedResources.add("Personnel count: " + assignment.getNumberOfPersons());
+				}
+			}
+		}
+		grouped.put("", new MutableLane("", "", "ICP / Unassigned", ""));
+		Map<String, String> eventLabels = new LinkedHashMap<>();
+		List<ActivityEventType> eventTypes = data.getActivityEventTypes().isEmpty()
+				? ActivityEventType.defaultTypes() : data.getActivityEventTypes();
+		for (ActivityEventType eventType : eventTypes) {
+			eventLabels.put(eventType.getId(), eventType.getLabel());
+		}
+		for (Ics214Form log : data.getActivityLogs()) {
+			if (log == null || log.getLogScope() != ActivityLogScope.ICP || log.getActivityLog() == null) {
+				continue;
+			}
+			for (ActivityLogEntry entry : log.getActivityLog()) {
+				if (entry == null || entry.getTimestamp() == null) {
+					continue;
+				}
+				String assignmentId = safe(entry.getAssignmentId());
+				if (assignmentId.isBlank()) {
+					assignmentId = assignmentIdForResource(data, entry.getResourceIdentifier());
+				}
+				MutableLane lane = grouped.get(assignmentId);
+				if (lane == null) {
+					String resource = safe(entry.getResourceIdentifier());
+					String label = resource.isBlank() ? "Unassigned" : resource;
+					lane = new MutableLane(assignmentId, "", label, resource);
+					grouped.put(assignmentId, lane);
+				}
+				String typeId = entry.getEventTypeId();
+				lane.markers.add(new TimelineMarker(entry.getTimestamp(), typeId,
+						eventLabels.getOrDefault(typeId, "Activity"), entry.getNotableActivity(),
+						safe(entry.getResourceIdentifier()),
+						entry.isStruckOut()));
+			}
+		}
+		List<TimelineLane> result = new ArrayList<>();
+		for (MutableLane lane : grouped.values()) {
+			lane.markers.sort(Comparator.comparing(TimelineMarker::timestamp));
+			result.add(new TimelineLane(lane.assignmentId, lane.taskId, lane.label, lane.resourceIdentifier,
+					List.copyOf(lane.assignedResources), List.copyOf(lane.markers)));
+		}
+		return List.copyOf(result);
+	}
+
+	/**
+	 * Resolves a task's stable ID from a legacy activity resource label.
+	 *
+	 * @param data incident containing task assignments.
+	 * @param resourceIdentifier log resource label.
+	 * @return matching assignment ID, or empty when no task matches.
+	 */
+	private static String assignmentIdForResource(AppData data, String resourceIdentifier) {
+		String resource = safe(resourceIdentifier);
+		if (resource.isBlank()) {
+			return "";
+		}
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			if (resource.equals(task.getResourceIdentifier())
+					|| resource.equals(SarTaskSupport.taskResourceDisplayLabel(task))) {
+				return task.getAssignmentId();
+			}
+		}
+		for (ResourceAssignment assignment : data.getAllAssignmentResources()) {
+			if (resource.equals(assignment.getResourceIdentifier())) {
+				return assignment.getAssignmentId();
+			}
+		}
+		return "";
+	}
+
+	/**
+	 * Returns the compact visual symbol for a built-in lifecycle or clue event.
+	 *
+	 * @param eventTypeId stable event type ID.
+	 * @return short marker symbol.
+	 */
+	static String markerFor(String eventTypeId) {
+		return switch (safe(eventTypeId)) {
+			case ActivityEventType.ID_RESOURCE_DEPARTED_STAGING -> "D";
+			case ActivityEventType.ID_RESOURCE_ON_TASK -> "T";
+			case ActivityEventType.ID_CLUE_DETECTED, ActivityEventType.ID_CLUE_REPORTED -> "C";
+			case ActivityEventType.ID_SUBJECT_FOUND -> "S";
+			case ActivityEventType.ID_TASK_COMPLETED -> "✓";
+			case ActivityEventType.ID_RESOURCE_RETURNED_STAGING -> "R";
+			default -> "•";
+		};
+	}
+
+	/**
+	 * Finds intervals during which an assignment was logged as on task.
+	 *
+	 * @param markers chronologically ordered lane markers.
+	 * @param timelineEnd end of the visible timeline, used for active assignments.
+	 * @return on-task intervals terminated by a completion or return marker.
+	 */
+	static List<TimelineSegment> onTaskSegments(List<TimelineMarker> markers, LocalDateTime timelineEnd) {
+		List<TimelineSegment> segments = new ArrayList<>();
+		TimelineMarker onTaskMarker = null;
+		for (TimelineMarker marker : markers) {
+			if (marker.struckOut()) {
+				continue;
+			}
+			if (ActivityEventType.ID_RESOURCE_ON_TASK.equals(marker.eventTypeId())) {
+				if (onTaskMarker == null) {
+					onTaskMarker = marker;
+				}
+			} else if (onTaskMarker != null && (ActivityEventType.ID_TASK_COMPLETED.equals(marker.eventTypeId())
+					|| ActivityEventType.ID_RESOURCE_RETURNED_STAGING.equals(marker.eventTypeId()))) {
+				segments.add(new TimelineSegment(onTaskMarker.timestamp(), marker.timestamp(), onTaskMarker, marker));
+				onTaskMarker = null;
+			}
+		}
+		if (onTaskMarker != null && timelineEnd != null && timelineEnd.isAfter(onTaskMarker.timestamp())) {
+			segments.add(new TimelineSegment(onTaskMarker.timestamp(), timelineEnd, onTaskMarker, null));
+		}
+		return List.copyOf(segments);
+	}
+
+	/**
+	 * Returns the zero vertical offset that keeps all event markers on the lane center.
+	 *
+	 * @param markers lane markers, retained for call-site compatibility.
+	 * @param target marker, retained for call-site compatibility.
+	 * @param timelineStart horizontal-axis origin, retained for call-site compatibility.
+	 * @return the target marker's vertical offset.
+	 */
+	static int markerVerticalOffset(List<TimelineMarker> markers, TimelineMarker target, LocalDateTime timelineStart) {
+		return 0;
+	}
+
+	/**
+	 * Returns the marker color for a built-in activity type.
+	 *
+	 * @param eventTypeId stable event type ID.
+	 * @return marker color.
+	 */
+	private static Color markerColor(String eventTypeId) {
+		return switch (safe(eventTypeId)) {
+			case ActivityEventType.ID_RESOURCE_DEPARTED_STAGING -> new Color(178, 92, 0);
+			case ActivityEventType.ID_RESOURCE_ON_TASK -> new Color(29, 95, 155);
+			case ActivityEventType.ID_CLUE_DETECTED, ActivityEventType.ID_CLUE_REPORTED ->
+				new Color(118, 71, 160);
+			case ActivityEventType.ID_SUBJECT_FOUND -> new Color(33, 125, 70);
+			case ActivityEventType.ID_TASK_COMPLETED -> new Color(74, 74, 74);
+			case ActivityEventType.ID_RESOURCE_RETURNED_STAGING -> new Color(0, 121, 128);
+			default -> new Color(105, 105, 105);
+		};
+	}
+
+	/**
+	 * Returns an empty string for null display values.
+	 *
+	 * @param value source text.
+	 * @return non-null text.
+	 */
+	private static String safe(String value) {
+		return value == null ? "" : value;
+	}
+
+	/**
+	 * Escapes untrusted activity text before it is returned as Swing tooltip HTML.
+	 *
+	 * @param value text to escape.
+	 * @return escaped text.
+	 */
+	private static String escapeHtml(String value) {
+		return safe(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+	}
+
+	/**
+	 * Assignment lane and its event markers.
+	 *
+	 * @param assignmentId stable assignment identity.
+	 * @param taskId task identity.
+	 * @param label visible lane label.
+	 * @param resourceIdentifier resource display name.
+	 * @param assignedResources resource names and functions on this assignment.
+	 * @param markers chronologically ordered activity markers.
+	 */
+	record TimelineLane(String assignmentId, String taskId, String label, String resourceIdentifier,
+			List<String> assignedResources, List<TimelineMarker> markers) {
+	}
+
+	/**
+	 * A timestamped marker shown on one assignment lane.
+	 *
+	 * @param timestamp event time.
+	 * @param eventTypeId stable event type identity.
+	 * @param eventLabel configured event label.
+	 * @param activity notable activity text.
+	 * @param resourceIdentifier resource associated with the event.
+	 * @param struckOut whether the source entry is struck out.
+	 */
+	record TimelineMarker(LocalDateTime timestamp, String eventTypeId, String eventLabel, String activity,
+			String resourceIdentifier, boolean struckOut) {
+	}
+
+	/**
+	 * Time interval showing an assignment's logged on-task period.
+	 *
+	 * @param start interval start.
+	 * @param end interval end.
+	 * @param startMarker marker at the interval start.
+	 * @param endMarker marker at the interval end, or null for a still-active interval.
+	 */
+	record TimelineSegment(LocalDateTime start, LocalDateTime end, TimelineMarker startMarker,
+			TimelineMarker endMarker) {
+	}
+
+	/**
+	 * Mutable lane used only while constructing the timeline model.
+	 */
+	private static final class MutableLane {
+		private final String assignmentId;
+		private final String taskId;
+		private final String label;
+		private final String resourceIdentifier;
+		private final List<String> assignedResources = new ArrayList<>();
+		private final List<TimelineMarker> markers = new ArrayList<>();
+
+		/**
+		 * Creates a lane builder.
+		 *
+		 * @param assignmentId assignment identity.
+		 * @param taskId task identity.
+		 * @param label visible lane label.
+		 * @param resourceIdentifier resource display label.
+		 */
+		private MutableLane(String assignmentId, String taskId, String label, String resourceIdentifier) {
+			this.assignmentId = assignmentId;
+			this.taskId = taskId;
+			this.label = label;
+			this.resourceIdentifier = resourceIdentifier;
+		}
+	}
+
+	/**
+	 * Scrollable chart that paints lanes, hourly guides, and event symbols.
+	 */
+	private final class TimelineCanvas extends JPanel {
+		private static final int LEFT = TIMELINE_LEFT;
+		private static final int TOP = 42;
+		private static final int ROW_HEIGHT = 52;
+		private static final int HOUR_WIDTH = TIMELINE_HOUR_WIDTH;
+		private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
+		private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("MMM d");
+		private final List<MarkerHit> hits = new ArrayList<>();
+
+		/**
+		 * Creates a white, tooltip-enabled timeline canvas.
+		 */
+		private TimelineCanvas() {
+			setBackground(Color.WHITE);
+			setOpaque(true);
+			javax.swing.ToolTipManager.sharedInstance().registerComponent(this);
+			addMouseListener(new MouseAdapter() {
+				/**
+				 * Selects the assignment lane clicked by the operator.
+				 *
+				 * @param event pointer event.
+				 */
+				@Override
+				public void mouseClicked(MouseEvent event) {
+					int laneIndex = event.getY() < TOP ? -1 : (event.getY() - TOP) / ROW_HEIGHT;
+					if (laneIndex >= 0 && laneIndex < lanes.size()) {
+						selectLane(laneIndex);
+					}
+				}
+
+				/**
+				 * Opens the selected row menu when this platform triggers popups on press.
+				 *
+				 * @param event pointer event.
+				 */
+				@Override
+				public void mousePressed(MouseEvent event) {
+					showRowPopup(event);
+				}
+
+				/**
+				 * Opens the selected row menu when this platform triggers popups on release.
+				 *
+				 * @param event pointer event.
+				 */
+				@Override
+				public void mouseReleased(MouseEvent event) {
+					showRowPopup(event);
+				}
+			});
+		}
+
+		/**
+		 * Selects the row under a platform popup trigger and opens its actions.
+		 *
+		 * @param event pointer event.
+		 */
+		private void showRowPopup(MouseEvent event) {
+			if (!event.isPopupTrigger()) {
+				return;
+			}
+			int laneIndex = event.getY() < TOP ? -1 : (event.getY() - TOP) / ROW_HEIGHT;
+			if (laneIndex < 0 || laneIndex >= lanes.size()) {
+				return;
+			}
+			selectLane(laneIndex);
+			createRowPopup().show(this, event.getX(), event.getY());
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Dimension getPreferredSize() {
+			List<TimelineMarker> markers = allMarkers();
+			long hours = timelineHours(markers);
+			return new Dimension(Math.max(960, LEFT + (int) (hours * HOUR_WIDTH) + 60),
+					TOP + Math.max(1, lanes.size()) * ROW_HEIGHT + 22);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		protected void paintComponent(Graphics graphics) {
+			super.paintComponent(graphics);
+			Graphics2D g = (Graphics2D) graphics.create();
+			try {
+				g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+				drawTimeline(g);
+			} finally {
+				g.dispose();
+			}
+		}
+
+		/**
+		 * Returns the marker tooltip under the pointer.
+		 *
+		 * @param event pointer location.
+		 * @return event time, category, and activity text.
+		 */
+		@Override
+		public String getToolTipText(MouseEvent event) {
+			for (MarkerHit hit : hits) {
+				if (hit.contains(event.getX(), event.getY())) {
+					return "<html>" + hit.tooltip() + "</html>";
+				}
+			}
+			return null;
+		}
+
+		/**
+		 * Draws the axis, lanes, and event symbols.
+		 *
+		 * @param g drawing context.
+		 */
+		private void drawTimeline(Graphics2D g) {
+			List<TimelineMarker> markers = allMarkers();
+			LocalDateTime start = timelineStart(markers);
+			LocalDateTime end = markers.stream().map(TimelineMarker::timestamp).max(LocalDateTime::compareTo)
+					.orElse(start);
+			long hours = timelineHours(markers);
+			g.setColor(new Color(80, 80, 80));
+			g.setFont(getFont().deriveFont(Font.BOLD, 12f));
+			g.drawString("Assignment", 8, 24);
+			for (long hour = 0; hour <= hours; hour++) {
+				int x = LEFT + (int) (hour * HOUR_WIDTH);
+				LocalDateTime tick = start.plusHours(hour);
+				g.setColor(new Color(215, 220, 225));
+				g.setStroke(new BasicStroke(1f));
+				g.drawLine(x, TOP - 10, x, TOP + lanes.size() * ROW_HEIGHT);
+				g.setColor(new Color(70, 70, 70));
+				g.setFont(getFont().deriveFont(Font.PLAIN, 11f));
+				g.drawString(tick.getHour() == 0 ? tick.format(DATE) : tick.format(TIME), x + 3, 24);
+			}
+			hits.clear();
+			for (int laneIndex = 0; laneIndex < lanes.size(); laneIndex++) {
+				TimelineLane lane = lanes.get(laneIndex);
+				int top = TOP + laneIndex * ROW_HEIGHT;
+				if (laneIndex == selectedLane) {
+					g.setColor(new Color(230, 241, 252));
+					g.fillRect(0, top, getWidth(), ROW_HEIGHT);
+				}
+				g.setColor(new Color(222, 226, 230));
+				g.drawLine(0, top + ROW_HEIGHT, getWidth(), top + ROW_HEIGHT);
+				g.setColor(new Color(45, 50, 55));
+				g.setFont(getFont().deriveFont(Font.PLAIN, 12f));
+				g.drawString(trim(lane.label(), 32), 8, top + ROW_HEIGHT / 2 + 4);
+				drawOnTaskSegments(g, lane, laneIndex, start, end);
+				drawMarkers(g, lane, laneIndex, start);
+			}
+			if (lanes.isEmpty()) {
+				g.setColor(Color.DARK_GRAY);
+				g.drawString("No ICP activity or assignments yet.", 12, TOP + 20);
+			}
+		}
+
+		/**
+		 * Draws all events for a lane and records their tooltip bounds.
+		 *
+		 * @param g drawing context.
+		 * @param lane assignment row.
+		 * @param laneIndex row number.
+		 * @param start horizontal-axis origin.
+		 */
+		private void drawMarkers(Graphics2D g, TimelineLane lane, int laneIndex, LocalDateTime start) {
+			for (TimelineMarker marker : lane.markers()) {
+				int x = markerX(marker.timestamp(), start);
+				int centerY = TOP + laneIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+				int y = centerY + markerVerticalOffset(lane.markers(), marker, start);
+				Color color = markerColor(marker.eventTypeId());
+				g.setColor(color);
+				g.fillOval(x - 8, y - 8, 16, 16);
+				g.setColor(Color.WHITE);
+				g.setFont(getFont().deriveFont(Font.BOLD, 9f));
+				g.drawString(markerFor(marker.eventTypeId()), x - 4, y + 3);
+				if (marker.struckOut()) {
+					g.setColor(Color.BLACK);
+					g.drawLine(x - 8, y, x + 8, y);
+				}
+				String resource = marker.resourceIdentifier().isBlank() ? ""
+						: " — " + escapeHtml(marker.resourceIdentifier());
+				String text = marker.timestamp().format(TIME) + " — " + escapeHtml(marker.eventLabel()) + resource + ": "
+						+ escapeHtml(marker.activity())
+						+ (marker.struckOut() ? " [struck out]" : "");
+				hits.add(new MarkerHit(x - 10, y - 10, x + 10, y + 10, text));
+			}
+		}
+
+		/**
+		 * Draws a connector across each logged on-task interval in the lane.
+		 *
+		 * @param g drawing context.
+		 * @param lane assignment row.
+		 * @param laneIndex row number.
+		 * @param start horizontal-axis origin.
+		 */
+		private void drawOnTaskSegments(Graphics2D g, TimelineLane lane, int laneIndex, LocalDateTime start,
+				LocalDateTime end) {
+			int centerY = TOP + laneIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+			g.setColor(new Color(29, 95, 155, 150));
+			g.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+			for (TimelineSegment segment : onTaskSegments(lane.markers(), end)) {
+				int fromX = markerX(segment.start(), start);
+				int toX = markerX(segment.end(), start);
+				int fromY = centerY + markerVerticalOffset(lane.markers(), segment.startMarker(), start);
+				int toY = centerY + (segment.endMarker() == null ? 0
+						: markerVerticalOffset(lane.markers(), segment.endMarker(), start));
+				g.drawLine(fromX, fromY, toX, toY);
+			}
+		}
+
+		/**
+		 * Converts a timeline timestamp to its horizontal pixel coordinate.
+		 *
+		 * @param timestamp plotted time.
+		 * @param start horizontal-axis origin.
+		 * @return horizontal pixel coordinate.
+		 */
+		private int markerX(LocalDateTime timestamp, LocalDateTime start) {
+			long minutes = Duration.between(start, timestamp).toMinutes();
+			return LEFT + (int) (minutes * HOUR_WIDTH / 60f);
+		}
+
+		/**
+		 * Collects all plotted events.
+		 *
+		 * @return timeline markers in all assignment lanes.
+		 */
+		private List<TimelineMarker> allMarkers() {
+			return lanes.stream().flatMap(lane -> lane.markers().stream()).toList();
+		}
+
+		/**
+		 * Returns the chart's rounded hourly range.
+		 *
+		 * @param markers all plotted markers.
+		 * @return at least one hour.
+		 */
+		private long timelineHours(List<TimelineMarker> markers) {
+			if (markers.isEmpty()) {
+				return 1;
+			}
+			LocalDateTime start = timelineStart(markers);
+			LocalDateTime end = markers.stream().map(TimelineMarker::timestamp).max(LocalDateTime::compareTo).orElse(start);
+			return Math.max(1, (long) Math.ceil(Duration.between(start, end).toMinutes() / 60.0));
+		}
+
+		/**
+		 * Returns the start of the first plotted hour.
+		 *
+		 * @param markers all plotted markers.
+		 * @return rounded axis start.
+		 */
+		private LocalDateTime timelineStart(List<TimelineMarker> markers) {
+			return markers.stream().map(TimelineMarker::timestamp).min(LocalDateTime::compareTo)
+					.map(value -> value.withMinute(0).withSecond(0).withNano(0)).orElse(LocalDateTime.now().withMinute(0));
+		}
+
+		/**
+		 * Truncates a long lane label for its fixed-width column.
+		 *
+		 * @param text source label.
+		 * @param maxLength visible character limit.
+		 * @return display label.
+		 */
+		private String trim(String text, int maxLength) {
+			return text.length() <= maxLength ? text : text.substring(0, maxLength - 1) + "…";
+		}
+	}
+
+	/**
+	 * One marker's clickable/hoverable canvas bounds.
+	 *
+	 * @param left left edge.
+	 * @param top top edge.
+	 * @param right right edge.
+	 * @param bottom bottom edge.
+	 * @param tooltip hover text.
+	 */
+	private record MarkerHit(int left, int top, int right, int bottom, String tooltip) {
+		/**
+		 * Tests whether the pointer is inside this marker.
+		 *
+		 * @param x pointer horizontal coordinate.
+		 * @param y pointer vertical coordinate.
+		 * @return true when contained.
+		 */
+		private boolean contains(int x, int y) {
+			return x >= left && x <= right && y >= top && y <= bottom;
+		}
+	}
+}

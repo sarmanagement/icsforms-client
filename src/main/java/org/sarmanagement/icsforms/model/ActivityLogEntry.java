@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -24,6 +27,7 @@ public class ActivityLogEntry {
 	private String assignmentId = "";
 	private String notableActivity = "";
 	private boolean struckOut;
+	private List<EventTypeChange> eventTypeChangeHistory = new ArrayList<>();
 
 	/**
 	 * Returns this activity row's stable identity, assigning a UUID to legacy
@@ -103,6 +107,59 @@ public class ActivityLogEntry {
 	 */
 	public void setEventTypeId(String eventTypeId) {
 		this.eventTypeId = eventTypeId == null ? ActivityEventType.ID_FREE_TEXT : eventTypeId;
+	}
+
+	/**
+	 * Returns the recorded history of event type reclassifications.
+	 *
+	 * @return ordered classification changes, possibly empty.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_EMPTY)
+	public List<EventTypeChange> getEventTypeChangeHistory() {
+		if (eventTypeChangeHistory == null) {
+			eventTypeChangeHistory = new ArrayList<>();
+		}
+		return eventTypeChangeHistory;
+	}
+
+	/**
+	 * Sets the recorded event type reclassification history during deserialization.
+	 *
+	 * @param eventTypeChangeHistory prior classification changes.
+	 */
+	public void setEventTypeChangeHistory(List<EventTypeChange> eventTypeChangeHistory) {
+		this.eventTypeChangeHistory = eventTypeChangeHistory == null
+				? new ArrayList<>() : new ArrayList<>(eventTypeChangeHistory);
+	}
+
+	/**
+	 * Reclassifies a Note entry and records the previous and new event type.
+	 *
+	 * @param newEventTypeId replacement event type identifier.
+	 * @param changedAt time the reclassification was made.
+	 * @throws IllegalStateException if this entry is not currently a Note.
+	 * @throws IllegalArgumentException if the replacement type or change time is invalid.
+	 */
+	public void reclassifyEventType(String newEventTypeId, LocalDateTime changedAt) {
+		if (!ActivityEventType.ID_FREE_TEXT.equals(eventTypeId)) {
+			throw new IllegalStateException("Only Note entries can be reclassified.");
+		}
+		if (newEventTypeId == null || newEventTypeId.isBlank()
+				|| ActivityEventType.ID_FREE_TEXT.equals(newEventTypeId) || changedAt == null) {
+			throw new IllegalArgumentException("A replacement event type and change time are required.");
+		}
+		getEventTypeChangeHistory().add(new EventTypeChange(eventTypeId, newEventTypeId, changedAt));
+		setEventTypeId(newEventTypeId);
+	}
+
+	/**
+	 * One durable event type reclassification audit record.
+	 *
+	 * @param previousEventTypeId event type before the change.
+	 * @param newEventTypeId event type after the change.
+	 * @param changedAt time the change was made.
+	 */
+	public record EventTypeChange(String previousEventTypeId, String newEventTypeId, LocalDateTime changedAt) {
 	}
 
 	/**

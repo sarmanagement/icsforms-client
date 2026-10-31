@@ -5,7 +5,6 @@ package org.sarmanagement.icsforms.persistence;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
@@ -39,6 +38,26 @@ public class FileIncidentStore implements IncidentStore {
 	private final String nodeId;
 	private final Map<IncidentId, FileChannel> channels = new HashMap<>();
 	private final Map<IncidentId, FileLock> locks = new HashMap<>();
+	private List<ImportValidationException.Problem> lastImportProblems = List.of();
+
+	/**
+	 * Validated external content and its immutable warning snapshot.
+	 *
+	 * @param data validated incident data
+	 * @param problems import warnings
+	 */
+	public record ImportResult(AppData data, List<ImportValidationException.Problem> problems) {
+		/**
+		 * Captures validated content and an immutable copy of its diagnostics.
+		 *
+		 * @param data validated incident data
+		 * @param problems import warnings
+		 */
+		public ImportResult(AppData data, List<ImportValidationException.Problem> problems) {
+			this.data = data;
+			this.problems = List.copyOf(problems);
+		}
+	}
 
 	/** Opens the default per-user file store. */
 	public FileIncidentStore() {
@@ -108,9 +127,9 @@ public class FileIncidentStore implements IncidentStore {
 			return true;
 		}
 
+		Path lockPath = incidents.resolve(id.value() + ".lock");
 		try {
-			FileChannel channel = FileChannel.open(incidents.resolve(id.value() + ".lock"),
-					StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+			FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
 			FileLock lock;
 			try {
 				lock = channel.tryLock();
@@ -125,7 +144,8 @@ public class FileIncidentStore implements IncidentStore {
 			locks.put(id, lock);
 			return true;
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot lock incident: " + id, e);
+			throw new IllegalStateException(
+					"Cannot lock incident: " + id + " at " + lockPath + ": " + e.getMessage(), e);
 		}
 	}
 
@@ -269,14 +289,24 @@ public class FileIncidentStore implements IncidentStore {
 		return results;
 	}
 
+	/**
+	 * Tombstones an unlocked incident, retaining its automatic backup.
+	 *
+	 * @param id incident identifier.
+	 * @throws StoreConflictException when any editor owns the incident lock.
+	 */
 	@Override
 	public synchronized void delete(IncidentId id) {
-		if (!lock(id)) {
-			throw new StoreConflictException("Incident is open in another window: " + id);
+		if (locks.containsKey(id) || !lock(id)) {
+			throw new StoreConflictException("Incident is open for editing; switch to another incident first: " + id);
 		}
 		Path path = path(id);
+		Path deleted = path.resolveSibling(path.getFileName() + ".deleted");
 		try {
-			move(path, path.resolveSibling(path.getFileName() + ".deleted"));
+			if (!Files.exists(path) && Files.exists(deleted)) {
+				return;
+			}
+			Files.move(path, deleted);
 		} catch (IOException e) {
 			throw new IllegalStateException("Cannot delete incident: " + id, e);
 		} finally {
@@ -284,22 +314,79 @@ public class FileIncidentStore implements IncidentStore {
 		}
 	}
 
+	/**
+	 * Validates external JSON and imports it under a fresh identity.
+	 *
+	 * @param jsonFile external document, or null when selection was cancelled
+	 * @return new identifier, or empty for cancelled selection
+	 * @throws ImportValidationException when validation fails
+	 */
 	@Override
-	public Optional<IncidentId> importFile(Path jsonFile) {
+	public synchronized Optional<IncidentId> importFile(Path jsonFile) {
+		lastImportProblems = List.of();
 		if (jsonFile == null) {
 			return Optional.empty();
 		}
+		IncidentDocumentReader reader = new IncidentDocumentReader();
+		AppData data = reader.readImport(jsonFile);
 		try {
-			AppData data = readDocument(jsonFile);
-			data.setIncidentId(null);
-			data.setRevision(0);
-			data.setCreatedAt(null);
-			data.setUpdatedAt(null);
-			data.setOriginNodeId(null);
-			return Optional.of(create(data));
-		} catch (IOException e) {
-			throw new IllegalStateException("Cannot import incident: " + jsonFile, e);
+			IncidentId imported = createImported(data);
+			lastImportProblems = reader.problems();
+			reader.logOutcome(jsonFile, data.getSchemaVersion(), "import-persisted");
+			return Optional.of(imported);
+		} catch (RuntimeException failure) {
+			reader.logOutcome(jsonFile, data.getSchemaVersion(), "import-failed");
+			throw failure;
 		}
+	}
+
+	/**
+	 * Returns warnings from the last successful import.
+	 *
+	 * @return immutable diagnostic snapshot
+	 */
+	@Override
+	public synchronized List<ImportValidationException.Problem> getLastImportProblems() {
+		return lastImportProblems;
+	}
+
+	/**
+	 * Validates an external document without creating an incident in a store.
+	 *
+	 * @param jsonFile external document path
+	 * @return validated incident data
+	 * @throws ImportValidationException when validation fails
+	 */
+	public static AppData readImportFile(Path jsonFile) {
+		return readImport(jsonFile).data();
+	}
+
+	/**
+	 * Validates external content without a store and retains successful warnings.
+	 *
+	 * @param jsonFile external document path
+	 * @return validated data and immutable warnings
+	 * @throws ImportValidationException when validation fails
+	 */
+	public static ImportResult readImport(Path jsonFile) {
+		IncidentDocumentReader reader = new IncidentDocumentReader();
+		AppData data = reader.readImport(jsonFile);
+		return new ImportResult(data, reader.problems());
+	}
+
+	/**
+	 * Creates a distinct copy of an imported or migrated document.
+	 *
+	 * @param data validated external or tolerantly loaded legacy data
+	 * @return new identifier
+	 */
+	private IncidentId createImported(AppData data) {
+		data.setIncidentId(null);
+		data.setRevision(0);
+		data.setCreatedAt(null);
+		data.setUpdatedAt(null);
+		data.setOriginNodeId(null);
+		return create(data);
 	}
 
 	@Override
@@ -308,6 +395,79 @@ public class FileIncidentStore implements IncidentStore {
 			MAPPER.writerWithDefaultPrettyPrinter().writeValue(target.toFile(), load(id));
 		} catch (IOException e) {
 			throw new IllegalStateException("Cannot export incident: " + id, e);
+		}
+	}
+
+	/**
+	 * Reports support for byte-preserving, non-overwriting external backups.
+	 *
+	 * @return true.
+	 */
+	@Override
+	public boolean supportsBackup() {
+		return true;
+	}
+
+	/**
+	 * Copies the readable primary JSON verbatim, falling back to its good automatic
+	 * backup when the primary is corrupt. A transient advisory lock protects the
+	 * snapshot without releasing an existing local edit lock.
+	 *
+	 * @param id incident identifier.
+	 * @param target new file outside the live store.
+	 * @throws IllegalStateException when the backup cannot be safely written.
+	 * @throws StoreConflictException when another editor owns the incident.
+	 */
+	@Override
+	public synchronized void backupFile(IncidentId id, Path target) {
+		Path destination = target.toAbsolutePath().normalize();
+		boolean owned = locks.containsKey(id);
+		if (!lock(id)) {
+			throw new StoreConflictException("Incident is open in another window: " + id);
+		}
+		boolean created = false;
+		try {
+			Path realParent = destination.getParent().toRealPath();
+			if (destination.startsWith(root.normalize()) || realParent.startsWith(root.toRealPath())
+					|| realParent.startsWith(incidents.toRealPath())) {
+				throw new IllegalArgumentException("Choose a new backup filename outside the live incident store.");
+			}
+			if (Files.exists(destination, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+				throw new IllegalArgumentException("Backup already exists; choose a new filename (no overwriting).");
+			}
+			Path source = path(id);
+			if (!Files.exists(source)) {
+				throw new IllegalArgumentException("Incident not found: " + id);
+			}
+			AppData stored;
+			try {
+				stored = readDocument(source);
+			} catch (IOException corruptPrimary) {
+				source = backup(source);
+				stored = readDocument(source);
+			}
+			if (stored.getIncidentId() != null && !id.value().equals(stored.getIncidentId())) {
+				throw new IllegalStateException("Incident identifier does not match file: " + id);
+			}
+			try (var input = Files.newInputStream(source);
+					var output = Files.newOutputStream(destination, StandardOpenOption.CREATE_NEW,
+							StandardOpenOption.WRITE)) {
+				created = true;
+				input.transferTo(output);
+			}
+		} catch (IOException | RuntimeException failure) {
+			if (created) {
+				try {
+					Files.deleteIfExists(destination);
+				} catch (IOException cleanupFailure) {
+					failure.addSuppressed(cleanupFailure);
+				}
+			}
+			throw new IllegalStateException("Cannot back up incident: " + failure.getMessage(), failure);
+		} finally {
+			if (!owned) {
+				unlock(id);
+			}
 		}
 	}
 
@@ -387,13 +547,7 @@ public class FileIncidentStore implements IncidentStore {
 	 * @throws IllegalStateException when a newer schema must not be rewritten.
 	 */
 	private AppData readDocument(Path path) throws IOException {
-		JsonNode document = MAPPER.readTree(path.toFile());
-		JsonNode version = document == null ? null : document.get("schemaVersion");
-		if (version != null && version.canConvertToInt() && version.intValue() > AppData.CURRENT_SCHEMA_VERSION) {
-			throw new IllegalStateException("Incident schema " + version.intValue()
-					+ " is newer than supported schema " + AppData.CURRENT_SCHEMA_VERSION + ": " + path);
-		}
-		return MAPPER.treeToValue(document, AppData.class);
+		return new IncidentDocumentReader().readStored(path);
 	}
 
 	/**
@@ -453,7 +607,7 @@ public class FileIncidentStore implements IncidentStore {
 				return;
 			}
 		}
-		importFile(legacy);
+		createImported(readWithBackup(legacy));
 		try {
 			Files.createFile(marker);
 		} catch (java.nio.file.FileAlreadyExistsException ignored) {
