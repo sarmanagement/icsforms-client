@@ -13,6 +13,8 @@ import java.awt.Toolkit;
 import java.awt.Window;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -37,6 +39,20 @@ public class SwingTestLifecycleExtension implements BeforeEachCallback, AfterEac
 			FAILURES.add(new AssertionError("Unexpected autosave persistence failure", exception));
 		});
 		return controller;
+	}
+
+	/**
+	 * Drains asynchronous failures captured for the current test.
+	 *
+	 * @return captured asynchronous failures.
+	 */
+	static List<Throwable> drainCapturedFailures() {
+		List<Throwable> failures = new ArrayList<>();
+		Throwable failure;
+		while ((failure = FAILURES.poll()) != null) {
+			failures.add(failure);
+		}
+		return failures;
 	}
 
 	/**

@@ -957,6 +957,13 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
+	 * Cancels any address lookup or route request owned by this workspace.
+	 */
+	void dispose() {
+		cancelWorker();
+	}
+
+	/**
 	 * Enables each veterinary workflow action only when its inputs are available.
 	 */
 	private void refreshWorkflowControls() {

@@ -267,7 +267,7 @@ public class MainFrame extends JFrame {
 			/** {@inheritDoc} */
 			@Override
 			public void windowClosed(java.awt.event.WindowEvent event) {
-				controller.close();
+				closeOwnedResources();
 			}
 		});
 		setPreferredSize(new Dimension(1120, 820));
@@ -1845,11 +1845,19 @@ public class MainFrame extends JFrame {
 		if (!saveBeforeSwitch()) {
 			return;
 		}
-		controller.close();
+		closeOwnedResources();
 		if (controller.getStore() != null) {
 			controller.getStore().close();
 		}
 		dispose();
+	}
+
+	/**
+	 * Releases controller and background work owned by this frame.
+	 */
+	private void closeOwnedResources() {
+		canineMedicalPanel.dispose();
+		controller.close();
 	}
 
 	/**
