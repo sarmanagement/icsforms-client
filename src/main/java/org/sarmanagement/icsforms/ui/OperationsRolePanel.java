@@ -44,6 +44,7 @@ public class OperationsRolePanel extends JPanel {
 	private final Consumer<String> debrief;
 	private final Runnable humanReference;
 	private final Runnable canineReference;
+	private final Runnable openOperationalPlanning;
 	private final AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
 	private final DefaultListModel<TaskChoice> taskModel = new DefaultListModel<>();
@@ -69,6 +70,29 @@ public class OperationsRolePanel extends JPanel {
 	public OperationsRolePanel(AppController controller, Supplier<ResourceAssignment> newAssignment,
 			Consumer<String> editTask, Consumer<String> changeStatus, Consumer<SarTaskAssignment> addLog,
 			Runnable recordClue, Consumer<String> debrief, Runnable humanReference, Runnable canineReference) {
+		this(controller, newAssignment, editTask, changeStatus, addLog, recordClue, debrief, humanReference,
+				canineReference, () -> {
+				});
+	}
+
+	/**
+	 * Creates the Operations panel and links its operational planning action to the shared editor.
+	 *
+	 * @param controller incident controller.
+	 * @param newAssignment established normal assignment workflow.
+	 * @param editTask established task editor by assignment ID.
+	 * @param changeStatus established task lifecycle dialog by assignment ID.
+	 * @param addLog established contextual activity-entry workflow.
+	 * @param recordClue established clue-entry workflow.
+	 * @param debrief established task debrief workflow by assignment ID.
+	 * @param humanReference opens the human medical reference.
+	 * @param canineReference opens the canine medical reference.
+	 * @param openOperationalPlanning opens the shared ICS 215 editor.
+	 */
+	public OperationsRolePanel(AppController controller, Supplier<ResourceAssignment> newAssignment,
+			Consumer<String> editTask, Consumer<String> changeStatus, Consumer<SarTaskAssignment> addLog,
+			Runnable recordClue, Consumer<String> debrief, Runnable humanReference, Runnable canineReference,
+			Runnable openOperationalPlanning) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
 		this.newAssignment = newAssignment;
@@ -79,6 +103,7 @@ public class OperationsRolePanel extends JPanel {
 		this.debrief = debrief;
 		this.humanReference = humanReference;
 		this.canineReference = canineReference;
+		this.openOperationalPlanning = openOperationalPlanning;
 		binding = controller.captureIncidentBinding();
 		add(buildHeader(), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
@@ -171,9 +196,12 @@ public class OperationsRolePanel extends JPanel {
 		human.addActionListener(event -> humanReference.run());
 		JButton canine = new JButton("Canine Medical Reference");
 		canine.addActionListener(event -> canineReference.run());
+		JButton planning = new JButton("Operational planning / ICS 215");
+		planning.addActionListener(event -> openOperationalPlanning.run());
 		actions.add(create);
 		actions.add(human);
 		actions.add(canine);
+		actions.add(planning);
 		header.add(actions, BorderLayout.SOUTH);
 		return header;
 	}

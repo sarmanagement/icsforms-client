@@ -45,6 +45,12 @@ public class Ics215Form {
 		public String resourceId = "";
 		/** Explicit operator-selected counting unit; never inferred from card details. */
 		public ResourceUnit unit;
+		/** Card status recorded when the snapshot was accepted. */
+		public String recordedStatus = "";
+		/** Card location recorded when the snapshot was accepted. */
+		public String recordedLocation = "";
+		/** Assignment context recorded when the snapshot was accepted. */
+		public String recordedAssignmentContext = "";
 	}
 
 	/**
@@ -593,6 +599,57 @@ public class Ics215Form {
 	 */
 	public Ics215Form copy() {
 		return COPIER.convertValue(this, Ics215Form.class);
+	}
+
+	/**
+	 * Prepares a new worksheet from this plan without carrying period evidence.
+	 *
+	 * @param retainRequired true to retain only explicitly chosen Required values.
+	 * @return detached reusable worksheet with fresh stable IDs and no Have evidence.
+	 */
+	public Ics215Form copyForReuse(boolean retainRequired) {
+		Ics215Form copy = copy();
+		copy.setWorksheetId("");
+		copy.setTargetPeriodStart(null);
+		copy.setTargetPeriodEnd(null);
+		copy.setPreparerName("");
+		copy.setPreparerPositionTitle("");
+		copy.setPreparerSignature("");
+		copy.setPreparedDateTime(null);
+		Map<String, String> headingIds = new LinkedHashMap<>();
+		for (ResourceHeading heading : copy.getResourceHeadings()) {
+			String oldId = heading.id;
+			heading.id = UUID.randomUUID().toString();
+			headingIds.put(oldId, heading.id);
+			heading.acceptedOnHand = null;
+			heading.linkedResourceIds = new ArrayList<>();
+			heading.linkedResources = new ArrayList<>();
+			heading.manualSupplemental = new CountPair();
+			heading.acceptedAt = null;
+			heading.linksRequireReview = false;
+		}
+		for (WorkRow row : copy.getWorkRows()) {
+			row.id = UUID.randomUUID().toString();
+			row.requestedArrival = null;
+			row.ics204DraftFormId = "";
+			Map<String, ResourceAllocation> allocations = new LinkedHashMap<>();
+			if (row.resourceAllocations != null) {
+				row.resourceAllocations.forEach((oldHeadingId, oldAllocation) -> {
+					String newHeadingId = headingIds.get(oldHeadingId);
+					if (newHeadingId == null) {
+						return;
+					}
+					ResourceAllocation allocation = new ResourceAllocation();
+					if (retainRequired && oldAllocation != null && oldAllocation.required != null) {
+						allocation.required = new CountPair(oldAllocation.required.singleResources,
+								oldAllocation.required.teams);
+					}
+					allocations.put(newHeadingId, allocation);
+				});
+			}
+			row.resourceAllocations = allocations;
+		}
+		return copy;
 	}
 
 	/**

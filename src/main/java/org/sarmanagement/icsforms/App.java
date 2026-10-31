@@ -27,6 +27,7 @@ import org.sarmanagement.icsforms.pdf.Ics215aPdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
 import org.sarmanagement.icsforms.ui.MainFrame;
+import org.sarmanagement.icsforms.ui.Ics215PromotionDialog;
 import org.sarmanagement.icsforms.ui.StartupDialog;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
@@ -83,8 +84,16 @@ public final class App {
 								&& (fileStore.isLockedElsewhere(id) || !fileStore.lock(id))) {
 							throw new StoreConflictException("Incident is open in another window: " + id.value());
 						}
-						data = loadExistingIncident(store, id, action == StartupDialog.StartupAction.OPEN_NEW_PERIOD,
-								startup.isBringForwardCommunicationsPlan());
+						data = store.load(id);
+						if (action == StartupDialog.StartupAction.OPEN_NEW_PERIOD) {
+							boolean promote = startup.isPromotePlannedIcs215();
+							if (promote && !Ics215PromotionDialog.confirm(null, data)) {
+								store.close();
+								return;
+							}
+							data.advanceToNewOperationalPeriod(startup.isBringForwardCommunicationsPlan(), promote);
+							store.save(id, data);
+						}
 					}
 					default -> {
 						data = new AppData();
@@ -132,9 +141,24 @@ public final class App {
 	 */
 	static AppData loadExistingIncident(IncidentStore store, IncidentId id, boolean newPeriod,
 			boolean bringForwardCommunicationsPlan) {
+		return loadExistingIncident(store, id, newPeriod, bringForwardCommunicationsPlan, false);
+	}
+
+	/**
+	 * Loads an incident and optionally promotes its explicitly planned ICS 215 worksheet.
+	 *
+	 * @param store selected incident store.
+	 * @param id selected incident identity.
+	 * @param newPeriod whether to advance the existing incident.
+	 * @param bringForwardCommunicationsPlan explicit ICS 205 carry-forward choice.
+	 * @param promotePlannedIcs215 true to apply the worksheet's target dates after validation.
+	 * @return loaded incident with the requested period transition applied.
+	 */
+	static AppData loadExistingIncident(IncidentStore store, IncidentId id, boolean newPeriod,
+			boolean bringForwardCommunicationsPlan, boolean promotePlannedIcs215) {
 		AppData data = store.load(id);
 		if (newPeriod) {
-			data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan);
+			data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan, promotePlannedIcs215);
 			store.save(id, data);
 		}
 		return data;

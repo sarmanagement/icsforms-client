@@ -133,4 +133,48 @@ class Ics215FormTest {
 		assertTrue(data.getOperationalPeriodHistory().isEmpty());
 		assertEquals(IapPhase.PRE_OP, data.getIapPhase());
 	}
+
+	@Test
+	void planReuseClearsDatesEvidenceAndSignaturesUnlessRequiredIsExplicitlyKept() {
+		AppData source = new AppData();
+		Ics215Form planned = source.getNextPeriodForm215();
+		planned.setTargetPeriodStart(LocalDateTime.of(2026, 11, 1, 6, 0));
+		planned.setPreparerName("Prepared");
+		planned.setPreparerSignature("signature");
+		Ics215Form.ResourceHeading heading = new Ics215Form.ResourceHeading();
+		heading.category = "Ground";
+		heading.countingUnit = "resource";
+		planned.getResourceHeadings().add(heading);
+		Ics215Form.WorkRow row = new Ics215Form.WorkRow();
+		row.assignment = "Search sector";
+		row.specialInstructions = "Keep this instruction";
+		Ics215Form.ResourceAllocation allocation = new Ics215Form.ResourceAllocation();
+		allocation.required = new Ics215Form.CountPair(4, 1);
+		allocation.acceptedHave = new Ics215Form.CountPair(2, 0);
+		allocation.linkedResourceIds.add("card-1");
+		allocation.acceptedAt = LocalDateTime.now();
+		row.resourceAllocations.put(heading.id, allocation);
+		planned.getWorkRows().add(row);
+		AppData.OperationalPeriodRecord snapshot = PlanReuseService.snapshot(source);
+		AppData target = new AppData();
+
+		assertTrue(PlanReuseService.hasIcs215Plan(snapshot));
+		PlanReuseService.apply(target, snapshot, java.util.Set.of(), false, true, false);
+
+		Ics215Form reused = target.getNextPeriodForm215();
+		assertNull(reused.getTargetPeriodStart());
+		assertEquals("", reused.getPreparerName());
+		assertEquals("", reused.getPreparerSignature());
+		assertEquals("Keep this instruction", reused.getWorkRows().get(0).specialInstructions);
+		assertNull(reused.getWorkRows().get(0).resourceAllocations.values().iterator().next().acceptedHave);
+		assertTrue(reused.getWorkRows().get(0).resourceAllocations.values().iterator().next()
+				.linkedResourceIds.isEmpty());
+		assertNull(reused.getWorkRows().get(0).resourceAllocations.values().iterator().next()
+				.required.singleResources);
+		assertFalse(reused.getWorksheetId().equals(planned.getWorksheetId()));
+
+		PlanReuseService.apply(target, snapshot, java.util.Set.of(), false, true, true);
+		assertEquals(4, target.getNextPeriodForm215().getWorkRows().get(0)
+				.resourceAllocations.values().iterator().next().required.singleResources);
+	}
 }

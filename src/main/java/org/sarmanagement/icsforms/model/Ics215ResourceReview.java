@@ -85,7 +85,7 @@ public final class Ics215ResourceReview {
 			List<Ics215Form.ResourceLink> selectedResources,
 			Ics215Form.CountPair manualSupplemental, LocalDateTime acceptedAt) {
 		Ics215Form.ResourceHeading heading = requireHeading(form, headingId);
-		List<Ics215Form.ResourceLink> links = validateSelections(data, form, null, selectedResources);
+		List<Ics215Form.ResourceLink> links = validateSelections(data, form, null, headingId, selectedResources);
 		Ics215Form.CountPair manual = requireNonnegative(manualSupplemental);
 		Ics215Form.CountPair linkedCounts = count(links);
 		heading.linkedResources = links;
@@ -113,7 +113,7 @@ public final class Ics215ResourceReview {
 			String headingId, List<Ics215Form.ResourceLink> selectedResources,
 			Ics215Form.CountPair manualSupplemental, LocalDateTime acceptedAt) {
 		Ics215Form.ResourceAllocation allocation = requireAllocation(form, rowId, headingId);
-		List<Ics215Form.ResourceLink> links = validateSelections(data, form, rowId, selectedResources);
+		List<Ics215Form.ResourceLink> links = validateSelections(data, form, rowId, headingId, selectedResources);
 		Ics215Form.CountPair manual = requireNonnegative(manualSupplemental);
 		Ics215Form.CountPair accepted = add(count(links), manual);
 		allocation.linkedResources = links;
@@ -138,24 +138,33 @@ public final class Ics215ResourceReview {
 	 */
 	public static RefreshResult reviewRowHave(AppData data, Ics215Form form, String rowId, String headingId) {
 		Ics215Form.ResourceAllocation allocation = requireAllocation(form, rowId, headingId);
-		List<String> expected = allocation.linkedResourceIds == null
-				? List.of() : allocation.linkedResourceIds;
-		Set<String> live = new LinkedHashSet<>();
+		List<String> expected = allocation.linkedResourceIds == null ? List.of() : allocation.linkedResourceIds;
+		Map<String, Candidate> live = new LinkedHashMap<>();
 		for (Candidate candidate : inspect(data)) {
 			if (!candidate.missingIdentity() && !candidate.ambiguousIdentity()) {
-				live.add(candidate.resourceId());
+				live.put(candidate.resourceId(), candidate);
 			}
 		}
 		List<String> discrepancies = new ArrayList<>();
 		for (String id : expected) {
-			if (!live.contains(id)) {
+			if (!live.containsKey(id)) {
 				discrepancies.add("Linked resource is missing or ambiguous: " + id);
+			}
+		}
+		if (allocation.linkedResources != null) {
+			for (Ics215Form.ResourceLink link : allocation.linkedResources) {
+				Candidate candidate = live.get(link.resourceId);
+				if (candidate != null && (!equal(link.recordedStatus, candidate.status())
+						|| !equal(link.recordedLocation, candidate.location())
+						|| !equal(link.recordedAssignmentContext, candidate.assignmentContext()))) {
+					discrepancies.add("Recorded status/location/assignment changed for " + link.resourceId);
+				}
 			}
 		}
 		Ics215Form.CountPair observed = allocation.linkedResources == null
 				? new Ics215Form.CountPair()
 				: count(allocation.linkedResources.stream()
-						.filter(link -> live.contains(link.resourceId)).toList());
+						.filter(link -> live.containsKey(link.resourceId)).toList());
 		if (!allocation.manualOverride) {
 			discrepancies.add("Accepted Have values are dated snapshots; use explicit acceptance to refresh them.");
 		}
@@ -191,7 +200,7 @@ public final class Ics215ResourceReview {
 	 * @return detached, normalized links.
 	 */
 	private static List<Ics215Form.ResourceLink> validateSelections(AppData data, Ics215Form form,
-			String targetRowId, List<Ics215Form.ResourceLink> selected) {
+			String targetRowId, String targetHeadingId, List<Ics215Form.ResourceLink> selected) {
 		Map<String, Candidate> candidates = new LinkedHashMap<>();
 		for (Candidate candidate : inspect(data)) {
 			candidates.putIfAbsent(candidate.resourceId(), candidate);
@@ -211,16 +220,26 @@ public final class Ics215ResourceReview {
 				throw new IllegalArgumentException("A selected T-card identity is missing or ambiguous: "
 						+ link.resourceId);
 			}
+			if (TCardType.HEADER.getLabel().equals(candidate.cardCategory())) {
+				throw new IllegalArgumentException("ICS 219 header cards cannot be counted as resources.");
+			}
 			if (candidate.crewMemberOverlapNeedsReview()) {
 				throw new IllegalArgumentException("Resolve crew/member overlap before counting " + link.resourceId);
 			}
-			if (targetRowId != null && allocatedToOtherRow(form, targetRowId, link.resourceId)) {
+			if (targetRowId != null && allocatedElsewhere(form, targetRowId, targetHeadingId, link.resourceId)) {
 				throw new IllegalArgumentException("A resource cannot be allocated to multiple work rows: "
+						+ link.resourceId);
+			}
+			if (targetRowId == null && linkedToOtherHeading(form, targetHeadingId, link.resourceId)) {
+				throw new IllegalArgumentException("A resource cannot be counted under multiple headings: "
 						+ link.resourceId);
 			}
 			Ics215Form.ResourceLink copy = new Ics215Form.ResourceLink();
 			copy.resourceId = link.resourceId;
 			copy.unit = link.unit;
+			copy.recordedStatus = candidate.status();
+			copy.recordedLocation = candidate.location();
+			copy.recordedAssignmentContext = candidate.assignmentContext();
 			result.add(copy);
 		}
 		return List.copyOf(result);
@@ -234,16 +253,39 @@ public final class Ics215ResourceReview {
 	 * @param resourceId candidate resource.
 	 * @return true when a different row already allocates the identity.
 	 */
-	private static boolean allocatedToOtherRow(Ics215Form form, String targetRowId, String resourceId) {
+	private static boolean allocatedElsewhere(Ics215Form form, String targetRowId, String targetHeadingId,
+			String resourceId) {
 		for (Ics215Form.WorkRow row : form.getWorkRows()) {
-			if (row == null || row.id.equals(targetRowId) || row.resourceAllocations == null) {
+			if (row == null || row.resourceAllocations == null) {
 				continue;
 			}
-			for (Ics215Form.ResourceAllocation allocation : row.resourceAllocations.values()) {
+			for (Map.Entry<String, Ics215Form.ResourceAllocation> entry : row.resourceAllocations.entrySet()) {
+				if (row.id.equals(targetRowId) && entry.getKey().equals(targetHeadingId)) {
+					continue;
+				}
+				Ics215Form.ResourceAllocation allocation = entry.getValue();
 				if (allocation != null && allocation.linkedResourceIds != null
 						&& allocation.linkedResourceIds.contains(resourceId)) {
 					return true;
 				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Finds whether another incident-wide heading pool already counts an identity.
+	 *
+	 * @param form worksheet to inspect.
+	 * @param targetHeadingId heading receiving the snapshot.
+	 * @param resourceId candidate resource.
+	 * @return true when another heading already includes the identity.
+	 */
+	private static boolean linkedToOtherHeading(Ics215Form form, String targetHeadingId, String resourceId) {
+		for (Ics215Form.ResourceHeading heading : form.getResourceHeadings()) {
+			if (heading != null && !heading.id.equals(targetHeadingId) && heading.linkedResourceIds != null
+					&& heading.linkedResourceIds.contains(resourceId)) {
+				return true;
 			}
 		}
 		return false;
@@ -351,6 +393,17 @@ public final class Ics215ResourceReview {
 	 */
 	private static boolean usable(String value) {
 		return value != null && !value.isBlank();
+	}
+
+	/**
+	 * Compares nullable snapshot strings without treating null as current data.
+	 *
+	 * @param first accepted snapshot text.
+	 * @param second current text.
+	 * @return true when normalized values differ.
+	 */
+	private static boolean equal(String first, String second) {
+		return (first == null ? "" : first).equals(second == null ? "" : second);
 	}
 
 	/**

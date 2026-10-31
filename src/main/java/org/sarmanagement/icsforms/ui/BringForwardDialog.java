@@ -40,6 +40,8 @@ public final class BringForwardDialog extends JDialog {
 	private final JComboBox<IncidentChoice> incidents = new JComboBox<>();
 	private final JComboBox<PeriodChoice> periods = new JComboBox<>();
 	private final Map<PlanReviewArea, JCheckBox> choices = new EnumMap<>(PlanReviewArea.class);
+	private final JCheckBox ics215Choice = new JCheckBox("Operational planning (ICS 215)");
+	private final JCheckBox retainIcs215Required = new JCheckBox("Retain Required quantities");
 	private final JButton apply = new JButton("Bring Forward");
 	private final JLabel status = new JLabel(" ");
 
@@ -79,6 +81,10 @@ public final class BringForwardDialog extends JDialog {
 			choice.addActionListener(event -> updateApply());
 			fields.add(choice);
 		}
+		ics215Choice.addActionListener(event -> updateApply());
+		fields.add(ics215Choice);
+		retainIcs215Required.setBorder(BorderFactory.createEmptyBorder(0, 20, 0, 0));
+		fields.add(retainIcs215Required);
 		fields.add(new JLabel("<html>Selected plans replace current content; other plans remain unchanged.<br>"
 				+ "Incident and operational period stay unchanged. Copied plans require a new review.<br>"
 				+ "Repeat for other source periods to combine different plan areas.</html>"));
@@ -178,12 +184,17 @@ public final class BringForwardDialog extends JDialog {
 			choice.setEnabled(available.contains(area));
 			choice.setSelected(false);
 		});
+		ics215Choice.setEnabled(PlanReuseService.hasIcs215Plan(selected == null ? null : selected.period()));
+		ics215Choice.setSelected(false);
+		retainIcs215Required.setEnabled(ics215Choice.isEnabled());
+		retainIcs215Required.setSelected(false);
 		updateApply();
 	}
 
 	/** Requires an explicit selection before replacing any plan content. */
 	private void updateApply() {
-		apply.setEnabled(choices.values().stream().anyMatch(choice -> choice.isEnabled() && choice.isSelected()));
+		apply.setEnabled(ics215Choice.isEnabled() && ics215Choice.isSelected()
+				|| choices.values().stream().anyMatch(choice -> choice.isEnabled() && choice.isSelected()));
 	}
 
 	/** Confirms replacement and applies the explicit selection to the original incident only. */
@@ -198,8 +209,10 @@ public final class BringForwardDialog extends JDialog {
 				areas.add(area);
 			}
 		});
-		if (selected == null || areas.isEmpty() || JOptionPane.showConfirmDialog(this,
-				"Replace the selected current plans? Copied approvals and signatures will be cleared.",
+		boolean includeIcs215 = ics215Choice.isEnabled() && ics215Choice.isSelected();
+		if (selected == null || areas.isEmpty() && !includeIcs215 || JOptionPane.showConfirmDialog(this,
+				"Replace selected current plans? ICS 215 is copied to the next-period worksheet. "
+						+ "Dates, Have evidence, allocations, approvals, and signatures are cleared.",
 				"Bring Forward", JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) {
 			return;
 		}
@@ -207,7 +220,8 @@ public final class BringForwardDialog extends JDialog {
 			return;
 		}
 		try {
-			controller.bringForwardPlans(selected.period(), areas, other.isSelected());
+			controller.bringForwardPlans(selected.period(), areas, other.isSelected(), includeIcs215,
+					retainIcs215Required.isEnabled() && retainIcs215Required.isSelected());
 			dispose();
 		} catch (RuntimeException exception) {
 			JOptionPane.showMessageDialog(this, exception.getMessage(), "Bring Forward", JOptionPane.ERROR_MESSAGE);

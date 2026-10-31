@@ -280,7 +280,7 @@ public class AppController {
 	public List<AppData.OperationalPeriodRecord> getPreviousPlanSources() {
 		List<AppData.OperationalPeriodRecord> sources = new ArrayList<>();
 		for (AppData.OperationalPeriodRecord period : data.getOperationalPeriodHistory()) {
-			if (!PlanReuseService.availablePlans(period).isEmpty()) {
+			if (!PlanReuseService.availablePlans(period).isEmpty() || PlanReuseService.hasIcs215Plan(period)) {
 				sources.add(INCIDENT_COPIER.convertValue(period, AppData.OperationalPeriodRecord.class));
 			}
 		}
@@ -295,7 +295,8 @@ public class AppController {
 	 */
 	public boolean hasPreviousPlans() {
 		return data.getOperationalPeriodHistory().stream()
-				.anyMatch(period -> !PlanReuseService.availablePlans(period).isEmpty());
+				.anyMatch(period -> !PlanReuseService.availablePlans(period).isEmpty()
+						|| PlanReuseService.hasIcs215Plan(period));
 	}
 
 	/**
@@ -350,13 +351,13 @@ public class AppController {
 		AppData source = store.load(incidentId);
 		List<AppData.OperationalPeriodRecord> sources = new ArrayList<>();
 		AppData.OperationalPeriodRecord current = PlanReuseService.snapshot(source);
-		if (!PlanReuseService.availablePlans(current).isEmpty()) {
+		if (!PlanReuseService.availablePlans(current).isEmpty() || PlanReuseService.hasIcs215Plan(current)) {
 			sources.add(current);
 		}
 		List<AppData.OperationalPeriodRecord> history = source.getOperationalPeriodHistory();
 		for (int index = history.size() - 1; index >= 0; index--) {
 			AppData.OperationalPeriodRecord period = history.get(index);
-			if (!PlanReuseService.availablePlans(period).isEmpty()) {
+			if (!PlanReuseService.availablePlans(period).isEmpty() || PlanReuseService.hasIcs215Plan(period)) {
 				sources.add(INCIDENT_COPIER.convertValue(period, AppData.OperationalPeriodRecord.class));
 			}
 		}
@@ -373,7 +374,21 @@ public class AppController {
 	 */
 	public void bringForwardPlans(AppData.OperationalPeriodRecord source, Set<PlanReviewArea> areas,
 			boolean crossIncident) {
-		PlanReuseService.apply(data, source, areas, crossIncident);
+		bringForwardPlans(source, areas, crossIncident, false, false);
+	}
+
+	/**
+	 * Reuses selected plans and may copy ICS 215 structure into the next-period worksheet.
+	 *
+	 * @param source detached source-period snapshot.
+	 * @param areas explicitly selected existing plan areas.
+	 * @param crossIncident whether source identities belong to another incident.
+	 * @param includeIcs215 whether to reuse the ICS 215 worksheet.
+	 * @param retainIcs215Required whether to retain Required values.
+	 */
+	public void bringForwardPlans(AppData.OperationalPeriodRecord source, Set<PlanReviewArea> areas,
+			boolean crossIncident, boolean includeIcs215, boolean retainIcs215Required) {
+		PlanReuseService.apply(data, source, areas, crossIncident, includeIcs215, retainIcs215Required);
 		markDirty();
 	}
 
@@ -1029,7 +1044,17 @@ public class AppController {
 	 * @param bringForwardCommunicationsPlan whether to deep-copy ICS 205 channels and instructions.
 	 */
 	public void newOperationalPeriod(boolean bringForwardCommunicationsPlan) {
-		data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan);
+		newOperationalPeriod(bringForwardCommunicationsPlan, false);
+	}
+
+	/**
+	 * Advances the active incident, optionally promoting a validated planned ICS 215 worksheet.
+	 *
+	 * @param bringForwardCommunicationsPlan whether to carry forward ICS 205 data.
+	 * @param promotePlannedIcs215 true to apply the next worksheet's target dates.
+	 */
+	public void newOperationalPeriod(boolean bringForwardCommunicationsPlan, boolean promotePlannedIcs215) {
+		data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan, promotePlannedIcs215);
 		ensureDefaults(data);
 		syncSarTasks();
 		dirty = true;
