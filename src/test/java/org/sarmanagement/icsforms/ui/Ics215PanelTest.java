@@ -13,7 +13,9 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
 import javax.swing.JButton;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
@@ -21,10 +23,14 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.lang.reflect.Field;
 import java.awt.GridLayout;
+import java.awt.GridBagLayout;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -138,6 +144,59 @@ class Ics215PanelTest {
 		}
 	}
 
+	@Test
+	void resourceHeadingIsRequiredBeforeAssignmentsAndMatrixHasPopupActions() throws Exception {
+		AppData data = new AppData();
+		AppController controller = new AppController(data, new LocalRepository(directory.resolve("setup.json")),
+				new PdfExportService(), new IncidentValidator());
+		Ics215Panel[] panel = new Ics215Panel[1];
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				panel[0] = new Ics215Panel(controller);
+				JButton addAssignment = field(panel[0], "addAssignmentButton", JButton.class);
+				JButton addHeading = field(panel[0], "addResourceHeadingButton", JButton.class);
+				JTable matrix = field(panel[0], "matrix", JTable.class);
+				assertFalse(addAssignment.isEnabled());
+				assertEquals("Add first resource heading…", addHeading.getText());
+				assertTrue(matrix.getComponentPopupMenu() instanceof JPopupMenu);
+
+				JPopupMenu popup = (JPopupMenu) matrix.getComponentPopupMenu();
+				assertTrue(popup.getComponentCount() >= 6);
+				assertFalse(field(panel[0], "popupAddAssignment", JMenuItem.class).isEnabled());
+				assertTrue(field(panel[0], "popupAddHeading", JMenuItem.class).isEnabled());
+
+				Ics215Form.ResourceHeading heading = new Ics215Form.ResourceHeading();
+				heading.category = "Ground";
+				data.getForm215().getResourceHeadings().add(heading);
+				Ics215Form.ResourceHeading secondHeading = new Ics215Form.ResourceHeading();
+				secondHeading.category = "Air";
+				data.getForm215().getResourceHeadings().add(secondHeading);
+				panel[0].refreshFromModel();
+				assertTrue(addAssignment.isEnabled());
+				assertEquals("Add resource heading…", addHeading.getText());
+				assertTrue(field(panel[0], "popupAddAssignment", JMenuItem.class).isEnabled());
+				Ics215Form.WorkRow row = new Ics215Form.WorkRow();
+				Ics215Form.ResourceAllocation allocation = new Ics215Form.ResourceAllocation();
+				allocation.required = new Ics215Form.CountPair(2, 1);
+				allocation.acceptedHave = new Ics215Form.CountPair(1, 0);
+				row.resourceAllocations.put(heading.id, allocation);
+				data.getForm215().getWorkRows().add(row);
+				Map<String, List<JTextField>> countFields = new LinkedHashMap<>();
+				JPanel assignmentEditor = new JPanel(new GridBagLayout());
+				invokeCountEditors(panel[0], assignmentEditor, data.getForm215(), row, countFields);
+				assertEquals(2, countFields.size());
+				assertEquals(4, countFields.get(heading.id).size());
+				assertEquals(List.of("2", "1", "1", "0"),
+						countFields.get(heading.id).stream().map(JTextField::getText).toList());
+				assertEquals(4, countFields.get(secondHeading.id).size());
+				assertEquals(List.of("", "", "", ""),
+						countFields.get(secondHeading.id).stream().map(JTextField::getText).toList());
+			});
+		} finally {
+			SwingUtilities.invokeAndWait(() -> field(controller, "autosaveTimer", Timer.class).stop());
+		}
+	}
+
 	/**
 	 * Lays out a component subtree as a containing frame would.
 	 *
@@ -163,6 +222,27 @@ class Ics215PanelTest {
 			var method = target.getClass().getDeclaredMethod(name);
 			method.setAccessible(true);
 			method.invoke(target);
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
+		}
+	}
+
+	/**
+	 * Adds the assignment-dialog count editor for the test worksheet.
+	 *
+	 * @param target ICS 215 editor.
+	 * @param editor dialog content.
+	 * @param form worksheet.
+	 * @param row assignment row.
+	 * @param fields receives heading-keyed count fields.
+	 */
+	private static void invokeCountEditors(Object target, JPanel editor, Ics215Form form, Ics215Form.WorkRow row,
+			Map<String, List<JTextField>> fields) {
+		try {
+			var method = target.getClass().getDeclaredMethod("addResourceCountEditors",
+					JPanel.class, int.class, Ics215Form.class, Ics215Form.WorkRow.class, Map.class);
+			method.setAccessible(true);
+			method.invoke(target, editor, 0, form, row, fields);
 		} catch (ReflectiveOperationException exception) {
 			throw new IllegalStateException(exception);
 		}

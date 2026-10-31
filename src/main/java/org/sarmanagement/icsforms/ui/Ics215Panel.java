@@ -12,27 +12,39 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * Optional, scrollable editor for active- and next-period ICS 215 worksheets.
@@ -53,6 +65,8 @@ public class Ics215Panel extends JPanel {
 	private final JLabel totalsLabel = new JLabel();
 	private final JTable matrix;
 	private final JScrollPane matrixScroll;
+	private final JButton addAssignmentButton = new JButton("Add assignment");
+	private final JButton addResourceHeadingButton = new JButton("Add first resource heading…");
 	private final JButton editAssignmentButton = new JButton("Edit assignment…");
 	private final JButton removeAssignmentButton = new JButton("Remove assignment");
 	private final JButton moveAssignmentUpButton = new JButton("Move up");
@@ -65,6 +79,18 @@ public class Ics215Panel extends JPanel {
 	private final JButton reviewTCardsButton = new JButton("Review T-cards…");
 	private final JButton reviewAcceptedHaveButton = new JButton("Review accepted Have…");
 	private final JButton createIcs204Button = new JButton("Create ICS 204 draft…");
+	private final JMenuItem popupAddAssignment = new JMenuItem("Add assignment");
+	private final JMenuItem popupAddHeading = new JMenuItem("Add resource heading…");
+	private final JMenuItem popupEditAssignment = new JMenuItem("Edit assignment…");
+	private final JMenuItem popupEditCounts = new JMenuItem("Edit counts…");
+	private final JMenuItem popupEditHeading = new JMenuItem("Edit resource heading…");
+	private final JMenuItem popupMoveAssignmentUp = new JMenuItem("Move assignment up");
+	private final JMenuItem popupMoveAssignmentDown = new JMenuItem("Move assignment down");
+	private final JMenuItem popupMoveHeadingLeft = new JMenuItem("Move heading left");
+	private final JMenuItem popupMoveHeadingRight = new JMenuItem("Move heading right");
+	private final JMenuItem popupReviewTCards = new JMenuItem("Review T-cards…");
+	private final JMenuItem popupRemoveAssignment = new JMenuItem("Remove assignment");
+	private final JMenuItem popupRemoveHeading = new JMenuItem("Remove resource heading");
 	private final JTextArea detail = new JTextArea();
 	private String selectedRowId = "";
 	private int editorPeriodIndex;
@@ -97,6 +123,18 @@ public class Ics215Panel extends JPanel {
 		matrix.getColumnModel().getSelectionModel().addListSelectionListener(event -> {
 			if (!event.getValueIsAdjusting()) {
 				refreshActionAvailability();
+			}
+		});
+		matrix.setComponentPopupMenu(buildMatrixPopupMenu());
+		matrix.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent event) {
+				selectPopupCell(event);
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent event) {
+				selectPopupCell(event);
 			}
 		});
 		matrixScroll.getViewport().addComponentListener(new ComponentAdapter() {
@@ -193,12 +231,12 @@ public class Ics215Panel extends JPanel {
 		panel.add(totalsLabel, BorderLayout.NORTH);
 		panel.add(matrixScroll, BorderLayout.CENTER);
 		JPanel actions = new JPanel(new GridLayout(0, 4, 4, 4));
-		addButton(actions, "Add assignment", this::addRow);
+		addButton(actions, addResourceHeadingButton, this::addHeading);
+		addButton(actions, addAssignmentButton, this::addRow);
 		addButton(actions, editAssignmentButton, this::editSelectedRow);
 		addButton(actions, removeAssignmentButton, this::removeRow);
 		addButton(actions, moveAssignmentUpButton, () -> moveRow(-1));
 		addButton(actions, moveAssignmentDownButton, () -> moveRow(1));
-		addButton(actions, "Add resource heading…", this::addHeading);
 		addButton(actions, editHeadingButton, this::editHeading);
 		addButton(actions, moveHeadingLeftButton, () -> moveHeading(-1));
 		addButton(actions, moveHeadingRightButton, () -> moveHeading(1));
@@ -210,6 +248,72 @@ public class Ics215Panel extends JPanel {
 		addButton(actions, "Preparation details…", this::editPreparationDetails);
 		panel.add(actions, BorderLayout.SOUTH);
 		return panel;
+	}
+
+	/**
+	 * Creates contextual actions for adding and editing worksheet matrix content.
+	 *
+	 * @return matrix popup menu.
+	 */
+	private JPopupMenu buildMatrixPopupMenu() {
+		JPopupMenu popup = new JPopupMenu();
+		addPopupItem(popupAddHeading, this::addHeading, popup);
+		addPopupItem(popupAddAssignment, this::addRow, popup);
+		popup.addSeparator();
+		addPopupItem(popupEditAssignment, this::editSelectedRow, popup);
+		addPopupItem(popupMoveAssignmentUp, () -> moveRow(-1), popup);
+		addPopupItem(popupMoveAssignmentDown, () -> moveRow(1), popup);
+		addPopupItem(popupRemoveAssignment, this::removeRow, popup);
+		popup.addSeparator();
+		addPopupItem(popupEditCounts, this::editCounts, popup);
+		addPopupItem(popupReviewTCards, this::reviewTCards, popup);
+		addPopupItem(popupEditHeading, this::editHeading, popup);
+		addPopupItem(popupMoveHeadingLeft, () -> moveHeading(-1), popup);
+		addPopupItem(popupMoveHeadingRight, () -> moveHeading(1), popup);
+		addPopupItem(popupRemoveHeading, this::removeHeading, popup);
+		popup.addPopupMenuListener(new PopupMenuListener() {
+			@Override
+			public void popupMenuWillBecomeVisible(PopupMenuEvent event) {
+				refreshActionAvailability();
+			}
+
+			@Override
+			public void popupMenuWillBecomeInvisible(PopupMenuEvent event) {
+			}
+
+			@Override
+			public void popupMenuCanceled(PopupMenuEvent event) {
+			}
+		});
+		return popup;
+	}
+
+	/**
+	 * Adds an action to the matrix popup menu.
+	 *
+	 * @param item popup item.
+	 * @param action action to execute.
+	 * @param popup destination popup.
+	 */
+	private void addPopupItem(JMenuItem item, Runnable action, JPopupMenu popup) {
+		item.addActionListener(event -> runEditorAction(action));
+		popup.add(item);
+	}
+
+	/**
+	 * Selects the matrix cell under a popup-triggering pointer event.
+	 *
+	 * @param event mouse event.
+	 */
+	private void selectPopupCell(MouseEvent event) {
+		if (!event.isPopupTrigger()) {
+			return;
+		}
+		int row = matrix.rowAtPoint(event.getPoint());
+		int column = matrix.columnAtPoint(event.getPoint());
+		if (row >= 0 && column >= 0) {
+			matrix.changeSelection(row, column, false, false);
+		}
 	}
 
 	/**
@@ -280,10 +384,15 @@ public class Ics215Panel extends JPanel {
 	 */
 	private void refreshActionAvailability() {
 		Ics215Form form = selectedForm();
+		boolean hasHeadings = !form.getResourceHeadings().isEmpty();
 		boolean hasRow = selectedRow(form) != null;
 		int headingIndex = selectedHeadingIndex();
 		boolean hasHeading = headingIndex >= 0 && headingIndex < form.getResourceHeadings().size();
 		boolean hasCell = hasRow && hasHeading;
+		addAssignmentButton.setEnabled(hasHeadings);
+		addAssignmentButton.setToolTipText(hasHeadings ? null
+				: "Add a resource heading before creating assignment rows.");
+		addResourceHeadingButton.setText(hasHeadings ? "Add resource heading…" : "Add first resource heading…");
 		editAssignmentButton.setEnabled(hasRow);
 		removeAssignmentButton.setEnabled(hasRow);
 		moveAssignmentUpButton.setEnabled(hasRow && indexOfSelectedRow(form) > 0);
@@ -297,6 +406,18 @@ public class Ics215Panel extends JPanel {
 		reviewAcceptedHaveButton.setEnabled(hasCell);
 		createIcs204Button.setEnabled(hasRow);
 		detail.setEnabled(hasRow);
+		popupAddAssignment.setEnabled(hasHeadings);
+		popupAddHeading.setEnabled(true);
+		popupEditAssignment.setEnabled(hasRow);
+		popupEditCounts.setEnabled(hasCell);
+		popupEditHeading.setEnabled(hasHeading);
+		popupMoveAssignmentUp.setEnabled(hasRow && indexOfSelectedRow(form) > 0);
+		popupMoveAssignmentDown.setEnabled(hasRow && indexOfSelectedRow(form) < form.getWorkRows().size() - 1);
+		popupMoveHeadingLeft.setEnabled(hasHeading && headingIndex > 0);
+		popupMoveHeadingRight.setEnabled(hasHeading && headingIndex < form.getResourceHeadings().size() - 1);
+		popupReviewTCards.setEnabled(hasHeading);
+		popupRemoveAssignment.setEnabled(hasRow);
+		popupRemoveHeading.setEnabled(hasHeading);
 	}
 
 	/**
@@ -356,45 +477,60 @@ public class Ics215Panel extends JPanel {
 	 * Opens selected-row details, retaining long work and instruction text.
 	 */
 	private void editSelectedRow() {
-		Ics215Form.WorkRow row = selectedRow(selectedForm());
+		Ics215Form formData = selectedForm();
+		Ics215Form.WorkRow row = selectedRow(formData);
 		if (row == null) {
 			return;
 		}
-		JTextField branch = new JTextField(row.branch, 24);
+		JTextField branch = new JTextField(row.branch, 18);
 		JComboBox<String> context = new JComboBox<>(MANAGEMENT_CONTEXTS);
 		context.setSelectedItem(row.managementContext);
-		JTextField contextValue = new JTextField(selectedContextValue(row), 24);
-		JTextField assignment = new JTextField(row.assignment, 24);
-		JTextField overhead = new JTextField(row.overheadPositions, 24);
-		JTextField equipment = new JTextField(row.specialEquipment, 24);
-		JTextField supplies = new JTextField(row.supplies, 24);
-		JTextField reporting = new JTextField(row.reportingLocation, 24);
-		JTextField arrival = new JTextField(formatDate(row.requestedArrival), 24);
-		JTextArea instructions = new JTextArea(row.specialInstructions, 5, 24);
-		JPanel form = new JPanel(new GridLayout(0, 2, 4, 4));
-		form.add(new JLabel("Branch:"));
-		form.add(branch);
-		form.add(new JLabel("Division/Group/Other/Staging:"));
-		form.add(context);
-		form.add(new JLabel("Management-context value:"));
-		form.add(contextValue);
-		form.add(new JLabel("Work assignment:"));
-		form.add(assignment);
-		form.add(new JLabel("Overhead positions:"));
-		form.add(overhead);
-		form.add(new JLabel("Special equipment:"));
-		form.add(equipment);
-		form.add(new JLabel("Supplies / aviation support:"));
-		form.add(supplies);
-		form.add(new JLabel("Reporting location:"));
-		form.add(reporting);
-		form.add(new JLabel("Requested arrival (yyyy-MM-dd HH:mm):"));
-		form.add(arrival);
-		form.add(new JLabel("Special instructions:"));
-		form.add(new JScrollPane(instructions));
-		if (JOptionPane.showConfirmDialog(this, form, "Edit ICS 215 work assignment",
+		JTextField contextValue = new JTextField(selectedContextValue(row), 18);
+		JTextField assignment = new JTextField(row.assignment, 18);
+		JTextField overhead = new JTextField(row.overheadPositions, 18);
+		JTextField equipment = new JTextField(row.specialEquipment, 18);
+		JTextField supplies = new JTextField(row.supplies, 18);
+		JTextField reporting = new JTextField(row.reportingLocation, 18);
+		JTextField arrival = new JTextField(formatDate(row.requestedArrival), 18);
+		JTextArea instructions = new JTextArea(row.specialInstructions, 3, 18);
+		instructions.setLineWrap(true);
+		instructions.setWrapStyleWord(true);
+		JPanel fields = new JPanel(new GridBagLayout());
+		int line = 0;
+		line = addAssignmentField(fields, line, "Branch:", branch);
+		line = addAssignmentField(fields, line, "Division / Group / Other / Staging:", context);
+		line = addAssignmentField(fields, line, "Management-context value:", contextValue);
+		line = addAssignmentField(fields, line, "Work assignment:", assignment);
+		line = addAssignmentField(fields, line, "Overhead positions:", overhead);
+		line = addAssignmentField(fields, line, "Special equipment:", equipment);
+		line = addAssignmentField(fields, line, "Supplies / aviation support:", supplies);
+		line = addAssignmentField(fields, line, "Reporting location:", reporting);
+		line = addAssignmentField(fields, line, "Requested arrival (yyyy-MM-dd HH:mm):", arrival);
+		line = addAssignmentField(fields, line, "Special instructions:", new JScrollPane(instructions));
+
+		Map<String, List<JTextField>> countFields = new LinkedHashMap<>();
+		line = addResourceCountEditors(fields, line, formData, row, countFields);
+		GridBagConstraints filler = new GridBagConstraints();
+		filler.gridx = 0;
+		filler.gridy = line;
+		filler.gridwidth = 2;
+		filler.weightx = 1;
+		filler.weighty = 1;
+		filler.fill = GridBagConstraints.BOTH;
+		fields.add(new JPanel(), filler);
+		JScrollPane editorScroll = new JScrollPane(fields);
+		editorScroll.setPreferredSize(new Dimension(760, 460));
+		if (JOptionPane.showConfirmDialog(this, editorScroll, "Edit ICS 215 work assignment",
 				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
 			return;
+		}
+		LocalDateTime requestedArrival = parseDate(arrival.getText(), "requested arrival");
+		Map<String, Ics215Form.CountPair[]> parsedCounts = new LinkedHashMap<>();
+		for (Map.Entry<String, List<JTextField>> entry : countFields.entrySet()) {
+			List<JTextField> values = entry.getValue();
+			parsedCounts.put(entry.getKey(), new Ics215Form.CountPair[] {
+					parsePair(values.get(0), values.get(1)), parsePair(values.get(2), values.get(3))
+			});
 		}
 		row.branch = branch.getText();
 		row.managementContext = (String) context.getSelectedItem();
@@ -404,8 +540,107 @@ public class Ics215Panel extends JPanel {
 		row.specialEquipment = equipment.getText();
 		row.supplies = supplies.getText();
 		row.reportingLocation = reporting.getText();
-		row.requestedArrival = parseDate(arrival.getText(), "requested arrival");
+		row.requestedArrival = requestedArrival;
 		row.specialInstructions = instructions.getText();
+		for (Map.Entry<String, Ics215Form.CountPair[]> entry : parsedCounts.entrySet()) {
+			Ics215Form.ResourceAllocation allocation = row.resourceAllocations.computeIfAbsent(
+					entry.getKey(), ignored -> new Ics215Form.ResourceAllocation());
+			Ics215Form.CountPair[] values = entry.getValue();
+			allocation.required = values[0];
+			if (!sameCounts(allocation.acceptedHave, values[1])) {
+				allocation.acceptedHave = values[1];
+				allocation.manualSupplemental = new Ics215Form.CountPair(
+						values[1].singleResources, values[1].teams);
+				allocation.linkedResourceIds.clear();
+				allocation.linkedResources.clear();
+				allocation.acceptedAt = LocalDateTime.now(ZoneOffset.UTC);
+				allocation.manualOverride = true;
+			}
+		}
+	}
+
+	/**
+	 * Adds editable Required and Have fields for every ordered resource heading.
+	 *
+	 * @param fields assignment dialog content.
+	 * @param line next grid row.
+	 * @param formData worksheet supplying resource headings.
+	 * @param row work assignment supplying existing quantities.
+	 * @param countFields receives fields keyed by stable heading identity.
+	 * @return next free grid row.
+	 */
+	private int addResourceCountEditors(JPanel fields, int line, Ics215Form formData, Ics215Form.WorkRow row,
+			Map<String, List<JTextField>> countFields) {
+		if (formData.getResourceHeadings().isEmpty()) {
+			return addAssignmentField(fields, line, "",
+					new JLabel("Add a resource heading before creating assignment rows."));
+		}
+		JPanel counts = new JPanel(new GridLayout(0, 5, 4, 4));
+		counts.add(new JLabel("Resource heading"));
+		counts.add(new JLabel("Required resources"));
+		counts.add(new JLabel("Required teams"));
+		counts.add(new JLabel("Have resources"));
+		counts.add(new JLabel("Have teams"));
+		for (Ics215Form.ResourceHeading heading : formData.getResourceHeadings()) {
+			Ics215Form.ResourceAllocation allocation = row.resourceAllocations.get(heading.id);
+			Ics215Form.CountPair required = allocation == null || allocation.required == null
+					? new Ics215Form.CountPair() : allocation.required;
+			Ics215Form.CountPair have = allocation == null || allocation.acceptedHave == null
+					? new Ics215Form.CountPair() : allocation.acceptedHave;
+			JTextField requiredSingles = countField(required.singleResources);
+			JTextField requiredTeams = countField(required.teams);
+			JTextField haveSingles = countField(have.singleResources);
+			JTextField haveTeams = countField(have.teams);
+			countFields.put(heading.id, List.of(requiredSingles, requiredTeams, haveSingles, haveTeams));
+			counts.add(new JLabel(heading.category + " / " + heading.kind + " / " + heading.type
+					+ " (" + heading.countingUnit + ")"));
+			counts.add(requiredSingles);
+			counts.add(requiredTeams);
+			counts.add(haveSingles);
+			counts.add(haveTeams);
+		}
+		line = addAssignmentField(fields, line, "Required and accepted Have counts:", counts);
+		return addAssignmentField(fields, line, "",
+				new JLabel("<html>Leave blank for unknown; Need is calculated. Have entries are manual snapshots.<br>"
+						+ "Changing Have replaces any linked T-card snapshot with these manual counts.</html>"));
+	}
+
+	/**
+	 * Adds one compact label and editor row to the assignment dialog.
+	 *
+	 * @param panel dialog content.
+	 * @param row grid row.
+	 * @param label visible field label.
+	 * @param editor field component.
+	 * @return next free grid row.
+	 */
+	private int addAssignmentField(JPanel panel, int row, String label, java.awt.Component editor) {
+		GridBagConstraints labelConstraints = new GridBagConstraints();
+		labelConstraints.gridx = 0;
+		labelConstraints.gridy = row;
+		labelConstraints.anchor = GridBagConstraints.LINE_START;
+		labelConstraints.insets = new Insets(3, 4, 3, 8);
+		panel.add(new JLabel(label), labelConstraints);
+		GridBagConstraints editorConstraints = new GridBagConstraints();
+		editorConstraints.gridx = 1;
+		editorConstraints.gridy = row;
+		editorConstraints.weightx = 1;
+		editorConstraints.fill = GridBagConstraints.HORIZONTAL;
+		editorConstraints.insets = new Insets(3, 4, 3, 4);
+		panel.add(editor, editorConstraints);
+		return row + 1;
+	}
+
+	/**
+	 * Compares count pairs while treating absent pairs as unspecified components.
+	 *
+	 * @param first first quantity pair.
+	 * @param second second quantity pair.
+	 * @return whether both pairs represent the same quantities.
+	 */
+	private boolean sameCounts(Ics215Form.CountPair first, Ics215Form.CountPair second) {
+		return Objects.equals(first == null ? null : first.singleResources, second.singleResources)
+				&& Objects.equals(first == null ? null : first.teams, second.teams);
 	}
 
 	/**
@@ -487,15 +722,21 @@ public class Ics215Panel extends JPanel {
 		JTextField kind = new JTextField(heading.kind, 20);
 		JTextField type = new JTextField(heading.type, 20);
 		JTextField unit = new JTextField(heading.countingUnit, 20);
-		JPanel fields = new JPanel(new GridLayout(0, 2, 4, 4));
-		fields.add(new JLabel("Category:"));
-		fields.add(category);
-		fields.add(new JLabel("Kind:"));
-		fields.add(kind);
-		fields.add(new JLabel("Type:"));
-		fields.add(type);
-		fields.add(new JLabel("Counting unit (explicit):"));
-		fields.add(unit);
+		JPanel fields = new JPanel(new BorderLayout(4, 8));
+		fields.add(new JLabel("<html><b>Define one ordered resource column.</b><br>"
+				+ "Category describes the resource class; kind and type identify its operational classification.<br>"
+				+ "Use a specific counting unit (for example, people, engines, or crews).<br>"
+				+ "Individual resources and Strike Teams / Task Forces are counted separately.</html>"), BorderLayout.NORTH);
+		JPanel inputs = new JPanel(new GridLayout(0, 2, 4, 4));
+		inputs.add(new JLabel("Category:"));
+		inputs.add(category);
+		inputs.add(new JLabel("Kind:"));
+		inputs.add(kind);
+		inputs.add(new JLabel("Type:"));
+		inputs.add(type);
+		inputs.add(new JLabel("Counting unit (explicit):"));
+		inputs.add(unit);
+		fields.add(inputs, BorderLayout.CENTER);
 		if (JOptionPane.showConfirmDialog(this, fields, "Resource heading",
 				JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) {
 			return null;
@@ -513,7 +754,15 @@ public class Ics215Panel extends JPanel {
 	private void removeHeading() {
 		Ics215Form form = selectedForm();
 		Ics215Form.ResourceHeading heading = selectedHeading();
-		if (heading == null || JOptionPane.showConfirmDialog(this,
+		if (heading == null) {
+			return;
+		}
+		if (form.getResourceHeadings().size() == 1 && !form.getWorkRows().isEmpty()) {
+			JOptionPane.showMessageDialog(this, "Keep at least one resource heading while assignment rows exist.",
+					"Remove heading", JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		if (JOptionPane.showConfirmDialog(this,
 				"Remove this resource heading and its row counts?", "Remove heading",
 				JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
 			return;
@@ -1031,7 +1280,8 @@ public class Ics215Panel extends JPanel {
 					+ " / Need To Order " + pairText(form.totalNeedToOrder(heading.id)));
 		}
 		totalsLabel.setText("<html>Blocks 11–13 totals: "
-				+ (totals.isEmpty() ? "add resource headings" : String.join("<br>", totals)) + "</html>");
+				+ (totals.isEmpty() ? "add the first resource heading before adding assignments"
+						: String.join("<br>", totals)) + "</html>");
 	}
 
 	/**
