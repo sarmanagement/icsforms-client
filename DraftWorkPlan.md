@@ -57,7 +57,7 @@ Three ideas carry the whole design:
 
 Work proceeds in two independent streams, then converges:
 
-- **Role-panel completion** (Part I): finish the outstanding #33 scope in the
+- **Role-panel completion** (Part I, #46): finish the outstanding #33 scope in the
   standalone application — no network, no authentication.
 - **Persistence foundation** (Part IV, Stage 1): make the existing `IncidentStore`
   seam backend-neutral and asynchronous, with contract tests, strict imports,
@@ -117,11 +117,9 @@ was agreed. Statuses were determined by inspecting the merged tree.
 
 ### Remaining role-panel work and where it is tracked
 
-**No open issue currently tracks the remaining #33 scope.** Issue #33 was
-closed when PR #32 merged. The following items must be filed as a single
-follow-up issue (proposed title: *Complete live role panels: stale-write
-prevention, editable IC layout, canine-tool extraction, dashboard retirement*)
-before further role-panel work is started:
+Issue #33 was closed when PR #32 merged. The remaining scope is tracked in
+**#46 — Complete live role panels: stale-write prevention, editable IC layout,
+canine-tool extraction, dashboard retirement**, which covers the following items:
 
 1. Prevent stale full-editor overwrites and complete live propagation for every
    editor that participates in a role panel (Phase 2 gap).
@@ -156,6 +154,7 @@ remote persistence features.
 | #42 | Asynchronous snapshot-based persistence | Part IV, Stage 1, gate P4 |
 | #43 | Deterministic Swing test lifecycle; displayed-test CI | Part IV, Stage 1, gate P0 |
 | #44 | Provenance seam and injected operator context | Part IV, Stage 1, gate T2 |
+| #46 | Complete live role panels (remaining #33 scope) | Part I — role-panel stream, independent of Part IV |
 
 ---
 
