@@ -40,6 +40,8 @@ public final class PlanReuseService {
 		record.setPeriodEnd(data.getIncidentContext().getOperationalPeriodEnd());
 		record.setForm205(copy(data.getForm205(), Ics205Form.class));
 		record.setForm215a(copy(data.getForm215a(), Ics215aForm.class));
+		record.setForm215(data.getForm215().copy());
+		record.setNextPeriodForm215(data.getNextPeriodForm215().copy());
 		record.setForm208(copy(data.getForm208(), Ics208Form.class));
 		record.setMedicalPlan(copy(data.getMedicalPlan(), MedicalPlan.class));
 		record.setCanineMedicalPlan(copy(data.getCanineMedicalPlan(), CanineMedicalPlan.class));
@@ -74,6 +76,17 @@ public final class PlanReuseService {
 	}
 
 	/**
+	 * Tests whether a period snapshot contains reusable ICS 215 worksheet content.
+	 *
+	 * @param source source period snapshot.
+	 * @return true when its active or planned worksheet contains operator-entered content.
+	 */
+	public static boolean hasIcs215Plan(AppData.OperationalPeriodRecord source) {
+		return source != null && (hasIcs215Content(source.getForm215())
+				|| hasIcs215Content(source.getNextPeriodForm215()));
+	}
+
+	/**
 	 * Replaces only selected plan areas using detached copies; leaves other plans,
 	 * incident identity, period, organizational roles, resources and directories intact.
 	 *
@@ -85,12 +98,31 @@ public final class PlanReuseService {
 	 */
 	public static void apply(AppData target, AppData.OperationalPeriodRecord source,
 			Set<PlanReviewArea> areas, boolean crossIncident) {
-		if (areas.isEmpty() || !availablePlans(source).containsAll(areas)) {
+		apply(target, source, areas, crossIncident, false, false);
+	}
+
+	/**
+	 * Replaces selected plan areas and optionally reuses ICS 215 structure as a next-period draft.
+	 *
+	 * @param target active incident.
+	 * @param source source period snapshot.
+	 * @param areas selected existing plan areas.
+	 * @param crossIncident true to discard source-incident resource links and routing estimates.
+	 * @param includeIcs215 true to reuse the ICS 215 worksheet structure.
+	 * @param retainIcs215Required true to retain only explicitly chosen Required values.
+	 * @throws IllegalArgumentException when a selected plan is unavailable.
+	 */
+	public static void apply(AppData target, AppData.OperationalPeriodRecord source,
+			Set<PlanReviewArea> areas, boolean crossIncident, boolean includeIcs215,
+			boolean retainIcs215Required) {
+		if ((areas == null || areas.isEmpty()) && !includeIcs215
+				|| !availablePlans(source).containsAll(areas == null ? Set.of() : areas)
+				|| includeIcs215 && !hasIcs215Plan(source)) {
 			throw new IllegalArgumentException("Select at least one available plan.");
 		}
 		// Prepare every copy before changing the target so a malformed source cannot partially import.
 		AppData.OperationalPeriodRecord detached = copy(source, AppData.OperationalPeriodRecord.class);
-		for (PlanReviewArea area : areas) {
+		for (PlanReviewArea area : areas == null ? Set.<PlanReviewArea>of() : areas) {
 			switch (area) {
 				case COMMUNICATIONS -> target.setForm205(detached.getForm205().copyForNewPeriod());
 				case SAFETY -> {
@@ -151,6 +183,59 @@ public final class PlanReuseService {
 			}
 			target.setReviewAssertion(area, new PlanReviewAssertion());
 		}
+		if (includeIcs215) {
+			Ics215Form sourceForm = hasIcs215Content(detached.getNextPeriodForm215())
+					? detached.getNextPeriodForm215() : detached.getForm215();
+			target.setNextPeriodForm215(sourceForm.copyForReuse(retainIcs215Required));
+		}
+	}
+
+	/**
+	 * Identifies nonempty worksheet structure or operator-entered data without comparing generated IDs.
+	 *
+	 * @param form worksheet to inspect.
+	 * @return true when the worksheet contains reusable content.
+	 */
+	private static boolean hasIcs215Content(Ics215Form form) {
+		if (form == null) {
+			return false;
+		}
+		if (form.getTargetPeriodStart() != null || form.getTargetPeriodEnd() != null
+				|| hasText(form.getBranch()) || hasText(form.getDivision()) || hasText(form.getGroup())
+				|| hasText(form.getOther()) || hasText(form.getStagingArea())
+				|| hasText(form.getSpecialInstructions()) || hasText(form.getPreparerName())
+				|| hasText(form.getPreparerPositionTitle()) || hasText(form.getPreparerSignature())
+				|| form.getPreparedDateTime() != null) {
+			return true;
+		}
+		for (Ics215Form.ResourceHeading heading : form.getResourceHeadings()) {
+			if (heading != null && (hasText(heading.category) || hasText(heading.kind)
+					|| hasText(heading.type) || hasText(heading.countingUnit)
+					|| heading.acceptedOnHand != null
+					|| heading.linkedResourceIds != null && !heading.linkedResourceIds.isEmpty())) {
+				return true;
+			}
+		}
+		for (Ics215Form.WorkRow row : form.getWorkRows()) {
+			if (row != null && (hasText(row.branch) || hasText(row.assignment)
+					|| hasText(row.specialInstructions) || hasText(row.overheadPositions)
+					|| hasText(row.specialEquipment) || hasText(row.supplies)
+					|| hasText(row.reportingLocation) || row.requestedArrival != null
+					|| row.resourceAllocations != null && !row.resourceAllocations.isEmpty())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Tests nullable worksheet text for operator-entered content.
+	 *
+	 * @param value worksheet text.
+	 * @return true when text is nonblank.
+	 */
+	private static boolean hasText(String value) {
+		return value != null && !value.isBlank();
 	}
 
 	/**

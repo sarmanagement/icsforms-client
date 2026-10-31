@@ -111,6 +111,32 @@ final class RolePanelWindows {
 			java.util.function.Supplier<ResourceAssignment> newAssignment, Consumer<String> editTask,
 			Consumer<String> changeStatus, Consumer<SarTaskAssignment> addLog, Runnable recordClue,
 			Consumer<String> debrief, Runnable humanReference, Runnable canineReference) {
+		return openOperations(owner, controller, newAssignment, editTask, changeStatus, addLog, recordClue,
+				debrief, humanReference, canineReference, () -> {
+				});
+	}
+
+	/**
+	 * Opens or focuses the Operations panel and delegates planning to the shared ICS 215 editor.
+	 *
+	 * @param owner parent window.
+	 * @param controller incident controller.
+	 * @param newAssignment established assignment workflow.
+	 * @param editTask established task edit workflow.
+	 * @param changeStatus established lifecycle workflow.
+	 * @param addLog established activity-entry workflow.
+	 * @param recordClue established clue workflow.
+	 * @param debrief established debrief workflow.
+	 * @param humanReference human reference action.
+	 * @param canineReference canine reference action.
+	 * @param openOperationalPlanning opens the shared ICS 215 editor.
+	 * @return role window.
+	 */
+	static JFrame openOperations(Window owner, AppController controller,
+			java.util.function.Supplier<ResourceAssignment> newAssignment, Consumer<String> editTask,
+			Consumer<String> changeStatus, Consumer<SarTaskAssignment> addLog, Runnable recordClue,
+			Consumer<String> debrief, Runnable humanReference, Runnable canineReference,
+			Runnable openOperationalPlanning) {
 		AppData incident = controller.getData();
 		JFrame existing = OPERATIONS_WINDOWS.get(incident);
 		if (existing != null && existing.isDisplayable()) {
@@ -118,7 +144,7 @@ final class RolePanelWindows {
 			return existing;
 		}
 		OperationsRolePanel panel = new OperationsRolePanel(controller, newAssignment, editTask, changeStatus, addLog,
-				recordClue, debrief, humanReference, canineReference);
+				recordClue, debrief, humanReference, canineReference, openOperationalPlanning);
 		JFrame frame = createFrame("Operations — " + incident.getIncidentContext().getIncidentName(), panel,
 				ApplicationIcon.Variant.OPERATIONS);
 		frame.addWindowListener(new java.awt.event.WindowAdapter() {

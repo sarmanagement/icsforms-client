@@ -280,7 +280,7 @@ public class AppController {
 	public List<AppData.OperationalPeriodRecord> getPreviousPlanSources() {
 		List<AppData.OperationalPeriodRecord> sources = new ArrayList<>();
 		for (AppData.OperationalPeriodRecord period : data.getOperationalPeriodHistory()) {
-			if (!PlanReuseService.availablePlans(period).isEmpty()) {
+			if (!PlanReuseService.availablePlans(period).isEmpty() || PlanReuseService.hasIcs215Plan(period)) {
 				sources.add(INCIDENT_COPIER.convertValue(period, AppData.OperationalPeriodRecord.class));
 			}
 		}
@@ -295,7 +295,8 @@ public class AppController {
 	 */
 	public boolean hasPreviousPlans() {
 		return data.getOperationalPeriodHistory().stream()
-				.anyMatch(period -> !PlanReuseService.availablePlans(period).isEmpty());
+				.anyMatch(period -> !PlanReuseService.availablePlans(period).isEmpty()
+						|| PlanReuseService.hasIcs215Plan(period));
 	}
 
 	/**
@@ -350,13 +351,13 @@ public class AppController {
 		AppData source = store.load(incidentId);
 		List<AppData.OperationalPeriodRecord> sources = new ArrayList<>();
 		AppData.OperationalPeriodRecord current = PlanReuseService.snapshot(source);
-		if (!PlanReuseService.availablePlans(current).isEmpty()) {
+		if (!PlanReuseService.availablePlans(current).isEmpty() || PlanReuseService.hasIcs215Plan(current)) {
 			sources.add(current);
 		}
 		List<AppData.OperationalPeriodRecord> history = source.getOperationalPeriodHistory();
 		for (int index = history.size() - 1; index >= 0; index--) {
 			AppData.OperationalPeriodRecord period = history.get(index);
-			if (!PlanReuseService.availablePlans(period).isEmpty()) {
+			if (!PlanReuseService.availablePlans(period).isEmpty() || PlanReuseService.hasIcs215Plan(period)) {
 				sources.add(INCIDENT_COPIER.convertValue(period, AppData.OperationalPeriodRecord.class));
 			}
 		}
@@ -373,7 +374,21 @@ public class AppController {
 	 */
 	public void bringForwardPlans(AppData.OperationalPeriodRecord source, Set<PlanReviewArea> areas,
 			boolean crossIncident) {
-		PlanReuseService.apply(data, source, areas, crossIncident);
+		bringForwardPlans(source, areas, crossIncident, false, false);
+	}
+
+	/**
+	 * Reuses selected plans and may copy ICS 215 structure into the next-period worksheet.
+	 *
+	 * @param source detached source-period snapshot.
+	 * @param areas explicitly selected existing plan areas.
+	 * @param crossIncident whether source identities belong to another incident.
+	 * @param includeIcs215 whether to reuse the ICS 215 worksheet.
+	 * @param retainIcs215Required whether to retain Required values.
+	 */
+	public void bringForwardPlans(AppData.OperationalPeriodRecord source, Set<PlanReviewArea> areas,
+			boolean crossIncident, boolean includeIcs215, boolean retainIcs215Required) {
+		PlanReuseService.apply(data, source, areas, crossIncident, includeIcs215, retainIcs215Required);
 		markDirty();
 	}
 
@@ -1029,7 +1044,17 @@ public class AppController {
 	 * @param bringForwardCommunicationsPlan whether to deep-copy ICS 205 channels and instructions.
 	 */
 	public void newOperationalPeriod(boolean bringForwardCommunicationsPlan) {
-		data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan);
+		newOperationalPeriod(bringForwardCommunicationsPlan, false);
+	}
+
+	/**
+	 * Advances the active incident, optionally promoting a validated planned ICS 215 worksheet.
+	 *
+	 * @param bringForwardCommunicationsPlan whether to carry forward ICS 205 data.
+	 * @param promotePlannedIcs215 true to apply the next worksheet's target dates.
+	 */
+	public void newOperationalPeriod(boolean bringForwardCommunicationsPlan, boolean promotePlannedIcs215) {
+		data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan, promotePlannedIcs215);
 		ensureDefaults(data);
 		syncSarTasks();
 		dirty = true;
@@ -1223,9 +1248,28 @@ public class AppController {
 	 */
 	public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory,
 			LinkSource source, PdfOrientation ics205Orientation, PdfOrientation ics233Orientation) throws IOException {
+		return exportSelectedForms(formKeys, outputDirectory, source, ics205Orientation, ics233Orientation, false);
+	}
+
+	/**
+	 * Exports selected forms using the explicitly selected active- or next-period ICS 215 worksheet.
+	 *
+	 * @param formKeys selected renderer keys.
+	 * @param outputDirectory destination directory.
+	 * @param source authoritative linked-field source.
+	 * @param ics205Orientation ICS 205 media and content orientation.
+	 * @param ics233Orientation ICS 233 and adapted clue-log orientation.
+	 * @param ics215NextPeriod true to select the planned worksheet.
+	 * @return published PDFs by form key.
+	 * @throws IOException when copying or exporting fails.
+	 */
+	public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory,
+			LinkSource source, PdfOrientation ics205Orientation, PdfOrientation ics233Orientation,
+			boolean ics215NextPeriod) throws IOException {
 		java.util.Objects.requireNonNull(ics205Orientation, "ics205Orientation");
 		java.util.Objects.requireNonNull(ics233Orientation, "ics233Orientation");
 		AppData snapshot = createPrintSnapshot(source, ics233Orientation == PdfOrientation.PORTRAIT);
+		snapshot.setIcs215ExportNextPeriod(ics215NextPeriod);
 		List<String> supported = formKeys == null ? List.of()
 				: formKeys.stream().distinct().filter(exportService::supports).toList();
 		return supported.isEmpty() ? new LinkedHashMap<>()
@@ -1286,11 +1330,30 @@ public class AppController {
 	 */
 	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source,
 			PdfOrientation ics205Orientation, PdfOrientation ics233Orientation) throws IOException {
+		return exportSelectedIapBundle(formKeys, outputDirectory, source, ics205Orientation, ics233Orientation,
+				false);
+	}
+
+	/**
+	 * Exports a bundle with a specific ICS 215 worksheet period.
+	 *
+	 * @param formKeys selected keys, or null/empty for defaults.
+	 * @param outputDirectory destination directory.
+	 * @param source authoritative linked-field source.
+	 * @param ics205Orientation ICS 205 media and content orientation.
+	 * @param ics233Orientation ICS 233 and adapted clue-log orientation.
+	 * @param ics215NextPeriod true to select the planned worksheet.
+	 * @return published bundle PDF.
+	 * @throws IOException when copying, rendering, or merging fails.
+	 */
+	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source,
+			PdfOrientation ics205Orientation, PdfOrientation ics233Orientation, boolean ics215NextPeriod)
+			throws IOException {
 		java.util.Objects.requireNonNull(ics205Orientation, "ics205Orientation");
 		java.util.Objects.requireNonNull(ics233Orientation, "ics233Orientation");
-		return exportService.exportIapBundle(
-				createPrintSnapshot(source, ics233Orientation == PdfOrientation.PORTRAIT), outputDirectory, formKeys,
-				ics205Orientation, ics233Orientation);
+		AppData snapshot = createPrintSnapshot(source, ics233Orientation == PdfOrientation.PORTRAIT);
+		snapshot.setIcs215ExportNextPeriod(ics215NextPeriod);
+		return exportService.exportIapBundle(snapshot, outputDirectory, formKeys, ics205Orientation, ics233Orientation);
 	}
 
 	/**

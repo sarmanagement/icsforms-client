@@ -82,6 +82,7 @@ public class MainFrame extends JFrame {
 	/** Independent regular action tracker tab group. */
 	private static final String ACTION_TRACKER_GROUP = "Open Action Tracker";
 	private static final String COMMUNICATIONS_GROUP = "Communications Plan (ICS 205)";
+	private static final String ICS_215_GROUP = "Operational Planning Worksheet (ICS 215)";
 	private static final String SAFETY_DASHBOARD_GROUP = "Safety Dashboard";
 	private static final String DASHBOARD_PREFERENCE = "workspace-dashboard";
 	private static final String DESCRIPTIVE_TABS_PREFERENCE = "descriptive-workspace-tabs";
@@ -101,7 +102,9 @@ public class MainFrame extends JFrame {
 	private final Ics204Panel ics204Panel;
 	private final Ics205Panel ics205Panel;
 	private final JCheckBoxMenuItem communicationsPlanItem = new JCheckBoxMenuItem(COMMUNICATIONS_GROUP);
+	private final JCheckBoxMenuItem ics215Item = new JCheckBoxMenuItem(ICS_215_GROUP);
 	private final JMenuItem bringForwardItem = new JMenuItem("Bring Forward…");
+	private final Ics215Panel ics215Panel;
 	private final Ics206Panel medicalPlanPanel;
 	private final CanineMedicalPanel canineMedicalPanel;
 	private final MedicalWorkspacePanel medicalWorkspacePanel;
@@ -187,6 +190,7 @@ public class MainFrame extends JFrame {
 		this.ics202Panel = new Ics202Panel(controller);
 		this.ics204Panel = new Ics204Panel(controller);
 		this.ics205Panel = new Ics205Panel(controller);
+		this.ics215Panel = new Ics215Panel(controller);
 		this.medicalPlanPanel = new Ics206Panel(controller);
 		this.canineMedicalPanel = new CanineMedicalPanel(controller, defaultDirectory);
 		this.medicalWorkspacePanel = new MedicalWorkspacePanel(medicalPlanPanel, canineMedicalPanel);
@@ -222,6 +226,7 @@ public class MainFrame extends JFrame {
 		groupVisible.put(T_CARDS_GROUP, true);
 		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		groupVisible.put(COMMUNICATIONS_GROUP, controller.getData().isIcs205Enabled());
+		groupVisible.put(ICS_215_GROUP, controller.getData().isIcs215Enabled());
 		medicalWorkspacePanel.setCanineVisible(controller.getData().isCanineMedicalWorkspaceEligible());
 		groupVisible.put(SAFETY_DASHBOARD_GROUP,
 				safetyDashboardVisible(activeDashboard, safetyDashboardManuallyVisible));
@@ -231,6 +236,7 @@ public class MainFrame extends JFrame {
 		registerWorkspace(WorkspaceId.ICS_201, ics201Panel, AppController.LinkSource.NONE, ICS_201_GROUP);
 		registerWorkspace(WorkspaceId.ICS_202, ics202Panel, AppController.LinkSource.ICS202, CORE_GROUP);
 		registerWorkspace(WorkspaceId.ICS_204, ics204Panel, AppController.LinkSource.ICS204, CORE_GROUP);
+		registerWorkspace(WorkspaceId.ICS_215, ics215Panel, AppController.LinkSource.NONE, ICS_215_GROUP);
 		registerWorkspace(WorkspaceId.ICS_205, ics205Panel, AppController.LinkSource.NONE, COMMUNICATIONS_GROUP);
 		registerWorkspace(WorkspaceId.MEDICAL, medicalWorkspacePanel, AppController.LinkSource.NONE, CORE_GROUP);
 		registerNestedWorkspace(WorkspaceId.HUMAN_MEDICAL_PLAN, medicalWorkspacePanel);
@@ -413,7 +419,10 @@ public class MainFrame extends JFrame {
 					case OPEN_EXISTING -> controller.open(startup.getChosenIncidentId());
 					case OPEN_NEW_PERIOD -> {
 						controller.open(startup.getChosenIncidentId());
-						controller.newOperationalPeriod();
+						boolean promote = startup.isPromotePlannedIcs215();
+						if (!promote || Ics215PromotionDialog.confirm(this, controller.getData())) {
+							controller.newOperationalPeriod(false, promote);
+						}
 					}
 					case NEW_PRE_OP, NEW_INITIAL_RESPONSE, NEW_OPERATIONAL_PERIOD -> {
 						IapPhase phase = switch (action) {
@@ -514,7 +523,8 @@ public class MainFrame extends JFrame {
 			// CORE_GROUP is always visible; SAR_ONLY_GROUP is controlled exclusively by the
 			// Incident Mode menu (Configuration > Incident Mode) and must not appear here.
 			if (CORE_GROUP.equals(entry.getKey()) || SAR_ONLY_GROUP.equals(entry.getKey())
-					|| ACTION_TRACKER_GROUP.equals(entry.getKey()) || COMMUNICATIONS_GROUP.equals(entry.getKey())) {
+					|| ACTION_TRACKER_GROUP.equals(entry.getKey()) || COMMUNICATIONS_GROUP.equals(entry.getKey())
+					|| ICS_215_GROUP.equals(entry.getKey())) {
 				continue;
 			}
 			JCheckBoxMenuItem item = new JCheckBoxMenuItem(entry.getKey(), entry.getValue());
@@ -547,6 +557,17 @@ public class MainFrame extends JFrame {
 			}
 		});
 		viewMenu.add(communicationsPlanItem);
+		ics215Item.setSelected(controller.getData().isIcs215Enabled());
+		ics215Item.addActionListener(event -> {
+			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			controller.getData().setIcs215Enabled(ics215Item.isSelected());
+			controller.markDirty();
+			refreshFromModel();
+			if (ics215Item.isSelected()) {
+				openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_215));
+			}
+		});
+		viewMenu.add(ics215Item);
 
 		JMenuItem exportFormsPdfItem = new JMenuItem("Export forms as PDF…");
 		exportFormsPdfItem.setMnemonic(KeyEvent.VK_P);
@@ -756,7 +777,8 @@ public class MainFrame extends JFrame {
 						org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(task))),
 				clueLogPanel::openAddClueDialog, sarTaskPanel::openDebriefByAssignmentId,
 				() -> HumanMedicalReferenceWindow.open(this, controller, this::openWorkspace),
-				() -> CanineMedicalReferenceWindow.open(this, controller, this::openWorkspace));
+				() -> CanineMedicalReferenceWindow.open(this, controller, this::openWorkspace),
+				() -> openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_215)));
 	}
 
 	/** Opens Communications while delegating import/export to established dialogs. */
@@ -816,10 +838,41 @@ public class MainFrame extends JFrame {
 		controls.add(selectNone);
 		ExportModeControls exportModeControls = createExportModeControls();
 		PdfPrintOptionsPanel printOptions = new PdfPrintOptionsPanel(formKeys);
+		JComboBox<String> ics215Period = new JComboBox<>(
+				new String[] {"Active-period worksheet", "Next-period worksheet"});
+		JLabel ics215PeriodNotice = new JLabel(" ");
+		ics215PeriodNotice.setForeground(new java.awt.Color(150, 70, 0));
+		Runnable refreshIcs215PeriodNotice = () -> {
+			javax.swing.JCheckBox ics215Check = selectors.get("ICS 215");
+			if (ics215Check == null || !ics215Check.isSelected()) {
+				ics215PeriodNotice.setText(" ");
+				return;
+			}
+			AppData current = controller.getData();
+			boolean nextPeriod = ics215Period.getSelectedIndex() == 1;
+			org.sarmanagement.icsforms.model.Ics215Form worksheet = nextPeriod
+					? current.getNextPeriodForm215() : current.getForm215();
+			if (!java.util.Objects.equals(worksheet.getTargetPeriodStart(),
+					current.getIncidentContext().getOperationalPeriodStart())
+					|| !java.util.Objects.equals(worksheet.getTargetPeriodEnd(),
+							current.getIncidentContext().getOperationalPeriodEnd())) {
+				ics215PeriodNotice.setText("<html>Warning: ICS 215 target dates differ from Shared context; "
+						+ "the worksheet dates will print without changing Shared.</html>");
+			} else {
+				ics215PeriodNotice.setText(" ");
+			}
+		};
+		ics215Period.addActionListener(event -> refreshIcs215PeriodNotice.run());
+		if (selectors.containsKey("ICS 215")) {
+			selectors.get("ICS 215").addActionListener(event -> refreshIcs215PeriodNotice.run());
+		}
 		UiSupport.addWideRow(form, 0, checksPanel);
 		UiSupport.addRow(form, 1, "", controls);
 		UiSupport.addRow(form, 2, "Output", exportModeControls.panel());
 		UiSupport.addRow(form, 3, "Print options", printOptions);
+		UiSupport.addRow(form, 4, "ICS 215 worksheet", ics215Period);
+		UiSupport.addRow(form, 5, "Period check", ics215PeriodNotice);
+		refreshIcs215PeriodNotice.run();
 		if (!UiSupport.showResizableConfirmDialog(this, "Export forms as PDF", form, null)) {
 			return;
 		}
@@ -831,6 +884,7 @@ public class MainFrame extends JFrame {
 					JOptionPane.WARNING_MESSAGE);
 			return;
 		}
+		boolean ics215NextPeriod = ics215Period.getSelectedIndex() == 1;
 		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
 		chooseDirectory(defaultDirectory, directory -> {
 			try {
@@ -841,7 +895,7 @@ public class MainFrame extends JFrame {
 				addSelectedFormsToIcs202Attachments(selected);
 				if (exportModeControls.combined().isSelected()) {
 					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source,
-							printOptions.ics205Orientation(), printOptions.ics233Orientation());
+							printOptions.ics205Orientation(), printOptions.ics233Orientation(), ics215NextPeriod);
 					JPanel completion = new JPanel(new BorderLayout(0, 8));
 					JTextArea summary = new JTextArea(controller.getLastPdfBundleSummary(), 3, 50);
 					summary.setEditable(false);
@@ -853,7 +907,7 @@ public class MainFrame extends JFrame {
 							JOptionPane.INFORMATION_MESSAGE);
 				} else {
 					Map<String, Path> exported = controller.exportSelectedForms(selected, directory, source,
-							printOptions.ics205Orientation(), printOptions.ics233Orientation());
+							printOptions.ics205Orientation(), printOptions.ics233Orientation(), ics215NextPeriod);
 					JOptionPane.showMessageDialog(this, createExportCompletePanel(new ArrayList<>(exported.values())), "Export complete",
 							JOptionPane.INFORMATION_MESSAGE);
 				}
@@ -980,6 +1034,7 @@ public class MainFrame extends JFrame {
 		return switch (formKey) {
 			case "ICS 201" -> hasBriefingContent(data.getForm201());
 			case "ICS 205" -> data.isIcs205Enabled();
+			case "ICS 215" -> false;
 			case "ICS 233-CG" -> data.isOpenActionTrackerEnabled();
 			case "Clue Log (ICS 233-CG adapted)" -> false;
 			case "ICS 208", "ICS 215A" -> data.getForm202().getIncidentActionPlanAttachments().stream()
@@ -1078,6 +1133,7 @@ public class MainFrame extends JFrame {
 			case "ICS 207" -> "ICS 207 – Incident Organization Chart";
 			case "ICS 208" -> "ICS 208 – Safety Message / Plan";
 			case "ICS 214" -> "ICS 214 – Activity Log";
+			case "ICS 215" -> "ICS 215 – Operational Planning Worksheet";
 			case "ICS 215A" -> "ICS 215A – Incident Action Plan Safety Analysis";
 			case "SAR Task Assignment" -> "SAR Task Assignment Forms";
 			case "Clue Log" -> "Clue Log";
@@ -1171,6 +1227,7 @@ public class MainFrame extends JFrame {
 		ics202Panel.pushToModel();
 		ics204Panel.pushToModel();
 		ics205Panel.pushToModel();
+		ics215Panel.pushToModel();
 		medicalPlanPanel.pushToModel();
 		canineMedicalPanel.pushToModel();
 		safetyPanel.pushToModel();
@@ -1253,6 +1310,7 @@ public class MainFrame extends JFrame {
 		ics202Panel.refreshFromModel();
 		ics204Panel.refreshFromModel();
 		ics205Panel.refreshFromModel();
+		ics215Panel.refreshFromModel();
 		medicalPlanPanel.refreshFromModel();
 		canineMedicalPanel.refreshFromModel();
 		medicalWorkspacePanel.setCanineVisible(
@@ -1281,6 +1339,8 @@ public class MainFrame extends JFrame {
 		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		groupVisible.put(COMMUNICATIONS_GROUP, controller.getData().isIcs205Enabled());
 		communicationsPlanItem.setSelected(controller.getData().isIcs205Enabled());
+		groupVisible.put(ICS_215_GROUP, controller.getData().isIcs215Enabled());
+		ics215Item.setSelected(controller.getData().isIcs215Enabled());
 		bringForwardItem.setEnabled(controller.canReusePlans());
 		// Reset ICS 201 group visibility to the phase-based default only when the phase
 		// changes
@@ -1426,6 +1486,18 @@ public class MainFrame extends JFrame {
 				ordered.add(panel);
 			}
 		}
+		Component ics215 = workspaces.get(WorkspaceId.ICS_215).component();
+		int ics215Index = ordered.indexOf(ics215);
+		int lastActivityLogIndex = -1;
+		for (int index = 0; index < ordered.size(); index++) {
+			if (ordered.get(index) instanceof Ics214Panel) {
+				lastActivityLogIndex = index;
+			}
+		}
+		if (ics215Index >= 0 && lastActivityLogIndex >= 0 && ics215Index < lastActivityLogIndex) {
+			ordered.remove(ics215Index);
+			ordered.add(lastActivityLogIndex, ics215);
+		}
 		return ordered;
 	}
 
@@ -1468,6 +1540,11 @@ public class MainFrame extends JFrame {
 			controller.markDirty();
 			communicationsPlanItem.setSelected(true);
 			groupVisible.put(COMMUNICATIONS_GROUP, true);
+		} else if (destination.workspaceId() == WorkspaceId.ICS_215) {
+			controller.getData().setIcs215Enabled(true);
+			controller.markDirty();
+			ics215Item.setSelected(true);
+			groupVisible.put(ICS_215_GROUP, true);
 		}
 		rebuildVisibleTabs(definition.component(), -1);
 		refreshStatus();
@@ -1556,6 +1633,7 @@ public class MainFrame extends JFrame {
 		return switch (id) {
 			case ICS_202 -> "ICS-202 Objectives";
 			case ICS_204 -> "ICS-204 Assignments";
+			case ICS_215 -> "ICS-215 Operational Planning";
 			case ICS_205 -> "ICS-205 Comms";
 			case ACTIVITY_LOG -> compactLabel.replaceFirst("^ICS 214", "ICS-214 Log");
 			default -> compactLabel;
@@ -2429,15 +2507,15 @@ public class MainFrame extends JFrame {
 	 */
 	enum Dashboard {
 		IC_ICP("IC/ICP", List.of(WorkspaceId.SHARED, WorkspaceId.ORG_CHART, WorkspaceId.ICS_201,
-				WorkspaceId.ICS_202, WorkspaceId.ICS_204, WorkspaceId.ICS_205, WorkspaceId.MEDICAL, WorkspaceId.SAFETY,
+				WorkspaceId.ICS_202, WorkspaceId.ICS_204, WorkspaceId.ICS_215, WorkspaceId.ICS_205, WorkspaceId.MEDICAL, WorkspaceId.SAFETY,
 				WorkspaceId.SAR_TASKS, WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ACTIVITY_LOG,
 				WorkspaceId.CLUE_LOG, WorkspaceId.TCARDS)),
 		SAFETY_OFFICER("Safety Officer", List.of(WorkspaceId.SAFETY_OVERVIEW, WorkspaceId.SAFETY,
 				WorkspaceId.MEDICAL, WorkspaceId.ORG_CHART, WorkspaceId.SHARED, WorkspaceId.TCARDS,
 				WorkspaceId.ICS_204, WorkspaceId.ICS_205, WorkspaceId.SAR_TASKS, WorkspaceId.CLUE_LOG, WorkspaceId.ACTIVITY_LOG,
 				WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ICS_202, WorkspaceId.ICS_201)),
-		OPERATIONS("Operations", List.of(WorkspaceId.ICS_204, WorkspaceId.SAR_TASKS, WorkspaceId.TCARDS,
-				WorkspaceId.CLUE_LOG, WorkspaceId.ACTIVITY_LOG, WorkspaceId.SAFETY, WorkspaceId.ORG_CHART,
+		OPERATIONS("Operations", List.of(WorkspaceId.ICS_204, WorkspaceId.ICS_215, WorkspaceId.SAR_TASKS,
+				WorkspaceId.TCARDS, WorkspaceId.CLUE_LOG, WorkspaceId.ACTIVITY_LOG, WorkspaceId.SAFETY, WorkspaceId.ORG_CHART,
 				WorkspaceId.MEDICAL, WorkspaceId.SHARED, WorkspaceId.ICS_202, WorkspaceId.ICS_201,
 				WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ICS_205)),
 		COMMUNICATIONS("Communications", List.of(WorkspaceId.ICS_205, WorkspaceId.SAFETY, WorkspaceId.ORG_CHART, WorkspaceId.MEDICAL,

@@ -178,7 +178,7 @@ class BringForwardDialogTest {
 	}
 
 	@Test
-	void previousPeriodAvailabilityRequiresContentAndStartupOffersNoCopyCheckbox() throws Exception {
+	void previousPeriodAvailabilityRequiresContentAndStartupOffersExplicitIcs215Promotion() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			AppData target = new AppData();
@@ -197,8 +197,10 @@ class BringForwardDialogTest {
 					assertTrue(((JCheckBox) choices.get(PlanReviewArea.COMMUNICATIONS)).isEnabled());
 					assertFalse(((JCheckBox) choices.get(PlanReviewArea.HUMAN_MEDICAL)).isEnabled());
 					assertFalse(startup.isBringForwardCommunicationsPlan());
-					assertTrue(java.util.Arrays.stream(StartupDialog.class.getDeclaredFields())
-							.noneMatch(value -> JCheckBox.class.isAssignableFrom(value.getType())));
+					JCheckBox promote = (JCheckBox) field(startup, "promotePlannedIcs215");
+					assertEquals("Promote planned ICS 215 target period when advancing", promote.getText());
+					assertFalse(promote.isSelected());
+					assertFalse(startup.isPromotePlannedIcs215());
 				} finally {
 					dialog.dispose();
 					startup.dispose();

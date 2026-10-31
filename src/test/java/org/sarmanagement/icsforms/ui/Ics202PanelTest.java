@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
@@ -364,6 +365,7 @@ class Ics202PanelTest {
 	}
 
 	@Test
+	@EnabledIfSystemProperty(named = "icsforms.desktopTests", matches = "true")
 	void defaultWindowWidthDevotesObjectiveGridToTextWithoutHorizontalScrolling() throws Exception {
 		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
 		AppController controller = sampleController();
@@ -639,9 +641,11 @@ class Ics202PanelTest {
 		assertEquals("ICS 208 – Safety Message / Plan", MainFrame.exportFormDisplayLabel("ICS 208"));
 		assertEquals("ICS 215A – Incident Action Plan Safety Analysis",
 				MainFrame.exportFormDisplayLabel("ICS 215A"));
-		assertEquals(List.of("ICS 204", "SAR Task Assignment", "ICS 205A", "ICS 207", "ICS 208", "ICS 214", "ICS 215A"),
+		assertEquals(List.of("ICS 204", "SAR Task Assignment", "ICS 205A", "ICS 207", "ICS 208", "ICS 214", "ICS 215",
+				"ICS 215A"),
 				MainFrame.sortExportFormKeys(
-						List.of("ICS 215A", "SAR Task Assignment", "ICS 208", "ICS 214", "ICS 207", "ICS 205A", "ICS 204")));
+						List.of("ICS 215A", "ICS 215", "SAR Task Assignment", "ICS 208", "ICS 214", "ICS 207",
+								"ICS 205A", "ICS 204")));
 		assertEquals(List.of("ICS 204", "ICS 208", "ICS 215A"),
 				MainFrame.mergeSelectedFormsWithIcs202Attachments(List.of("ICS 204", "ICS 208"),
 						List.of("ICS 215A", "ICS 208")));

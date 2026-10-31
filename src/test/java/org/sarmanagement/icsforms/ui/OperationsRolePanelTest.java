@@ -16,9 +16,13 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.SwingUtilities;
 import javax.swing.JTextArea;
+import javax.swing.JButton;
+import java.awt.Component;
+import java.awt.Container;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -85,6 +89,28 @@ class OperationsRolePanelTest {
 		assertTrue(card.getStatus().isBlank() || "Available".equalsIgnoreCase(card.getStatus()));
 	}
 
+	@Test
+	void operationalPlanningActionOpensTheSharedWorksheetCallback() throws Exception {
+		AppController controller = controller(new AppData());
+		AtomicBoolean opened = new AtomicBoolean();
+		OperationsRolePanel[] panel = new OperationsRolePanel[1];
+		SwingUtilities.invokeAndWait(() -> {
+			panel[0] = new OperationsRolePanel(controller, () -> null, ignored -> {
+			}, ignored -> {
+			}, ignored -> {
+			}, () -> {
+			}, ignored -> {
+			}, () -> {
+			}, () -> {
+			}, () -> opened.set(true));
+			JButton action = findButton(panel[0], "Operational planning / ICS 215");
+			assertTrue(action != null);
+			action.doClick();
+		});
+		assertTrue(opened.get());
+		SwingUtilities.invokeAndWait(panel[0]::dispose);
+	}
+
 	private OperationsRolePanel createPanel(AppController controller) {
 		return new OperationsRolePanel(controller, () -> null, ignored -> {
 		}, ignored -> {
@@ -105,5 +131,27 @@ class OperationsRolePanelTest {
 		Field field = target.getClass().getDeclaredField(name);
 		field.setAccessible(true);
 		return field.get(target);
+	}
+
+	/**
+	 * Finds a role-panel action by its visible label.
+	 *
+	 * @param component component tree.
+	 * @param label requested button label.
+	 * @return matching button or null.
+	 */
+	private JButton findButton(Component component, String label) {
+		if (component instanceof JButton button && label.equals(button.getText())) {
+			return button;
+		}
+		if (component instanceof Container container) {
+			for (Component child : container.getComponents()) {
+				JButton result = findButton(child, label);
+				if (result != null) {
+					return result;
+				}
+			}
+		}
+		return null;
 	}
 }

@@ -225,14 +225,14 @@ class PdfPrintOptionsTest {
 	}
 
 	@Test
-	void startupHasOnlyActionModeAndExplicitRadioCarryForwardControls() throws Exception {
+	void startupOffersExplicitIcs215PromotionAlongsideModeControls() throws Exception {
 		Assumptions.assumeFalse(GraphicsEnvironment.isHeadless());
 		SwingUtilities.invokeAndWait(() -> {
 			StartupDialog startup = new StartupDialog(null, null, false);
 			try {
 				List<JCheckBox> checkboxes = components(startup, JCheckBox.class);
 				assertEquals(1, checkboxes.size());
-				assertEquals("Bring forward communications plan (ICS 205)", checkboxes.get(0).getText());
+				assertEquals("Promote planned ICS 215 target period when advancing", checkboxes.get(0).getText());
 				assertFalse(checkboxes.get(0).isSelected());
 				assertTrue(components(startup, JComboBox.class).isEmpty());
 				assertTrue(components(startup, ActionTrackerSettingsPanel.class).isEmpty());
