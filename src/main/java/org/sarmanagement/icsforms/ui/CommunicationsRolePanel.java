@@ -8,6 +8,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.model.RadioChannel;
 import org.sarmanagement.icsforms.model.RadioCheckStatus;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -328,7 +329,7 @@ public class CommunicationsRolePanel extends JPanel {
 		checkStatus.setSelectedItem(channel.getRadioCheckStatus());
 		checkedBy.setText(channel.getRadioCheckedBy());
 		checkedAt.setText(channel.getRadioCheckedAt() == null ? "Not recorded"
-				: CHECK_TIME.format(channel.getRadioCheckedAt()));
+				: UiSupport.formatDateTime(channel.getRadioCheckedAt(), CHECK_TIME));
 		checkNotes.setText(channel.getRadioCheckNotes());
 		rebuildLinks(id);
 		editorDirty = false;
@@ -379,7 +380,7 @@ public class CommunicationsRolePanel extends JPanel {
 		LocalDateTime time = selectedStatus == RadioCheckStatus.NOT_RECORDED ? null
 				: selectedStatus == baseline.getRadioCheckStatus() && baseline.getRadioCheckedAt() != null
 						? baseline.getRadioCheckedAt()
-						: LocalDateTime.now().withSecond(0).withNano(0);
+						: UtcTimestamp.now().withSecond(0).withNano(0);
 		controller.updateRadioChannelOperations(loadedChannelId, baseline, coverage.getText(), relay.getText(),
 				selectedStatus, checkedBy.getText(), time, checkNotes.getText());
 		loadSelectedChannel();

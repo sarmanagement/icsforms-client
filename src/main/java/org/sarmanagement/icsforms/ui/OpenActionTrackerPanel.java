@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.OpenActionItem;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -24,7 +25,6 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.text.ParseException;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -223,7 +223,7 @@ public class OpenActionTrackerPanel extends JPanel {
 	 */
 	static boolean isOverdue(OpenActionItem item) {
 		return !item.isCompleted() && item.getTargetDate() != null
-				&& item.getTargetDate().isBefore(LocalDateTime.now(ZoneOffset.UTC));
+				&& item.getTargetDate().isBefore(UtcTimestamp.now());
 	}
 
 	/**
@@ -232,7 +232,7 @@ public class OpenActionTrackerPanel extends JPanel {
 	 * @return true when due soon, excluding overdue and completed actions
 	 */
 	static boolean isDueSoon(OpenActionItem item) {
-		LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+		LocalDateTime now = UtcTimestamp.now();
 		return !item.isCompleted() && item.getTargetDate() != null
 				&& !item.getTargetDate().isBefore(now) && !item.getTargetDate().isAfter(now.plusHours(24));
 	}

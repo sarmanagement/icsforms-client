@@ -9,7 +9,6 @@ import javax.swing.JSpinner;
 import java.awt.FlowLayout;
 import java.text.ParseException;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
 
@@ -53,8 +52,6 @@ class ActionDateField extends JPanel {
 	 * @return display text, or empty when unset
 	 */
 	static String format(LocalDateTime value) {
-		return value == null ? "" : value.atZone(ZoneOffset.UTC)
-				.withZoneSameInstant(UiSupport.getDateTimeDisplayZone())
-				.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+		return UiSupport.formatDateTime(value, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
 	}
 }

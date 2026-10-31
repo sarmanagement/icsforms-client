@@ -10,6 +10,7 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.model.PdfLayoutSettings;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
@@ -470,7 +471,7 @@ abstract class AbstractPdfRenderer {
 	 */
 	protected String pdfTimeZoneLabel(AppData data) {
 		ZoneId zoneId = pdfZoneId(data);
-		ZonedDateTime now = ZonedDateTime.now(zoneId);
+		ZonedDateTime now = UtcTimestamp.nowInstant().atZone(zoneId);
 		return zoneId.getId() + " (UTC" + now.getOffset() + ", " + now.format(DateTimeFormatter.ofPattern("z")) + ")";
 	}
 

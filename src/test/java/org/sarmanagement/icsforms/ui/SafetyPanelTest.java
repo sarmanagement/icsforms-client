@@ -18,6 +18,8 @@ import javax.swing.SwingUtilities;
 import javax.swing.JTabbedPane;
 import java.awt.event.MouseEvent;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Map;
 import javax.swing.JTable;
 
@@ -134,6 +136,21 @@ class SafetyPanelTest {
 
 	@Test
 	void safetyPanelShowsArchivedAndCurrentReportsWithCoverageStatus() throws Exception {
+		ZoneId previousZone = UiSupport.getDateTimeDisplayZone();
+		try {
+			UiSupport.setDateTimeDisplayZone(ZoneOffset.UTC);
+			assertSafetyPanelShowsArchivedAndCurrentReportsWithCoverageStatusInUtc();
+		} finally {
+			UiSupport.setDateTimeDisplayZone(previousZone);
+		}
+	}
+
+	/**
+	 * Checks archived and current safety report formatting and promotion in UTC.
+	 *
+	 * @throws Exception if Swing setup or reflective access fails.
+	 */
+	private void assertSafetyPanelShowsArchivedAndCurrentReportsWithCoverageStatusInUtc() throws Exception {
 		AppData data = new AppData();
 		data.setIncidentMode(IncidentMode.SAR);
 		data.getForm215a().getEntries().add(new SafetyAnalysisEntry());

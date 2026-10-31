@@ -25,7 +25,6 @@ import java.awt.FlowLayout;
 import java.awt.Window;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Objects;
 
 /** Manages saved incidents without opening or changing the active editor. */
 public class IncidentManagerDialog extends JDialog {
@@ -150,8 +149,10 @@ public class IncidentManagerDialog extends JDialog {
 			for (int row = 0; row < updated.size(); row++) {
 				IncidentSummary summary = updated.get(row);
 				var context = store.load(summary.incidentId()).getIncidentContext();
-				String period = Objects.toString(context.getOperationalPeriodStart(), "not set") + " — "
-						+ Objects.toString(context.getOperationalPeriodEnd(), "not set");
+				String period = context.getOperationalPeriodStart() == null ? "not set"
+						: UiSupport.formatIsoDateTime(context.getOperationalPeriodStart());
+				period += " — " + (context.getOperationalPeriodEnd() == null ? "not set"
+						: UiSupport.formatIsoDateTime(context.getOperationalPeriodEnd()));
 				rows[row] = new Object[]{summary.displayLabel(), summary.incidentId().value(), period,
 						summary.lastModified(), summary.path()};
 			}

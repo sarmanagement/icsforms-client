@@ -59,6 +59,24 @@ class ClueLogHistoryPdfTest {
 	}
 
 	@Test
+	void clueTimestampUsesConfiguredPdfTimezone() throws Exception {
+		AppData data = new AppData();
+		data.setUseSystemTimeZone(false);
+		data.setConfiguredTimeZoneId("America/Los_Angeles");
+		ClueLogEntry clue = new ClueLogEntry();
+		clue.setDateTimeCollected(LocalDateTime.of(2024, 1, 1, 1, 30));
+		data.setClueLogEntries(List.of(clue));
+		Path pdf = output.resolve("clue-timezone.pdf");
+		new ClueLogPdfRenderer().render(data, pdf);
+		try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
+			String text = new PDFTextStripper().getText(document);
+			assertTrue(text.contains("2023-12-31 17:30"));
+		} finally {
+			Files.deleteIfExists(pdf);
+		}
+	}
+
+	@Test
 	void oversizedDescriptionAndHistoryStayVisibleAcrossLetterAndA4Pages() throws Exception {
 		for (PdfLayoutSettings.PaperSize paper : PdfLayoutSettings.PaperSize.values()) {
 			AppData data = new AppData();

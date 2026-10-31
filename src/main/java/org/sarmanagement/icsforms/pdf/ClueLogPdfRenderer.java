@@ -14,7 +14,6 @@ import org.sarmanagement.icsforms.model.PocAssignment;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,7 +27,6 @@ import java.util.List;
  * </p>
  */
 public class ClueLogPdfRenderer extends AbstractPdfRenderer implements PdfFormRenderer {
-	private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	private static final String FORM_KEY = "Clue Log";
 
 	/** {@inheritDoc} */
@@ -149,8 +147,7 @@ public class ClueLogPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 			List<String> block = new ArrayList<>();
 			block.add("Clue #" + (i + 1) + (e.isPossibleDuplicate() ? "  [POSSIBLE DUPLICATE]" : ""));
 			block.add("Detecting Task:    " + safe(e.getDetectingTask()));
-			block.add("Date/Time:         "
-					+ (e.getDateTimeCollected() == null ? "" : DATE_TIME_FORMATTER.format(e.getDateTimeCollected())));
+			block.add("Date/Time:         " + formatPdfDateTime(data, e.getDateTimeCollected()));
 			block.add("Location:          " + safe(e.getLocation()));
 			block.add("Description:       " + safe(e.getDescription()));
 			if (!safe(e.getImmediateAction()).isBlank()) {
