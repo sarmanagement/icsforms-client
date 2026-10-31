@@ -53,9 +53,6 @@ import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -314,7 +311,7 @@ public class CanineMedicalPanel extends JPanel {
 			procedures.setText(plan.getEmergencyProcedures());
 			aviationUsed.setSelected(plan.isAviationAssetsUsed());
 			preparedBy.setText(MedicalRoleSupport.medicalUnitLeaderName(data));
-			preparedAt.setText(UiSupport.formatDateTime(plan.getPreparedAt(), DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+			preparedAt.setText(UiSupport.formatIsoDateTime(plan.getPreparedAt()));
 			safetyOfficer.setText(MedicalRoleSupport.safetyOfficerName(data));
 			reviewStatus.setSelectedItem(plan.getReviewStatus());
 			loadDirectory(data.getVetDirectory());
@@ -2179,8 +2176,7 @@ public class CanineMedicalPanel extends JPanel {
 			return;
 		}
 		try {
-			plan.setPreparedAt(UiSupport.parseDateTime(preparedAt.getText().trim(),
-					DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+			plan.setPreparedAt(UiSupport.parseIsoDateTime(preparedAt.getText().trim()));
 		} catch (RuntimeException exception) {
 			status.setText("Preparation date/time must use yyyy-MM-ddTHH:mm.");
 		}

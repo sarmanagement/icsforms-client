@@ -15,6 +15,9 @@ import java.util.Objects;
 public final class UtcTimestamp {
 	private static volatile Clock clock = Clock.systemUTC();
 
+	/**
+	 * Prevents construction of this timestamp utility.
+	 */
 	private UtcTimestamp() {
 	}
 

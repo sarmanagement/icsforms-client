@@ -25,7 +25,6 @@ import java.awt.FlowLayout;
 import java.awt.Window;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Objects;
 
 /** Manages saved incidents without opening or changing the active editor. */
 public class IncidentManagerDialog extends JDialog {

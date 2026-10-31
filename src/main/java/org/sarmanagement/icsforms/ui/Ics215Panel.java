@@ -38,10 +38,8 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -1344,9 +1342,7 @@ public class Ics215Panel extends JPanel {
 			return null;
 		}
 		try {
-			LocalDateTime displayed = LocalDateTime.parse(value.trim(), DATE_TIME);
-			return LocalDateTime.ofInstant(displayed.atZone(UiSupport.getDateTimeDisplayZone()).toInstant(),
-					ZoneOffset.UTC);
+			return UiSupport.parseDateTime(value.trim(), DATE_TIME);
 		} catch (DateTimeParseException exception) {
 			throw new IllegalStateException("Enter " + label + " as yyyy-MM-dd HH:mm.");
 		}
@@ -1362,8 +1358,7 @@ public class Ics215Panel extends JPanel {
 		if (value == null) {
 			return "";
 		}
-		Instant instant = value.toInstant(ZoneOffset.UTC);
-		return DATE_TIME.format(LocalDateTime.ofInstant(instant, UiSupport.getDateTimeDisplayZone()));
+		return UiSupport.formatDateTime(value, DATE_TIME);
 	}
 
 	/**

@@ -124,6 +124,17 @@ final class UiSupport {
 	}
 
 	/**
+	 * Formats a UTC timestamp as ISO local date/time in the active display timezone.
+	 *
+	 * @param value UTC timestamp.
+	 * @return ISO timestamp, or an empty string when the value is null.
+	 */
+	static String formatIsoDateTime(LocalDateTime value) {
+		return value == null ? ""
+				: value.atOffset(ZoneOffset.UTC).atZoneSameInstant(dateTimeDisplayZone).toLocalDateTime().toString();
+	}
+
+	/**
 	 * Parses a timestamp entered in the active display timezone into UTC.
 	 *
 	 * @param value displayed timestamp.
@@ -146,6 +157,20 @@ final class UiSupport {
 	 */
 	static LocalDateTime parseDateTime(String value) {
 		return parseDateTime(value, DATE_TIME_FORMATTER);
+	}
+
+	/**
+	 * Parses an ISO date/time entered in the active display timezone into UTC.
+	 *
+	 * @param value displayed ISO timestamp.
+	 * @return UTC timestamp, or null when the value is blank.
+	 */
+	static LocalDateTime parseIsoDateTime(String value) {
+		if (value == null || value.isBlank()) {
+			return null;
+		}
+		LocalDateTime displayed = LocalDateTime.parse(value.trim());
+		return displayed.atZone(dateTimeDisplayZone).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
 	}
 
 	static void applyDateTimeDisplayZone(Component root) {

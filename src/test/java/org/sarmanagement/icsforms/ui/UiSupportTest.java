@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.TimeZone;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -220,14 +221,16 @@ class UiSupportTest {
 	@Test
 	void generatedTimestampsStayUtcAcrossClientAndDaylightSavingTransitions() {
 		ZoneId previousZone = UiSupport.getDateTimeDisplayZone();
+		TimeZone previousSystemZone = TimeZone.getDefault();
 		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 		try {
+			TimeZone.setDefault(TimeZone.getTimeZone("Asia/Tokyo"));
 			UiSupport.setDateTimeDisplayZone(ZoneId.of("America/Los_Angeles"));
-			UtcTimestamp.setClock(Clock.fixed(Instant.parse("2024-03-10T09:59:00Z"), ZoneId.of("Asia/Tokyo")));
+			UtcTimestamp.setClock(Clock.fixed(Instant.parse("2024-03-10T09:59:00Z"), ZoneId.systemDefault()));
 			LocalDateTime beforeTransition = UtcTimestamp.now();
 			assertEquals(Instant.parse("2024-03-10T09:59:00Z"), UtcTimestamp.nowInstant());
 
-			UtcTimestamp.setClock(Clock.fixed(Instant.parse("2024-03-10T10:00:00Z"), ZoneId.of("Asia/Tokyo")));
+			UtcTimestamp.setClock(Clock.fixed(Instant.parse("2024-03-10T10:00:00Z"), ZoneId.systemDefault()));
 			LocalDateTime afterTransition = UtcTimestamp.now();
 
 			assertEquals(LocalDateTime.of(2024, 3, 10, 9, 59), beforeTransition);
@@ -235,6 +238,9 @@ class UiSupportTest {
 			assertTrue(afterTransition.isAfter(beforeTransition));
 			assertEquals("2024-03-10 01:59", UiSupport.formatDateTime(beforeTransition, formatter));
 			assertEquals("2024-03-10 03:00", UiSupport.formatDateTime(afterTransition, formatter));
+			assertEquals("2024-03-10 01:59", UiSupport.formatInstant(Instant.parse("2024-03-10T09:59:00Z")));
+			assertEquals("2024-03-10T01:59", UiSupport.formatIsoDateTime(beforeTransition));
+			assertEquals(beforeTransition, UiSupport.parseIsoDateTime("2024-03-10T01:59"));
 			assertEquals(beforeTransition,
 					UiSupport.parseDateTime(UiSupport.formatDateTime(beforeTransition, formatter), formatter));
 			assertEquals(afterTransition,
@@ -242,6 +248,7 @@ class UiSupportTest {
 		} finally {
 			UtcTimestamp.resetClock();
 			UiSupport.setDateTimeDisplayZone(previousZone);
+			TimeZone.setDefault(previousSystemZone);
 		}
 	}
 

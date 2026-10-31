@@ -41,7 +41,6 @@ import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -986,7 +985,7 @@ public class SafetyPanel extends JPanel {
 	}
 
 	/**
-	 * Parses an ISO local date/time entered in the safety form.
+	 * Parses an ISO local date/time entered in the active display timezone.
 	 *
 	 * @param value ISO date/time text.
 	 * @return parsed time, or null when blank/invalid.
@@ -996,7 +995,7 @@ public class SafetyPanel extends JPanel {
 			return null;
 		}
 		try {
-			return UiSupport.parseDateTime(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+			return UiSupport.parseIsoDateTime(value.trim());
 		} catch (java.time.format.DateTimeParseException exception) {
 			return null;
 		}
@@ -1009,7 +1008,7 @@ public class SafetyPanel extends JPanel {
 	 * @return ISO local date/time text, or blank.
 	 */
 	private static String isoDateTime(LocalDateTime dateTime) {
-		return UiSupport.formatDateTime(dateTime, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+		return UiSupport.formatIsoDateTime(dateTime);
 	}
 
 	/**
