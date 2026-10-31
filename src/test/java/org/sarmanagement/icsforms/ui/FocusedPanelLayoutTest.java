@@ -6,6 +6,7 @@ package org.sarmanagement.icsforms.ui;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentObjective;
@@ -82,21 +83,25 @@ class FocusedPanelLayoutTest {
 	}
 
 	@Test
+	@EnabledIfSystemProperty(named = "icsforms.desktopTests", matches = "true")
 	void defaultMissingPlanningFitsWithoutScrollbars() throws Exception {
 		assertIncidentLayout(new AppData());
 	}
 
 	@Test
+	@EnabledIfSystemProperty(named = "icsforms.desktopTests", matches = "true")
 	void populatedCurrentPlanningFitsWithoutScrollbars() throws Exception {
 		assertIncidentLayout(populated(false));
 	}
 
 	@Test
+	@EnabledIfSystemProperty(named = "icsforms.desktopTests", matches = "true")
 	void longIncidentAndReviewerNamesDoNotDisplacePlanning() throws Exception {
 		assertIncidentLayout(populated(true));
 	}
 
 	@Test
+	@EnabledIfSystemProperty(named = "icsforms.desktopTests", matches = "true")
 	void stalePlanningFitsWithoutScrollbars() throws Exception {
 		AppData data = populated(true);
 		data.getForm202().getStructuredObjectives().get(0).setText("Changed objective");

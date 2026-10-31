@@ -340,6 +340,7 @@ public class PdfExportService {
 		if (data == null || !data.isOpenActionTrackerEnabled()) {
 			keys.remove("ICS 233-CG");
 		}
+		keys.remove("ICS 215");
 		if (data != null && data.isClueLogIcs233Enabled()
 				&& renderers.containsKey("Clue Log (ICS 233-CG adapted)")) {
 			keys.remove("Clue Log");
@@ -561,6 +562,8 @@ public class PdfExportService {
 		data.setForm205aIapPage("");
 		data.getForm205().setIapPage("");
 		data.getForm215a().setIapPage("");
+		data.getForm215().setIapPage("");
+		data.getNextPeriodForm215().setIapPage("");
 		data.getForm208().setIapPage("");
 		data.getForm207().setIapPage("");
 		data.getOrganizationalChart().getAssignmentList().setIapPage("");
@@ -598,6 +601,12 @@ public class PdfExportService {
 							form.setIapPage(String.valueOf(page));
 							page += Ics204PdfRenderer.pageCount(data, form);
 						}
+					}
+				}
+				case "ICS 215" -> {
+					if (included != null && included.contains(formKey)) {
+						Ics215PdfRenderer.formForExport(data).setIapPage(String.valueOf(page));
+						page += Ics215PdfRenderer.pageCount(data);
 					}
 				}
 				case "ICS 206" -> {
@@ -756,6 +765,9 @@ public class PdfExportService {
 		copy.setForm202(data.getForm202());
 		copy.setForm205(data.getForm205());
 		copy.setForm215a(data.getForm215a());
+		copy.setForm215(data.getForm215());
+		copy.setNextPeriodForm215(data.getNextPeriodForm215());
+		copy.setIcs215Enabled(data.isIcs215Enabled());
 		copy.setForm208(data.getForm208());
 		copy.setForm205aIapPage(data.getForm205aIapPage());
 		copy.setForm207(data.getForm207());

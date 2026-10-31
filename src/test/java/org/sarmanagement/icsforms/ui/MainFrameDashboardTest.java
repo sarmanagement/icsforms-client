@@ -5,6 +5,7 @@ package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -35,6 +36,9 @@ class MainFrameDashboardTest {
 		assertEquals("ICS-202 Objectives", MainFrame.workspaceTabLabel(WorkspaceId.ICS_202, "ICS 202", true));
 		assertEquals("ICS-204 Assignments", MainFrame.workspaceTabLabel(WorkspaceId.ICS_204, "ICS 204", true));
 		assertEquals("ICS-205 Comms", MainFrame.workspaceTabLabel(WorkspaceId.ICS_205, "ICS 205", true));
+		assertEquals("ICS 215", MainFrame.workspaceTabLabel(WorkspaceId.ICS_215, "ICS 215", false));
+		assertEquals("ICS-215 Operational Planning",
+				MainFrame.workspaceTabLabel(WorkspaceId.ICS_215, "ICS 215", true));
 		assertEquals("ICS-214 Log – Team A",
 				MainFrame.workspaceTabLabel(WorkspaceId.ACTIVITY_LOG, "ICS 214 – Team A", true));
 		assertEquals("ICS 214 – ICP",
@@ -82,6 +86,35 @@ class MainFrameDashboardTest {
 				} else {
 					preferences.put("descriptive-workspace-tabs", previous);
 				}
+				AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
+				((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
+				frame.dispose();
+			}
+		});
+	}
+
+	@Test
+	void enabledIcs215FollowsAllVisibleActivityLogs() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		var directory = Files.createTempDirectory("icsforms-215-tab-order");
+		AppData data = new AppData();
+		data.setIcs215Enabled(true);
+		data.getActivityLogs().add(new Ics214Form());
+		data.getActivityLogs().add(new Ics214Form());
+		SwingUtilities.invokeAndWait(() -> {
+			MainFrame frame = new MainFrame(data, new LocalRepository(directory.resolve("incident.json")),
+					new PdfExportService(), new IncidentValidator(), directory);
+			try {
+				JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame, "tabs");
+				int ics215Index = tabs.indexOfComponent((java.awt.Component) Ics205PanelTest.field(frame, "ics215Panel"));
+				int lastLogIndex = -1;
+				for (int index = 0; index < tabs.getTabCount(); index++) {
+					if (tabs.getComponentAt(index) instanceof Ics214Panel) {
+						lastLogIndex = index;
+					}
+				}
+				assertTrue(ics215Index > lastLogIndex);
+			} finally {
 				AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
 				((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
 				frame.dispose();

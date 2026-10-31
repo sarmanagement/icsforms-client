@@ -12,6 +12,7 @@ public enum WorkspaceId {
 	ICS_201("ICS 201"),
 	ICS_202("ICS 202"),
 	ICS_204("ICS 204"),
+	ICS_215("ICS 215"),
 	ICS_205("ICS 205"),
 	MEDICAL("Medical"),
 	HUMAN_MEDICAL_PLAN("Medical Plan (ICS 206)"),

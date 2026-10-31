@@ -12,6 +12,7 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -62,7 +63,12 @@ public class StartupDialog extends JDialog {
 	private StartupAction chosenAction;
 	private IncidentMode chosenMode = IncidentMode.SAR;
 	private IncidentId chosenIncidentId;
+<<<<<<< HEAD
 	private final boolean includeOpenActions;
+=======
+	private final JCheckBox promotePlannedIcs215 = new JCheckBox(
+			"Promote planned ICS 215 target period when advancing");
+>>>>>>> origin/master
 
 	/**
 	 * Creates the startup dialog.
@@ -143,6 +149,15 @@ public class StartupDialog extends JDialog {
 		return false;
 	}
 
+	/**
+	 * Returns whether the operator explicitly selected planned ICS 215 promotion.
+	 *
+	 * @return true when the target worksheet should be validated and promoted.
+	 */
+	public boolean isPromotePlannedIcs215() {
+		return promotePlannedIcs215.isSelected();
+	}
+
 	// -------------------------------------------------------------------------
 
 	/**
@@ -173,6 +188,7 @@ public class StartupDialog extends JDialog {
 				"<html>Start a fresh workspace for a new operational period.<br>"
 						+ "ICS 202 and ICS 204 are the primary forms; ICS 201 is read-only.</html>",
 				StartupAction.NEW_OPERATIONAL_PERIOD, store));
+<<<<<<< HEAD
 		if (includeOpenActions) {
 			panel.add(Box.createVerticalStrut(10));
 			panel.add(new JSeparator());
@@ -187,6 +203,25 @@ public class StartupDialog extends JDialog {
 							+ "the ICS 201 and org chart as historical context.</html>",
 					StartupAction.OPEN_NEW_PERIOD, store));
 		}
+=======
+		panel.add(Box.createVerticalStrut(10));
+		panel.add(new JSeparator());
+		panel.add(Box.createVerticalStrut(10));
+
+		panel.add(buildActionRow("Open existing incident…",
+				"<html>Continue working on a previously saved incident workspace.</html>", StartupAction.OPEN_EXISTING,
+				store));
+		panel.add(Box.createVerticalStrut(6));
+
+		panel.add(buildActionRow("Open existing incident and add a new operational period…",
+				"<html>Load an existing workspace and advance it to the next<br>"
+						+ "operational period, clearing operational forms while keeping<br>"
+						+ "the ICS 201 and org chart as historical context.</html>",
+				StartupAction.OPEN_NEW_PERIOD, store));
+		panel.add(Box.createVerticalStrut(4));
+		promotePlannedIcs215.setAlignmentX(LEFT_ALIGNMENT);
+		panel.add(promotePlannedIcs215);
+>>>>>>> origin/master
 
 		return panel;
 	}
