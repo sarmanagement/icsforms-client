@@ -427,12 +427,10 @@ script:
 ./xvfb_build.sh
 ```
 
-The script uses `xvfb-run` with a 1280×800×24 virtual screen, enables the
-desktop test switches above, first runs `mvn clean test` for the full suite,
-then runs `mvn -DskipTests package` to avoid repeating the suite while creating
-the application JAR. Packaging is attempted even if tests fail, but the script
-still returns a nonzero test status; a generated JAR does not indicate that
-tests passed. A headless skipped run does not validate native input.
+The script uses `xvfb-run` with a 1280×800×24 virtual screen and enables the
+desktop test switches above. A single `mvn clean package` runs the full test
+suite once and creates the application JAR only if tests pass. A headless
+skipped run does not validate native input.
 
 ## Run
 
