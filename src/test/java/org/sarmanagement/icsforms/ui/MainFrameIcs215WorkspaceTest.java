@@ -66,7 +66,7 @@ class MainFrameIcs215WorkspaceTest {
 					}
 					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_215));
 					assertTrue(data.isIcs215Enabled());
-					assertEquals("ICS 215 Operational Planning", tabs.getTitleAt(tabs.getSelectedIndex()));
+					assertEquals("ICS 215", tabs.getTitleAt(tabs.getSelectedIndex()));
 					assertEquals("ICS-215 Operational Planning",
 							MainFrame.workspaceTabLabel(WorkspaceId.ICS_215, "ICS 215", true));
 					assertFalse(MainFrame.isExportFormSelectedByDefault("ICS 215", data));

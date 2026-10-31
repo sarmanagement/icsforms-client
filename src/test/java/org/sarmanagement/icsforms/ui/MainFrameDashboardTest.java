@@ -35,6 +35,9 @@ class MainFrameDashboardTest {
 		assertEquals("ICS-202 Objectives", MainFrame.workspaceTabLabel(WorkspaceId.ICS_202, "ICS 202", true));
 		assertEquals("ICS-204 Assignments", MainFrame.workspaceTabLabel(WorkspaceId.ICS_204, "ICS 204", true));
 		assertEquals("ICS-205 Comms", MainFrame.workspaceTabLabel(WorkspaceId.ICS_205, "ICS 205", true));
+		assertEquals("ICS 215", MainFrame.workspaceTabLabel(WorkspaceId.ICS_215, "ICS 215", false));
+		assertEquals("ICS-215 Operational Planning",
+				MainFrame.workspaceTabLabel(WorkspaceId.ICS_215, "ICS 215", true));
 		assertEquals("ICS-214 Log – Team A",
 				MainFrame.workspaceTabLabel(WorkspaceId.ACTIVITY_LOG, "ICS 214 – Team A", true));
 		assertEquals("ICS 214 – ICP",
