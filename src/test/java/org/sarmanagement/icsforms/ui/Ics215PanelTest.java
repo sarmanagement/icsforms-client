@@ -185,12 +185,27 @@ class Ics215PanelTest {
 				JPanel assignmentEditor = new JPanel(new GridBagLayout());
 				invokeCountEditors(panel[0], assignmentEditor, data.getForm215(), row, countFields);
 				assertEquals(2, countFields.size());
-				assertEquals(4, countFields.get(heading.id).size());
+				assertEquals(6, countFields.get(heading.id).size());
 				assertEquals(List.of("2", "1", "1", "0"),
-						countFields.get(heading.id).stream().map(JTextField::getText).toList());
-				assertEquals(4, countFields.get(secondHeading.id).size());
+						countFields.get(heading.id).subList(0, 4).stream().map(JTextField::getText).toList());
+				assertEquals(List.of("1", "1"),
+						countFields.get(heading.id).subList(4, 6).stream().map(JTextField::getText).toList());
+				countFields.get(heading.id).get(2).setText("3");
+				assertEquals(List.of("-1", "1"),
+						countFields.get(heading.id).subList(4, 6).stream().map(JTextField::getText).toList());
+				assertEquals(6, countFields.get(secondHeading.id).size());
 				assertEquals(List.of("", "", "", ""),
-						countFields.get(secondHeading.id).stream().map(JTextField::getText).toList());
+						countFields.get(secondHeading.id).subList(0, 4).stream().map(JTextField::getText).toList());
+				assertEquals(List.of("?", "?"),
+						countFields.get(secondHeading.id).subList(4, 6).stream().map(JTextField::getText).toList());
+				JPanel singleHeadingCounts = countEditor(panel[0]);
+				assertEquals(12, singleHeadingCounts.getComponentCount());
+				assertEquals("Required", ((javax.swing.JLabel) singleHeadingCounts.getComponent(3)).getText());
+				assertEquals("Have", ((javax.swing.JLabel) singleHeadingCounts.getComponent(6)).getText());
+				assertEquals("Need", ((javax.swing.JLabel) singleHeadingCounts.getComponent(9)).getText());
+				String guidance = guidanceText(panel[0]);
+				assertTrue(guidance.contains("Ground / Engine / Type 3"));
+				assertTrue(guidance.contains("Ground / Hand Crew / Type 2"));
 			});
 		} finally {
 			SwingUtilities.invokeAndWait(() -> field(controller, "autosaveTimer", Timer.class).stop());
@@ -243,6 +258,40 @@ class Ics215PanelTest {
 					JPanel.class, int.class, Ics215Form.class, Ics215Form.WorkRow.class, Map.class);
 			method.setAccessible(true);
 			method.invoke(target, editor, 0, form, row, fields);
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
+		}
+	}
+
+	/**
+	 * Reads embedded resource-heading guidance for its example content.
+	 *
+	 * @param target ICS 215 editor.
+	 * @return guidance HTML text.
+	 */
+	private static String guidanceText(Object target) {
+		try {
+			var method = target.getClass().getDeclaredMethod("resourceHeadingGuidance");
+			method.setAccessible(true);
+			return ((javax.swing.JLabel) method.invoke(target)).getText();
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
+		}
+	}
+
+	/**
+	 * Builds the standalone per-heading count dialog grid.
+	 *
+	 * @param target ICS 215 editor.
+	 * @return count grid.
+	 */
+	private static JPanel countEditor(Object target) {
+		try {
+			var method = target.getClass().getDeclaredMethod("countEditor", JTextField.class, JTextField.class,
+					JTextField.class, JTextField.class, JTextField.class, JTextField.class);
+			method.setAccessible(true);
+			return (JPanel) method.invoke(target, new JTextField(), new JTextField(), new JTextField(),
+					new JTextField(), new JTextField(), new JTextField());
 		} catch (ReflectiveOperationException exception) {
 			throw new IllegalStateException(exception);
 		}

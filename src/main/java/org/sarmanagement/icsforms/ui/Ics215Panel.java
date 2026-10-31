@@ -520,7 +520,7 @@ public class Ics215Panel extends JPanel {
 		fields.add(new JPanel(), filler);
 		JScrollPane editorScroll = new JScrollPane(fields);
 		editorScroll.setPreferredSize(new Dimension(760, 460));
-		if (JOptionPane.showConfirmDialog(this, editorScroll, "Edit ICS 215 work assignment",
+		if (JOptionPane.showConfirmDialog(this, editorScroll, "Edit assignment and resource counts — ICS 215",
 				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
 			return;
 		}
@@ -575,12 +575,14 @@ public class Ics215Panel extends JPanel {
 			return addAssignmentField(fields, line, "",
 					new JLabel("Add a resource heading before creating assignment rows."));
 		}
-		JPanel counts = new JPanel(new GridLayout(0, 5, 4, 4));
+		JPanel counts = new JPanel(new GridLayout(0, 7, 4, 4));
 		counts.add(new JLabel("Resource heading"));
-		counts.add(new JLabel("Required resources"));
-		counts.add(new JLabel("Required teams"));
+		counts.add(new JLabel("Req. resources"));
+		counts.add(new JLabel("Req. teams"));
 		counts.add(new JLabel("Have resources"));
 		counts.add(new JLabel("Have teams"));
+		counts.add(new JLabel("Need resources"));
+		counts.add(new JLabel("Need teams"));
 		for (Ics215Form.ResourceHeading heading : formData.getResourceHeadings()) {
 			Ics215Form.ResourceAllocation allocation = row.resourceAllocations.get(heading.id);
 			Ics215Form.CountPair required = allocation == null || allocation.required == null
@@ -591,18 +593,122 @@ public class Ics215Panel extends JPanel {
 			JTextField requiredTeams = countField(required.teams);
 			JTextField haveSingles = countField(have.singleResources);
 			JTextField haveTeams = countField(have.teams);
-			countFields.put(heading.id, List.of(requiredSingles, requiredTeams, haveSingles, haveTeams));
+			JTextField needSingles = calculatedCountField();
+			JTextField needTeams = calculatedCountField();
+			countFields.put(heading.id,
+					List.of(requiredSingles, requiredTeams, haveSingles, haveTeams, needSingles, needTeams));
+			updateNeedFields(requiredSingles, requiredTeams, haveSingles, haveTeams, needSingles, needTeams);
+			listenForNeedUpdates(requiredSingles, requiredTeams, haveSingles, haveTeams, needSingles, needTeams);
 			counts.add(new JLabel(heading.category + " / " + heading.kind + " / " + heading.type
 					+ " (" + heading.countingUnit + ")"));
 			counts.add(requiredSingles);
 			counts.add(requiredTeams);
 			counts.add(haveSingles);
 			counts.add(haveTeams);
+			counts.add(needSingles);
+			counts.add(needTeams);
 		}
-		line = addAssignmentField(fields, line, "Required and accepted Have counts:", counts);
+		counts.setBorder(BorderFactory.createTitledBorder(
+				"Resource counts by heading — same Required/Have fields as Edit counts"));
+		line = addAssignmentField(fields, line, "Required / Have / calculated Need:", counts);
 		return addAssignmentField(fields, line, "",
 				new JLabel("<html>Leave blank for unknown; Need is calculated. Have entries are manual snapshots.<br>"
 						+ "Changing Have replaces any linked T-card snapshot with these manual counts.</html>"));
+	}
+
+	/**
+	 * Creates a non-editable field for a calculated resource quantity.
+	 *
+	 * @return calculated quantity display.
+	 */
+	private JTextField calculatedCountField() {
+		JTextField field = new JTextField(8);
+		field.setEditable(false);
+		return field;
+	}
+
+	/**
+	 * Updates calculated single-resource and team needs as count inputs change.
+	 *
+	 * @param requiredSingles required individual resources.
+	 * @param requiredTeams required Strike Teams / Task Forces.
+	 * @param haveSingles accepted individual resources.
+	 * @param haveTeams accepted Strike Teams / Task Forces.
+	 * @param needSingles calculated individual-resource need.
+	 * @param needTeams calculated team need.
+	 */
+	private void updateNeedFields(JTextField requiredSingles, JTextField requiredTeams, JTextField haveSingles,
+			JTextField haveTeams, JTextField needSingles, JTextField needTeams) {
+		needSingles.setText(needComponent(requiredSingles.getText(), haveSingles.getText()));
+		needTeams.setText(needComponent(requiredTeams.getText(), haveTeams.getText()));
+	}
+
+	/**
+	 * Recalculates displayed Need whenever any Required or Have quantity changes.
+	 *
+	 * @param requiredSingles required individual resources.
+	 * @param requiredTeams required Strike Teams / Task Forces.
+	 * @param haveSingles accepted individual resources.
+	 * @param haveTeams accepted Strike Teams / Task Forces.
+	 * @param needSingles calculated individual-resource need.
+	 * @param needTeams calculated team need.
+	 */
+	private void listenForNeedUpdates(JTextField requiredSingles, JTextField requiredTeams, JTextField haveSingles,
+			JTextField haveTeams, JTextField needSingles, JTextField needTeams) {
+		javax.swing.event.DocumentListener listener = new javax.swing.event.DocumentListener() {
+			@Override
+			public void insertUpdate(javax.swing.event.DocumentEvent event) {
+				updateNeedFields(requiredSingles, requiredTeams, haveSingles, haveTeams, needSingles, needTeams);
+			}
+
+			@Override
+			public void removeUpdate(javax.swing.event.DocumentEvent event) {
+				updateNeedFields(requiredSingles, requiredTeams, haveSingles, haveTeams, needSingles, needTeams);
+			}
+
+			@Override
+			public void changedUpdate(javax.swing.event.DocumentEvent event) {
+				updateNeedFields(requiredSingles, requiredTeams, haveSingles, haveTeams, needSingles, needTeams);
+			}
+		};
+		requiredSingles.getDocument().addDocumentListener(listener);
+		requiredTeams.getDocument().addDocumentListener(listener);
+		haveSingles.getDocument().addDocumentListener(listener);
+		haveTeams.getDocument().addDocumentListener(listener);
+	}
+
+	/**
+	 * Calculates one signed requirement-minus-have component, leaving unknown inputs unknown.
+	 *
+	 * @param required required quantity text.
+	 * @param have accepted Have quantity text.
+	 * @return signed difference or question mark when either value is unknown/invalid.
+	 */
+	private String needComponent(String required, String have) {
+		Integer requiredValue = previewCount(required);
+		Integer haveValue = previewCount(have);
+		if (requiredValue == null || haveValue == null) {
+			return "?";
+		}
+		return Integer.toString(requiredValue - haveValue);
+	}
+
+	/**
+	 * Parses a count for live preview without rejecting temporarily incomplete input.
+	 *
+	 * @param text count field contents.
+	 * @return parsed nonnegative count or null.
+	 */
+	private Integer previewCount(String text) {
+		if (text == null || text.isBlank()) {
+			return null;
+		}
+		try {
+			int value = Integer.parseInt(text.trim());
+			return value < 0 ? null : value;
+		} catch (NumberFormatException exception) {
+			return null;
+		}
 	}
 
 	/**
@@ -723,10 +829,7 @@ public class Ics215Panel extends JPanel {
 		JTextField type = new JTextField(heading.type, 20);
 		JTextField unit = new JTextField(heading.countingUnit, 20);
 		JPanel fields = new JPanel(new BorderLayout(4, 8));
-		fields.add(new JLabel("<html><b>Define one ordered resource column.</b><br>"
-				+ "Category describes the resource class; kind and type identify its operational classification.<br>"
-				+ "Use a specific counting unit (for example, people, engines, or crews).<br>"
-				+ "Individual resources and Strike Teams / Task Forces are counted separately.</html>"), BorderLayout.NORTH);
+		fields.add(resourceHeadingGuidance(), BorderLayout.NORTH);
 		JPanel inputs = new JPanel(new GridLayout(0, 2, 4, 4));
 		inputs.add(new JLabel("Category:"));
 		inputs.add(category);
@@ -746,6 +849,22 @@ public class Ics215Panel extends JPanel {
 		heading.type = type.getText();
 		heading.countingUnit = unit.getText();
 		return heading;
+	}
+
+	/**
+	 * Provides examples for distinguishing resource category, kind, type, and counting unit.
+	 *
+	 * @return embedded resource-heading guidance.
+	 */
+	private JLabel resourceHeadingGuidance() {
+		return new JLabel("<html><b>Define one ordered resource column.</b><br>"
+				+ "Category is the broad resource group, such as <b>Ground</b> or <b>Air</b>.<br>"
+				+ "Kind names the resource, such as <b>Engine</b> or <b>Hand Crew</b>; type describes its capability, "
+				+ "such as <b>Type 3</b>.<br>"
+				+ "Examples: Ground / Engine / Type 3 (count by engines); "
+				+ "Ground / Hand Crew / Type 2 (count by crews).<br>"
+				+ "Choose the unit that matches the heading. Individual resources and Strike Teams / Task Forces "
+				+ "are counted separately.</html>");
 	}
 
 	/**
@@ -791,7 +910,14 @@ public class Ics215Panel extends JPanel {
 		JTextField reqTeams = countField(required.teams);
 		JTextField haveSingles = countField(have.singleResources);
 		JTextField haveTeams = countField(have.teams);
-		JPanel fields = countEditor(reqSingles, reqTeams, haveSingles, haveTeams);
+		JTextField needSingles = calculatedCountField();
+		JTextField needTeams = calculatedCountField();
+		updateNeedFields(reqSingles, reqTeams, haveSingles, haveTeams, needSingles, needTeams);
+		listenForNeedUpdates(reqSingles, reqTeams, haveSingles, haveTeams, needSingles, needTeams);
+		JPanel fields = countEditor(reqSingles, reqTeams, haveSingles, haveTeams, needSingles, needTeams);
+		fields.setBorder(BorderFactory.createTitledBorder("Required / Have / calculated Need — "
+				+ heading.category + " / " + heading.kind + " / " + heading.type
+				+ " (" + heading.countingUnit + ")"));
 		if (JOptionPane.showConfirmDialog(this, fields, "Required and accepted Have",
 				JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) {
 			return;
@@ -1010,6 +1136,35 @@ public class Ics215Panel extends JPanel {
 	private JPanel countEditor(JTextField requiredSingles, JTextField requiredTeams,
 			JTextField haveSingles, JTextField haveTeams) {
 		return countEditor(requiredSingles, requiredTeams, haveSingles, haveTeams, true);
+	}
+
+	/**
+	 * Builds the Required / Have / calculated Need grid for one resource heading.
+	 *
+	 * @param requiredSingles required individual resources.
+	 * @param requiredTeams required Strike Teams / Task Forces.
+	 * @param haveSingles accepted individual resources.
+	 * @param haveTeams accepted Strike Teams / Task Forces.
+	 * @param needSingles calculated individual-resource need.
+	 * @param needTeams calculated team need.
+	 * @return count grid.
+	 */
+	private JPanel countEditor(JTextField requiredSingles, JTextField requiredTeams,
+			JTextField haveSingles, JTextField haveTeams, JTextField needSingles, JTextField needTeams) {
+		JPanel fields = new JPanel(new GridLayout(0, 3, 4, 4));
+		fields.add(new JLabel(""));
+		fields.add(new JLabel("Single resources"));
+		fields.add(new JLabel("Strike Teams / Task Forces"));
+		fields.add(new JLabel("Required"));
+		fields.add(requiredSingles);
+		fields.add(requiredTeams);
+		fields.add(new JLabel("Have"));
+		fields.add(haveSingles);
+		fields.add(haveTeams);
+		fields.add(new JLabel("Need"));
+		fields.add(needSingles);
+		fields.add(needTeams);
+		return fields;
 	}
 
 	/**
