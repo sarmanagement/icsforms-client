@@ -132,11 +132,12 @@ class PdfExportServiceTest {
 		data.setIcs215ExportNextPeriod(true);
 		int worksheetPages = Ics215PdfRenderer.pageCount(data);
 
-		PdfExportService.assignIapPageNumbers(data, List.of("ICS 202", "ICS 215", "ICS 207"), true);
+		PdfExportService.assignIapPageNumbers(data, List.of("ICS 202", "ICS 215", "ICS 207", "ICS 215A"), true);
 
-		assertEquals("2", data.getNextPeriodForm215().getIapPage());
+		assertEquals("3", data.getNextPeriodForm215().getIapPage());
 		assertEquals("", data.getForm215().getIapPage());
-		assertEquals(String.valueOf(2 + worksheetPages), data.getForm207().getIapPage());
+		assertEquals("2", data.getForm207().getIapPage());
+		assertEquals(String.valueOf(3 + worksheetPages), data.getForm215a().getIapPage());
 	}
 
 	@Test
