@@ -1,0 +1,84 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [ "main", "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.lane }} tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [headless, displayed]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Install Xvfb
+        if: matrix.lane == 'displayed'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Run headless tests
+        if: matrix.lane == 'headless'
+        run: mvn -B -ntp verify -Djava.awt.headless=true
+
+      - name: Run displayed tests
+        if: matrix.lane == 'displayed'
+        run: xvfb-run -a -s '-screen 0 1280x800x24' mvn -B -ntp verify -Dicsforms.desktopTests=true -Djava.awt.headless=false
+
+      - name: Report skipped tests
+        if: always()
+        env:
+          DISPLAYED_LANE: ${{ matrix.lane == 'displayed' }}
+          LANE: ${{ matrix.lane }}
+        run: |
+          python3 - <<'PY'
+          import glob
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
+
+          reports = glob.glob("target/surefire-reports/TEST-*.xml")
+          skipped = 0
+          for report in reports:
+              root = ET.parse(report).getroot()
+              suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
+              skipped += sum(int(suite.attrib.get("skipped", "0")) for suite in suites)
+
+          summary = f"### {os.environ['LANE']} test summary\n\nSkipped tests: **{skipped}**\n"
+          failures = []
+          if os.environ["DISPLAYED_LANE"] == "true":
+              with open("src/test/resources/displayed-test-baseline.txt", encoding="utf-8") as baseline:
+                  for class_name in (line.strip() for line in baseline if line.strip()):
+                      report = "target/surefire-reports/TEST-" + class_name + ".xml"
+                      if not os.path.exists(report):
+                          failures.append(f"Missing displayed-test report: `{class_name}`")
+                          continue
+                      root = ET.parse(report).getroot()
+                      suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
+                      class_skipped = sum(int(suite.attrib.get("skipped", "0")) for suite in suites)
+                      if class_skipped:
+                          failures.append(f"`{class_name}` skipped {class_skipped} test(s)")
+              summary += "\nDisplayed-test baseline: 28 classes; all reports must be present with zero skipped tests.\n"
+
+          if failures:
+              summary += "\n**Displayed-test gate failures:**\n" + "\n".join(f"- {failure}" for failure in failures) + "\n"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as output:
+              output.write(summary)
+          if failures:
+              print("\n".join(failures), file=sys.stderr)
+              sys.exit(1)
+          PY
