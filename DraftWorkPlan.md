@@ -4,14 +4,16 @@
 
 ### What the system is for
 
-`icsforms-client` supports the command post of a search and rescue (SAR)
-incident run under the Incident Command System. It lets a small team produce
-and keep current the documents an incident actually runs on — ICS 201–208,
-214, 215/215A, SAR task assignments and debriefs, T-cards, clue log, medical and
-communications plans — and print them individually or as a combined Incident
-Action Plan. Incidents are often rural, intermittent-connectivity events staffed
-by volunteers who arrive at different times, work shifts, share laptops, and
-carry their own phones.
+`icsforms-client` supports the command post of an incident run under the 
+Incident Command System.  It is intended to scale It lets a person in the
+incident management or an incident management team produce and keep current 
+the documents an incident runs on — ICS 201–208, 214, 215/215A, medical and 
+communications plans, T-cards, including SAR specific extensions for SAR 
+task assignments and debriefs, and a clue log — and print them individually 
+or as a combined Incident Action Plan. Incidents can be of different scales,
+with differing levels of support and infrastructure, including rural, 
+intermittent-connectivity events staffed by volunteers who arrive at different 
+times, work shifts, share laptops, and carry their own phones.
 
 ### Where it is today
 
