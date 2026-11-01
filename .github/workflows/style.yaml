@@ -1,4 +1,4 @@
-name: Verify
+name: Style
 
 on:
   pull_request:
@@ -9,6 +9,23 @@ permissions:
   contents: read
 
 jobs:
+  style:
+    name: style
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Verify formatting and style
+        run: mvn -B -ntp spotless:check checkstyle:check
+
   test:
     name: ${{ matrix.lane }} tests
     runs-on: ubuntu-latest
