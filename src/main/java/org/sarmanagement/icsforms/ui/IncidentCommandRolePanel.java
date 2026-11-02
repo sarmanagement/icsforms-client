@@ -15,8 +15,11 @@ import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JMenuItem;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
@@ -29,6 +32,8 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.GridLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -52,7 +57,8 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final JPanel planProgress = new JPanel(new GridLayout(0, 2, 6, 6));
 	private final JLabel overallProgress = new JLabel();
 	private final Map<String, JLabel> progressBadges = new LinkedHashMap<>();
-	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "Assessment", "Linked assignments");
+	private final Map<String, JLabel> compactRoleBadges = new LinkedHashMap<>();
+	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "Linked assignments", "Assessment");
 	private final JTable objectives = new JTable(objectiveModel);
 	private final JComboBox<String> resourceGrouping = new JComboBox<>(new String[]{"All resources", "By resource type"});
 	private final DefaultTableModel resourceModel = readOnlyModel("Resource group", "Total");
@@ -186,6 +192,20 @@ public class IncidentCommandRolePanel extends JPanel {
 	private JPanel buildHeader() {
 		JPanel header = new JPanel(new BorderLayout());
 		header.add(banner, BorderLayout.CENTER);
+		JPanel roleStatuses = new JPanel(new GridLayout(2, 3, 3, 3));
+		roleStatuses.setPreferredSize(new Dimension(330, 64));
+		roleStatuses.getAccessibleContext().setAccessibleName("Compact role status overview");
+		for (String title : List.of("Objectives", "Assignment coverage", "Safety", "Human medical", "Canine medical",
+				"Communications")) {
+			JLabel badge = new JLabel();
+			badge.setOpaque(true);
+			badge.setBorder(javax.swing.BorderFactory.createEtchedBorder());
+			badge.setFont(badge.getFont().deriveFont(10f));
+			badge.getAccessibleContext().setAccessibleName(title + " status");
+			compactRoleBadges.put(title, badge);
+			roleStatuses.add(badge);
+		}
+		header.add(roleStatuses, BorderLayout.EAST);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JButton objectivesButton = new JButton("Open full ICS 202");
 		objectivesButton.addActionListener(
@@ -215,13 +235,57 @@ public class IncidentCommandRolePanel extends JPanel {
 		objectives.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 		objectives.getColumnModel().getColumn(0).setPreferredWidth(640);
 		objectives.getColumnModel().getColumn(0).setMinWidth(240);
-		objectives.getColumnModel().getColumn(1).setPreferredWidth(120);
-		objectives.getColumnModel().getColumn(1).setMaxWidth(150);
+		objectives.getColumnModel().getColumn(1).setPreferredWidth(250);
+		objectives.getColumnModel().getColumn(1).setMinWidth(160);
 		objectives.getColumnModel().getColumn(2).setPreferredWidth(120);
 		objectives.getColumnModel().getColumn(2).setMaxWidth(140);
 		objectives.setRowHeight(52);
 		objectives.setToolTipText("Assignment lifecycle counts are recorded task states, not objective achievement "
 				+ "or resource readiness. Missing and conflicting lifecycle records remain explicit.");
+		JPopupMenu objectiveMenu = new JPopupMenu();
+		JMenuItem assignmentsItem = new JMenuItem("Show linked assignments and status…");
+		assignmentsItem.addActionListener(event -> showSelectedObjectiveAssignments());
+		objectiveMenu.add(assignmentsItem);
+		objectiveMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+			/** {@inheritDoc} */
+			@Override
+			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
+				assignmentsItem.setEnabled(objectives.getSelectedRow() >= 0);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {
+			}
+		});
+		objectives.setComponentPopupMenu(objectiveMenu);
+		objectives.addMouseListener(new MouseAdapter() {
+			/** {@inheritDoc} */
+			@Override
+			public void mousePressed(MouseEvent event) {
+				selectObjectiveAtEvent(event);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void mouseReleased(MouseEvent event) {
+				selectObjectiveAtEvent(event);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void mouseClicked(MouseEvent event) {
+				if (event.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(event)) {
+					selectObjectiveAtEvent(event);
+					showSelectedObjectiveAssignments();
+				}
+			}
+		});
 		planProgress.getAccessibleContext().setAccessibleName("Recorded IAP progress summary");
 		planProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
 		for (String area : List.of("Objectives", "Assignment coverage", "Safety", "Human medical", "Canine medical",
@@ -318,12 +382,56 @@ public class IncidentCommandRolePanel extends JPanel {
 			long links = controller.getAssignmentResources().stream()
 					.filter(assignment -> assignment.getObjectiveIds().contains(objective.getObjectiveId())).count();
 			String states = IncidentCommandSummary.assignmentStates(data, objective.getObjectiveId());
-			String text = "<html>" + html(objective.toString()) + "<br><small>Assignments: "
+			String assignmentSummary = "<html>" + links + " linked<br><small>"
 					+ html(states).replace("; ", "<br>") + "</small></html>";
-			objectiveModel.addRow(new Object[]{text, objective.getAssessment().displayLabel(), links});
+			objectiveModel.addRow(new Object[]{objective.toString(), assignmentSummary,
+					objective.getAssessment().displayLabel()});
 			objectives.setRowHeight(objectiveModel.getRowCount() - 1,
 					Math.max(52, 24 + states.split("; ", -1).length * 18));
 		}
+	}
+
+	/**
+	 * Selects the row beneath a context-menu click.
+	 *
+	 * @param event mouse event.
+	 */
+	private void selectObjectiveAtEvent(MouseEvent event) {
+		if (event.isPopupTrigger()) {
+			int row = objectives.rowAtPoint(event.getPoint());
+			if (row >= 0) {
+				objectives.setRowSelectionInterval(row, row);
+			}
+		}
+	}
+
+	/** Displays linked assignment identities and recorded task lifecycle states. */
+	private void showSelectedObjectiveAssignments() {
+		int row = objectives.getSelectedRow();
+		if (row < 0 || row >= controller.getData().getForm202().getStructuredObjectives().size()) {
+			return;
+		}
+		IncidentObjective objective = controller.getData().getForm202().getStructuredObjectives().get(row);
+		List<String> lines = new java.util.ArrayList<>();
+		for (var assignment : controller.getAssignmentResources()) {
+			if (!assignment.getObjectiveIds().contains(objective.getObjectiveId())) {
+				continue;
+			}
+			String taskStatus = controller.getData().getSarTaskAssignments().stream()
+					.filter(task -> assignment.getAssignmentId().equals(task.getAssignmentId()))
+					.map(task -> task.getTaskLifecycleStatus()).findFirst().orElse("not recorded");
+			String label = assignment.getAssignmentTeamNumber() == null || assignment.getAssignmentTeamNumber().isBlank()
+					? assignment.getAssignmentId() : assignment.getAssignmentTeamNumber();
+			lines.add(label + " — " + taskStatus);
+		}
+		if (lines.isEmpty()) {
+			lines.add("No assignments are linked to this objective.");
+		}
+		javax.swing.JTextArea content = new javax.swing.JTextArea(String.join("\n", lines), 8, 48);
+		content.setEditable(false);
+		UiSupport.showDocumentMessage(this, new JScrollPane(content),
+				"Linked assignments for " + objective.getObjectiveId(),
+				JOptionPane.INFORMATION_MESSAGE);
 	}
 
 	/**
@@ -494,6 +602,15 @@ public class IncidentCommandRolePanel extends JPanel {
 								+ "do not count. Link coverage is checked only when every assignment links to a recorded objective; "
 								+ "it is not assignment approval, objective achievement, or operational readiness."
 						: ""));
+		JLabel compact = compactRoleBadges.get(title);
+		if (compact != null) {
+			compact.setText("<html><b>" + html(title) + "</b><br>" + html(compactContent) + "<br>"
+					+ html(compactState) + "</html>");
+			compact.setBackground(color);
+			compact.setForeground(Color.BLACK);
+			compact.setToolTipText(title + ": " + content + "; " + state);
+			compact.getAccessibleContext().setAccessibleDescription(title + ": " + content + "; " + state);
+		}
 	}
 
 	/**

@@ -44,6 +44,7 @@ public class CommunicationsRolePanel extends JPanel {
 	private final Consumer<WorkspaceDestination> navigator;
 	private final Runnable importCsv;
 	private final Runnable exportCsv;
+	private final Runnable addIcpLogEntry;
 	private final AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
 	private final JTextField filter = new JTextField(22);
@@ -77,11 +78,27 @@ public class CommunicationsRolePanel extends JPanel {
 	 */
 	public CommunicationsRolePanel(AppController controller, Consumer<WorkspaceDestination> navigator,
 			Runnable importCsv, Runnable exportCsv) {
+		this(controller, navigator, importCsv, exportCsv, () -> {
+		});
+	}
+
+	/**
+	 * Creates the Communications Unit panel with an explicit ICP activity-log action.
+	 *
+	 * @param controller incident controller.
+	 * @param navigator typed full-workspace navigator.
+	 * @param importCsv established native/CHIRP import workflow.
+	 * @param exportCsv established native export workflow.
+	 * @param addIcpLogEntry opens the shared ICP 214 entry workflow.
+	 */
+	public CommunicationsRolePanel(AppController controller, Consumer<WorkspaceDestination> navigator,
+			Runnable importCsv, Runnable exportCsv, Runnable addIcpLogEntry) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
 		this.navigator = navigator;
 		this.importCsv = importCsv;
 		this.exportCsv = exportCsv;
+		this.addIcpLogEntry = addIcpLogEntry;
 		binding = controller.captureIncidentBinding();
 		review = new PlanReviewStrip(controller, PlanReviewArea.COMMUNICATIONS, this::commitFocusedEdits);
 		add(buildHeader(), BorderLayout.NORTH);
@@ -161,9 +178,12 @@ public class CommunicationsRolePanel extends JPanel {
 		importButton.addActionListener(event -> importCsv.run());
 		JButton exportButton = new JButton("Export CSV…");
 		exportButton.addActionListener(event -> exportCsv.run());
+		JButton logEntry = new JButton("Add ICP 214 log entry…");
+		logEntry.addActionListener(event -> addIcpLogEntry.run());
 		actions.add(fullPlan);
 		actions.add(importButton);
 		actions.add(exportButton);
+		actions.add(logEntry);
 		header.add(actions, BorderLayout.SOUTH);
 		return header;
 	}

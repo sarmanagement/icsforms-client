@@ -5,12 +5,9 @@ import java.util.List;
 /**
  * Configurable event type used to categorise ICS 214 activity log entries.
  *
- * <p>
- * Built-in types are provided by {@link #defaultTypes()} and are pre-populated
- * into {@link AppData#getActivityEventTypes()} on first use. Operators may
- * extend or replace this list with types that suit the specific incident or
- * organisation.
- * </p>
+ * Built-in types are provided by {@link #defaultTypes()} and custom types are
+ * shared through {@link ActivityEventTypeCatalog}. Incident documents retain
+ * the event type metadata needed to display their existing entries.
  */
 public class ActivityEventType {
 
@@ -48,6 +45,7 @@ public class ActivityEventType {
 	private String id = "";
 	private String label = "";
 	private boolean builtIn = false;
+	private boolean showInQuickMenu = false;
 
 	/**
 	 * Creates an empty event type (required for JSON deserialisation).
@@ -66,9 +64,22 @@ public class ActivityEventType {
 	 *            {@code true} when this is a pre-defined system type.
 	 */
 	public ActivityEventType(String id, String label, boolean builtIn) {
+		this(id, label, builtIn, false);
+	}
+
+	/**
+	 * Creates an event type with explicit quick-menu visibility.
+	 *
+	 * @param id stable identifier used for JSON storage and look-up.
+	 * @param label display label shown in the UI and printed on the ICS 214.
+	 * @param builtIn {@code true} when this is a pre-defined system type.
+	 * @param showInQuickMenu {@code true} when task context menus should include this type.
+	 */
+	public ActivityEventType(String id, String label, boolean builtIn, boolean showInQuickMenu) {
 		this.id = id == null ? "" : id;
 		this.label = label == null ? "" : label;
 		this.builtIn = builtIn;
+		this.showInQuickMenu = showInQuickMenu;
 	}
 
 	/**
@@ -84,10 +95,10 @@ public class ActivityEventType {
 				new ActivityEventType(ID_CLUE_DETECTED, "Clue Detected", true),
 				new ActivityEventType(ID_CLUE_REPORTED, "Clue Reported", true),
 				new ActivityEventType(ID_SUBJECT_FOUND, "Subject Found", true),
-				new ActivityEventType(ID_RESOURCE_ON_TASK, "Resource Going on Task", true),
-				new ActivityEventType(ID_TASK_COMPLETED, "Task Completed", true),
-				new ActivityEventType(ID_RESOURCE_DEPARTED_STAGING, "Resource Departed Staging", true),
-				new ActivityEventType(ID_RESOURCE_RETURNED_STAGING, "Resource Returned to Staging", true));
+				new ActivityEventType(ID_RESOURCE_ON_TASK, "Resource Going on Task", true, true),
+				new ActivityEventType(ID_TASK_COMPLETED, "Task Completed", true, true),
+				new ActivityEventType(ID_RESOURCE_DEPARTED_STAGING, "Resource Departed Staging", true, true),
+				new ActivityEventType(ID_RESOURCE_RETURNED_STAGING, "Resource Returned to Staging", true, true));
 	}
 
 	/**
@@ -145,6 +156,24 @@ public class ActivityEventType {
 	 */
 	public void setBuiltIn(boolean builtIn) {
 		this.builtIn = builtIn;
+	}
+
+	/**
+	 * Returns whether the event type appears in task quick-log menus.
+	 *
+	 * @return true when it appears in the quick menu.
+	 */
+	public boolean isShowInQuickMenu() {
+		return showInQuickMenu;
+	}
+
+	/**
+	 * Sets whether the event type appears in task quick-log menus.
+	 *
+	 * @param showInQuickMenu true to show it in the quick menu.
+	 */
+	public void setShowInQuickMenu(boolean showInQuickMenu) {
+		this.showInQuickMenu = showInQuickMenu;
 	}
 
 	/** {@inheritDoc} */

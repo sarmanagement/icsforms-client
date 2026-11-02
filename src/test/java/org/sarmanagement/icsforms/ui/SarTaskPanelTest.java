@@ -27,6 +27,7 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JPanel;
@@ -277,7 +278,9 @@ class SarTaskPanelTest {
 		tableField.setAccessible(true);
 		JTable table = (JTable) tableField.get(panel);
 		var logged = new java.util.concurrent.atomic.AtomicReference<SarTaskAssignment>();
+		var quickLog = new java.util.concurrent.atomic.AtomicReference<SarTaskPanel.QuickLogRequest>();
 		panel.setOnAddLogEntryRequest((launching, assignment) -> logged.set(assignment));
+		panel.setOnQuickLogRequest((launching, request) -> quickLog.set(request));
 		table.setAutoCreateRowSorter(true);
 		table.getRowSorter().toggleSortOrder(1);
 		table.getRowSorter().toggleSortOrder(1);
@@ -297,6 +300,20 @@ class SarTaskPanelTest {
 		}
 		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(1);
 		assertSame(task, logged.get());
+		JMenu quickMenu = java.util.Arrays.stream(table.getComponentPopupMenu().getComponents())
+				.filter(JMenu.class::isInstance).map(JMenu.class::cast)
+				.filter(item -> "Quick log entry".equals(item.getText())).findFirst().orElseThrow();
+		for (var listener : table.getComponentPopupMenu().getPopupMenuListeners()) {
+			listener.popupMenuWillBecomeVisible(
+					new javax.swing.event.PopupMenuEvent(table.getComponentPopupMenu()));
+		}
+		assertTrue(quickMenu.getItemCount() > 0);
+		assertTrue(quickMenu.getItem(0).getText().startsWith("Log "));
+		quickMenu.getItem(0).doClick();
+		assertSame(task, quickLog.get().task());
+		assertEquals(org.sarmanagement.icsforms.model.ActivityEventType.ID_RESOURCE_ON_TASK,
+				quickLog.get().eventTypeId());
+		assertTrue(quickLog.get().activity().contains("going on task"));
 		Method buildCard = SarTaskPanel.class.getDeclaredMethod("buildBoardTaskCard", SarTaskAssignment.class,
 				java.awt.Color.class);
 		buildCard.setAccessible(true);

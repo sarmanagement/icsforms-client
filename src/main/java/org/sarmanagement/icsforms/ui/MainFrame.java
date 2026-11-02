@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityEventType;
+import org.sarmanagement.icsforms.model.ActivityEventTypeCatalog;
 import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
@@ -83,7 +84,7 @@ public class MainFrame extends JFrame {
 	private static final String ACTION_TRACKER_GROUP = "Open Action Tracker";
 	private static final String COMMUNICATIONS_GROUP = "Communications Plan (ICS 205)";
 	private static final String ICS_215_GROUP = "Operational Planning Worksheet (ICS 215)";
-	private static final String SAFETY_DASHBOARD_GROUP = "Safety Dashboard";
+	private static final String SAFETY_DASHBOARD_GROUP = "Safety Overview";
 	private static final String DESCRIPTIVE_TABS_PREFERENCE = "descriptive-workspace-tabs";
 	private static final List<WorkspaceId> WORKSPACE_ORDER = List.of(WorkspaceId.SHARED, WorkspaceId.ORG_CHART,
 			WorkspaceId.ICS_201, WorkspaceId.ICS_202, WorkspaceId.ICS_204, WorkspaceId.ICS_215,
@@ -220,6 +221,7 @@ public class MainFrame extends JFrame {
 		sarTaskPanel.setOnAddLogEntryRequest((source, assignment) -> showAddLogEntry(
 				new LogEntryContext(source, assignment.getTaskId(), assignment.getAssignmentId(),
 						org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(assignment))));
+		sarTaskPanel.setOnQuickLogRequest(this::showQuickLogEntry);
 		tCardPanel.setOnAddLogEntryRequest(this::showAddLogEntry);
 		groupVisible.put(CORE_GROUP, true);
 		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
@@ -770,7 +772,8 @@ public class MainFrame extends JFrame {
 	private void openCommunicationsRolePanel() {
 		RolePanelWindows.openCommunications(this, controller, this::openWorkspace,
 				() -> new RadioChannelCsvDialogs(ics205Panel, controller).importCsv(),
-				() -> new RadioChannelCsvDialogs(ics205Panel, controller).exportCsv(false));
+				() -> new RadioChannelCsvDialogs(ics205Panel, controller).exportCsv(false),
+				() -> showAddLogEntry(new LogEntryContext(this, "", "", "")));
 	}
 
 	/**
@@ -1902,17 +1905,22 @@ public class MainFrame extends JFrame {
 	private void manageEventTypes() {
 		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
 		AppData data = controller.getData();
-		List<ActivityEventType> initial = data.getActivityEventTypes().isEmpty()
-				? ActivityEventType.defaultTypes()
-				: new ArrayList<>(data.getActivityEventTypes());
+		List<ActivityEventType> initial = new ArrayList<>(data.getActivityEventTypes());
 		Ics214Panel.EventTypeManagerDialog dialog = new Ics214Panel.EventTypeManagerDialog(initial);
 		JScrollPane scrollPane = new JScrollPane(dialog.panel);
 		scrollPane.setBorder(BorderFactory.createEmptyBorder());
-		if (UiSupport.showResizableConfirmDialog(this, "Manage event types", scrollPane, new Dimension(480, 380))) {
-			data.setActivityEventTypes(dialog.getEventTypes());
-			controller.markDirty(AppController.LinkSource.ICS214);
-			for (Ics214Panel panel : ics214Panels) {
-				panel.refreshEventTypes();
+		if (UiSupport.showResizableConfirmDialog(this, "Manage event types", scrollPane, new Dimension(760, 440))) {
+			try {
+				List<ActivityEventType> eventTypes = dialog.getEventTypes();
+				ActivityEventTypeCatalog.saveCustomTypes(ActivityEventTypeCatalog.supportedCustomTypes(eventTypes));
+				data.setActivityEventTypes(eventTypes);
+				controller.markDirty(AppController.LinkSource.ICS214);
+				for (Ics214Panel panel : ics214Panels) {
+					panel.refreshEventTypes();
+				}
+			} catch (IllegalArgumentException | IllegalStateException exception) {
+				UiSupport.showDocumentMessage(this, exception.getMessage(), "Unable to save event types",
+						JOptionPane.ERROR_MESSAGE);
 			}
 		}
 	}
@@ -2061,10 +2069,35 @@ public class MainFrame extends JFrame {
 	 * @param context initiating component and task/resource context
 	 */
 	private void showAddLogEntry(LogEntryContext context) {
+		showAddLogEntry(context, null, "");
+	}
+
+	/**
+	 * Opens a task-context activity entry prefilled by a quick-log action.
+	 *
+	 * @param source component that initiated the action.
+	 * @param request quick-log event and narrative.
+	 */
+	private void showQuickLogEntry(Component source, SarTaskPanel.QuickLogRequest request) {
+		var task = request.task();
+		showAddLogEntry(new LogEntryContext(source, task.getTaskId(), task.getAssignmentId(),
+				org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(task)),
+				request.eventTypeId(), request.activity());
+	}
+
+	/**
+	 * Opens the shared activity entry dialog with optional quick-log defaults.
+	 *
+	 * @param context initiating component and task/resource context.
+	 * @param eventTypeId preferred event type, or null.
+	 * @param initialActivity initial activity narrative.
+	 */
+	private void showAddLogEntry(LogEntryContext context, String eventTypeId, String initialActivity) {
 		AppData incident = controller.getData();
 		int previousLogCount = incident.getActivityLogs().size();
 		Component owner = ActivityEntryDialog.resolveOwner(context.source(), this);
-		if (!new ActivityEntryDialog(controller, context, null).show(owner) || controller.getData() != incident) {
+		if (!new ActivityEntryDialog(controller, context, null, eventTypeId, initialActivity).show(owner)
+				|| controller.getData() != incident) {
 			return;
 		}
 		if (previousLogCount != controller.getData().getActivityLogs().size()) {

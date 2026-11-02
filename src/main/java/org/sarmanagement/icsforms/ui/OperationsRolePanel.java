@@ -11,18 +11,23 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.TCardType;
 
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,9 +54,11 @@ public class OperationsRolePanel extends JPanel {
 	private final JLabel banner = new JLabel();
 	private final DefaultListModel<TaskChoice> taskModel = new DefaultListModel<>();
 	private final JList<TaskChoice> taskBoard = new JList<>(taskModel);
+	private JButton debriefButton;
 	private final JTextArea detail = new JTextArea();
 	private final DefaultListModel<ResourceChoice> resourceModel = new DefaultListModel<>();
 	private final JList<ResourceChoice> availableResources = new JList<>(resourceModel);
+	private final JLabel resourceHint = new JLabel();
 	private final AppController.IncidentChangeSubscription subscription;
 
 	/**
@@ -113,6 +120,20 @@ public class OperationsRolePanel extends JPanel {
 				refreshDetail();
 			}
 		});
+		taskBoard.addMouseListener(new MouseAdapter() {
+			/** {@inheritDoc} */
+			@Override
+			public void mousePressed(MouseEvent event) {
+				selectTaskAtPopup(event);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void mouseReleased(MouseEvent event) {
+				selectTaskAtPopup(event);
+			}
+		});
+		taskBoard.setComponentPopupMenu(buildTaskMenu());
 		availableResources.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 		availableResources.getAccessibleContext()
 				.setAccessibleName("Recorded available resources for a new assignment");
@@ -159,16 +180,21 @@ public class OperationsRolePanel extends JPanel {
 		}
 		resourceModel.clear();
 		for (TCard card : data.getTCards()) {
-			if ("available".equalsIgnoreCase(card.getStatus())) {
+			if (card.getCardType() != TCardType.HEADER
+					&& card.getStatus() != null
+					&& card.getStatus().trim().toLowerCase(java.util.Locale.ROOT).startsWith("available")) {
 				resourceModel.addElement(new ResourceChoice(card));
 			}
 		}
+		resourceHint.setText(resourceModel.isEmpty() ? "No T-cards are recorded as available."
+				: "Select for New assignment; operator must confirm readiness.");
 		for (int index = 0; index < resourceModel.size(); index++) {
 			if (selectedResources.contains(resourceModel.get(index).resourceId())) {
 				availableResources.addSelectionInterval(index, index);
 			}
 		}
 		refreshDetail();
+		refreshDebriefAvailability();
 	}
 
 	/**
@@ -226,7 +252,13 @@ public class OperationsRolePanel extends JPanel {
 		button(actions, "Change status…", () -> withTask(task -> changeStatus.accept(task.getAssignmentId())));
 		button(actions, "Add log entry…", () -> withTask(addLog));
 		button(actions, "Record clue…", recordClue);
-		button(actions, "Debrief task…", () -> withTask(task -> debrief.accept(task.getAssignmentId())));
+		debriefButton = button(actions, "Debrief task…",
+				() -> withTask(task -> debrief.accept(task.getAssignmentId())));
+		taskBoard.addListSelectionListener(event -> {
+			if (!event.getValueIsAdjusting()) {
+				refreshDebriefAvailability();
+			}
+		});
 		right.add(actions, BorderLayout.SOUTH);
 		JSplitPane tasks = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right);
 		tasks.setResizeWeight(0.35);
@@ -234,7 +266,7 @@ public class OperationsRolePanel extends JPanel {
 		JPanel resources = new JPanel(new BorderLayout(4, 4));
 		resources.setBorder(javax.swing.BorderFactory.createTitledBorder("Recorded available resources"));
 		resources.add(new JScrollPane(availableResources), BorderLayout.CENTER);
-		resources.add(new JLabel("Select for New assignment; operator must confirm readiness."), BorderLayout.SOUTH);
+		resources.add(resourceHint, BorderLayout.SOUTH);
 		JSplitPane body = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tasks, resources);
 		body.setResizeWeight(0.72);
 		body.setDividerLocation(540);
@@ -249,10 +281,94 @@ public class OperationsRolePanel extends JPanel {
 	 * @param label button label.
 	 * @param action action callback.
 	 */
-	private void button(JPanel panel, String label, Runnable action) {
+	private JButton button(JPanel panel, String label, Runnable action) {
 		JButton button = new JButton(label);
 		button.addActionListener(event -> action.run());
 		panel.add(button);
+		return button;
+	}
+
+	/**
+	 * Builds the task context menu from the actions also available beside the board.
+	 *
+	 * @return configured task context menu.
+	 */
+	private JPopupMenu buildTaskMenu() {
+		JPopupMenu menu = new JPopupMenu();
+		JMenuItem edit = menuItem(menu, "Edit assignment…",
+				() -> withTask(task -> editTask.accept(task.getAssignmentId())));
+		menuItem(menu, "Change status…", () -> withTask(task -> changeStatus.accept(task.getAssignmentId())));
+		menuItem(menu, "Add log entry…", () -> withTask(addLog));
+		menuItem(menu, "Record clue…", recordClue);
+		JMenuItem debriefItem = menuItem(menu, "Debrief task…",
+				() -> withTask(task -> debrief.accept(task.getAssignmentId())));
+		menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+			/** {@inheritDoc} */
+			@Override
+			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
+				SarTaskAssignment selected = selectedTask();
+				boolean hasTask = selected != null;
+				edit.setEnabled(hasTask);
+				debriefItem.setEnabled(hasTask && isComplete(selected));
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {
+			}
+		});
+		return menu;
+	}
+
+	/**
+	 * Adds a task action menu item.
+	 *
+	 * @param menu target menu.
+	 * @param label visible item label.
+	 * @param action action callback.
+	 * @return configured menu item.
+	 */
+	private JMenuItem menuItem(JPopupMenu menu, String label, Runnable action) {
+		JMenuItem item = new JMenuItem(label);
+		item.addActionListener(event -> action.run());
+		menu.add(item);
+		return item;
+	}
+
+	/**
+	 * Selects the row beneath a right-click before its task menu is displayed.
+	 *
+	 * @param event mouse event.
+	 */
+	private void selectTaskAtPopup(MouseEvent event) {
+		if (event.isPopupTrigger()) {
+			int index = taskBoard.locationToIndex(event.getPoint());
+			if (index >= 0 && taskBoard.getCellBounds(index, index).contains(event.getPoint())) {
+				taskBoard.setSelectedIndex(index);
+			}
+		}
+	}
+
+	/**
+	 * Returns whether the task has reached the returned lifecycle state.
+	 *
+	 * @param task task to inspect.
+	 * @return true when returned.
+	 */
+	private static boolean isComplete(SarTaskAssignment task) {
+		return task != null && "returned".equalsIgnoreCase(task.getTaskLifecycleStatus());
+	}
+
+	/** Enables the debrief action only when the selected task is complete. */
+	private void refreshDebriefAvailability() {
+		if (debriefButton != null) {
+			debriefButton.setEnabled(isComplete(selectedTask()));
+		}
 	}
 
 	/** Creates a normal assignment and applies explicitly selected recorded resources. */
