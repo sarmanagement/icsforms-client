@@ -18,6 +18,8 @@ final class EditorCommitGuard {
 	EditorCommitGuard(AppController controller) {
 		this.controller = controller;
 		binding = controller.captureEditorCommitBinding();
+		System.err.println("Created EditorCommitGuard " + System.identityHashCode(this)
+				+ " from " + Thread.currentThread().getStackTrace()[3]);
 	}
 
 	/**
@@ -29,6 +31,7 @@ final class EditorCommitGuard {
 	 */
 	boolean commit(AppController.LinkSource source, Runnable edit) {
 		if (controller.isEditorCommitInProgress()) {
+			controller.noteEditorCommit(this);
 			edit.run();
 			return true;
 		}
@@ -47,10 +50,11 @@ final class EditorCommitGuard {
 	 */
 	boolean commitField(Runnable edit) {
 		if (controller.isEditorCommitInProgress()) {
+			controller.noteEditorCommit(this);
 			edit.run();
 			return true;
 		}
-		if (!controller.commitIfCurrent(binding.incidentBinding(), edit)) {
+		if (!controller.commitEditorIfCurrent(binding, AppController.LinkSource.NONE, edit)) {
 			return false;
 		}
 		rebase();
@@ -71,5 +75,20 @@ final class EditorCommitGuard {
 	 */
 	void rebase(AppController.EditorCommitBinding observedBinding) {
 		binding = observedBinding;
+	}
+
+	/**
+	 * Tests whether the editor still observes the current incident and model revision.
+	 *
+	 * @return true when no model write has occurred since the editor was bound.
+	 */
+	boolean isCurrent() {
+		boolean current = controller.isCurrent(binding.incidentBinding())
+				&& binding.revision() == controller.captureEditorCommitBinding().revision();
+		if (!current) {
+			System.err.println("Stale EditorCommitGuard " + System.identityHashCode(this) + " at " + binding
+					+ ", current " + controller.captureEditorCommitBinding());
+		}
+		return current;
 	}
 }

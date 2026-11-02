@@ -1368,11 +1368,24 @@ public class MainFrame extends JFrame {
 		}
 		boolean committed;
 		try {
+			if (!controller.editorCommitBindingsCurrent()) {
+				validationLabel.setText("An editor is stale after another workspace changed the incident. "
+						+ "Refresh it before saving or navigating.");
+				return false;
+			}
 			committed = controller.commitEditorIfCurrent(editorCommitBinding, source, () -> {
-				incidentContextPanel.pushToModel();
-				organizationalChartPanel.pushToModel();
-				ics201Panel.pushToModel();
-				ics202Panel.pushToModel();
+				if (!incidentContextPanel.pushToModel()) {
+					throw new IllegalStateException("The incident context editor rejected its draft.");
+				}
+				if (!organizationalChartPanel.pushToModel()) {
+					throw new IllegalStateException("The Organizational Chart editor rejected its draft.");
+				}
+				if (!ics201Panel.pushToModel()) {
+					throw new IllegalStateException("The ICS 201 editor rejected its draft.");
+				}
+				if (!ics202Panel.pushToModel()) {
+					throw new IllegalStateException("The ICS 202 editor rejected its draft.");
+				}
 				if (!ics204Panel.pushToModel()) {
 					throw new IllegalStateException("The ICS 204 editor rejected its draft.");
 				}

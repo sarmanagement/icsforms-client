@@ -97,6 +97,8 @@ public class AppController implements AutoCloseable {
 	private Runnable afterPlanReuse = () -> { };
 	private final Set<EditorCommitGuard> editorCommitGuards =
 			Collections.newSetFromMap(new java.util.WeakHashMap<>());
+	private final Set<EditorCommitGuard> transactionEditorCommitGuards =
+			Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 	private int editorCommitDepth;
 	private java.util.function.Consumer<RuntimeException> autosaveErrorHandler = exception -> {
 		throw exception;
@@ -495,11 +497,18 @@ public class AppController implements AutoCloseable {
 		LinkSource previousSource = activeLinkSource;
 		boolean pendingAutosave = autosaveTimer.isRunning();
 		boolean previousSuppression = suppressChangeNotifications;
+		boolean outermostCommit = editorCommitDepth == 0;
+		if (outermostCommit) {
+			transactionEditorCommitGuards.clear();
+		}
 		editorCommitDepth++;
 		try {
 			suppressChangeNotifications = true;
 			edit.run();
 			markDirty(source);
+			if (outermostCommit) {
+				transactionEditorCommitGuards.forEach(EditorCommitGuard::rebase);
+			}
 			suppressChangeNotifications = previousSuppression;
 		} catch (RuntimeException exception) {
 			suppressChangeNotifications = previousSuppression;
@@ -514,6 +523,9 @@ public class AppController implements AutoCloseable {
 			throw exception;
 		} finally {
 			editorCommitDepth--;
+			if (outermostCommit) {
+				transactionEditorCommitGuards.clear();
+			}
 		}
 		publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
 		return true;
@@ -528,6 +540,26 @@ public class AppController implements AutoCloseable {
 		EditorCommitGuard guard = new EditorCommitGuard(this);
 		editorCommitGuards.add(guard);
 		return guard;
+	}
+
+	/**
+	 * Records the guarded editor participating in a MainFrame-owned transaction.
+	 *
+	 * @param guard editor writing as part of the current transaction.
+	 */
+	void noteEditorCommit(EditorCommitGuard guard) {
+		if (editorCommitDepth > 0) {
+			transactionEditorCommitGuards.add(guard);
+		}
+	}
+
+	/**
+	 * Checks whether every registered full-form editor observes the active model revision.
+	 *
+	 * @return true when no registered editor contains a stale model binding.
+	 */
+	boolean editorCommitBindingsCurrent() {
+		return editorCommitGuards.stream().allMatch(EditorCommitGuard::isCurrent);
 	}
 
 	/**

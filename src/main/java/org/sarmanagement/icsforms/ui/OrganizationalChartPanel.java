@@ -59,6 +59,7 @@ import java.text.ParseException;
  */
 public class OrganizationalChartPanel extends JPanel {
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 	private boolean loading;
 	private final JPanel incidentCommanderRowsPanel = new JPanel(new GridBagLayout());
 	private final JButton addIncidentCommanderButton = new JButton("Add");
@@ -191,6 +192,7 @@ public class OrganizationalChartPanel extends JPanel {
 	public OrganizationalChartPanel(AppController controller) {
 		super(new BorderLayout());
 		this.controller = controller;
+		editorCommitGuard = controller.createEditorCommitGuard();
 		RadioChannelPicker.install(agencyRepresentatives.table, 2, controller);
 		RadioChannelPicker.install(customPositionsTable, 3, controller);
 
@@ -842,9 +844,9 @@ public class OrganizationalChartPanel extends JPanel {
 	 */
 	private void updateMedicalUnitLeaderAssignment() {
 		if (!loading) {
-			MedicalRoleSupport.setMedicalUnitLeader(controller.getData(), medicalUnitLeaderNameField.getText(),
-					medicalUnitLeaderRadioField.getText(), medicalUnitLeaderPhoneField.getText());
-			controller.markDirty();
+			editorCommitGuard.commitField(() -> MedicalRoleSupport.setMedicalUnitLeader(controller.getData(),
+					medicalUnitLeaderNameField.getText(), medicalUnitLeaderRadioField.getText(),
+					medicalUnitLeaderPhoneField.getText()));
 		}
 	}
 
@@ -853,11 +855,12 @@ public class OrganizationalChartPanel extends JPanel {
 	 */
 	private void updateSafetyOfficerAssignment() {
 		if (!loading) {
-			MedicalRoleSupport.setSafetyOfficerName(controller.getData(), safetyOfficerNameField.getText());
-			OrganizationalChart chart = controller.getData().getOrganizationalChart();
-			chart.setSafetyOfficerRadio(safetyOfficerRadioField.getText());
-			chart.setSafetyOfficerPhone(safetyOfficerPhoneField.getText());
-			controller.markDirty();
+			editorCommitGuard.commitField(() -> {
+				MedicalRoleSupport.setSafetyOfficerName(controller.getData(), safetyOfficerNameField.getText());
+				OrganizationalChart chart = controller.getData().getOrganizationalChart();
+				chart.setSafetyOfficerRadio(safetyOfficerRadioField.getText());
+				chart.setSafetyOfficerPhone(safetyOfficerPhoneField.getText());
+			});
 		}
 	}
 
@@ -1007,12 +1010,22 @@ public class OrganizationalChartPanel extends JPanel {
 		} finally {
 			loading = false;
 		}
+		editorCommitGuard.rebase();
 	}
 
 	/**
 	 * Applies field values and agency representatives to the model, committing pending representative edits.
+	 *
+	 * @return true when the editor commit succeeds.
 	 */
-	public void pushToModel() {
+	public boolean pushToModel() {
+		return editorCommitGuard.commit(AppController.LinkSource.ORG_CHART, this::flushToModel);
+	}
+
+	/**
+	 * Applies the Org Chart controls after validating the editor binding.
+	 */
+	private void flushToModel() {
 		OrganizationalChart chart = controller.getData().getOrganizationalChart();
 		chart.getAssignmentList().setAgencyRepresentatives(agencyRepresentatives.getEntries());
 		List<String> icNames = new ArrayList<>();

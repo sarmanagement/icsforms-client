@@ -45,6 +45,7 @@ public class IncidentContextPanel extends JPanel {
 	private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 
 	// Read-only status labels (refreshed from model)
 	private final JLabel filePathLabel = new JLabel(" ");
@@ -87,6 +88,7 @@ public class IncidentContextPanel extends JPanel {
 	public IncidentContextPanel(AppController controller) {
 		super(new BorderLayout());
 		this.controller = controller;
+		editorCommitGuard = controller.createEditorCommitGuard();
 		currentUserPositionCombo.setEditable(true);
 
 		// --- Status section (read-only) ---
@@ -148,8 +150,7 @@ public class IncidentContextPanel extends JPanel {
 		locationsPanel.add(locationControls, BorderLayout.SOUTH);
 		locationsModel.addTableModelListener(event -> {
 			if (!loadingLocations && !savingLocations) {
-				saveIncidentLocations();
-				controller.markDirty();
+				editorCommitGuard.commitField(this::saveIncidentLocations);
 			}
 		});
 
@@ -205,6 +206,7 @@ public class IncidentContextPanel extends JPanel {
 		historyTableModel.addRow(new Object[]{history.size() + 1, formatDateTime(context.getOperationalPeriodStart()),
 				formatDateTime(context.getOperationalPeriodEnd()),
 				currentIcs.isEmpty() ? "(current)" : String.join("; ", currentIcs) + " (current)"});
+		editorCommitGuard.rebase();
 	}
 
 	/**
@@ -223,8 +225,17 @@ public class IncidentContextPanel extends JPanel {
 
 	/**
 	 * Applies field values to the model.
+	 *
+	 * @return true when the editor commit succeeds.
 	 */
-	public void pushToModel() {
+	public boolean pushToModel() {
+		return editorCommitGuard.commit(AppController.LinkSource.SHARED, this::flushToModel);
+	}
+
+	/**
+	 * Writes incident context fields after validating the editor binding.
+	 */
+	private void flushToModel() {
 		IncidentContext context = controller.getData().getIncidentContext();
 		context.setIncidentName(incidentNameField.getText().trim());
 		context.setOperationalPeriodStart(AppController.toLocalDateTime((Date) startField.getValue()));
