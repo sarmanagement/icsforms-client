@@ -603,7 +603,7 @@ public class IncidentCommandRolePanel extends JPanel {
 	 * @param objectiveId objective whose results are displayed.
 	 * @return read-only result table model.
 	 */
-	private DefaultTableModel resultsModelFor(String objectiveId) {
+	DefaultTableModel resultsModelFor(String objectiveId) {
 		DefaultTableModel model = readOnlyModel("Reported result", "Source", "Recorded");
 		for (Ics202ReportedResult result : controller.getData().getForm202().getReportedResults()) {
 			if (objectiveId.equals(result.getObjectiveId())) {

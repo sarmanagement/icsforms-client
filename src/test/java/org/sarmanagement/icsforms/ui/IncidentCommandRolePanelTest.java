@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IapPlanningStage;
 import org.sarmanagement.icsforms.model.IncidentObjective;
+import org.sarmanagement.icsforms.model.ObjectiveAssessment;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.model.PlanReviewSupport;
@@ -112,6 +113,126 @@ class IncidentCommandRolePanelTest {
 
 		assertEquals(IapPlanningStage.PLANNING_MEETING, planningStage(panel[0]).getSelectedItem());
 		SwingUtilities.invokeAndWait(panel[0]::dispose);
+	}
+
+	@Test
+	void incidentCommandEditsObjectivesAndAddsThemWithoutChangingLinkedIdentity() throws Exception {
+		AppData data = new AppData();
+		IncidentObjective objective = new IncidentObjective("Search the north ridge", 0);
+		data.getForm202().setStructuredObjectives(List.of(objective));
+		ResourceAssignment assignment = new ResourceAssignment();
+		assignment.setObjectiveIds(List.of(objective.getObjectiveId()));
+		data.getForm204().getResourcesAssigned().add(assignment);
+		AppController controller = controller(data);
+		IncidentCommandRolePanel panel = panel(controller);
+		AppController.IncidentBinding binding = controller.captureIncidentBinding();
+		SwingUtilities.invokeAndWait(() -> assertTrue(panel.saveObjective(binding, objective.getObjectiveId(),
+				"Search north ridge sector A", ObjectiveAssessment.ONGOING, "Team report pending.")));
+
+		assertEquals(objective.getObjectiveId(), data.getForm202().getStructuredObjectives().get(0).getObjectiveId());
+		assertEquals("Search north ridge sector A", objective.getText());
+		assertEquals(ObjectiveAssessment.ONGOING, objective.getAssessment());
+		assertEquals("Team report pending.", objective.getAssessmentNote());
+		assertEquals(List.of(objective.getObjectiveId()), assignment.getObjectiveIds());
+
+		SwingUtilities.invokeAndWait(() -> assertTrue(panel.saveObjective(controller.captureIncidentBinding(), "",
+				"Establish command post", ObjectiveAssessment.NOT_ASSESSED, "")));
+		assertEquals(2, data.getForm202().getStructuredObjectives().size());
+		assertEquals("Establish command post", data.getForm202().getStructuredObjectives().get(1).getText());
+		SwingUtilities.invokeAndWait(panel::dispose);
+	}
+
+	@Test
+	void incidentCommandEditsIcs202CommandEmphasisAndSituationalAwareness() throws Exception {
+		AppData data = new AppData();
+		AppController controller = controller(data);
+		IncidentCommandRolePanel panel = panel(controller);
+		SwingUtilities.invokeAndWait(() -> assertTrue(panel.saveIcs202Context(controller.captureIncidentBinding(),
+				"Protect responder safety", "Weather worsening after 1600.")));
+
+		assertEquals("Protect responder safety", data.getForm202().getCommandEmphasis());
+		assertEquals("Weather worsening after 1600.", data.getForm202().getSituationalAwareness());
+		SwingUtilities.invokeAndWait(panel::dispose);
+	}
+
+	@Test
+	void incidentCommandLinksExistingAndCreatesNormalPrelinkedAssignments() throws Exception {
+		AppData data = new AppData();
+		IncidentObjective objective = new IncidentObjective("Search sector A", 0);
+		IncidentObjective otherObjective = new IncidentObjective("Secure command post", 1);
+		data.getForm202().setStructuredObjectives(List.of(objective, otherObjective));
+		ResourceAssignment existing = new ResourceAssignment();
+		existing.setObjectiveIds(List.of(otherObjective.getObjectiveId()));
+		data.getForm204().getResourcesAssigned().add(existing);
+		AppController controller = controller(data);
+		IncidentCommandRolePanel.AssignmentActions actions = new IncidentCommandRolePanel.AssignmentActions() {
+			@Override
+			public void openIcs204(String assignmentId) {
+			}
+
+			@Override
+			public void openSarTask(String assignmentId) {
+			}
+
+			@Override
+			public void addLogEntry(String assignmentId) {
+			}
+
+			@Override
+			public void changeStatus(String assignmentId) {
+			}
+
+			@Override
+			public void debrief(String assignmentId) {
+			}
+
+			@Override
+			public ResourceAssignment createSupportingAssignment(String objectiveId) {
+				ResourceAssignment created = new ResourceAssignment();
+				created.setAssignmentTeamNumber("T-21");
+				created.setResourceIdentifier("Search team");
+				created.setAssignment("Search sector A");
+				data.getForm204().getResourcesAssigned().add(created);
+				return created;
+			}
+		};
+		IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller, ignored -> {
+		}, actions);
+		SwingUtilities.invokeAndWait(() -> assertTrue(panel.linkAssignmentsToObjective(
+				controller.captureIncidentBinding(), objective.getObjectiveId(),
+				List.of(existing.getAssignmentId()))));
+		assertEquals(List.of(otherObjective.getObjectiveId(), objective.getObjectiveId()), existing.getObjectiveIds());
+
+		ResourceAssignment[] createdHolder = new ResourceAssignment[1];
+		SwingUtilities.invokeAndWait(
+				() -> createdHolder[0] = panel.createSupportingAssignment(objective.getObjectiveId()));
+		ResourceAssignment created = createdHolder[0];
+		assertTrue(created.getObjectiveIds().contains(objective.getObjectiveId()));
+		assertEquals("T-21", created.getAssignmentTeamNumber());
+		assertEquals(2, controller.getData().getAllAssignmentResources().size());
+		assertEquals(2, controller.getData().getAssignmentsForObjective(objective.getObjectiveId()).size());
+		assertTrue(controller.getData().getAssignmentsForObjective(objective.getObjectiveId()).contains(existing));
+		SwingUtilities.invokeAndWait(panel::dispose);
+	}
+
+	@Test
+	void incidentCommandRecordsAndDisplaysReportedResultsWithTheirSources() throws Exception {
+		AppData data = new AppData();
+		IncidentObjective objective = new IncidentObjective("Search sector A", 0);
+		data.getForm202().setStructuredObjectives(List.of(objective));
+		AppController controller = controller(data);
+		IncidentCommandRolePanel panel = panel(controller);
+		SwingUtilities.invokeAndWait(() -> assertTrue(panel.recordReportedResult(
+				controller.captureIncidentBinding(), objective.getObjectiveId(), "Sector A searched; no find.",
+				"Team T-12 radio report")));
+
+		assertEquals(1, data.getForm202().getReportedResults().size());
+		assertEquals(objective.getObjectiveId(), data.getForm202().getReportedResults().get(0).getObjectiveId());
+		assertEquals(ObjectiveAssessment.NOT_ASSESSED, objective.getAssessment());
+		javax.swing.table.DefaultTableModel displayed = panel.resultsModelFor(objective.getObjectiveId());
+		assertEquals("Sector A searched; no find.", displayed.getValueAt(0, 0));
+		assertEquals("Team T-12 radio report", displayed.getValueAt(0, 1));
+		SwingUtilities.invokeAndWait(panel::dispose);
 	}
 
 	@Test
