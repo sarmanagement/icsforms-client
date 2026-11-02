@@ -1910,9 +1910,8 @@ public class MainFrame extends JFrame {
 		AppData data = controller.getData();
 		List<ActivityEventType> initial = new ArrayList<>(data.getActivityEventTypes());
 		Ics214Panel.EventTypeManagerDialog dialog = new Ics214Panel.EventTypeManagerDialog(initial);
-		JScrollPane scrollPane = new JScrollPane(dialog.panel);
-		scrollPane.setBorder(BorderFactory.createEmptyBorder());
-		if (UiSupport.showResizableConfirmDialog(this, "Manage event types", scrollPane, new Dimension(760, 440))) {
+		if (UiSupport.showResizableConfirmDialog(this, "Manage event types", dialog.contentPanel(),
+				new Dimension(760, 440))) {
 			try {
 				List<ActivityEventType> eventTypes = dialog.getEventTypes();
 				ActivityEventTypeCatalog.saveCustomTypes(ActivityEventTypeCatalog.supportedCustomTypes(eventTypes));

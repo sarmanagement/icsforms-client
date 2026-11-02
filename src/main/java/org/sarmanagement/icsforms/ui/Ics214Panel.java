@@ -1542,37 +1542,53 @@ public class Ics214Panel extends JPanel {
 	/** Manages configurable activity types within the owning document's dialog chain. */
 	static class EventTypeManagerDialog {
 		final JPanel panel = new JPanel(new BorderLayout(4, 4));
+		final JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		private final EventTypesTableModel tableModel;
 		private final JTable table;
+		private final JButton removeButton = new JButton("Remove Selected");
 
 		EventTypeManagerDialog(List<ActivityEventType> initial) {
 			tableModel = new EventTypesTableModel(initial, panel);
 			table = new JTable(tableModel);
 			table.setFillsViewportHeight(true);
 
-			JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
 			JButton add = new JButton("Add Custom Type");
-			JButton remove = new JButton("Remove Selected");
 			add.addActionListener(e -> addCustomType());
-			remove.addActionListener(e -> removeSelected());
-			buttons.add(add);
-			buttons.add(remove);
+			removeButton.setEnabled(false);
+			removeButton.addActionListener(e -> removeSelected());
+			table.getSelectionModel().addListSelectionListener(event -> updateRemoveButton());
+			actionPanel.add(add);
+			actionPanel.add(removeButton);
 
 			panel.add(new JLabel("Built-in types cannot be removed. Custom IDs are unique; labels are limited to five words."),
 					BorderLayout.NORTH);
-			panel.add(new JScrollPane(table), BorderLayout.CENTER);
-			panel.add(buttons, BorderLayout.SOUTH);
+			panel.add(table, BorderLayout.CENTER);
 		}
 
 		/** Adds a validated custom event type using a document-modal picker. */
 		private void addCustomType() {
 			JTextField idField = new JTextField(12);
 			JTextField labelField = new JTextField(20);
-			JPanel input = new JPanel(new FlowLayout(FlowLayout.LEFT));
-			input.add(new JLabel("ID (A-Z and underscores):"));
-			input.add(idField);
-			input.add(new JLabel("Label:"));
-			input.add(labelField);
+			JCheckBox quickMenu = new JCheckBox("Show in quick menu");
+			JPanel input = new JPanel();
+			input.setLayout(new javax.swing.BoxLayout(input, javax.swing.BoxLayout.Y_AXIS));
+			JPanel idRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+			idRow.add(new JLabel("ID (A-Z and underscores):"));
+			idRow.add(idField);
+			JPanel labelRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+			labelRow.add(new JLabel("Label (up to five words):"));
+			labelRow.add(labelField);
+			javax.swing.JTextArea guidance = new javax.swing.JTextArea(
+					"Use a unique ID containing only A-Z and underscores, and a short label of one to five words."
+							+ "\nExample: FIELD_UPDATE — Field Update. Show in quick menu adds it to SAR task quick-log actions.");
+			guidance.setEditable(false);
+			guidance.setLineWrap(true);
+			guidance.setWrapStyleWord(true);
+			guidance.setOpaque(false);
+			input.add(idRow);
+			input.add(labelRow);
+			input.add(quickMenu);
+			input.add(guidance);
 			int result = ActivityEntryDialog.showDocumentConfirm(panel, input, "New Event Type", JOptionPane.OK_CANCEL_OPTION);
 			if (result != JOptionPane.OK_OPTION) {
 				return;
@@ -1596,7 +1612,7 @@ public class Ics214Panel extends JPanel {
 						JOptionPane.ERROR_MESSAGE);
 				return;
 			}
-			tableModel.addType(new ActivityEventType(id, label, false));
+			tableModel.addType(new ActivityEventType(id, label, false, quickMenu.isSelected()));
 		}
 
 		/**
@@ -1611,9 +1627,13 @@ public class Ics214Panel extends JPanel {
 
 		/** Confirms removal of a configurable event type within its owner document. */
 		private void removeSelected() {
-			int row = table.getSelectedRow();
+			int viewRow = table.getSelectedRow();
+			int row = viewRow < 0 ? -1 : table.convertRowIndexToModel(viewRow);
 			if (row >= 0) {
 				ActivityEventType type = tableModel.getTypes().get(row);
+				if (type.isBuiltIn()) {
+					return;
+				}
 				int confirm = ActivityEntryDialog.showDocumentConfirm(panel,
 						"Remove event type '" + type.getLabel() + "' (" + type.getId() + ")?", "Remove Event Type",
 						JOptionPane.YES_NO_OPTION);
@@ -1623,8 +1643,30 @@ public class Ics214Panel extends JPanel {
 			}
 		}
 
+		/** Enables removal only when the selected row represents a custom type. */
+		private void updateRemoveButton() {
+			int viewRow = table.getSelectedRow();
+			int row = viewRow < 0 ? -1 : table.convertRowIndexToModel(viewRow);
+			removeButton.setEnabled(row >= 0 && row < tableModel.getTypes().size()
+					&& !tableModel.getTypes().get(row).isBuiltIn());
+		}
+
 		List<ActivityEventType> getEventTypes() {
 			return tableModel.getTypes();
+		}
+
+		/**
+		 * Returns the dialog content with management actions outside the scrolling area.
+		 *
+		 * @return complete event-type management content.
+		 */
+		JPanel contentPanel() {
+			JScrollPane scrollPane = new JScrollPane(panel);
+			scrollPane.setBorder(javax.swing.BorderFactory.createEmptyBorder());
+			JPanel content = new JPanel(new BorderLayout(4, 4));
+			content.add(scrollPane, BorderLayout.CENTER);
+			content.add(actionPanel, BorderLayout.SOUTH);
+			return content;
 		}
 	}
 
