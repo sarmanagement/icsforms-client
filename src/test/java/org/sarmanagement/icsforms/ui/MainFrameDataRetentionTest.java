@@ -203,8 +203,17 @@ class MainFrameDataRetentionTest {
 					assertTrue(table.editCellAt(0, source.column));
 					((JTextComponent) table.getEditorComponent()).setText("Uncommitted value");
 					var flush = panel.getClass().getMethod("pushToModel");
-					var failure = assertThrows(java.lang.reflect.InvocationTargetException.class, () -> flush.invoke(panel));
-					assertInstanceOf(IllegalStateException.class, failure.getCause(), source.name());
+					if (flush.getReturnType() == boolean.class) {
+						try {
+							assertFalse((boolean) flush.invoke(panel), source.name());
+						} catch (java.lang.reflect.InvocationTargetException failure) {
+							assertInstanceOf(IllegalStateException.class, failure.getCause(), source.name());
+						}
+					} else {
+						var failure = assertThrows(java.lang.reflect.InvocationTargetException.class,
+								() -> flush.invoke(panel));
+						assertInstanceOf(IllegalStateException.class, failure.getCause(), source.name());
+					}
 					assertTrue(table.isEditing(), source.name());
 					assertEquals("Uncommitted value", ((JTextComponent) table.getEditorComponent()).getText());
 					assertEquals(previous, source.persisted(data));

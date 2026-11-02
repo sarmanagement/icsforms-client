@@ -2091,9 +2091,11 @@ public class MainFrame extends JFrame {
 		}
 		if (destination.workspaceId() == WorkspaceId.HUMAN_MEDICAL_PLAN) {
 			medicalWorkspacePanel.selectHumanPlan();
+			rebaseAfterMedicalPlanSelection();
 		} else if (destination.workspaceId() == WorkspaceId.CANINE_MEDICAL_PLAN) {
 			canineMedicalManuallyOpened = true;
 			medicalWorkspacePanel.openCaninePlan();
+			rebaseAfterMedicalPlanSelection();
 		} else if (destination.workspaceId() == WorkspaceId.SAFETY_OVERVIEW) {
 			safetyDashboardManuallyVisible = true;
 			groupVisible.put(SAFETY_DASHBOARD_GROUP, true);
@@ -2112,6 +2114,15 @@ public class MainFrame extends JFrame {
 		}
 		rebuildVisibleTabs(definition.component(), -1);
 		refreshStatus();
+	}
+
+	/**
+	 * Rebinds all editors after switching the nested medical plan's active editor.
+	 */
+	private void rebaseAfterMedicalPlanSelection() {
+		editorCommitBinding = controller.captureEditorCommitBinding();
+		controller.rebaseEditorCommitGuards(editorCommitBinding);
+		captureEditorTextBaselines();
 	}
 
 	/**
