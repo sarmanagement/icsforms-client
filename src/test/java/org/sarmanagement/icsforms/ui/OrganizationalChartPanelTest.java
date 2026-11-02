@@ -31,7 +31,10 @@ import javax.swing.JPanel;
 import javax.swing.border.TitledBorder;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.EventQueue;
 import java.awt.GraphicsEnvironment;
+import java.awt.SecondaryLoop;
+import java.awt.Toolkit;
 import java.awt.Window;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
@@ -122,6 +125,7 @@ class OrganizationalChartPanelTest {
 							((JTextField) field(orgChart, declared.getName())).setText(value);
 						}
 					}
+					flushPendingSwingEvents();
 					assertFalse(expected.isEmpty());
 					for (var mode : org.sarmanagement.icsforms.model.IncidentMode.values()) {
 						data.setIncidentMode(mode);
@@ -228,6 +232,7 @@ class OrganizationalChartPanelTest {
 						selectPerson.stop();
 						timeout.stop();
 					}
+					flushPendingSwingEvents();
 					assertEquals(card.getPersonName(), name.getText());
 					assertEquals(card.getRadioChannel(), ((JTextField) field(orgChart, "safetyOfficerRadioField")).getText());
 					assertEquals(card.getPhoneNumber(), ((JTextField) field(orgChart, "safetyOfficerPhoneField")).getText());

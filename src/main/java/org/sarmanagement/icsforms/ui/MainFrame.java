@@ -44,7 +44,9 @@ import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
+import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.text.JTextComponent;
 import javax.swing.JComboBox;
 import javax.swing.JFormattedTextField;
 import javax.swing.SpinnerNumberModel;
@@ -55,7 +57,10 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.KeyboardFocusManager;
 import java.awt.event.KeyEvent;
+import java.awt.event.KeyAdapter;
+import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.DateTimeException;
@@ -138,6 +143,30 @@ public class MainFrame extends JFrame {
 	private AppData lastRefreshedIncident;
 	private final Set<Ics214Form> closedLogForms = new HashSet<>();
 	private AppData lastData;
+	private AppController.EditorCommitBinding editorCommitBinding;
+	private AppController.IncidentChangeSubscription editorChangeSubscription;
+	private Component lastFocusedEditor;
+	private final Map<JTextComponent, String> editorTextBaselines = new IdentityHashMap<>();
+	private final List<Component> pendingDraftComponents = new ArrayList<>();
+	private final Map<Component, javax.swing.event.DocumentListener> pendingDraftDocumentListeners =
+			new IdentityHashMap<>();
+	private final KeyAdapter pendingDraftKeyListener = new KeyAdapter() {
+		/** Rebinds a preserved draft after the operator edits it against the latest model. */
+		@Override
+		public void keyTyped(java.awt.event.KeyEvent event) {
+			confirmPendingDraft(event.getComponent());
+		}
+	};
+	private boolean restoringEditorState;
+	private boolean restoringTabSelection;
+	private boolean pendingEditorConflict;
+	private final PropertyChangeListener focusOwnerListener = event -> {
+		Object owner = event.getNewValue();
+		if (!restoringEditorState && owner instanceof JTextComponent text
+				&& javax.swing.SwingUtilities.isDescendingFrom(text, this)) {
+			lastFocusedEditor = text;
+		}
+	};
 
 	/**
 	 * Creates the main application frame.
@@ -204,7 +233,11 @@ public class MainFrame extends JFrame {
 		this.safetyPanel = new SafetyPanel(controller);
 		this.safetyDashboardPanel = new SafetyDashboardPanel(this::openWorkspace);
 		controller.setPlanReuseEditorCallbacks(
-				() -> pushToModel(linkSourceForTab(tabs.getSelectedIndex())), this::refreshFromModel);
+				() -> {
+					if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+						throw new IllegalStateException("Refresh the active editor before reusing a plan.");
+					}
+				}, this::refreshFromModel);
 		safetyPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		medicalPlanPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		canineMedicalPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
@@ -257,11 +290,15 @@ public class MainFrame extends JFrame {
 		registerWorkspace(WorkspaceId.TCARDS, tCardPanel, AppController.LinkSource.NONE, T_CARDS_GROUP);
 		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		addWindowListener(new java.awt.event.WindowAdapter() {
+			/** Saves pending edits before the window closes. */
 			@Override
 			public void windowClosing(java.awt.event.WindowEvent event) {
 				closeAfterSave();
 			}
+
 		});
+		KeyboardFocusManager.getCurrentKeyboardFocusManager()
+				.addPropertyChangeListener("focusOwner", focusOwnerListener);
 		setPreferredSize(new Dimension(1120, 820));
 		setJMenuBar(createMenuBar(defaultDirectory));
 		setLayout(new BorderLayout(8, 8));
@@ -269,7 +306,7 @@ public class MainFrame extends JFrame {
 		JPanel content = new JPanel(new BorderLayout(8, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 		tabs.addChangeListener(event -> {
-			if (rebuildingTabs) {
+			if (rebuildingTabs || restoringTabSelection) {
 				return;
 			}
 
@@ -278,7 +315,12 @@ public class MainFrame extends JFrame {
 				return;
 			}
 			if (lastSelectedTabIndex >= 0) {
-				pushToModel(linkSourceForTab(lastSelectedTabIndex));
+				if (!pushToModel(linkSourceForTab(lastSelectedTabIndex))) {
+					restoringTabSelection = true;
+					tabs.setSelectedIndex(lastSelectedTabIndex);
+					restoringTabSelection = false;
+					return;
+				}
 			}
 			refreshFromModel();
 			lastSelectedTabIndex = tabs.getSelectedIndex();
@@ -289,9 +331,24 @@ public class MainFrame extends JFrame {
 		add(content, BorderLayout.CENTER);
 		add(validationLabel, BorderLayout.SOUTH);
 		refreshFromModel();
+		editorChangeSubscription = controller.addIncidentChangeListener(this::refreshEditorsAfterCommit);
 		lastSelectedTabIndex = tabs.getSelectedIndex();
 		pack();
 		setLocationRelativeTo(null);
+	}
+
+	/** Releases live-editor listeners before disposing the frame. */
+	@Override
+	public void dispose() {
+		if (editorChangeSubscription != null) {
+			editorChangeSubscription.close();
+			editorChangeSubscription = null;
+		}
+		KeyboardFocusManager.getCurrentKeyboardFocusManager()
+				.removePropertyChangeListener("focusOwner", focusOwnerListener);
+		clearPendingDraft();
+		editorTextBaselines.clear();
+		super.dispose();
 	}
 
 	/**
@@ -346,7 +403,9 @@ public class MainFrame extends JFrame {
 		viewMenu.addSeparator();
 		JMenuItem activityTimelineItem = new JMenuItem("ICP Activity Timeline…");
 		activityTimelineItem.addActionListener(event -> {
-			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+				return;
+			}
 			new IcpActivityTimelineDialog(this, controller, this::showAddLogEntry,
 					this::openTimelineAssignment, request -> showAddLogEntry(request.context(), request.eventTypeId(),
 							request.activity())).setVisible(true);
@@ -415,7 +474,9 @@ public class MainFrame extends JFrame {
 		saveItem.setMnemonic(KeyEvent.VK_S);
 		saveItem.addActionListener(event -> {
 			AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-			pushToModel(source);
+			if (!pushToModel(source)) {
+				return;
+			}
 			try {
 				controller.save(source);
 				refreshStatus();
@@ -428,7 +489,9 @@ public class MainFrame extends JFrame {
 		saveAsItem.setMnemonic(KeyEvent.VK_A);
 		saveAsItem.addActionListener(event -> chooseFile(defaultDirectory, true, path -> {
 			AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-			pushToModel(source);
+			if (!pushToModel(source)) {
+				return;
+			}
 			try {
 				controller.saveAs(path, source);
 				refreshStatus();
@@ -504,7 +567,9 @@ public class MainFrame extends JFrame {
 		viewMenu.add(openCaninePlanItem);
 		communicationsPlanItem.setSelected(controller.getData().isIcs205Enabled());
 		communicationsPlanItem.addActionListener(event -> {
-			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+				return;
+			}
 			controller.getData().setIcs205Enabled(communicationsPlanItem.isSelected());
 			controller.markDirty();
 			refreshFromModel();
@@ -515,7 +580,9 @@ public class MainFrame extends JFrame {
 		viewMenu.add(communicationsPlanItem);
 		ics215Item.setSelected(controller.getData().isIcs215Enabled());
 		ics215Item.addActionListener(event -> {
-			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+				return;
+			}
 			controller.getData().setIcs215Enabled(ics215Item.isSelected());
 			controller.markDirty();
 			refreshFromModel();
@@ -679,8 +746,8 @@ public class MainFrame extends JFrame {
 			controller.getData().setUseSystemTimeZone(true);
 			applyConfiguredTimeZone();
 			refreshTimeZoneLabels.run();
-			refreshFromModel();
 			controller.markDirty();
+			refreshFromModel();
 		});
 		specifiedTimeZoneItem.addActionListener(e -> {
 			String current = controller.getData().getConfiguredTimeZoneId();
@@ -704,8 +771,8 @@ public class MainFrame extends JFrame {
 			controller.getData().setConfiguredTimeZoneId(chosen.trim());
 			applyConfiguredTimeZone();
 			refreshTimeZoneLabels.run();
-			refreshFromModel();
 			controller.markDirty();
+			refreshFromModel();
 		});
 		timeZoneGroup.add(systemTimeZoneItem);
 		timeZoneGroup.add(specifiedTimeZoneItem);
@@ -852,7 +919,6 @@ public class MainFrame extends JFrame {
 	 * @param requestedFormKey form key to add to the default selections.
 	 */
 	private void openFormsExportDialog(Path defaultDirectory, String requestedFormKey) {
-		ics201Panel.pushToModel();
 		List<String> formKeys = sortExportFormKeys(controller.exportableFormKeys());
 		if (formKeys.isEmpty()) {
 			JOptionPane.showMessageDialog(this, "No PDF forms are available to export.", "Export forms as PDF",
@@ -939,7 +1005,9 @@ public class MainFrame extends JFrame {
 				if (!handleValidationBeforeExport()) {
 					return;
 				}
-				pushToModel(source);
+				if (!pushToModel(source)) {
+					return;
+				}
 				addSelectedFormsToIcs202Attachments(selected);
 				if (exportModeControls.combined().isSelected()) {
 					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source,
@@ -1058,6 +1126,7 @@ public class MainFrame extends JFrame {
 		applyPdfLayoutSettings(data, (PdfLayoutSettings.PaperSize) paperSize.getSelectedItem(),
 				((Number) marginInches.getValue()).doubleValue());
 		controller.markDirty();
+		rebaseEditorCommitBinding();
 		refreshStatus();
 	}
 
@@ -1125,6 +1194,7 @@ public class MainFrame extends JFrame {
 		Ics202Panel.synchronizeMedicalPlanInclusion(controller.getData(), merged);
 		ics202Panel.refreshFromModel();
 		controller.markDirty();
+		rebaseEditorCommitBinding();
 	}
 
 	/**
@@ -1254,7 +1324,9 @@ public class MainFrame extends JFrame {
 				if (!handleValidationBeforeExport()) {
 					return;
 				}
-				pushToModel(source);
+				if (!pushToModel(source)) {
+					return;
+				}
 				Path output = controller.exportSelected(formKey, directory, source);
 				JOptionPane.showMessageDialog(this, createExportCompletePanel(List.of(output)), "Export complete",
 						JOptionPane.INFORMATION_MESSAGE);
@@ -1268,24 +1340,43 @@ public class MainFrame extends JFrame {
 	 * Flushes all editor fields and synchronizes linked document data.
 	 * @param source editor that initiated synchronization
 	 */
-	private void pushToModel(AppController.LinkSource source) {
-		incidentContextPanel.pushToModel();
-		organizationalChartPanel.pushToModel();
-		ics201Panel.pushToModel();
-		ics202Panel.pushToModel();
-		ics204Panel.pushToModel();
-		ics205Panel.pushToModel();
-		ics215Panel.pushToModel();
-		medicalPlanPanel.pushToModel();
-		canineMedicalPanel.pushToModel();
-		safetyPanel.pushToModel();
-		for (Ics214Panel panel : ics214Panels) {
-			panel.saveToModel();
+	private boolean pushToModel(AppController.LinkSource source) {
+		if (!pendingDraftComponents.isEmpty()) {
+			validationLabel.setText("A shared value changed while this editor had a partial draft. Edit that draft "
+					+ "again before saving or navigating.");
+			return false;
 		}
-		sarTaskPanel.pushToModel();
-		clueLogPanel.pushToModel();
-		tCardPanel.pushToModel();
-		controller.markDirty(source);
+		boolean committed = controller.commitEditorIfCurrent(editorCommitBinding, source, () -> {
+			incidentContextPanel.pushToModel();
+			organizationalChartPanel.pushToModel();
+			ics201Panel.pushToModel();
+			ics202Panel.pushToModel();
+			ics204Panel.pushToModel();
+			ics205Panel.pushToModel();
+			ics215Panel.pushToModel();
+			medicalPlanPanel.pushToModel();
+			canineMedicalPanel.pushToModel();
+			safetyPanel.pushToModel();
+			for (Ics214Panel panel : ics214Panels) {
+				panel.saveToModel();
+			}
+			sarTaskPanel.pushToModel();
+			clueLogPanel.pushToModel();
+			tCardPanel.pushToModel();
+		});
+		if (!committed) {
+			validationLabel.setText("The incident or operational period changed since these editors were refreshed. "
+					+ "No stale editor values were saved.");
+			return false;
+		}
+		editorCommitBinding = controller.captureEditorCommitBinding();
+		captureEditorTextBaselines();
+		return true;
+	}
+
+	/** Rebinds unchanged full editors after a MainFrame-owned model update. */
+	private void rebaseEditorCommitBinding() {
+		editorCommitBinding = controller.captureEditorCommitBinding();
 	}
 
 	/**
@@ -1306,7 +1397,11 @@ public class MainFrame extends JFrame {
 	private void rebuildLogTabs() {
 		rebuildingTabs = true;
 		try {
+			Map<Ics214Form, Ics214Panel> existingPanels = new IdentityHashMap<>();
 			for (Ics214Panel panel : new ArrayList<>(ics214Panels)) {
+				if (panel.getCurrentForm() != null) {
+					existingPanels.put(panel.getCurrentForm(), panel);
+				}
 				tabs.remove(panel);
 				tabWorkspaces.remove(panel);
 			}
@@ -1320,7 +1415,10 @@ public class MainFrame extends JFrame {
 				if (closedLogForms.contains(form)) {
 					continue;
 				}
-				Ics214Panel panel = new Ics214Panel(controller);
+				Ics214Panel panel = existingPanels.remove(form);
+				if (panel == null) {
+					panel = new Ics214Panel(controller);
+				}
 				panel.loadFromModel(form, data);
 				ics214Panels.add(panel);
 				registerActivityLogTab(panel, shortLogTabTitle(form, data), AppController.LinkSource.ICS214,
@@ -1333,7 +1431,9 @@ public class MainFrame extends JFrame {
 
 	/** Configures availability of the independent incident tracker. */
 	private void openActionSettingsDialog() {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		ActionTrackerSettingsPanel settings = new ActionTrackerSettingsPanel(controller.getData());
 		if (UiSupport.showResizableConfirmDialog(this, "Open Action Tracker", settings,
 				new Dimension(620, 220))) {
@@ -1355,7 +1455,7 @@ public class MainFrame extends JFrame {
 		incidentContextPanel.refreshFromModel();
 		organizationalChartPanel.refreshFromModel();
 		ics201Panel.refreshFromModel();
-		ics202Panel.refreshFromModel();
+		ics202Panel.refreshFromSharedModelChange();
 		ics204Panel.refreshFromModel();
 		ics205Panel.refreshFromModel();
 		ics215Panel.refreshFromModel();
@@ -1403,6 +1503,380 @@ public class MainFrame extends JFrame {
 		rebuildVisibleTabs(selectedComponent, selectedLogIndex);
 		UiSupport.applyDateTimeDisplayZone(this);
 		refreshStatus();
+		editorCommitBinding = controller.captureEditorCommitBinding();
+		captureEditorTextBaselines();
+	}
+
+	/**
+	 * Refreshes full editors after a shared commit while retaining active drafts and
+	 * view state.
+	 *
+	 * @param change committed incident notification.
+	 */
+	private void refreshEditorsAfterCommit(AppController.IncidentChange change) {
+		if (!controller.isCurrent(change.binding()) || editorCommitBinding == null) {
+			return;
+		}
+		AppController.EditorCommitBinding latest = controller.captureEditorCommitBinding();
+		if (change.kind() == AppController.IncidentChangeKind.MODEL_COMMITTED
+				&& editorCommitBinding.revision() == latest.revision()) {
+			return;
+		}
+		boolean sameContext = controller.isCurrent(editorCommitBinding.incidentBinding())
+				&& change.kind() == AppController.IncidentChangeKind.MODEL_COMMITTED;
+		AppController.EditorCommitBinding previousBinding = editorCommitBinding;
+		EditorViewState viewState = sameContext ? captureEditorViewState() : null;
+		if (!sameContext) {
+			clearPendingDraft();
+			lastFocusedEditor = null;
+		}
+		refreshFromModel();
+		if (viewState != null) {
+			restoreEditorViewState(viewState, previousBinding, latest);
+		}
+	}
+
+	/**
+	 * Captures dirty text inputs, table selections, active cell edits and focus.
+	 *
+	 * @return detached view state for a safe live refresh.
+	 */
+	private EditorViewState captureEditorViewState() {
+		JTextComponent focusedText = lastFocusedEditor instanceof JTextComponent text
+				&& javax.swing.SwingUtilities.isDescendingFrom(text, this) ? text : null;
+		List<TextViewState> textInputs = new ArrayList<>();
+		for (JTextComponent text : descendants(tabs, JTextComponent.class)) {
+			if (!text.isEditable() || isTableEditor(text)) {
+				continue;
+			}
+			String value = text.getText();
+			boolean edited = !java.util.Objects.equals(value, editorTextBaselines.getOrDefault(text, value));
+			if (edited || text == focusedText) {
+				textInputs.add(new TextViewState(text, value, edited, text.getSelectionStart(), text.getSelectionEnd(),
+						text.getCaretPosition()));
+			}
+		}
+		List<TableViewState> tables = new ArrayList<>();
+		for (JTable table : descendants(tabs, JTable.class)) {
+			int[] selectedRows = table.getSelectedRows();
+			int[] selectedColumns = table.getSelectedColumns();
+			int editingRow = table.isEditing() ? table.getEditingRow() : -1;
+			int editingColumn = table.isEditing() ? table.getEditingColumn() : -1;
+			Component editorComponent = table.isEditing() ? table.getEditorComponent() : null;
+			String editorText = textOf(editorComponent);
+			int selectionStart = editorComponent instanceof JTextComponent text ? text.getSelectionStart() : 0;
+			int selectionEnd = editorComponent instanceof JTextComponent text ? text.getSelectionEnd() : 0;
+			int caretPosition = editorComponent instanceof JTextComponent text ? text.getCaretPosition() : 0;
+			boolean focused = editorComponent == focusedText;
+			boolean edited = table.isEditing() && editorText != null
+					&& !java.util.Objects.equals(editorText, String.valueOf(table.getValueAt(editingRow, editingColumn)));
+			tables.add(new TableViewState(table, selectedRows, selectedColumns, editingRow, editingColumn,
+					editorText, edited, selectionStart, selectionEnd, caretPosition, focused));
+			if (table.isEditing() && table.getCellEditor() != null) {
+				table.getCellEditor().cancelCellEditing();
+			}
+		}
+		return new EditorViewState(tables, textInputs, focusedText);
+	}
+
+	/**
+	 * Restores view state and retains a conflicting partial draft without allowing it
+	 * to overwrite the shared commit.
+	 *
+	 * @param state captured editor view state.
+	 * @param previousBinding revision on which the preserved draft began.
+	 * @param latestBinding current shared-model revision.
+	 */
+	private void restoreEditorViewState(EditorViewState state,
+			AppController.EditorCommitBinding previousBinding,
+			AppController.EditorCommitBinding latestBinding) {
+		restoringEditorState = true;
+		Component focusTarget = null;
+		List<Component> conflictTargets = new ArrayList<>();
+		for (TableViewState tableState : state.tables()) {
+			JTable table = tableState.table();
+			table.clearSelection();
+			for (int row : tableState.selectedRows()) {
+				if (row >= 0 && row < table.getRowCount()) {
+					table.addRowSelectionInterval(row, row);
+				}
+			}
+			for (int column : tableState.selectedColumns()) {
+				if (column >= 0 && column < table.getColumnCount()) {
+					table.addColumnSelectionInterval(column, column);
+				}
+			}
+			if (tableState.editingRow() >= 0 && tableState.editingColumn() >= 0
+					&& tableState.editingRow() < table.getRowCount()
+					&& tableState.editingColumn() < table.getColumnCount()
+					&& table.editCellAt(tableState.editingRow(), tableState.editingColumn())) {
+				Component editor = table.getEditorComponent();
+				Object currentValue = table.getValueAt(tableState.editingRow(), tableState.editingColumn());
+				if (tableState.edited() && !java.util.Objects.equals(tableState.editorText(),
+						String.valueOf(currentValue))) {
+					setText(editor, tableState.editorText());
+					if (editor instanceof JTextComponent text) {
+						restoreTextSelection(text, tableState.selectionStart(), tableState.selectionEnd(),
+								tableState.caretPosition());
+					}
+					conflictTargets.add(editor);
+				}
+				if (tableState.focused()) {
+					focusTarget = editor;
+					if (editor instanceof JTextComponent text) {
+						lastFocusedEditor = text;
+					}
+				} else if (focusTarget == null) {
+					focusTarget = editor;
+				}
+			}
+		}
+		for (TextViewState textState : state.textInputs()) {
+			JTextComponent component = textState.component();
+			if (!javax.swing.SwingUtilities.isDescendingFrom(component, this)) {
+				continue;
+			}
+			String refreshedText = component.getText();
+			if (textState.edited() && !java.util.Objects.equals(textState.text(), refreshedText)) {
+				component.setText(textState.text());
+				conflictTargets.add(component);
+			}
+			if (component == state.focusedText() || textState.edited()) {
+				restoreTextSelection(component, textState.selectionStart(), textState.selectionEnd(),
+						textState.caretPosition());
+			}
+			if (component == state.focusedText()) {
+				lastFocusedEditor = component;
+				focusTarget = component;
+			}
+		}
+		if (focusTarget != null) {
+			focusTarget.requestFocusInWindow();
+		}
+		restoringEditorState = false;
+		if (!conflictTargets.isEmpty()) {
+			pendingEditorConflict = true;
+			for (Component conflictTarget : conflictTargets) {
+				attachPendingDraftListeners(conflictTarget);
+			}
+			editorCommitBinding = previousBinding;
+		} else {
+			pendingEditorConflict = false;
+			editorCommitBinding = latestBinding;
+		}
+	}
+
+	/**
+	 * Returns text from a text component when the active editor exposes one.
+	 *
+	 * @param component component to inspect.
+	 * @return editor text, or null for non-text components.
+	 */
+	private static String textOf(Component component) {
+		return component instanceof JTextComponent text ? text.getText() : null;
+	}
+
+	/** Records the current value of each editable full-form text input. */
+	private void captureEditorTextBaselines() {
+		Set<JTextComponent> present = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+		for (JTextComponent text : descendants(tabs, JTextComponent.class)) {
+			if (text.isEditable() && !isTableEditor(text)) {
+				present.add(text);
+				editorTextBaselines.put(text, text.getText());
+			}
+		}
+		editorTextBaselines.keySet().retainAll(present);
+	}
+
+	/**
+	 * Applies text to a text-based cell editor.
+	 *
+	 * @param component active editor component.
+	 * @param value pending text value.
+	 */
+	private static void setText(Component component, String value) {
+		if (component instanceof JTextComponent text) {
+			text.setText(value);
+		}
+	}
+
+	/**
+	 * Restores a text selection without collapsing it while repositioning the caret.
+	 *
+	 * @param component text component.
+	 * @param selectionStart selected text start.
+	 * @param selectionEnd selected text end.
+	 * @param originalCaretPosition caret location before refresh.
+	 */
+	private static void restoreTextSelection(JTextComponent component, int selectionStart, int selectionEnd,
+			int originalCaretPosition) {
+		int length = component.getText().length();
+		int start = Math.min(selectionStart, length);
+		int end = Math.min(selectionEnd, length);
+		int caretPosition = Math.max(start, Math.min(end, originalCaretPosition));
+		component.select(start, end);
+		if (start < end && caretPosition == start) {
+			component.getCaret().setDot(end);
+			component.getCaret().moveDot(start);
+		}
+	}
+
+	/**
+	 * Finds all descendants of a requested Swing component type.
+	 *
+	 * @param root container to search.
+	 * @param type component class to collect.
+	 * @param <T> component type.
+	 * @return matching descendants in component traversal order.
+	 */
+	private static <T extends Component> List<T> descendants(java.awt.Container root, Class<T> type) {
+		List<T> result = new ArrayList<>();
+		for (Component child : root.getComponents()) {
+			if (type.isInstance(child)) {
+				result.add(type.cast(child));
+			}
+			if (child instanceof java.awt.Container nested) {
+				result.addAll(descendants(nested, type));
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Determines whether text component belongs to an active table cell editor.
+	 *
+	 * @param component text component to test.
+	 * @return true when it is nested inside a JTable.
+	 */
+	private boolean isTableEditor(Component component) {
+		for (Component parent = component; parent != null && parent != this; parent = parent.getParent()) {
+			if (parent instanceof JTable) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Installs one-shot input listeners that rebase a retained draft after new input.
+	 *
+	 * @param component component containing the pending draft.
+	 */
+	private void attachPendingDraftListeners(Component component) {
+		if (pendingDraftComponents.contains(component)) {
+			return;
+		}
+		pendingDraftComponents.add(component);
+		component.addKeyListener(pendingDraftKeyListener);
+		if (component instanceof JTextComponent text) {
+			javax.swing.event.DocumentListener listener = new javax.swing.event.DocumentListener() {
+				/** {@inheritDoc} */
+				@Override
+				public void insertUpdate(javax.swing.event.DocumentEvent event) {
+					confirmPendingDraft(component);
+				}
+
+				/** {@inheritDoc} */
+				@Override
+				public void removeUpdate(javax.swing.event.DocumentEvent event) {
+					confirmPendingDraft(component);
+				}
+
+				/** {@inheritDoc} */
+				@Override
+				public void changedUpdate(javax.swing.event.DocumentEvent event) {
+					confirmPendingDraft(component);
+				}
+			};
+			text.getDocument().addDocumentListener(listener);
+			pendingDraftDocumentListeners.put(component, listener);
+		}
+	}
+
+	/**
+	 * Rebases a preserved partial draft after the operator edits that input again.
+	 *
+	 * @param component changed editor component.
+	 */
+	private void confirmPendingDraft(Component component) {
+		if (restoringEditorState || !pendingEditorConflict || !pendingDraftComponents.contains(component)) {
+			return;
+		}
+		component.removeKeyListener(pendingDraftKeyListener);
+		javax.swing.event.DocumentListener listener = pendingDraftDocumentListeners.remove(component);
+		if (listener != null && component instanceof JTextComponent text) {
+			text.getDocument().removeDocumentListener(listener);
+		}
+		pendingDraftComponents.remove(component);
+		if (!pendingDraftComponents.isEmpty()) {
+			return;
+		}
+		pendingEditorConflict = false;
+		editorCommitBinding = controller.captureEditorCommitBinding();
+		validationLabel.setText("Partial editor draft is based on the latest shared update.");
+	}
+
+	/** Removes temporary listeners from the retained draft component. */
+	private void clearPendingDraftListeners() {
+		for (Component component : new ArrayList<>(pendingDraftComponents)) {
+			component.removeKeyListener(pendingDraftKeyListener);
+			javax.swing.event.DocumentListener listener = pendingDraftDocumentListeners.remove(component);
+			if (listener != null && component instanceof JTextComponent text) {
+				text.getDocument().removeDocumentListener(listener);
+			}
+		}
+		pendingDraftComponents.clear();
+	}
+
+	/** Discards temporary conflict state when the incident or frame is replaced. */
+	private void clearPendingDraft() {
+		clearPendingDraftListeners();
+		pendingEditorConflict = false;
+	}
+
+	/**
+	 * Captures table and editable text state across a live model refresh.
+	 *
+	 * @param tables active table states.
+	 * @param textInputs locally edited or focused text inputs.
+	 * @param focusedText most recently focused text input.
+	 */
+	private record EditorViewState(List<TableViewState> tables, List<TextViewState> textInputs,
+			JTextComponent focusedText) {
+	}
+
+	/**
+	 * Captures one dirty text input and its selection.
+	 *
+	 * @param component input component.
+	 * @param text local text before refresh.
+	 * @param edited whether local text differs from the last loaded value.
+	 * @param selectionStart selected text start.
+	 * @param selectionEnd selected text end.
+	 * @param caretPosition caret location.
+	 */
+	private record TextViewState(JTextComponent component, String text, boolean edited, int selectionStart,
+			int selectionEnd, int caretPosition) {
+	}
+
+	/**
+	 * Captures a table selection and a pending active cell edit.
+	 *
+	 * @param table table component.
+	 * @param selectedRows selected view rows.
+	 * @param selectedColumns selected view columns.
+	 * @param editingRow active view row or -1.
+	 * @param editingColumn active view column or -1.
+	 * @param editorText pending text from the active cell.
+	 * @param edited whether the active cell differs from its stored value.
+	 * @param selectionStart selected text start.
+	 * @param selectionEnd selected text end.
+	 * @param caretPosition caret location.
+	 * @param focused whether this cell editor owned focus before refresh.
+	 */
+	private record TableViewState(JTable table, int[] selectedRows, int[] selectedColumns, int editingRow,
+			int editingColumn, String editorText, boolean edited, int selectionStart, int selectionEnd,
+			int caretPosition, boolean focused) {
 	}
 
 	/**
@@ -1558,7 +2032,9 @@ public class MainFrame extends JFrame {
 			return;
 		}
 		try {
-			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+				return;
+			}
 			refreshFromModel();
 		} catch (RuntimeException exception) {
 			showSaveError(exception);
@@ -1585,11 +2061,13 @@ public class MainFrame extends JFrame {
 		} else if (destination.workspaceId() == WorkspaceId.ICS_205) {
 			controller.getData().setIcs205Enabled(true);
 			controller.markDirty();
+			rebaseEditorCommitBinding();
 			communicationsPlanItem.setSelected(true);
 			groupVisible.put(COMMUNICATIONS_GROUP, true);
 		} else if (destination.workspaceId() == WorkspaceId.ICS_215) {
 			controller.getData().setIcs215Enabled(true);
 			controller.markDirty();
+			rebaseEditorCommitBinding();
 			ics215Item.setSelected(true);
 			groupVisible.put(ICS_215_GROUP, true);
 		}
@@ -1801,7 +2279,9 @@ public class MainFrame extends JFrame {
 		}
 		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
 		try {
-			pushToModel(source);
+			if (!pushToModel(source)) {
+				return false;
+			}
 			controller.save(source);
 			return true;
 		} catch (RuntimeException exception) {
@@ -1896,7 +2376,9 @@ public class MainFrame extends JFrame {
 	 */
 	private boolean handleValidationBeforeExport() {
 		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-		pushToModel(source);
+		if (!pushToModel(source)) {
+			return false;
+		}
 		List<ValidationMessage> messages = controller.validate(source);
 		refreshStatus();
 		if (!messages.isEmpty()) {
@@ -1963,7 +2445,9 @@ public class MainFrame extends JFrame {
 
 	/** Opens the incident's activity-event type editor. */
 	private void manageEventTypes() {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		AppData data = controller.getData();
 		List<ActivityEventType> initial = new ArrayList<>(data.getActivityEventTypes());
 		Ics214Panel.EventTypeManagerDialog dialog = new Ics214Panel.EventTypeManagerDialog(initial);
@@ -1974,6 +2458,7 @@ public class MainFrame extends JFrame {
 				ActivityEventTypeCatalog.saveCustomTypes(ActivityEventTypeCatalog.supportedCustomTypes(eventTypes));
 				data.setActivityEventTypes(eventTypes);
 				controller.markDirty(AppController.LinkSource.ICS214);
+				rebaseEditorCommitBinding();
 				for (Ics214Panel panel : ics214Panels) {
 					panel.refreshEventTypes();
 				}
@@ -1991,7 +2476,9 @@ public class MainFrame extends JFrame {
 	 *            new incident mode.
 	 */
 	private void setIncidentMode(IncidentMode mode) {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		controller.setIncidentMode(mode);
 		groupVisible.put(SAR_ONLY_GROUP, mode == IncidentMode.SAR);
 		rebuildVisibleTabs();
@@ -2008,7 +2495,9 @@ public class MainFrame extends JFrame {
 		if (task == null) {
 			return;
 		}
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		AppData data = controller.getData();
 		String assignmentId = task.getAssignmentId();
 		for (int i = 0; i < data.getActivityLogs().size(); i++) {
@@ -2028,6 +2517,7 @@ public class MainFrame extends JFrame {
 		}
 		data.getActivityLogs().add(form);
 		controller.markDirty(AppController.LinkSource.ICS214);
+		rebaseEditorCommitBinding();
 		rebuildLogTabs();
 		openWorkspace(WorkspaceDestination.activityLog(activityLogInstanceId(form)));
 	}
@@ -2037,7 +2527,9 @@ public class MainFrame extends JFrame {
 	 * @param resource resource requesting a log
 	 */
 	private void addOrOpenLog214ForResource(ResourceAssignment resource) {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		AppData data = controller.getData();
 		String assignmentId = resource.getAssignmentId();
 		for (int i = 0; i < data.getActivityLogs().size(); i++) {
@@ -2064,6 +2556,7 @@ public class MainFrame extends JFrame {
 				}, () -> form.setIcsPosition(resource.getLeaderRole()));
 		data.getActivityLogs().add(form);
 		controller.markDirty(AppController.LinkSource.ICS214);
+		rebaseEditorCommitBinding();
 		rebuildLogTabs();
 		openWorkspace(WorkspaceDestination.activityLog(activityLogInstanceId(form)));
 	}
@@ -2185,7 +2678,9 @@ public class MainFrame extends JFrame {
 
 	/** Creates an activity log using the selected scope and linked document. */
 	private void addLog() {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		AppData data = controller.getData();
 		ensureLogs(data);
 		javax.swing.JComboBox<ActivityLogScope> scopeCombo = new javax.swing.JComboBox<>(ActivityLogScope.values());
@@ -2215,6 +2710,7 @@ public class MainFrame extends JFrame {
 		}
 		data.getActivityLogs().add(form);
 		controller.markDirty(AppController.LinkSource.ICS214);
+		rebaseEditorCommitBinding();
 		rebuildLogTabs();
 		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
 		int newIndex = ics214Panels.size() - 1;
@@ -2229,7 +2725,9 @@ public class MainFrame extends JFrame {
 	 * Removes an open activity log from the interface, deleting it only if empty and not the ICP log.
 	 */
 	void removeLog() {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		AppData data = controller.getData();
 		ensureLogs(data);
 		List<Ics214Form> openLogs = data.getActivityLogs().stream()
@@ -2283,6 +2781,7 @@ public class MainFrame extends JFrame {
 			closedLogForms.add(formToRemove);
 		}
 		controller.markDirty(AppController.LinkSource.ICS214);
+		rebaseEditorCommitBinding();
 		rebuildLogTabs();
 		int newIndex = Math.max(0, ics214Panels.size() - 1);
 		rebuildVisibleTabs(newIndex < ics214Panels.size() ? ics214Panels.get(newIndex) : incidentContextPanel,
@@ -2325,7 +2824,9 @@ public class MainFrame extends JFrame {
 		if (log == null) {
 			return;
 		}
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		Ics214Panel.openInNewWindow(controller, log, controller.getData(), () -> {
 			refreshStatus();
 			for (Ics214Panel panel : ics214Panels) {

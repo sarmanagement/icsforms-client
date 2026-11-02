@@ -26,9 +26,12 @@ import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.EventQueue;
 import java.awt.GraphicsEnvironment;
 import java.awt.Dialog;
 import java.awt.Dimension;
+import java.awt.SecondaryLoop;
+import java.awt.Toolkit;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -84,12 +87,14 @@ class MainFrameIcs205WorkspaceTest {
 					Component radioEditor = tabs.getSelectedComponent();
 					JTextArea instructions = (JTextArea) Ics205PanelTest.field(radioEditor, "instructions");
 					instructions.setText("Pending typed navigation");
+					flushPendingSwingEvents();
 					tabs.setTitleAt(tabs.getSelectedIndex(), "Renamed radio plan");
 					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_204));
 					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_205));
 					assertSame(radioEditor, tabs.getSelectedComponent());
 					assertEquals("Pending typed navigation", data.getForm205().getSpecialInstructions());
 					instructions.setText("Pending View navigation");
+					flushPendingSwingEvents();
 					tabs.setTitleAt(tabs.getSelectedIndex(), "Renamed before toggle");
 					toggle.doClick();
 					toggle.doClick();
@@ -99,6 +104,7 @@ class MainFrameIcs205WorkspaceTest {
 					assertSame(radioEditor, tabs.getSelectedComponent());
 					assertEquals("ICS 205", tabs.getTitleAt(tabs.getSelectedIndex()));
 					instructions.setText("Pending stable workspace navigation");
+					flushPendingSwingEvents();
 					tabs.setTitleAt(tabs.getSelectedIndex(), "Renamed before workspace navigation");
 					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_204));
 					assertEquals("Pending stable workspace navigation", data.getForm205().getSpecialInstructions());
@@ -190,6 +196,15 @@ class MainFrameIcs205WorkspaceTest {
 		} catch (ReflectiveOperationException exception) {
 			throw new AssertionError(exception);
 		}
+	}
+
+	/**
+	 * Processes queued live-refresh notifications while a test currently owns the EDT.
+	 */
+	private static void flushPendingSwingEvents() {
+		SecondaryLoop loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
+		EventQueue.invokeLater(loop::exit);
+		assertTrue(loop.enter());
 	}
 
 	/**

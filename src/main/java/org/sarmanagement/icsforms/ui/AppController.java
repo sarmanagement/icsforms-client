@@ -85,6 +85,7 @@ public class AppController {
 	private PersonnelCardCreator personnelCardCreator;
 	private final List<IncidentChangeListener> incidentChangeListeners = new CopyOnWriteArrayList<>();
 	private long incidentGeneration = 1;
+	private long modelRevision;
 	private long changeSequence;
 	private boolean suppressChangeNotifications;
 	private final Object incidentChangeDeliveryLock = new Object();
@@ -122,6 +123,15 @@ public class AppController {
 	 * @param generation controller incident generation.
 	 */
 	public record IncidentBinding(AppData dataIdentity, long generation) {
+	}
+
+	/**
+	 * Immutable token for a full-editor commit based on one model revision.
+	 *
+	 * @param incidentBinding identity of the incident and operational period.
+	 * @param revision controller revision observed by the editor.
+	 */
+	public record EditorCommitBinding(IncidentBinding incidentBinding, long revision) {
 	}
 
 	/**
@@ -449,6 +459,58 @@ public class AppController {
 	}
 
 	/**
+	 * Captures the active incident, period, and model revision for a full editor.
+	 *
+	 * @return token representing the current editable model revision.
+	 */
+	public EditorCommitBinding captureEditorCommitBinding() {
+		return new EditorCommitBinding(captureIncidentBinding(), modelRevision);
+	}
+
+	/**
+	 * Applies a full-editor change only when its incident, period, and model revision
+	 * are unchanged.
+	 *
+	 * @param binding editor's captured commit token.
+	 * @param source editor that owns linked values.
+	 * @param edit synchronous editor flush that must not display a modal dialog.
+	 * @return true when the flush was applied; false when its token is stale.
+	 */
+	public boolean commitEditorIfCurrent(EditorCommitBinding binding, LinkSource source, Runnable edit) {
+		Objects.requireNonNull(edit, "edit");
+		Objects.requireNonNull(source, "source");
+		if (binding == null || !isCurrent(binding.incidentBinding()) || binding.revision() != modelRevision) {
+			return false;
+		}
+		EditorModelSnapshot snapshot = new EditorModelSnapshot();
+		snapshot.capture(data);
+		boolean previousDirty = dirty;
+		long previousRevision = modelRevision;
+		LinkSource previousSource = activeLinkSource;
+		boolean pendingAutosave = autosaveTimer.isRunning();
+		boolean previousSuppression = suppressChangeNotifications;
+		try {
+			suppressChangeNotifications = true;
+			edit.run();
+			markDirty(source);
+			suppressChangeNotifications = previousSuppression;
+		} catch (RuntimeException exception) {
+			suppressChangeNotifications = previousSuppression;
+			autosaveTimer.stop();
+			snapshot.restore();
+			dirty = previousDirty;
+			modelRevision = previousRevision;
+			activeLinkSource = previousSource;
+			if (pendingAutosave) {
+				autosaveTimer.restart();
+			}
+			throw exception;
+		}
+		publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
+		return true;
+	}
+
+	/**
 	 * Applies a synchronous shared-model edit only while its originating incident
 	 * binding remains current.
 	 *
@@ -598,6 +660,7 @@ public class AppController {
 		dirty = false;
 		activeLinkSource = LinkSource.NONE;
 		incidentGeneration++;
+		modelRevision++;
 		publishIncidentChange(IncidentChangeKind.INCIDENT_REPLACED);
 	}
 
@@ -616,6 +679,7 @@ public class AppController {
 	 */
 	public void markDirty(LinkSource source) {
 		dirty = true;
+		modelRevision++;
 		if (source != LinkSource.NONE) {
 			activeLinkSource = source;
 		}
@@ -644,6 +708,7 @@ public class AppController {
 		EditorModelSnapshot snapshot = new EditorModelSnapshot();
 		snapshot.capture(data);
 		boolean previousDirty = dirty;
+		long previousRevision = modelRevision;
 		LinkSource previousSource = activeLinkSource;
 		boolean pendingAutosave = autosaveTimer.isRunning();
 		boolean previousSuppression = suppressChangeNotifications;
@@ -658,6 +723,7 @@ public class AppController {
 			autosaveTimer.stop();
 			snapshot.restore();
 			dirty = previousDirty;
+			modelRevision = previousRevision;
 			activeLinkSource = previousSource;
 			if (pendingAutosave) {
 				autosaveTimer.restart();
@@ -1084,6 +1150,7 @@ public class AppController {
 		activeLinkSource = LinkSource.NONE;
 		autosaveTimer.restart();
 		incidentGeneration++;
+		modelRevision++;
 		publishIncidentChange(IncidentChangeKind.OPERATIONAL_PERIOD_CHANGED);
 	}
 

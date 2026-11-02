@@ -386,7 +386,7 @@ public class Ics202Panel extends JPanel {
 			return;
 		}
 		controller.getData().removeObjective(objective.getObjectiveId(), "", unlink);
-		refreshObjectives(controller.getData().getForm202());
+		refreshObjectives(controller.getData().getForm202(), true);
 		controller.markDirty();
 	}
 
@@ -403,11 +403,12 @@ public class Ics202Panel extends JPanel {
 	 * Reloads stable objective rows without creating new identities.
 	 *
 	 * @param form active ICS 202 form.
+	 * @param commitPendingEdit whether an accepted table edit should be committed first.
 	 * @throws IllegalStateException if an active edit in the current incident is rejected.
 	 */
-	private void refreshObjectives(Ics202Form form) {
+	private void refreshObjectives(Ics202Form form, boolean commitPendingEdit) {
 		if (objectivesTable.isEditing()) {
-			if (controller.isCurrent(objectiveBinding)) {
+			if (commitPendingEdit && controller.isCurrent(objectiveBinding)) {
 				UiSupport.commitTableEdits(objectivesTable);
 			} else {
 				objectivesTable.getCellEditor().cancelCellEditing();
@@ -440,8 +441,24 @@ public class Ics202Panel extends JPanel {
 	 * @throws IllegalStateException if the current incident's active edit is rejected.
 	 */
 	public void refreshFromModel() {
+		refreshFromModel(true);
+	}
+
+	/**
+	 * Refreshes after a shared-model change without committing a stale active cell.
+	 */
+	void refreshFromSharedModelChange() {
+		refreshFromModel(false);
+	}
+
+	/**
+	 * Refreshes the full form with an explicit policy for a pending objective cell.
+	 *
+	 * @param commitPendingObjectiveEdit whether an accepted objective-cell edit is committed.
+	 */
+	private void refreshFromModel(boolean commitPendingObjectiveEdit) {
 		Ics202Form form = controller.getData().getForm202();
-		refreshObjectives(form);
+		refreshObjectives(form, commitPendingObjectiveEdit);
 		commandEmphasisArea.setText(nullSafe(form.getCommandEmphasis()));
 		situationalAwarenessArea.setText(nullSafe(form.getSituationalAwareness()));
 		siteSafetyPlanRequired.setSelected(form.isSiteSafetyPlanRequired());
