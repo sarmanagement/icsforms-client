@@ -20,6 +20,7 @@ import java.util.List;
 public class Ics202Form {
 	private List<String> objectives = new ArrayList<>();
 	private List<IncidentObjective> structuredObjectives = new ArrayList<>();
+	private List<Ics202ReportedResult> reportedResults = new ArrayList<>();
 	private String commandEmphasis = "";
 	private String situationalAwareness = "";
 	private boolean siteSafetyPlanRequired;
@@ -85,6 +86,27 @@ public class Ics202Form {
 	public void setStructuredObjectives(List<IncidentObjective> structuredObjectives) {
 		this.structuredObjectives = structuredObjectives == null ? new ArrayList<>() : structuredObjectives;
 		normalizeObjectiveOrder();
+	}
+
+	/**
+	 * Returns operator-recorded results and their stated sources.
+	 *
+	 * @return mutable reported-results list.
+	 */
+	public List<Ics202ReportedResult> getReportedResults() {
+		if (reportedResults == null) {
+			reportedResults = new ArrayList<>();
+		}
+		return reportedResults;
+	}
+
+	/**
+	 * Sets operator-recorded results and their stated sources.
+	 *
+	 * @param reportedResults reported results; null becomes an empty list.
+	 */
+	public void setReportedResults(List<Ics202ReportedResult> reportedResults) {
+		this.reportedResults = reportedResults == null ? new ArrayList<>() : reportedResults;
 	}
 
 	/**

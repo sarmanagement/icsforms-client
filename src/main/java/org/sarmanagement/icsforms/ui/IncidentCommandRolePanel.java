@@ -4,8 +4,10 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Ics202ReportedResult;
 import org.sarmanagement.icsforms.model.IapPlanningStage;
 import org.sarmanagement.icsforms.model.IncidentObjective;
+import org.sarmanagement.icsforms.model.ObjectiveAssessment;
 import org.sarmanagement.icsforms.model.ObjectiveApprovalStatus;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.model.PlanReviewStatus;
@@ -18,12 +20,15 @@ import org.sarmanagement.icsforms.model.UtcTimestamp;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
+import javax.swing.DefaultListModel;
+import javax.swing.JList;
 import javax.swing.JMenuItem;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTabbedPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextField;
 import javax.swing.JTextArea;
@@ -41,6 +46,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -66,6 +72,11 @@ public class IncidentCommandRolePanel extends JPanel {
 
 		/** Opens the established SAR task debrief workflow. */
 		void debrief(String assignmentId);
+
+		/** Creates and saves a normal ICS 204 assignment prelinked to an objective. */
+		default ResourceAssignment createSupportingAssignment(String objectiveId) {
+			return null;
+		}
 	}
 
 	private static final DateTimeFormatter APPROVAL_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -80,6 +91,8 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final Map<String, JLabel> progressBadges = new LinkedHashMap<>();
 	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "Linked assignments", "Assessment");
 	private final JTable objectives = new JTable(objectiveModel);
+	private final DefaultListModel<String> attentionModel = new DefaultListModel<>();
+	private final JList<String> attention = new JList<>(attentionModel);
 	private final JComboBox<String> resourceGrouping = new JComboBox<>(new String[]{"All resources", "By resource type"});
 	private final DefaultTableModel resourceModel = readOnlyModel("Resource group", "Total");
 	private final JTable resources = new JTable(resourceModel);
@@ -262,6 +275,12 @@ public class IncidentCommandRolePanel extends JPanel {
 		objectives.setToolTipText("Assignment lifecycle counts are recorded task states, not objective achievement "
 				+ "or resource readiness. Missing and conflicting lifecycle records remain explicit.");
 		JPopupMenu objectiveMenu = new JPopupMenu();
+		JMenuItem addObjectiveItem = new JMenuItem("Add objective…");
+		addObjectiveItem.addActionListener(event -> editObjective(null));
+		objectiveMenu.add(addObjectiveItem);
+		JMenuItem editObjectiveItem = new JMenuItem("Edit objective…");
+		editObjectiveItem.addActionListener(event -> editSelectedObjective());
+		objectiveMenu.add(editObjectiveItem);
 		JMenuItem assignmentsItem = new JMenuItem("Show linked assignments and status…");
 		assignmentsItem.addActionListener(event -> showSelectedObjectiveAssignments());
 		objectiveMenu.add(assignmentsItem);
@@ -269,7 +288,9 @@ public class IncidentCommandRolePanel extends JPanel {
 			/** {@inheritDoc} */
 			@Override
 			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
-				assignmentsItem.setEnabled(objectives.getSelectedRow() >= 0);
+				boolean selected = objectives.getSelectedRow() >= 0;
+				editObjectiveItem.setEnabled(selected);
+				assignmentsItem.setEnabled(selected);
 			}
 
 			/** {@inheritDoc} */
@@ -301,10 +322,23 @@ public class IncidentCommandRolePanel extends JPanel {
 			public void mouseClicked(MouseEvent event) {
 				if (event.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(event)) {
 					selectObjectiveAtEvent(event);
-					showSelectedObjectiveAssignments();
+					editSelectedObjective();
 				}
 			}
 		});
+		JButton addObjective = new JButton("Add objective…");
+		addObjective.addActionListener(event -> editObjective(null));
+		JButton editObjective = new JButton("Edit objective…");
+		editObjective.addActionListener(event -> editSelectedObjective());
+		JButton editContext = new JButton("Edit ICS 202 context…");
+		editContext.addActionListener(event -> editIcs202Context());
+		JPanel objectiveActions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING, 4, 2));
+		objectiveActions.add(addObjective);
+		objectiveActions.add(editObjective);
+		objectiveActions.add(editContext);
+		JPanel objectiveTablePanel = new JPanel(new BorderLayout(0, 4));
+		objectiveTablePanel.add(objectiveActions, BorderLayout.NORTH);
+		objectiveTablePanel.add(new JScrollPane(objectives), BorderLayout.CENTER);
 		planProgress.getAccessibleContext().setAccessibleName("Recorded IAP progress summary");
 		planProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
 		for (String area : List.of("Objectives", "Assignment coverage", "Safety", "Human medical", "Canine medical",
@@ -322,8 +356,15 @@ public class IncidentCommandRolePanel extends JPanel {
 		overallProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
 		progress.add(overallProgress, BorderLayout.NORTH);
 		progress.add(planProgress, BorderLayout.CENTER);
-		JSplitPane objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(objectives),
-				new JScrollPane(progress));
+		JPanel attentionPanel = new JPanel(new BorderLayout());
+		attentionPanel.setBorder(javax.swing.BorderFactory.createTitledBorder("Observational attention"));
+		attention.getAccessibleContext().setAccessibleName("Objectives needing operator attention");
+		attentionPanel.add(new JScrollPane(attention), BorderLayout.CENTER);
+		JPanel progressAndAttention = new JPanel(new BorderLayout(4, 4));
+		progressAndAttention.add(progress, BorderLayout.CENTER);
+		progressAndAttention.add(attentionPanel, BorderLayout.SOUTH);
+		JSplitPane objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, objectiveTablePanel,
+				progressAndAttention);
 		objectiveSplit.setResizeWeight(0.5);
 		objectiveSplit.setDividerLocation(210);
 		planning.add(objectiveSplit, BorderLayout.CENTER);
@@ -397,6 +438,7 @@ public class IncidentCommandRolePanel extends JPanel {
 	 */
 	private void rebuildObjectives(AppData data) {
 		objectiveModel.setRowCount(0);
+		attentionModel.clear();
 		for (IncidentObjective objective : data.getForm202().getStructuredObjectives()) {
 			long links = controller.getAssignmentResources().stream()
 					.filter(assignment -> assignment.getObjectiveIds().contains(objective.getObjectiveId())).count();
@@ -407,9 +449,404 @@ public class IncidentCommandRolePanel extends JPanel {
 					objective.getAssessment().displayLabel()});
 			objectives.setRowHeight(objectiveModel.getRowCount() - 1,
 					Math.max(52, 24 + states.split("; ", -1).length * 18));
+			if (links == 0) {
+				attentionModel.addElement("Objective " + (objective.getDisplayOrder() + 1) + " has no linked assignment.");
+			}
+			if (objective.getAssessment() == ObjectiveAssessment.NOT_ASSESSED) {
+				attentionModel.addElement("Objective " + (objective.getDisplayOrder() + 1) + " has no recorded assessment.");
+			}
+		}
+		if (attentionModel.isEmpty()) {
+			attentionModel.addElement("No unlinked or unassessed objectives recorded.");
 		}
 	}
 
+	/**
+	 * Returns the selected objective's stable identifier.
+	 *
+	 * @return selected objective identifier, or blank.
+	 */
+	private String selectedObjectiveId() {
+		int selected = objectives.getSelectedRow();
+		int row = selected < 0 ? -1 : objectives.convertRowIndexToModel(selected);
+		List<IncidentObjective> current = controller.getData().getForm202().getStructuredObjectives();
+		return row < 0 || row >= current.size() ? "" : current.get(row).getObjectiveId();
+	}
+
+	/** Opens the focused editor for the selected objective. */
+	private void editSelectedObjective() {
+		int selected = objectives.getSelectedRow();
+		int row = selected < 0 ? -1 : objectives.convertRowIndexToModel(selected);
+		List<IncidentObjective> current = controller.getData().getForm202().getStructuredObjectives();
+		if (row >= 0 && row < current.size()) {
+			editObjective(current.get(row));
+		}
+	}
+
+	/**
+	 * Opens a focused editor for adding or editing objective wording, assessment,
+	 * and assessment note.
+	 *
+	 * @param existing objective being edited, or null to create one.
+	 */
+	private void editObjective(IncidentObjective existing) {
+		AppController.IncidentBinding editBinding = controller.captureIncidentBinding();
+		JTextArea wording = new JTextArea(existing == null ? "" : existing.getText(), 5, 48);
+		wording.setLineWrap(true);
+		wording.setWrapStyleWord(true);
+		wording.getAccessibleContext().setAccessibleName("Full objective wording");
+		JComboBox<ObjectiveAssessment> assessment = new JComboBox<>(ObjectiveAssessment.values());
+		assessment.setSelectedItem(existing == null ? ObjectiveAssessment.NOT_ASSESSED : existing.getAssessment());
+		assessment.getAccessibleContext().setAccessibleName("Objective assessment");
+		JTextArea note = new JTextArea(existing == null ? "" : existing.getAssessmentNote(), 3, 48);
+		note.setLineWrap(true);
+		note.setWrapStyleWord(true);
+		note.getAccessibleContext().setAccessibleName("Objective assessment note");
+		JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
+		form.add(new JLabel("Objective wording"));
+		form.add(new JScrollPane(wording));
+		form.add(new JLabel("Assessment"));
+		form.add(assessment);
+		form.add(new JLabel("Assessment note"));
+		form.add(new JScrollPane(note));
+		String title = existing == null ? "Add incident objective" : "Edit incident objective";
+		int choice = UiSupport.showResizableOptionDialog(this, title, form, new Dimension(620, 420),
+				new Object[]{"Save", "Cancel"}, "Save");
+		if (choice == 0) {
+			saveObjective(editBinding, existing == null ? "" : existing.getObjectiveId(), wording.getText(),
+					(ObjectiveAssessment) assessment.getSelectedItem(), note.getText());
+		}
+	}
+
+	/**
+	 * Applies an objective edit only to the incident binding from which it began.
+	 *
+	 * @param editBinding originating incident and period.
+	 * @param objectiveId stable objective identifier, or blank to add.
+	 * @param wording complete objective text.
+	 * @param assessment explicit human assessment.
+	 * @param note assessment note.
+	 * @return true when the objective was added or updated.
+	 */
+	boolean saveObjective(AppController.IncidentBinding editBinding, String objectiveId, String wording,
+			ObjectiveAssessment assessment, String note) {
+		if (!controller.isCurrent(editBinding)) {
+			return false;
+		}
+		List<IncidentObjective> ordered = new ArrayList<>(controller.getData().getForm202().getStructuredObjectives());
+		IncidentObjective objective = null;
+		if (objectiveId != null && !objectiveId.isBlank()) {
+			objective = ordered.stream().filter(candidate -> objectiveId.equals(candidate.getObjectiveId()))
+					.findFirst().orElse(null);
+			if (objective == null) {
+				return false;
+			}
+		} else {
+			objective = new IncidentObjective();
+			ordered.add(objective);
+		}
+		objective.setText(wording);
+		objective.setAssessment(assessment);
+		objective.setAssessmentNote(note);
+		objective.setAssessedBy(controller.getData().getIncidentContext().getCurrentUser());
+		objective.setAssessedAt(UtcTimestamp.now().withSecond(0).withNano(0));
+		controller.getData().getForm202().setStructuredObjectives(ordered);
+		controller.markDirty();
+		refreshFromModel();
+		return true;
+	}
+
+	/** Opens editors for command emphasis and general situational awareness. */
+	private void editIcs202Context() {
+		AppController.IncidentBinding editBinding = controller.captureIncidentBinding();
+		JTextArea emphasis = new JTextArea(controller.getData().getForm202().getCommandEmphasis(), 4, 48);
+		emphasis.setLineWrap(true);
+		emphasis.setWrapStyleWord(true);
+		emphasis.getAccessibleContext().setAccessibleName("Command emphasis");
+		JTextArea awareness = new JTextArea(controller.getData().getForm202().getSituationalAwareness(), 4, 48);
+		awareness.setLineWrap(true);
+		awareness.setWrapStyleWord(true);
+		awareness.getAccessibleContext().setAccessibleName("General situational awareness");
+		JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
+		form.add(new JLabel("Command emphasis"));
+		form.add(new JScrollPane(emphasis));
+		form.add(new JLabel("General situational awareness"));
+		form.add(new JScrollPane(awareness));
+		int choice = UiSupport.showResizableOptionDialog(this, "Edit ICS 202 context", form,
+				new Dimension(620, 360), new Object[]{"Save", "Cancel"}, "Save");
+		if (choice == 0) {
+			saveIcs202Context(editBinding, emphasis.getText(), awareness.getText());
+		}
+	}
+
+	/**
+	 * Saves ICS 202 command emphasis and situational awareness against the originating incident.
+	 *
+	 * @param editBinding originating incident and period.
+	 * @param emphasis command emphasis wording.
+	 * @param awareness general situational awareness wording.
+	 * @return true when the values were saved.
+	 */
+	boolean saveIcs202Context(AppController.IncidentBinding editBinding, String emphasis, String awareness) {
+		if (!controller.isCurrent(editBinding)) {
+			return false;
+		}
+		controller.getData().getForm202().setCommandEmphasis(emphasis);
+		controller.getData().getForm202().setSituationalAwareness(awareness);
+		controller.markDirty();
+		return true;
+	}
+
+	/**
+	 * Creates a table model containing reported results for one objective.
+	 *
+	 * @param objectiveId objective whose results are displayed.
+	 * @return read-only result table model.
+	 */
+	private DefaultTableModel resultsModelFor(String objectiveId) {
+		DefaultTableModel model = readOnlyModel("Reported result", "Source", "Recorded");
+		for (Ics202ReportedResult result : controller.getData().getForm202().getReportedResults()) {
+			if (objectiveId.equals(result.getObjectiveId())) {
+				model.addRow(new Object[]{result.getResult(), result.getSource(),
+						result.getReportedAt() == null ? "Not recorded"
+								: UiSupport.formatDateTime(result.getReportedAt(), APPROVAL_TIME)});
+			}
+		}
+		return model;
+	}
+
+	/**
+	 * Refreshes an existing reported-results table model.
+	 *
+	 * @param model table model to refresh.
+	 * @param objectiveId objective whose results are displayed.
+	 */
+	private void refreshResults(DefaultTableModel model, String objectiveId) {
+		model.setRowCount(0);
+		DefaultTableModel latest = resultsModelFor(objectiveId);
+		for (int row = 0; row < latest.getRowCount(); row++) {
+			model.addRow(new Object[]{latest.getValueAt(row, 0), latest.getValueAt(row, 1),
+					latest.getValueAt(row, 2)});
+		}
+	}
+
+	/**
+	 * Opens a picker for existing assignments not already linked to this objective.
+	 *
+	 * @param objective objective receiving selected links.
+	 * @param assignmentsModel linked-assignment table model to refresh.
+	 * @param linkedAssignments current linked-assignment rows.
+	 */
+	private void linkExistingAssignments(IncidentObjective objective, DefaultTableModel assignmentsModel,
+			List<ResourceAssignment> linkedAssignments, Runnable refreshActionAvailability) {
+		AppController.IncidentBinding editBinding = controller.captureIncidentBinding();
+		List<ResourceAssignment> available = controller.getAssignmentResources().stream()
+				.filter(assignment -> !assignment.getObjectiveIds().contains(objective.getObjectiveId())).toList();
+		if (available.isEmpty()) {
+			UiSupport.showDocumentMessage(this, "There are no unlinked assignments to add.",
+					"Link existing assignments", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		JList<String> picker = new JList<>(available.stream().map(IncidentCommandRolePanel::assignmentLabel)
+				.toArray(String[]::new));
+		picker.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+		picker.getAccessibleContext().setAccessibleName("Existing assignments to link");
+		int choice = UiSupport.showResizableOptionDialog(this, "Link existing assignments",
+				new JScrollPane(picker), new Dimension(620, 320), new Object[]{"Link", "Cancel"}, "Link");
+		if (choice == 0) {
+			List<String> assignmentIds = picker.getSelectedIndices().length == 0 ? List.of()
+					: java.util.Arrays.stream(picker.getSelectedIndices()).mapToObj(index -> available.get(index))
+							.map(ResourceAssignment::getAssignmentId).toList();
+			if (linkAssignmentsToObjective(editBinding, objective.getObjectiveId(), assignmentIds)) {
+				refreshLinkedAssignments(objective, assignmentsModel, linkedAssignments);
+				refreshActionAvailability.run();
+			}
+		}
+	}
+
+	/**
+	 * Creates supporting work through the normal assignment workflow and refreshes the dialog.
+	 *
+	 * @param objective objective receiving the assignment.
+	 * @param assignmentsModel linked-assignment table model.
+	 * @param linkedAssignments current linked rows.
+	 * @param refreshActionAvailability updates direct-action enablement.
+	 */
+	private void createSupportingAssignment(IncidentObjective objective, DefaultTableModel assignmentsModel,
+			List<ResourceAssignment> linkedAssignments, Runnable refreshActionAvailability) {
+		if (createSupportingAssignment(objective.getObjectiveId()) != null) {
+			refreshLinkedAssignments(objective, assignmentsModel, linkedAssignments);
+			refreshActionAvailability.run();
+		}
+	}
+
+	/**
+	 * Adds existing assignment links without disturbing any other objective links.
+	 *
+	 * @param editBinding originating incident and period.
+	 * @param objectiveId stable objective identifier.
+	 * @param assignmentIds existing assignments selected for this objective.
+	 * @return true when at least one valid link was added.
+	 */
+	boolean linkAssignmentsToObjective(AppController.IncidentBinding editBinding, String objectiveId,
+			List<String> assignmentIds) {
+		if (!controller.isCurrent(editBinding) || selectedObjective(objectiveId) == null || assignmentIds == null) {
+			return false;
+		}
+		List<ResourceAssignment> assignments = controller.getData().getAllAssignmentResources();
+		boolean changed = false;
+		for (String assignmentId : assignmentIds) {
+			ResourceAssignment assignment = assignments.stream()
+					.filter(candidate -> assignmentId != null && assignmentId.equals(candidate.getAssignmentId()))
+					.findFirst().orElse(null);
+			if (assignment != null && !assignment.getObjectiveIds().contains(objectiveId)) {
+				List<String> links = new ArrayList<>(assignment.getObjectiveIds());
+				links.add(objectiveId);
+				assignment.setObjectiveIds(links);
+				changed = true;
+			}
+		}
+		if (changed) {
+			controller.markDirty();
+			refreshFromModel();
+		}
+		return changed;
+	}
+
+	/**
+	 * Creates a normal assignment with the selected objective prelinked.
+	 *
+	 * @param objectiveId stable objective identifier.
+	 * @return saved assignment, or null when cancelled or stale.
+	 */
+	ResourceAssignment createSupportingAssignment(String objectiveId) {
+		AppController.IncidentBinding editBinding = controller.captureIncidentBinding();
+		if (selectedObjective(objectiveId) == null || assignmentActions == null) {
+			return null;
+		}
+		ResourceAssignment assignment = assignmentActions.createSupportingAssignment(objectiveId);
+		if (assignment == null || !controller.isCurrent(editBinding)
+				|| selectedObjective(objectiveId) == null) {
+			return null;
+		}
+		List<ResourceAssignment> existing = controller.getData().getAllAssignmentResources();
+		boolean changed = false;
+		if (existing.stream().noneMatch(row -> assignment.getAssignmentId().equals(row.getAssignmentId()))) {
+			controller.getData().getForm204().getResourcesAssigned().add(assignment);
+			changed = true;
+		}
+		if (!assignment.getObjectiveIds().contains(objectiveId)) {
+			List<String> links = new ArrayList<>(assignment.getObjectiveIds());
+			links.add(objectiveId);
+			assignment.setObjectiveIds(links);
+			changed = true;
+		}
+		if (changed) {
+			controller.markDirty();
+		}
+		refreshFromModel();
+		return assignment;
+	}
+
+	/**
+	 * Creates a readable assignment label for the existing-link picker.
+	 *
+	 * @param assignment ICS 204 assignment.
+	 * @return team number, resource identifier, and description.
+	 */
+	private static String assignmentLabel(ResourceAssignment assignment) {
+		return nonblank(assignment.getAssignmentTeamNumber(), "No team number") + " — "
+				+ nonblank(assignment.getResourceIdentifier(), "No resource identifier") + " — "
+				+ nonblank(assignment.getAssignment(), "No assignment text");
+	}
+
+	/**
+	 * Rebuilds the linked assignment table after adding an assignment.
+	 *
+	 * @param objective objective whose assignment links are shown.
+	 * @param model displayed assignment table.
+	 * @param linkedAssignments backing table rows.
+	 */
+	private void refreshLinkedAssignments(IncidentObjective objective, DefaultTableModel model,
+			List<ResourceAssignment> linkedAssignments) {
+		linkedAssignments.clear();
+		linkedAssignments.addAll(controller.getData().getAssignmentsForObjective(objective.getObjectiveId()));
+		model.setRowCount(0);
+		if (linkedAssignments.isEmpty()) {
+			model.addRow(new Object[]{"", "No assignments linked", "", ""});
+			return;
+		}
+		for (ResourceAssignment assignment : linkedAssignments) {
+			SarTaskAssignment task = findSarTask(assignment.getAssignmentId());
+			model.addRow(new Object[]{nonblank(assignment.getAssignmentTeamNumber(), "Not recorded"),
+					nonblank(assignment.getResourceIdentifier(), "Not recorded"),
+					task == null ? "Not recorded" : nonblank(task.getTaskLifecycleStatus(), "Not recorded"),
+					assignment.getAssignment()});
+		}
+	}
+
+	/**
+	 * Opens an operator input dialog for a reported result and its source.
+	 *
+	 * @param objectiveId stable objective identifier.
+	 */
+	private void openReportedResultDialog(String objectiveId) {
+		AppController.IncidentBinding editBinding = controller.captureIncidentBinding();
+		JTextArea result = new JTextArea(4, 42);
+		result.setLineWrap(true);
+		result.setWrapStyleWord(true);
+		result.getAccessibleContext().setAccessibleName("Reported result");
+		JTextField source = new JTextField(42);
+		source.getAccessibleContext().setAccessibleName("Reported result source");
+		JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
+		form.add(new JLabel("Reported result"));
+		form.add(new JScrollPane(result));
+		form.add(new JLabel("Source (for example: team report, log entry, or observed fact)"));
+		form.add(source);
+		int choice = UiSupport.showResizableOptionDialog(this, "Record reported result", form,
+				new Dimension(560, 300), new Object[]{"Record", "Cancel"}, "Record");
+		if (choice == 0 && !recordReportedResult(editBinding, objectiveId, result.getText(), source.getText())) {
+			UiSupport.showDocumentMessage(this, "A result and its source are required, and the incident must be unchanged.",
+					"Unable to record result", javax.swing.JOptionPane.WARNING_MESSAGE);
+		}
+	}
+
+	/**
+	 * Records an operator-reported result and its source without calculating objective achievement.
+	 *
+	 * @param editBinding originating incident and period.
+	 * @param objectiveId stable objective identifier.
+	 * @param result reported result wording.
+	 * @param source stated source of the result.
+	 * @return true when the result was recorded.
+	 */
+	boolean recordReportedResult(AppController.IncidentBinding editBinding, String objectiveId, String result,
+			String source) {
+		if (!controller.isCurrent(editBinding) || selectedObjective(objectiveId) == null
+				|| result == null || result.isBlank() || source == null || source.isBlank()) {
+			return false;
+		}
+		Ics202ReportedResult recorded = new Ics202ReportedResult();
+		recorded.setObjectiveId(objectiveId);
+		recorded.setResult(result.trim());
+		recorded.setSource(source.trim());
+		recorded.setReportedBy(controller.getData().getIncidentContext().getCurrentUser());
+		recorded.setReportedAt(UtcTimestamp.now().withSecond(0).withNano(0));
+		controller.getData().getForm202().getReportedResults().add(recorded);
+		controller.markDirty();
+		return true;
+	}
+
+	/**
+	 * Finds an objective by its stable identity.
+	 *
+	 * @param objectiveId objective identifier.
+	 * @return objective, or null if absent.
+	 */
+	private IncidentObjective selectedObjective(String objectiveId) {
+		return controller.getData().getForm202().getStructuredObjectives().stream()
+				.filter(objective -> objectiveId.equals(objective.getObjectiveId())).findFirst().orElse(null);
+	}
 	/**
 	 * Selects the row beneath a context-menu click.
 	 *
@@ -432,7 +869,7 @@ public class IncidentCommandRolePanel extends JPanel {
 			return;
 		}
 		IncidentObjective objective = controller.getData().getForm202().getStructuredObjectives().get(row);
-		List<ResourceAssignment> linkedAssignments = new java.util.ArrayList<>();
+		List<ResourceAssignment> linkedAssignments = new ArrayList<>();
 		for (ResourceAssignment assignment : controller.getAssignmentResources()) {
 			if (!assignment.getObjectiveIds().contains(objective.getObjectiveId())) {
 				continue;
@@ -470,7 +907,26 @@ public class IncidentCommandRolePanel extends JPanel {
 		} else {
 			assignmentsTable.setRowSelectionInterval(0, 0);
 		}
-		content.add(new JScrollPane(assignmentsTable), BorderLayout.CENTER);
+		JPanel assignmentTab = new JPanel(new BorderLayout());
+		assignmentTab.add(new JScrollPane(assignmentsTable), BorderLayout.CENTER);
+		DefaultTableModel objectiveResultsModel = resultsModelFor(objective.getObjectiveId());
+		JTable resultsTable = new JTable(objectiveResultsModel);
+		resultsTable.getAccessibleContext().setAccessibleName("Reported results and sources for objective");
+		resultsTable.setFillsViewportHeight(true);
+		JPanel resultsTab = new JPanel(new BorderLayout(4, 4));
+		resultsTab.add(new JScrollPane(resultsTable), BorderLayout.CENTER);
+		JButton recordResult = new JButton("Record reported result…");
+		recordResult.addActionListener(event -> {
+			openReportedResultDialog(objective.getObjectiveId());
+			refreshResults(objectiveResultsModel, objective.getObjectiveId());
+		});
+		JPanel resultActions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
+		resultActions.add(recordResult);
+		resultsTab.add(resultActions, BorderLayout.SOUTH);
+		JTabbedPane detailTabs = new JTabbedPane();
+		detailTabs.addTab("Linked assignments", assignmentTab);
+		detailTabs.addTab("Reported results", resultsTab);
+		content.add(detailTabs, BorderLayout.CENTER);
 
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JButton open204 = new JButton("Open ICS 204 details");
@@ -478,10 +934,13 @@ public class IncidentCommandRolePanel extends JPanel {
 		JButton addLog = new JButton("Make a log entry");
 		JButton changeStatus = new JButton("Change status");
 		JButton debrief = new JButton("Debrief");
+		JButton linkExisting = new JButton("Link existing…");
+		JButton createSupporting = new JButton("Create supporting assignment…");
 		JButton close = new JButton("Close");
 		boolean sarMode = controller.getIncidentMode() == org.sarmanagement.icsforms.model.IncidentMode.SAR;
 		openSar.setVisible(sarMode);
 		debrief.setVisible(sarMode);
+		createSupporting.setEnabled(assignmentActions != null);
 		open204.setEnabled(!linkedAssignments.isEmpty());
 		openSar.setEnabled(!linkedAssignments.isEmpty());
 		addLog.setEnabled(!linkedAssignments.isEmpty());
@@ -506,6 +965,10 @@ public class IncidentCommandRolePanel extends JPanel {
 			}
 		});
 		refreshActionAvailability.run();
+		linkExisting.addActionListener(event -> linkExistingAssignments(objective, assignmentsModel,
+				linkedAssignments, refreshActionAvailability));
+		createSupporting.addActionListener(event -> createSupportingAssignment(objective, assignmentsModel,
+				linkedAssignments, refreshActionAvailability));
 		open204.addActionListener(event -> runSelectedAssignmentAction(assignmentsTable, linkedAssignments,
 				assignmentActions == null ? null : assignmentActions::openIcs204));
 		openSar.addActionListener(event -> runSelectedAssignmentAction(assignmentsTable, linkedAssignments,
@@ -559,6 +1022,8 @@ public class IncidentCommandRolePanel extends JPanel {
 		actions.add(addLog);
 		actions.add(changeStatus);
 		actions.add(debrief);
+		actions.add(linkExisting);
+		actions.add(createSupporting);
 		actions.add(close);
 		content.add(actions, BorderLayout.SOUTH);
 		dialog.setContentPane(content);

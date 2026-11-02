@@ -883,6 +883,13 @@ public class MainFrame extends JFrame {
 					public void debrief(String assignmentId) {
 						sarTaskPanel.openDebriefByAssignmentId(assignmentId);
 					}
+
+					/** {@inheritDoc} */
+					@Override
+					public org.sarmanagement.icsforms.model.ResourceAssignment createSupportingAssignment(
+							String objectiveId) {
+						return ics204Panel.openNewAssignmentEditorForObjective(objectiveId);
+					}
 				});
 	}
 
