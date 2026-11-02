@@ -232,6 +232,7 @@ public class MainFrame extends JFrame {
 		this.medicalPlanPanel = new Ics206Panel(controller);
 		this.canineMedicalPanel = new CanineMedicalPanel(controller, defaultDirectory);
 		this.medicalWorkspacePanel = new MedicalWorkspacePanel(medicalPlanPanel, canineMedicalPanel);
+		medicalWorkspacePanel.setAfterPlanCommit(this::rebaseEditorCommitBinding);
 		this.sarTaskPanel = new SarTaskPanel(controller);
 		this.clueLogPanel = new ClueLogPanel(controller);
 		this.openActionTrackerPanel = new OpenActionTrackerPanel(controller);

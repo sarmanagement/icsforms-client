@@ -24,6 +24,7 @@ public class MedicalWorkspacePanel extends JPanel {
 	private final JTabbedPane plans = new JTabbedPane();
 	private boolean canineVisible;
 	private Component lastSelectedPlan;
+	private Runnable afterPlanCommit = () -> { };
 
 	/**
 	 * Creates the shared medical workspace around the two independent plan editors.
@@ -40,6 +41,15 @@ public class MedicalWorkspacePanel extends JPanel {
 		lastSelectedPlan = humanPanel;
 		plans.addChangeListener(event -> flushPreviousPlan());
 		add(plans, BorderLayout.CENTER);
+	}
+
+	/**
+	 * Sets the callback that refreshes the owning frame's editor binding after a nested plan commit.
+	 *
+	 * @param callback action to run after the previous plan is committed.
+	 */
+	void setAfterPlanCommit(Runnable callback) {
+		afterPlanCommit = callback == null ? () -> { } : callback;
 	}
 
 	/**
@@ -98,9 +108,12 @@ public class MedicalWorkspacePanel extends JPanel {
 			return;
 		}
 		if (lastSelectedPlan == humanPanel) {
-			humanPanel.pushToModel();
+			if (humanPanel.pushToModel()) {
+				afterPlanCommit.run();
+			}
 		} else if (lastSelectedPlan == caninePanel) {
 			caninePanel.pushToModel();
+			afterPlanCommit.run();
 		}
 		lastSelectedPlan = selectedPlan;
 	}

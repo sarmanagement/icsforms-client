@@ -40,6 +40,24 @@ final class EditorCommitGuard {
 	}
 
 	/**
+	 * Commits one field against the current model revision without flushing stale editor controls.
+	 *
+	 * @param edit synchronous update to one field.
+	 * @return true when the incident binding is still current.
+	 */
+	boolean commitField(Runnable edit) {
+		if (controller.isEditorCommitInProgress()) {
+			edit.run();
+			return true;
+		}
+		if (!controller.commitIfCurrent(binding.incidentBinding(), edit)) {
+			return false;
+		}
+		rebase();
+		return true;
+	}
+
+	/**
 	 * Binds the editor to the current incident and model revision after refresh.
 	 */
 	void rebase() {

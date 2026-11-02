@@ -158,7 +158,7 @@ public class Ics206Panel extends JPanel {
 				validation.setText("This medical plan editor is stale. Keep the draft and refresh before retrying.");
 			}
 			return committed;
-		} catch (IllegalArgumentException | IllegalStateException exception) {
+		} catch (IllegalArgumentException exception) {
 			validation.setText(exception.getMessage());
 			return false;
 		}
@@ -301,10 +301,18 @@ public class Ics206Panel extends JPanel {
 						.setSimpleMode("Simple".equals(mode.getSelectedItem())));
 			}
 		});
-		aviationUsed.addActionListener(event -> commitField(
-				() -> controller.getData().getMedicalPlan().setAviationAssetsUsed(aviationUsed.isSelected())));
-		reviewStatus.addActionListener(event -> commitField(
-				() -> controller.getData().getMedicalPlan().setReviewStatus(String.valueOf(reviewStatus.getSelectedItem()))));
+		aviationUsed.addActionListener(event -> {
+			if (!loading && !flushing) {
+				commitField(() -> controller.getData().getMedicalPlan()
+						.setAviationAssetsUsed(aviationUsed.isSelected()));
+			}
+		});
+		reviewStatus.addActionListener(event -> {
+			if (!loading && !flushing) {
+				commitField(() -> controller.getData().getMedicalPlan()
+						.setReviewStatus(String.valueOf(reviewStatus.getSelectedItem())));
+			}
+		});
 		watch(medicalRole, value -> controller.getData().getMedicalPlan().setDesignatedMedicalUnitRole(value));
 		watchMedicalRole(medicalName, preparedBy, true);
 		watch(medicalContact, value -> controller.getData().getMedicalPlan().setDesignatedMedicalUnitContact(value));
@@ -491,6 +499,9 @@ public class Ics206Panel extends JPanel {
 	 */
 	private boolean commitField(Runnable update) {
 		boolean committed = editorCommitGuard.commit(AppController.LinkSource.NONE, update);
+		if (!committed) {
+			committed = editorCommitGuard.commitField(update);
+		}
 		if (!committed) {
 			validation.setText("This medical plan editor is stale. Keep the draft and refresh before retrying.");
 		} else {
