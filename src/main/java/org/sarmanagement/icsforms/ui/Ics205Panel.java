@@ -182,7 +182,12 @@ public final class Ics205Panel extends JPanel {
 		editorCommitGuard.rebase();
 	}
 
-	/** Flushes preparation fields without modifying saved signature or pagination data. */
+	/**
+	 * Flushes preparation fields without modifying saved signature or pagination data.
+	 *
+	 * @return true when the preparation fields are committed; false when validation or editor
+	 *         revision checks fail
+	 */
 	public boolean pushToModel() {
 		if (loading) {
 			return true;

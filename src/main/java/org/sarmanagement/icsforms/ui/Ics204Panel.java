@@ -319,7 +319,11 @@ public class Ics204Panel extends JPanel {
 		editorCommitGuard.rebase();
 	}
 
-	/** Applies field values to the model. */
+	/**
+	 * Applies field values to the model.
+	 *
+	 * @return true when the editor values are committed; false when the editor is stale
+	 */
 	public boolean pushToModel() {
 		return editorCommitGuard.commit(AppController.LinkSource.ICS204, this::flushToModel);
 	}

@@ -151,6 +151,7 @@ public class Ics215Panel extends JPanel {
 	/**
 	 * Flushes editor values to the active or next-period worksheet.
 	 *
+	 * @return true when the editor values are committed; false when the editor is stale
 	 * @throws IllegalStateException when dates or a pending table edit are invalid.
 	 */
 	public boolean pushToModel() {
