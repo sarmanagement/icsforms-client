@@ -6,6 +6,8 @@ package org.sarmanagement.icsforms.ui;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.MedicalPlan;
+import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -19,8 +21,10 @@ import java.awt.Component;
 import java.awt.Container;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -136,6 +140,7 @@ class PreparationRolePanelTest {
 				} catch (ReflectiveOperationException exception) {
 					throw new IllegalStateException(exception);
 				}
+
 			});
 			waitForPdf(safety[0], "caninePreview");
 			waitForPdf(medical[0], "caninePreview");
@@ -145,6 +150,72 @@ class PreparationRolePanelTest {
 				medical[0].dispose();
 			});
 		}
+	}
+
+	@Test
+	void medicalResponsibleWorkPairsPlansWithTheirOwnPdfAndReviewAndShowsOperationalDetails() throws Exception {
+		AppData data = new AppData();
+		MedicalPlan.AidStation station = new MedicalPlan.AidStation();
+		station.setName("North Aid");
+		station.setLocation("Base camp");
+		station.setContactNumbers("555-0100");
+		data.getMedicalPlan().getAidStations().add(station);
+		MedicalPlan.TransportService transport = new MedicalPlan.TransportService();
+		transport.setService("Ground ambulance");
+		transport.setLocation("East road");
+		transport.setContactNumbers("555-0101");
+		data.getMedicalPlan().getTransportServices().add(transport);
+		MedicalPlan.Hospital hospital = new MedicalPlan.Hospital();
+		hospital.setName("Ridge Hospital");
+		hospital.setAddress("1 Ridge Road");
+		data.getMedicalPlan().getHospitals().add(hospital);
+		LocalDateTime reviewTime = LocalDateTime.of(2026, 11, 2, 2, 0);
+		data.recordPlanReview(PlanReviewArea.HUMAN_MEDICAL, "Reviewer", reviewTime);
+		data.recordPlanReview(PlanReviewArea.CANINE_MEDICAL, "Reviewer", reviewTime);
+		data.getCanineMedicalPlan().setEmergencyProcedures("Changed after review");
+		AppController controller = controller(data);
+		AtomicReference<WorkspaceDestination> destination = new AtomicReference<>();
+		MedicalUnitLeaderRolePanel[] panel = new MedicalUnitLeaderRolePanel[1];
+		SwingUtilities.invokeAndWait(() -> {
+			panel[0] = new MedicalUnitLeaderRolePanel(controller, destination::set);
+			JList<?> worklist = (JList<?>) fieldUnchecked(panel[0], "worklist");
+			JTextArea detail = (JTextArea) fieldUnchecked(panel[0], "detail");
+			AsyncFormPreviewPanel humanPreview = (AsyncFormPreviewPanel) fieldUnchecked(panel[0], "humanPreview");
+			AsyncFormPreviewPanel caninePreview = (AsyncFormPreviewPanel) fieldUnchecked(panel[0], "caninePreview");
+			PlanReviewStrip humanReview = (PlanReviewStrip) fieldUnchecked(panel[0], "humanReview");
+			PlanReviewStrip canineReview = (PlanReviewStrip) fieldUnchecked(panel[0], "canineReview");
+			worklist.setSelectedValue("Human medical plan preparation", true);
+			assertTrue(humanPreview.isVisible());
+			assertFalse(caninePreview.isVisible());
+			assertTrue(humanReview.isVisible());
+			assertFalse(canineReview.isVisible());
+			worklist.setSelectedValue("Canine medical plan preparation", true);
+			assertFalse(humanPreview.isVisible());
+			assertTrue(caninePreview.isVisible());
+			assertFalse(humanReview.isVisible());
+			assertTrue(canineReview.isVisible());
+			worklist.setSelectedValue("Personnel and aid stations", true);
+			assertTrue(detail.getText().contains("North Aid"));
+			assertTrue(detail.getText().contains("555-0100"));
+			worklist.setSelectedValue("Transport and facilities", true);
+			assertTrue(detail.getText().contains("Ground ambulance"));
+			assertTrue(detail.getText().contains("Ridge Hospital"));
+			worklist.setSelectedValue("Review handoff", true);
+			assertTrue(humanReview.isVisible());
+			assertTrue(canineReview.isVisible());
+			assertTrue(detail.getText().contains("Reviewed-approved"));
+			assertTrue(detail.getText().contains("Changed since review"));
+			worklist.setSelectedValue("Canine medical plan preparation", true);
+			try {
+				var method = MedicalUnitLeaderRolePanel.class.getDeclaredMethod("openSelectedSource");
+				method.setAccessible(true);
+				method.invoke(panel[0]);
+			} catch (ReflectiveOperationException exception) {
+				throw new IllegalStateException(exception);
+			}
+			assertEquals(WorkspaceDestination.canineMedicalPlan(), destination.get());
+		});
+		SwingUtilities.invokeAndWait(panel[0]::dispose);
 	}
 
 	@Test
@@ -220,8 +291,33 @@ class PreparationRolePanelTest {
 	 * @return isolated incident controller.
 	 */
 	private AppController controller() {
-		return new AppController(new AppData(), new LocalRepository(directory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		return controller(new AppData());
+	}
+
+	/**
+	 * Creates a controller using the supplied incident fixture.
+	 *
+	 * @param data incident data.
+	 * @return isolated incident controller.
+	 */
+	private AppController controller(AppData data) {
+		return new AppController(data, new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
+				new IncidentValidator());
+	}
+
+	/**
+	 * Reads a panel field from an assertion running on the Swing event thread.
+	 *
+	 * @param target role panel.
+	 * @param name field name.
+	 * @return field value.
+	 */
+	private Object fieldUnchecked(Object target, String name) {
+		try {
+			return field(target, name);
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
+		}
 	}
 
 	/**

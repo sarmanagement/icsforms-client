@@ -47,8 +47,10 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 	private final JTextArea canineInstruction = new JTextArea(3, 40);
 	private final RolePlanStatusBadges planBadges;
 	private final JPanel previewCards = new JPanel(new CardLayout());
+	private final JPanel reviewCards = new JPanel(new CardLayout());
 	private final AsyncFormPreviewPanel humanPreview = new AsyncFormPreviewPanel(new Ics206PdfRenderer());
 	private final AsyncFormPreviewPanel caninePreview = new AsyncFormPreviewPanel(new Ics206CaninePdfRenderer());
+	private final JPanel focusedCards = new JPanel(new CardLayout());
 	private final PlanReviewStrip humanReview;
 	private final PlanReviewStrip canineReview;
 	private final AppController.IncidentChangeSubscription subscription;
@@ -185,12 +187,17 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		left.setBorder(javax.swing.BorderFactory.createTitledBorder("Responsible work"));
 		left.add(showAll, BorderLayout.NORTH);
 		left.add(new JScrollPane(worklist), BorderLayout.CENTER);
-		JPanel focused = UiSupport.formPanel();
-		UiSupport.addRow(focused, 0, "Medical Unit Leader", leaderName);
-		UiSupport.addRow(focused, 1, "Radio channel", leaderRadio);
-		UiSupport.addRow(focused, 2, "Phone", leaderPhone);
-		UiSupport.addRow(focused, 3, "Human emergency instruction", new JScrollPane(humanInstruction));
-		UiSupport.addRow(focused, 4, "Canine emergency procedure", new JScrollPane(canineInstruction));
+		JPanel personnelFields = UiSupport.formPanel();
+		UiSupport.addRow(personnelFields, 0, "Medical Unit Leader", leaderName);
+		UiSupport.addRow(personnelFields, 1, "Radio channel", leaderRadio);
+		UiSupport.addRow(personnelFields, 2, "Phone", leaderPhone);
+		JPanel humanFields = UiSupport.formPanel();
+		UiSupport.addRow(humanFields, 0, "Human emergency instruction", new JScrollPane(humanInstruction));
+		JPanel canineFields = UiSupport.formPanel();
+		UiSupport.addRow(canineFields, 0, "Canine emergency procedure", new JScrollPane(canineInstruction));
+		focusedCards.add(personnelFields, "Personnel and aid stations");
+		focusedCards.add(humanFields, HUMAN_PLAN);
+		focusedCards.add(canineFields, CANINE_PLAN);
 		humanInstruction.setLineWrap(true);
 		humanInstruction.setWrapStyleWord(true);
 		canineInstruction.setLineWrap(true);
@@ -202,9 +209,6 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		source.addActionListener(event -> openSelectedSource());
 		actions.add(apply);
 		actions.add(source);
-		JPanel reviews = new JPanel(new java.awt.GridLayout(0, 1));
-		reviews.add(humanReview);
-		reviews.add(canineReview);
 		previewCards.add(humanPreview, HUMAN_PLAN);
 		previewCards.add(caninePreview, CANINE_PLAN);
 		JPanel right = new JPanel(new BorderLayout(4, 4));
@@ -213,11 +217,11 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		detail.setWrapStyleWord(true);
 		JPanel upper = new JPanel(new BorderLayout());
 		upper.add(new JScrollPane(detail), BorderLayout.CENTER);
-		upper.add(focused, BorderLayout.SOUTH);
+		upper.add(focusedCards, BorderLayout.SOUTH);
 		right.add(upper, BorderLayout.NORTH);
 		right.add(previewCards, BorderLayout.CENTER);
 		JPanel bottom = new JPanel(new BorderLayout());
-		bottom.add(reviews, BorderLayout.CENTER);
+		bottom.add(reviewCards, BorderLayout.CENTER);
 		bottom.add(actions, BorderLayout.SOUTH);
 		right.add(bottom, BorderLayout.SOUTH);
 		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right);
@@ -260,6 +264,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 					+ data.getMedicalPlan().getTransportServices().size() + "\nHospitals: "
 					+ data.getMedicalPlan().getHospitals().size());
 			((CardLayout) previewCards.getLayout()).show(previewCards, HUMAN_PLAN);
+			((CardLayout) focusedCards.getLayout()).show(focusedCards, HUMAN_PLAN);
 		} else if (CANINE_PLAN.equals(selected)) {
 			detail.setText("Canine plan: " + data.getPlanReviewStatus(PlanReviewArea.CANINE_MEDICAL).displayLabel()
 					+ "\nLinked veterinary personnel: "
@@ -267,17 +272,101 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 					+ "\nAccepted veterinary facilities: "
 					+ data.getCanineMedicalPlan().getSelectedFacilities().size());
 			((CardLayout) previewCards.getLayout()).show(previewCards, CANINE_PLAN);
+			((CardLayout) focusedCards.getLayout()).show(focusedCards, CANINE_PLAN);
+		} else if ("Personnel and aid stations".equals(selected)) {
+			detail.setText(personnelAndAidStationDetails(data));
+			((CardLayout) focusedCards.getLayout()).show(focusedCards, "Personnel and aid stations");
+		} else if ("Transport and facilities".equals(selected)) {
+			detail.setText(transportAndFacilityDetails(data));
+		} else if ("Review handoff".equals(selected)) {
+			detail.setText("Human medical: " + data.getPlanReviewStatus(PlanReviewArea.HUMAN_MEDICAL).displayLabel()
+					+ "\nCanine medical: " + data.getPlanReviewStatus(PlanReviewArea.CANINE_MEDICAL).displayLabel()
+					+ "\nEach review is a separate, content-bound operator assertion.");
 		} else {
-			detail.setText("Recorded plan information is displayed without an automatic sufficiency judgment.\n"
-					+ "Use the focused fields or open the comprehensive editor for extensive changes.");
+			detail.setText(selected.startsWith("Safety")
+					? "Safety plan review: " + data.getPlanReviewStatus(PlanReviewArea.SAFETY).displayLabel()
+					: "Communications plan review: " + data.getPlanReviewStatus(PlanReviewArea.COMMUNICATIONS).displayLabel());
 		}
 		boolean planSelected = HUMAN_PLAN.equals(selected) || CANINE_PLAN.equals(selected);
 		previewCards.setVisible(planSelected);
+		focusedCards.setVisible(HUMAN_PLAN.equals(selected) || CANINE_PLAN.equals(selected)
+				|| "Personnel and aid stations".equals(selected));
+		boolean reviewsSelected = planSelected || "Review handoff".equals(selected);
+		reviewCards.setVisible(reviewsSelected);
+		showReviewCards(selected);
 		if (planSelected) {
 			previewSelected();
 		} else {
 			cancelPreviews();
 		}
+	}
+
+	/**
+	 * Displays only the review control associated with the selected work item.
+	 *
+	 * @param selected selected responsible-work item.
+	 */
+	private void showReviewCards(String selected) {
+		reviewCards.removeAll();
+		reviewCards.setLayout(HUMAN_PLAN.equals(selected) || CANINE_PLAN.equals(selected)
+				? new BorderLayout() : new java.awt.GridLayout(0, 1, 0, 4));
+		humanReview.setVisible(HUMAN_PLAN.equals(selected) || "Review handoff".equals(selected));
+		canineReview.setVisible(CANINE_PLAN.equals(selected) || "Review handoff".equals(selected));
+		if (HUMAN_PLAN.equals(selected)) {
+			reviewCards.add(humanReview, BorderLayout.CENTER);
+		} else if (CANINE_PLAN.equals(selected)) {
+			reviewCards.add(canineReview, BorderLayout.CENTER);
+		} else if ("Review handoff".equals(selected)) {
+			reviewCards.add(humanReview);
+			reviewCards.add(canineReview);
+		}
+		reviewCards.revalidate();
+		reviewCards.repaint();
+	}
+
+	/**
+	 * Summarizes the recorded medical leadership and aid-station details.
+	 *
+	 * @param data active incident.
+	 * @return recorded personnel and aid-station details.
+	 */
+	private static String personnelAndAidStationDetails(AppData data) {
+		var leader = data.getMedicalUnitLeaderAssignment();
+		StringBuilder details = new StringBuilder("Medical Unit Leader: ").append(leader.getName())
+				.append("\nRadio: ").append(leader.getRadioChannel()).append("\nPhone: ").append(leader.getPhoneNumber());
+		var plan = data.getMedicalPlan();
+		details.append("\nDesignated medical role: ").append(plan.getDesignatedMedicalUnitRole()).append(" — ")
+				.append(plan.getDesignatedMedicalUnitName()).append("\nDesignated contact: ")
+				.append(plan.getDesignatedMedicalUnitContact()).append("\nAid stations: ")
+				.append(plan.getAidStations().size());
+		for (var station : plan.getAidStations()) {
+			details.append("\n• ").append(station.getName()).append(" — ").append(station.getLocation())
+					.append(" | ").append(station.getContactNumbers()).append(" | ").append(station.getFrequency());
+		}
+		return details.toString();
+	}
+
+	/**
+	 * Summarizes recorded transport services and receiving facilities.
+	 *
+	 * @param data active incident.
+	 * @return recorded transport and facility details.
+	 */
+	private static String transportAndFacilityDetails(AppData data) {
+		var plan = data.getMedicalPlan();
+		StringBuilder details = new StringBuilder("Transport services: ").append(plan.getTransportServices().size());
+		for (var service : plan.getTransportServices()) {
+			details.append("\n• ").append(service.getService()).append(" — ").append(service.getLocation())
+					.append(" | ").append(service.getContactNumbers()).append(" | ").append(service.getAirOrGround())
+					.append(" | ").append(service.getLevelOfService());
+		}
+		details.append("\nHospitals / facilities: ").append(plan.getHospitals().size());
+		for (var facility : plan.getHospitals()) {
+			details.append("\n• ").append(facility.getName()).append(" — ").append(facility.getAddress())
+					.append(" | Ground: ").append(facility.getGroundTravelTime()).append(" | Air: ")
+					.append(facility.getAirTravelTime());
+		}
+		return details.toString();
 	}
 
 	/** Applies shared role contacts and separate human/canine instructions. */

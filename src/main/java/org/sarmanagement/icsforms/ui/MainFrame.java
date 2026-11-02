@@ -348,7 +348,8 @@ public class MainFrame extends JFrame {
 		activityTimelineItem.addActionListener(event -> {
 			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
 			new IcpActivityTimelineDialog(this, controller, this::showAddLogEntry,
-					this::openTimelineAssignment).setVisible(true);
+					this::openTimelineAssignment, request -> showAddLogEntry(request.context(), request.eventTypeId(),
+							request.activity())).setVisible(true);
 		});
 		viewMenu.add(activityTimelineItem);
 		viewMenu.addSeparator();
