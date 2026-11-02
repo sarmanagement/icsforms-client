@@ -29,11 +29,13 @@ import javax.swing.JComboBox;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JList;
 import javax.swing.JTable;
 import javax.swing.JFrame;
 import javax.swing.JDialog;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+import javax.swing.JSplitPane;
 import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
 import javax.swing.JTextArea;
@@ -50,6 +52,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
@@ -115,6 +118,27 @@ class IncidentCommandRolePanelTest {
 
 		assertEquals(IapPlanningStage.PLANNING_MEETING, planningStage(panel[0]).getSelectedItem());
 		SwingUtilities.invokeAndWait(panel[0]::dispose);
+	}
+
+	@Test
+	void incidentCommandActionsAreGroupedWithPlanningAndContextAboveResources() throws Exception {
+		IncidentCommandRolePanel panel = panel(controller(new AppData()));
+		try {
+			JComboBox<?> stage = planningStage(panel);
+			assertSame(stage.getParent(), button(panel, "Add objective…").getParent());
+			assertSame(stage.getParent(), button(panel, "Edit objective…").getParent());
+			assertNull(findComponent(panel, JList.class));
+
+			JSplitPane body = findComponent(panel, JSplitPane.class);
+			JPanel secondColumn = (JPanel) body.getRightComponent();
+			BorderLayout layout = (BorderLayout) secondColumn.getLayout();
+			JPanel context = (JPanel) layout.getLayoutComponent(BorderLayout.NORTH);
+			JPanel resourceOverview = (JPanel) layout.getLayoutComponent(BorderLayout.CENTER);
+			assertTrue(context.isAncestorOf(button(panel, "Edit ICS 202 context…")));
+			assertTrue(resourceOverview.isAncestorOf((JTable) field(panel, "resources")));
+		} finally {
+			SwingUtilities.invokeAndWait(panel::dispose);
+		}
 	}
 
 	@Test

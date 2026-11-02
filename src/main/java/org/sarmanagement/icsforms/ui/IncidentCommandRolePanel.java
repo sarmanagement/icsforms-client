@@ -20,7 +20,6 @@ import org.sarmanagement.icsforms.model.UtcTimestamp;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
-import javax.swing.DefaultListModel;
 import javax.swing.JList;
 import javax.swing.JMenuItem;
 import javax.swing.JLabel;
@@ -91,8 +90,6 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final Map<String, JLabel> progressBadges = new LinkedHashMap<>();
 	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "Linked assignments", "Assessment");
 	private final JTable objectives = new JTable(objectiveModel);
-	private final DefaultListModel<String> attentionModel = new DefaultListModel<>();
-	private final JList<String> attention = new JList<>(attentionModel);
 	private final JComboBox<String> resourceGrouping = new JComboBox<>(new String[]{"All resources", "By resource type"});
 	private final DefaultTableModel resourceModel = readOnlyModel("Resource group", "Total");
 	private final JTable resources = new JTable(resourceModel);
@@ -262,6 +259,12 @@ public class IncidentCommandRolePanel extends JPanel {
 		stage.add(new JLabel("Explicit planning stage"));
 		planningStage.getAccessibleContext().setAccessibleName("IAP planning-cycle stage");
 		stage.add(planningStage);
+		JButton addObjective = new JButton("Add objective…");
+		addObjective.addActionListener(event -> editObjective(null));
+		JButton editObjective = new JButton("Edit objective…");
+		editObjective.addActionListener(event -> editSelectedObjective());
+		stage.add(addObjective);
+		stage.add(editObjective);
 		planning.add(stage, BorderLayout.NORTH);
 		objectives.getAccessibleContext().setAccessibleName("Incident objectives and recorded assessments");
 		objectives.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
@@ -326,18 +329,9 @@ public class IncidentCommandRolePanel extends JPanel {
 				}
 			}
 		});
-		JButton addObjective = new JButton("Add objective…");
-		addObjective.addActionListener(event -> editObjective(null));
-		JButton editObjective = new JButton("Edit objective…");
-		editObjective.addActionListener(event -> editSelectedObjective());
 		JButton editContext = new JButton("Edit ICS 202 context…");
 		editContext.addActionListener(event -> editIcs202Context());
-		JPanel objectiveActions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING, 4, 2));
-		objectiveActions.add(addObjective);
-		objectiveActions.add(editObjective);
-		objectiveActions.add(editContext);
 		JPanel objectiveTablePanel = new JPanel(new BorderLayout(0, 4));
-		objectiveTablePanel.add(objectiveActions, BorderLayout.NORTH);
 		objectiveTablePanel.add(new JScrollPane(objectives), BorderLayout.CENTER);
 		planProgress.getAccessibleContext().setAccessibleName("Recorded IAP progress summary");
 		planProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
@@ -356,15 +350,8 @@ public class IncidentCommandRolePanel extends JPanel {
 		overallProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
 		progress.add(overallProgress, BorderLayout.NORTH);
 		progress.add(new JScrollPane(planProgress), BorderLayout.CENTER);
-		JPanel attentionPanel = new JPanel(new BorderLayout());
-		attentionPanel.setBorder(javax.swing.BorderFactory.createTitledBorder("Observational attention"));
-		attention.getAccessibleContext().setAccessibleName("Objectives needing operator attention");
-		attentionPanel.add(new JScrollPane(attention), BorderLayout.CENTER);
-		JPanel progressAndAttention = new JPanel(new BorderLayout(4, 4));
-		progressAndAttention.add(progress, BorderLayout.CENTER);
-		progressAndAttention.add(attentionPanel, BorderLayout.SOUTH);
 		JSplitPane objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, objectiveTablePanel,
-				progressAndAttention);
+				progress);
 		objectiveSplit.setResizeWeight(0.5);
 		objectiveSplit.setDividerLocation(210);
 		planning.add(objectiveSplit, BorderLayout.CENTER);
@@ -385,7 +372,16 @@ public class IncidentCommandRolePanel extends JPanel {
 		resourcePanel.add(new JLabel("<html>Unspecified is not Available.<br>No radio check or readiness is inferred.</html>"),
 				BorderLayout.SOUTH);
 
-		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, planning, resourcePanel);
+		JPanel contextPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
+		contextPanel.setBorder(javax.swing.BorderFactory.createTitledBorder(
+				"Command emphasis and general situational awareness"));
+		contextPanel.getAccessibleContext().setAccessibleName("ICS 202 command emphasis and situational awareness");
+		contextPanel.add(editContext);
+		JPanel resourceColumn = new JPanel(new BorderLayout(4, 4));
+		resourceColumn.add(contextPanel, BorderLayout.NORTH);
+		resourceColumn.add(resourcePanel, BorderLayout.CENTER);
+
+		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, planning, resourceColumn);
 		split.setResizeWeight(0.7);
 		split.setDividerLocation(760);
 		split.setPreferredSize(new Dimension(1120, 680));
@@ -438,7 +434,6 @@ public class IncidentCommandRolePanel extends JPanel {
 	 */
 	private void rebuildObjectives(AppData data) {
 		objectiveModel.setRowCount(0);
-		attentionModel.clear();
 		for (IncidentObjective objective : data.getForm202().getStructuredObjectives()) {
 			long links = controller.getAssignmentResources().stream()
 					.filter(assignment -> assignment.getObjectiveIds().contains(objective.getObjectiveId())).count();
@@ -449,15 +444,6 @@ public class IncidentCommandRolePanel extends JPanel {
 					objective.getAssessment().displayLabel()});
 			objectives.setRowHeight(objectiveModel.getRowCount() - 1,
 					Math.max(52, 24 + states.split("; ", -1).length * 18));
-			if (links == 0) {
-				attentionModel.addElement("Objective " + (objective.getDisplayOrder() + 1) + " has no linked assignment.");
-			}
-			if (objective.getAssessment() == ObjectiveAssessment.NOT_ASSESSED) {
-				attentionModel.addElement("Objective " + (objective.getDisplayOrder() + 1) + " has no recorded assessment.");
-			}
-		}
-		if (attentionModel.isEmpty()) {
-			attentionModel.addElement("No unlinked or unassessed objectives recorded.");
 		}
 	}
 
