@@ -384,7 +384,7 @@ public class IncidentCommandRolePanel extends JPanel {
 			String states = IncidentCommandSummary.assignmentStates(data, objective.getObjectiveId());
 			String assignmentSummary = "<html>" + links + " linked<br><small>"
 					+ html(states).replace("; ", "<br>") + "</small></html>";
-			objectiveModel.addRow(new Object[]{objective.toString(), assignmentSummary,
+			objectiveModel.addRow(new Object[]{"<html>" + html(objective.toString()) + "</html>", assignmentSummary,
 					objective.getAssessment().displayLabel()});
 			objectives.setRowHeight(objectiveModel.getRowCount() - 1,
 					Math.max(52, 24 + states.split("; ", -1).length * 18));

@@ -3,6 +3,7 @@
  */
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -15,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Verifies application-wide event type settings and the task quick-log defaults. */
 class ActivityEventTypeCatalogTest {
 	@Test
-	void customTypesPersistAcrossIncidentMergesAndQuickFlagsDefaultSafely() {
+	void customTypesPersistAcrossIncidentMergesAndQuickFlagsDefaultSafely() throws Exception {
 		List<ActivityEventType> previous = ActivityEventTypeCatalog.loadCustomTypes();
 		ActivityEventType custom = new ActivityEventType("CANINE_CHECK", "Canine check", false);
 		custom.setShowInQuickMenu(true);
@@ -33,6 +34,7 @@ class ActivityEventTypeCatalogTest {
 			assertFalse(ActivityEventType.defaultTypes().stream()
 					.filter(type -> ActivityEventType.ID_FREE_TEXT.equals(type.getId()))
 					.findFirst().orElseThrow().isShowInQuickMenu());
+			assertFalse(new ObjectMapper().writeValueAsString(custom).contains("showInQuickMenu"));
 		} finally {
 			ActivityEventTypeCatalog.saveCustomTypes(previous);
 		}

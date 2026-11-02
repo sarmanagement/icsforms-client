@@ -206,7 +206,7 @@ class IcpActivityTimelineDialogTest {
 					button(dialog, "Event Details…").doClick();
 					assertEquals("assignment-1", context.get().assignmentId());
 					assertEquals("task-1", context.get().taskId());
-					button(dialog, "Add ICP Activity…").doClick();
+					button(dialog, "Add Log Entry…").doClick();
 					assertEquals("assignment-1", context.get().assignmentId());
 					assertEquals("Trackers", context.get().resourceId());
 				} finally {

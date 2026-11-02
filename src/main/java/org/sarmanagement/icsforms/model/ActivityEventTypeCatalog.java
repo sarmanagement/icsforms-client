@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.prefs.Preferences;
 
 /**
@@ -32,11 +33,12 @@ public final class ActivityEventTypeCatalog {
 	 */
 	public static List<ActivityEventType> loadCustomTypes() {
 		try {
-			List<ActivityEventType> saved = MAPPER.readValue(PREFERENCES.get(PREFERENCE_KEY, "[]"),
+			List<CatalogEntry> saved = MAPPER.readValue(PREFERENCES.get(PREFERENCE_KEY, "[]"),
 					new TypeReference<>() {
 					});
-			return saved.stream().filter(ActivityEventTypeCatalog::isValidCustomType)
-					.map(ActivityEventTypeCatalog::copy).toList();
+			return saved.stream().filter(Objects::nonNull)
+					.map(entry -> new ActivityEventType(entry.id(), entry.label(), false, entry.showInQuickMenu()))
+					.filter(ActivityEventTypeCatalog::isValidCustomType).toList();
 		} catch (IOException | RuntimeException exception) {
 			return List.of();
 		}
@@ -62,7 +64,9 @@ public final class ActivityEventTypeCatalog {
 			}
 		}
 		try {
-			PREFERENCES.put(PREFERENCE_KEY, MAPPER.writeValueAsString(new ArrayList<>(unique.values())));
+			List<CatalogEntry> entries = unique.values().stream()
+					.map(type -> new CatalogEntry(type.getId(), type.getLabel(), type.isShowInQuickMenu())).toList();
+			PREFERENCES.put(PREFERENCE_KEY, MAPPER.writeValueAsString(entries));
 			PREFERENCES.flush();
 		} catch (IOException | java.util.prefs.BackingStoreException exception) {
 			throw new IllegalStateException("Unable to save application-wide event types.", exception);
@@ -138,5 +142,16 @@ public final class ActivityEventTypeCatalog {
 	 */
 	private static ActivityEventType copy(ActivityEventType type) {
 		return new ActivityEventType(type.getId(), type.getLabel(), type.isBuiltIn(), type.isShowInQuickMenu());
+	}
+
+	/**
+	 * Preference-only representation of a custom type; quick-menu settings stay
+	 * out of incident documents.
+	 *
+	 * @param id stable custom event type identifier.
+	 * @param label custom event type label.
+	 * @param showInQuickMenu whether to show the type in task menus.
+	 */
+	private record CatalogEntry(String id, String label, boolean showInQuickMenu) {
 	}
 }

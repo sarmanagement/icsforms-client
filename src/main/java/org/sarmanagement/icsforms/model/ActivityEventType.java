@@ -1,5 +1,7 @@
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.util.List;
 
 /**
@@ -163,6 +165,7 @@ public class ActivityEventType {
 	 *
 	 * @return true when it appears in the quick menu.
 	 */
+	@JsonIgnore
 	public boolean isShowInQuickMenu() {
 		return showInQuickMenu;
 	}
@@ -172,6 +175,7 @@ public class ActivityEventType {
 	 *
 	 * @param showInQuickMenu true to show it in the quick menu.
 	 */
+	@JsonIgnore
 	public void setShowInQuickMenu(boolean showInQuickMenu) {
 		this.showInQuickMenu = showInQuickMenu;
 	}
