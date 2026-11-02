@@ -30,6 +30,7 @@ import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
 import java.awt.Container;
+import java.awt.BorderLayout;
 import java.awt.GraphicsEnvironment;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
@@ -39,6 +40,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
@@ -64,6 +66,28 @@ class IncidentCommandRolePanelTest {
 		assertEquals(1, panel[0].displayedResourceCount("Unspecified"));
 		assertEquals(1, panel[0].displayedResourceCount("Available"));
 		SwingUtilities.invokeAndWait(panel[0]::dispose);
+	}
+
+	@Test
+	void navigationActionsOccupyHeaderRightSide() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller(new AppData()), ignored -> {
+			});
+			try {
+				java.lang.reflect.Method method = IncidentCommandRolePanel.class.getDeclaredMethod("buildHeader");
+				method.setAccessible(true);
+				JPanel header = (JPanel) method.invoke(panel);
+				BorderLayout layout = (BorderLayout) header.getLayout();
+
+				assertTrue(layout.getLayoutComponent(BorderLayout.EAST) instanceof JPanel);
+				assertTrue(layout.getLayoutComponent(BorderLayout.CENTER) instanceof JLabel);
+				assertNull(layout.getLayoutComponent(BorderLayout.SOUTH));
+			} catch (ReflectiveOperationException exception) {
+				throw new IllegalStateException(exception);
+			} finally {
+				panel.dispose();
+			}
+		});
 	}
 
 	@Test

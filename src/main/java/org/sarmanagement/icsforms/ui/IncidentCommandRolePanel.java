@@ -189,7 +189,7 @@ public class IncidentCommandRolePanel extends JPanel {
 	 * @return header panel.
 	 */
 	private JPanel buildHeader() {
-		JPanel header = new JPanel(new BorderLayout());
+		JPanel header = new JPanel(new BorderLayout(8, 0));
 		header.add(banner, BorderLayout.CENTER);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JButton objectivesButton = new JButton("Open full ICS 202");
@@ -199,7 +199,7 @@ public class IncidentCommandRolePanel extends JPanel {
 		resourcesButton.addActionListener(event -> navigator.accept(WorkspaceDestination.of(WorkspaceId.TCARDS)));
 		actions.add(objectivesButton);
 		actions.add(resourcesButton);
-		header.add(actions, BorderLayout.SOUTH);
+		header.add(actions, BorderLayout.EAST);
 		return header;
 	}
 

@@ -20,6 +20,7 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.LookAndFeel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -145,6 +146,9 @@ class FocusedPanelLayoutTest {
 					assertControls(frame);
 					assertBanners(frame);
 					for (PlanReviewStrip strip : descendants(frame, PlanReviewStrip.class)) {
+						if (!strip.isShowing()) {
+							continue;
+						}
 						JTextField reviewer = descendants(strip, JTextField.class).get(0);
 						assertTrue(reviewer.getWidth() >= 80, "Reviewer input must remain usable");
 						assertTrue(reviewer.getHeight() >= reviewer.getPreferredSize().height);
@@ -164,6 +168,76 @@ class FocusedPanelLayoutTest {
 			});
 		} finally {
 			SwingUtilities.invokeAndWait(() -> frames.forEach(JFrame::dispose));
+		}
+	}
+
+	@Test
+	void safetyWorkSelectionShowsMatchingPlanAndReview() throws Exception {
+		AppController controller = controller(populated(true));
+		SafetyRolePanel[] panel = new SafetyRolePanel[1];
+		SwingUtilities.invokeAndWait(() -> {
+			panel[0] = new SafetyRolePanel(controller, ignored -> {
+			});
+			JList<?> worklist = descendants(panel[0], JList.class).get(0);
+			javax.swing.JPanel focusedSafetyFields = (javax.swing.JPanel) field(panel[0], "focusedSafetyFields");
+			javax.swing.JPanel previewCards = (javax.swing.JPanel) field(panel[0], "previewCards");
+			javax.swing.JPanel reviewCards = (javax.swing.JPanel) field(panel[0], "reviewCards");
+			AsyncFormPreviewPanel safetyPreview = (AsyncFormPreviewPanel) field(panel[0], "safetyPreview");
+			AsyncFormPreviewPanel humanPreview = (AsyncFormPreviewPanel) field(panel[0], "humanPreview");
+			AsyncFormPreviewPanel caninePreview = (AsyncFormPreviewPanel) field(panel[0], "caninePreview");
+			List<PlanReviewStrip> strips = descendants(panel[0], PlanReviewStrip.class);
+
+			assertTrue(focusedSafetyFields.isVisible());
+			assertTrue(visibleReview(strips, PlanReviewArea.SAFETY));
+			assertTrue(previewCards.isVisible());
+			assertTrue(safetyPreview.isVisible());
+
+			worklist.setSelectedValue("Human medical plan review", true);
+			assertFalse(focusedSafetyFields.isVisible());
+			assertTrue(visibleReview(strips, PlanReviewArea.HUMAN_MEDICAL));
+			assertFalse(visibleReview(strips, PlanReviewArea.SAFETY));
+			assertTrue(previewCards.isVisible());
+			assertTrue(humanPreview.isVisible());
+			assertFalse(safetyPreview.isVisible());
+			assertTrue(reviewCards.isVisible());
+
+			worklist.setSelectedValue("Canine medical plan review", true);
+			assertTrue(visibleReview(strips, PlanReviewArea.CANINE_MEDICAL));
+			assertFalse(visibleReview(strips, PlanReviewArea.HUMAN_MEDICAL));
+			assertTrue(caninePreview.isVisible());
+			assertFalse(humanPreview.isVisible());
+			panel[0].dispose();
+		});
+	}
+
+	/**
+	 * Checks whether the review strip for one area is the visible card.
+	 *
+	 * @param strips all available review strips.
+	 * @param area selected review area.
+	 * @return true when the matching strip is visible.
+	 */
+	private boolean visibleReview(List<PlanReviewStrip> strips, PlanReviewArea area) {
+		String reviewerName = area.displayLabel() + " plan reviewer";
+		return strips.stream().filter(PlanReviewStrip::isVisible)
+				.anyMatch(strip -> descendants(strip, JTextField.class).stream().anyMatch(field ->
+						reviewerName.equals(field.getAccessibleContext().getAccessibleName())));
+	}
+
+	/**
+	 * Reads a private field used to verify Swing card visibility.
+	 *
+	 * @param target component containing the field.
+	 * @param name field name.
+	 * @return field value.
+	 */
+	private Object field(Object target, String name) {
+		try {
+			java.lang.reflect.Field field = target.getClass().getDeclaredField(name);
+			field.setAccessible(true);
+			return field.get(target);
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
 		}
 	}
 
