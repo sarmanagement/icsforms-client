@@ -3,6 +3,7 @@
  */
 package org.sarmanagement.icsforms.ui;
 
+import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.PodFactorRating;
@@ -21,6 +22,7 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -68,6 +70,7 @@ import java.util.Set;
  */
 public class SarTaskPanel extends JPanel {
 	private java.util.function.BiConsumer<Component, SarTaskAssignment> onAddLogEntryRequest;
+	private java.util.function.BiConsumer<Component, QuickLogRequest> onQuickLogRequest;
 
 	/**
 	 * Installs contextual logging without discarding unsaved editor fields.
@@ -77,6 +80,26 @@ public class SarTaskPanel extends JPanel {
 	public void setOnAddLogEntryRequest(java.util.function.BiConsumer<Component, SarTaskAssignment> handler) {
 		onAddLogEntryRequest = handler;
 	}
+
+	/**
+	 * Installs the prefilled task quick-log workflow.
+	 *
+	 * @param handler callback receiving the launcher and quick-log request.
+	 */
+	public void setOnQuickLogRequest(java.util.function.BiConsumer<Component, QuickLogRequest> handler) {
+		onQuickLogRequest = handler;
+	}
+
+	/**
+	 * Carries the task and selected event text to the shared activity entry dialog.
+	 *
+	 * @param task task being logged.
+	 * @param eventTypeId configured event type identifier.
+	 * @param activity prefilled activity narrative.
+	 */
+	public record QuickLogRequest(SarTaskAssignment task, String eventTypeId, String activity) {
+	}
+
 	private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	private static final int MAX_RESOURCE_ROWS = 18;
 	/**
@@ -206,13 +229,13 @@ public class SarTaskPanel extends JPanel {
 		toggleBoardBtn.addActionListener(e -> toggleBoardView());
 
 		JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+		row.add(toggleBoardBtn);
 		row.add(addBtn);
 		row.add(editBtn);
 		row.add(debriefBtn);
 		row.add(open214Btn);
 		row.add(open204Btn);
 		row.add(removeBtn);
-		row.add(toggleBoardBtn);
 		return row;
 	}
 
@@ -394,6 +417,11 @@ public class SarTaskPanel extends JPanel {
 			}
 		});
 		cardMenu.add(addLogEntryItem);
+		JMenu quickLogMenu = buildQuickLogMenu(p, task);
+		if (quickLogMenu.getItemCount() > 0) {
+			cardMenu.addSeparator();
+			cardMenu.add(quickLogMenu);
+		}
 		p.setComponentPopupMenu(cardMenu);
 
 		// Double-click opens edit dialog; hover highlights border.
@@ -700,19 +728,35 @@ public class SarTaskPanel extends JPanel {
 		JMenuItem addLogEntryItem = new JMenuItem("Add log entry…");
 		addLogEntryItem.addActionListener(event -> addLogEntryForSelectedTask());
 		menu.add(addLogEntryItem);
+		menu.addSeparator();
+		JMenu quickLogMenu = new JMenu("Quick log entry");
+		menu.add(quickLogMenu);
+		populateQuickLogMenu(quickLogMenu, table);
 		menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+			/** {@inheritDoc} */
 			@Override
 			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
 				SarTaskAssignment selected = selectedTaskFromTable();
 				editDebriefingItem.setEnabled(selected != null && isReadyForDebrief(selected));
 				changeStatusItem.setEnabled(selected != null && isPlannedOrAssigned(selected.getTaskLifecycleStatus()));
 				addLogEntryItem.setEnabled(onAddLogEntryRequest != null && selected != null);
+				quickLogMenu.setEnabled(selected != null && quickLogMenu.getItemCount() > 0);
+				if (selected != null) {
+					for (int index = 0; index < quickLogMenu.getItemCount(); index++) {
+						JMenuItem item = quickLogMenu.getItem(index);
+						if (item != null && item.getClientProperty("activityEventType") instanceof ActivityEventType type) {
+							item.setText(quickLogLabel(selected, type));
+						}
+					}
+				}
 			}
 
+			/** {@inheritDoc} */
 			@Override
 			public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
 			}
 
+			/** {@inheritDoc} */
 			@Override
 			public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
 			}
@@ -741,6 +785,84 @@ public class SarTaskPanel extends JPanel {
 				}
 			}
 		});
+	}
+
+	/**
+	 * Builds an event-type submenu for a task-board card.
+	 *
+	 * @param source component opening the submenu.
+	 * @param task task associated with each quick entry.
+	 * @return populated quick-log submenu.
+	 */
+	private JMenu buildQuickLogMenu(Component source, SarTaskAssignment task) {
+		JMenu menu = new JMenu("Quick log entry");
+		for (ActivityEventType type : controller.getData().getActivityEventTypes()) {
+			if (type.isShowInQuickMenu()) {
+				JMenuItem item = new JMenuItem(quickLogLabel(task, type));
+				item.addActionListener(event -> {
+					if (onQuickLogRequest != null) {
+						onQuickLogRequest.accept(source,
+								new QuickLogRequest(task, type.getId(), quickLogActivity(task, type)));
+					}
+				});
+				menu.add(item);
+			}
+		}
+		return menu;
+	}
+
+	/**
+	 * Populates a table quick-log submenu for the currently selected task.
+	 *
+	 * @param menu target submenu.
+	 * @param source component opening the menu.
+	 */
+	private void populateQuickLogMenu(JMenu menu, Component source) {
+		for (ActivityEventType type : controller.getData().getActivityEventTypes()) {
+			if (type.isShowInQuickMenu()) {
+				JMenuItem item = new JMenuItem(type.getLabel());
+				item.putClientProperty("activityEventType", type);
+				item.addActionListener(event -> {
+					SarTaskAssignment task = selectedTaskFromTable();
+					if (task != null && onQuickLogRequest != null) {
+						onQuickLogRequest.accept(source,
+								new QuickLogRequest(task, type.getId(), quickLogActivity(task, type)));
+					}
+				});
+				menu.add(item);
+			}
+		}
+	}
+
+	/**
+	 * Creates the requested task-number-first label for a quick-log action.
+	 *
+	 * @param task task being logged.
+	 * @param type event type.
+	 * @return menu label.
+	 */
+	private static String quickLogLabel(SarTaskAssignment task, ActivityEventType type) {
+		return "Log " + quickLogActivity(task, type);
+	}
+
+	/**
+	 * Builds the event narrative, retaining task number and configured event label.
+	 *
+	 * @param task task being logged.
+	 * @param type event type.
+	 * @return prefilled narrative.
+	 */
+	private static String quickLogActivity(SarTaskAssignment task, ActivityEventType type) {
+		String taskNumber = task.getAssignmentTeamNumber() == null || task.getAssignmentTeamNumber().isBlank()
+				? task.getAssignmentId() : task.getAssignmentTeamNumber();
+		String suffix = switch (type.getId()) {
+			case ActivityEventType.ID_RESOURCE_DEPARTED_STAGING -> "departed staging";
+			case ActivityEventType.ID_RESOURCE_ON_TASK -> "going on task";
+			case ActivityEventType.ID_TASK_COMPLETED -> "task completed";
+			case ActivityEventType.ID_RESOURCE_RETURNED_STAGING -> "returned to staging";
+			default -> type.getLabel();
+		};
+		return taskNumber + " " + suffix;
 	}
 
 	/** Launches contextual logging for the selected task, respecting sorting. */

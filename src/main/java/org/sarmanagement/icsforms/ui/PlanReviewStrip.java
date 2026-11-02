@@ -47,7 +47,7 @@ public class PlanReviewStrip extends JPanel {
 		controls.add(new JLabel("Reviewer"), BorderLayout.WEST);
 		reviewer.getAccessibleContext().setAccessibleName(area.displayLabel() + " plan reviewer");
 		controls.add(reviewer, BorderLayout.CENTER);
-		JButton review = new JButton("Review current content");
+		JButton review = new JButton("Record review of current content");
 		review.addActionListener(event -> recordReview());
 		controls.add(review, BorderLayout.EAST);
 		add(controls, BorderLayout.CENTER);

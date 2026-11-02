@@ -16,7 +16,7 @@ import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
-import javax.swing.JDialog;
+import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -50,7 +50,7 @@ import java.util.function.Consumer;
 /**
  * Proof-of-concept timeline for ICP activity, grouped by assignment.
  */
-public final class IcpActivityTimelineDialog extends JDialog {
+public final class IcpActivityTimelineDialog extends JFrame {
 	private static final int TIMELINE_LEFT = 240;
 	private static final int TIMELINE_HOUR_WIDTH = 100;
 	private final AppController controller;
@@ -84,11 +84,11 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	 */
 	public IcpActivityTimelineDialog(Window owner, AppController controller, Consumer<LogEntryContext> addEntry,
 			Consumer<String> openAssignment) {
-		super(owner, "ICP Activity Timeline", ModalityType.MODELESS);
+		super("ICP Activity Timeline");
 		this.controller = Objects.requireNonNull(controller);
 		this.addEntry = Objects.requireNonNull(addEntry);
 		this.openAssignment = Objects.requireNonNull(openAssignment);
-		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+		setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		JPanel content = new JPanel(new BorderLayout(8, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 		content.add(new JLabel("ICP activity by assignment. Markers show staging, task, clue, subject, completion, and return events."),
@@ -102,7 +102,7 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		JPanel controls = new JPanel(new BorderLayout());
 		controls.add(selectionLabel, BorderLayout.CENTER);
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-		JButton addButton = new JButton("Add ICP Activity…");
+		JButton addButton = new JButton("Add Log Entry…");
 		addButton.addActionListener(event -> addSelectedEntry());
 		detailsButton.addActionListener(event -> showSelectedDetails());
 		openAssignmentButton.addActionListener(event -> openSelectedAssignment());

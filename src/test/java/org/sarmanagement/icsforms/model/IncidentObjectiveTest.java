@@ -89,9 +89,13 @@ class IncidentObjectiveTest {
 	}
 
 	@Test
-	void periodAdvanceArchivesIndependentObjectiveAssignmentGraph() {
+	void periodAdvanceArchivesIndependentObjectiveAssignmentGraphAndRoundTrips() throws Exception {
 		AppData data = new AppData();
 		IncidentObjective objective = new IncidentObjective("Search", 0);
+		objective.setAssessment(ObjectiveAssessment.ONGOING);
+		objective.setAssessmentNote("Crews are working the north sector.");
+		objective.setAssessedBy("Planning");
+		objective.setAssessedAt(LocalDateTime.parse("2026-10-25T03:30"));
 		data.getForm202().setStructuredObjectives(List.of(objective));
 		ResourceAssignment assignment = new ResourceAssignment();
 		assignment.setAssignment("Sector A");
@@ -105,8 +109,27 @@ class IncidentObjectiveTest {
 
 		assertNotSame(objective, archived);
 		assertEquals(objective.getObjectiveId(), archived.getObjectiveId());
+		assertEquals("Search", archived.getText());
+		assertEquals(ObjectiveAssessment.ONGOING, archived.getAssessment());
+		assertEquals("Crews are working the north sector.", archived.getAssessmentNote());
+		assertEquals("Planning", archived.getAssessedBy());
 		assertEquals(List.of(objective.getObjectiveId()), archivedAssignment.getObjectiveIds());
 		assertTrue(data.getForm202().getStructuredObjectives().isEmpty());
 		assertTrue(data.getForm204().getResourcesAssigned().isEmpty());
+
+		objective.setText("Changed in the next period");
+		objective.setAssessment(ObjectiveAssessment.ACHIEVED);
+		assignment.setAssignment("Changed in the next period");
+		ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+		AppData restored = mapper.readValue(mapper.writeValueAsBytes(data), AppData.class);
+		IncidentObjective restoredArchived = restored.getOperationalPeriodHistory().get(0)
+				.getForm202().getStructuredObjectives().get(0);
+		ResourceAssignment restoredAssignment = restored.getOperationalPeriodHistory().get(0)
+				.getForms204().get(0).getResourcesAssigned().get(0);
+
+		assertEquals("Search", restoredArchived.getText());
+		assertEquals(ObjectiveAssessment.ONGOING, restoredArchived.getAssessment());
+		assertEquals(List.of(objective.getObjectiveId()), restoredAssignment.getObjectiveIds());
+		assertEquals("Sector A", restoredAssignment.getAssignment());
 	}
 }

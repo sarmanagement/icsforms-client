@@ -36,6 +36,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -259,6 +260,14 @@ class IncidentCommandRolePanelTest {
 		assertTrue(badge(panel, "Objectives").getText().contains("1 recorded"));
 		assertTrue(badge(panel, "Assignment coverage").getAccessibleContext().getAccessibleName()
 				.contains("1/3 assignments linked"));
+		JTable table = (JTable) field(panel, "objectives");
+		assertEquals("Linked assignments", table.getColumnName(1));
+		assertEquals("Assessment", table.getColumnName(2));
+		assertTrue(table.getValueAt(0, 1).toString().contains("1 linked"));
+		Map<String, JLabel> compactBadges = (Map<String, JLabel>) field(panel, "compactRoleBadges");
+		assertEquals(6, compactBadges.size());
+		assertEquals(badge(panel, "Objectives").getBackground(),
+				compactBadges.get("Objectives").getBackground());
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
 
@@ -327,12 +336,12 @@ class IncidentCommandRolePanelTest {
 			});
 			JTable table = (JTable) field((IncidentCommandRolePanel) window[0].getContentPane(), "objectives");
 			int textWidth = table.getColumnModel().getColumn(0).getWidth();
-			int assessmentWidth = table.getColumnModel().getColumn(1).getWidth();
-			int linksWidth = table.getColumnModel().getColumn(2).getWidth();
+			int linksWidth = table.getColumnModel().getColumn(1).getWidth();
+			int assessmentWidth = table.getColumnModel().getColumn(2).getWidth();
 			assertEquals(1220, window[0].getWidth());
 			assertTrue(textWidth >= 400, "Default objective text width: " + textWidth);
 			assertTrue(textWidth > assessmentWidth * 2, "Text/assessment widths: " + textWidth + "/" + assessmentWidth);
-			assertTrue(textWidth > linksWidth * 2, "Text/links widths: " + textWidth + "/" + linksWidth);
+			assertTrue(textWidth > linksWidth, "Text/links widths: " + textWidth + "/" + linksWidth);
 		} finally {
 			if (window[0] != null) {
 				SwingUtilities.invokeAndWait(window[0]::dispose);
@@ -353,9 +362,8 @@ class IncidentCommandRolePanelTest {
 			table.doLayout();
 			textWidths[1] = table.getColumnModel().getColumn(0).getWidth();
 		});
-		assertTrue(textWidths[0] > table.getColumnModel().getColumn(1).getMaxWidth() * 3);
 		assertTrue(textWidths[1] > textWidths[0]);
-		assertTrue(table.getColumnModel().getColumn(1).getWidth() <= 150);
+		assertTrue(table.getColumnModel().getColumn(1).getWidth() >= 160);
 		assertTrue(table.getColumnModel().getColumn(2).getWidth() <= 140);
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
@@ -367,7 +375,7 @@ class IncidentCommandRolePanelTest {
 		SwingUtilities.invokeAndWait(() -> {
 			panel[0] = new IncidentCommandRolePanel(controller(new AppData()), destinations::add);
 			JPanel header = (JPanel) panel[0].getComponent(0);
-			JPanel actions = (JPanel) header.getComponent(1);
+			JPanel actions = (JPanel) header.getComponent(2);
 			((JButton) actions.getComponent(0)).doClick();
 			((JButton) actions.getComponent(1)).doClick();
 			panel[0].dispose();

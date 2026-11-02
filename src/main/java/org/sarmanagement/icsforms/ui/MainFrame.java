@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityEventType;
+import org.sarmanagement.icsforms.model.ActivityEventTypeCatalog;
 import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
@@ -66,7 +67,6 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 import java.util.Set;
 import java.util.UUID;
@@ -84,9 +84,13 @@ public class MainFrame extends JFrame {
 	private static final String ACTION_TRACKER_GROUP = "Open Action Tracker";
 	private static final String COMMUNICATIONS_GROUP = "Communications Plan (ICS 205)";
 	private static final String ICS_215_GROUP = "Operational Planning Worksheet (ICS 215)";
-	private static final String SAFETY_DASHBOARD_GROUP = "Safety Dashboard";
-	private static final String DASHBOARD_PREFERENCE = "workspace-dashboard";
+	private static final String SAFETY_DASHBOARD_GROUP = "Safety Overview";
 	private static final String DESCRIPTIVE_TABS_PREFERENCE = "descriptive-workspace-tabs";
+	private static final List<WorkspaceId> WORKSPACE_ORDER = List.of(WorkspaceId.SHARED, WorkspaceId.ORG_CHART,
+			WorkspaceId.ICS_201, WorkspaceId.ICS_202, WorkspaceId.ICS_204, WorkspaceId.ICS_215,
+			WorkspaceId.ICS_205, WorkspaceId.MEDICAL, WorkspaceId.SAFETY, WorkspaceId.SAFETY_OVERVIEW,
+			WorkspaceId.SAR_TASKS, WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ACTIVITY_LOG, WorkspaceId.CLUE_LOG,
+			WorkspaceId.TCARDS);
 	/** Tab group for T-Card (ICS 219) resource status tabs. */
 	private static final String T_CARDS_GROUP = "T-Cards";
 	/**
@@ -132,8 +136,6 @@ public class MainFrame extends JFrame {
 	private boolean safetyDashboardManuallyVisible;
 	private IapPhase lastKnownPhase;
 	private AppData lastRefreshedIncident;
-	private Dashboard activeDashboard = Dashboard.from(
-			Preferences.userNodeForPackage(MainFrame.class).get(DASHBOARD_PREFERENCE, "IC/ICP"));
 	private final Set<Ics214Form> closedLogForms = new HashSet<>();
 	private AppData lastData;
 
@@ -225,6 +227,7 @@ public class MainFrame extends JFrame {
 		sarTaskPanel.setOnAddLogEntryRequest((source, assignment) -> showAddLogEntry(
 				new LogEntryContext(source, assignment.getTaskId(), assignment.getAssignmentId(),
 						org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(assignment))));
+		sarTaskPanel.setOnQuickLogRequest(this::showQuickLogEntry);
 		tCardPanel.setOnAddLogEntryRequest(this::showAddLogEntry);
 		groupVisible.put(CORE_GROUP, true);
 		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
@@ -235,8 +238,7 @@ public class MainFrame extends JFrame {
 		groupVisible.put(COMMUNICATIONS_GROUP, controller.getData().isIcs205Enabled());
 		groupVisible.put(ICS_215_GROUP, controller.getData().isIcs215Enabled());
 		medicalWorkspacePanel.setCanineVisible(controller.getData().isCanineMedicalWorkspaceEligible());
-		groupVisible.put(SAFETY_DASHBOARD_GROUP,
-				safetyDashboardVisible(activeDashboard, safetyDashboardManuallyVisible));
+		groupVisible.put(SAFETY_DASHBOARD_GROUP, safetyDashboardManuallyVisible);
 		registerWorkspace(WorkspaceId.SHARED, incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
 		registerWorkspace(WorkspaceId.ORG_CHART, organizationalChartPanel, AppController.LinkSource.ORG_CHART,
 				CORE_GROUP);
@@ -300,54 +302,6 @@ public class MainFrame extends JFrame {
 		lastSelectedTabIndex = tabs.getSelectedIndex();
 		pack();
 		setLocationRelativeTo(null);
-	}
-
-	/**
-	 * Builds a radio-item dashboard submenu for the View menu.
-	 *
-	 * @param selected active dashboard.
-	 * @param selector callback for a new dashboard selection.
-	 * @return dashboard submenu.
-	 */
-	static JMenu createDashboardMenu(Dashboard selected, Consumer<Dashboard> selector) {
-		JMenu menu = new JMenu("Dashboard");
-		ButtonGroup group = new ButtonGroup();
-		for (Dashboard dashboard : Dashboard.values()) {
-			String label = dashboard == Dashboard.IC_ICP ? dashboard.label() + " (default)" : dashboard.label();
-			JRadioButtonMenuItem item = new JRadioButtonMenuItem(label, dashboard == selected);
-			item.addActionListener(event -> selector.accept(dashboard));
-			group.add(item);
-			menu.add(item);
-		}
-		return menu;
-	}
-
-	/**
-	 * Determines whether the Safety Overview remains available in the current view.
-	 *
-	 * @param dashboard active role dashboard.
-	 * @param manuallyVisible whether the operator opened the overview from View.
-	 * @return true for the Safety Officer dashboard or explicit operator visibility.
-	 */
-	static boolean safetyDashboardVisible(Dashboard dashboard, boolean manuallyVisible) {
-		return manuallyVisible || dashboard == Dashboard.SAFETY_OFFICER;
-	}
-
-	/**
-	 * Applies a dashboard choice while retaining all shared editor instances.
-	 *
-	 * @param selected dashboard chosen in View > Dashboard.
-	 */
-	private void selectDashboard(Dashboard selected) {
-		if (selected == null || selected == activeDashboard) {
-			return;
-		}
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
-		activeDashboard = selected;
-		userPreferences.put(DASHBOARD_PREFERENCE, selected.label());
-		groupVisible.put(SAFETY_DASHBOARD_GROUP,
-				safetyDashboardVisible(activeDashboard, safetyDashboardManuallyVisible));
-		rebuildVisibleTabs();
 	}
 
 	/**
@@ -419,7 +373,6 @@ public class MainFrame extends JFrame {
 				event -> CanineMedicalReferenceWindow.open(this, controller, this::openWorkspace));
 		viewMenu.add(humanMedicalReference);
 		viewMenu.add(canineMedicalReference);
-		viewMenu.add(createDashboardMenu(activeDashboard, this::selectDashboard));
 		viewMenu.addSeparator();
 		JMenu openLogInNewWindowMenu = new JMenu("Open Log in New Window");
 		openLogInNewWindowMenu.setMnemonic(KeyEvent.VK_O);
@@ -832,7 +785,8 @@ public class MainFrame extends JFrame {
 	private void openCommunicationsRolePanel() {
 		RolePanelWindows.openCommunications(this, controller, this::openWorkspace,
 				() -> new RadioChannelCsvDialogs(ics205Panel, controller).importCsv(),
-				() -> new RadioChannelCsvDialogs(ics205Panel, controller).exportCsv(false));
+				() -> new RadioChannelCsvDialogs(ics205Panel, controller).exportCsv(false),
+				() -> showAddLogEntry(new LogEntryContext(this, "", "", "")));
 	}
 
 	/**
@@ -1381,8 +1335,7 @@ public class MainFrame extends JFrame {
 		tCardPanel.refreshFromModel();
 		// Keep SAR-only tabs visible only in SAR mode.
 		groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
-		groupVisible.put(SAFETY_DASHBOARD_GROUP,
-				safetyDashboardVisible(activeDashboard, safetyDashboardManuallyVisible));
+		groupVisible.put(SAFETY_DASHBOARD_GROUP, safetyDashboardManuallyVisible);
 		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		groupVisible.put(COMMUNICATIONS_GROUP, controller.getData().isIcs205Enabled());
 		communicationsPlanItem.setSelected(controller.getData().isIcs205Enabled());
@@ -1503,13 +1456,13 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Resolves one dashboard's ordered list of existing editor components.
+	 * Resolves the stable full-workspace order of existing editor components.
 	 *
 	 * @return ordered shared workspaces and current activity logs.
 	 */
 	private List<Component> dashboardWorkspaces() {
 		List<Component> ordered = new ArrayList<>();
-		for (WorkspaceId id : activeDashboard.workspaceIds()) {
+		for (WorkspaceId id : WORKSPACE_ORDER) {
 			if (id == WorkspaceId.ACTIVITY_LOG) {
 				if (isGroupVisible(ACTIVITY_LOGS_GROUP)) {
 					ordered.addAll(ics214Panels);
@@ -1974,17 +1927,22 @@ public class MainFrame extends JFrame {
 	private void manageEventTypes() {
 		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
 		AppData data = controller.getData();
-		List<ActivityEventType> initial = data.getActivityEventTypes().isEmpty()
-				? ActivityEventType.defaultTypes()
-				: new ArrayList<>(data.getActivityEventTypes());
+		List<ActivityEventType> initial = new ArrayList<>(data.getActivityEventTypes());
 		Ics214Panel.EventTypeManagerDialog dialog = new Ics214Panel.EventTypeManagerDialog(initial);
 		JScrollPane scrollPane = new JScrollPane(dialog.panel);
 		scrollPane.setBorder(BorderFactory.createEmptyBorder());
-		if (UiSupport.showResizableConfirmDialog(this, "Manage event types", scrollPane, new Dimension(480, 380))) {
-			data.setActivityEventTypes(dialog.getEventTypes());
-			controller.markDirty(AppController.LinkSource.ICS214);
-			for (Ics214Panel panel : ics214Panels) {
-				panel.refreshEventTypes();
+		if (UiSupport.showResizableConfirmDialog(this, "Manage event types", scrollPane, new Dimension(760, 440))) {
+			try {
+				List<ActivityEventType> eventTypes = dialog.getEventTypes();
+				ActivityEventTypeCatalog.saveCustomTypes(ActivityEventTypeCatalog.supportedCustomTypes(eventTypes));
+				data.setActivityEventTypes(eventTypes);
+				controller.markDirty(AppController.LinkSource.ICS214);
+				for (Ics214Panel panel : ics214Panels) {
+					panel.refreshEventTypes();
+				}
+			} catch (IllegalArgumentException | IllegalStateException exception) {
+				UiSupport.showDocumentMessage(this, exception.getMessage(), "Unable to save event types",
+						JOptionPane.ERROR_MESSAGE);
 			}
 		}
 	}
@@ -2133,10 +2091,35 @@ public class MainFrame extends JFrame {
 	 * @param context initiating component and task/resource context
 	 */
 	private void showAddLogEntry(LogEntryContext context) {
+		showAddLogEntry(context, null, "");
+	}
+
+	/**
+	 * Opens a task-context activity entry prefilled by a quick-log action.
+	 *
+	 * @param source component that initiated the action.
+	 * @param request quick-log event and narrative.
+	 */
+	private void showQuickLogEntry(Component source, SarTaskPanel.QuickLogRequest request) {
+		var task = request.task();
+		showAddLogEntry(new LogEntryContext(source, task.getTaskId(), task.getAssignmentId(),
+				org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(task)),
+				request.eventTypeId(), request.activity());
+	}
+
+	/**
+	 * Opens the shared activity entry dialog with optional quick-log defaults.
+	 *
+	 * @param context initiating component and task/resource context.
+	 * @param eventTypeId preferred event type, or null.
+	 * @param initialActivity initial activity narrative.
+	 */
+	private void showAddLogEntry(LogEntryContext context, String eventTypeId, String initialActivity) {
 		AppData incident = controller.getData();
 		int previousLogCount = incident.getActivityLogs().size();
 		Component owner = ActivityEntryDialog.resolveOwner(context.source(), this);
-		if (!new ActivityEntryDialog(controller, context, null).show(owner) || controller.getData() != incident) {
+		if (!new ActivityEntryDialog(controller, context, null, eventTypeId, initialActivity).show(owner)
+				|| controller.getData() != incident) {
 			return;
 		}
 		if (previousLogCount != controller.getData().getActivityLogs().size()) {
@@ -2572,81 +2555,6 @@ public class MainFrame extends JFrame {
 			return "Assignment – " + resource;
 		}
 		return "Assignment";
-	}
-
-	/**
-	 * Role-oriented orderings of the same incident workspaces.
-	 */
-	enum Dashboard {
-		IC_ICP("IC/ICP", List.of(WorkspaceId.SHARED, WorkspaceId.ORG_CHART, WorkspaceId.ICS_201,
-				WorkspaceId.ICS_202, WorkspaceId.ICS_204, WorkspaceId.ICS_215, WorkspaceId.ICS_205, WorkspaceId.MEDICAL, WorkspaceId.SAFETY,
-				WorkspaceId.SAR_TASKS, WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ACTIVITY_LOG,
-				WorkspaceId.CLUE_LOG, WorkspaceId.TCARDS)),
-		SAFETY_OFFICER("Safety Officer", List.of(WorkspaceId.SAFETY_OVERVIEW, WorkspaceId.SAFETY,
-				WorkspaceId.MEDICAL, WorkspaceId.ORG_CHART, WorkspaceId.SHARED, WorkspaceId.TCARDS,
-				WorkspaceId.ICS_204, WorkspaceId.ICS_205, WorkspaceId.SAR_TASKS, WorkspaceId.CLUE_LOG, WorkspaceId.ACTIVITY_LOG,
-				WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ICS_202, WorkspaceId.ICS_201)),
-		OPERATIONS("Operations", List.of(WorkspaceId.ICS_204, WorkspaceId.ICS_215, WorkspaceId.SAR_TASKS,
-				WorkspaceId.TCARDS, WorkspaceId.CLUE_LOG, WorkspaceId.ACTIVITY_LOG, WorkspaceId.SAFETY, WorkspaceId.ORG_CHART,
-				WorkspaceId.MEDICAL, WorkspaceId.SHARED, WorkspaceId.ICS_202, WorkspaceId.ICS_201,
-				WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ICS_205)),
-		COMMUNICATIONS("Communications", List.of(WorkspaceId.ICS_205, WorkspaceId.SAFETY, WorkspaceId.ORG_CHART, WorkspaceId.MEDICAL,
-				WorkspaceId.TCARDS, WorkspaceId.ACTIVITY_LOG, WorkspaceId.CLUE_LOG, WorkspaceId.ICS_204,
-				WorkspaceId.SAR_TASKS, WorkspaceId.SHARED, WorkspaceId.ICS_202, WorkspaceId.ICS_201,
-				WorkspaceId.OPEN_ACTION_TRACKER));
-
-		private final String label;
-		private final List<WorkspaceId> workspaceIds;
-
-		/**
-		 * Creates one role-specific ordering for the shared workspaces.
-		 *
-		 * @param label display label.
-		 * @param workspaceIds ordered stable workspace identifiers.
-		 */
-		Dashboard(String label, List<WorkspaceId> workspaceIds) {
-			this.label = label;
-			this.workspaceIds = workspaceIds;
-		}
-
-		/**
-		 * Returns the label presented in the dashboard selector.
-		 *
-		 * @return dashboard label.
-		 */
-		public String label() {
-			return label;
-		}
-
-		/**
-		 * Returns this dashboard's order of shared editor identifiers.
-		 *
-		 * @return ordered workspace IDs.
-		 */
-		public List<WorkspaceId> workspaceIds() {
-			return workspaceIds;
-		}
-
-		/** {@inheritDoc} */
-		@Override
-		public String toString() {
-			return label;
-		}
-
-		/**
-		 * Resolves a saved dashboard setting safely.
-		 *
-		 * @param label saved label.
-		 * @return matching dashboard or the legacy default.
-		 */
-		private static Dashboard from(String label) {
-			for (Dashboard dashboard : values()) {
-				if (dashboard.label.equals(label)) {
-					return dashboard;
-				}
-			}
-			return IC_ICP;
-		}
 	}
 
 	/**

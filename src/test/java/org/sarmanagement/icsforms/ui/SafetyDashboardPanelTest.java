@@ -84,13 +84,6 @@ class SafetyDashboardPanelTest {
 	}
 
 	@Test
-	void safetyOverviewVisibilitySurvivesManualOpeningOutsideItsRoleDashboard() {
-		assertFalse(MainFrame.safetyDashboardVisible(MainFrame.Dashboard.IC_ICP, false));
-		assertTrue(MainFrame.safetyDashboardVisible(MainFrame.Dashboard.IC_ICP, true));
-		assertTrue(MainFrame.safetyDashboardVisible(MainFrame.Dashboard.SAFETY_OFFICER, false));
-	}
-
-	@Test
 	void inactivePlansAreNotDescribedAsReviewedOrApproved() {
 		String summary = SafetyDashboardPanel.summaryText(new AppData());
 

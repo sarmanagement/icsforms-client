@@ -17,6 +17,9 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 import javax.swing.SwingUtilities;
 import javax.swing.JTextArea;
 import javax.swing.JButton;
+import javax.swing.JList;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import java.awt.Component;
 import java.awt.Container;
 import java.lang.reflect.Field;
@@ -25,6 +28,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Verifies Operations context, selection retention, and canonical resource assignment. */
@@ -111,6 +115,46 @@ class OperationsRolePanelTest {
 		SwingUtilities.invokeAndWait(panel[0]::dispose);
 	}
 
+	@Test
+	void availableTcardsAppearAndTaskMenuRestrictsDebriefUntilReturned() throws Exception {
+		AppData data = new AppData();
+		SarTaskAssignment task = new SarTaskAssignment();
+		task.setAssignmentId("assignment-1");
+		task.setTaskLifecycleStatus("on task");
+		data.getSarTaskAssignments().add(task);
+		ResourceAssignment assignment = new ResourceAssignment();
+		assignment.setAssignmentId("assignment-1");
+		data.getForm204().getResourcesAssigned().add(assignment);
+		TCard card = new TCard();
+		card.setPersonName("Responder One");
+		card.setStatus("Available");
+		data.getTCards().add(card);
+		AppController controller = controller(data);
+		OperationsRolePanel[] panel = new OperationsRolePanel[1];
+
+		SwingUtilities.invokeAndWait(() -> panel[0] = createPanel(controller));
+		JList<?> resources = (JList<?>) field(panel[0], "availableResources");
+		assertEquals(1, resources.getModel().getSize());
+		assertEquals("assignment-1", panel[0].selectedAssignmentId());
+		JList<?> taskBoard = (JList<?>) field(panel[0], "taskBoard");
+		JPopupMenu popup = taskBoard.getComponentPopupMenu();
+		assertTrue(menuItem(popup, "Add log entry…") != null);
+		assertFalse(findButton(panel[0], "Debrief task…").isEnabled());
+		for (javax.swing.event.PopupMenuListener listener : popup.getPopupMenuListeners()) {
+			listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(popup));
+		}
+		assertFalse(menuItem(popup, "Debrief task…").isEnabled());
+
+		task.setTaskLifecycleStatus("returned");
+		assertEquals("returned", task.getTaskLifecycleStatus());
+		SwingUtilities.invokeAndWait(panel[0]::refreshFromModel);
+		for (javax.swing.event.PopupMenuListener listener : popup.getPopupMenuListeners()) {
+			listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(popup));
+		}
+		assertTrue(menuItem(popup, "Debrief task…").isEnabled());
+		SwingUtilities.invokeAndWait(panel[0]::dispose);
+	}
+
 	private OperationsRolePanel createPanel(AppController controller) {
 		return new OperationsRolePanel(controller, () -> null, ignored -> {
 		}, ignored -> {
@@ -150,6 +194,15 @@ class OperationsRolePanelTest {
 				if (result != null) {
 					return result;
 				}
+			}
+		}
+		return null;
+	}
+
+	private JMenuItem menuItem(JPopupMenu menu, String label) {
+		for (Component component : menu.getComponents()) {
+			if (component instanceof JMenuItem item && label.equals(item.getText())) {
+				return item;
 			}
 		}
 		return null;
