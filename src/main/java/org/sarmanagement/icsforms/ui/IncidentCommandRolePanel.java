@@ -355,7 +355,7 @@ public class IncidentCommandRolePanel extends JPanel {
 		overallProgress.setForeground(Color.BLACK);
 		overallProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
 		progress.add(overallProgress, BorderLayout.NORTH);
-		progress.add(planProgress, BorderLayout.CENTER);
+		progress.add(new JScrollPane(planProgress), BorderLayout.CENTER);
 		JPanel attentionPanel = new JPanel(new BorderLayout());
 		attentionPanel.setBorder(javax.swing.BorderFactory.createTitledBorder("Observational attention"));
 		attention.getAccessibleContext().setAccessibleName("Objectives needing operator attention");
