@@ -63,6 +63,9 @@ public class IncidentCommandRolePanel extends JPanel {
 
 		/** Opens the established SAR task status workflow. */
 		void changeStatus(String assignmentId);
+
+		/** Opens the established SAR task debrief workflow. */
+		void debrief(String assignmentId);
 	}
 
 	private static final DateTimeFormatter APPROVAL_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -474,9 +477,11 @@ public class IncidentCommandRolePanel extends JPanel {
 		JButton openSar = new JButton("Open SAR task");
 		JButton addLog = new JButton("Make a log entry");
 		JButton changeStatus = new JButton("Change status");
+		JButton debrief = new JButton("Debrief");
 		JButton close = new JButton("Close");
 		boolean sarMode = controller.getIncidentMode() == org.sarmanagement.icsforms.model.IncidentMode.SAR;
 		openSar.setVisible(sarMode);
+		debrief.setVisible(sarMode);
 		open204.setEnabled(!linkedAssignments.isEmpty());
 		openSar.setEnabled(!linkedAssignments.isEmpty());
 		addLog.setEnabled(!linkedAssignments.isEmpty());
@@ -485,12 +490,15 @@ public class IncidentCommandRolePanel extends JPanel {
 			int viewRow = assignmentsTable.getSelectedRow();
 			int modelRow = viewRow < 0 ? -1 : assignmentsTable.convertRowIndexToModel(viewRow);
 			boolean hasAssignment = modelRow >= 0 && modelRow < linkedAssignments.size();
-			boolean hasSarTask = hasAssignment
-					&& findSarTask(linkedAssignments.get(modelRow).getAssignmentId()) != null;
+			SarTaskAssignment task = hasAssignment
+					? findSarTask(linkedAssignments.get(modelRow).getAssignmentId()) : null;
+			boolean hasSarTask = task != null;
 			open204.setEnabled(hasAssignment);
 			openSar.setEnabled(sarMode && hasAssignment && hasSarTask);
 			addLog.setEnabled(hasAssignment);
-			changeStatus.setEnabled(sarMode && hasAssignment && hasSarTask);
+			changeStatus.setEnabled(sarMode && hasSarTask
+					&& SarTaskPanel.isPlannedOrAssigned(task.getTaskLifecycleStatus()));
+			debrief.setEnabled(sarMode && SarTaskPanel.isReadyForDebrief(task));
 		};
 		assignmentsTable.getSelectionModel().addListSelectionListener(event -> {
 			if (!event.getValueIsAdjusting()) {
@@ -506,6 +514,8 @@ public class IncidentCommandRolePanel extends JPanel {
 				assignmentActions == null ? null : assignmentActions::addLogEntry));
 		changeStatus.addActionListener(event -> runSelectedAssignmentAction(assignmentsTable, linkedAssignments,
 				assignmentActions == null ? null : assignmentActions::changeStatus));
+		debrief.addActionListener(event -> runSelectedAssignmentAction(assignmentsTable, linkedAssignments,
+				assignmentActions == null ? null : assignmentActions::debrief));
 		close.addActionListener(event -> dialog.dispose());
 		JPopupMenu assignmentMenu = new JPopupMenu();
 		addAssignmentMenuItem(assignmentMenu, "Open ICS 204 details", open204);
@@ -515,6 +525,9 @@ public class IncidentCommandRolePanel extends JPanel {
 		assignmentMenu.addSeparator();
 		addAssignmentMenuItem(assignmentMenu, "Make a log entry", addLog);
 		addAssignmentMenuItem(assignmentMenu, "Change status", changeStatus);
+		if (sarMode) {
+			addAssignmentMenuItem(assignmentMenu, "Debrief", debrief);
+		}
 		assignmentsTable.setComponentPopupMenu(assignmentMenu);
 		assignmentsTable.addMouseListener(new java.awt.event.MouseAdapter() {
 			/** Selects the row under a context-menu invocation. */
@@ -545,6 +558,7 @@ public class IncidentCommandRolePanel extends JPanel {
 		actions.add(openSar);
 		actions.add(addLog);
 		actions.add(changeStatus);
+		actions.add(debrief);
 		actions.add(close);
 		content.add(actions, BorderLayout.SOUTH);
 		dialog.setContentPane(content);
@@ -591,6 +605,9 @@ public class IncidentCommandRolePanel extends JPanel {
 	 */
 	private static void addAssignmentMenuItem(JPopupMenu menu, String label, JButton actionButton) {
 		JMenuItem item = new JMenuItem(label);
+		item.setEnabled(actionButton.isEnabled());
+		actionButton.addPropertyChangeListener("enabled",
+				event -> item.setEnabled(actionButton.isEnabled()));
 		item.addActionListener(event -> actionButton.doClick());
 		menu.add(item);
 	}

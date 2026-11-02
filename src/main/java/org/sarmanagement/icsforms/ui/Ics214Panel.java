@@ -299,11 +299,33 @@ public class Ics214Panel extends JPanel {
 		}
 		JComboBox<ActivityEventType> choices = new JComboBox<>(types);
 		UiSupport.configureDialogComboBox(choices, 280);
-		int result = JOptionPane.showConfirmDialog(this, choices, "Classify Note Entry",
+		int result = JOptionPane.showConfirmDialog(this, buildClassifyNotePanel(entry, choices), "Classify Note Entry",
 				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 		if (result == JOptionPane.OK_OPTION && choices.getSelectedItem() instanceof ActivityEventType selected) {
 			applyNoteClassification(entry, selected.getId(), UtcTimestamp.now());
 		}
+	}
+
+	/**
+	 * Builds the classification dialog content with the selected note's context.
+	 *
+	 * @param entry activity entry being classified
+	 * @param choices available replacement event types
+	 * @return form displaying the entry context and classification selector
+	 */
+	static JPanel buildClassifyNotePanel(ActivityLogEntry entry, JComboBox<ActivityEventType> choices) {
+		JPanel panel = UiSupport.formPanel();
+		UiSupport.addRow(panel, 0, "Date/time", new JLabel(UiSupport.formatDateTime(entry.getTimestamp())));
+		String resource = entry.getResourceIdentifier();
+		UiSupport.addRow(panel, 1, "Resource", new JLabel(resource == null || resource.isBlank()
+				? "Not recorded" : resource));
+		JTextArea activity = UiSupport.textArea(3);
+		activity.setEditable(false);
+		activity.setText(entry.getNotableActivity() == null ? "" : entry.getNotableActivity());
+		activity.getAccessibleContext().setAccessibleName("Notable activity being classified");
+		UiSupport.addRow(panel, 2, "Notable activity", new JScrollPane(activity));
+		UiSupport.addRow(panel, 3, "Classify as", choices);
+		return panel;
 	}
 
 	/**

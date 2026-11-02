@@ -798,6 +798,12 @@ public class MainFrame extends JFrame {
 					public void changeStatus(String assignmentId) {
 						sarTaskPanel.openTaskStatusDialogByAssignmentId(assignmentId);
 					}
+
+					/** {@inheritDoc} */
+					@Override
+					public void debrief(String assignmentId) {
+						sarTaskPanel.openDebriefByAssignmentId(assignmentId);
+					}
 				});
 	}
 

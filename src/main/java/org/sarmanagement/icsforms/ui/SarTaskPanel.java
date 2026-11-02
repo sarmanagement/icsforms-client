@@ -682,7 +682,13 @@ public class SarTaskPanel extends JPanel {
 		}
 	}
 
-	private static boolean isReadyForDebrief(SarTaskAssignment task) {
+	/**
+	 * Returns whether a SAR task is in the lifecycle state that permits debriefing.
+	 *
+	 * @param task task to inspect.
+	 * @return true when the task has been returned.
+	 */
+	static boolean isReadyForDebrief(SarTaskAssignment task) {
 		if (task == null) {
 			return false;
 		}
@@ -722,7 +728,13 @@ public class SarTaskPanel extends JPanel {
 		return lifecycle != null && lifecycle.trim().toLowerCase(java.util.Locale.ROOT).startsWith("assigned -");
 	}
 
-	private static boolean isPlannedOrAssigned(String lifecycle) {
+	/**
+	 * Returns whether the lifecycle permits a task status transition.
+	 *
+	 * @param lifecycle recorded task lifecycle.
+	 * @return true for planned or assigned states.
+	 */
+	static boolean isPlannedOrAssigned(String lifecycle) {
 		if (lifecycle == null) {
 			return false;
 		}

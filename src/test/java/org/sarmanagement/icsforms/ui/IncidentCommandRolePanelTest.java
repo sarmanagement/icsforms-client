@@ -339,6 +339,12 @@ class IncidentCommandRolePanelTest {
 			public void changeStatus(String assignmentId) {
 				invokedAction.set("status");
 			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void debrief(String assignmentId) {
+				invokedAction.set("debrief");
+			}
 		};
 		IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller(data), ignored -> {
 		}, actions);
@@ -407,6 +413,17 @@ class IncidentCommandRolePanelTest {
 			assertTrue(shownDialog.isShowing());
 			assertEquals("status", invokedAction.get());
 
+			task.setTaskLifecycleStatus("returned");
+			tasks.clearSelection();
+			tasks.setRowSelectionInterval(0, 0);
+			assertFalse(button(shownDialog, "Change status").isEnabled());
+			assertTrue(button(shownDialog, "Debrief").isEnabled());
+			assertFalse(menuItem(tasks.getComponentPopupMenu(), "Change status").isEnabled());
+			assertTrue(menuItem(tasks.getComponentPopupMenu(), "Debrief").isEnabled());
+			button(shownDialog, "Debrief").doClick();
+			assertTrue(shownDialog.isShowing());
+			assertEquals("debrief", invokedAction.get());
+
 			for (var listener : tasks.getMouseListeners()) {
 				listener.mouseClicked(new java.awt.event.MouseEvent(tasks, java.awt.event.MouseEvent.MOUSE_CLICKED,
 						System.currentTimeMillis(), 0, 10, tasks.getRowHeight() / 2, 2, false,
@@ -418,6 +435,18 @@ class IncidentCommandRolePanelTest {
 		});
 		assertEquals(assignment.getAssignmentId(), openedAssignment.get());
 		SwingUtilities.invokeAndWait(panel::dispose);
+	}
+
+	/**
+	 * Finds a context menu item by its displayed label.
+	 *
+	 * @param popup menu to inspect
+	 * @param label requested item label
+	 * @return matching menu item
+	 */
+	private static JMenuItem menuItem(JPopupMenu popup, String label) {
+		return java.util.Arrays.stream(popup.getComponents()).filter(JMenuItem.class::isInstance)
+				.map(JMenuItem.class::cast).filter(item -> label.equals(item.getText())).findFirst().orElseThrow();
 	}
 
 	@Test

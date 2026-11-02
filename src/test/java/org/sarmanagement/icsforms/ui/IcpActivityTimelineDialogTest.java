@@ -175,6 +175,11 @@ class IcpActivityTimelineDialogTest {
 					assertEquals(digitalTime.getParent(), timeZone.getParent());
 					assertEquals(new java.awt.Dimension(270, 72),
 							field(dialog, "clockPanel", JPanel.class).getPreferredSize());
+					assertTrue(((java.awt.FlowLayout) field(dialog, "clockPanel", JPanel.class).getLayout())
+							.getAlignment() == java.awt.FlowLayout.CENTER);
+					assertTrue(((javax.swing.border.CompoundBorder) field(dialog, "clockPanel", JPanel.class)
+							.getBorder()).getInsideBorder().getBorderInsets(field(dialog, "clockPanel", JPanel.class))
+							.bottom >= 7);
 					assertTrue(descendants(dialog).stream().filter(JLabel.class::isInstance)
 							.map(JLabel.class::cast).anyMatch(label -> "ICP activity by assignment.".equals(label.getText())));
 					assertTrue(descendants(dialog).stream().filter(JLabel.class::isInstance)

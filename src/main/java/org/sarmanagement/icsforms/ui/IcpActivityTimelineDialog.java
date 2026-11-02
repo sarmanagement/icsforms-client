@@ -66,7 +66,7 @@ public final class IcpActivityTimelineDialog extends JFrame {
 	private final JLabel currentTime = new JLabel();
 	private final JLabel currentZone = new JLabel();
 	private final ClockFace clockFace = new ClockFace();
-	private final JPanel clockPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+	private final JPanel clockPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 0));
 	private final Timer clockTimer;
 	private final JButton detailsButton = new JButton("Event Details…");
 	private final JButton openAssignmentButton = new JButton("Open Task / Assignment…");
@@ -121,7 +121,8 @@ public final class IcpActivityTimelineDialog extends JFrame {
 		description.add(new JLabel("ICP activity by assignment."));
 		description.add(new JLabel("Markers show staging, task, clue, subject, completion, and return events."));
 		header.add(description, BorderLayout.CENTER);
-		clockPanel.setBorder(BorderFactory.createTitledBorder("Current time"));
+		clockPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder("Current time"),
+				BorderFactory.createEmptyBorder(0, 0, 7, 0)));
 		clockPanel.setPreferredSize(new Dimension(270, 72));
 		clockFace.setPreferredSize(new Dimension(48, 48));
 		JPanel digitalClock = new JPanel(new GridLayout(2, 1, 0, 0));
