@@ -31,10 +31,7 @@ import javax.swing.JPanel;
 import javax.swing.border.TitledBorder;
 import java.awt.Component;
 import java.awt.Container;
-import java.awt.EventQueue;
 import java.awt.GraphicsEnvironment;
-import java.awt.SecondaryLoop;
-import java.awt.Toolkit;
 import java.awt.Window;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
@@ -521,6 +518,15 @@ class OrganizationalChartPanelTest {
 				throw new AssertionError(exception);
 			}
 		});
+	}
+
+	/**
+	 * Processes queued controller notifications while a test currently owns the EDT.
+	 */
+	private static void flushPendingSwingEvents() {
+		java.awt.SecondaryLoop loop = java.awt.Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
+		java.awt.EventQueue.invokeLater(loop::exit);
+		assertTrue(loop.enter());
 	}
 
 	/**

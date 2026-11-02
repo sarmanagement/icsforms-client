@@ -74,8 +74,8 @@ the later stages is allowed to make the solo-laptop case harder.
 
 ### How to read this document
 
-**Status date:** 2026-10-31. Status entries are taken from the merged source
-tree, not from issue or PR closure state.
+**Status date:** 2026-11-02. Status entries are taken from the committed source
+tree and the validation recorded below, not from issue or PR closure state.
 
 - **Part I — Current status:** what is delivered, what remains of the role-panel
   plan, and where each open issue sits.
@@ -105,7 +105,7 @@ was agreed. Statuses were determined by inspecting the merged tree.
 | Phase | Scope | Status | Evidence / gap |
 | --- | --- | --- | --- |
 | 1 — Baseline/design | Contracts, layouts, scenarios | Delivered | Part II of this document. |
-| 2 — Live multi-view | Incident/period-bound change notifications, stale-action guards, disposable listeners, partial-text retention | **Delivered, one gap** | `ui/AppController.java:110-150` (bindings, generations, change kinds, subscriptions), `:705` (publish); `ui/Ics202Panel.java:225-240` (partial retention). **Gap:** PR #32 reports stale full-editor overwrites are not yet fully prevented and live propagation is incomplete for some editors. |
+| 2 — Live multi-view | Incident/period-bound change notifications, stale-action guards, disposable listeners, partial-text retention | **Implementation added; acceptance pending** | `ui/AppController.java` now has revision-bound full-editor commit tokens and rejects stale incident/period/revision tokens; `ui/MainFrame.java` guards full-editor flushes and preserves drafts and table state during refresh. Regression tests were added. The full Xvfb run on this branch reported failures, so this phase is not yet accepted. |
 | 3 — Objectives/linkage | `IncidentObjective` entities, migration, ordered editor, authoritative links, archives | **Partial** | `model/Ics202Form.java:20-115`, `model/ResourceAssignment.java`, `ui/Ics202Panel.java:230-405`; archived objective form in `model/AppData.java:220-240`. **Gap:** no explicit period-end objective/assignment-context archive workflow found. |
 | 4 — Review tracking | Persisted reviewed-content boundary; Not yet reviewed / Reviewed / Changed since review | Delivered | `model/PlanReviewAssertion.java`, `model/PlanReviewStatus.java`, `model/AppData.java:1750-1800`, `ui/PlanReviewStrip.java`. |
 | 5 — Reference vertical slice | Two nonmodal medical reference windows, cached async previews | Delivered | `ui/HumanMedicalReferenceWindow.java`, `ui/CanineMedicalReferenceWindow.java`, `ui/MedicalReferencePanel.java`, `ui/AsyncFormPreviewPanel.java:35-140`. |
@@ -129,15 +129,14 @@ canine-tool extraction, dashboard retirement**, which covers the following items
    debrief, and reported results (Phase 8 gap).
 4. Extract reusable canine medical components from `CanineMedicalPanel` without
    duplicating state or reparenting one Swing tree into two windows (Phase 10).
-5. Retire `View > Dashboard` role-ordered tab sets once panel entry points and
-   stable full-workspace navigation are confirmed discoverable (Phase 10). Dashboard
-   ordering must continue to use `WorkspaceId`, never display labels, until removal.
-6. Reconcile scope added during PR #32 that was not in the agreed plan:
-   planning-stage, objective-approval, radio-check and CSV-version additions.
-   Each must either be accepted into Part II contracts or removed.
-7. Integration acceptance against the regression matrix in Part II, including
-   keyboard, resizing, second-screen and offline evidence, and role-panel
-   documentation under `docs/`.
+5. **Delivered in PR #48:** retire `View > Dashboard` role-ordered tab sets. Stable
+   full-workspace navigation uses `WorkspaceId`; legacy dashboard preferences are
+   ignored. Role-panel documentation is in [`docs/role-panels.md`](docs/role-panels.md).
+6. **Decision recorded in Part II:** planning stage, objective approval, explicit
+   radio-check facts and versioned CSV are accepted with rationale. Channel assignment
+   is not a radio check; review is not approval.
+7. Integration acceptance against the regression matrix in Part II remains open.
+   The record below distinguishes automated validation from desktop scenarios not run.
 
 This work is independent of the persistence roadmap in Part IV and must not be
 blocked on it; conversely, it must not introduce network, authentication or
@@ -300,9 +299,34 @@ and visible unresolved state. Channel assignment is not a radio check.
 | 7 — Operations | Task board, every agreed direct action, recorded resources, objective/member/hazard/comms/results context. | Representative task creation/status/log/clue/debrief/resource scenarios preserve existing lifecycle rules and selection. | Operations panel exists; complete action and lifecycle acceptance evidence remains pending. |
 | 8 — IC | Agreed objective-centered layout, explicit assessments, linked effort, results and observational attention. | Normal prelinked assignment creation/linking works; no calculated achievement, request queue or duplicate allocation count. | Current panel is a read-only objective/resource overview with planning-stage and approval controls. The focused objective editor, assignment actions, reported-result sources, and attention list remain incomplete. |
 | 9 — Communications | Full workflow on PR31's model/accessor/editor/import/PDF. | Resolved/unresolved/broken-link cases preserve recorded semantics; focused edits, review and full tools work live. | Communications role panel, explicit radio-check data, channel links, CSV import/export, and PDF workflows exist; full acceptance evidence remains pending. |
-| 10 — Consolidation/hardening | Discoverable Panels entry points, stable full workspace/log instances, accessibility/keyboard/resizing/second-screen/offline behavior, lifecycle robustness and docs. | All migrations, save/reload, standard exports, full tests, Spotless and Checkstyle pass; manual desktop scenarios recorded. | Role Panels entry points and typed workspace navigation exist. Superseded View > Dashboard tab ordering is removed here; documentation and desktop acceptance evidence remain pending. |
+| 10 — Consolidation/hardening | Discoverable Panels entry points, stable full workspace/log instances, accessibility/keyboard/resizing/second-screen/offline behavior, lifecycle robustness and docs. | All migrations, save/reload, standard exports, full tests, Spotless and Checkstyle pass; manual desktop scenarios recorded. | **Delivered:** Role Panels entry points, typed full-workspace navigation, removal of View > Dashboard ordering, and [`docs/role-panels.md`](docs/role-panels.md). Desktop acceptance evidence remains pending; canine-tool extraction remains open. |
 
 ### Acceptance and regression matrix
+
+#### Integration acceptance record (2026-11-02)
+
+Automated regression coverage is not a substitute for hands-on desktop acceptance.
+The branch's earlier Xvfb full-suite attempt reported four failures: two
+Organizational Chart radio-field persistence failures, one ICS-205 workspace
+failure, and one PDF export-dialog dirty-state failure. A targeted rerun after the
+latest changes passes the ICS-205, PDF, and stale-editor retention tests but still
+fails one Organizational Chart text-retention case; the full suite has not been
+rerun after the latest changes. The full automated acceptance gate therefore
+remains pending. Spotless and Checkstyle pass. CodeQL reported zero alerts for the
+stale-editor implementation; the secret scan reported no secrets in the changed
+files.
+
+The following manual scenarios were **not run** and must not be treated as accepted:
+
+| Scenario | Evidence/status |
+| --- | --- |
+| Keyboard-only navigation and accessible-name inspection across every role panel and full editor | Not manually exercised; automated accessible-name assertions are partial. |
+| Resizing role/reference windows and split panes at narrow and large sizes | Not manually exercised. |
+| Opening role/reference windows across two physical displays and moving them between screens | Not manually exercised. |
+| Offline operation, including canine routing behavior without a configured provider | Not manually exercised. The application remains standalone/local; no network workflow was added in this work. |
+| Concurrent canine workspace and reference window with human/canine content isolation | Not yet covered by a passing dedicated concurrency test; canine-tool extraction remains open. |
+| Complete objective-centered IC editing, objective linking, supporting assignment creation, and sourced results | Not implemented; Phase 8 remains open. |
+| Stale hidden-editor navigation/save after a newer role-panel commit | Regression coverage was added, but full-suite failures mean acceptance is pending. |
 
 - Shared laptop operator changes do not conflate role view and current position.
 - Small incidents deploy while plans are incomplete or changing; larger incidents

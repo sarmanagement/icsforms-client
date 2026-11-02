@@ -268,7 +268,7 @@ public class OrganizationalChartPanel extends JPanel {
 
 		// Install autocomplete on all name fields.
 		installPersonAutocomplete(safetyOfficerNameField, safetyOfficerRadioField, safetyOfficerPhoneField,
-				name -> MedicalRoleSupport.setSafetyOfficerName(controller.getData(), name));
+				ignored -> updateSafetyOfficerAssignment());
 		installPersonAutocomplete(pioNameField, pioRadioField, pioPhoneField);
 		installPersonAutocomplete(liaisonNameField, liaisonRadioField, liaisonPhoneField);
 		installPersonAutocomplete(operationsSectionChiefField, operationsSectionChiefRadioField,
@@ -300,12 +300,8 @@ public class OrganizationalChartPanel extends JPanel {
 				name -> updateMedicalUnitLeaderAssignment());
 		watchRoleFields(List.of(medicalUnitLeaderNameField, medicalUnitLeaderRadioField,
 				medicalUnitLeaderPhoneField), this::updateMedicalUnitLeaderAssignment);
-		watchRoleFields(List.of(safetyOfficerNameField), () -> {
-			if (!loading) {
-				MedicalRoleSupport.setSafetyOfficerName(controller.getData(), safetyOfficerNameField.getText());
-				controller.markDirty();
-			}
-		});
+		watchRoleFields(List.of(safetyOfficerNameField, safetyOfficerRadioField, safetyOfficerPhoneField),
+				this::updateSafetyOfficerAssignment);
 		installPersonAutocomplete(timeUnitLeaderNameField, timeUnitLeaderRadioField, timeUnitLeaderPhoneField);
 		installPersonAutocomplete(procurementUnitLeaderNameField, procurementUnitLeaderRadioField,
 				procurementUnitLeaderPhoneField);
@@ -848,6 +844,19 @@ public class OrganizationalChartPanel extends JPanel {
 		if (!loading) {
 			MedicalRoleSupport.setMedicalUnitLeader(controller.getData(), medicalUnitLeaderNameField.getText(),
 					medicalUnitLeaderRadioField.getText(), medicalUnitLeaderPhoneField.getText());
+			controller.markDirty();
+		}
+	}
+
+	/**
+	 * Saves the live Safety Officer role edit before any later panel flush.
+	 */
+	private void updateSafetyOfficerAssignment() {
+		if (!loading) {
+			MedicalRoleSupport.setSafetyOfficerName(controller.getData(), safetyOfficerNameField.getText());
+			OrganizationalChart chart = controller.getData().getOrganizationalChart();
+			chart.setSafetyOfficerRadio(safetyOfficerRadioField.getText());
+			chart.setSafetyOfficerPhone(safetyOfficerPhoneField.getText());
 			controller.markDirty();
 		}
 	}
