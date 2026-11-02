@@ -114,15 +114,26 @@ class OrganizationalChartPanelTest {
 					((JTextField) field(commander, "nameField")).setText("Entered Commander");
 					((JTextField) field(commander, "radioField")).setText("Command Radio");
 					((JTextField) field(commander, "phoneField")).setText("555-0143");
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.SHARED));
 					Map<String, String> expected = new java.util.LinkedHashMap<>();
+					List<String> liveRoleFields = List.of("safetyOfficerNameField", "safetyOfficerRadioField",
+							"safetyOfficerPhoneField", "medicalUnitLeaderNameField", "medicalUnitLeaderRadioField",
+							"medicalUnitLeaderPhoneField");
 					for (Field declared : OrganizationalChartPanel.class.getDeclaredFields()) {
 						if (declared.getType() == JTextField.class) {
 							String value = "Entered " + declared.getName();
 							expected.put(declared.getName(), value);
-							((JTextField) field(orgChart, declared.getName())).setText(value);
+							if (liveRoleFields.contains(declared.getName())) {
+								((JTextField) field(orgChart, declared.getName())).setText(value);
+							}
 						}
 					}
 					flushPendingSwingEvents();
+					for (var entry : expected.entrySet()) {
+						if (!liveRoleFields.contains(entry.getKey())) {
+							((JTextField) field(orgChart, entry.getKey())).setText(entry.getValue());
+						}
+					}
 					assertFalse(expected.isEmpty());
 					for (var mode : org.sarmanagement.icsforms.model.IncidentMode.values()) {
 						data.setIncidentMode(mode);

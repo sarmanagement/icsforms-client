@@ -308,16 +308,15 @@ and visible unresolved state. Channel assignment is not a radio check.
 #### Integration acceptance record (2026-11-02)
 
 Automated regression coverage is not a substitute for hands-on desktop acceptance.
-An earlier Xvfb full-suite attempt reported four failures: two Organizational
-Chart radio-field persistence failures, one ICS-205 workspace failure, and one
-PDF export-dialog dirty-state failure. A later full-suite run passed the ICS-205
-and PDF cases but still reported two Organizational Chart failures. After the
-latest Safety Officer live-update change, targeted tests pass for ICS-205, PDF,
-and stale-editor retention, but one Organizational Chart text-retention case
-remains; the full suite has not been rerun after that change. The full automated
-acceptance gate therefore remains pending. Spotless and Checkstyle pass. CodeQL
-reported zero alerts for the stale-editor implementation; the secret scan
-reported no secrets in the changed files.
+The Xvfb CI run on 2026-11-02 reported one failure in
+`OrganizationalChartPanelTest.allOrgChartTextFieldsSurviveEveryWorkspaceAndFileStoreReload`
+(`pioNameField` after visiting Shared in SAR mode). The test setup now commits the
+incident-commander row and processes live role-field updates before entering
+unrelated full-editor drafts. The Organizational Chart class and targeted
+cross-view, ICS-205, and PDF tests pass after that adjustment. The subsequent full
+Xvfb suite passes (863 tests, 0 failures, 0 errors, 6 skipped). Spotless and
+Checkstyle pass. CodeQL reported zero alerts for the stale-editor implementation;
+the secret scan reported no secrets in the changed files.
 
 The following manual scenarios were **not run** and must not be treated as accepted:
 
