@@ -45,6 +45,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 	private final JTextField leaderPhone = new JTextField();
 	private final JTextArea humanInstruction = new JTextArea(3, 40);
 	private final JTextArea canineInstruction = new JTextArea(3, 40);
+	private final RolePlanStatusBadges planBadges;
 	private final JPanel previewCards = new JPanel(new CardLayout());
 	private final AsyncFormPreviewPanel humanPreview = new AsyncFormPreviewPanel(new Ics206PdfRenderer());
 	private final AsyncFormPreviewPanel caninePreview = new AsyncFormPreviewPanel(new Ics206CaninePdfRenderer());
@@ -66,9 +67,14 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		this.controller = controller;
 		this.navigator = navigator;
 		binding = controller.captureIncidentBinding();
+		planBadges = new RolePlanStatusBadges(controller.getData(), "Human medical", "Canine medical");
 		humanReview = new PlanReviewStrip(controller, PlanReviewArea.HUMAN_MEDICAL, this::applyFocusedEdits);
 		canineReview = new PlanReviewStrip(controller, PlanReviewArea.CANINE_MEDICAL, this::applyFocusedEdits);
-		add(new JLabel("MEDICAL UNIT LEADER | Human and canine plans remain separate"), BorderLayout.NORTH);
+		JPanel header = new JPanel(new BorderLayout(6, 4));
+		header.add(new JLabel("MEDICAL UNIT LEADER | Human and canine plans remain separate"),
+				BorderLayout.CENTER);
+		header.add(planBadges, BorderLayout.EAST);
+		add(header, BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
 		installFocusedDraftListeners();
 		showAll.addActionListener(event -> refreshFromModel());
@@ -113,6 +119,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 			canineInstruction.setText(data.getCanineMedicalPlan().getEmergencyProcedures());
 			loadingFocusedEdits = false;
 		}
+		planBadges.refreshFromModel(data);
 		rebuildWorklist();
 		if (selected != null) {
 			worklist.setSelectedValue(selected, true);

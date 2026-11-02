@@ -57,7 +57,6 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final JPanel planProgress = new JPanel(new GridLayout(0, 2, 6, 6));
 	private final JLabel overallProgress = new JLabel();
 	private final Map<String, JLabel> progressBadges = new LinkedHashMap<>();
-	private final Map<String, JLabel> compactRoleBadges = new LinkedHashMap<>();
 	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "Linked assignments", "Assessment");
 	private final JTable objectives = new JTable(objectiveModel);
 	private final JComboBox<String> resourceGrouping = new JComboBox<>(new String[]{"All resources", "By resource type"});
@@ -192,20 +191,6 @@ public class IncidentCommandRolePanel extends JPanel {
 	private JPanel buildHeader() {
 		JPanel header = new JPanel(new BorderLayout());
 		header.add(banner, BorderLayout.CENTER);
-		JPanel roleStatuses = new JPanel(new GridLayout(2, 3, 3, 3));
-		roleStatuses.setPreferredSize(new Dimension(330, 64));
-		roleStatuses.getAccessibleContext().setAccessibleName("Compact role status overview");
-		for (String title : List.of("Objectives", "Assignment coverage", "Safety", "Human medical", "Canine medical",
-				"Communications")) {
-			JLabel badge = new JLabel();
-			badge.setOpaque(true);
-			badge.setBorder(javax.swing.BorderFactory.createEtchedBorder());
-			badge.setFont(badge.getFont().deriveFont(10f));
-			badge.getAccessibleContext().setAccessibleName(title + " status");
-			compactRoleBadges.put(title, badge);
-			roleStatuses.add(badge);
-		}
-		header.add(roleStatuses, BorderLayout.EAST);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JButton objectivesButton = new JButton("Open full ICS 202");
 		objectivesButton.addActionListener(
@@ -602,15 +587,6 @@ public class IncidentCommandRolePanel extends JPanel {
 								+ "do not count. Link coverage is checked only when every assignment links to a recorded objective; "
 								+ "it is not assignment approval, objective achievement, or operational readiness."
 						: ""));
-		JLabel compact = compactRoleBadges.get(title);
-		if (compact != null) {
-			compact.setText("<html><b>" + html(title) + "</b><br>" + html(compactContent) + "<br>"
-					+ html(compactState) + "</html>");
-			compact.setBackground(color);
-			compact.setForeground(Color.BLACK);
-			compact.setToolTipText(title + ": " + content + "; " + state);
-			compact.getAccessibleContext().setAccessibleDescription(title + ": " + content + "; " + state);
-		}
 	}
 
 	/**

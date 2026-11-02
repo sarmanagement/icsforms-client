@@ -222,6 +222,9 @@ public class MainFrame extends JFrame {
 				new LogEntryContext(source, assignment.getTaskId(), assignment.getAssignmentId(),
 						org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(assignment))));
 		sarTaskPanel.setOnQuickLogRequest(this::showQuickLogEntry);
+		tCardPanel.setTaskGroupActionHandlers(sarTaskPanel::openLogEntryForAssignment,
+				sarTaskPanel::quickLogItemsForAssignment, sarTaskPanel::openTaskStatusDialogByAssignmentId,
+				sarTaskPanel::addResourcesToPlannedAssignment);
 		tCardPanel.setOnAddLogEntryRequest(this::showAddLogEntry);
 		groupVisible.put(CORE_GROUP, true);
 		groupVisible.put(ACTIVITY_LOGS_GROUP, true);

@@ -36,7 +36,6 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -264,10 +263,6 @@ class IncidentCommandRolePanelTest {
 		assertEquals("Linked assignments", table.getColumnName(1));
 		assertEquals("Assessment", table.getColumnName(2));
 		assertTrue(table.getValueAt(0, 1).toString().contains("1 linked"));
-		Map<String, JLabel> compactBadges = (Map<String, JLabel>) field(panel, "compactRoleBadges");
-		assertEquals(6, compactBadges.size());
-		assertEquals(badge(panel, "Objectives").getBackground(),
-				compactBadges.get("Objectives").getBackground());
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
 
@@ -375,7 +370,7 @@ class IncidentCommandRolePanelTest {
 		SwingUtilities.invokeAndWait(() -> {
 			panel[0] = new IncidentCommandRolePanel(controller(new AppData()), destinations::add);
 			JPanel header = (JPanel) panel[0].getComponent(0);
-			JPanel actions = (JPanel) header.getComponent(2);
+			JPanel actions = (JPanel) header.getComponent(1);
 			((JButton) actions.getComponent(0)).doClick();
 			((JButton) actions.getComponent(1)).doClick();
 			panel[0].dispose();

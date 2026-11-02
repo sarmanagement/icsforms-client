@@ -45,6 +45,7 @@ public class SafetyRolePanel extends JPanel {
 	private final JTextArea detail = new JTextArea();
 	private final JTextField safetyOfficer = new JTextField();
 	private final JTextArea safetyMessage = new JTextArea(4, 40);
+	private final RolePlanStatusBadges planBadges;
 	private final JPanel previewCards = new JPanel(new CardLayout());
 	private final AsyncFormPreviewPanel safetyPreview = new AsyncFormPreviewPanel(new Ics208PdfRenderer());
 	private final AsyncFormPreviewPanel humanPreview = new AsyncFormPreviewPanel(new Ics206PdfRenderer());
@@ -68,12 +69,17 @@ public class SafetyRolePanel extends JPanel {
 		this.controller = controller;
 		this.navigator = navigator;
 		binding = controller.captureIncidentBinding();
+		planBadges = new RolePlanStatusBadges(controller.getData(), "Safety", "Human medical", "Canine medical");
 		safetyReview = new PlanReviewStrip(controller, PlanReviewArea.SAFETY, this::applyFocusedEdits);
 		humanReview = new PlanReviewStrip(controller, PlanReviewArea.HUMAN_MEDICAL, () -> {
 		});
 		canineReview = new PlanReviewStrip(controller, PlanReviewArea.CANINE_MEDICAL, () -> {
 		});
-		add(new JLabel("SAFETY OFFICER | Focused live view — not an authorization boundary"), BorderLayout.NORTH);
+		JPanel header = new JPanel(new BorderLayout(6, 4));
+		header.add(new JLabel("SAFETY OFFICER | Focused live view — not an authorization boundary"),
+				BorderLayout.CENTER);
+		header.add(planBadges, BorderLayout.EAST);
+		add(header, BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
 		installFocusedDraftListeners();
 		showAll.addActionListener(event -> refreshFromModel());
@@ -115,6 +121,7 @@ public class SafetyRolePanel extends JPanel {
 			safetyMessage.setText(controller.getData().getForm208().getFreeText());
 			loadingFocusedEdits = false;
 		}
+		planBadges.refreshFromModel(controller.getData());
 		rebuildWorklist();
 		if (selected != null) {
 			worklist.setSelectedValue(selected, true);

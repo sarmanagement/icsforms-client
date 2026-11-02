@@ -27,7 +27,6 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
-import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JPanel;
@@ -299,17 +298,16 @@ class SarTaskPanelTest {
 			}
 		}
 		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(1);
+		task.setTaskLifecycleStatus("assigned - enroute to assignment");
 		assertSame(task, logged.get());
-		JMenu quickMenu = java.util.Arrays.stream(table.getComponentPopupMenu().getComponents())
-				.filter(JMenu.class::isInstance).map(JMenu.class::cast)
-				.filter(item -> "Quick log entry".equals(item.getText())).findFirst().orElseThrow();
 		for (var listener : table.getComponentPopupMenu().getPopupMenuListeners()) {
 			listener.popupMenuWillBecomeVisible(
 					new javax.swing.event.PopupMenuEvent(table.getComponentPopupMenu()));
 		}
-		assertTrue(quickMenu.getItemCount() > 0);
-		assertTrue(quickMenu.getItem(0).getText().startsWith("Log "));
-		quickMenu.getItem(0).doClick();
+		JMenuItem quickLogItem = java.util.Arrays.stream(table.getComponentPopupMenu().getComponents())
+				.filter(JMenuItem.class::isInstance).map(JMenuItem.class::cast)
+				.filter(item -> item.getText().startsWith("Log ")).findFirst().orElseThrow();
+		quickLogItem.doClick();
 		assertSame(task, quickLog.get().task());
 		assertEquals(org.sarmanagement.icsforms.model.ActivityEventType.ID_RESOURCE_ON_TASK,
 				quickLog.get().eventTypeId());
@@ -326,6 +324,7 @@ class SarTaskPanelTest {
 				item.doClick();
 			}
 		}
+
 		assertSame(task, logged.get());
 		table.clearSelection();
 		var click = new java.awt.event.MouseEvent(label, java.awt.event.MouseEvent.MOUSE_CLICKED,
@@ -334,6 +333,44 @@ class SarTaskPanelTest {
 			listener.mouseClicked(click);
 		}
 		assertEquals(0, table.getSelectedRow());
+	}
+
+	@Test
+	void quickLogItemsFollowTaskLifecycleInSequence() throws Exception {
+		AppController controller = sampleController();
+		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(0);
+		SarTaskPanel panel = new SarTaskPanel(controller);
+		var request = new java.util.concurrent.atomic.AtomicReference<SarTaskPanel.QuickLogRequest>();
+		panel.setOnQuickLogRequest((source, quickLogRequest) -> request.set(quickLogRequest));
+
+		task.setTaskLifecycleStatus("planned");
+		assertEquals(List.of(org.sarmanagement.icsforms.model.ActivityEventType.ID_RESOURCE_DEPARTED_STAGING),
+				runQuickLogItems(panel, task.getAssignmentId(), request));
+		task.setTaskLifecycleStatus("assigned - enroute to assignment");
+		assertEquals(List.of(org.sarmanagement.icsforms.model.ActivityEventType.ID_RESOURCE_ON_TASK),
+				runQuickLogItems(panel, task.getAssignmentId(), request));
+		task.setTaskLifecycleStatus("assigned - on task");
+		assertEquals(List.of(org.sarmanagement.icsforms.model.ActivityEventType.ID_TASK_COMPLETED,
+				org.sarmanagement.icsforms.model.ActivityEventType.ID_RESOURCE_RETURNED_STAGING),
+				runQuickLogItems(panel, task.getAssignmentId(), request));
+		task.setTaskLifecycleStatus("assigned - returning from assignment");
+		assertEquals(List.of(org.sarmanagement.icsforms.model.ActivityEventType.ID_RESOURCE_RETURNED_STAGING),
+				runQuickLogItems(panel, task.getAssignmentId(), request));
+		task.setTaskLifecycleStatus("returned");
+		assertTrue(runQuickLogItems(panel, task.getAssignmentId(), request).isEmpty());
+	}
+
+	private static List<String> runQuickLogItems(SarTaskPanel panel, String assignmentId,
+			java.util.concurrent.atomic.AtomicReference<SarTaskPanel.QuickLogRequest> request) {
+		List<JMenuItem> items = panel.quickLogItemsForAssignment(panel, assignmentId);
+		List<String> eventTypeIds = new ArrayList<>();
+		for (JMenuItem item : items) {
+			request.set(null);
+			item.doClick();
+			assertNotNull(request.get());
+			eventTypeIds.add(request.get().eventTypeId());
+		}
+		return eventTypeIds;
 	}
 
 	@Test

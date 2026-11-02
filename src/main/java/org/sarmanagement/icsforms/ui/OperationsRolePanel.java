@@ -52,6 +52,7 @@ public class OperationsRolePanel extends JPanel {
 	private final Runnable openOperationalPlanning;
 	private final AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
+	private final RolePlanStatusBadges planBadges;
 	private final DefaultListModel<TaskChoice> taskModel = new DefaultListModel<>();
 	private final JList<TaskChoice> taskBoard = new JList<>(taskModel);
 	private JButton debriefButton;
@@ -112,6 +113,7 @@ public class OperationsRolePanel extends JPanel {
 		this.canineReference = canineReference;
 		this.openOperationalPlanning = openOperationalPlanning;
 		binding = controller.captureIncidentBinding();
+		planBadges = new RolePlanStatusBadges(controller.getData(), "Objectives");
 		add(buildHeader(), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
 		taskBoard.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -165,6 +167,7 @@ public class OperationsRolePanel extends JPanel {
 		RolePanelSupport.banner(banner, "OPERATIONS", data.getIncidentContext().getIncidentName(),
 				"Operational period: " + start + " — " + end
 						+ " | Recorded status/location, not readiness confirmation");
+		planBadges.refreshFromModel(data);
 		taskModel.clear();
 		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
 			taskModel.addElement(new TaskChoice(task));
@@ -215,6 +218,7 @@ public class OperationsRolePanel extends JPanel {
 	private JPanel buildHeader() {
 		JPanel header = new JPanel(new BorderLayout());
 		header.add(banner, BorderLayout.CENTER);
+		header.add(planBadges, BorderLayout.EAST);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JButton create = new JButton("New assignment…");
 		create.addActionListener(event -> createAssignment());

@@ -22,7 +22,6 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -88,6 +87,67 @@ public class SarTaskPanel extends JPanel {
 	 */
 	public void setOnQuickLogRequest(java.util.function.BiConsumer<Component, QuickLogRequest> handler) {
 		onQuickLogRequest = handler;
+	}
+
+	/**
+	 * Provides lifecycle-appropriate quick-log actions for a task context menu.
+	 *
+	 * @param source component owning the task context menu.
+	 * @param assignmentId stable assignment identifier.
+	 * @return configured quick-log actions, or an empty list when none apply.
+	 */
+	public List<JMenuItem> quickLogItemsForAssignment(Component source, String assignmentId) {
+		SarTaskAssignment task = findTask(assignmentId);
+		return task == null ? List.of() : quickLogItems(source, task);
+	}
+
+	/**
+	 * Opens the shared activity-entry workflow for a task-group header.
+	 *
+	 * @param source initiating task-group component.
+	 * @param assignmentId stable assignment identifier.
+	 */
+	public void openLogEntryForAssignment(Component source, String assignmentId) {
+		SarTaskAssignment task = findTask(assignmentId);
+		if (task != null && onAddLogEntryRequest != null) {
+			onAddLogEntryRequest.accept(source, task);
+		}
+	}
+
+	/**
+	 * Opens the established resource picker for an existing planned assignment.
+	 *
+	 * @param parent parent component for the picker.
+	 * @param assignmentId stable assignment identifier.
+	 */
+	public void addResourcesToPlannedAssignment(Component parent, String assignmentId) {
+		SarTaskAssignment task = findTask(assignmentId);
+		if (task == null || !"planned".equalsIgnoreCase(task.getTaskLifecycleStatus())) {
+			return;
+		}
+		List<SarTaskResource> picked = showResourcePickerDialog(parent, controller.getAvailableTCards(),
+				controller.getOnTaskResourceIds(), task.getResourcesAssigned());
+		if (picked == null) {
+			return;
+		}
+		controller.assignRecordedResources(assignmentId,
+				picked.stream().map(SarTaskResource::getResourceId).filter(id -> id != null && !id.isBlank())
+						.toList());
+		refreshFromModel();
+	}
+
+	/**
+	 * Finds a task in the current incident by its stable assignment identifier.
+	 *
+	 * @param assignmentId stable assignment identifier.
+	 * @return matching task, or null when it no longer exists.
+	 */
+	private SarTaskAssignment findTask(String assignmentId) {
+		if (assignmentId == null || assignmentId.isBlank()) {
+			return null;
+		}
+		return controller.getData().getSarTaskAssignments().stream()
+				.filter(task -> assignmentId.equals(task.getAssignmentId())).findFirst().orElse(null);
 	}
 
 	/**
@@ -417,10 +477,10 @@ public class SarTaskPanel extends JPanel {
 			}
 		});
 		cardMenu.add(addLogEntryItem);
-		JMenu quickLogMenu = buildQuickLogMenu(p, task);
-		if (quickLogMenu.getItemCount() > 0) {
+		List<JMenuItem> quickLogItems = quickLogItems(p, task);
+		if (!quickLogItems.isEmpty()) {
 			cardMenu.addSeparator();
-			cardMenu.add(quickLogMenu);
+			quickLogItems.forEach(cardMenu::add);
 		}
 		p.setComponentPopupMenu(cardMenu);
 
@@ -729,9 +789,11 @@ public class SarTaskPanel extends JPanel {
 		addLogEntryItem.addActionListener(event -> addLogEntryForSelectedTask());
 		menu.add(addLogEntryItem);
 		menu.addSeparator();
-		JMenu quickLogMenu = new JMenu("Quick log entry");
-		menu.add(quickLogMenu);
-		populateQuickLogMenu(quickLogMenu, table);
+		JPopupMenu.Separator quickLogDivider = new JPopupMenu.Separator();
+		menu.add(quickLogDivider);
+		JMenuItem removeItem = new JMenuItem("Remove Task");
+		removeItem.addActionListener(event -> removeSelectedTask());
+		menu.add(removeItem);
 		menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
 			/** {@inheritDoc} */
 			@Override
@@ -740,15 +802,7 @@ public class SarTaskPanel extends JPanel {
 				editDebriefingItem.setEnabled(selected != null && isReadyForDebrief(selected));
 				changeStatusItem.setEnabled(selected != null && isPlannedOrAssigned(selected.getTaskLifecycleStatus()));
 				addLogEntryItem.setEnabled(onAddLogEntryRequest != null && selected != null);
-				quickLogMenu.setEnabled(selected != null && quickLogMenu.getItemCount() > 0);
-				if (selected != null) {
-					for (int index = 0; index < quickLogMenu.getItemCount(); index++) {
-						JMenuItem item = quickLogMenu.getItem(index);
-						if (item != null && item.getClientProperty("activityEventType") instanceof ActivityEventType type) {
-							item.setText(quickLogLabel(selected, type));
-						}
-					}
-				}
+				refreshQuickLogItems(menu, quickLogDivider, removeItem, selected, table);
 			}
 
 			/** {@inheritDoc} */
@@ -761,10 +815,6 @@ public class SarTaskPanel extends JPanel {
 			public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
 			}
 		});
-		menu.addSeparator();
-		JMenuItem removeItem = new JMenuItem("Remove Task");
-		removeItem.addActionListener(event -> removeSelectedTask());
-		menu.add(removeItem);
 		table.setComponentPopupMenu(menu);
 		table.addMouseListener(new MouseAdapter() {
 			@Override
@@ -788,50 +838,99 @@ public class SarTaskPanel extends JPanel {
 	}
 
 	/**
-	 * Builds an event-type submenu for a task-board card.
+	 * Replaces the direct task quick-log items using the selected task's lifecycle.
 	 *
-	 * @param source component opening the submenu.
-	 * @param task task associated with each quick entry.
-	 * @return populated quick-log submenu.
+	 * @param menu parent context menu.
+	 * @param divider separator above quick-log items.
+	 * @param removeItem item below quick-log items.
+	 * @param task currently selected task, or null.
+	 * @param source component opening the menu.
 	 */
-	private JMenu buildQuickLogMenu(Component source, SarTaskAssignment task) {
-		JMenu menu = new JMenu("Quick log entry");
-		for (ActivityEventType type : controller.getData().getActivityEventTypes()) {
-			if (type.isShowInQuickMenu()) {
-				JMenuItem item = new JMenuItem(quickLogLabel(task, type));
-				item.addActionListener(event -> {
-					if (onQuickLogRequest != null) {
-						onQuickLogRequest.accept(source,
-								new QuickLogRequest(task, type.getId(), quickLogActivity(task, type)));
-					}
-				});
-				menu.add(item);
-			}
+	private void refreshQuickLogItems(JPopupMenu menu, JPopupMenu.Separator divider, JMenuItem removeItem,
+			SarTaskAssignment task, Component source) {
+		int dividerIndex = menu.getComponentIndex(divider);
+		int removeIndex = menu.getComponentIndex(removeItem);
+		for (int index = removeIndex - 1; index > dividerIndex; index--) {
+			menu.remove(index);
 		}
-		return menu;
+		List<JMenuItem> items = task == null ? List.of() : quickLogItems(source, task);
+		divider.setVisible(!items.isEmpty());
+		int insertIndex = menu.getComponentIndex(removeItem);
+		for (JMenuItem item : items) {
+			menu.insert(item, insertIndex++);
+		}
 	}
 
 	/**
-	 * Populates a table quick-log submenu for the currently selected task.
+	 * Creates direct, ordered quick-log actions permitted by the task lifecycle.
 	 *
-	 * @param menu target submenu.
-	 * @param source component opening the menu.
+	 * @param source component opening the context menu.
+	 * @param task task being logged.
+	 * @return configured direct menu items.
 	 */
-	private void populateQuickLogMenu(JMenu menu, Component source) {
-		for (ActivityEventType type : controller.getData().getActivityEventTypes()) {
-			if (type.isShowInQuickMenu()) {
-				JMenuItem item = new JMenuItem(type.getLabel());
-				item.putClientProperty("activityEventType", type);
-				item.addActionListener(event -> {
-					SarTaskAssignment task = selectedTaskFromTable();
-					if (task != null && onQuickLogRequest != null) {
-						onQuickLogRequest.accept(source,
-								new QuickLogRequest(task, type.getId(), quickLogActivity(task, type)));
-					}
-				});
-				menu.add(item);
+	private List<JMenuItem> quickLogItems(Component source, SarTaskAssignment task) {
+		String status = safeValue(task.getTaskLifecycleStatus()).trim().toLowerCase(java.util.Locale.ROOT);
+		List<String> applicableIds = switch (status) {
+			case "planned" -> List.of(ActivityEventType.ID_RESOURCE_DEPARTED_STAGING);
+			case "assigned - enroute to assignment" -> List.of(ActivityEventType.ID_RESOURCE_ON_TASK);
+			case "assigned - on task" -> List.of(ActivityEventType.ID_TASK_COMPLETED,
+					ActivityEventType.ID_RESOURCE_RETURNED_STAGING);
+			case "assigned - returning from assignment" -> List.of(ActivityEventType.ID_RESOURCE_RETURNED_STAGING);
+			default -> List.of();
+		};
+		List<JMenuItem> items = new ArrayList<>();
+		for (String id : applicableIds) {
+			findQuickLogType(id).ifPresent(type -> items.add(quickLogItem(source, task, type)));
+		}
+		if (!"returned".equals(status)) {
+			for (ActivityEventType type : controller.getData().getActivityEventTypes()) {
+				if (type.isShowInQuickMenu() && !isLifecycleQuickLogType(type.getId())) {
+					items.add(quickLogItem(source, task, type));
+				}
 			}
 		}
+		return items;
+	}
+
+	/**
+	 * Creates one direct action that opens the shared activity-entry workflow.
+	 *
+	 * @param source component opening the menu.
+	 * @param task task being logged.
+	 * @param type configured event type.
+	 * @return actionable menu item.
+	 */
+	private JMenuItem quickLogItem(Component source, SarTaskAssignment task, ActivityEventType type) {
+		JMenuItem item = new JMenuItem(quickLogLabel(task, type));
+		item.addActionListener(event -> {
+			if (onQuickLogRequest != null) {
+				onQuickLogRequest.accept(source, new QuickLogRequest(task, type.getId(), quickLogActivity(task, type)));
+			}
+		});
+		return item;
+	}
+
+	/**
+	 * Finds a configured quick-log event type by identifier.
+	 *
+	 * @param id stable event type ID.
+	 * @return configured event type when present and enabled for quick menus.
+	 */
+	private java.util.Optional<ActivityEventType> findQuickLogType(String id) {
+		return controller.getData().getActivityEventTypes().stream()
+				.filter(type -> id.equals(type.getId()) && type.isShowInQuickMenu()).findFirst();
+	}
+
+	/**
+	 * Identifies built-in lifecycle event types with state-specific visibility.
+	 *
+	 * @param id event type ID.
+	 * @return true for task lifecycle event types.
+	 */
+	private static boolean isLifecycleQuickLogType(String id) {
+		return ActivityEventType.ID_RESOURCE_DEPARTED_STAGING.equals(id)
+				|| ActivityEventType.ID_RESOURCE_ON_TASK.equals(id) || ActivityEventType.ID_TASK_COMPLETED.equals(id)
+				|| ActivityEventType.ID_RESOURCE_RETURNED_STAGING.equals(id);
 	}
 
 	/**
