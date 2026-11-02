@@ -563,7 +563,7 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
-	 * Rebases registered editors after a transaction that flushed every editor.
+	 * Rebases registered editors after the main frame has refreshed all editor views.
 	 */
 	void rebaseEditorCommitGuards() {
 		for (EditorCommitGuard guard : List.copyOf(editorCommitGuards)) {

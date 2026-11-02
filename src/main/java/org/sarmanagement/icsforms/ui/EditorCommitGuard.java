@@ -18,8 +18,6 @@ final class EditorCommitGuard {
 	EditorCommitGuard(AppController controller) {
 		this.controller = controller;
 		binding = controller.captureEditorCommitBinding();
-		System.err.println("Created EditorCommitGuard " + System.identityHashCode(this)
-				+ " from " + Thread.currentThread().getStackTrace()[3]);
 	}
 
 	/**
@@ -54,9 +52,29 @@ final class EditorCommitGuard {
 			edit.run();
 			return true;
 		}
-		if (!controller.commitEditorIfCurrent(binding, AppController.LinkSource.NONE, edit)) {
+		if (!controller.commitIfCurrent(binding.incidentBinding(), edit)) {
 			return false;
 		}
+		rebase();
+		return true;
+	}
+
+	/**
+	 * Applies an editor flush within the current frame transaction without starting a second commit.
+	 *
+	 * @param edit synchronous editor flush.
+	 * @return true when the binding is current and the flush was applied.
+	 */
+	boolean applyIfCurrent(Runnable edit) {
+		if (controller.isEditorCommitInProgress()) {
+			controller.noteEditorCommit(this);
+			edit.run();
+			return true;
+		}
+		if (!isCurrent()) {
+			return false;
+		}
+		edit.run();
 		rebase();
 		return true;
 	}
@@ -83,12 +101,7 @@ final class EditorCommitGuard {
 	 * @return true when no model write has occurred since the editor was bound.
 	 */
 	boolean isCurrent() {
-		boolean current = controller.isCurrent(binding.incidentBinding())
+		return controller.isCurrent(binding.incidentBinding())
 				&& binding.revision() == controller.captureEditorCommitBinding().revision();
-		if (!current) {
-			System.err.println("Stale EditorCommitGuard " + System.identityHashCode(this) + " at " + binding
-					+ ", current " + controller.captureEditorCommitBinding());
-		}
-		return current;
 	}
 }

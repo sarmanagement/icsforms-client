@@ -138,6 +138,30 @@ class AppControllerLiveChangeTest {
 	}
 
 	@Test
+	void registeredEditorGuardRejectsOldRevisionIncidentAndPeriodBindings() {
+		AppController revisionController = controller(new AppData());
+		EditorCommitGuard revisionGuard = revisionController.createEditorCommitGuard();
+		revisionController.markDirty();
+		assertFalse(revisionGuard.commit(AppController.LinkSource.NONE,
+				() -> revisionController.getData().getIncidentContext().setIncidentName("Stale revision")));
+		assertEquals("", revisionController.getData().getIncidentContext().getIncidentName());
+
+		AppController incidentController = controller(new AppData());
+		EditorCommitGuard incidentGuard = incidentController.createEditorCommitGuard();
+		incidentController.setData(new AppData());
+		assertFalse(incidentGuard.commitField(
+				() -> incidentController.getData().getIncidentContext().setIncidentName("Old incident")));
+		assertEquals("", incidentController.getData().getIncidentContext().getIncidentName());
+
+		AppController periodController = controller(new AppData());
+		EditorCommitGuard periodGuard = periodController.createEditorCommitGuard();
+		periodController.newOperationalPeriod();
+		assertFalse(periodGuard.commitField(
+				() -> periodController.getData().getIncidentContext().setIncidentName("Old period")));
+		assertEquals("", periodController.getData().getIncidentContext().getIncidentName());
+	}
+
+	@Test
 	void defersAndCoalescesChangesPublishedOnEventDispatchThread() throws Exception {
 		AppController controller = controller(new AppData());
 		AtomicInteger deliveries = new AtomicInteger();

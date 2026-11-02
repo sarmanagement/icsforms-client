@@ -1019,7 +1019,7 @@ public class OrganizationalChartPanel extends JPanel {
 	 * @return true when the editor commit succeeds.
 	 */
 	public boolean pushToModel() {
-		return editorCommitGuard.commit(AppController.LinkSource.ORG_CHART, this::flushToModel);
+		return editorCommitGuard.applyIfCurrent(this::flushToModel);
 	}
 
 	/**

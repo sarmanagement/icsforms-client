@@ -20,6 +20,7 @@ import javax.swing.JButton;
 import javax.swing.AbstractButton;
 import javax.swing.JEditorPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
@@ -52,6 +53,26 @@ class CanineMedicalPanelTest {
 					instanceof Consumer<?>);
 			assertFalse(hasLabel(panel, "DVM"));
 			assertFalse(hasLabel(panel, "Also route unknown 24-hour status (not confirmed)"));
+		});
+	}
+
+	@Test
+	void staleCanineEditorInputCannotOverwriteNewerModelRevision() throws Exception {
+		AppData data = new AppData();
+		AppController controller = new AppController(data,
+				new LocalRepository(tempDirectory.resolve("stale-canine.json")),
+				new PdfExportService(), new IncidentValidator());
+		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
+		JTextArea procedures = (JTextArea) fieldValue(panel, "procedures");
+		JLabel status = (JLabel) fieldValue(panel, "status");
+
+		SwingUtilities.invokeAndWait(() -> {
+			controller.markDirty();
+			data.getCanineMedicalPlan().setEmergencyProcedures("Newer role-panel value");
+			procedures.setText("Stale full-editor value");
+			assertEquals("Newer role-panel value", data.getCanineMedicalPlan().getEmergencyProcedures());
+			assertTrue(status.getText().contains("is stale"));
+			controller.close();
 		});
 	}
 

@@ -12,8 +12,6 @@ import org.sarmanagement.icsforms.model.PlanReviewStatus;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
-import org.sarmanagement.icsforms.model.VetFacility;
-import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.pdf.Ics206CaninePdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics206PdfRenderer;
 
@@ -31,10 +29,8 @@ import javax.swing.JTextField;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
-import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -315,53 +311,11 @@ class MedicalReferencePanel extends JPanel {
 				.collect(java.util.stream.Collectors.joining("\n"));
 		transport.setText(join(structuredTransport, plan.getTransportServices()));
 		facilityModel.clear();
-		List<VetFacility> accepted = new ArrayList<>(plan.getSelectedFacilities());
-		accepted.sort(Comparator.comparingDouble(MedicalReferencePanel::sortableDistance));
-		for (VetFacility facility : accepted) {
-			facilityModel.addElement(facilityChoice(facility, "[Accepted plan]", data));
-		}
-		List<String> acceptedIds = accepted.stream().map(VetFacility::getId).toList();
-		List<VetFacility> candidates = data.getVetDirectory().getFacilities().stream()
-				.filter(facility -> !acceptedIds.contains(facility.getId()))
-				.sorted(Comparator.comparingDouble(MedicalReferencePanel::sortableDistance)).toList();
-		for (VetFacility facility : candidates) {
-			facilityModel.addElement(facilityChoice(facility, "[Directory candidate]", data));
+		for (CanineMedicalFacilityTools.FacilityDisplay facility
+				: CanineMedicalFacilityTools.referenceFacilities(data)) {
+			facilityModel.addElement(new FacilityChoice(facility.label(), facility.detail()));
 		}
 		selectFirstFacility();
-	}
-
-	/**
-	 * Builds a veterinary facility summary with route provenance and age.
-	 *
-	 * @param facility facility snapshot or directory candidate.
-	 * @param source source label.
-	 * @param data active incident.
-	 * @return display choice.
-	 */
-	private FacilityChoice facilityChoice(VetFacility facility, String source, AppData data) {
-		String distance = Double.isFinite(facility.getDistanceMeters())
-				? String.format("%.1f mi", facility.getDistanceMeters() / 1609.344)
-				: "unrouted";
-		String duration = Double.isFinite(facility.getDurationSeconds())
-				? Math.round(facility.getDurationSeconds() / 60d) + " min"
-				: "duration unknown";
-		String age = facility.getCalculatedAt() == null
-				? "age unknown"
-				: Duration.between(facility.getCalculatedAt(), UtcTimestamp.nowInstant()).toHours() + " h old";
-		String current = facility.hasCurrentDistance(data.getStagingLocation().getGeneration())
-				? "current origin generation"
-				: "stale/other origin";
-		String origin = data.getStagingLocation().getLabel() + " — " + data.getStagingLocation().getAddress();
-		String detail = source + "\n" + facility.getName() + "\n" + facility.getAddress() + ", "
-				+ facility.getTown() + ", " + facility.getState() + " " + facility.getPostalCode()
-				+ "\nContacts: " + String.join(", ", facility.getContactNumbers()) + "\nAvailability: "
-				+ value(facility.getAvailable24Hours()) + " 24-hour; " + facility.getAvailabilityNotes()
-				+ "\nCapabilities: " + facility.getCapabilities() + "\nVerified: "
-				+ UiSupport.formatInstant(facility.getVerifiedAt())
-				+ "\nOrigin: " + origin + "\nRoute: " + distance + ", " + duration + " | "
-				+ facility.getDistanceMethod() + " | " + facility.getDistanceProvenance() + " | " + age + " | "
-				+ current;
-		return new FacilityChoice(source + " " + facility.getName() + " — " + distance, detail);
 	}
 
 	/**
@@ -497,16 +451,6 @@ class MedicalReferencePanel extends JPanel {
 		} else {
 			facilityDetail.setText("No facilities recorded for this reference type.");
 		}
-	}
-
-	/**
-	 * Returns a sort key that leaves unrouted facilities visible after routed ones.
-	 *
-	 * @param facility facility.
-	 * @return finite distance or positive infinity.
-	 */
-	private static double sortableDistance(VetFacility facility) {
-		return Double.isFinite(facility.getDistanceMeters()) ? facility.getDistanceMeters() : Double.POSITIVE_INFINITY;
 	}
 
 	/** @return configured read-only wrapping text area. */

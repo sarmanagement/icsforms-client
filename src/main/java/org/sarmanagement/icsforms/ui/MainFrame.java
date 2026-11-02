@@ -1398,7 +1398,9 @@ public class MainFrame extends JFrame {
 				if (!medicalPlanPanel.pushToModel()) {
 					throw new IllegalStateException("The human medical editor rejected its draft.");
 				}
-				canineMedicalPanel.pushToModel();
+				if (!canineMedicalPanel.pushToModel()) {
+					throw new IllegalStateException("The canine medical editor rejected its draft.");
+				}
 				safetyPanel.pushToModel();
 				for (Ics214Panel panel : ics214Panels) {
 					panel.saveToModel();
@@ -1426,6 +1428,7 @@ public class MainFrame extends JFrame {
 	/** Rebinds unchanged full editors after a MainFrame-owned model update. */
 	private void rebaseEditorCommitBinding() {
 		editorCommitBinding = controller.captureEditorCommitBinding();
+		controller.rebaseEditorCommitGuards(editorCommitBinding);
 	}
 
 	/**
@@ -1553,6 +1556,7 @@ public class MainFrame extends JFrame {
 		UiSupport.applyDateTimeDisplayZone(this);
 		refreshStatus();
 		editorCommitBinding = controller.captureEditorCommitBinding();
+		controller.rebaseEditorCommitGuards(editorCommitBinding);
 		captureEditorTextBaselines();
 	}
 
