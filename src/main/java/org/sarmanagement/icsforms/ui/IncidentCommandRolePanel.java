@@ -438,7 +438,7 @@ public class IncidentCommandRolePanel extends JPanel {
 		}
 		String title = "Linked assignments for objective " + (objective.getDisplayOrder() + 1);
 		JDialog dialog = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this), title,
-				java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
+				java.awt.Dialog.ModalityType.MODELESS);
 		dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 		JPanel content = new JPanel(new BorderLayout(6, 6));
 		JTextArea objectiveText = new JTextArea(objective.getText());
@@ -449,13 +449,11 @@ public class IncidentCommandRolePanel extends JPanel {
 		objectiveText.getAccessibleContext().setAccessibleName("Objective wording");
 		content.add(new JScrollPane(objectiveText), BorderLayout.NORTH);
 
-		DefaultTableModel assignmentsModel = readOnlyModel("Task number", "Task name", "Status", "Assignment");
+		DefaultTableModel assignmentsModel = readOnlyModel("Task Number", "Task Name", "Status", "Assignment");
 		for (ResourceAssignment assignment : linkedAssignments) {
 			SarTaskAssignment task = findSarTask(assignment.getAssignmentId());
 			String number = nonblank(assignment.getAssignmentTeamNumber(), "Not recorded");
-			String name = task == null
-					? nonblank(assignment.getResourceIdentifier(), "Not recorded")
-					: nonblank(task.getAssignment(), assignment.getResourceIdentifier());
+			String name = nonblank(assignment.getResourceIdentifier(), "Not recorded");
 			String status = task == null ? "Not recorded" : nonblank(task.getTaskLifecycleStatus(), "Not recorded");
 			assignmentsModel.addRow(new Object[]{number, name, status, assignment.getAssignment()});
 		}
@@ -500,15 +498,49 @@ public class IncidentCommandRolePanel extends JPanel {
 			}
 		});
 		refreshActionAvailability.run();
-		open204.addActionListener(event -> runSelectedAssignmentAction(dialog, assignmentsTable, linkedAssignments,
+		open204.addActionListener(event -> runSelectedAssignmentAction(assignmentsTable, linkedAssignments,
 				assignmentActions == null ? null : assignmentActions::openIcs204));
-		openSar.addActionListener(event -> runSelectedAssignmentAction(dialog, assignmentsTable, linkedAssignments,
+		openSar.addActionListener(event -> runSelectedAssignmentAction(assignmentsTable, linkedAssignments,
 				assignmentActions == null ? null : assignmentActions::openSarTask));
-		addLog.addActionListener(event -> runSelectedAssignmentAction(dialog, assignmentsTable, linkedAssignments,
+		addLog.addActionListener(event -> runSelectedAssignmentAction(assignmentsTable, linkedAssignments,
 				assignmentActions == null ? null : assignmentActions::addLogEntry));
-		changeStatus.addActionListener(event -> runSelectedAssignmentAction(dialog, assignmentsTable, linkedAssignments,
+		changeStatus.addActionListener(event -> runSelectedAssignmentAction(assignmentsTable, linkedAssignments,
 				assignmentActions == null ? null : assignmentActions::changeStatus));
 		close.addActionListener(event -> dialog.dispose());
+		JPopupMenu assignmentMenu = new JPopupMenu();
+		addAssignmentMenuItem(assignmentMenu, "Open ICS 204 details", open204);
+		if (sarMode) {
+			addAssignmentMenuItem(assignmentMenu, "Open SAR task", openSar);
+		}
+		assignmentMenu.addSeparator();
+		addAssignmentMenuItem(assignmentMenu, "Make a log entry", addLog);
+		addAssignmentMenuItem(assignmentMenu, "Change status", changeStatus);
+		assignmentsTable.setComponentPopupMenu(assignmentMenu);
+		assignmentsTable.addMouseListener(new java.awt.event.MouseAdapter() {
+			/** Selects the row under a context-menu invocation. */
+			@Override
+			public void mousePressed(java.awt.event.MouseEvent event) {
+				selectAssignmentRow(assignmentsTable, event);
+			}
+
+			/** Selects the row under a context-menu invocation. */
+			@Override
+			public void mouseReleased(java.awt.event.MouseEvent event) {
+				selectAssignmentRow(assignmentsTable, event);
+			}
+
+			/** Opens the ICS 204 details for a double-clicked assignment. */
+			@Override
+			public void mouseClicked(java.awt.event.MouseEvent event) {
+				if (event.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(event)) {
+					int viewRow = assignmentsTable.rowAtPoint(event.getPoint());
+					if (viewRow >= 0) {
+						assignmentsTable.setRowSelectionInterval(viewRow, viewRow);
+						open204.doClick();
+					}
+				}
+			}
+		});
 		actions.add(open204);
 		actions.add(openSar);
 		actions.add(addLog);
@@ -535,21 +567,47 @@ public class IncidentCommandRolePanel extends JPanel {
 	/**
 	 * Runs an assignment action for the currently selected table row.
 	 *
-	 * @param dialog linked-assignment dialog.
 	 * @param table task table.
 	 * @param assignments linked ICS 204 assignments in model order.
-	 * @param action callback to run after closing the dialog.
+	 * @param action callback for the selected assignment.
 	 */
-	private static void runSelectedAssignmentAction(JDialog dialog, JTable table,
-			List<ResourceAssignment> assignments, Consumer<String> action) {
+	private static void runSelectedAssignmentAction(JTable table, List<ResourceAssignment> assignments,
+			Consumer<String> action) {
 		int viewRow = table.getSelectedRow();
 		int modelRow = viewRow < 0 ? -1 : table.convertRowIndexToModel(viewRow);
 		if (action == null || modelRow < 0 || modelRow >= assignments.size()) {
 			return;
 		}
 		String assignmentId = assignments.get(modelRow).getAssignmentId();
-		dialog.dispose();
 		action.accept(assignmentId);
+	}
+
+	/**
+	 * Adds one context-menu item that delegates to an existing assignment action button.
+	 *
+	 * @param menu assignment row menu.
+	 * @param label visible menu label.
+	 * @param actionButton existing workflow action button.
+	 */
+	private static void addAssignmentMenuItem(JPopupMenu menu, String label, JButton actionButton) {
+		JMenuItem item = new JMenuItem(label);
+		item.addActionListener(event -> actionButton.doClick());
+		menu.add(item);
+	}
+
+	/**
+	 * Selects the row beneath a context-menu trigger.
+	 *
+	 * @param table linked-assignment table.
+	 * @param event mouse event.
+	 */
+	private static void selectAssignmentRow(JTable table, java.awt.event.MouseEvent event) {
+		if (event.isPopupTrigger()) {
+			int row = table.rowAtPoint(event.getPoint());
+			if (row >= 0) {
+				table.setRowSelectionInterval(row, row);
+			}
+		}
 	}
 
 	/**

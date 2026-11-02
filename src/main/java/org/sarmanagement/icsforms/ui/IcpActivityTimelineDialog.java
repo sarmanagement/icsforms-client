@@ -31,6 +31,7 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridLayout;
 import java.awt.RenderingHints;
 import java.awt.Window;
 import java.awt.event.MouseAdapter;
@@ -63,7 +64,9 @@ public final class IcpActivityTimelineDialog extends JFrame {
 	private final TimelineCanvas canvas = new TimelineCanvas();
 	private final JLabel selectionLabel = new JLabel("Select an assignment lane or add an ICP entry.");
 	private final JLabel currentTime = new JLabel();
+	private final JLabel currentZone = new JLabel();
 	private final ClockFace clockFace = new ClockFace();
+	private final JPanel clockPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
 	private final Timer clockTimer;
 	private final JButton detailsButton = new JButton("Event Details…");
 	private final JButton openAssignmentButton = new JButton("Open Task / Assignment…");
@@ -114,15 +117,20 @@ public final class IcpActivityTimelineDialog extends JFrame {
 		JPanel content = new JPanel(new BorderLayout(8, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 		JPanel header = new JPanel(new BorderLayout(8, 0));
-		header.add(new JLabel(
-				"ICP activity by assignment. Markers show staging, task, clue, subject, completion, and return events."),
-				BorderLayout.CENTER);
-		JPanel clock = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-		clock.setBorder(BorderFactory.createTitledBorder("Current time"));
+		JPanel description = new JPanel(new GridLayout(0, 1));
+		description.add(new JLabel("ICP activity by assignment."));
+		description.add(new JLabel("Markers show staging, task, clue, subject, completion, and return events."));
+		header.add(description, BorderLayout.CENTER);
+		clockPanel.setBorder(BorderFactory.createTitledBorder("Current time"));
+		clockPanel.setPreferredSize(new Dimension(270, 72));
 		clockFace.setPreferredSize(new Dimension(48, 48));
-		clock.add(clockFace);
-		clock.add(currentTime);
-		header.add(clock, BorderLayout.EAST);
+		JPanel digitalClock = new JPanel(new GridLayout(2, 1, 0, 0));
+		currentTime.setFont(currentTime.getFont().deriveFont(Font.BOLD, 18f));
+		digitalClock.add(currentTime);
+		digitalClock.add(currentZone);
+		clockPanel.add(clockFace);
+		clockPanel.add(digitalClock);
+		header.add(clockPanel, BorderLayout.EAST);
 		content.add(header, BorderLayout.NORTH);
 		JScrollPane scroll = new JScrollPane(canvas);
 		scroll.setPreferredSize(new Dimension(1000, 540));
@@ -217,8 +225,11 @@ public final class IcpActivityTimelineDialog extends JFrame {
 	private void refreshCurrentTime() {
 		ZoneId zone = MainFrame.configuredZoneId(controller.getData());
 		ZonedDateTime now = UtcTimestamp.nowInstant().atZone(zone);
-		currentTime.setText(formatClockTime(now.toInstant(), zone) + " " + zone.getId());
-		currentTime.getAccessibleContext().setAccessibleName("Current time, 24-hour " + currentTime.getText());
+		currentTime.setText(formatClockTime(now.toInstant(), zone));
+		currentZone.setText(zone.getId());
+		currentZone.setToolTipText(zone.getId());
+		currentTime.getAccessibleContext().setAccessibleName("Current time, 24-hour " + currentTime.getText()
+				+ " " + zone.getId());
 		clockFace.setTime(now);
 	}
 

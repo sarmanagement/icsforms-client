@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.model.PlanReviewSupport;
 import org.sarmanagement.icsforms.model.RadioChannel;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SafetyAnalysisEntry;
 import org.sarmanagement.icsforms.model.SafetyMessageBlock;
 import org.sarmanagement.icsforms.model.TCard;
@@ -28,6 +29,8 @@ import javax.swing.JPanel;
 import javax.swing.JTable;
 import javax.swing.JFrame;
 import javax.swing.JDialog;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
 import javax.swing.JTextArea;
@@ -305,27 +308,36 @@ class IncidentCommandRolePanelTest {
 		assignment.setAssignment("Search sector A");
 		assignment.setObjectiveIds(List.of(objective.getObjectiveId()));
 		data.getForm204().getResourcesAssigned().add(assignment);
+		SarTaskAssignment task = new SarTaskAssignment();
+		task.setAssignmentId(assignment.getAssignmentId());
+		task.setTaskLifecycleStatus("assigned - on task");
+		data.getSarTaskAssignments().add(task);
 		AtomicReference<String> openedAssignment = new AtomicReference<>();
+		AtomicReference<String> invokedAction = new AtomicReference<>();
 		IncidentCommandRolePanel.AssignmentActions actions = new IncidentCommandRolePanel.AssignmentActions() {
 			/** {@inheritDoc} */
 			@Override
 			public void openIcs204(String assignmentId) {
 				openedAssignment.set(assignmentId);
+				invokedAction.set("ics204");
 			}
 
 			/** {@inheritDoc} */
 			@Override
 			public void openSarTask(String assignmentId) {
+				invokedAction.set("sar");
 			}
 
 			/** {@inheritDoc} */
 			@Override
 			public void addLogEntry(String assignmentId) {
+				invokedAction.set("log");
 			}
 
 			/** {@inheritDoc} */
 			@Override
 			public void changeStatus(String assignmentId) {
+				invokedAction.set("status");
 			}
 		};
 		IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller(data), ignored -> {
@@ -364,22 +376,46 @@ class IncidentCommandRolePanelTest {
 		}
 		assertTrue(dialog != null, "Linked-assignment dialog did not open");
 		JDialog shownDialog = dialog;
+		dialogThread.join(2000);
+		assertFalse(dialogThread.isAlive(), "Modeless linked-assignment dialog blocked its caller");
+		assertNull(dialogFailure.get());
 		SwingUtilities.invokeAndWait(() -> {
 			assertEquals("Linked assignments for objective 1", shownDialog.getTitle());
 			assertFalse(shownDialog.getTitle().contains(objective.getObjectiveId()));
 			JTextArea wording = findComponent(shownDialog, JTextArea.class);
 			assertEquals(objective.getText(), wording.getText());
 			JTable tasks = findComponent(shownDialog, JTable.class);
-			assertEquals(List.of("Task number", "Task name", "Status", "Assignment"),
+			assertEquals(List.of("Task Number", "Task Name", "Status", "Assignment"),
 					java.util.stream.IntStream.range(0, tasks.getColumnCount()).mapToObj(tasks::getColumnName)
 							.toList());
 			assertEquals("T-12", tasks.getValueAt(0, 0));
+			assertEquals("North team", tasks.getValueAt(0, 1));
 			assertEquals("Search sector A", tasks.getValueAt(0, 3));
 			button(shownDialog, "Open ICS 204 details").doClick();
+			assertTrue(shownDialog.isShowing());
+			assertEquals("ics204", invokedAction.get());
+
+			JPopupMenu popup = tasks.getComponentPopupMenu();
+			assertTrue(popup != null);
+			JMenuItem logEntry = java.util.Arrays.stream(popup.getComponents()).filter(JMenuItem.class::isInstance)
+					.map(JMenuItem.class::cast).filter(item -> "Make a log entry".equals(item.getText()))
+					.findFirst().orElseThrow();
+			logEntry.doClick();
+			assertTrue(shownDialog.isShowing());
+			assertEquals("log", invokedAction.get());
+			button(shownDialog, "Change status").doClick();
+			assertTrue(shownDialog.isShowing());
+			assertEquals("status", invokedAction.get());
+
+			for (var listener : tasks.getMouseListeners()) {
+				listener.mouseClicked(new java.awt.event.MouseEvent(tasks, java.awt.event.MouseEvent.MOUSE_CLICKED,
+						System.currentTimeMillis(), 0, 10, tasks.getRowHeight() / 2, 2, false,
+						java.awt.event.MouseEvent.BUTTON1));
+			}
+			assertEquals(assignment.getAssignmentId(), openedAssignment.get());
+			assertTrue(shownDialog.isShowing());
+			button(shownDialog, "Close").doClick();
 		});
-		dialogThread.join(2000);
-		assertFalse(dialogThread.isAlive(), "Linked-assignment dialog did not close");
-		assertNull(dialogFailure.get());
 		assertEquals(assignment.getAssignmentId(), openedAssignment.get());
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}

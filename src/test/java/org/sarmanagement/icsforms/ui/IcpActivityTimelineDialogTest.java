@@ -17,8 +17,10 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JButton;
 import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
@@ -165,6 +167,19 @@ class IcpActivityTimelineDialogTest {
 				IcpActivityTimelineDialog dialog = new IcpActivityTimelineDialog(null, controller, context::set,
 						openedAssignment::set, quickLog::set);
 				try {
+					JLabel digitalTime = field(dialog, "currentTime", JLabel.class);
+					JLabel timeZone = field(dialog, "currentZone", JLabel.class);
+					assertTrue(digitalTime.getFont().getSize2D() >= 18f);
+					assertTrue(digitalTime.getText().matches("\\d{2}:\\d{2}:\\d{2}"));
+					assertFalse(digitalTime.getText().contains(timeZone.getText()));
+					assertEquals(digitalTime.getParent(), timeZone.getParent());
+					assertEquals(new java.awt.Dimension(270, 72),
+							field(dialog, "clockPanel", JPanel.class).getPreferredSize());
+					assertTrue(descendants(dialog).stream().filter(JLabel.class::isInstance)
+							.map(JLabel.class::cast).anyMatch(label -> "ICP activity by assignment.".equals(label.getText())));
+					assertTrue(descendants(dialog).stream().filter(JLabel.class::isInstance)
+							.map(JLabel.class::cast).anyMatch(label -> label.getText()
+									.startsWith("Markers show staging, task, clue")));
 					assertFalse(button(dialog, "Event Details…").isEnabled());
 					assertFalse(button(dialog, "Open Task / Assignment…").isEnabled());
 					JScrollPane scroll = descendants(dialog).stream().filter(JScrollPane.class::isInstance)
@@ -295,5 +310,24 @@ class IcpActivityTimelineDialogTest {
 			}
 		}
 		return result;
+	}
+
+	/**
+	 * Reads a private timeline component for focused visual assertions.
+	 *
+	 * @param dialog inspected timeline.
+	 * @param name component field name.
+	 * @param type expected component type.
+	 * @param <T> component type.
+	 * @return the named component.
+	 */
+	private static <T> T field(IcpActivityTimelineDialog dialog, String name, Class<T> type) {
+		try {
+			var field = IcpActivityTimelineDialog.class.getDeclaredField(name);
+			field.setAccessible(true);
+			return type.cast(field.get(dialog));
+		} catch (ReflectiveOperationException exception) {
+			throw new AssertionError(exception);
+		}
 	}
 }
