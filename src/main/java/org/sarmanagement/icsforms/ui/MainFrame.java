@@ -215,7 +215,13 @@ public class MainFrame extends JFrame {
 		ApplicationIcon.install(this);
 		this.controller = controller;
 		this.lastData = controller.getData();
-		this.controller.setAutosaveErrorHandler(exception -> showSaveError(exception));
+		if (Boolean.getBoolean("icsforms.testMode")) {
+			this.controller.setAutosaveErrorHandler(exception -> {
+				throw new IllegalStateException("Unexpected autosave persistence failure", exception);
+			});
+		} else {
+			this.controller.setAutosaveErrorHandler(exception -> showSaveError(exception));
+		}
 		this.incidentContextPanel = new IncidentContextPanel(controller);
 		this.organizationalChartPanel = new OrganizationalChartPanel(controller);
 		this.ics201Panel = new Ics201Panel(controller);
@@ -291,11 +297,17 @@ public class MainFrame extends JFrame {
 		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		addWindowListener(new java.awt.event.WindowAdapter() {
 			/** Saves pending edits before the window closes. */
+			/** {@inheritDoc} */
 			@Override
 			public void windowClosing(java.awt.event.WindowEvent event) {
 				closeAfterSave();
 			}
 
+			/** {@inheritDoc} */
+			@Override
+			public void windowClosed(java.awt.event.WindowEvent event) {
+				closeOwnedResources();
+			}
 		});
 		KeyboardFocusManager.getCurrentKeyboardFocusManager()
 				.addPropertyChangeListener("focusOwner", focusOwnerListener);
@@ -2325,10 +2337,19 @@ public class MainFrame extends JFrame {
 		if (!saveBeforeSwitch()) {
 			return;
 		}
+		closeOwnedResources();
 		if (controller.getStore() != null) {
 			controller.getStore().close();
 		}
 		dispose();
+	}
+
+	/**
+	 * Releases controller and background work owned by this frame.
+	 */
+	private void closeOwnedResources() {
+		canineMedicalPanel.dispose();
+		controller.close();
 	}
 
 	/**

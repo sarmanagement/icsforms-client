@@ -268,6 +268,10 @@ class MapleRidgeExampleTest {
 				assertEquals(row.getResourceType(), task.getResourceType());
 				assertEquals(row.getTaskType(), task.getTaskType());
 				assertEquals(row.getAssignment(), task.getAssignment());
+				assertEquals(task.getResourceType().equals("Canine")
+						? "Live-find canine, radio, GPS, canine water" : "", row.getSpecialEquipment());
+				assertEquals("Water", row.getSupplies());
+				assertEquals(task.getTaskLifecycleStatus().replace("assigned - ", ""), row.getRemarks());
 				assertTrue(objectiveIds.containsAll(row.getObjectiveIds()));
 				assertFalse(row.getObjectiveIds().isEmpty());
 				assertEquals(row.getNumberOfPersons(), task.getResourcesAssigned().stream()
@@ -1203,9 +1207,9 @@ class MapleRidgeExampleTest {
 		row.setReportingLocation(STAGING);
 		row.setAssignment(assignment);
 		row.setObjectiveIds(List.of(id("objective-0"), id("objective-" + objective)));
-		row.setSpecialEquipment(dogIndex < 0 ? "Radio, map, GPS, first-aid kit" : "Live-find canine, radio, GPS, canine water");
-		row.setSupplies("Water, sun protection, repellent per label, tick-removal kit");
-		row.setRemarks("FICTIONAL EXERCISE; directly supervised by Ops; " + status);
+		row.setSpecialEquipment(dogIndex < 0 ? "" : "Live-find canine, radio, GPS, canine water");
+		row.setSupplies("Water");
+		row.setRemarks(status.replace("assigned - ", ""));
 		data.getForm204().getResourcesAssigned().add(row);
 		SarTaskAssignment task = new SarTaskAssignment();
 		task.setTaskId(id("task-" + number));
@@ -1226,7 +1230,8 @@ class MapleRidgeExampleTest {
 		task.setAssignmentStart(start);
 		task.setAssignmentEnd(end);
 		task.setTaskLifecycleStatus(status);
-		task.setSpecialEquipment(row.getSpecialEquipment());
+		task.setSpecialEquipment(dogIndex < 0
+				? "Radio, map, GPS, first-aid kit" : "Live-find canine, radio, GPS, canine water");
 		task.setTransportationInstructions(
 				"Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.");
 		task.setCommunications(contacts(data));

@@ -1,15 +1,17 @@
 # icsforms-client
 
+`icsforms-client` is a Java Swing desktop application for authoring Incident Command System (ICS) incident forms with local JSON persistence and PDF export. Development is ongoing and the application is still evolving as additional forms and functionality are added.
+
+This project supports all hazards incident response under ICS with extensions to support SAR (Search and Rescue) incidents. It can author and export PDFs for ICS 201, 202, 203, 204, 205, 205A, 206, adapted canine ICS 206, 207, 208, 214, 215, 215A, and 233-CG, as well as SAR task assignments and the SAR clue log. T-cards and an organizational chart help manage personnel and structure. Shared incident data populates form headers, while individual PDFs and selected-form IAP bundles provide legible outputs. The adapted canine medical plan and clue-log ICS 233 layout are application adaptations, not official FEMA variants.
+
+Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. Each incident is persisted locally at `~/.icsforms/incidents/<incidentId>.json`, with its own `.json.bak` backup; the install's node identity is kept in `~/.icsforms/node.json`. On first launch, an existing `~/.icsforms/incident.json` is imported as a new incident if no incidents exist yet. The original is left untouched and `incident.json.migrated` prevents repeat imports. File → Import → Import Incident JSON… can also import an external workspace as a separate incident. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF. An H2-backed store and offline-to-remote synchronization are planned, but not yet implemented.
+
+### Example incident
+
 A fully fictional, importable [Maple Ridge SAR example](docs/examples/README.md)
 demonstrates an active dementia-search operational period and linked ICS forms,
 resources, safety reminders and PDF exports. It is illustrative, not an operational plan.
 Open it with **File → Import → Import Incident JSON…**.
-
-`icsforms-client` is a Java Swing desktop application for authoring Incident Command System (ICS) incident forms with local JSON persistence and PDF export. Development is ongoing and the application is still evolving as additional forms and functionality are added.
-
-This project supports the **SAR (Search and Rescue)** community and generic ICS incident planning. It can author and export PDFs for ICS 201, 202, 203, 204, 205, 205A, 206, adapted canine ICS 206, 207, 208, 214, 215, 215A, and 233-CG, as well as SAR task assignments and the SAR clue log. T-cards and an organizational chart help manage personnel and structure. Shared incident data populates form headers, while individual PDFs and selected-form IAP bundles provide legible outputs. The adapted canine medical plan and clue-log ICS 233 layout are application adaptations, not official FEMA variants.
-
-Currently, this is a desktop application with a Swing UI. It is not a web application, and it does not support multi-user collaboration. Each incident is persisted locally at `~/.icsforms/incidents/<incidentId>.json`, with its own `.json.bak` backup; the install's node identity is kept in `~/.icsforms/node.json`. On first launch, an existing `~/.icsforms/incident.json` is imported as a new incident if no incidents exist yet. The original is left untouched and `incident.json.migrated` prevents repeat imports. File → Import → Import Incident JSON… can also import an external workspace as a separate incident. PDF export is supported for each form, as well as bulk export of all forms and a merged IAP bundle PDF. An H2-backed store and offline-to-remote synchronization are planned, but not yet implemented.
 
 ### Managing saved incidents
 
