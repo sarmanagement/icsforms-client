@@ -27,8 +27,10 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTable;
 import javax.swing.JFrame;
+import javax.swing.JDialog;
 import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
+import javax.swing.JTextArea;
 import java.awt.Container;
 import java.awt.BorderLayout;
 import java.awt.GraphicsEnvironment;
@@ -37,6 +39,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -291,6 +294,97 @@ class IncidentCommandRolePanelTest {
 	}
 
 	@Test
+	void linkedAssignmentDialogShowsObjectiveAndRoutesAssignmentAction() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		AppData data = new AppData();
+		IncidentObjective objective = new IncidentObjective("Search the north ridge", 0);
+		data.getForm202().setStructuredObjectives(List.of(objective));
+		ResourceAssignment assignment = new ResourceAssignment();
+		assignment.setAssignmentTeamNumber("T-12");
+		assignment.setResourceIdentifier("North team");
+		assignment.setAssignment("Search sector A");
+		assignment.setObjectiveIds(List.of(objective.getObjectiveId()));
+		data.getForm204().getResourcesAssigned().add(assignment);
+		AtomicReference<String> openedAssignment = new AtomicReference<>();
+		IncidentCommandRolePanel.AssignmentActions actions = new IncidentCommandRolePanel.AssignmentActions() {
+			/** {@inheritDoc} */
+			@Override
+			public void openIcs204(String assignmentId) {
+				openedAssignment.set(assignmentId);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void openSarTask(String assignmentId) {
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void addLogEntry(String assignmentId) {
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void changeStatus(String assignmentId) {
+			}
+		};
+		IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller(data), ignored -> {
+		}, actions);
+		JTable objectives = (JTable) field(panel, "objectives");
+		objectives.setRowSelectionInterval(0, 0);
+		AtomicReference<Throwable> dialogFailure = new AtomicReference<>();
+		Thread dialogThread = new Thread(() -> {
+			try {
+				SwingUtilities.invokeAndWait(() -> {
+					try {
+						var method = IncidentCommandRolePanel.class.getDeclaredMethod("showSelectedObjectiveAssignments");
+						method.setAccessible(true);
+						method.invoke(panel);
+					} catch (ReflectiveOperationException exception) {
+						throw new IllegalStateException(exception);
+					}
+				});
+			} catch (Throwable exception) {
+				dialogFailure.set(exception);
+			}
+		});
+		dialogThread.start();
+		JDialog dialog = null;
+		for (int attempt = 0; attempt < 200 && dialog == null; attempt++) {
+			for (java.awt.Window window : java.awt.Window.getWindows()) {
+				if (window instanceof JDialog candidate && candidate.isShowing()
+						&& candidate.getTitle().startsWith("Linked assignments for objective ")) {
+					dialog = candidate;
+					break;
+				}
+			}
+			if (dialog == null) {
+				Thread.sleep(10);
+			}
+		}
+		assertTrue(dialog != null, "Linked-assignment dialog did not open");
+		JDialog shownDialog = dialog;
+		SwingUtilities.invokeAndWait(() -> {
+			assertEquals("Linked assignments for objective 1", shownDialog.getTitle());
+			assertFalse(shownDialog.getTitle().contains(objective.getObjectiveId()));
+			JTextArea wording = findComponent(shownDialog, JTextArea.class);
+			assertEquals(objective.getText(), wording.getText());
+			JTable tasks = findComponent(shownDialog, JTable.class);
+			assertEquals(List.of("Task number", "Task name", "Status", "Assignment"),
+					java.util.stream.IntStream.range(0, tasks.getColumnCount()).mapToObj(tasks::getColumnName)
+							.toList());
+			assertEquals("T-12", tasks.getValueAt(0, 0));
+			assertEquals("Search sector A", tasks.getValueAt(0, 3));
+			button(shownDialog, "Open ICS 204 details").doClick();
+		});
+		dialogThread.join(2000);
+		assertFalse(dialogThread.isAlive(), "Linked-assignment dialog did not close");
+		assertNull(dialogFailure.get());
+		assertEquals(assignment.getAssignmentId(), openedAssignment.get());
+		SwingUtilities.invokeAndWait(panel::dispose);
+	}
+
+	@Test
 	void objectiveBadgeShowsLegacyApprovalAndLiveCurrentThenStaleApproval() throws Exception {
 		AppData data = new AppData();
 		IncidentObjective objective = new IncidentObjective("Search north", 0);
@@ -447,6 +541,29 @@ class IncidentCommandRolePanelTest {
 			}
 			if (component instanceof Container container) {
 				JButton nested = button(container, text);
+				if (nested != null) {
+					return nested;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Finds the first descendant of the requested Swing component type.
+	 *
+	 * @param parent container to inspect.
+	 * @param type component type to find.
+	 * @param <T> component type.
+	 * @return matching component.
+	 */
+	private <T extends java.awt.Component> T findComponent(Container parent, Class<T> type) {
+		for (java.awt.Component component : parent.getComponents()) {
+			if (type.isInstance(component)) {
+				return type.cast(component);
+			}
+			if (component instanceof Container container) {
+				T nested = findComponent(container, type);
 				if (nested != null) {
 					return nested;
 				}

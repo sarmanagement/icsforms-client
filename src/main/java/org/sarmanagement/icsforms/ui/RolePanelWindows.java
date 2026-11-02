@@ -171,13 +171,27 @@ final class RolePanelWindows {
 	 */
 	static JFrame openIncidentCommand(Window owner, AppController controller,
 			Consumer<WorkspaceDestination> navigator) {
+		return openIncidentCommand(owner, controller, navigator, null);
+	}
+
+	/**
+	 * Opens or focuses the Incident Command panel with linked-assignment operations.
+	 *
+	 * @param owner parent window.
+	 * @param controller incident controller.
+	 * @param navigator typed workspace navigator.
+	 * @param assignmentActions callbacks for linked task operations.
+	 * @return role window.
+	 */
+	static JFrame openIncidentCommand(Window owner, AppController controller,
+			Consumer<WorkspaceDestination> navigator, IncidentCommandRolePanel.AssignmentActions assignmentActions) {
 		AppData incident = controller.getData();
 		JFrame existing = INCIDENT_COMMAND_WINDOWS.get(incident);
 		if (existing != null && existing.isDisplayable()) {
 			existing.toFront();
 			return existing;
 		}
-		IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller, navigator);
+		IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller, navigator, assignmentActions);
 		JFrame frame = createFrame("Incident Command — " + incident.getIncidentContext().getIncidentName(), panel,
 				ApplicationIcon.Variant.INCIDENT_COMMAND);
 		frame.addWindowListener(new java.awt.event.WindowAdapter() {

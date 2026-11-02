@@ -334,8 +334,7 @@ public class MainFrame extends JFrame {
 		JMenuItem operationsRolePanel = new JMenuItem("Operations");
 		operationsRolePanel.addActionListener(event -> openOperationsRolePanel());
 		JMenuItem incidentCommandRolePanel = new JMenuItem("Incident Command");
-		incidentCommandRolePanel.addActionListener(
-				event -> RolePanelWindows.openIncidentCommand(this, controller, this::openWorkspace));
+		incidentCommandRolePanel.addActionListener(event -> openIncidentCommandRolePanel());
 		JMenuItem communicationsRolePanel = new JMenuItem("Communications Unit");
 		communicationsRolePanel.addActionListener(event -> openCommunicationsRolePanel());
 		rolePanelsMenu.add(incidentCommandRolePanel);
@@ -769,6 +768,57 @@ public class MainFrame extends JFrame {
 				() -> HumanMedicalReferenceWindow.open(this, controller, this::openWorkspace),
 				() -> CanineMedicalReferenceWindow.open(this, controller, this::openWorkspace),
 				() -> openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_215)));
+	}
+
+	/** Opens Incident Command with the established assignment, log, and status workflows. */
+	private void openIncidentCommandRolePanel() {
+		RolePanelWindows.openIncidentCommand(this, controller, this::openWorkspace,
+				new IncidentCommandRolePanel.AssignmentActions() {
+					/** {@inheritDoc} */
+					@Override
+					public void openIcs204(String assignmentId) {
+						openIcs204EditorForAssignment(assignmentId);
+					}
+
+					/** {@inheritDoc} */
+					@Override
+					public void openSarTask(String assignmentId) {
+						openSarTaskEditorForAssignment(assignmentId);
+					}
+
+					/** {@inheritDoc} */
+					@Override
+					public void addLogEntry(String assignmentId) {
+						openAssignmentLogEntry(assignmentId);
+					}
+
+					/** {@inheritDoc} */
+					@Override
+					public void changeStatus(String assignmentId) {
+						sarTaskPanel.openTaskStatusDialogByAssignmentId(assignmentId);
+					}
+				});
+	}
+
+	/**
+	 * Opens the shared activity entry for an assignment in its task context.
+	 *
+	 * @param assignmentId stable ICS 204 assignment identity.
+	 */
+	private void openAssignmentLogEntry(String assignmentId) {
+		var task = controller.getData().getSarTaskAssignments().stream()
+				.filter(candidate -> assignmentId.equals(candidate.getAssignmentId())).findFirst().orElse(null);
+		if (task != null) {
+			showAddLogEntry(new LogEntryContext(sarTaskPanel, task.getTaskId(), task.getAssignmentId(),
+					org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(task)));
+			return;
+		}
+		var assignment = controller.getAssignmentResources().stream()
+				.filter(candidate -> assignmentId.equals(candidate.getAssignmentId())).findFirst().orElse(null);
+		if (assignment != null) {
+			showAddLogEntry(new LogEntryContext(ics204Panel, "", assignment.getAssignmentId(),
+					assignment.getResourceIdentifier()));
+		}
 	}
 
 	/** Opens Communications while delegating import/export to established dialogs. */

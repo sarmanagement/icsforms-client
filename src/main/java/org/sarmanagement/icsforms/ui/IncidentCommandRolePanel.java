@@ -9,21 +9,24 @@ import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.ObjectiveApprovalStatus;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.model.PlanReviewStatus;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JDialog;
 import javax.swing.JMenuItem;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
 import javax.swing.JTable;
+import javax.swing.JSplitPane;
 import javax.swing.JTextField;
+import javax.swing.JTextArea;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.JTextComponent;
@@ -48,9 +51,24 @@ import java.util.function.Consumer;
  * approval, reviews, and recorded resource states.
  */
 public class IncidentCommandRolePanel extends JPanel {
+	interface AssignmentActions {
+		/** Opens the matching ICS 204 resource detail. */
+		void openIcs204(String assignmentId);
+
+		/** Opens the matching SAR task editor. */
+		void openSarTask(String assignmentId);
+
+		/** Opens the shared task-linked activity entry workflow. */
+		void addLogEntry(String assignmentId);
+
+		/** Opens the established SAR task status workflow. */
+		void changeStatus(String assignmentId);
+	}
+
 	private static final DateTimeFormatter APPROVAL_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	private final AppController controller;
 	private final Consumer<WorkspaceDestination> navigator;
+	private final AssignmentActions assignmentActions;
 	private final AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
 	private final JComboBox<IapPlanningStage> planningStage = new JComboBox<>(IapPlanningStage.values());
@@ -77,9 +95,22 @@ public class IncidentCommandRolePanel extends JPanel {
 	 * @param navigator typed full-workspace navigator.
 	 */
 	public IncidentCommandRolePanel(AppController controller, Consumer<WorkspaceDestination> navigator) {
+		this(controller, navigator, null);
+	}
+
+	/**
+	 * Creates the Incident Command panel with linked-assignment operations.
+	 *
+	 * @param controller incident controller.
+	 * @param navigator typed full-workspace navigator.
+	 * @param assignmentActions callbacks for existing assignment workflows.
+	 */
+	IncidentCommandRolePanel(AppController controller, Consumer<WorkspaceDestination> navigator,
+			AssignmentActions assignmentActions) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
 		this.navigator = navigator;
+		this.assignmentActions = assignmentActions;
 		binding = controller.captureIncidentBinding();
 		add(buildHeader(), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
@@ -390,33 +421,146 @@ public class IncidentCommandRolePanel extends JPanel {
 		}
 	}
 
-	/** Displays linked assignment identities and recorded task lifecycle states. */
+	/** Displays linked assignments and delegates selected-row actions to existing workflows. */
 	private void showSelectedObjectiveAssignments() {
-		int row = objectives.getSelectedRow();
+		int selectedRow = objectives.getSelectedRow();
+		int row = selectedRow < 0 ? -1 : objectives.convertRowIndexToModel(selectedRow);
 		if (row < 0 || row >= controller.getData().getForm202().getStructuredObjectives().size()) {
 			return;
 		}
 		IncidentObjective objective = controller.getData().getForm202().getStructuredObjectives().get(row);
-		List<String> lines = new java.util.ArrayList<>();
-		for (var assignment : controller.getAssignmentResources()) {
+		List<ResourceAssignment> linkedAssignments = new java.util.ArrayList<>();
+		for (ResourceAssignment assignment : controller.getAssignmentResources()) {
 			if (!assignment.getObjectiveIds().contains(objective.getObjectiveId())) {
 				continue;
 			}
-			String taskStatus = controller.getData().getSarTaskAssignments().stream()
-					.filter(task -> assignment.getAssignmentId().equals(task.getAssignmentId()))
-					.map(task -> task.getTaskLifecycleStatus()).findFirst().orElse("not recorded");
-			String label = assignment.getAssignmentTeamNumber() == null || assignment.getAssignmentTeamNumber().isBlank()
-					? assignment.getAssignmentId() : assignment.getAssignmentTeamNumber();
-			lines.add(label + " — " + taskStatus);
+			linkedAssignments.add(assignment);
 		}
-		if (lines.isEmpty()) {
-			lines.add("No assignments are linked to this objective.");
+		String title = "Linked assignments for objective " + (objective.getDisplayOrder() + 1);
+		JDialog dialog = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(this), title,
+				java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
+		dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+		JPanel content = new JPanel(new BorderLayout(6, 6));
+		JTextArea objectiveText = new JTextArea(objective.getText());
+		objectiveText.setEditable(false);
+		objectiveText.setLineWrap(true);
+		objectiveText.setWrapStyleWord(true);
+		objectiveText.setRows(3);
+		objectiveText.getAccessibleContext().setAccessibleName("Objective wording");
+		content.add(new JScrollPane(objectiveText), BorderLayout.NORTH);
+
+		DefaultTableModel assignmentsModel = readOnlyModel("Task number", "Task name", "Status", "Assignment");
+		for (ResourceAssignment assignment : linkedAssignments) {
+			SarTaskAssignment task = findSarTask(assignment.getAssignmentId());
+			String number = nonblank(assignment.getAssignmentTeamNumber(), "Not recorded");
+			String name = task == null
+					? nonblank(assignment.getResourceIdentifier(), "Not recorded")
+					: nonblank(task.getAssignment(), assignment.getResourceIdentifier());
+			String status = task == null ? "Not recorded" : nonblank(task.getTaskLifecycleStatus(), "Not recorded");
+			assignmentsModel.addRow(new Object[]{number, name, status, assignment.getAssignment()});
 		}
-		javax.swing.JTextArea content = new javax.swing.JTextArea(String.join("\n", lines), 8, 48);
-		content.setEditable(false);
-		UiSupport.showDocumentMessage(this, new JScrollPane(content),
-				"Linked assignments for " + objective.getObjectiveId(),
-				JOptionPane.INFORMATION_MESSAGE);
+		JTable assignmentsTable = new JTable(assignmentsModel);
+		assignmentsTable.getAccessibleContext().setAccessibleName("Tasks linked to objective");
+		assignmentsTable.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+		assignmentsTable.setAutoCreateRowSorter(true);
+		assignmentsTable.setFillsViewportHeight(true);
+		if (linkedAssignments.isEmpty()) {
+			assignmentsModel.addRow(new Object[]{"", "No assignments linked", "", ""});
+		} else {
+			assignmentsTable.setRowSelectionInterval(0, 0);
+		}
+		content.add(new JScrollPane(assignmentsTable), BorderLayout.CENTER);
+
+		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
+		JButton open204 = new JButton("Open ICS 204 details");
+		JButton openSar = new JButton("Open SAR task");
+		JButton addLog = new JButton("Make a log entry");
+		JButton changeStatus = new JButton("Change status");
+		JButton close = new JButton("Close");
+		boolean sarMode = controller.getIncidentMode() == org.sarmanagement.icsforms.model.IncidentMode.SAR;
+		openSar.setVisible(sarMode);
+		open204.setEnabled(!linkedAssignments.isEmpty());
+		openSar.setEnabled(!linkedAssignments.isEmpty());
+		addLog.setEnabled(!linkedAssignments.isEmpty());
+		changeStatus.setEnabled(false);
+		Runnable refreshActionAvailability = () -> {
+			int viewRow = assignmentsTable.getSelectedRow();
+			int modelRow = viewRow < 0 ? -1 : assignmentsTable.convertRowIndexToModel(viewRow);
+			boolean hasAssignment = modelRow >= 0 && modelRow < linkedAssignments.size();
+			boolean hasSarTask = hasAssignment
+					&& findSarTask(linkedAssignments.get(modelRow).getAssignmentId()) != null;
+			open204.setEnabled(hasAssignment);
+			openSar.setEnabled(sarMode && hasAssignment && hasSarTask);
+			addLog.setEnabled(hasAssignment);
+			changeStatus.setEnabled(sarMode && hasAssignment && hasSarTask);
+		};
+		assignmentsTable.getSelectionModel().addListSelectionListener(event -> {
+			if (!event.getValueIsAdjusting()) {
+				refreshActionAvailability.run();
+			}
+		});
+		refreshActionAvailability.run();
+		open204.addActionListener(event -> runSelectedAssignmentAction(dialog, assignmentsTable, linkedAssignments,
+				assignmentActions == null ? null : assignmentActions::openIcs204));
+		openSar.addActionListener(event -> runSelectedAssignmentAction(dialog, assignmentsTable, linkedAssignments,
+				assignmentActions == null ? null : assignmentActions::openSarTask));
+		addLog.addActionListener(event -> runSelectedAssignmentAction(dialog, assignmentsTable, linkedAssignments,
+				assignmentActions == null ? null : assignmentActions::addLogEntry));
+		changeStatus.addActionListener(event -> runSelectedAssignmentAction(dialog, assignmentsTable, linkedAssignments,
+				assignmentActions == null ? null : assignmentActions::changeStatus));
+		close.addActionListener(event -> dialog.dispose());
+		actions.add(open204);
+		actions.add(openSar);
+		actions.add(addLog);
+		actions.add(changeStatus);
+		actions.add(close);
+		content.add(actions, BorderLayout.SOUTH);
+		dialog.setContentPane(content);
+		dialog.setSize(new Dimension(920, 420));
+		dialog.setLocationRelativeTo(this);
+		dialog.setVisible(true);
+	}
+
+	/**
+	 * Finds a SAR task linked to one ICS 204 assignment.
+	 *
+	 * @param assignmentId stable assignment identifier.
+	 * @return linked task, or null when the assignment has no SAR task.
+	 */
+	private SarTaskAssignment findSarTask(String assignmentId) {
+		return controller.getData().getSarTaskAssignments().stream()
+				.filter(task -> assignmentId.equals(task.getAssignmentId())).findFirst().orElse(null);
+	}
+
+	/**
+	 * Runs an assignment action for the currently selected table row.
+	 *
+	 * @param dialog linked-assignment dialog.
+	 * @param table task table.
+	 * @param assignments linked ICS 204 assignments in model order.
+	 * @param action callback to run after closing the dialog.
+	 */
+	private static void runSelectedAssignmentAction(JDialog dialog, JTable table,
+			List<ResourceAssignment> assignments, Consumer<String> action) {
+		int viewRow = table.getSelectedRow();
+		int modelRow = viewRow < 0 ? -1 : table.convertRowIndexToModel(viewRow);
+		if (action == null || modelRow < 0 || modelRow >= assignments.size()) {
+			return;
+		}
+		String assignmentId = assignments.get(modelRow).getAssignmentId();
+		dialog.dispose();
+		action.accept(assignmentId);
+	}
+
+	/**
+	 * Returns the first nonblank display value.
+	 *
+	 * @param value preferred display value.
+	 * @param fallback alternate value.
+	 * @return preferred nonblank value or fallback.
+	 */
+	private static String nonblank(String value, String fallback) {
+		return value == null || value.isBlank() ? fallback : value;
 	}
 
 	/**
