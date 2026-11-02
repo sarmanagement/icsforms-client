@@ -1403,7 +1403,9 @@ public class MainFrame extends JFrame {
 				}
 				safetyPanel.pushToModel();
 				for (Ics214Panel panel : ics214Panels) {
-					panel.saveToModel();
+					if (!panel.saveToModel()) {
+						throw new IllegalStateException("An ICS 214 editor rejected its draft.");
+					}
 				}
 				sarTaskPanel.pushToModel();
 				clueLogPanel.pushToModel();

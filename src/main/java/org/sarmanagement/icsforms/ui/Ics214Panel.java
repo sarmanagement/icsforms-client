@@ -65,6 +65,7 @@ public class Ics214Panel extends JPanel {
 	private static final Map<Ics214Form, JFrame> POP_OUT_WINDOWS = new IdentityHashMap<>();
 
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 	private final JTextField nameField = UiSupport.textField();
 	private final JTextField icsPositionField = UiSupport.textField();
 	private final JTextField homeAgencyField = UiSupport.textField();
@@ -96,6 +97,7 @@ public class Ics214Panel extends JPanel {
 	public Ics214Panel(AppController controller) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
+		editorCommitGuard = new EditorCommitGuard(controller);
 
 		JPanel form = UiSupport.formPanel();
 		form.setBorder(BorderFactory.createTitledBorder("ICS 214 Activity Log"));
@@ -395,6 +397,7 @@ public class Ics214Panel extends JPanel {
 			clearFields();
 			pickPreparerButton.setEnabled(false);
 			updateActivityButtonsState();
+			editorCommitGuard.rebase();
 			return;
 		}
 		nameField.setText(nullSafe(currentForm.getName()));
@@ -419,14 +422,24 @@ public class Ics214Panel extends JPanel {
 		}
 		loadedHeader = headerState();
 		loadedResources = resourceStates(resourcesTableModel.getRows());
+		editorCommitGuard.rebase();
 	}
 
 	/**
 	 * Merges locally edited fields against their loaded baselines and current
 	 * canonical values. Untouched fields adopt external changes; deliberate local
 	 * edits win same-field conflicts. Authoritative activity entries are never replaced.
+	 *
+	 * @return true when the editor binding is current and the flush succeeds.
 	 */
-	public void saveToModel() {
+	public boolean saveToModel() {
+		return editorCommitGuard.applyIfCurrent(this::flushToModel);
+	}
+
+	/**
+	 * Merges visible ICS 214 values into the bound form after validating the editor token.
+	 */
+	private void flushToModel() {
 		if (currentForm == null || currentData != controller.getData() || loadedHeader == null) {
 			return;
 		}
@@ -676,7 +689,11 @@ public class Ics214Panel extends JPanel {
 		if (currentForm == null || currentData != controller.getData()) {
 			return;
 		}
-		saveToModel();
+		if (!saveToModel()) {
+			JOptionPane.showMessageDialog(this, "This ICS 214 editor is stale. Refresh it before opening another window.",
+					"Unable to open activity log", JOptionPane.WARNING_MESSAGE);
+			return;
+		}
 		openInNewWindow(controller, currentForm, currentData, () -> {
 			if (currentData == controller.getData() && currentForm != null) {
 				refreshActivityEntries();
@@ -768,7 +785,11 @@ public class Ics214Panel extends JPanel {
 	private static void closePopOutWindow(JFrame frame, Ics214Panel popOut, Ics214Form form, AppData data,
 			Runnable onSave) {
 		if (popOut.controller.getData() == data) {
-			popOut.saveToModel();
+			if (!popOut.saveToModel()) {
+				JOptionPane.showMessageDialog(popOut, "This ICS 214 editor is stale. Refresh it before closing.",
+						"Unable to save activity log", JOptionPane.WARNING_MESSAGE);
+				return;
+			}
 			popOut.controller.markDirty();
 			if (onSave != null) {
 				onSave.run();
