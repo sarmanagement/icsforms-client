@@ -3,6 +3,8 @@
  */
 package org.sarmanagement.icsforms.ui;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
@@ -125,6 +127,9 @@ class IncidentCommandRolePanelTest {
 		data.getForm204().getResourcesAssigned().add(assignment);
 		AppController controller = controller(data);
 		IncidentCommandRolePanel panel = panel(controller);
+		assertTrue(java.util.Arrays.stream(((JTable) field(panel, "objectives")).getComponentPopupMenu().getComponents())
+				.filter(JMenuItem.class::isInstance).map(JMenuItem.class::cast)
+				.anyMatch(item -> "Edit objective…".equals(item.getText())));
 		AppController.IncidentBinding binding = controller.captureIncidentBinding();
 		SwingUtilities.invokeAndWait(() -> assertTrue(panel.saveObjective(binding, objective.getObjectiveId(),
 				"Search north ridge sector A", ObjectiveAssessment.ONGOING, "Team report pending.")));
@@ -139,6 +144,7 @@ class IncidentCommandRolePanelTest {
 				"Establish command post", ObjectiveAssessment.NOT_ASSESSED, "")));
 		assertEquals(2, data.getForm202().getStructuredObjectives().size());
 		assertEquals("Establish command post", data.getForm202().getStructuredObjectives().get(1).getText());
+		assertNull(data.getForm202().getStructuredObjectives().get(1).getAssessedAt());
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
 
@@ -232,6 +238,27 @@ class IncidentCommandRolePanelTest {
 		javax.swing.table.DefaultTableModel displayed = panel.resultsModelFor(objective.getObjectiveId());
 		assertEquals("Sector A searched; no find.", displayed.getValueAt(0, 0));
 		assertEquals("Team T-12 radio report", displayed.getValueAt(0, 1));
+		SwingUtilities.invokeAndWait(panel::dispose);
+	}
+
+	@Test
+	void reportedResultsAndSourcesRoundTripWithTheIcs202Form() throws Exception {
+		AppData data = new AppData();
+		IncidentObjective objective = new IncidentObjective("Search sector A", 0);
+		data.getForm202().setStructuredObjectives(List.of(objective));
+		AppController controller = controller(data);
+		IncidentCommandRolePanel panel = panel(controller);
+		SwingUtilities.invokeAndWait(() -> assertTrue(panel.recordReportedResult(
+				controller.captureIncidentBinding(), objective.getObjectiveId(), "Sector searched.",
+				"Team radio report")));
+
+		ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+		var saved = mapper.readValue(mapper.writeValueAsBytes(data.getForm202()),
+				org.sarmanagement.icsforms.model.Ics202Form.class);
+		assertEquals(1, saved.getReportedResults().size());
+		assertEquals("Sector searched.", saved.getReportedResults().get(0).getResult());
+		assertEquals("Team radio report", saved.getReportedResults().get(0).getSource());
+		assertEquals(objective.getObjectiveId(), saved.getReportedResults().get(0).getObjectiveId());
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
 

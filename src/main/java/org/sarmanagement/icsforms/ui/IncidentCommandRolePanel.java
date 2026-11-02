@@ -545,11 +545,16 @@ public class IncidentCommandRolePanel extends JPanel {
 			objective = new IncidentObjective();
 			ordered.add(objective);
 		}
+		ObjectiveAssessment previousAssessment = objective.getAssessment();
+		String previousNote = objective.getAssessmentNote();
 		objective.setText(wording);
 		objective.setAssessment(assessment);
 		objective.setAssessmentNote(note);
-		objective.setAssessedBy(controller.getData().getIncidentContext().getCurrentUser());
-		objective.setAssessedAt(UtcTimestamp.now().withSecond(0).withNano(0));
+		if (previousAssessment != objective.getAssessment()
+				|| !java.util.Objects.equals(previousNote, objective.getAssessmentNote())) {
+			objective.setAssessedBy(controller.getData().getIncidentContext().getCurrentUser());
+			objective.setAssessedAt(UtcTimestamp.now().withSecond(0).withNano(0));
+		}
 		controller.getData().getForm202().setStructuredObjectives(ordered);
 		controller.markDirty();
 		refreshFromModel();
@@ -803,10 +808,17 @@ public class IncidentCommandRolePanel extends JPanel {
 		form.add(new JScrollPane(result));
 		form.add(new JLabel("Source (for example: team report, log entry, or observed fact)"));
 		form.add(source);
-		int choice = UiSupport.showResizableOptionDialog(this, "Record reported result", form,
-				new Dimension(560, 300), new Object[]{"Record", "Cancel"}, "Record");
-		if (choice == 0 && !recordReportedResult(editBinding, objectiveId, result.getText(), source.getText())) {
-			UiSupport.showDocumentMessage(this, "A result and its source are required, and the incident must be unchanged.",
+		while (controller.isCurrent(editBinding)) {
+			int choice = UiSupport.showResizableOptionDialog(this, "Record reported result", form,
+					new Dimension(560, 300), new Object[]{"Record", "Cancel"}, "Record");
+			if (choice != 0) {
+				return;
+			}
+			if (recordReportedResult(editBinding, objectiveId, result.getText(), source.getText())) {
+				return;
+			}
+			UiSupport.showDocumentMessage(this,
+					"A result and its source are required, and the incident must be unchanged.",
 					"Unable to record result", javax.swing.JOptionPane.WARNING_MESSAGE);
 		}
 	}
@@ -844,7 +856,8 @@ public class IncidentCommandRolePanel extends JPanel {
 	 * @return objective, or null if absent.
 	 */
 	private IncidentObjective selectedObjective(String objectiveId) {
-		return controller.getData().getForm202().getStructuredObjectives().stream()
+		return objectiveId == null || objectiveId.isBlank() ? null
+				: controller.getData().getForm202().getStructuredObjectives().stream()
 				.filter(objective -> objectiveId.equals(objective.getObjectiveId())).findFirst().orElse(null);
 	}
 	/**

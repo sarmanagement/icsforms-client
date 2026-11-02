@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -93,6 +94,7 @@ public class Ics202Form {
 	 *
 	 * @return mutable reported-results list.
 	 */
+	@JsonInclude(JsonInclude.Include.NON_EMPTY)
 	public List<Ics202ReportedResult> getReportedResults() {
 		if (reportedResults == null) {
 			reportedResults = new ArrayList<>();

@@ -6,12 +6,16 @@ Operations, or Communications Unit. They are workflow conveniences, not
 permissions or separate incident records. The full editors remain available
 through the main workspace and are reached using stable workspace identifiers.
 
-The Incident Command panel summarizes objectives, their recorded assessments,
-planning information, and unique resource states. It does not calculate
-objective achievement or resource readiness. Detailed objective and assignment
-editing continues in the ICS 202 and ICS 204 workspaces. Compact status blocks
-mirror the recorded status colors; objective rows expose linked-assignment
-states and a dialog listing those assignments.
+The Incident Command panel supports adding and editing objective wording,
+assessment, and assessment notes while preserving objective identity and
+assignment links. Its objective context can link existing assignments or create
+a normal ICS 204 assignment prelinked to the objective. The linked-assignment
+window retains the existing ICS 204, SAR task, logging, status, and debrief
+actions, and has a separate reported-results view with operator-stated sources.
+Command emphasis and general situational awareness from ICS 202 are editable in
+the panel. Its observational attention list calls out objectives without links
+or an assessment. The panel does not calculate objective achievement, resource
+readiness, or duplicate resource totals.
 
 The Operations task board offers the same assignment, status, logging, clue, and
 debrief actions in its task context menu. Debrief is enabled only for returned
@@ -46,7 +50,6 @@ The former **View > Dashboard** role-based tab ordering has been retired.
 Workspaces now use one stable order; use **View > Role Panels** for focused role
 views. A saved legacy dashboard preference is ignored.
 
-The Incident Command panel is currently an overview rather than the complete
-objective-centered editor described in
-[`DraftWorkPlan.md`](../DraftWorkPlan.md). The work-plan status table records
-the remaining editing and desktop-acceptance gaps.
+The Incident Command panel now provides focused objective editing and assignment
+linking, but full desktop acceptance across keyboard, resizing, and multi-screen
+scenarios remains outstanding in [`DraftWorkPlan.md`](../DraftWorkPlan.md).
