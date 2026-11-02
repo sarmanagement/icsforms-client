@@ -28,6 +28,7 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 /**
  * Explicit, selective plan reuse from completed periods or another saved incident.
@@ -148,6 +149,34 @@ public final class BringForwardDialog extends JDialog {
 			return;
 		}
 		flushStandalone.run();
+		try {
+			showDialog(editor, controller);
+		} finally {
+			refreshStandalone.run();
+		}
+	}
+
+	/**
+	 * Opens plan reuse only after a standalone editor confirms its guarded flush.
+	 *
+	 * @param editor launching editor.
+	 * @param controller active controller.
+	 * @param flushStandalone commits pending edits and returns false on conflict.
+	 * @param refreshStandalone reloads the editor after plan reuse.
+	 */
+	public static void showFromEditorIfCurrent(Component editor, AppController controller,
+			BooleanSupplier flushStandalone, Runnable refreshStandalone) {
+		if (SwingUtilities.getWindowAncestor(editor) instanceof MainFrame frame) {
+			frame.openBringForwardPlans();
+			return;
+		}
+		if (!flushStandalone.getAsBoolean()) {
+			JOptionPane.showMessageDialog(editor,
+					"Plan reuse was cancelled because this editor has a stale or invalid draft. "
+							+ "The draft remains available for correction.",
+					"Unable to bring plans forward", JOptionPane.ERROR_MESSAGE);
+			return;
+		}
 		try {
 			showDialog(editor, controller);
 		} finally {

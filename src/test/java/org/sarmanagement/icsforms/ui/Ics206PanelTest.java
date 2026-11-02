@@ -76,6 +76,64 @@ class Ics206PanelTest {
 	}
 
 	@Test
+	void unrelatedTextChangeDoesNotFlushAnActiveHospitalCell() throws Exception {
+		AppData data = new AppData();
+		MedicalPlan.Hospital hospital = new MedicalPlan.Hospital();
+		hospital.setName("Recorded hospital");
+		data.getMedicalPlan().getHospitals().add(hospital);
+		Ics206Panel panel = new Ics206Panel(controller(data));
+
+		SwingUtilities.invokeAndWait(() -> {
+			JTable table = (JTable) fieldValue(panel, "hospitalTable");
+			table.getColumnModel().getColumn(0).setCellEditor(new DefaultCellEditor(new JTextField()));
+			assertTrue(table.editCellAt(0, 0));
+			((JTextField) table.getEditorComponent()).setText("Uncommitted cell draft");
+			((javax.swing.JTextArea) fieldValue(panel, "procedures")).setText("Updated emergency procedure");
+			assertTrue(table.isEditing());
+		});
+
+		assertEquals("Updated emergency procedure", data.getMedicalPlan().getEmergencyProcedures());
+		assertEquals("Recorded hospital", data.getMedicalPlan().getHospitals().get(0).getName());
+	}
+
+	@Test
+	void staleEditorFlushCannotOverwriteNewerMedicalPlanValue() throws Exception {
+		AppData data = new AppData();
+		AppController controller = controller(data);
+		Ics206Panel panel = new Ics206Panel(controller);
+
+		SwingUtilities.invokeAndWait(() -> {
+			((javax.swing.JTextArea) fieldValue(panel, "procedures")).setText("Older editor draft");
+			AppController.EditorCommitBinding newer = controller.captureEditorCommitBinding();
+			assertTrue(controller.commitEditorIfCurrent(newer, AppController.LinkSource.NONE,
+					() -> data.getMedicalPlan().setEmergencyProcedures("Newer role-panel value")));
+			assertFalse(panel.pushToModel());
+		});
+
+		assertEquals("Newer role-panel value", data.getMedicalPlan().getEmergencyProcedures());
+		assertEquals("This medical plan editor is stale. Keep the draft and refresh before retrying.",
+				((javax.swing.JLabel) fieldValue(panel, "validation")).getText());
+	}
+
+	@Test
+	void staleEditorCannotWriteIntoTheNextOperationalPeriod() throws Exception {
+		AppData data = new AppData();
+		AppController controller = controller(data);
+		Ics206Panel panel = new Ics206Panel(controller);
+
+		SwingUtilities.invokeAndWait(() -> {
+			((javax.swing.JTextArea) fieldValue(panel, "procedures")).setText("Old-period draft");
+			controller.newOperationalPeriod();
+			AppController.EditorCommitBinding newPeriod = controller.captureEditorCommitBinding();
+			assertTrue(controller.commitEditorIfCurrent(newPeriod, AppController.LinkSource.NONE,
+					() -> data.getMedicalPlan().setEmergencyProcedures("New-period value")));
+			assertFalse(panel.pushToModel());
+		});
+
+		assertEquals("New-period value", data.getMedicalPlan().getEmergencyProcedures());
+	}
+
+	@Test
 	void medicalRolePickerFieldsEditTheSharedRoleWithoutRewritingLegacyCopies() throws Exception {
 		AppData data = new AppData();
 		data.getOrganizationalChart().setMedicalUnitLeaderName("Fictional Medical Leader");

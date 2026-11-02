@@ -95,6 +95,9 @@ public class AppController implements AutoCloseable {
 	private boolean incidentChangeDeliveryScheduled;
 	private Runnable beforePlanReuse = () -> { };
 	private Runnable afterPlanReuse = () -> { };
+	private final Set<EditorCommitGuard> editorCommitGuards =
+			Collections.newSetFromMap(new java.util.WeakHashMap<>());
+	private int editorCommitDepth;
 	private java.util.function.Consumer<RuntimeException> autosaveErrorHandler = exception -> {
 		throw exception;
 	};
@@ -108,7 +111,7 @@ public class AppController implements AutoCloseable {
 	 * Identifies which tab last edited a shared linked role field.
 	 */
 	public enum LinkSource {
-		NONE, SHARED, ORG_CHART, ICS202, ICS204, ICS214
+		NONE, SHARED, ORG_CHART, ICS202, ICS204, ICS205, ICS214
 	}
 
 	/**
@@ -492,6 +495,7 @@ public class AppController implements AutoCloseable {
 		LinkSource previousSource = activeLinkSource;
 		boolean pendingAutosave = autosaveTimer.isRunning();
 		boolean previousSuppression = suppressChangeNotifications;
+		editorCommitDepth++;
 		try {
 			suppressChangeNotifications = true;
 			edit.run();
@@ -508,9 +512,51 @@ public class AppController implements AutoCloseable {
 				autosaveTimer.restart();
 			}
 			throw exception;
+		} finally {
+			editorCommitDepth--;
 		}
 		publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
 		return true;
+	}
+
+	/**
+	 * Creates a revision-bound commit helper for one full-form editor.
+	 *
+	 * @return editor commit helper registered for coordinated MainFrame flushes.
+	 */
+	EditorCommitGuard createEditorCommitGuard() {
+		EditorCommitGuard guard = new EditorCommitGuard(this);
+		editorCommitGuards.add(guard);
+		return guard;
+	}
+
+	/**
+	 * Rebases registered editors after a transaction that flushed every editor.
+	 */
+	void rebaseEditorCommitGuards() {
+		for (EditorCommitGuard guard : List.copyOf(editorCommitGuards)) {
+			guard.rebase();
+		}
+	}
+
+	/**
+	 * Rebinds registered editors to an explicit shared revision.
+	 *
+	 * @param binding shared revision to apply.
+	 */
+	void rebaseEditorCommitGuards(EditorCommitBinding binding) {
+		for (EditorCommitGuard guard : List.copyOf(editorCommitGuards)) {
+			guard.rebase(binding);
+		}
+	}
+
+	/**
+	 * Returns whether a coordinated full-editor transaction is currently applying.
+	 *
+	 * @return true while the controller is synchronously flushing full editors.
+	 */
+	boolean isEditorCommitInProgress() {
+		return editorCommitDepth > 0;
 	}
 
 	/**

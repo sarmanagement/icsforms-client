@@ -27,6 +27,7 @@ import java.awt.GridLayout;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Consumer;
 
 /**
  * Shared editor for the standard human ICS 206 Medical Plan.
@@ -36,6 +37,7 @@ public class Ics206Panel extends JPanel {
 	private static final String SIMPLE_MODE = "simple";
 	private static final String DETAILED_MODE = "detailed";
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 	private final JComboBox<String> mode = new JComboBox<>(new String[] {"Simple", "Detailed"});
 	private final JTextField medicalRole = new JTextField();
 	private final JTextField medicalName = new JTextField();
@@ -77,6 +79,7 @@ public class Ics206Panel extends JPanel {
 	public Ics206Panel(AppController controller) {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
+		editorCommitGuard = controller.createEditorCommitGuard();
 		RadioChannelPicker.install(aidTable, 3, controller);
 		RadioChannelPicker.install(transportTable, 3, controller);
 		JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -84,14 +87,15 @@ public class Ics206Panel extends JPanel {
 		header.add(mode);
 		JButton export = new JButton("Export ICS 206 PDF");
 		export.addActionListener(event -> {
-			pushToModel();
-			exportRequest.accept("ICS 206");
+			if (pushToModel()) {
+				exportRequest.accept("ICS 206");
+			}
 		});
 		header.add(export);
-		bringForward.addActionListener(event -> BringForwardDialog.showFromEditor(this, controller,
+		bringForward.addActionListener(event -> BringForwardDialog.showFromEditorIfCurrent(this, controller,
 				this::pushToModel, this::refreshFromModel));
 		header.add(bringForward);
-		header.add(new PlanReviewStrip(controller, PlanReviewArea.HUMAN_MEDICAL, this::pushToModel));
+		header.add(new PlanReviewStrip(controller, PlanReviewArea.HUMAN_MEDICAL, this::commitBeforeReview));
 		add(header, BorderLayout.NORTH);
 		add(buildEditor(), BorderLayout.CENTER);
 		add(validation, BorderLayout.SOUTH);
@@ -136,12 +140,44 @@ public class Ics206Panel extends JPanel {
 		} finally {
 			loading = false;
 		}
+		editorCommitGuard.rebase();
 	}
 
 	/**
 	 * Flushes all controls and pending table edits into the incident model.
+	 *
+	 * @return true when the draft was committed.
 	 */
-	public void pushToModel() {
+	public boolean pushToModel() {
+		if (flushing) {
+			return true;
+		}
+		try {
+			boolean committed = editorCommitGuard.commit(AppController.LinkSource.NONE, this::flushToModel);
+			if (!committed) {
+				validation.setText("This medical plan editor is stale. Keep the draft and refresh before retrying.");
+			}
+			return committed;
+		} catch (IllegalArgumentException | IllegalStateException exception) {
+			validation.setText(exception.getMessage());
+			return false;
+		}
+	}
+
+	/**
+	 * Prevents plan review when pending medical edits could not be committed.
+	 */
+	private void commitBeforeReview() {
+		if (!pushToModel()) {
+			throw new IllegalStateException("The medical plan draft was not committed. Resolve the stale editor "
+					+ "or validation message before recording a review.");
+		}
+	}
+
+	/**
+	 * Flushes the current complete medical plan after the commit guard accepts it.
+	 */
+	private void flushToModel() {
 		if (flushing) {
 			return;
 		}
@@ -261,19 +297,21 @@ public class Ics206Panel extends JPanel {
 		mode.addActionListener(event -> {
 			if (!loading && !flushing) {
 				showMode("Simple".equals(mode.getSelectedItem()));
-				inputChanged();
+				commitField(() -> controller.getData().getMedicalPlan()
+						.setSimpleMode("Simple".equals(mode.getSelectedItem())));
 			}
 		});
-		aviationUsed.addActionListener(event -> inputChanged());
-		reviewStatus.addActionListener(event -> inputChanged());
-		watch(medicalRole);
+		aviationUsed.addActionListener(event -> commitField(
+				() -> controller.getData().getMedicalPlan().setAviationAssetsUsed(aviationUsed.isSelected())));
+		reviewStatus.addActionListener(event -> commitField(
+				() -> controller.getData().getMedicalPlan().setReviewStatus(String.valueOf(reviewStatus.getSelectedItem()))));
+		watch(medicalRole, value -> controller.getData().getMedicalPlan().setDesignatedMedicalUnitRole(value));
 		watchMedicalRole(medicalName, preparedBy, true);
-		watch(medicalContact);
-		watch(call911);
-		watch(procedures);
-		watch(airOperations);
+		watch(medicalContact, value -> controller.getData().getMedicalPlan().setDesignatedMedicalUnitContact(value));
+		watch(call911, value -> controller.getData().getMedicalPlan().setCall911Procedure(value));
+		watch(procedures, value -> controller.getData().getMedicalPlan().setEmergencyProcedures(value));
+		watch(airOperations, value -> controller.getData().getMedicalPlan().setAirOperationsReminder(value));
 		watchMedicalRole(preparedBy, medicalName, true);
-		watch(preparedAt);
 		watchMedicalRole(reviewedBy, null, false);
 		UiSupport.installNameAutocomplete(medicalName, controller::getPersonnelNames,
 				name -> synchronizeMedicalRole(medicalName, preparedBy, name, true));
@@ -281,9 +319,11 @@ public class Ics206Panel extends JPanel {
 				name -> synchronizeMedicalRole(preparedBy, medicalName, name, true));
 		UiSupport.installNameAutocomplete(reviewedBy, controller::getPersonnelNames,
 				name -> synchronizeMedicalRole(reviewedBy, null, name, false));
-		aidModel.addTableModelListener(event -> inputChanged());
-		transportModel.addTableModelListener(event -> inputChanged());
-		hospitalModel.addTableModelListener(event -> inputChanged());
+		aidModel.addTableModelListener(event -> commitTable(() -> saveAidStations(controller.getData().getMedicalPlan())));
+		transportModel.addTableModelListener(
+				event -> commitTable(() -> saveTransport(controller.getData().getMedicalPlan())));
+		hospitalModel.addTableModelListener(
+				event -> commitTable(() -> saveHospitals(controller.getData().getMedicalPlan())));
 	}
 
 	/**
@@ -324,8 +364,10 @@ public class Ics206Panel extends JPanel {
 			return;
 		}
 		String name = source.getText().trim();
+		if (!commitField(() -> setSharedRole(name, medicalLeader))) {
+			return;
+		}
 		if (!name.isBlank()) {
-			setSharedRole(name, medicalLeader);
 			if (otherField != null) {
 				javax.swing.SwingUtilities.invokeLater(() -> {
 					if (!loading && name.equals(source.getText().trim())) {
@@ -333,10 +375,7 @@ public class Ics206Panel extends JPanel {
 					}
 				});
 			}
-		} else {
-			setSharedRole("", medicalLeader);
 		}
-		inputChanged();
 	}
 
 	/**
@@ -358,8 +397,7 @@ public class Ics206Panel extends JPanel {
 		} finally {
 			loading = false;
 		}
-		setSharedRole(name, medicalLeader);
-		controller.markDirty();
+		commitField(() -> setSharedRole(name, medicalLeader));
 	}
 
 	/**
@@ -393,21 +431,21 @@ public class Ics206Panel extends JPanel {
 	 *
 	 * @param field editable text field.
 	 */
-	private void watch(JTextField field) {
+	private void watch(JTextField field, Consumer<String> update) {
 		field.getDocument().addDocumentListener(new DocumentListener() {
 			@Override
 			public void insertUpdate(DocumentEvent event) {
-				inputChanged();
+				inputChanged(field.getText(), update);
 			}
 
 			@Override
 			public void removeUpdate(DocumentEvent event) {
-				inputChanged();
+				inputChanged(field.getText(), update);
 			}
 
 			@Override
 			public void changedUpdate(DocumentEvent event) {
-				inputChanged();
+				inputChanged(field.getText(), update);
 			}
 		});
 	}
@@ -417,21 +455,21 @@ public class Ics206Panel extends JPanel {
 	 *
 	 * @param area editable text area.
 	 */
-	private void watch(JTextArea area) {
+	private void watch(JTextArea area, Consumer<String> update) {
 		area.getDocument().addDocumentListener(new DocumentListener() {
 			@Override
 			public void insertUpdate(DocumentEvent event) {
-				inputChanged();
+				inputChanged(area.getText(), update);
 			}
 
 			@Override
 			public void removeUpdate(DocumentEvent event) {
-				inputChanged();
+				inputChanged(area.getText(), update);
 			}
 
 			@Override
 			public void changedUpdate(DocumentEvent event) {
-				inputChanged();
+				inputChanged(area.getText(), update);
 			}
 		});
 	}
@@ -439,10 +477,36 @@ public class Ics206Panel extends JPanel {
 	/**
 	 * Flushes an edit and schedules the controller's normal autosave.
 	 */
-	private void inputChanged() {
-		if (!loading) {
-			pushToModel();
-			controller.markDirty();
+	private void inputChanged(String value, Consumer<String> update) {
+		if (!loading && !flushing) {
+			commitField(() -> update.accept(value));
+		}
+	}
+
+	/**
+	 * Commits one changed field without flushing unrelated controls or table editors.
+	 *
+	 * @param update exact field update.
+	 * @return true when the field was committed.
+	 */
+	private boolean commitField(Runnable update) {
+		boolean committed = editorCommitGuard.commit(AppController.LinkSource.NONE, update);
+		if (!committed) {
+			validation.setText("This medical plan editor is stale. Keep the draft and refresh before retrying.");
+		} else {
+			validation.setText(" ");
+		}
+		return committed;
+	}
+
+	/**
+	 * Commits one table's current model without stopping unrelated active cell editors.
+	 *
+	 * @param update update for the table that changed.
+	 */
+	private void commitTable(Runnable update) {
+		if (!loading && !flushing) {
+			commitField(update);
 		}
 	}
 

@@ -1365,30 +1365,46 @@ public class MainFrame extends JFrame {
 					+ "again before saving or navigating.");
 			return false;
 		}
-		boolean committed = controller.commitEditorIfCurrent(editorCommitBinding, source, () -> {
-			incidentContextPanel.pushToModel();
-			organizationalChartPanel.pushToModel();
-			ics201Panel.pushToModel();
-			ics202Panel.pushToModel();
-			ics204Panel.pushToModel();
-			ics205Panel.pushToModel();
-			ics215Panel.pushToModel();
-			medicalPlanPanel.pushToModel();
-			canineMedicalPanel.pushToModel();
-			safetyPanel.pushToModel();
-			for (Ics214Panel panel : ics214Panels) {
-				panel.saveToModel();
-			}
-			sarTaskPanel.pushToModel();
-			clueLogPanel.pushToModel();
-			tCardPanel.pushToModel();
-		});
+		boolean committed;
+		try {
+			committed = controller.commitEditorIfCurrent(editorCommitBinding, source, () -> {
+				incidentContextPanel.pushToModel();
+				organizationalChartPanel.pushToModel();
+				ics201Panel.pushToModel();
+				ics202Panel.pushToModel();
+				if (!ics204Panel.pushToModel()) {
+					throw new IllegalStateException("The ICS 204 editor rejected its draft.");
+				}
+				if (!ics205Panel.pushToModel()) {
+					throw new IllegalStateException("The ICS 205 editor rejected its draft.");
+				}
+				if (!ics215Panel.pushToModel()) {
+					throw new IllegalStateException("The ICS 215 editor rejected its draft.");
+				}
+				if (!medicalPlanPanel.pushToModel()) {
+					throw new IllegalStateException("The human medical editor rejected its draft.");
+				}
+				canineMedicalPanel.pushToModel();
+				safetyPanel.pushToModel();
+				for (Ics214Panel panel : ics214Panels) {
+					panel.saveToModel();
+				}
+				sarTaskPanel.pushToModel();
+				clueLogPanel.pushToModel();
+				tCardPanel.pushToModel();
+			});
+		} catch (RuntimeException exception) {
+			validationLabel.setText("Editor changes were not committed: " + exception.getMessage()
+					+ " Correct the draft before retrying.");
+			return false;
+		}
 		if (!committed) {
 			validationLabel.setText("The incident or operational period changed since these editors were refreshed. "
 					+ "No stale editor values were saved.");
 			return false;
 		}
 		editorCommitBinding = controller.captureEditorCommitBinding();
+		controller.rebaseEditorCommitGuards();
 		captureEditorTextBaselines();
 		return true;
 	}
@@ -1679,9 +1695,11 @@ public class MainFrame extends JFrame {
 				attachPendingDraftListeners(conflictTarget);
 			}
 			editorCommitBinding = previousBinding;
+			controller.rebaseEditorCommitGuards(previousBinding);
 		} else {
 			pendingEditorConflict = false;
 			editorCommitBinding = latestBinding;
+			controller.rebaseEditorCommitGuards(latestBinding);
 		}
 	}
 
@@ -1832,6 +1850,7 @@ public class MainFrame extends JFrame {
 		}
 		pendingEditorConflict = false;
 		editorCommitBinding = controller.captureEditorCommitBinding();
+		controller.rebaseEditorCommitGuards(editorCommitBinding);
 		validationLabel.setText("Partial editor draft is based on the latest shared update.");
 	}
 

@@ -57,6 +57,7 @@ public class Ics215Panel extends JPanel {
 	private static final String[] MANAGEMENT_CONTEXTS = {Ics204Form.MANAGEMENT_STAGING_AREA,
 			Ics204Form.MANAGEMENT_BRANCH, Ics204Form.MANAGEMENT_DIVISION, Ics204Form.MANAGEMENT_GROUP};
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 	private final JComboBox<String> periodSelector = new JComboBox<>(new String[] {"Active period", "Next period"});
 	private final JComboBox<Ics215Form.PaperSize> paperSize = new JComboBox<>(Ics215Form.PaperSize.values());
 	private final JTextField targetStart = new JTextField(16);
@@ -104,6 +105,7 @@ public class Ics215Panel extends JPanel {
 	public Ics215Panel(AppController controller) {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
+		editorCommitGuard = controller.createEditorCommitGuard();
 		this.matrix = new JTable(new MatrixModel());
 		this.matrixScroll = new JScrollPane(matrix);
 		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
@@ -151,7 +153,18 @@ public class Ics215Panel extends JPanel {
 	 *
 	 * @throws IllegalStateException when dates or a pending table edit are invalid.
 	 */
-	public void pushToModel() {
+	public boolean pushToModel() {
+		boolean committed = editorCommitGuard.commit(AppController.LinkSource.NONE, this::flushToModel);
+		if (!committed) {
+			contextLabel.setText("This ICS 215 editor is stale; draft values were not saved.");
+		}
+		return committed;
+	}
+
+	/**
+	 * Flushes the active ICS 215 form after the editor revision has been accepted.
+	 */
+	private void flushToModel() {
 		UiSupport.commitTableEdits(matrix);
 		if (refreshing) {
 			return;
@@ -194,6 +207,7 @@ public class Ics215Panel extends JPanel {
 		} finally {
 			refreshing = false;
 		}
+		editorCommitGuard.rebase();
 	}
 
 	/**
@@ -427,7 +441,10 @@ public class Ics215Panel extends JPanel {
 	 */
 	private void runEditorAction(Runnable action) {
 		try {
-			pushToModel();
+			if (!pushToModel()) {
+				JOptionPane.showMessageDialog(this, contextLabel.getText(), "ICS 215", JOptionPane.WARNING_MESSAGE);
+				return;
+			}
 			action.run();
 			controller.markDirty();
 			refreshFromModel();
@@ -451,7 +468,10 @@ public class Ics215Panel extends JPanel {
 		periodSelector.setSelectedIndex(editorPeriodIndex);
 		refreshing = false;
 		try {
-			pushToModel();
+			if (!pushToModel()) {
+				JOptionPane.showMessageDialog(this, contextLabel.getText(), "ICS 215", JOptionPane.WARNING_MESSAGE);
+				return;
+			}
 			editorPeriodIndex = requestedPeriod;
 			refreshing = true;
 			periodSelector.setSelectedIndex(editorPeriodIndex);

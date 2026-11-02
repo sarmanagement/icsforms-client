@@ -39,6 +39,7 @@ import java.util.UUID;
  */
 public final class Ics205Panel extends JPanel {
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 	private final ChannelTableModel tableModel = new ChannelTableModel();
 	private final JTable table = new JTable(tableModel);
 	private final TableRowSorter<ChannelTableModel> channelSorter = new TableRowSorter<>(tableModel);
@@ -66,6 +67,7 @@ public final class Ics205Panel extends JPanel {
 	public Ics205Panel(AppController controller) {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
+		editorCommitGuard = controller.createEditorCommitGuard();
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 		table.setRowSorter(channelSorter);
 		for (int index = 0; index < table.getColumnCount(); index++) {
@@ -113,7 +115,7 @@ public final class Ics205Panel extends JPanel {
 		JPanel heading = new JPanel(new BorderLayout());
 		heading.add(buildToolbar(), BorderLayout.NORTH);
 		heading.add(new PlanReviewStrip(controller,
-				org.sarmanagement.icsforms.model.PlanReviewArea.COMMUNICATIONS, this::pushToModel),
+				org.sarmanagement.icsforms.model.PlanReviewArea.COMMUNICATIONS, this::commitBeforeReview),
 				BorderLayout.SOUTH);
 		add(heading, BorderLayout.NORTH);
 		add(new JScrollPane(table), BorderLayout.CENTER);
@@ -177,14 +179,41 @@ public final class Ics205Panel extends JPanel {
 		} finally {
 			loading = false;
 		}
+		editorCommitGuard.rebase();
 	}
 
 	/** Flushes preparation fields without modifying saved signature or pagination data. */
-	public void pushToModel() {
+	public boolean pushToModel() {
 		if (loading) {
-			return;
+			return true;
 		}
-		applyPreparationFields();
+		LocalDateTime preparation;
+		try {
+			preparation = enteredDate(preparedDate, preparedDatePresent);
+		} catch (ParseException exception) {
+			validation.setText("Invalid preparation date/time. Metadata was not saved; use yyyy-MM-dd HH:mm.");
+			return false;
+		}
+		try {
+			Ics205Form plan = controller.getData().getForm205();
+			if (Objects.equals(instructions.getText(), plan.getSpecialInstructions())
+					&& Objects.equals(preparedBy.getText(), plan.getPreparedByName())
+					&& Objects.equals(preparation, preparationDate(plan))) {
+				return true;
+			}
+			boolean committed = editorCommitGuard.commit(AppController.LinkSource.ICS205, () -> {
+				if (!applyPreparationFields()) {
+					throw new IllegalStateException(validation.getText());
+				}
+			});
+			if (!committed) {
+				validation.setText("This communications editor is stale. Keep the draft and refresh before retrying.");
+			}
+			return committed;
+		} catch (IllegalStateException exception) {
+			validation.setText(exception.getMessage());
+			return false;
+		}
 	}
 
 	/**
@@ -265,12 +294,17 @@ public final class Ics205Panel extends JPanel {
 				throw new IllegalArgumentException("Channel ID already belongs to another row.");
 			}
 		}
-		if (index < 0) {
-			channels.add(channel);
-		} else {
-			channels.set(index, channel);
+		boolean committed = editorCommitGuard.commit(AppController.LinkSource.ICS205, () -> {
+			if (index < 0) {
+				channels.add(channel);
+			} else {
+				channels.set(index, channel);
+			}
+		});
+		if (!committed) {
+			RadioChannelPicker.showError(this, "The communications editor is stale. No channel change was saved.");
+			return;
 		}
-		controller.markDirty();
 		tableModel.fireTableDataChanged();
 		updateWarnings();
 	}
@@ -301,8 +335,11 @@ public final class Ics205Panel extends JPanel {
 		if (index < 0 || destination < 0 || destination >= channels.size()) {
 			return;
 		}
-		Collections.swap(channels, index, destination);
-		controller.markDirty();
+		if (!editorCommitGuard.commit(AppController.LinkSource.ICS205,
+				() -> Collections.swap(channels, index, destination))) {
+			RadioChannelPicker.showError(this, "The communications editor is stale. No channel change was saved.");
+			return;
+		}
 		tableModel.fireTableDataChanged();
 		int view = table.convertRowIndexToView(destination);
 		if (view >= 0) {
@@ -317,8 +354,11 @@ public final class Ics205Panel extends JPanel {
 	 */
 	void removeChannel(int index) {
 		if (index >= 0) {
-			controller.getData().getForm205().getChannels().remove(index);
-			controller.markDirty();
+			if (!editorCommitGuard.commit(AppController.LinkSource.ICS205,
+					() -> controller.getData().getForm205().getChannels().remove(index))) {
+				RadioChannelPicker.showError(this, "The communications editor is stale. No channel was removed.");
+				return;
+			}
 			tableModel.fireTableDataChanged();
 			updateWarnings();
 		}
@@ -331,7 +371,7 @@ public final class Ics205Panel extends JPanel {
 	 */
 	private JPanel buildToolbar() {
 		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-		bringForward.addActionListener(event -> BringForwardDialog.showFromEditor(this, controller,
+		bringForward.addActionListener(event -> BringForwardDialog.showFromEditorIfCurrent(this, controller,
 				this::pushToModel, this::refreshFromModel));
 		panel.add(bringForward);
 		addButton(panel, "Add…", () -> editChannel(true));
@@ -378,8 +418,11 @@ public final class Ics205Panel extends JPanel {
 		}
 		int sourceIndex = table.convertRowIndexToModel(view);
 		int targetIndex = table.convertRowIndexToModel(destination);
-		Collections.swap(controller.getData().getForm205().getChannels(), sourceIndex, targetIndex);
-		controller.markDirty();
+		if (!editorCommitGuard.commit(AppController.LinkSource.ICS205,
+				() -> Collections.swap(controller.getData().getForm205().getChannels(), sourceIndex, targetIndex))) {
+			RadioChannelPicker.showError(this, "The communications editor is stale. No channel change was saved.");
+			return;
+		}
 		tableModel.fireTableDataChanged();
 		int selected = table.convertRowIndexToView(targetIndex);
 		table.setRowSelectionInterval(selected, selected);
@@ -558,11 +601,18 @@ public final class Ics205Panel extends JPanel {
 	/** Saves a user edit and schedules existing autosave behavior. */
 	private void changed() {
 		if (!loading) {
-			updatePreparerRole();
 			preparedDate.setEnabled(preparedDatePresent.isSelected());
-			if (applyPreparationFields()) {
-				controller.markDirty();
-			}
+			pushToModel();
+		}
+	}
+
+	/**
+	 * Stops plan review when pending communications edits were rejected.
+	 */
+	private void commitBeforeReview() {
+		if (!pushToModel()) {
+			throw new IllegalStateException("The communications plan draft was not committed. Resolve the stale "
+					+ "editor or validation message before recording a review.");
 		}
 	}
 
