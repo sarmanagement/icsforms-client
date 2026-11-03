@@ -88,6 +88,7 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final JLabel banner = new JLabel();
 	private final JComboBox<IapPlanningStage> planningStage = new JComboBox<>(IapPlanningStage.values());
 	private final JPanel planProgress = new JPanel(new GridLayout(0, 2, 6, 6));
+	private final JLabel overallProgress = new JLabel();
 	private final Map<String, JLabel> progressBadges = new LinkedHashMap<>();
 	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "Linked assignments", "Assessment");
 	private final JTable objectives = new JTable(objectiveModel);
@@ -1300,8 +1301,11 @@ public class IncidentCommandRolePanel extends JPanel {
 		boolean animalRequired = IncidentCommandSummary.requiresAnimalMedicalPlan(data);
 		String objectiveCoverage = objectivesWithoutAssignments + " objectives without linked assignments; "
 				+ assignmentsWithoutObjectives + " assignments without a current objective link";
-		String compactObjectiveCoverage = objectivesWithoutAssignments + " objectives without assignments · "
-				+ assignmentsWithoutObjectives + " assignments without objective links";
+		String compactObjectiveCoverage = "Objectives with no assignments: " + objectivesWithoutAssignments + "\n"
+				+ "Assignments with no objective: " + assignmentsWithoutObjectives;
+		long populatedAssignments = IncidentCommandSummary.populatedAssignments(data);
+		boolean missing = !objectivesRecorded || populatedAssignments == 0;
+		boolean approved = objectivesApproved;
 		updateBadge("Objectives", mark(objectivesRecorded) + objectiveIds.size() + " recorded; " + objectiveCoverage,
 				mark(objectivesApproved) + data.getForm202().getObjectiveApprovalStatus().displayLabel()
 						+ "; " + objectiveCoverage,
@@ -1311,7 +1315,6 @@ public class IncidentCommandRolePanel extends JPanel {
 						: objectivesApproved ? RolePanelSupport.CURRENT : RolePanelSupport.PENDING);
 		int assignmentCount = assignments.size();
 		long linkedAssignments = assignmentCount - assignmentsWithoutObjectives;
-		long populatedAssignments = IncidentCommandSummary.populatedAssignments(data);
 		updateBadge("Assignment coverage", mark(populatedAssignments > 0) + populatedAssignments
 				+ " populated assignment rows; " + mark(assignmentCount > 0 && linkedAssignments == assignmentCount)
 				+ linkedAssignments + "/" + assignmentCount + " assignments linked to recorded objectives",
@@ -1337,6 +1340,10 @@ public class IncidentCommandRolePanel extends JPanel {
 			long contentItems = IncidentCommandSummary.recordedContent(data, area);
 			boolean current = data.getPlanReviewStatus(area) == PlanReviewStatus.REVIEWED_APPROVED;
 			boolean required = area != PlanReviewArea.CANINE_MEDICAL || animalRequired;
+			if (required) {
+				missing |= contentItems == 0;
+				approved &= current;
+			}
 			updateBadge(title, mark(contentItems > 0) + (contentItems == 0 ? "No content recorded"
 					: contentItems + " content items recorded"),
 					mark(current) + review + (area == PlanReviewArea.CANINE_MEDICAL
@@ -1349,6 +1356,24 @@ public class IncidentCommandRolePanel extends JPanel {
 					contentItems == 0 ? required ? RolePanelSupport.MISSING : RolePanelSupport.OPTIONAL
 							: current ? RolePanelSupport.CURRENT : RolePanelSupport.PENDING);
 		}
+		String state = missing ? "RED — Required planning content missing"
+				: !approved ? "YELLOW — Required content recorded; approval pending or stale"
+				: "GREEN — Required content recorded and current approvals";
+		overallProgress.setText("<html><b>" + (missing ? "RED — Required content missing"
+				: !approved ? "YELLOW — Approval pending or stale" : "GREEN — Content recorded / approvals current")
+				+ "</b><br>Recorded content and approvals only —<br>"
+				+ "not plan sufficiency or operational readiness.</html>");
+		overallProgress.setBackground(missing ? RolePanelSupport.MISSING
+				: !approved ? RolePanelSupport.PENDING : RolePanelSupport.CURRENT);
+		overallProgress.getAccessibleContext().setAccessibleName("Overall planning status: " + state);
+		overallProgress.setToolTipText("Required: objectives, ICS 204 assignment plan, safety, human medical, communications; canine/equine "
+				+ "medical only when animal resources are recorded. Approvals must match current content. "
+				+ "Populated means at least one substantive row or narrative section (or a nonblank objective), "
+				+ "not a validated complete plan. Red: missing required content; yellow: content present but "
+				+ "current approval missing; green: required content present with current approvals. "
+				+ "Assignments require a substantive populated row; objective links alone do not count as assignment content. "
+				+ "No separate assignment approval is inferred. Assignment links and the manually selected planning stage "
+				+ "do not certify approval or readiness.");
 	}
 
 	/**
@@ -1374,7 +1399,7 @@ public class IncidentCommandRolePanel extends JPanel {
 	private void updateBadge(String title, String content, String state, String compactContent,
 			String compactState, Color color) {
 		JLabel badge = progressBadges.get(title);
-		badge.setText("<html><b>" + html(title) + "</b><br>" + html(compactContent)
+		badge.setText("<html><b>" + html(title) + "</b><br>" + html(compactContent).replace("\n", "<br>")
 				+ "<br>" + html(compactState) + "</html>");
 		badge.setOpaque(true);
 		badge.setForeground(Color.BLACK);
