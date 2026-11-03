@@ -88,7 +88,6 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final JLabel banner = new JLabel();
 	private final JComboBox<IapPlanningStage> planningStage = new JComboBox<>(IapPlanningStage.values());
 	private final JPanel planProgress = new JPanel(new GridLayout(0, 2, 6, 6));
-	private final JLabel overallProgress = new JLabel();
 	private final Map<String, JLabel> progressBadges = new LinkedHashMap<>();
 	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "Linked assignments", "Assessment");
 	private final JTable objectives = new JTable(objectiveModel);
@@ -278,6 +277,20 @@ public class IncidentCommandRolePanel extends JPanel {
 		DefaultTableCellRenderer objectiveRenderer = new DefaultTableCellRenderer();
 		objectiveRenderer.setVerticalAlignment(SwingConstants.TOP);
 		objectives.getColumnModel().getColumn(0).setCellRenderer(objectiveRenderer);
+		objectives.getColumnModel().getColumn(1).setCellRenderer(new DefaultTableCellRenderer() {
+			/** {@inheritDoc} */
+			@Override
+			public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
+					boolean focused, int row, int column) {
+				java.awt.Component component = super.getTableCellRendererComponent(table, value, selected, focused,
+						row, column);
+				if (!selected && value != null && value.toString().contains("<b>None</b>")) {
+					component.setBackground(new Color(255, 232, 175));
+					component.setForeground(table.getForeground());
+				}
+				return component;
+			}
+		});
 		objectives.setToolTipText("Assignment lifecycle counts are recorded task states, not objective achievement "
 				+ "or resource readiness. Missing and conflicting lifecycle records remain explicit.");
 		JPopupMenu objectiveMenu = new JPopupMenu();
@@ -371,10 +384,6 @@ public class IncidentCommandRolePanel extends JPanel {
 			planProgress.add(badge);
 		}
 		JPanel progress = new JPanel(new BorderLayout(4, 4));
-		overallProgress.setOpaque(true);
-		overallProgress.setForeground(Color.BLACK);
-		overallProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
-		progress.add(overallProgress, BorderLayout.NORTH);
 		progress.add(new JScrollPane(planProgress), BorderLayout.CENTER);
 		JSplitPane objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, objectiveTablePanel, progress);
 		objectiveSplit.setResizeWeight(0.5);
@@ -757,7 +766,7 @@ public class IncidentCommandRolePanel extends JPanel {
 					"Link existing assignments", javax.swing.JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
-		JList<String> picker = new JList<>(available.stream().map(IncidentCommandRolePanel::assignmentLabel)
+		JList<String> picker = new JList<>(available.stream().map(this::assignmentLabel)
 				.toArray(String[]::new));
 		picker.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 		picker.getAccessibleContext().setAccessibleName("Existing assignments to link");
@@ -864,8 +873,13 @@ public class IncidentCommandRolePanel extends JPanel {
 	 * @param assignment ICS 204 assignment.
 	 * @return team number, resource identifier, and description.
 	 */
-	private static String assignmentLabel(ResourceAssignment assignment) {
-		return nonblank(assignment.getAssignmentTeamNumber(), "No team number") + " — "
+	String assignmentLabel(ResourceAssignment assignment) {
+		Set<String> objectiveIds = controller.getData().getForm202().getStructuredObjectives().stream()
+				.filter(objective -> !objective.getText().isBlank())
+				.map(IncidentObjective::getObjectiveId).collect(java.util.stream.Collectors.toSet());
+		boolean linked = assignment.getObjectiveIds().stream().anyMatch(objectiveIds::contains);
+		return (linked ? "" : "[No objective link] ")
+				+ nonblank(assignment.getAssignmentTeamNumber(), "No team number") + " — "
 				+ nonblank(assignment.getResourceIdentifier(), "No resource identifier") + " — "
 				+ nonblank(assignment.getAssignment(), "No assignment text");
 	}
@@ -1272,22 +1286,32 @@ public class IncidentCommandRolePanel extends JPanel {
 		Set<String> objectiveIds = new LinkedHashSet<>();
 		data.getForm202().getStructuredObjectives().stream().filter(objective -> !objective.getText().isBlank())
 				.forEach(objective -> objectiveIds.add(objective.getObjectiveId()));
-		long linkedAssignments = controller.getAssignmentResources().stream()
-				.filter(assignment -> assignment.getObjectiveIds().stream().anyMatch(objectiveIds::contains)).count();
+		List<ResourceAssignment> assignments = controller.getAssignmentResources();
+		long objectivesWithoutAssignments = data.getForm202().getStructuredObjectives().stream()
+				.filter(objective -> objectiveIds.contains(objective.getObjectiveId()))
+				.filter(objective -> assignments.stream()
+						.noneMatch(assignment -> assignment.getObjectiveIds().contains(objective.getObjectiveId())))
+				.count();
+		long assignmentsWithoutObjectives = assignments.stream()
+				.filter(assignment -> assignment.getObjectiveIds().stream().noneMatch(objectiveIds::contains)).count();
 		boolean objectivesRecorded = !objectiveIds.isEmpty();
 		boolean objectivesApproved = data.getForm202().getObjectiveApprovalStatus()
 				== ObjectiveApprovalStatus.APPROVED_CURRENT;
-		long populatedAssignments = IncidentCommandSummary.populatedAssignments(data);
-		boolean missing = !objectivesRecorded || populatedAssignments == 0;
-		boolean approved = objectivesApproved;
 		boolean animalRequired = IncidentCommandSummary.requiresAnimalMedicalPlan(data);
-		updateBadge("Objectives", mark(objectivesRecorded) + objectiveIds.size() + " recorded",
-				mark(objectivesApproved) + data.getForm202().getObjectiveApprovalStatus().displayLabel(),
-				mark(objectivesRecorded) + objectiveIds.size() + " recorded",
+		String objectiveCoverage = objectivesWithoutAssignments + " objectives without linked assignments; "
+				+ assignmentsWithoutObjectives + " assignments without a current objective link";
+		String compactObjectiveCoverage = objectivesWithoutAssignments + " objectives without assignments · "
+				+ assignmentsWithoutObjectives + " assignments without objective links";
+		updateBadge("Objectives", mark(objectivesRecorded) + objectiveIds.size() + " recorded; " + objectiveCoverage,
+				mark(objectivesApproved) + data.getForm202().getObjectiveApprovalStatus().displayLabel()
+						+ "; " + objectiveCoverage,
+				mark(objectivesRecorded) + objectiveIds.size() + " recorded · " + compactObjectiveCoverage,
 				mark(objectivesApproved) + data.getForm202().getObjectiveApprovalStatus().displayLabel(),
 				!objectivesRecorded ? RolePanelSupport.MISSING
 						: objectivesApproved ? RolePanelSupport.CURRENT : RolePanelSupport.PENDING);
-		int assignmentCount = controller.getAssignmentResources().size();
+		int assignmentCount = assignments.size();
+		long linkedAssignments = assignmentCount - assignmentsWithoutObjectives;
+		long populatedAssignments = IncidentCommandSummary.populatedAssignments(data);
 		updateBadge("Assignment coverage", mark(populatedAssignments > 0) + populatedAssignments
 				+ " populated assignment rows; " + mark(assignmentCount > 0 && linkedAssignments == assignmentCount)
 				+ linkedAssignments + "/" + assignmentCount + " assignments linked to recorded objectives",
@@ -1313,10 +1337,6 @@ public class IncidentCommandRolePanel extends JPanel {
 			long contentItems = IncidentCommandSummary.recordedContent(data, area);
 			boolean current = data.getPlanReviewStatus(area) == PlanReviewStatus.REVIEWED_APPROVED;
 			boolean required = area != PlanReviewArea.CANINE_MEDICAL || animalRequired;
-			if (required) {
-				missing |= contentItems == 0;
-				approved &= current;
-			}
 			updateBadge(title, mark(contentItems > 0) + (contentItems == 0 ? "No content recorded"
 					: contentItems + " content items recorded"),
 					mark(current) + review + (area == PlanReviewArea.CANINE_MEDICAL
@@ -1329,24 +1349,6 @@ public class IncidentCommandRolePanel extends JPanel {
 					contentItems == 0 ? required ? RolePanelSupport.MISSING : RolePanelSupport.OPTIONAL
 							: current ? RolePanelSupport.CURRENT : RolePanelSupport.PENDING);
 		}
-		String state = missing ? "RED — Required planning content missing"
-				: !approved ? "YELLOW — Required content recorded; approval pending or stale"
-				: "GREEN — Required content recorded and current approvals";
-		overallProgress.setText("<html><b>" + (missing ? "RED — Required content missing"
-				: !approved ? "YELLOW — Approval pending or stale" : "GREEN — Content recorded / approvals current")
-				+ "</b><br>Recorded content and approvals only —<br>"
-				+ "not plan sufficiency or operational readiness.</html>");
-		overallProgress.setBackground(missing ? RolePanelSupport.MISSING
-				: !approved ? RolePanelSupport.PENDING : RolePanelSupport.CURRENT);
-		overallProgress.getAccessibleContext().setAccessibleName("Overall planning status: " + state);
-		overallProgress.setToolTipText("Required: objectives, ICS 204 assignment plan, safety, human medical, communications; canine/equine "
-				+ "medical only when animal resources are recorded. Approvals must match current content. "
-				+ "Populated means at least one substantive row or narrative section (or a nonblank objective), "
-				+ "not a validated complete plan. Red: missing required content; yellow: content present but "
-				+ "current approval missing; green: required content present with current approvals. "
-				+ "Assignments require a substantive populated row; objective links alone do not count as assignment content. "
-				+ "No separate assignment approval is inferred. Assignment links and the manually selected planning stage "
-				+ "do not certify approval or readiness.");
 	}
 
 	/**
@@ -1388,6 +1390,9 @@ public class IncidentCommandRolePanel extends JPanel {
 								+ "At least one substantive assignment row is required; generated IDs and objective links alone "
 								+ "do not count. Link coverage is checked only when every assignment links to a recorded objective; "
 								+ "it is not assignment approval, objective achievement, or operational readiness."
+						: "Objectives".equals(title)
+								? " Counts identify objectives without linked assignments and assignments without a link "
+										+ "to a currently recorded objective; they are not achievement or readiness judgments."
 						: ""));
 	}
 

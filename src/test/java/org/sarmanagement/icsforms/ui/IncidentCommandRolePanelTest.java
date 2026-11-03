@@ -222,16 +222,28 @@ class IncidentCommandRolePanelTest {
 		data.getForm202().setStructuredObjectives(List.of(noAssignment, withAssignment));
 		ResourceAssignment linked = new ResourceAssignment();
 		linked.setObjectiveIds(List.of(withAssignment.getObjectiveId()));
-		data.getForm204().getResourcesAssigned().add(linked);
+		ResourceAssignment unlinked = new ResourceAssignment();
+		data.getForm204().getResourcesAssigned().addAll(List.of(linked, unlinked));
 		data.getForm202().setCommandEmphasis("Prioritize the north ridge search.");
 		data.getForm202().setSituationalAwareness("Weather remains clear; visibility is good.");
-		IncidentCommandRolePanel panel = panel(controller(data));
+		AppController controller = controller(data);
+		IncidentCommandRolePanel panel = panel(controller);
 		try {
 			JTable objectives = (JTable) field(panel, "objectives");
 			JTextArea emphasis = (JTextArea) field(panel, "commandEmphasis");
 			JTextArea awareness = (JTextArea) field(panel, "situationalAwareness");
 			assertTrue(objectives.getValueAt(0, 1).toString().contains("<b>None</b>"));
 			assertFalse(objectives.getValueAt(1, 1).toString().contains("<b>None</b>"));
+			JLabel missingLinks = (JLabel) objectives.getCellRenderer(0, 1)
+					.getTableCellRendererComponent(objectives, objectives.getValueAt(0, 1), false, false, 0, 1);
+			assertEquals(new java.awt.Color(255, 232, 175), missingLinks.getBackground());
+			assertTrue(badge(panel, "Objectives").getAccessibleContext().getAccessibleName()
+					.contains("1 objectives without linked assignments"));
+			assertTrue(badge(panel, "Objectives").getAccessibleContext().getAccessibleName()
+					.contains("1 assignments without a current objective link"));
+			assertTrue(panel.assignmentLabel(unlinked).contains("[No objective link]"));
+			assertFalse(panel.assignmentLabel(linked).contains("[No objective link]"));
+			assertFalse(containsLabelText(panel, "not plan sufficiency or operational readiness"));
 			JLabel objectiveCell = (JLabel) objectives.getCellRenderer(0, 0)
 					.getTableCellRendererComponent(objectives, objectives.getValueAt(0, 0), false, false, 0, 0);
 			assertEquals(SwingConstants.TOP, objectiveCell.getVerticalAlignment());
@@ -916,6 +928,18 @@ class IncidentCommandRolePanelTest {
 			}
 		}
 		return null;
+	}
+
+	private boolean containsLabelText(Container parent, String text) {
+		for (java.awt.Component component : parent.getComponents()) {
+			if (component instanceof JLabel label && label.getText() != null && label.getText().contains(text)) {
+				return true;
+			}
+			if (component instanceof Container container && containsLabelText(container, text)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
