@@ -265,9 +265,6 @@ public class IncidentCommandRolePanel extends JPanel {
 		stage.add(new JLabel("Planning stage"));
 		planningStage.getAccessibleContext().setAccessibleName("IAP planning-cycle stage");
 		stage.add(planningStage);
-		JButton addObjective = new JButton("Add objective");
-		addObjective.addActionListener(event -> editObjective(null));
-		stage.add(addObjective);
 		planning.add(stage, BorderLayout.NORTH);
 		objectives.getAccessibleContext().setAccessibleName("Incident objectives and recorded assessments");
 		objectives.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
@@ -339,9 +336,12 @@ public class IncidentCommandRolePanel extends JPanel {
 		editObjective.addActionListener(event -> editSelectedObjective());
 		JButton linkedWork = new JButton("Linked work");
 		linkedWork.addActionListener(event -> showSelectedObjectiveAssignments());
+		JButton addObjective = new JButton("Add objective");
+		addObjective.addActionListener(event -> editObjective(null));
 		editObjective.setEnabled(false);
 		linkedWork.setEnabled(false);
 		JPanel objectiveActions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING, 4, 0));
+		objectiveActions.add(addObjective);
 		objectiveActions.add(editObjective);
 		objectiveActions.add(linkedWork);
 		objectives.getSelectionModel().addListSelectionListener(event -> {
@@ -452,15 +452,52 @@ public class IncidentCommandRolePanel extends JPanel {
 	 * @return approval panel.
 	 */
 	private JPanel buildApprovalPanel() {
-		JPanel approval = UiSupport.formPanel();
-		UiSupport.addRow(approval, 0, "Objective approval", approvalStatus);
+		JPanel approval = new JPanel(new java.awt.GridBagLayout());
+		approval.setOpaque(false);
+		JLabel approvalLabel = new JLabel("Objective approval");
+		approvalLabel.setLabelFor(approvalStatus);
+		java.awt.GridBagConstraints constraints = new java.awt.GridBagConstraints();
+		constraints.insets = new java.awt.Insets(1, 3, 1, 8);
+		constraints.anchor = java.awt.GridBagConstraints.WEST;
+		constraints.gridx = 0;
+		constraints.gridy = 0;
+		approval.add(approvalLabel, constraints);
+		constraints.gridx = 1;
+		constraints.weightx = 0.5;
+		constraints.fill = java.awt.GridBagConstraints.HORIZONTAL;
+		approval.add(approvalStatus, constraints);
+
 		approver.getAccessibleContext().setAccessibleName("Approving Incident Commander");
-		UiSupport.addRow(approval, 1, "Incident Commander", approver);
+		JLabel approverLabel = new JLabel("Incident Commander");
+		approverLabel.setLabelFor(approver);
+		constraints.gridx = 2;
+		constraints.weightx = 0;
+		constraints.fill = java.awt.GridBagConstraints.NONE;
+		approval.add(approverLabel, constraints);
+		constraints.gridx = 3;
+		constraints.weightx = 0.5;
+		constraints.fill = java.awt.GridBagConstraints.HORIZONTAL;
+		approval.add(approver, constraints);
+
 		signature.getAccessibleContext().setAccessibleName("Incident Commander typed signature");
-		UiSupport.addRow(approval, 2, "Typed signature", signature);
+		JLabel signatureLabel = new JLabel("Typed signature");
+		signatureLabel.setLabelFor(signature);
+		constraints.gridx = 0;
+		constraints.gridy = 1;
+		constraints.weightx = 0;
+		constraints.fill = java.awt.GridBagConstraints.NONE;
+		approval.add(signatureLabel, constraints);
+		constraints.gridx = 1;
+		constraints.weightx = 0.5;
+		constraints.fill = java.awt.GridBagConstraints.HORIZONTAL;
+		approval.add(signature, constraints);
+
 		JButton approve = new JButton("Approve current objectives");
 		approve.addActionListener(event -> approveObjectives());
-		UiSupport.addRow(approval, 3, "", approve);
+		constraints.gridx = 2;
+		constraints.gridwidth = 2;
+		constraints.weightx = 0.5;
+		approval.add(approve, constraints);
 		return approval;
 	}
 

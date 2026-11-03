@@ -130,12 +130,13 @@ class IncidentCommandRolePanelTest {
 			JButton editObjective = button(panel, "Edit objective");
 			JButton linkedWork = button(panel, "Linked work");
 			JPanel stageRow = (JPanel) stage.getParent();
-			assertSame(stageRow, addObjective.getParent());
+			assertTrue(stageRow.getComponents().length < 4);
 			assertTrue(java.util.Arrays.stream(stageRow.getComponents())
 					.filter(JLabel.class::isInstance).map(JLabel.class::cast)
 					.anyMatch(label -> "Planning stage".equals(label.getText())));
-			assertSame(editObjective.getParent(), linkedWork.getParent());
-			JPanel objectiveActions = (JPanel) editObjective.getParent();
+			assertSame(addObjective.getParent(), editObjective.getParent());
+			assertSame(addObjective.getParent(), linkedWork.getParent());
+			JPanel objectiveActions = (JPanel) addObjective.getParent();
 			JPanel objectiveTablePanel = (JPanel) objectiveActions.getParent();
 			assertSame(objectiveActions,
 					((BorderLayout) objectiveTablePanel.getLayout()).getLayoutComponent(BorderLayout.NORTH));
@@ -144,6 +145,12 @@ class IncidentCommandRolePanelTest {
 			assertFalse(linkedWork.getText().endsWith("…"));
 			assertFalse(editObjective.isEnabled());
 			assertFalse(linkedWork.isEnabled());
+			JPanel approval = (JPanel) ((BorderLayout) ((JPanel) stageRow.getParent()).getLayout())
+					.getLayoutComponent(BorderLayout.SOUTH);
+			assertTrue(approval.getLayout() instanceof java.awt.GridBagLayout);
+			assertEquals(2, java.util.Arrays.stream(approval.getComponents())
+					.mapToInt(component -> ((java.awt.GridBagLayout) approval.getLayout())
+							.getConstraints(component).gridy).max().orElse(-1) + 1);
 
 			JSplitPane body = findComponent(panel, JSplitPane.class);
 			JSplitPane secondColumn = (JSplitPane) body.getRightComponent();
