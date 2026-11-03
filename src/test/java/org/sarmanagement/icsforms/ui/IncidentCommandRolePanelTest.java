@@ -130,16 +130,15 @@ class IncidentCommandRolePanelTest {
 			JButton editObjective = button(panel, "Edit objective");
 			JButton linkedWork = button(panel, "Linked work");
 			JPanel stageRow = (JPanel) stage.getParent();
-			assertTrue(stageRow.getComponents().length < 4);
+			assertEquals(5, stageRow.getComponents().length);
 			assertTrue(java.util.Arrays.stream(stageRow.getComponents())
 					.filter(JLabel.class::isInstance).map(JLabel.class::cast)
 					.anyMatch(label -> "Planning stage".equals(label.getText())));
-			assertSame(addObjective.getParent(), editObjective.getParent());
-			assertSame(addObjective.getParent(), linkedWork.getParent());
-			JPanel objectiveActions = (JPanel) addObjective.getParent();
-			JPanel objectiveTablePanel = (JPanel) objectiveActions.getParent();
-			assertSame(objectiveActions,
-					((BorderLayout) objectiveTablePanel.getLayout()).getLayoutComponent(BorderLayout.NORTH));
+			assertSame(stageRow, addObjective.getParent());
+			assertSame(stageRow, editObjective.getParent());
+			assertSame(stageRow, linkedWork.getParent());
+			JPanel planning = (JPanel) stageRow.getParent();
+			assertSame(stageRow, ((BorderLayout) planning.getLayout()).getLayoutComponent(BorderLayout.NORTH));
 			assertFalse(addObjective.getText().endsWith("…"));
 			assertFalse(editObjective.getText().endsWith("…"));
 			assertFalse(linkedWork.getText().endsWith("…"));
@@ -168,6 +167,51 @@ class IncidentCommandRolePanelTest {
 		} finally {
 			SwingUtilities.invokeAndWait(panel::dispose);
 		}
+	}
+
+	@Test
+	void contextEditorProvidesLargerLabeledTextAreas() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		IncidentCommandRolePanel panel = panel(controller(new AppData()));
+		Thread opener = new Thread(() -> {
+			try {
+				SwingUtilities.invokeAndWait(() -> button(panel,
+						"Edit command emphasis and situational awareness").doClick());
+			} catch (Exception exception) {
+				throw new IllegalStateException(exception);
+			}
+		});
+		opener.start();
+		JDialog dialog = null;
+		for (int attempt = 0; attempt < 200 && dialog == null; attempt++) {
+			for (java.awt.Window window : java.awt.Window.getWindows()) {
+				if (window instanceof JDialog candidate && candidate.isShowing()
+						&& "Edit ICS 202 context".equals(candidate.getTitle())) {
+					dialog = candidate;
+					break;
+				}
+			}
+			if (dialog == null) {
+				Thread.sleep(10);
+			}
+		}
+		assertTrue(dialog != null, "ICS 202 context editor did not open");
+		JDialog shownDialog = dialog;
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				assertTrue(shownDialog.getWidth() >= 760);
+				assertTrue(shownDialog.getHeight() >= 520);
+				JTextArea editor = findComponent(shownDialog, JTextArea.class);
+				assertEquals(8, editor.getRows());
+				assertEquals("Command emphasis", editor.getAccessibleContext().getAccessibleName());
+				assertTrue(editor.getLineWrap());
+				button(shownDialog, "Cancel").doClick();
+			});
+		} finally {
+			opener.join(2000);
+			SwingUtilities.invokeAndWait(panel::dispose);
+		}
+		assertFalse(opener.isAlive(), "Context editor did not close");
 	}
 
 	@Test

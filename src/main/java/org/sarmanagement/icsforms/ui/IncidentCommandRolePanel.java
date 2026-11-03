@@ -264,8 +264,8 @@ public class IncidentCommandRolePanel extends JPanel {
 		JPanel stage = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
 		stage.add(new JLabel("Planning stage"));
 		planningStage.getAccessibleContext().setAccessibleName("IAP planning-cycle stage");
+		planningStage.setPreferredSize(new Dimension(170, planningStage.getPreferredSize().height));
 		stage.add(planningStage);
-		planning.add(stage, BorderLayout.NORTH);
 		objectives.getAccessibleContext().setAccessibleName("Incident objectives and recorded assessments");
 		objectives.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 		objectives.getColumnModel().getColumn(0).setPreferredWidth(640);
@@ -338,12 +338,15 @@ public class IncidentCommandRolePanel extends JPanel {
 		linkedWork.addActionListener(event -> showSelectedObjectiveAssignments());
 		JButton addObjective = new JButton("Add objective");
 		addObjective.addActionListener(event -> editObjective(null));
+		java.awt.Insets actionButtonInsets = new java.awt.Insets(2, 4, 2, 4);
+		editObjective.setMargin(actionButtonInsets);
+		linkedWork.setMargin(actionButtonInsets);
+		addObjective.setMargin(actionButtonInsets);
 		editObjective.setEnabled(false);
 		linkedWork.setEnabled(false);
-		JPanel objectiveActions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING, 4, 0));
-		objectiveActions.add(addObjective);
-		objectiveActions.add(editObjective);
-		objectiveActions.add(linkedWork);
+		stage.add(addObjective);
+		stage.add(editObjective);
+		stage.add(linkedWork);
 		objectives.getSelectionModel().addListSelectionListener(event -> {
 			if (!event.getValueIsAdjusting()) {
 				boolean selected = objectives.getSelectedRow() >= 0;
@@ -351,10 +354,10 @@ public class IncidentCommandRolePanel extends JPanel {
 				linkedWork.setEnabled(selected);
 			}
 		});
+		planning.add(stage, BorderLayout.NORTH);
 		JButton editContext = new JButton("Edit command emphasis and situational awareness");
 		editContext.addActionListener(event -> editIcs202Context());
 		JPanel objectiveTablePanel = new JPanel(new BorderLayout(0, 4));
-		objectiveTablePanel.add(objectiveActions, BorderLayout.NORTH);
 		objectiveTablePanel.add(new JScrollPane(objectives), BorderLayout.CENTER);
 		planProgress.getAccessibleContext().setAccessibleName("Recorded IAP progress summary");
 		planProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
@@ -645,24 +648,45 @@ public class IncidentCommandRolePanel extends JPanel {
 	/** Opens editors for command emphasis and general situational awareness. */
 	private void editIcs202Context() {
 		AppController.IncidentBinding editBinding = controller.captureIncidentBinding();
-		JTextArea emphasis = new JTextArea(controller.getData().getForm202().getCommandEmphasis(), 4, 48);
+		JTextArea emphasis = new JTextArea(controller.getData().getForm202().getCommandEmphasis(), 8, 48);
 		emphasis.setLineWrap(true);
 		emphasis.setWrapStyleWord(true);
 		emphasis.getAccessibleContext().setAccessibleName("Command emphasis");
-		JTextArea awareness = new JTextArea(controller.getData().getForm202().getSituationalAwareness(), 4, 48);
+		JTextArea awareness = new JTextArea(controller.getData().getForm202().getSituationalAwareness(), 8, 48);
 		awareness.setLineWrap(true);
 		awareness.setWrapStyleWord(true);
 		awareness.getAccessibleContext().setAccessibleName("General situational awareness");
-		JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
-		form.add(new JLabel("Command emphasis"));
-		form.add(new JScrollPane(emphasis));
-		form.add(new JLabel("General situational awareness"));
-		form.add(new JScrollPane(awareness));
+		JLabel emphasisLabel = new JLabel("Command emphasis");
+		emphasisLabel.setLabelFor(emphasis);
+		JLabel awarenessLabel = new JLabel("General situational awareness");
+		awarenessLabel.setLabelFor(awareness);
+		JPanel form = new JPanel();
+		form.setLayout(new javax.swing.BoxLayout(form, javax.swing.BoxLayout.Y_AXIS));
+		form.add(contextEditorSection(emphasisLabel, emphasis));
+		form.add(javax.swing.Box.createVerticalStrut(10));
+		form.add(contextEditorSection(awarenessLabel, awareness));
 		int choice = UiSupport.showResizableOptionDialog(this, "Edit ICS 202 context", form,
-				new Dimension(620, 360), new Object[]{"Save", "Cancel"}, "Save");
+				new Dimension(760, 520), new Object[]{"Save", "Cancel"}, "Save");
 		if (choice == 0) {
 			saveIcs202Context(editBinding, emphasis.getText(), awareness.getText());
 		}
+	}
+
+	/**
+	 * Creates a labeled ICS 202 context editor section with compact label spacing.
+	 *
+	 * @param label section label connected to its editor.
+	 * @param editor text editor for the section.
+	 * @return vertically arranged labeled editor section.
+	 */
+	private JPanel contextEditorSection(JLabel label, JTextArea editor) {
+		JPanel section = new JPanel(new BorderLayout(0, 2));
+		section.setAlignmentX(LEFT_ALIGNMENT);
+		JScrollPane scroll = new JScrollPane(editor);
+		scroll.setPreferredSize(new Dimension(700, 190));
+		section.add(label, BorderLayout.NORTH);
+		section.add(scroll, BorderLayout.CENTER);
+		return section;
 	}
 
 	/**
