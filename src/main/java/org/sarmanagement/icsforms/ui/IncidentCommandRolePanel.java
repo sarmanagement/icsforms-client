@@ -362,7 +362,7 @@ public class IncidentCommandRolePanel extends JPanel {
 		overallProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
 		progress.add(overallProgress, BorderLayout.NORTH);
 		progress.add(new JScrollPane(planProgress), BorderLayout.CENTER);
-		JSplitPane progressAttention = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, progress, buildAttentionPanel());
+		JSplitPane progressAttention = new JSplitPane(JSplitPane.VERTICAL_SPLIT, progress, buildAttentionPanel());
 		progressAttention.setResizeWeight(0.55);
 		progressAttention.setDividerLocation(0.55);
 		JSplitPane objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, objectiveTablePanel, progressAttention);
