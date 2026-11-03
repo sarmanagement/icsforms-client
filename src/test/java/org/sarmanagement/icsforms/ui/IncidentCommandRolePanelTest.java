@@ -37,6 +37,7 @@ import javax.swing.JDialog;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JSplitPane;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
 import javax.swing.JTextArea;
@@ -131,12 +132,18 @@ class IncidentCommandRolePanelTest {
 			assertTrue(findComponent(panel, JList.class) != null);
 
 			JSplitPane body = findComponent(panel, JSplitPane.class);
-			JPanel secondColumn = (JPanel) body.getRightComponent();
-			BorderLayout layout = (BorderLayout) secondColumn.getLayout();
-			JPanel context = (JPanel) layout.getLayoutComponent(BorderLayout.NORTH);
-			JPanel resourceOverview = (JPanel) layout.getLayoutComponent(BorderLayout.CENTER);
-			assertTrue(context.isAncestorOf(button(panel, "Edit ICS 202 context…")));
+			JSplitPane secondColumn = (JSplitPane) body.getRightComponent();
+			assertEquals(JSplitPane.VERTICAL_SPLIT, secondColumn.getOrientation());
+			assertEquals(0.72, secondColumn.getResizeWeight());
+			JPanel context = (JPanel) secondColumn.getTopComponent();
+			JPanel resourceOverview = (JPanel) secondColumn.getBottomComponent();
+			assertNull(context.getBorder());
+			assertTrue(context.isAncestorOf(button(panel, "Edit command emphasis and situational awareness")));
 			assertTrue(resourceOverview.isAncestorOf((JTable) field(panel, "resources")));
+			JScrollPane resourceScroll = findComponent(resourceOverview, JScrollPane.class);
+			JTable resources = (JTable) field(panel, "resources");
+			assertEquals(resources.getTableHeader().getPreferredSize().height + 10 * resources.getRowHeight(),
+					resourceScroll.getPreferredSize().height);
 		} finally {
 			SwingUtilities.invokeAndWait(panel::dispose);
 		}

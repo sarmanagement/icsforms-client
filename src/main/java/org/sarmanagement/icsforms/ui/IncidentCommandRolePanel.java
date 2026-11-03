@@ -341,7 +341,7 @@ public class IncidentCommandRolePanel extends JPanel {
 				}
 			}
 		});
-		JButton editContext = new JButton("Edit ICS 202 context…");
+		JButton editContext = new JButton("Edit command emphasis and situational awareness");
 		editContext.addActionListener(event -> editIcs202Context());
 		JPanel objectiveTablePanel = new JPanel(new BorderLayout(0, 4));
 		objectiveTablePanel.add(new JScrollPane(objectives), BorderLayout.CENTER);
@@ -382,15 +382,15 @@ public class IncidentCommandRolePanel extends JPanel {
 		grouping.add(new JLabel("Group by"));
 		grouping.add(resourceGrouping);
 		resourcePanel.add(grouping, BorderLayout.NORTH);
-		resourcePanel.add(new JScrollPane(resources), BorderLayout.CENTER);
+		JScrollPane resourceScroll = new JScrollPane(resources);
+		resourceScroll.setPreferredSize(new Dimension(resourceScroll.getPreferredSize().width,
+				resources.getTableHeader().getPreferredSize().height + 10 * resources.getRowHeight()));
+		resourcePanel.add(resourceScroll, BorderLayout.CENTER);
 		resourcePanel.add(new JLabel("<html>Unspecified is not Available.<br>No radio check or readiness is inferred.</html>"),
 				BorderLayout.SOUTH);
 
-		JPanel contextPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
-		contextPanel.setBorder(javax.swing.BorderFactory.createTitledBorder(
-				"Command emphasis and general situational awareness"));
+		JPanel contextPanel = new JPanel(new BorderLayout(4, 4));
 		contextPanel.getAccessibleContext().setAccessibleName("ICS 202 command emphasis and situational awareness");
-		contextPanel.setLayout(new BorderLayout(4, 4));
 		JPanel contextActions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING, 0, 0));
 		contextActions.add(editContext);
 		contextPanel.add(contextActions, BorderLayout.NORTH);
@@ -398,9 +398,9 @@ public class IncidentCommandRolePanel extends JPanel {
 		contextDetails.add(contextSection("Command emphasis", commandEmphasis));
 		contextDetails.add(contextSection("General situational awareness", situationalAwareness));
 		contextPanel.add(contextDetails, BorderLayout.CENTER);
-		JPanel resourceColumn = new JPanel(new BorderLayout(4, 4));
-		resourceColumn.add(contextPanel, BorderLayout.NORTH);
-		resourceColumn.add(resourcePanel, BorderLayout.CENTER);
+		JSplitPane resourceColumn = new JSplitPane(JSplitPane.VERTICAL_SPLIT, contextPanel, resourcePanel);
+		resourceColumn.setResizeWeight(0.72);
+		resourceColumn.setDividerLocation(0.72);
 
 		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, planning, resourceColumn);
 		split.setResizeWeight(0.7);
