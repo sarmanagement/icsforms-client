@@ -27,10 +27,8 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
 import javax.swing.JButton;
-import javax.swing.DefaultListModel;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JList;
 import javax.swing.JTable;
 import javax.swing.JFrame;
 import javax.swing.JDialog;
@@ -41,6 +39,7 @@ import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
 import javax.swing.JTextArea;
+import javax.swing.SwingConstants;
 import java.awt.Container;
 import java.awt.BorderLayout;
 import java.awt.GraphicsEnvironment;
@@ -127,9 +126,24 @@ class IncidentCommandRolePanelTest {
 		IncidentCommandRolePanel panel = panel(controller(new AppData()));
 		try {
 			JComboBox<?> stage = planningStage(panel);
-			assertSame(stage.getParent(), button(panel, "Add objective…").getParent());
-			assertSame(stage.getParent(), button(panel, "Edit objective…").getParent());
-			assertTrue(findComponent(panel, JList.class) != null);
+			JButton addObjective = button(panel, "Add objective");
+			JButton editObjective = button(panel, "Edit objective");
+			JButton linkedWork = button(panel, "Linked work");
+			JPanel stageRow = (JPanel) stage.getParent();
+			assertSame(stageRow, addObjective.getParent());
+			assertTrue(java.util.Arrays.stream(stageRow.getComponents())
+					.filter(JLabel.class::isInstance).map(JLabel.class::cast)
+					.anyMatch(label -> "Planning stage".equals(label.getText())));
+			assertSame(editObjective.getParent(), linkedWork.getParent());
+			JPanel objectiveActions = (JPanel) editObjective.getParent();
+			JPanel objectiveTablePanel = (JPanel) objectiveActions.getParent();
+			assertSame(objectiveActions,
+					((BorderLayout) objectiveTablePanel.getLayout()).getLayoutComponent(BorderLayout.NORTH));
+			assertFalse(addObjective.getText().endsWith("…"));
+			assertFalse(editObjective.getText().endsWith("…"));
+			assertFalse(linkedWork.getText().endsWith("…"));
+			assertFalse(editObjective.isEnabled());
+			assertFalse(linkedWork.isEnabled());
 
 			JSplitPane body = findComponent(panel, JSplitPane.class);
 			JSplitPane secondColumn = (JSplitPane) body.getRightComponent();
@@ -150,41 +164,36 @@ class IncidentCommandRolePanelTest {
 	}
 
 	@Test
-	void attentionListSelectsObjectivesWithMissingLinksOrAssessmentAndShowsIcs202Context() throws Exception {
+	void objectivesHighlightMissingAssignmentsAndSelectionEnablesObjectiveActions() throws Exception {
 		AppData data = new AppData();
-		IncidentObjective missingBoth = new IncidentObjective("Search sector A", 0);
-		IncidentObjective missingAssessment = new IncidentObjective("Search sector B", 1);
-		IncidentObjective complete = new IncidentObjective("Secure command post", 2);
-		complete.setAssessment(ObjectiveAssessment.ONGOING);
-		data.getForm202().setStructuredObjectives(List.of(missingBoth, missingAssessment, complete));
+		IncidentObjective noAssignment = new IncidentObjective("Search sector A", 0);
+		IncidentObjective withAssignment = new IncidentObjective("Search sector B", 1);
+		data.getForm202().setStructuredObjectives(List.of(noAssignment, withAssignment));
 		ResourceAssignment linked = new ResourceAssignment();
-		linked.setObjectiveIds(List.of(missingAssessment.getObjectiveId(), complete.getObjectiveId()));
+		linked.setObjectiveIds(List.of(withAssignment.getObjectiveId()));
 		data.getForm204().getResourcesAssigned().add(linked);
 		data.getForm202().setCommandEmphasis("Prioritize the north ridge search.");
 		data.getForm202().setSituationalAwareness("Weather remains clear; visibility is good.");
 		IncidentCommandRolePanel panel = panel(controller(data));
 		try {
-			JList<?> attention = (JList<?>) field(panel, "attentionList");
-			DefaultListModel<?> model = (DefaultListModel<?>) field(panel, "attentionModel");
 			JTable objectives = (JTable) field(panel, "objectives");
 			JTextArea emphasis = (JTextArea) field(panel, "commandEmphasis");
 			JTextArea awareness = (JTextArea) field(panel, "situationalAwareness");
-			assertEquals(2, model.size());
-			assertTrue(model.get(0).toString().contains("no linked assignments"));
-			assertTrue(model.get(0).toString().contains("assessment not recorded"));
-			assertTrue(model.get(1).toString().contains("assessment not recorded"));
-			assertFalse(model.get(1).toString().contains("no linked assignments"));
+			assertTrue(objectives.getValueAt(0, 1).toString().contains("<b>None</b>"));
+			assertFalse(objectives.getValueAt(1, 1).toString().contains("<b>None</b>"));
+			JLabel objectiveCell = (JLabel) objectives.getCellRenderer(0, 0)
+					.getTableCellRendererComponent(objectives, objectives.getValueAt(0, 0), false, false, 0, 0);
+			assertEquals(SwingConstants.TOP, objectiveCell.getVerticalAlignment());
 			assertFalse(emphasis.isEditable());
 			assertFalse(awareness.isEditable());
 			assertEquals("Prioritize the north ridge search.", emphasis.getText());
 			assertEquals("Weather remains clear; visibility is good.", awareness.getText());
 
-			SwingUtilities.invokeAndWait(() -> attention.setSelectedIndex(1));
-			assertEquals(1, objectives.getSelectedRow());
-			assertEquals(missingAssessment.getObjectiveId(),
+			SwingUtilities.invokeAndWait(() -> objectives.setRowSelectionInterval(0, 0));
+			assertEquals(noAssignment.getObjectiveId(),
 					data.getForm202().getStructuredObjectives().get(objectives.getSelectedRow()).getObjectiveId());
-			assertTrue(button(panel, "Edit objective…").isEnabled());
-			assertTrue(button(panel, "Linked work…").isEnabled());
+			assertTrue(button(panel, "Edit objective").isEnabled());
+			assertTrue(button(panel, "Linked work").isEnabled());
 		} finally {
 			SwingUtilities.invokeAndWait(panel::dispose);
 		}
@@ -202,7 +211,7 @@ class IncidentCommandRolePanelTest {
 		IncidentCommandRolePanel panel = panel(controller);
 		assertTrue(java.util.Arrays.stream(((JTable) field(panel, "objectives")).getComponentPopupMenu().getComponents())
 				.filter(JMenuItem.class::isInstance).map(JMenuItem.class::cast)
-				.anyMatch(item -> "Edit objective…".equals(item.getText())));
+				.anyMatch(item -> "Edit objective".equals(item.getText())));
 		AppController.IncidentBinding binding = controller.captureIncidentBinding();
 		SwingUtilities.invokeAndWait(() -> assertTrue(panel.saveObjective(binding, objective.getObjectiveId(),
 				"Search north ridge sector A", ObjectiveAssessment.ONGOING, "Team report pending.")));
