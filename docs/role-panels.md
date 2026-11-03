@@ -13,9 +13,11 @@ a normal ICS 204 assignment prelinked to the objective. The linked-assignment
 window retains the existing ICS 204, SAR task, logging, status, and debrief
 actions, and has a separate reported-results view with operator-stated sources.
 Command emphasis and general situational awareness from ICS 202 are editable in
-the panel. Its observational attention list calls out objectives without links
-or an assessment. The panel does not calculate objective achievement, resource
-readiness, or duplicate resource totals.
+the panel. Objectives without linked assignments are highlighted in the table;
+the Objectives badge also reports objectives without linked work and assignments
+without a current objective link. There is no separate attention panel. The panel
+does not calculate objective achievement, resource readiness, or duplicate
+resource totals.
 
 The Operations task board offers the same assignment, status, logging, clue, and
 debrief actions in its task context menu. Debrief is enabled only for returned
@@ -43,8 +45,13 @@ human and canine plan content.
 
 All views use the same local incident model. Role selection does not enforce
 authorization, and this UI adds no remote persistence or automatic incident
-events. Existing canine directory and routing operations are separate, explicit
-tools in the canine workspace.
+events. Canine workspace and reference instances share `CanineMedicalFacilityTools`
+for directory lookup, stable-ID facility selection and details, and route
+presentation. The tool also delegates the workspace's explicit shortlist and
+route-calculation actions to existing medical services. Each surface owns its own
+Swing components; the reference uses only read-only operations and never invokes
+a geocoder or routing provider. Explicit editing, geocoding, route calculation,
+and plan selection remain in the canine workspace.
 
 The former **View > Dashboard** role-based tab ordering has been retired.
 Workspaces now use one stable order; use **View > Role Panels** for focused role

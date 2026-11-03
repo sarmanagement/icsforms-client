@@ -131,6 +131,15 @@ class MedicalReferencePanel extends JPanel {
 		return facilityModel.size();
 	}
 
+	/**
+	 * Returns the currently selected facility details for focused reference tests.
+	 *
+	 * @return displayed read-only facility details.
+	 */
+	String displayedFacilityDetail() {
+		return facilityDetail.getText();
+	}
+
 	/** Refreshes structured data without changing logs, tasks, routes, or review. */
 	void refreshFromModel() {
 		if (!controller.isCurrent(binding)) {
@@ -201,7 +210,12 @@ class MedicalReferencePanel extends JPanel {
 		facilities.addListSelectionListener(event -> {
 			if (!event.getValueIsAdjusting()) {
 				FacilityChoice choice = facilities.getSelectedValue();
-				facilityDetail.setText(choice == null ? "" : choice.detail());
+				CanineMedicalFacilityTools.FacilityDisplay selected = choice == null || !canine
+						|| !controller.isCurrent(binding) ? null
+								: CanineMedicalFacilityTools.selectedFacility(controller.getData(),
+										choice.facilityId());
+				facilityDetail.setText(choice == null ? ""
+						: selected == null ? choice.detail() : selected.detail());
 				facilityDetail.setCaretPosition(0);
 			}
 		});
@@ -272,7 +286,7 @@ class MedicalReferencePanel extends JPanel {
 					+ hospital.getAirTravelProvenance() + ")\nTrauma center: " + value(hospital.getTraumaCenter())
 					+ " " + hospital.getTraumaLevel() + "\nBurn center: " + value(hospital.getBurnCenter())
 					+ "\nHelipad: " + value(hospital.getHelipad());
-			facilityModel.addElement(new FacilityChoice("[Accepted plan] " + hospital.getName(), detail));
+			facilityModel.addElement(new FacilityChoice("", "[Accepted plan] " + hospital.getName(), detail));
 		}
 		selectFirstFacility();
 	}
@@ -313,7 +327,7 @@ class MedicalReferencePanel extends JPanel {
 		facilityModel.clear();
 		for (CanineMedicalFacilityTools.FacilityDisplay facility
 				: CanineMedicalFacilityTools.referenceFacilities(data)) {
-			facilityModel.addElement(new FacilityChoice(facility.label(), facility.detail()));
+			facilityModel.addElement(new FacilityChoice(facility.facilityId(), facility.label(), facility.detail()));
 		}
 		selectFirstFacility();
 	}
@@ -486,10 +500,11 @@ class MedicalReferencePanel extends JPanel {
 	/**
 	 * Immutable facility display row.
 	 *
+	 * @param facilityId stable facility identifier, or blank for human facilities.
 	 * @param label list label.
 	 * @param detail selected detail.
 	 */
-	private record FacilityChoice(String label, String detail) {
+	private record FacilityChoice(String facilityId, String label, String detail) {
 		/** @return list label. */
 		@Override
 		public String toString() {

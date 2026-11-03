@@ -72,7 +72,6 @@ public class CanineMedicalPanel extends JPanel {
 	private final AddressGeocoder geocoder;
 	private final DrivingRouteProvider routeProvider;
 	private final VetDirectoryFileService fileService = new VetDirectoryFileService();
-	private final VetShortlistSelector shortlistSelector = new VetShortlistSelector();
 	private final JTextField stagingLabel = new JTextField();
 	private final JTextField stagingAddress = new JTextField();
 	private final JTextField stagingLatitude = new JTextField();
@@ -320,7 +319,7 @@ public class CanineMedicalPanel extends JPanel {
 			preparedAt.setText(UiSupport.formatIsoDateTime(plan.getPreparedAt()));
 			safetyOfficer.setText(MedicalRoleSupport.safetyOfficerName(data));
 			reviewStatus.setSelectedItem(plan.getReviewStatus());
-			loadDirectory(data.getVetDirectory());
+			loadDirectory(CanineMedicalFacilityTools.directoryFacilities(data));
 			loadSelection(plan.getSelectedFacilities());
 		} finally {
 			loading = false;
@@ -1014,9 +1013,8 @@ public class CanineMedicalPanel extends JPanel {
 				.anyMatch(CanineMedicalPanel::hasValidCoordinates);
 		calculateRoutesButton.setEnabled(!working && data.getStagingLocation().hasValidCoordinates()
 				&& hasRoutableFacility);
-		boolean hasShortlistCandidate = !shortlistSelector.propose(data.getVetDirectory().getFacilities(),
-				integer(shortlistLimit.getText(), VetShortlistSelector.DEFAULT_LIMIT),
-				data.getStagingLocation().getGeneration()).isEmpty();
+		boolean hasShortlistCandidate = !CanineMedicalFacilityTools.proposeFacilities(data,
+				integer(shortlistLimit.getText(), VetShortlistSelector.DEFAULT_LIMIT)).isEmpty();
 		previewSelectionButton.setEnabled(!working && hasShortlistCandidate);
 	}
 
@@ -1064,9 +1062,9 @@ public class CanineMedicalPanel extends JPanel {
 	 *
 	 * @param directory incident-owned directory.
 	 */
-	private void loadDirectory(VetDirectory directory) {
+	private void loadDirectory(List<VetFacility> facilities) {
 		directoryModel.setRowCount(0);
-		for (VetFacility facility : directory.getFacilities()) {
+		for (VetFacility facility : facilities) {
 			directoryModel.addRow(directoryRow(facility));
 		}
 	}
@@ -1916,7 +1914,7 @@ public class CanineMedicalPanel extends JPanel {
 		if (!isCurrent(binding, incident, -1)) {
 			return false;
 		}
-		VetFacility current = findFacility(incident, facilityId);
+		VetFacility current = CanineMedicalFacilityTools.findDirectoryFacility(incident, facilityId);
 		if (current == null || !geocodingAddress(current).equals(requestedAddress)) {
 			return false;
 		}
@@ -1965,8 +1963,8 @@ public class CanineMedicalPanel extends JPanel {
 		startWorker(new SwingWorker<RouteWorkResult, Void>() {
 			@Override
 			protected RouteWorkResult doInBackground() throws Exception {
-				VetRoutingService routing = new VetRoutingService(routeProvider);
-				VetRoutingService.CalculationReport report = routing.calculate(base, snapshot, false);
+				VetRoutingService.CalculationReport report =
+						CanineMedicalFacilityTools.calculateRoutes(routeProvider, base, snapshot, false);
 				return new RouteWorkResult(snapshot, report, limit);
 			}
 
@@ -2005,9 +2003,8 @@ public class CanineMedicalPanel extends JPanel {
 			return;
 		}
 		AppData data = controller.getData();
-		List<VetFacility> proposal = shortlistSelector.propose(data.getVetDirectory().getFacilities(),
-				integer(shortlistLimit.getText(), VetShortlistSelector.DEFAULT_LIMIT),
-				data.getStagingLocation().getGeneration());
+		List<VetFacility> proposal = CanineMedicalFacilityTools.proposeFacilities(data,
+				integer(shortlistLimit.getText(), VetShortlistSelector.DEFAULT_LIMIT));
 		if (proposal.isEmpty()) {
 			JOptionPane.showMessageDialog(this,
 					"No current ORS driving results for confirmed 24-hour facilities. Resolve locations and calculate routes first.",
@@ -2204,7 +2201,7 @@ public class CanineMedicalPanel extends JPanel {
 	 */
 	private void mergeRouteResults(AppData incident, VetDirectory routedDirectory, long baseGeneration) {
 		for (VetFacility routed : routedDirectory.getFacilities()) {
-			VetFacility current = findFacility(incident, routed.getId());
+			VetFacility current = CanineMedicalFacilityTools.findDirectoryFacility(incident, routed.getId());
 			if (current != null && current.getAddress().equals(routed.getAddress())
 					&& routed.hasCurrentDistance(baseGeneration)) {
 				current.setDistance(routed.getDistanceMeters(), routed.getDurationSeconds(),
@@ -2212,18 +2209,6 @@ public class CanineMedicalPanel extends JPanel {
 						baseGeneration);
 			}
 		}
-	}
-
-	/**
-	 * Finds one regional facility by stable ID.
-	 *
-	 * @param incident incident document.
-	 * @param id stable facility ID.
-	 * @return source record or null.
-	 */
-	private VetFacility findFacility(AppData incident, String id) {
-		return incident.getVetDirectory().getFacilities().stream().filter(item -> id.equals(item.getId())).findFirst()
-				.orElse(null);
 	}
 
 	/**
