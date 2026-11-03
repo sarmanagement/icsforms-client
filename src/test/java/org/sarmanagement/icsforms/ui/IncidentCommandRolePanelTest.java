@@ -27,6 +27,7 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
 import javax.swing.JButton;
+import javax.swing.DefaultListModel;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JList;
@@ -127,7 +128,7 @@ class IncidentCommandRolePanelTest {
 			JComboBox<?> stage = planningStage(panel);
 			assertSame(stage.getParent(), button(panel, "Add objective…").getParent());
 			assertSame(stage.getParent(), button(panel, "Edit objective…").getParent());
-			assertNull(findComponent(panel, JList.class));
+			assertTrue(findComponent(panel, JList.class) != null);
 
 			JSplitPane body = findComponent(panel, JSplitPane.class);
 			JPanel secondColumn = (JPanel) body.getRightComponent();
@@ -136,6 +137,47 @@ class IncidentCommandRolePanelTest {
 			JPanel resourceOverview = (JPanel) layout.getLayoutComponent(BorderLayout.CENTER);
 			assertTrue(context.isAncestorOf(button(panel, "Edit ICS 202 context…")));
 			assertTrue(resourceOverview.isAncestorOf((JTable) field(panel, "resources")));
+		} finally {
+			SwingUtilities.invokeAndWait(panel::dispose);
+		}
+	}
+
+	@Test
+	void attentionListSelectsObjectivesWithMissingLinksOrAssessmentAndShowsIcs202Context() throws Exception {
+		AppData data = new AppData();
+		IncidentObjective missingBoth = new IncidentObjective("Search sector A", 0);
+		IncidentObjective missingAssessment = new IncidentObjective("Search sector B", 1);
+		IncidentObjective complete = new IncidentObjective("Secure command post", 2);
+		complete.setAssessment(ObjectiveAssessment.ONGOING);
+		data.getForm202().setStructuredObjectives(List.of(missingBoth, missingAssessment, complete));
+		ResourceAssignment linked = new ResourceAssignment();
+		linked.setObjectiveIds(List.of(missingAssessment.getObjectiveId(), complete.getObjectiveId()));
+		data.getForm204().getResourcesAssigned().add(linked);
+		data.getForm202().setCommandEmphasis("Prioritize the north ridge search.");
+		data.getForm202().setSituationalAwareness("Weather remains clear; visibility is good.");
+		IncidentCommandRolePanel panel = panel(controller(data));
+		try {
+			JList<?> attention = (JList<?>) field(panel, "attentionList");
+			DefaultListModel<?> model = (DefaultListModel<?>) field(panel, "attentionModel");
+			JTable objectives = (JTable) field(panel, "objectives");
+			JTextArea emphasis = (JTextArea) field(panel, "commandEmphasis");
+			JTextArea awareness = (JTextArea) field(panel, "situationalAwareness");
+			assertEquals(2, model.size());
+			assertTrue(model.get(0).toString().contains("no linked assignments"));
+			assertTrue(model.get(0).toString().contains("assessment not recorded"));
+			assertTrue(model.get(1).toString().contains("assessment not recorded"));
+			assertFalse(model.get(1).toString().contains("no linked assignments"));
+			assertFalse(emphasis.isEditable());
+			assertFalse(awareness.isEditable());
+			assertEquals("Prioritize the north ridge search.", emphasis.getText());
+			assertEquals("Weather remains clear; visibility is good.", awareness.getText());
+
+			SwingUtilities.invokeAndWait(() -> attention.setSelectedIndex(1));
+			assertEquals(1, objectives.getSelectedRow());
+			assertEquals(missingAssessment.getObjectiveId(),
+					data.getForm202().getStructuredObjectives().get(objectives.getSelectedRow()).getObjectiveId());
+			assertTrue(button(panel, "Edit objective…").isEnabled());
+			assertTrue(button(panel, "Linked work…").isEnabled());
 		} finally {
 			SwingUtilities.invokeAndWait(panel::dispose);
 		}

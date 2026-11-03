@@ -19,6 +19,7 @@ import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.DefaultListModel;
 import javax.swing.JDialog;
 import javax.swing.JList;
 import javax.swing.JMenuItem;
@@ -90,6 +91,14 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final Map<String, JLabel> progressBadges = new LinkedHashMap<>();
 	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "Linked assignments", "Assessment");
 	private final JTable objectives = new JTable(objectiveModel);
+	private final DefaultListModel<String> attentionModel = new DefaultListModel<>();
+	private final JList<String> attentionList = new JList<>(attentionModel);
+	private final List<String> attentionObjectiveIds = new ArrayList<>();
+	private final JLabel attentionEmpty = new JLabel("No objective link or assessment gaps recorded.");
+	private final JButton editAttentionObjective = new JButton("Edit objective…");
+	private final JButton linkedWork = new JButton("Linked work…");
+	private final JTextArea commandEmphasis = contextDisplay();
+	private final JTextArea situationalAwareness = contextDisplay();
 	private final JComboBox<String> resourceGrouping = new JComboBox<>(new String[]{"All resources", "By resource type"});
 	private final DefaultTableModel resourceModel = readOnlyModel("Resource group", "Total");
 	private final JTable resources = new JTable(resourceModel);
@@ -154,8 +163,11 @@ public class IncidentCommandRolePanel extends JPanel {
 						+ " | Recorded resource states, not readiness certification");
 		planningStage.setSelectedItem(data.getIapPlanningStage());
 		rebuildObjectives(data);
+		rebuildAttention(data);
 		rebuildResources(data);
 		rebuildProgress(data);
+		commandEmphasis.setText(data.getForm202().getCommandEmphasis());
+		situationalAwareness.setText(data.getForm202().getSituationalAwareness());
 		String approval = data.getForm202().getObjectiveApprovalStatus().displayLabel();
 		if (data.getForm202().getApprovedDateTime() != null) {
 			approval += " by " + data.getForm202().getApprovedByIncidentCommanderName() + " at "
@@ -350,8 +362,10 @@ public class IncidentCommandRolePanel extends JPanel {
 		overallProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
 		progress.add(overallProgress, BorderLayout.NORTH);
 		progress.add(new JScrollPane(planProgress), BorderLayout.CENTER);
-		JSplitPane objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, objectiveTablePanel,
-				progress);
+		JSplitPane progressAttention = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, progress, buildAttentionPanel());
+		progressAttention.setResizeWeight(0.55);
+		progressAttention.setDividerLocation(0.55);
+		JSplitPane objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, objectiveTablePanel, progressAttention);
 		objectiveSplit.setResizeWeight(0.5);
 		objectiveSplit.setDividerLocation(210);
 		planning.add(objectiveSplit, BorderLayout.CENTER);
@@ -376,7 +390,14 @@ public class IncidentCommandRolePanel extends JPanel {
 		contextPanel.setBorder(javax.swing.BorderFactory.createTitledBorder(
 				"Command emphasis and general situational awareness"));
 		contextPanel.getAccessibleContext().setAccessibleName("ICS 202 command emphasis and situational awareness");
-		contextPanel.add(editContext);
+		contextPanel.setLayout(new BorderLayout(4, 4));
+		JPanel contextActions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING, 0, 0));
+		contextActions.add(editContext);
+		contextPanel.add(contextActions, BorderLayout.NORTH);
+		JPanel contextDetails = new JPanel(new GridLayout(0, 1, 4, 4));
+		contextDetails.add(contextSection("Command emphasis", commandEmphasis));
+		contextDetails.add(contextSection("General situational awareness", situationalAwareness));
+		contextPanel.add(contextDetails, BorderLayout.CENTER);
 		JPanel resourceColumn = new JPanel(new BorderLayout(4, 4));
 		resourceColumn.add(contextPanel, BorderLayout.NORTH);
 		resourceColumn.add(resourcePanel, BorderLayout.CENTER);
@@ -386,6 +407,134 @@ public class IncidentCommandRolePanel extends JPanel {
 		split.setDividerLocation(760);
 		split.setPreferredSize(new Dimension(1120, 680));
 		return split;
+	}
+
+	/**
+	 * Creates a read-only, wrapped display for current ICS 202 context.
+	 *
+	 * @return text area for one ICS 202 context value.
+	 */
+	private static JTextArea contextDisplay() {
+		JTextArea display = new JTextArea(2, 24);
+		display.setEditable(false);
+		display.setLineWrap(true);
+		display.setWrapStyleWord(true);
+		display.setFocusable(true);
+		return display;
+	}
+
+	/**
+	 * Builds a titled read-only context section.
+	 *
+	 * @param title section title.
+	 * @param content displayed context text.
+	 * @return labeled context section.
+	 */
+	private JPanel contextSection(String title, JTextArea content) {
+		JPanel section = new JPanel(new BorderLayout());
+		section.setBorder(javax.swing.BorderFactory.createTitledBorder(title));
+		content.getAccessibleContext().setAccessibleName(title);
+		section.add(new JScrollPane(content), BorderLayout.CENTER);
+		return section;
+	}
+
+	/**
+	 * Builds actions and an informational list for objective records needing attention.
+	 *
+	 * @return observational attention panel.
+	 */
+	private JPanel buildAttentionPanel() {
+		JPanel attention = new JPanel(new BorderLayout(4, 4));
+		attention.setBorder(javax.swing.BorderFactory.createTitledBorder("Observational attention"));
+		attentionList.getAccessibleContext().setAccessibleName("Objectives missing links or assessment");
+		attentionList.setToolTipText("Flags missing recorded links or human assessment only; it does not calculate "
+				+ "objective achievement or readiness.");
+		attentionEmpty.setBorder(javax.swing.BorderFactory.createEmptyBorder(4, 6, 4, 6));
+		attentionEmpty.getAccessibleContext().setAccessibleName("No objective attention items");
+		attentionList.addListSelectionListener(event -> {
+			if (!event.getValueIsAdjusting()) {
+				selectAttentionObjective(attentionList.getSelectedIndex());
+				editAttentionObjective.setEnabled(attentionList.getSelectedIndex() >= 0);
+				linkedWork.setEnabled(attentionList.getSelectedIndex() >= 0);
+			}
+		});
+		attentionList.addMouseListener(new MouseAdapter() {
+			/** Opens the focused editor for a double-clicked attention item. */
+			@Override
+			public void mouseClicked(MouseEvent event) {
+				if (event.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(event)) {
+					selectAttentionObjective(attentionList.locationToIndex(event.getPoint()));
+					editSelectedObjective();
+				}
+			}
+		});
+		JPanel attentionContents = new JPanel(new BorderLayout());
+		attentionContents.add(attentionEmpty, BorderLayout.NORTH);
+		attentionContents.add(new JScrollPane(attentionList), BorderLayout.CENTER);
+		attention.add(attentionContents, BorderLayout.CENTER);
+		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING, 4, 0));
+		editAttentionObjective.addActionListener(event -> editSelectedObjective());
+		linkedWork.addActionListener(event -> showSelectedObjectiveAssignments());
+		actions.add(editAttentionObjective);
+		actions.add(linkedWork);
+		editAttentionObjective.setEnabled(false);
+		linkedWork.setEnabled(false);
+		attention.add(actions, BorderLayout.SOUTH);
+		return attention;
+	}
+
+	/** Selects the objective corresponding to the chosen attention item. */
+	private void selectAttentionObjective(int attentionIndex) {
+		if (attentionIndex < 0 || attentionIndex >= attentionObjectiveIds.size()) {
+			return;
+		}
+		String objectiveId = attentionObjectiveIds.get(attentionIndex);
+		List<IncidentObjective> current = controller.getData().getForm202().getStructuredObjectives();
+		for (int row = 0; row < current.size(); row++) {
+			if (objectiveId.equals(current.get(row).getObjectiveId())) {
+				objectives.setRowSelectionInterval(row, row);
+				objectives.scrollRectToVisible(objectives.getCellRect(row, 0, true));
+				return;
+			}
+		}
+	}
+
+	/**
+	 * Rebuilds the attention list from explicit objective link and assessment fields.
+	 *
+	 * @param data active incident.
+	 */
+	private void rebuildAttention(AppData data) {
+		String selectedId = attentionList.getSelectedIndex() < 0 ? ""
+				: attentionObjectiveIds.get(attentionList.getSelectedIndex());
+		attentionModel.clear();
+		attentionObjectiveIds.clear();
+		for (IncidentObjective objective : data.getForm202().getStructuredObjectives()) {
+			long links = controller.getAssignmentResources().stream()
+					.filter(assignment -> assignment.getObjectiveIds().contains(objective.getObjectiveId())).count();
+			boolean missingLinks = links == 0;
+			boolean missingAssessment = objective.getAssessment() == ObjectiveAssessment.NOT_ASSESSED;
+			if (!missingLinks && !missingAssessment) {
+				continue;
+			}
+			List<String> gaps = new ArrayList<>();
+			if (missingLinks) {
+				gaps.add("no linked assignments");
+			}
+			if (missingAssessment) {
+				gaps.add("assessment not recorded");
+			}
+			attentionObjectiveIds.add(objective.getObjectiveId());
+			attentionModel.addElement(objective.toString() + " — " + String.join("; ", gaps));
+		}
+		attentionEmpty.setVisible(attentionModel.isEmpty());
+		int selectedIndex = attentionObjectiveIds.indexOf(selectedId);
+		if (selectedIndex >= 0) {
+			attentionList.setSelectedIndex(selectedIndex);
+		} else {
+			editAttentionObjective.setEnabled(false);
+			linkedWork.setEnabled(false);
+		}
 	}
 
 	/**
