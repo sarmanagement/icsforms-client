@@ -1,6 +1,0 @@
-Nov 04, 2026 4:59:53 AM org.sarmanagement.icsforms.persistence.IncidentDocumentReader log
-INFO: Incident read path=target/ics203-store-13886905496666202120/exported.json schema=unknown outcome=attempt count=0 first=[]
-Nov 04, 2026 4:59:53 AM org.sarmanagement.icsforms.persistence.IncidentDocumentReader log
-INFO: Incident read path=target/ics203-store-13886905496666202120/exported.json schema=16 outcome=validated count=1 first=[WARNING $.incidentContext.incidentName: Incident name is missing.]
-Nov 04, 2026 4:59:53 AM org.sarmanagement.icsforms.persistence.IncidentDocumentReader log
-INFO: Incident read path=target/ics203-store-13886905496666202120/exported.json schema=16 outcome=import-persisted count=1 first=[WARNING $.incidentContext.incidentName: Incident name is missing.]
