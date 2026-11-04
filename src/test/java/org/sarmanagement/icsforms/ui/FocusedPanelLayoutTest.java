@@ -317,6 +317,7 @@ class FocusedPanelLayoutTest {
 				JPanel content = (JPanel) badges.get(0).getParent();
 				for (int index = 0; index < badges.size(); index += 2) {
 					assertEquals(badges.get(index).getY(), badges.get(index + 1).getY());
+					assertTrue(badges.get(index).getX() < badges.get(index + 1).getX());
 					if (index > 0) {
 						assertTrue(badges.get(index).getY() > badges.get(index - 2).getY());
 					}

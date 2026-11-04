@@ -405,7 +405,7 @@ public class IncidentCommandRolePanel extends JPanel {
 					javax.swing.BorderFactory.createEmptyBorder(2, 4, 2, 4)));
 			progressBadges.put(area, badge);
 			java.awt.GridBagConstraints constraints = new java.awt.GridBagConstraints();
-			constraints.gridx = progressBadges.size() % 2;
+			constraints.gridx = (progressBadges.size() - 1) % 2;
 			constraints.gridy = (progressBadges.size() - 1) / 2;
 			constraints.weightx = 1;
 			constraints.anchor = java.awt.GridBagConstraints.NORTHWEST;
