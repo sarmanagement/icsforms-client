@@ -310,6 +310,10 @@ class FocusedPanelLayoutTest {
 				assertNull(SwingUtilities.getAncestorOfClass(JScrollPane.class, badges.get(0)),
 						"Planning badges should not require a scroll pane");
 				JPanel content = (JPanel) badges.get(0).getParent();
+				for (int index = 2; index < badges.size(); index++) {
+					assertTrue(badges.get(index).getHeight() < badges.get(0).getHeight(),
+							"Review badge should use only its own text height: " + badges.get(index).getText());
+				}
 				for (JLabel badge : badges) {
 					assertTextFits(badge);
 					Rectangle bounds = SwingUtilities.convertRectangle(badge.getParent(), badge.getBounds(), content);

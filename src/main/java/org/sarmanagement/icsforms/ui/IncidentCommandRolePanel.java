@@ -89,7 +89,7 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
 	private final JComboBox<IapPlanningStage> planningStage = new JComboBox<>(IapPlanningStage.values());
-	private final JPanel planProgress = new JPanel(new GridLayout(0, 2, 4, 3));
+	private final JPanel planProgress = new JPanel(new java.awt.GridBagLayout());
 	private final JLabel overallProgress = new JLabel();
 	private final Map<String, JLabel> progressBadges = new LinkedHashMap<>();
 	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "n", "Linked assignments", "Assessment");
@@ -409,7 +409,14 @@ public class IncidentCommandRolePanel extends JPanel {
 					javax.swing.BorderFactory.createEtchedBorder(),
 					javax.swing.BorderFactory.createEmptyBorder(2, 4, 2, 4)));
 			progressBadges.put(area, badge);
-			planProgress.add(badge);
+			java.awt.GridBagConstraints constraints = new java.awt.GridBagConstraints();
+			constraints.gridx = progressBadges.size() % 2;
+			constraints.gridy = (progressBadges.size() - 1) / 2;
+			constraints.weightx = 1;
+			constraints.anchor = java.awt.GridBagConstraints.NORTHWEST;
+			constraints.fill = java.awt.GridBagConstraints.HORIZONTAL;
+			constraints.insets = new java.awt.Insets(1, 2, 1, 2);
+			planProgress.add(badge, constraints);
 		}
 		JPanel progress = new JPanel(new BorderLayout(4, 4));
 		progress.add(planProgress, BorderLayout.CENTER);
