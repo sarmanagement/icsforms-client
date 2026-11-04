@@ -1495,6 +1495,11 @@ public class IncidentCommandRolePanel extends JPanel {
 				case CHANGED_SINCE_REVIEW -> "Stale — changed since review";
 				case NOT_YET_REVIEWED -> "Not yet reviewed";
 			};
+			String compactReview = switch (data.getPlanReviewStatus(area)) {
+				case REVIEWED_APPROVED -> "Reviewed · current";
+				case CHANGED_SINCE_REVIEW -> "Stale since review";
+				case NOT_YET_REVIEWED -> "Not reviewed";
+			};
 			long contentItems = IncidentCommandSummary.recordedContent(data, area);
 			boolean current = data.getPlanReviewStatus(area) == PlanReviewStatus.REVIEWED_APPROVED;
 			boolean required = area != PlanReviewArea.CANINE_MEDICAL || animalRequired;
@@ -1502,16 +1507,17 @@ public class IncidentCommandRolePanel extends JPanel {
 				missing |= contentItems == 0;
 				approved &= current;
 			}
+			String compactContent = contentItems == 0 ? "No content"
+					: contentItems + (contentItems == 1 ? " item" : " items") + " recorded";
 			updateBadge(title, mark(contentItems > 0) + (contentItems == 0 ? "No content recorded"
 					: contentItems + " content items recorded"),
 					mark(current) + review + (area == PlanReviewArea.CANINE_MEDICAL
 							? required ? " (required — animal resources recorded)" : " (optional — no animal resources recorded)"
 							: ""),
-					(contentItems == 0 ? "No content recorded"
-							: contentItems + (contentItems == 1 ? " item" : " items") + " recorded")
+					compactContent
 							+ (area == PlanReviewArea.CANINE_MEDICAL
 							? required ? " · required" : " · optional" : ""),
-					mark(current) + review,
+					mark(current) + compactReview,
 					contentItems == 0 ? required ? RolePanelSupport.MISSING : RolePanelSupport.OPTIONAL
 							: current ? RolePanelSupport.CURRENT : RolePanelSupport.PENDING);
 		}

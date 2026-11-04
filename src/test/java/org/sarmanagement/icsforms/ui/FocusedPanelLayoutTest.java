@@ -348,6 +348,7 @@ class FocusedPanelLayoutTest {
 				IncidentCommandRolePanel panel = (IncidentCommandRolePanel) frame[0].getContentPane();
 				List<JLabel> badges = badges(panel);
 				JPanel content = (JPanel) badges.get(0).getParent();
+				frame[0].validate();
 				for (JLabel badge : badges) {
 					assertTextFits(badge);
 					Rectangle bounds = SwingUtilities.convertRectangle(badge.getParent(), badge.getBounds(), content);

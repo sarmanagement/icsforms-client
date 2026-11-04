@@ -302,7 +302,12 @@ class IncidentCommandRolePanelTest {
 		return new OpenObjectiveEditor(dialog, opener);
 	}
 
-	/** Holds a displayed objective dialog and the thread waiting for it to close. */
+	/**
+	 * Holds a displayed objective dialog and the thread waiting for it to close.
+	 *
+	 * @param dialog displayed objective editor.
+	 * @param opener thread waiting for the dialog to close.
+	 */
 	private record OpenObjectiveEditor(JDialog dialog, Thread opener) {
 	}
 
@@ -628,8 +633,8 @@ class IncidentCommandRolePanelTest {
 		IncidentCommandRolePanel panel = panel(controller(data));
 		for (String area : List.of("Safety", "Human medical", "Canine medical", "Communications")) {
 			String badge = badge(panel, area).getText();
-			assertTrue(badge.contains("No content recorded"), badge);
-			assertTrue(badge.contains("Not yet reviewed"), badge);
+			assertTrue(badge.contains("No content"), badge);
+			assertTrue(badge.contains("Not reviewed"), badge);
 			assertFalse(badge.contains("%"), badge);
 		}
 		assertTrue(badge(panel, "Objectives").getText().contains("0 recorded"));
@@ -666,15 +671,19 @@ class IncidentCommandRolePanelTest {
 				.contains("1 content items recorded"));
 		assertTrue(badge(panel, "Communications").getAccessibleContext().getAccessibleName()
 				.contains("2 content items recorded"));
-		assertTrue(badge(panel, "Safety").getText().contains("Reviewed-approved — current"));
+		assertTrue(badge(panel, "Safety").getText().contains("Reviewed · current"));
+		assertTrue(badge(panel, "Safety").getAccessibleContext().getAccessibleName()
+				.contains("Reviewed-approved — current"));
 
 		hazard.setHazardsRisks("Changed terrain");
 		controller.markDirty();
 		SwingUtilities.invokeAndWait(() -> {
 		});
-		assertTrue(badge(panel, "Safety").getText().contains("Stale — changed since review"));
-		assertTrue(badge(panel, "Human medical").getText().contains("Reviewed-approved — current"));
-		assertTrue(badge(panel, "Communications").getText().contains("Reviewed-approved — current"));
+		assertTrue(badge(panel, "Safety").getText().contains("Stale since review"));
+		assertTrue(badge(panel, "Safety").getAccessibleContext().getAccessibleName()
+				.contains("Stale — changed since review"));
+		assertTrue(badge(panel, "Human medical").getText().contains("Reviewed · current"));
+		assertTrue(badge(panel, "Communications").getText().contains("Reviewed · current"));
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
 
@@ -931,8 +940,8 @@ class IncidentCommandRolePanelTest {
 		IncidentCommandRolePanel panel = panel(controller(data));
 		assertTrue(badge(panel, "Objectives").getText().contains("Not approved"));
 		for (String area : List.of("Safety", "Human medical", "Canine medical", "Communications")) {
-			assertTrue(badge(panel, area).getText().contains("Not yet reviewed"));
-			assertTrue(badge(panel, area).getText().contains("No content recorded"));
+			assertTrue(badge(panel, area).getText().contains("Not reviewed"));
+			assertTrue(badge(panel, area).getText().contains("No content"));
 		}
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
