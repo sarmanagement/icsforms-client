@@ -17,7 +17,9 @@ the panel. Objectives without linked assignments are highlighted in the table;
 the Objectives badge also reports objectives without linked work and assignments
 without a current objective link. There is no separate attention panel. The panel
 does not calculate objective achievement, resource readiness, or duplicate
-resource totals.
+resource totals. The assessment column is visible by default and can be toggled
+from the objectives table context menu. The recorded resource overview initially
+groups counts by resource type.
 
 The Operations task board offers the same assignment, status, logging, clue, and
 debrief actions in its task context menu. Debrief is enabled only for returned

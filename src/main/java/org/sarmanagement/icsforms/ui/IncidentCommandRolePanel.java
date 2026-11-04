@@ -18,6 +18,7 @@ import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.JButton;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JList;
@@ -37,6 +38,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.text.JTextComponent;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableColumn;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -87,11 +89,13 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
 	private final JComboBox<IapPlanningStage> planningStage = new JComboBox<>(IapPlanningStage.values());
-	private final JPanel planProgress = new JPanel(new GridLayout(0, 2, 6, 6));
+	private final JPanel planProgress = new JPanel(new GridLayout(0, 2, 4, 3));
 	private final JLabel overallProgress = new JLabel();
 	private final Map<String, JLabel> progressBadges = new LinkedHashMap<>();
-	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "Linked assignments", "Assessment");
+	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "n", "Linked assignments", "Assessment");
 	private final JTable objectives = new JTable(objectiveModel);
+	private final JCheckBoxMenuItem showObjectiveAssessments = new JCheckBoxMenuItem("Show assessment", true);
+	private TableColumn objectiveAssessmentColumn;
 	private final JTextArea commandEmphasis = contextDisplay();
 	private final JTextArea situationalAwareness = contextDisplay();
 	private final JComboBox<String> resourceGrouping = new JComboBox<>(new String[]{"All resources", "By resource type"});
@@ -263,33 +267,54 @@ public class IncidentCommandRolePanel extends JPanel {
 		planning.setBorder(javax.swing.BorderFactory.createTitledBorder("IAP planning cycle and objectives"));
 		JPanel stage = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
 		stage.add(new JLabel("Planning stage"));
+		resourceGrouping.setSelectedIndex(1);
 		planningStage.getAccessibleContext().setAccessibleName("IAP planning-cycle stage");
-		planningStage.setPreferredSize(new Dimension(170, planningStage.getPreferredSize().height));
+		planningStage.setPreferredSize(new Dimension(145, planningStage.getPreferredSize().height));
 		stage.add(planningStage);
+		showObjectiveAssessments.getAccessibleContext().setAccessibleName("Show objective assessments");
+		showObjectiveAssessments.setToolTipText("Show or hide the objective assessment column");
 		objectives.getAccessibleContext().setAccessibleName("Incident objectives and recorded assessments");
 		objectives.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 		objectives.getColumnModel().getColumn(0).setPreferredWidth(640);
 		objectives.getColumnModel().getColumn(0).setMinWidth(240);
-		objectives.getColumnModel().getColumn(1).setPreferredWidth(250);
-		objectives.getColumnModel().getColumn(1).setMinWidth(160);
-		objectives.getColumnModel().getColumn(2).setPreferredWidth(120);
-		objectives.getColumnModel().getColumn(2).setMaxWidth(140);
-		objectives.setRowHeight(52);
+		objectives.getColumnModel().getColumn(1).setPreferredWidth(34);
+		objectives.getColumnModel().getColumn(1).setMinWidth(30);
+		objectives.getColumnModel().getColumn(1).setMaxWidth(42);
+		objectives.getColumnModel().getColumn(2).setPreferredWidth(250);
+		objectives.getColumnModel().getColumn(2).setMinWidth(160);
+		objectives.getColumnModel().getColumn(3).setPreferredWidth(120);
+		objectives.getColumnModel().getColumn(3).setMaxWidth(140);
+		objectives.setRowHeight(42);
 		DefaultTableCellRenderer objectiveRenderer = new DefaultTableCellRenderer();
 		objectiveRenderer.setVerticalAlignment(SwingConstants.TOP);
 		objectives.getColumnModel().getColumn(0).setCellRenderer(objectiveRenderer);
-		objectives.getColumnModel().getColumn(1).setCellRenderer(new DefaultTableCellRenderer() {
+		objectives.getColumnModel().getColumn(2).setCellRenderer(new DefaultTableCellRenderer() {
 			/** {@inheritDoc} */
 			@Override
 			public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
 					boolean focused, int row, int column) {
 				java.awt.Component component = super.getTableCellRendererComponent(table, value, selected, focused,
 						row, column);
-				if (!selected && value != null && value.toString().contains("<b>None</b>")) {
+				if (value != null && value.toString().contains("<b>None</b>")) {
 					component.setBackground(new Color(255, 232, 175));
-					component.setForeground(table.getForeground());
+					component.setForeground(Color.BLACK);
+					((JLabel) component).setToolTipText("No linked assignments");
+				} else {
+					component.setBackground(selected ? table.getSelectionBackground() : table.getBackground());
+					component.setForeground(selected ? table.getSelectionForeground() : table.getForeground());
+					((JLabel) component).setToolTipText(value == null ? null : value.toString());
 				}
 				return component;
+			}
+		});
+		objectiveAssessmentColumn = objectives.getColumnModel().getColumn(3);
+		showObjectiveAssessments.addActionListener(event -> setObjectiveAssessmentColumnVisible(
+				showObjectiveAssessments.isSelected()));
+		objectives.addComponentListener(new java.awt.event.ComponentAdapter() {
+			/** {@inheritDoc} */
+			@Override
+			public void componentResized(java.awt.event.ComponentEvent event) {
+				updateObjectiveRowHeights();
 			}
 		});
 		objectives.setToolTipText("Assignment lifecycle counts are recorded task states, not objective achievement "
@@ -304,6 +329,8 @@ public class IncidentCommandRolePanel extends JPanel {
 		JMenuItem assignmentsItem = new JMenuItem("Linked work");
 		assignmentsItem.addActionListener(event -> showSelectedObjectiveAssignments());
 		objectiveMenu.add(assignmentsItem);
+		objectiveMenu.addSeparator();
+		objectiveMenu.add(showObjectiveAssessments);
 		objectiveMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
 			/** {@inheritDoc} */
 			@Override
@@ -374,21 +401,21 @@ public class IncidentCommandRolePanel extends JPanel {
 		JPanel objectiveTablePanel = new JPanel(new BorderLayout(0, 4));
 		objectiveTablePanel.add(new JScrollPane(objectives), BorderLayout.CENTER);
 		planProgress.getAccessibleContext().setAccessibleName("Recorded IAP progress summary");
-		planProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 6, 6, 6));
+		planProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(2, 4, 2, 4));
 		for (String area : List.of("Objectives", "Assignment coverage", "Safety", "Human medical", "Canine medical",
 				"Communications")) {
 			JLabel badge = new JLabel();
 			badge.setBorder(javax.swing.BorderFactory.createCompoundBorder(
 					javax.swing.BorderFactory.createEtchedBorder(),
-					javax.swing.BorderFactory.createEmptyBorder(4, 6, 4, 6)));
+					javax.swing.BorderFactory.createEmptyBorder(2, 4, 2, 4)));
 			progressBadges.put(area, badge);
 			planProgress.add(badge);
 		}
 		JPanel progress = new JPanel(new BorderLayout(4, 4));
-		progress.add(new JScrollPane(planProgress), BorderLayout.CENTER);
+		progress.add(planProgress, BorderLayout.CENTER);
 		JSplitPane objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, objectiveTablePanel, progress);
-		objectiveSplit.setResizeWeight(0.5);
-		objectiveSplit.setDividerLocation(210);
+		objectiveSplit.setResizeWeight(0.62);
+		objectiveSplit.setDividerLocation(0.62);
 		planning.add(objectiveSplit, BorderLayout.CENTER);
 		planning.add(buildApprovalPanel(), BorderLayout.SOUTH);
 
@@ -547,12 +574,72 @@ public class IncidentCommandRolePanel extends JPanel {
 					.filter(assignment -> assignment.getObjectiveIds().contains(objective.getObjectiveId())).count();
 			String states = IncidentCommandSummary.assignmentStates(data, objective.getObjectiveId());
 			String assignmentSummary = links == 0 ? "<html><b>None</b></html>"
-					: "<html>" + links + " linked<br><small>" + html(states).replace("; ", "<br>") + "</small></html>";
-			objectiveModel.addRow(new Object[]{"<html>" + html(objective.toString()) + "</html>", assignmentSummary,
-					objective.getAssessment().displayLabel()});
-			objectives.setRowHeight(objectiveModel.getRowCount() - 1,
-					Math.max(52, 24 + states.split("; ", -1).length * 18));
+					: states.replace("; ", " · ");
+			objectiveModel.addRow(new Object[]{"<html>" + html(objective.toString()) + "</html>", links,
+					assignmentSummary, objective.getAssessment().displayLabel()});
 		}
+		updateObjectiveRowHeights();
+	}
+
+	/**
+	 * Keeps objective wording fully visible while using compact rows for short text.
+	 */
+	private void updateObjectiveRowHeights() {
+		int width = Math.max(240, objectives.getColumnModel().getColumn(0).getWidth());
+		java.awt.FontMetrics metrics = objectives.getFontMetrics(objectives.getFont());
+		for (int row = 0; row < objectiveModel.getRowCount(); row++) {
+			String text = String.valueOf(objectiveModel.getValueAt(row, 0));
+			text = text.replaceAll("<[^>]+>", "").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
+			int lineCount = wrappedLineCount(text, width - 10, metrics);
+			objectives.setRowHeight(row, Math.max(42, lineCount * metrics.getHeight() + 6));
+		}
+	}
+
+	/**
+	 * Estimates wrapped lines using the table font and objective-column width.
+	 *
+	 * @param text objective wording.
+	 * @param availableWidth width available for the text.
+	 * @param metrics table font metrics.
+	 * @return minimum number of wrapped lines.
+	 */
+	private static int wrappedLineCount(String text, int availableWidth, java.awt.FontMetrics metrics) {
+		int lines = 1;
+		int lineWidth = 0;
+		for (String word : text.split("\\s+")) {
+			int wordWidth = metrics.stringWidth(word);
+			if (lineWidth > 0 && lineWidth + metrics.stringWidth(" ") + wordWidth > availableWidth) {
+				lines++;
+				lineWidth = wordWidth;
+			} else {
+				lineWidth += (lineWidth == 0 ? 0 : metrics.stringWidth(" ")) + wordWidth;
+			}
+		}
+		return lines;
+	}
+
+	/**
+	 * Shows or hides the objective assessment column without changing recorded data.
+	 *
+	 * @param visible whether the assessment column should be visible.
+	 */
+	private void setObjectiveAssessmentColumnVisible(boolean visible) {
+		boolean currentlyVisible = false;
+		for (int index = 0; index < objectives.getColumnModel().getColumnCount(); index++) {
+			if (objectives.getColumnModel().getColumn(index) == objectiveAssessmentColumn) {
+				currentlyVisible = true;
+				break;
+			}
+		}
+		if (visible && !currentlyVisible) {
+			objectives.addColumn(objectiveAssessmentColumn);
+			objectives.moveColumn(objectives.getColumnCount() - 1, objectives.getColumnCount() - 1);
+		} else if (!visible && currentlyVisible) {
+			objectives.removeColumn(objectiveAssessmentColumn);
+		}
+		objectives.doLayout();
+		updateObjectiveRowHeights();
+		objectives.getTableHeader().repaint();
 	}
 
 	/**
@@ -1298,19 +1385,25 @@ public class IncidentCommandRolePanel extends JPanel {
 		boolean objectivesRecorded = !objectiveIds.isEmpty();
 		boolean objectivesApproved = data.getForm202().getObjectiveApprovalStatus()
 				== ObjectiveApprovalStatus.APPROVED_CURRENT;
+		String compactApproval = switch (data.getForm202().getObjectiveApprovalStatus()) {
+			case NOT_APPROVED -> "Not approved";
+			case APPROVED_CURRENT -> "Approved";
+			case CONTENT_CHANGED -> "Approval stale";
+			case LEGACY_UNVERIFIED -> "Legacy approval";
+		};
 		boolean animalRequired = IncidentCommandSummary.requiresAnimalMedicalPlan(data);
 		String objectiveCoverage = objectivesWithoutAssignments + " objectives without linked assignments; "
 				+ assignmentsWithoutObjectives + " assignments without a current objective link";
-		String compactObjectiveCoverage = "Objectives with no assignments: " + objectivesWithoutAssignments + "\n"
-				+ "Assignments with no objective: " + assignmentsWithoutObjectives;
+		String compactObjectiveCoverage = "No obj links: " + objectivesWithoutAssignments + "\n"
+				+ "No assignment links: " + assignmentsWithoutObjectives;
 		long populatedAssignments = IncidentCommandSummary.populatedAssignments(data);
 		boolean missing = !objectivesRecorded || populatedAssignments == 0;
 		boolean approved = objectivesApproved;
 		updateBadge("Objectives", mark(objectivesRecorded) + objectiveIds.size() + " recorded; " + objectiveCoverage,
 				mark(objectivesApproved) + data.getForm202().getObjectiveApprovalStatus().displayLabel()
 						+ "; " + objectiveCoverage,
-				mark(objectivesRecorded) + objectiveIds.size() + " recorded · " + compactObjectiveCoverage,
-				mark(objectivesApproved) + data.getForm202().getObjectiveApprovalStatus().displayLabel(),
+				mark(objectivesRecorded) + objectiveIds.size() + " recorded\n" + compactObjectiveCoverage,
+				mark(objectivesApproved) + compactApproval,
 				!objectivesRecorded ? RolePanelSupport.MISSING
 						: objectivesApproved ? RolePanelSupport.CURRENT : RolePanelSupport.PENDING);
 		int assignmentCount = assignments.size();
@@ -1349,7 +1442,8 @@ public class IncidentCommandRolePanel extends JPanel {
 					mark(current) + review + (area == PlanReviewArea.CANINE_MEDICAL
 							? required ? " (required — animal resources recorded)" : " (optional — no animal resources recorded)"
 							: ""),
-					(contentItems == 0 ? "No content recorded" : contentItems + " content items recorded")
+					(contentItems == 0 ? "No content recorded"
+							: contentItems + (contentItems == 1 ? " item" : " items") + " recorded")
 							+ (area == PlanReviewArea.CANINE_MEDICAL
 							? required ? " · required" : " · optional" : ""),
 					mark(current) + review,

@@ -26,6 +26,7 @@ import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -53,6 +54,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
@@ -232,11 +234,19 @@ class IncidentCommandRolePanelTest {
 			JTable objectives = (JTable) field(panel, "objectives");
 			JTextArea emphasis = (JTextArea) field(panel, "commandEmphasis");
 			JTextArea awareness = (JTextArea) field(panel, "situationalAwareness");
-			assertTrue(objectives.getValueAt(0, 1).toString().contains("<b>None</b>"));
-			assertFalse(objectives.getValueAt(1, 1).toString().contains("<b>None</b>"));
-			JLabel missingLinks = (JLabel) objectives.getCellRenderer(0, 1)
-					.getTableCellRendererComponent(objectives, objectives.getValueAt(0, 1), false, false, 0, 1);
+			assertTrue(objectives.getValueAt(0, 2).toString().contains("<b>None</b>"));
+			assertFalse(objectives.getValueAt(1, 2).toString().contains("<b>None</b>"));
+			JLabel missingLinks = (JLabel) objectives.getCellRenderer(0, 2)
+					.getTableCellRendererComponent(objectives, objectives.getValueAt(0, 2), false, false, 0, 2);
 			assertEquals(new java.awt.Color(255, 232, 175), missingLinks.getBackground());
+			JLabel selectedMissingLinks = (JLabel) objectives.getCellRenderer(0, 2)
+					.getTableCellRendererComponent(objectives, objectives.getValueAt(0, 2), true, false, 0, 2);
+			assertEquals(new java.awt.Color(255, 232, 175), selectedMissingLinks.getBackground());
+			assertEquals(java.awt.Color.BLACK, selectedMissingLinks.getForeground());
+			JLabel linkedCell = (JLabel) objectives.getCellRenderer(1, 2).getTableCellRendererComponent(objectives,
+					objectives.getValueAt(1, 2), false, false, 1, 2);
+			assertNotEquals(new java.awt.Color(255, 232, 175), linkedCell.getBackground());
+			assertEquals(0L, objectives.getValueAt(0, 1));
 			assertTrue(badge(panel, "Objectives").getAccessibleContext().getAccessibleName()
 					.contains("1 objectives without linked assignments"));
 			assertTrue(badge(panel, "Objectives").getAccessibleContext().getAccessibleName()
@@ -251,6 +261,14 @@ class IncidentCommandRolePanelTest {
 			assertFalse(awareness.isEditable());
 			assertEquals("Prioritize the north ridge search.", emphasis.getText());
 			assertEquals("Weather remains clear; visibility is good.", awareness.getText());
+			JCheckBoxMenuItem assessmentToggle = (JCheckBoxMenuItem) field(panel, "showObjectiveAssessments");
+			assertTrue(assessmentToggle.isSelected());
+			assertSame(objectives.getComponentPopupMenu(), assessmentToggle.getParent());
+			assertEquals("Assessment", objectives.getColumnName(3));
+			SwingUtilities.invokeAndWait(() -> assessmentToggle.doClick());
+			assertEquals(3, objectives.getColumnCount());
+			SwingUtilities.invokeAndWait(() -> assessmentToggle.doClick());
+			assertEquals("Assessment", objectives.getColumnName(3));
 
 			SwingUtilities.invokeAndWait(() -> objectives.setRowSelectionInterval(0, 0));
 			assertEquals(noAssignment.getObjectiveId(),
@@ -447,11 +465,18 @@ class IncidentCommandRolePanelTest {
 		IncidentCommandRolePanel panel = panel(controller);
 		JTable table = (JTable) field(panel, "resources");
 		JComboBox<?> grouping = (JComboBox<?>) field(panel, "resourceGrouping");
+		assertEquals(1, grouping.getSelectedIndex());
 		assertEquals(1, panel.displayedResourceCount("Available"));
 		assertEquals(1, panel.displayedResourceCount("Assigned"));
 		assertEquals(1, panel.displayedResourceCount("Unspecified"));
-		assertEquals(3, table.getValueAt(0, table.getColumnCount() - 1));
+		assertEquals(2, table.getRowCount());
+		assertEquals(3, (Integer) table.getValueAt(0, table.getColumnCount() - 1)
+				+ (Integer) table.getValueAt(1, table.getColumnCount() - 1));
 
+		SwingUtilities.invokeAndWait(() -> grouping.setSelectedIndex(0));
+		assertEquals(1, table.getRowCount());
+		assertEquals("All resources", table.getValueAt(0, 0));
+		assertEquals(3, table.getValueAt(0, table.getColumnCount() - 1));
 		SwingUtilities.invokeAndWait(() -> grouping.setSelectedIndex(1));
 		assertEquals(2, table.getRowCount());
 		assertEquals(TCardType.PERSONNEL.getLabel(), table.getValueAt(0, 0));
@@ -525,10 +550,13 @@ class IncidentCommandRolePanelTest {
 		}
 		AppController controller = controller(data);
 		IncidentCommandRolePanel panel = panel(controller);
-		assertTrue(badge(panel, "Safety").getText().contains("2 content items recorded"));
-		assertTrue(badge(panel, "Human medical").getText().contains("1 content items recorded"));
-		assertTrue(badge(panel, "Canine medical").getText().contains("1 content items recorded"));
-		assertTrue(badge(panel, "Communications").getText().contains("2 content items recorded"));
+		assertTrue(badge(panel, "Safety").getAccessibleContext().getAccessibleName().contains("2 content items recorded"));
+		assertTrue(badge(panel, "Human medical").getAccessibleContext().getAccessibleName()
+				.contains("1 content items recorded"));
+		assertTrue(badge(panel, "Canine medical").getAccessibleContext().getAccessibleName()
+				.contains("1 content items recorded"));
+		assertTrue(badge(panel, "Communications").getAccessibleContext().getAccessibleName()
+				.contains("2 content items recorded"));
 		assertTrue(badge(panel, "Safety").getText().contains("Reviewed-approved — current"));
 
 		hazard.setHazardsRisks("Changed terrain");
@@ -562,9 +590,12 @@ class IncidentCommandRolePanelTest {
 		programmed.getProgrammingMetadata().put("Imported setting", "Recorded value");
 		data.getForm205().getChannels().addAll(List.of(receiveOnly, programmed, new RadioChannel()));
 		IncidentCommandRolePanel panel = panel(controller(data));
-		assertTrue(badge(panel, "Human medical").getText().contains("4 content items recorded"));
-		assertTrue(badge(panel, "Canine medical").getText().contains("2 content items recorded"));
-		assertTrue(badge(panel, "Communications").getText().contains("2 content items recorded"));
+		assertTrue(badge(panel, "Human medical").getAccessibleContext().getAccessibleName()
+				.contains("4 content items recorded"));
+		assertTrue(badge(panel, "Canine medical").getAccessibleContext().getAccessibleName()
+				.contains("2 content items recorded"));
+		assertTrue(badge(panel, "Communications").getAccessibleContext().getAccessibleName()
+				.contains("2 content items recorded"));
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
 
@@ -583,9 +614,11 @@ class IncidentCommandRolePanelTest {
 		assertTrue(badge(panel, "Assignment coverage").getAccessibleContext().getAccessibleName()
 				.contains("1/3 assignments linked"));
 		JTable table = (JTable) field(panel, "objectives");
-		assertEquals("Linked assignments", table.getColumnName(1));
-		assertEquals("Assessment", table.getColumnName(2));
-		assertTrue(table.getValueAt(0, 1).toString().contains("1 linked"));
+		assertEquals("n", table.getColumnName(1));
+		assertEquals("Linked assignments", table.getColumnName(2));
+		assertEquals("Assessment", table.getColumnName(3));
+		assertFalse(table.getValueAt(0, 2).toString().contains("<b>None</b>"));
+		assertEquals(1L, table.getValueAt(0, 1));
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
 
@@ -751,7 +784,8 @@ class IncidentCommandRolePanelTest {
 		data.getForm202().setApprovedBySignature("Legacy signature");
 		AppController controller = controller(data);
 		IncidentCommandRolePanel panel = panel(controller);
-		assertTrue(badge(panel, "Objectives").getText().contains("Legacy approval — content not verified"));
+		assertTrue(badge(panel, "Objectives").getAccessibleContext().getAccessibleName()
+				.contains("Legacy approval — content not verified"));
 
 		SwingUtilities.invokeAndWait(() -> {
 			try {
@@ -762,7 +796,7 @@ class IncidentCommandRolePanelTest {
 			}
 			button(panel, "Approve current objectives").doClick();
 		});
-		assertTrue(badge(panel, "Objectives").getText().contains("Approved — current"));
+		assertTrue(badge(panel, "Objectives").getAccessibleContext().getAccessibleName().contains("Approved — current"));
 		assertEquals("Commander", data.getForm202().getApprovedByIncidentCommanderName());
 		assertEquals("Signature", data.getForm202().getApprovedBySignature());
 		objective.setText("Search south");
@@ -807,8 +841,8 @@ class IncidentCommandRolePanelTest {
 			});
 			JTable table = (JTable) field((IncidentCommandRolePanel) window[0].getContentPane(), "objectives");
 			int textWidth = table.getColumnModel().getColumn(0).getWidth();
-			int linksWidth = table.getColumnModel().getColumn(1).getWidth();
-			int assessmentWidth = table.getColumnModel().getColumn(2).getWidth();
+			int linksWidth = table.getColumnModel().getColumn(2).getWidth();
+			int assessmentWidth = table.getColumnModel().getColumn(3).getWidth();
 			assertEquals(1220, window[0].getWidth());
 			assertTrue(textWidth >= 400, "Default objective text width: " + textWidth);
 			assertTrue(textWidth > assessmentWidth * 2, "Text/assessment widths: " + textWidth + "/" + assessmentWidth);
@@ -834,8 +868,9 @@ class IncidentCommandRolePanelTest {
 			textWidths[1] = table.getColumnModel().getColumn(0).getWidth();
 		});
 		assertTrue(textWidths[1] > textWidths[0]);
-		assertTrue(table.getColumnModel().getColumn(1).getWidth() >= 160);
-		assertTrue(table.getColumnModel().getColumn(2).getWidth() <= 140);
+		assertTrue(table.getColumnModel().getColumn(1).getWidth() <= 42);
+		assertTrue(table.getColumnModel().getColumn(2).getWidth() >= 160);
+		assertTrue(table.getColumnModel().getColumn(3).getWidth() <= 140);
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
 

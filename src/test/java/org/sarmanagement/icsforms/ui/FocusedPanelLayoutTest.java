@@ -29,7 +29,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import java.awt.Component;
 import java.awt.Container;
-import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Rectangle;
 import java.nio.file.Path;
@@ -39,6 +38,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
@@ -307,11 +307,9 @@ class FocusedPanelLayoutTest {
 				IncidentCommandRolePanel panel = (IncidentCommandRolePanel) frame[0].getContentPane();
 				List<JLabel> badges = badges(panel);
 				assertEquals(6, badges.size());
-				JScrollPane progress = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, badges.get(0));
-				assertFalse(progress.getHorizontalScrollBar().isVisible(), "Planning horizontal scrollbar");
-				JPanel content = (JPanel) progress.getViewport().getView();
-				assertEquals(content.getPreferredSize().height > progress.getViewport().getExtentSize().height,
-						progress.getVerticalScrollBar().isVisible(), "Planning vertical scrollbar matches available height");
+				assertNull(SwingUtilities.getAncestorOfClass(JScrollPane.class, badges.get(0)),
+						"Planning badges should not require a scroll pane");
+				JPanel content = (JPanel) badges.get(0).getParent();
 				for (JLabel badge : badges) {
 					assertTextFits(badge);
 					Rectangle bounds = SwingUtilities.convertRectangle(badge.getParent(), badge.getBounds(), content);
@@ -322,16 +320,13 @@ class FocusedPanelLayoutTest {
 				assertTextFits((JLabel) content.getComponent(0));
 				assertControls(frame[0]);
 				assertBanners(frame[0]);
-				System.out.println("IncidentCommand client " + panel.getSize() + "; progress viewport "
-						+ progress.getViewport().getExtentSize() + "; badge " + badges.get(0).getSize());
 				frame[0].setSize(860, 620);
 				frame[0].validate();
-				assertEquals(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED, progress.getHorizontalScrollBarPolicy());
-				assertEquals(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, progress.getVerticalScrollBarPolicy());
-				Dimension extent = progress.getViewport().getExtentSize();
-				Dimension preferred = content.getPreferredSize();
-				assertTrue(preferred.width <= extent.width || progress.getHorizontalScrollBar().isVisible());
-				assertTrue(preferred.height <= extent.height || progress.getVerticalScrollBar().isVisible());
+				for (JLabel badge : badges) {
+					assertTextFits(badge);
+					Rectangle bounds = SwingUtilities.convertRectangle(badge.getParent(), badge.getBounds(), content);
+					assertTrue(new Rectangle(content.getSize()).contains(bounds), badge.getText());
+				}
 			});
 		} finally {
 			if (frame[0] != null) {
