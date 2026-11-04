@@ -60,6 +60,8 @@ The former **View > Dashboard** role-based tab ordering has been retired.
 Workspaces now use one stable order; use **View > Role Panels** for focused role
 views. A saved legacy dashboard preference is ignored.
 
-The Incident Command panel now provides focused objective editing and assignment
-linking, but full desktop acceptance across keyboard, resizing, and multi-screen
-scenarios remains outstanding in [`DraftWorkPlan.md`](../DraftWorkPlan.md).
+The Incident Command panel provides focused objective editing, assessment,
+assignment linking/creation, and reported results with stated sources. Automated
+coverage and the remaining optional accessibility follow-up are recorded in
+[`DraftWorkPlan.md`](../DraftWorkPlan.md); resizing and second-screen use are
+user-confirmed. Keyboard-only navigation is not an acceptance gate.
