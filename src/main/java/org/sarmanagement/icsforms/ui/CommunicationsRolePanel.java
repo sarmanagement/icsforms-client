@@ -185,8 +185,10 @@ public class CommunicationsRolePanel extends JPanel {
 	private JPanel buildHeader() {
 		JPanel header = new JPanel(new BorderLayout());
 		header.add(banner, BorderLayout.CENTER);
-		header.add(planBadges, BorderLayout.EAST);
-		header.add(clock, BorderLayout.NORTH);
+		JPanel status = new JPanel(new BorderLayout(8, 0));
+		status.add(planBadges, BorderLayout.CENTER);
+		status.add(clock, BorderLayout.EAST);
+		header.add(status, BorderLayout.EAST);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JLabel activeMode = new JLabel("Mode: Plan");
 		JButton planView = new JButton("Plan");

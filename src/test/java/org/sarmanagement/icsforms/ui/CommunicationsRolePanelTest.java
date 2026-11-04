@@ -21,6 +21,10 @@ import javax.swing.JButton;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTable;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import java.awt.BorderLayout;
+import java.awt.FlowLayout;
 import java.awt.Component;
 import java.awt.Container;
 import java.nio.file.Path;
@@ -28,6 +32,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -35,6 +41,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CommunicationsRolePanelTest {
 	@TempDir
 	Path directory;
+
+	@Test
+	void headerKeepsBannerBadgesAndClockAboveRightAlignedActions() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			CommunicationsRolePanel panel = createPanel(controller(new AppData()));
+			try {
+				JPanel header = (JPanel) ((BorderLayout) panel.getLayout()).getLayoutComponent(BorderLayout.NORTH);
+				BorderLayout layout = (BorderLayout) header.getLayout();
+				assertTrue(layout.getLayoutComponent(BorderLayout.CENTER) instanceof JLabel);
+				assertNull(layout.getLayoutComponent(BorderLayout.NORTH));
+				JPanel status = (JPanel) layout.getLayoutComponent(BorderLayout.EAST);
+				BorderLayout statusLayout = (BorderLayout) status.getLayout();
+				assertTrue(statusLayout.getLayoutComponent(BorderLayout.CENTER) instanceof RolePlanStatusBadges);
+				assertTrue(statusLayout.getLayoutComponent(BorderLayout.EAST) instanceof IncidentClockPanel);
+				JPanel actions = (JPanel) layout.getLayoutComponent(BorderLayout.SOUTH);
+				assertEquals(FlowLayout.TRAILING, ((FlowLayout) actions.getLayout()).getAlignment());
+				for (String label : List.of("Plan", "Console", "Open full ICS 205", "Import CSV…",
+						"Export CSV…", "Add ICP 214 log entry…")) {
+					assertSame(actions, findButton(panel, label).getParent());
+				}
+			} finally {
+				panel.dispose();
+			}
+		});
+	}
 
 	@Test
 	void displayingStableLinksHasNoReadSideEffectsAndRetainsSelection() throws Exception {

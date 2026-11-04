@@ -88,16 +88,15 @@ class IncidentCommandRolePanelTest {
 			IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller(new AppData()), ignored -> {
 			});
 			try {
-				java.lang.reflect.Method method = IncidentCommandRolePanel.class.getDeclaredMethod("buildHeader");
-				method.setAccessible(true);
-				JPanel header = (JPanel) method.invoke(panel);
+				JPanel header = (JPanel) ((BorderLayout) panel.getLayout()).getLayoutComponent(BorderLayout.NORTH);
 				BorderLayout layout = (BorderLayout) header.getLayout();
 
 				assertTrue(layout.getLayoutComponent(BorderLayout.EAST) instanceof IncidentClockPanel);
-				assertTrue(layout.getLayoutComponent(BorderLayout.CENTER) instanceof JLabel);
-				assertTrue(layout.getLayoutComponent(BorderLayout.SOUTH) instanceof JPanel);
-			} catch (ReflectiveOperationException exception) {
-				throw new IllegalStateException(exception);
+				assertTrue(layout.getLayoutComponent(BorderLayout.WEST) instanceof JLabel);
+				assertTrue(layout.getLayoutComponent(BorderLayout.CENTER) instanceof JPanel);
+				assertNull(layout.getLayoutComponent(BorderLayout.SOUTH));
+				assertSame(header, button(panel, "Open full ICS 202").getParent().getParent());
+				assertSame(header, button(panel, "Open T-Cards").getParent().getParent());
 			} finally {
 				panel.dispose();
 			}
@@ -1000,7 +999,7 @@ class IncidentCommandRolePanelTest {
 		SwingUtilities.invokeAndWait(() -> {
 			panel[0] = new IncidentCommandRolePanel(controller(new AppData()), destinations::add);
 			JPanel header = (JPanel) panel[0].getComponent(0);
-			JPanel actions = (JPanel) ((BorderLayout) header.getLayout()).getLayoutComponent(BorderLayout.SOUTH);
+			JPanel actions = (JPanel) ((BorderLayout) header.getLayout()).getLayoutComponent(BorderLayout.CENTER);
 			((JButton) actions.getComponent(0)).doClick();
 			((JButton) actions.getComponent(1)).doClick();
 			panel[0].dispose();

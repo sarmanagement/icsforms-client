@@ -40,11 +40,15 @@ it does not save or discard them.
 
 Console provides a task/assignment board, recorded resource/contact lookup,
 channel context, and recent ICP ICS 214 activity. Selecting a task scopes lookup
-and activity to that task; clear the task filter to return to all incident
-entries. Activity association uses stable assignment identities and the supported
-legacy resource association, not guesses based on current task status. Full
-entry details remain available through the shared activity-entry workflow.
+and activity to that task; **All incident ICP entries** shows incident-wide
+activity without changing the selected task. Activity association uses stable
+assignment identities and the supported legacy resource association, not guesses
+based on current task status. Full entry details remain available through the
+shared activity-entry workflow.
 
+The recorded-status task board contains **Add Log Entry** and
+**Communications Problem** buttons, also available by right-clicking a task.
+Right-clicking selects that task before opening either action.
 **Add Log Entry** opens the standard editor with selected task/resource context
 prefilled when available. **Communications Problem** prefills that built-in
 event type but still requires an operator to confirm and save a normal ICP

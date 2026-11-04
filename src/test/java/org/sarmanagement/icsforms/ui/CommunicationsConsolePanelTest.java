@@ -30,12 +30,17 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
+import javax.swing.JFrame;
 import javax.swing.JList;
+import javax.swing.JMenuItem;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.awt.Component;
+import java.awt.BorderLayout;
 import java.awt.Container;
 import java.awt.GraphicsEnvironment;
 import java.awt.Window;
@@ -60,6 +65,76 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 class CommunicationsConsolePanelTest {
 	@TempDir
 	Path directory;
+
+	@Test
+	void logActionsBelongToRecordedStatusBoardAndClearFilterButtonIsAbsent() throws Exception {
+		onEdt(() -> {
+			CommunicationsConsolePanel panel = new CommunicationsConsolePanel(controller(incident()));
+			try {
+				JList<?> tasks = accessible(panel, JList.class, "Communications task assignment board");
+				JPanel board = (JPanel) tasks.getParent().getParent().getParent().getParent();
+				assertEquals("Task assignment board — recorded status",
+						((javax.swing.border.TitledBorder) board.getBorder()).getTitle());
+				Component actions = ((BorderLayout) board.getLayout()).getLayoutComponent(BorderLayout.SOUTH);
+				assertSame(actions, button(panel, "Add Log Entry…").getParent());
+				assertSame(actions, button(panel, "Communications Problem…").getParent());
+				assertEquals(null, ((BorderLayout) panel.getLayout()).getLayoutComponent(BorderLayout.NORTH));
+				assertFalse(components(panel, JButton.class).stream()
+						.anyMatch(button -> button.getText().startsWith("Clear task filter")));
+				JPopupMenu menu = tasks.getComponentPopupMenu();
+				assertNotNull(menu);
+				assertEquals(List.of("Add Log Entry…", "Communications Problem…"),
+						components(menu, JMenuItem.class).stream().map(JMenuItem::getText).toList());
+			} finally {
+				panel.dispose();
+			}
+		});
+	}
+
+	@Test
+	void taskContextMenuSelectsClickedRowAndRecordsBothEventTypesWithoutChangingChannels() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		AppData data = incident();
+		AppController controller = controller(data);
+		onEdt(() -> {
+			CommunicationsConsolePanel panel = new CommunicationsConsolePanel(controller);
+			JFrame frame = new JFrame();
+			frame.setContentPane(panel);
+			frame.setSize(1200, 800);
+			frame.setVisible(true);
+			try {
+				JList<?> tasks = accessible(panel, JList.class, "Communications task assignment board");
+				JPopupMenu menu = tasks.getComponentPopupMenu();
+				for (int index = 0; index < 2; index++) {
+					tasks.setSelectedIndex(0);
+					java.awt.Rectangle row = tasks.getCellBounds(1, 1);
+					menu.show(tasks, row.x + 2, row.y + row.height / 2);
+					assertTrue(menu.isVisible());
+					assertEquals(data.getSarTaskAssignments().get(1).getAssignmentId(), panel.selectedAssignmentId());
+					menu.setVisible(false);
+					JMenuItem action = (JMenuItem) menu.getComponent(index);
+					String eventType = index == 0 ? ActivityEventType.ID_FREE_TEXT
+							: ActivityEventType.ID_COMMUNICATIONS_PROBLEM;
+					withDialog("Add log entry", dialog -> {
+						assertEquals(eventType, selectedEventType(dialog).getId());
+						narrative(dialog).setText("Task-board contextual entry");
+						button(dialog, "OK").doClick();
+					}, action::doClick);
+					ActivityLogEntry saved = data.getActivityLogs().get(0).getActivityLog().get(index);
+					assertEquals(data.getSarTaskAssignments().get(1).getAssignmentId(), saved.getAssignmentId());
+					assertEquals(eventType, saved.getEventTypeId());
+				}
+				menu.show(tasks, 2, tasks.getCellBounds(1, 1).y + tasks.getCellBounds(1, 1).height + 20);
+				assertFalse(menu.isVisible());
+				for (RadioChannel channel : data.getForm205().getChannels()) {
+					assertEquals(RadioCheckStatus.NOT_RECORDED, channel.getRadioCheckStatus());
+				}
+			} finally {
+				panel.dispose();
+				frame.dispose();
+			}
+		});
+	}
 
 	@Test
 	void noTaskSelectionShowsIncidentActivityAndChannelNamesRemainPlainText() throws Exception {
@@ -181,7 +256,7 @@ class CommunicationsConsolePanelTest {
 		data.getForm205().getChannels().add(duplicate);
 		onEdt(() -> {
 			CommunicationsConsolePanel panel = new CommunicationsConsolePanel(controller);
-			button(panel, "Clear task filter — all incident").doClick();
+			accessible(panel, JList.class, "Communications task assignment board").clearSelection();
 			String text = accessible(panel, JTextArea.class, "Resource and contact lookup results").getText();
 			for (String expected : List.of("[AMBIGUOUS]", "[MISSING]", "[UNLINKED]", "[LINKED]",
 					"Original fallback", "Original missing", "555-0101", "Staging", "Available")) {
@@ -236,7 +311,7 @@ class CommunicationsConsolePanelTest {
 			accessible(panel, JList.class, "Communications task assignment board").setSelectedIndex(1);
 			assertFalse(contacts.getText().contains("555-assigned"));
 			assertFalse(contacts.getText().contains("555-leader"));
-			button(panel, "Clear task filter — all incident").doClick();
+			accessible(panel, JList.class, "Communications task assignment board").clearSelection();
 			assertEquals("", panel.selectedAssignmentId());
 			assertTrue(contacts.getText().contains("555-unrelated"));
 			panel.refreshFromModel();
@@ -256,7 +331,7 @@ class CommunicationsConsolePanelTest {
 		assertEquals(null, legacy.peekResourceId());
 		onEdt(() -> {
 			CommunicationsConsolePanel panel = new CommunicationsConsolePanel(controller);
-			button(panel, "Clear task filter — all incident").doClick();
+			accessible(panel, JList.class, "Communications task assignment board").clearSelection();
 			panel.refreshFromModel();
 			assertTrue(accessible(panel, JTextArea.class, "Resource and contact lookup results").getText()
 					.contains("Legacy responder"));
@@ -267,7 +342,7 @@ class CommunicationsConsolePanelTest {
 	}
 
 	@Test
-	void genericAssignmentsRemainSelectableWithoutSarScaffoldsAndClearShowsAllIncidentLogs() throws Exception {
+	void genericAssignmentsRemainSelectableWithoutSarScaffoldsAndCheckboxShowsAllIncidentLogs() throws Exception {
 		AppData data = incident();
 		AppController controller = controller(data);
 		data.getSarTaskAssignments().clear();
@@ -291,10 +366,10 @@ class CommunicationsConsolePanelTest {
 					.contains("Recorded generic phone"));
 			JList<?> logs = accessible(panel, JList.class, "Recent ICP log entries");
 			assertEquals(1, logs.getModel().getSize());
-			button(panel, "Clear task filter — all incident").doClick();
+			accessible(panel, JCheckBox.class, "All incident ICP entries").doClick();
 			assertEquals(2, logs.getModel().getSize());
 			panel.refreshFromModel();
-			assertEquals("", panel.selectedAssignmentId());
+			assertEquals(generic.getAssignmentId(), panel.selectedAssignmentId());
 			assertEquals(2, logs.getModel().getSize());
 			panel.dispose();
 		});
@@ -360,7 +435,7 @@ class CommunicationsConsolePanelTest {
 			assertFalse(contacts.getText().contains("First task contact"));
 			assertTrue(contacts.getText().contains("Other task contact"));
 			assertTrue(contacts.getText().contains("Owning form contact"));
-			button(panel, "Clear task filter — all incident").doClick();
+			accessible(panel, JList.class, "Communications task assignment board").clearSelection();
 			assertTrue(contacts.getText().contains("Unrelated form contact"));
 			panel.dispose();
 		});

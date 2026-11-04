@@ -27,7 +27,9 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
@@ -99,11 +101,12 @@ public final class CommunicationsConsolePanel extends JPanel {
 		contactChoices.setCellRenderer(plainText);
 		logs.setCellRenderer(plainText);
 		channels.setRenderer(plainText);
-		add(buildActions(), BorderLayout.NORTH);
 		JPanel board = new JPanel(new BorderLayout(4, 4));
 		board.setBorder(BorderFactory.createTitledBorder("Task assignment board — recorded status"));
+		board.add(buildActions(), BorderLayout.SOUTH);
 		tasks.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		tasks.getAccessibleContext().setAccessibleName("Communications task assignment board");
+		installTaskMenu();
 		JSplitPane taskSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(tasks),
 				new JScrollPane(taskDetails));
 		taskSplit.setResizeWeight(0.5);
@@ -242,7 +245,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 	}
 
 	/**
-	 * Builds contextual shared-editor actions, none of which mutate a channel.
+	 * Builds task-board shared-editor actions, none of which mutate a channel.
 	 *
 	 * @return action toolbar.
 	 */
@@ -254,17 +257,37 @@ public final class CommunicationsConsolePanel extends JPanel {
 		problem.addActionListener(event -> openEntry(ActivityEventType.ID_COMMUNICATIONS_PROBLEM));
 		actions.add(add);
 		actions.add(problem);
-		JButton clear = new JButton("Clear task filter — all incident");
-		clear.addActionListener(event -> {
-			tasks.clearSelection();
-			allIncident.setSelected(true);
-			refreshTaskDetails();
-			refreshContacts();
-			refreshLogs();
-		});
-		actions.add(clear);
-		actions.add(new JLabel("Task context follows the selected assignment; logs do not change channels."));
 		return actions;
+	}
+
+	/** Installs shared log actions that use the task beneath the context-menu click. */
+	private void installTaskMenu() {
+		JPopupMenu menu = new JPopupMenu() {
+			/**
+			 * Selects an actual task row before displaying its contextual actions.
+			 *
+			 * @param invoker component requesting the menu.
+			 * @param x horizontal click position.
+			 * @param y vertical click position.
+			 */
+			@Override
+			public void show(java.awt.Component invoker, int x, int y) {
+				java.awt.Point point = new java.awt.Point(x, y);
+				int row = tasks.locationToIndex(point);
+				if (!isActive() || row < 0 || !tasks.getCellBounds(row, row).contains(point)) {
+					return;
+				}
+				tasks.setSelectedIndex(row);
+				super.show(invoker, x, y);
+			}
+		};
+		JMenuItem add = new JMenuItem("Add Log Entry…");
+		add.addActionListener(event -> openEntry(ActivityEventType.ID_FREE_TEXT));
+		JMenuItem problem = new JMenuItem("Communications Problem…");
+		problem.addActionListener(event -> openEntry(ActivityEventType.ID_COMMUNICATIONS_PROBLEM));
+		menu.add(add);
+		menu.add(problem);
+		tasks.setComponentPopupMenu(menu);
 	}
 
 	/**
