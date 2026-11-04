@@ -83,7 +83,7 @@ class IncidentCommandRolePanelTest {
 	}
 
 	@Test
-	void navigationActionsOccupyHeaderRightSide() throws Exception {
+	void clockOccupiesHeaderRightSideAndNavigationRemainsAvailable() throws Exception {
 		SwingUtilities.invokeAndWait(() -> {
 			IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller(new AppData()), ignored -> {
 			});
@@ -93,9 +93,9 @@ class IncidentCommandRolePanelTest {
 				JPanel header = (JPanel) method.invoke(panel);
 				BorderLayout layout = (BorderLayout) header.getLayout();
 
-				assertTrue(layout.getLayoutComponent(BorderLayout.EAST) instanceof JPanel);
+				assertTrue(layout.getLayoutComponent(BorderLayout.EAST) instanceof IncidentClockPanel);
 				assertTrue(layout.getLayoutComponent(BorderLayout.CENTER) instanceof JLabel);
-				assertNull(layout.getLayoutComponent(BorderLayout.SOUTH));
+				assertTrue(layout.getLayoutComponent(BorderLayout.SOUTH) instanceof JPanel);
 			} catch (ReflectiveOperationException exception) {
 				throw new IllegalStateException(exception);
 			} finally {
@@ -1000,7 +1000,7 @@ class IncidentCommandRolePanelTest {
 		SwingUtilities.invokeAndWait(() -> {
 			panel[0] = new IncidentCommandRolePanel(controller(new AppData()), destinations::add);
 			JPanel header = (JPanel) panel[0].getComponent(0);
-			JPanel actions = (JPanel) header.getComponent(1);
+			JPanel actions = (JPanel) ((BorderLayout) header.getLayout()).getLayoutComponent(BorderLayout.SOUTH);
 			((JButton) actions.getComponent(0)).doClick();
 			((JButton) actions.getComponent(1)).doClick();
 			panel[0].dispose();

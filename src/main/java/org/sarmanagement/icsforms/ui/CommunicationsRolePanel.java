@@ -26,6 +26,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -35,8 +36,8 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Live Communications Unit channel workbench with stable links, explicit radio
- * checks, coverage guidance, review, and existing CSV workflows.
+ * Live Communications Unit with retained Plan and Console cards, stable channel
+ * links, explicit checks, coverage guidance, review, and existing CSV workflows.
  */
 public class CommunicationsRolePanel extends JPanel {
 	private static final DateTimeFormatter CHECK_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -64,6 +65,10 @@ public class CommunicationsRolePanel extends JPanel {
 	private final JLabel saveStatus = new JLabel(" ");
 	private final PlanReviewStrip review;
 	private final AppController.IncidentChangeSubscription subscription;
+	private final CardLayout viewLayout = new CardLayout();
+	private final JPanel views = new JPanel(viewLayout);
+	private final CommunicationsConsolePanel console;
+	private final IncidentClockPanel clock;
 	private RadioChannel baseline;
 	private String loadedChannelId = "";
 	private boolean refreshing;
@@ -103,8 +108,12 @@ public class CommunicationsRolePanel extends JPanel {
 		binding = controller.captureIncidentBinding();
 		planBadges = new RolePlanStatusBadges(controller.getData(), "Communications");
 		review = new PlanReviewStrip(controller, PlanReviewArea.COMMUNICATIONS, this::commitFocusedEdits);
+		console = new CommunicationsConsolePanel(controller);
+		clock = new IncidentClockPanel(controller);
 		add(buildHeader(), BorderLayout.NORTH);
-		add(buildBody(), BorderLayout.CENTER);
+		views.add(buildBody(), "Plan");
+		views.add(console, "Console");
+		add(views, BorderLayout.CENTER);
 		installListeners();
 		refreshFromModel();
 		subscription = controller.addIncidentChangeListener(change -> {
@@ -114,9 +123,11 @@ public class CommunicationsRolePanel extends JPanel {
 		});
 	}
 
-	/** Releases the live incident listener. */
+	/** Releases both views' incident subscriptions and the shared incident clock. */
 	public void dispose() {
 		subscription.close();
+		console.dispose();
+		clock.dispose();
 	}
 
 	/**
@@ -167,7 +178,7 @@ public class CommunicationsRolePanel extends JPanel {
 	}
 
 	/**
-	 * Builds incident context, import/export, and full-workspace actions.
+	 * Builds incident context, the visible mode indicator, and established plan actions.
 	 *
 	 * @return header panel.
 	 */
@@ -175,7 +186,22 @@ public class CommunicationsRolePanel extends JPanel {
 		JPanel header = new JPanel(new BorderLayout());
 		header.add(banner, BorderLayout.CENTER);
 		header.add(planBadges, BorderLayout.EAST);
+		header.add(clock, BorderLayout.NORTH);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
+		JLabel activeMode = new JLabel("Mode: Plan");
+		JButton planView = new JButton("Plan");
+		planView.addActionListener(event -> {
+			viewLayout.show(views, "Plan");
+			activeMode.setText("Mode: Plan");
+		});
+		JButton consoleView = new JButton("Console");
+		consoleView.addActionListener(event -> {
+			viewLayout.show(views, "Console");
+			activeMode.setText("Mode: Console");
+		});
+		actions.add(activeMode);
+		actions.add(planView);
+		actions.add(consoleView);
 		JButton fullPlan = new JButton("Open full ICS 205");
 		fullPlan.addActionListener(event -> navigator.accept(WorkspaceDestination.of(WorkspaceId.ICS_205)));
 		JButton importButton = new JButton("Import CSV…");
@@ -287,10 +313,17 @@ public class CommunicationsRolePanel extends JPanel {
 		checkStatus.addActionListener(event -> markEditorDirty());
 	}
 
-	/** Applies a case-insensitive literal filter across displayed channel columns. */
+	/** Filters displayed channels without discarding the retained focused draft. */
 	private void applyFilter() {
+		String selectedId = selectedChannelId();
 		String text = filter.getText();
+		refreshing = true;
 		sorter.setRowFilter(text.isBlank() ? null : RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(text)));
+		restoreSelection(selectedId.isBlank() ? loadedChannelId : selectedId);
+		refreshing = false;
+		if (!editorDirty) {
+			loadSelectedChannel();
+		}
 	}
 
 	/** Marks focused input dirty unless fields are being loaded. */

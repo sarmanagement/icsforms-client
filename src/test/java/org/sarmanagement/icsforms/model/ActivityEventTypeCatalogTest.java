@@ -16,6 +16,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Verifies application-wide event type settings and the task quick-log defaults. */
 class ActivityEventTypeCatalogTest {
 	@Test
+	void communicationsEventsAreBuiltInsAvailableToExistingIncidentsAndReservedFromCustomPreferences() {
+		for (String id : List.of(ActivityEventType.ID_COMMUNICATIONS_CHECK,
+				ActivityEventType.ID_COMMUNICATIONS_PROBLEM)) {
+			ActivityEventType type = ActivityEventTypeCatalog.forIncident(
+					List.of(new ActivityEventType(ActivityEventType.ID_FREE_TEXT, "Legacy note", true))).stream()
+					.filter(candidate -> id.equals(candidate.getId())).findFirst().orElseThrow();
+			assertTrue(type.isBuiltIn());
+			assertFalse(type.isShowInQuickMenu());
+			assertEquals(ActivityEventType.ID_COMMUNICATIONS_CHECK.equals(id)
+					? "Communications Check" : "Communications Problem", type.getLabel());
+			assertThrows(IllegalArgumentException.class,
+					() -> ActivityEventTypeCatalog.saveCustomTypes(List.of(new ActivityEventType(id, "Collision", false))));
+		}
+	}
+
+	@Test
 	void customTypesPersistAcrossIncidentMergesAndQuickFlagsDefaultSafely() throws Exception {
 		List<ActivityEventType> previous = ActivityEventTypeCatalog.loadCustomTypes();
 		ActivityEventType custom = new ActivityEventType("CANINE_CHECK", "Canine check", false);

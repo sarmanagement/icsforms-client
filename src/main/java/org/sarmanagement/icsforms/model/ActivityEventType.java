@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -39,6 +40,10 @@ public class ActivityEventType {
 
 	/** Stable identifier for the built-in free-text "Note" type. */
 	public static final String ID_FREE_TEXT = "FREE_TEXT";
+	/** Stable identifier for an explicitly recorded communications check. */
+	public static final String ID_COMMUNICATIONS_CHECK = "COMMUNICATIONS_CHECK";
+	/** Stable identifier for a reported communications problem. */
+	public static final String ID_COMMUNICATIONS_PROBLEM = "COMMUNICATIONS_PROBLEM";
 	/** Stable identifier for an explicitly confirmed responder medical event. */
 	public static final String ID_RESPONDER_MEDICAL_EVENT = "RESPONDER_MEDICAL_EVENT";
 	/** Stable identifier for an explicitly confirmed response-canine medical event. */
@@ -92,6 +97,8 @@ public class ActivityEventType {
 	 */
 	public static List<ActivityEventType> defaultTypes() {
 		return List.of(new ActivityEventType(ID_FREE_TEXT, "Note", true),
+				new ActivityEventType(ID_COMMUNICATIONS_CHECK, "Communications Check", true),
+				new ActivityEventType(ID_COMMUNICATIONS_PROBLEM, "Communications Problem", true),
 				new ActivityEventType(ID_RESPONDER_MEDICAL_EVENT, "Responder medical event", true),
 				new ActivityEventType(ID_CANINE_MEDICAL_EVENT, "Response canine medical event", true),
 				new ActivityEventType(ID_CLUE_DETECTED, "Clue Detected", true),

@@ -52,6 +52,7 @@ public class OperationsRolePanel extends JPanel {
 	private final Runnable openOperationalPlanning;
 	private final AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
+	private final IncidentClockPanel clockPanel;
 	private final RolePlanStatusBadges planBadges;
 	private final DefaultListModel<TaskChoice> taskModel = new DefaultListModel<>();
 	private final JList<TaskChoice> taskBoard = new JList<>(taskModel);
@@ -103,6 +104,7 @@ public class OperationsRolePanel extends JPanel {
 			Runnable openOperationalPlanning) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
+		clockPanel = new IncidentClockPanel(controller);
 		this.newAssignment = newAssignment;
 		this.editTask = editTask;
 		this.changeStatus = changeStatus;
@@ -147,9 +149,10 @@ public class OperationsRolePanel extends JPanel {
 		});
 	}
 
-	/** Releases the live incident listener. */
+	/** Releases the live incident listener and header clock refresh work. */
 	public void dispose() {
 		subscription.close();
+		clockPanel.dispose();
 	}
 
 	/** Refreshes the board while retaining task and resource selection identities. */
@@ -218,7 +221,10 @@ public class OperationsRolePanel extends JPanel {
 	private JPanel buildHeader() {
 		JPanel header = new JPanel(new BorderLayout());
 		header.add(banner, BorderLayout.CENTER);
-		header.add(planBadges, BorderLayout.EAST);
+		JPanel status = new JPanel(new BorderLayout(8, 0));
+		status.add(planBadges, BorderLayout.CENTER);
+		status.add(clockPanel, BorderLayout.EAST);
+		header.add(status, BorderLayout.EAST);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JButton create = new JButton("New assignment…");
 		create.addActionListener(event -> createAssignment());

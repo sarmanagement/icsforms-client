@@ -448,7 +448,7 @@ class MapleRidgeExampleTest {
 			assertTrue(data.getOpenActionItems().get(2).getItem().contains("MANDATORY"));
 			assertTrue(data.getOpenActionItems().get(2).getPoc().contains(MEDL));
 			assertTrue(data.getOpenActionItems().get(3).getPoc().contains(SAFETY));
-			assertEquals(24, data.getActivityLogs().get(0).getActivityLog().size());
+			assertEquals(25, data.getActivityLogs().get(0).getActivityLog().size());
 			assertOperationalTimeline(data, trackers);
 			assertEquals(3, data.getForm215a().getEntries().size());
 			assertEquals(3, data.getForm208().getHazardBlocks().size());
@@ -586,7 +586,8 @@ class MapleRidgeExampleTest {
 	}
 
 	/**
-	 * Checks actual linked lifecycle events without implying that planned work has started.
+	 * Checks explicit exercise radio-check and linked lifecycle events without
+	 * implying that planned work has started.
 	 *
 	 * @param data imported exercise snapshot.
 	 * @param tracker completed tracker task.
@@ -605,6 +606,16 @@ class MapleRidgeExampleTest {
 		Set<String> eventTypes = data.getActivityEventTypes().stream().map(ActivityEventType::getId)
 				.collect(Collectors.toSet());
 		assertTrue(entries.stream().allMatch(e -> eventTypes.contains(e.getEventTypeId())));
+		List<ActivityLogEntry> checks = entries.stream()
+				.filter(entry -> ActivityEventType.ID_COMMUNICATIONS_CHECK.equals(entry.getEventTypeId())).toList();
+		assertEquals(1, checks.size());
+		RadioChannel channel = data.getForm205().getChannels().get(0);
+		assertEquals(channel.getRadioCheckedAt(), checks.get(0).getTimestamp());
+		assertTrue(checks.get(0).getAssignmentId().isBlank());
+		assertTrue(checks.get(0).getNotableActivity().contains(COML));
+		assertTrue(checks.get(0).getNotableActivity().contains(channel.getChannelName()));
+		assertTrue(checks.get(0).getNotableActivity().contains("successful"));
+		assertTrue(checks.get(0).getNotableActivity().contains(channel.getRadioCheckNotes()));
 		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
 			List<ActivityLogEntry> linked = entries.stream()
 					.filter(e -> task.getAssignmentId().equals(e.getAssignmentId())).toList();
@@ -1519,6 +1530,11 @@ class MapleRidgeExampleTest {
 		addActivity(log, "command", ActivityEventType.ID_FREE_TEXT, time(6, 30), null,
 				"0630 command established at " + ICP + "; all 42 people checked in: 36 field including four handlers "
 						+ "and six IMT (IC, Ops, Planning, Safety, COML, MEDL); four dogs checked in as equipment.");
+		RadioChannel channel = data.getForm205().getChannels().get(0);
+		addActivity(log, "communications-check", ActivityEventType.ID_COMMUNICATIONS_CHECK,
+				channel.getRadioCheckedAt(), null,
+				"0650 Communications Check: " + channel.getChannelName() + "; successful; checked by "
+						+ channel.getRadioCheckedBy() + ". " + channel.getRadioCheckNotes());
 		addActivity(log, "briefing", ActivityEventType.ID_FREE_TEXT, time(7, 0), null,
 				"0700 exercise briefing: objectives, dementia-aware approach, tick/fall/heat controls; "
 						+ "human aid cache and heat rehab at " + BASE + ". All field teams report directly to Ops.");

@@ -1553,6 +1553,15 @@ public class Ics214Panel extends JPanel {
 		}
 
 		/**
+		 * Prefills a UTC timestamp using the spinner's existing display-timezone conversion.
+		 *
+		 * @param timestamp UTC activity time
+		 */
+		void setTimestamp(LocalDateTime timestamp) {
+			timestampField.setValue(AppController.toDate(timestamp));
+		}
+
+		/**
 		 * Applies the event type and narrative selected by a task quick-log action.
 		 *
 		 * @param eventTypeId event type to preselect, or null.
