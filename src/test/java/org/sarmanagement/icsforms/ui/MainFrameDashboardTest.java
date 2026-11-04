@@ -13,16 +13,16 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JCheckBoxMenuItem;
-import javax.swing.JRadioButtonMenuItem;
+import javax.swing.JFrame;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.awt.GraphicsEnvironment;
 import java.nio.file.Files;
 import java.util.List;
-import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -67,6 +67,7 @@ class MainFrameDashboardTest {
 					if ("Configuration".equals(menu.getText())) {
 						setting = (JCheckBoxMenuItem) menu.getItem(0);
 					}
+
 				}
 				assertTrue(setting != null);
 				JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame, "tabs");
@@ -85,6 +86,67 @@ class MainFrameDashboardTest {
 					preferences.remove("descriptive-workspace-tabs");
 				} else {
 					preferences.put("descriptive-workspace-tabs", previous);
+				}
+				AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
+				((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
+				frame.dispose();
+			}
+		});
+	}
+
+	@Test
+	void objectiveAssessmentSettingLivesInConfigurationAndUpdatesOpenRolePanel() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		var directory = Files.createTempDirectory("icsforms-objective-assessment-setting");
+		var preferences = java.util.prefs.Preferences.userNodeForPackage(MainFrame.class);
+		String key = "show-objective-assessments";
+		String previous = preferences.get(key, null);
+		preferences.putBoolean(key, false);
+		SwingUtilities.invokeAndWait(() -> {
+			MainFrame frame = new MainFrame(new AppData(), new LocalRepository(directory.resolve("incident.json")),
+					new PdfExportService(), new IncidentValidator(), directory);
+			JFrame[] roleWindow = new JFrame[1];
+			try {
+				JMenu config = java.util.stream.IntStream.range(0, frame.getJMenuBar().getMenuCount())
+						.mapToObj(frame.getJMenuBar()::getMenu)
+						.filter(menu -> "Configuration".equals(menu.getText())).findFirst().orElseThrow();
+				int medicalSettings = java.util.stream.IntStream.range(0, config.getItemCount())
+						.filter(index -> config.getItem(index) != null
+								&& config.getItem(index).getText().startsWith("Medical Routing"))
+						.findFirst().orElseThrow();
+				JCheckBoxMenuItem setting = (JCheckBoxMenuItem) config.getItem(medicalSettings + 1);
+				assertEquals("Show objective assessments", setting.getText());
+				assertFalse(setting.isSelected());
+				setting.doClick();
+				assertTrue(preferences.getBoolean(key, false));
+
+				JMenu view = frame.getJMenuBar().getMenu(1);
+				JMenu rolePanels = view.getItem(0) instanceof JMenu menu ? menu : null;
+				assertTrue(rolePanels != null);
+				for (int index = 0; index < rolePanels.getItemCount(); index++) {
+					JMenuItem item = rolePanels.getItem(index);
+					if (item != null && "Incident Command".equals(item.getText())) {
+						item.doClick();
+						break;
+					}
+				}
+				roleWindow[0] = java.util.Arrays.stream(java.awt.Window.getWindows())
+						.filter(JFrame.class::isInstance).map(JFrame.class::cast)
+						.filter(candidate -> candidate.getTitle().startsWith("Incident Command —"))
+						.findFirst().orElseThrow();
+				IncidentCommandRolePanel panel = (IncidentCommandRolePanel) roleWindow[0].getContentPane();
+				assertEquals(4, ((javax.swing.JTable) Ics205PanelTest.field(panel, "objectives")).getColumnCount());
+				setting.doClick();
+				assertFalse(preferences.getBoolean(key, true));
+				assertEquals(3, ((javax.swing.JTable) Ics205PanelTest.field(panel, "objectives")).getColumnCount());
+			} finally {
+				if (roleWindow[0] != null) {
+					roleWindow[0].dispose();
+				}
+				if (previous == null) {
+					preferences.remove(key);
+				} else {
+					preferences.put(key, previous);
 				}
 				AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
 				((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
@@ -151,79 +213,41 @@ class MainFrameDashboardTest {
 	}
 
 	@Test
-	void defaultDashboardPreservesLegacyWorkspaceOrder() {
-		List<WorkspaceId> workspaces = MainFrame.Dashboard.IC_ICP.workspaceIds();
-
-		assertEquals(WorkspaceId.SHARED, workspaces.get(0));
-		assertEquals(WorkspaceId.ORG_CHART, workspaces.get(1));
-		assertEquals(WorkspaceId.ICS_201, workspaces.get(2));
-		assertEquals(WorkspaceId.ICS_202, workspaces.get(3));
-		assertEquals(WorkspaceId.ICS_204, workspaces.get(4));
-		assertTrue(workspaces.contains(WorkspaceId.MEDICAL));
-	}
-
-	@Test
-	void dashboardChoicesAreViewMenuRadioItemsWithIcIcpSelectedByDefault() {
-		List<MainFrame.Dashboard> selected = new ArrayList<>();
-
-		JMenu dashboardMenu = MainFrame.createDashboardMenu(MainFrame.Dashboard.IC_ICP, selected::add);
-
-		assertEquals("Dashboard", dashboardMenu.getText());
-		assertEquals(4, dashboardMenu.getItemCount());
-		assertEquals("IC/ICP (default)", dashboardMenu.getItem(0).getText());
-		assertEquals("IC/ICP", MainFrame.Dashboard.IC_ICP.label());
-		assertTrue(((JRadioButtonMenuItem) dashboardMenu.getItem(0)).isSelected());
-		dashboardMenu.getItem(2).doClick();
-		assertEquals(List.of(MainFrame.Dashboard.OPERATIONS), selected);
-	}
-
-	@Test
-	void dashboardMenuImmediatelyFollowsCanineReferenceWithoutChangingSavedDefault() throws Exception {
+	void rolePanelsUseStableWorkspaceOrderAndIgnoreLegacyDashboardPreference() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
-		var directory = Files.createTempDirectory("icsforms-dashboard-menu");
-		SwingUtilities.invokeAndWait(() -> {
-			MainFrame frame = new MainFrame(new AppData(), new LocalRepository(directory.resolve("incident.json")),
-					new PdfExportService(), new IncidentValidator(), directory);
-			try {
-				JMenu view = frame.getJMenuBar().getMenu(1);
-				List<String> labels = new ArrayList<>();
-				for (int index = 0; index < view.getItemCount(); index++) {
-					JMenuItem item = view.getItem(index);
-					labels.add(item == null ? "" : item.getText());
+		var directory = Files.createTempDirectory("icsforms-stable-workspace-order");
+		var preferences = java.util.prefs.Preferences.userNodeForPackage(MainFrame.class);
+		String previous = preferences.get("workspace-dashboard", null);
+		try {
+			preferences.put("workspace-dashboard", "Operations");
+			SwingUtilities.invokeAndWait(() -> {
+				MainFrame frame = new MainFrame(new AppData(), new LocalRepository(directory.resolve("incident.json")),
+						new PdfExportService(), new IncidentValidator(), directory);
+				try {
+					JMenu view = frame.getJMenuBar().getMenu(1);
+					List<String> labels = new java.util.ArrayList<>();
+					for (int index = 0; index < view.getItemCount(); index++) {
+						JMenuItem item = view.getItem(index);
+						labels.add(item == null ? "" : item.getText());
+					}
+					assertTrue(labels.contains("Role Panels"));
+					assertTrue(!labels.contains("Dashboard"));
+					JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame, "tabs");
+					assertEquals("Shared", tabs.getTitleAt(0));
+					assertEquals("Org Chart", tabs.getTitleAt(1));
+				} finally {
+					AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
+					((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
+					frame.dispose();
 				}
-				int reference = labels.indexOf("Canine Medical Reference — adapted ICS 206CANINE");
-				assertTrue(reference >= 0);
-				assertEquals("Dashboard", labels.get(reference + 1));
-			} finally {
-				AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
-				((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
-				frame.dispose();
+			});
+		} finally {
+			if (previous == null) {
+				preferences.remove("workspace-dashboard");
+			} else {
+				preferences.put("workspace-dashboard", previous);
 			}
-		});
-	}
-
-	@Test
-	void operationsAndCommunicationsExposeSharedSafetyOrgMedicalAndOptionalRadioEditors() {
-		for (MainFrame.Dashboard dashboard :
-				List.of(MainFrame.Dashboard.OPERATIONS, MainFrame.Dashboard.COMMUNICATIONS)) {
-			List<WorkspaceId> workspaces = dashboard.workspaceIds();
-			assertTrue(workspaces.contains(WorkspaceId.SAFETY));
-			assertTrue(workspaces.contains(WorkspaceId.ORG_CHART));
-			assertTrue(workspaces.contains(WorkspaceId.MEDICAL));
-			assertEquals(1, workspaces.stream().filter(WorkspaceId.MEDICAL::equals).count());
-			assertTrue(workspaces.contains(WorkspaceId.ICS_205));
-			assertTrue(workspaces.stream().noneMatch(id -> "ICS 205A".equals(id.displayLabel())));
 		}
-	}
-
-	@Test
-	void safetyDashboardIncludesReadinessOverviewAndLinksToCommonSafetyWorkspaces() {
-		List<WorkspaceId> workspaces = MainFrame.Dashboard.SAFETY_OFFICER.workspaceIds();
-
-		assertEquals(WorkspaceId.SAFETY_OVERVIEW, workspaces.get(0));
-		assertTrue(workspaces.contains(WorkspaceId.SAFETY));
-		assertTrue(workspaces.contains(WorkspaceId.ORG_CHART));
-		assertTrue(workspaces.contains(WorkspaceId.MEDICAL));
 	}
 
 	@Test

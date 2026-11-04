@@ -67,11 +67,11 @@ import java.util.function.Consumer;
 public class CanineMedicalPanel extends JPanel {
 	private static final String UNKNOWN = "Unknown";
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 	private final Path defaultDirectory;
 	private final AddressGeocoder geocoder;
 	private final DrivingRouteProvider routeProvider;
 	private final VetDirectoryFileService fileService = new VetDirectoryFileService();
-	private final VetShortlistSelector shortlistSelector = new VetShortlistSelector();
 	private final JTextField stagingLabel = new JTextField();
 	private final JTextField stagingAddress = new JTextField();
 	private final JTextField stagingLatitude = new JTextField();
@@ -230,17 +230,22 @@ public class CanineMedicalPanel extends JPanel {
 			DrivingRouteProvider routeProvider) {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
+		editorCommitGuard = controller.createEditorCommitGuard();
 		RadioChannelPicker.install(transportTable, 3, controller);
 		this.defaultDirectory = defaultDirectory;
 		this.geocoder = geocoder;
 		this.routeProvider = routeProvider;
 		JPanel heading = new JPanel(new BorderLayout());
 		heading.add(buildTop(), BorderLayout.NORTH);
-		bringForward.addActionListener(event -> BringForwardDialog.showFromEditor(this, controller,
+		bringForward.addActionListener(event -> BringForwardDialog.showFromEditorIfCurrent(this, controller,
 				this::pushToModel, this::refreshFromModel));
 		heading.add(bringForward, BorderLayout.CENTER);
 		heading.add(new PlanReviewStrip(controller,
-				org.sarmanagement.icsforms.model.PlanReviewArea.CANINE_MEDICAL, this::pushToModel),
+				org.sarmanagement.icsforms.model.PlanReviewArea.CANINE_MEDICAL, () -> {
+					if (!pushToModel()) {
+						throw new IllegalStateException("The canine medical editor rejected its draft.");
+					}
+				}),
 				BorderLayout.SOUTH);
 		add(heading, BorderLayout.NORTH);
 		workspace.addTab("Canine ICS 206CANINE plan", buildPlanFields());
@@ -314,18 +319,28 @@ public class CanineMedicalPanel extends JPanel {
 			preparedAt.setText(UiSupport.formatIsoDateTime(plan.getPreparedAt()));
 			safetyOfficer.setText(MedicalRoleSupport.safetyOfficerName(data));
 			reviewStatus.setSelectedItem(plan.getReviewStatus());
-			loadDirectory(data.getVetDirectory());
+			loadDirectory(CanineMedicalFacilityTools.directoryFacilities(data));
 			loadSelection(plan.getSelectedFacilities());
 		} finally {
 			loading = false;
 		}
 		refreshWorkflowControls();
+		editorCommitGuard.rebase();
 	}
 
 	/**
 	 * Flushes editor state and any active table edits to the incident model.
+	 *
+	 * @return true when the editor commit succeeds.
 	 */
-	public void pushToModel() {
+	public boolean pushToModel() {
+		return editorCommitGuard.commit(AppController.LinkSource.NONE, this::flushToModel);
+	}
+
+	/**
+	 * Flushes canine controls after validating the incident and model revision.
+	 */
+	private void flushToModel() {
 		if (flushing) {
 			return;
 		}
@@ -383,7 +398,9 @@ public class CanineMedicalPanel extends JPanel {
 		JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		JButton export = new JButton("Export ICS 206CANINE PDF");
 		export.addActionListener(event -> {
-			pushToModel();
+			if (!pushToModel()) {
+				return;
+			}
 			exportRequest.accept("ICS 206CANINE");
 		});
 		bar.add(export);
@@ -950,8 +967,10 @@ public class CanineMedicalPanel extends JPanel {
 			if (invalidateRoutes) {
 				cancelWorker();
 			}
-			pushToModel();
-			controller.markDirty();
+			if (!pushToModel()) {
+				status.setText("Canine medical editor is stale. Keep the draft and refresh before retrying.");
+				return;
+			}
 			refreshWorkflowControls();
 		}
 	}
@@ -994,9 +1013,8 @@ public class CanineMedicalPanel extends JPanel {
 				.anyMatch(CanineMedicalPanel::hasValidCoordinates);
 		calculateRoutesButton.setEnabled(!working && data.getStagingLocation().hasValidCoordinates()
 				&& hasRoutableFacility);
-		boolean hasShortlistCandidate = !shortlistSelector.propose(data.getVetDirectory().getFacilities(),
-				integer(shortlistLimit.getText(), VetShortlistSelector.DEFAULT_LIMIT),
-				data.getStagingLocation().getGeneration()).isEmpty();
+		boolean hasShortlistCandidate = !CanineMedicalFacilityTools.proposeFacilities(data,
+				integer(shortlistLimit.getText(), VetShortlistSelector.DEFAULT_LIMIT)).isEmpty();
 		previewSelectionButton.setEnabled(!working && hasShortlistCandidate);
 	}
 
@@ -1044,9 +1062,9 @@ public class CanineMedicalPanel extends JPanel {
 	 *
 	 * @param directory incident-owned directory.
 	 */
-	private void loadDirectory(VetDirectory directory) {
+	private void loadDirectory(List<VetFacility> facilities) {
 		directoryModel.setRowCount(0);
-		for (VetFacility facility : directory.getFacilities()) {
+		for (VetFacility facility : facilities) {
 			directoryModel.addRow(directoryRow(facility));
 		}
 	}
@@ -1252,7 +1270,9 @@ public class CanineMedicalPanel extends JPanel {
 	 * Manually adds selected facilities as plan snapshots, including explicit exceptions.
 	 */
 	private void addSelectedFacilities() {
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		int[] selected = directoryTable.getSelectedRows();
 		if (selected.length == 0) {
 			return;
@@ -1287,7 +1307,9 @@ public class CanineMedicalPanel extends JPanel {
 		}
 		String facilityId = record(directoryModel.getValueAt(
 				directoryTable.convertRowIndexToModel(viewRow), 15)).getId();
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		int row = directoryModelRow(facilityId);
 		if (row < 0 || row >= directoryModel.getRowCount()) {
 			return;
@@ -1430,9 +1452,12 @@ public class CanineMedicalPanel extends JPanel {
 		if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
 			return;
 		}
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		List<Path> files = java.util.Arrays.stream(chooser.getSelectedFiles()).map(java.io.File::toPath).toList();
 		AppData incident = controller.getData();
+		AppController.EditorCommitBinding operationBinding = controller.captureEditorCommitBinding();
 		VetDirectory existing = copyDirectory(incident.getVetDirectory());
 		startWorker(new SwingWorker<VetDirectoryFileService.ImportResult, Void>() {
 			@Override
@@ -1444,7 +1469,7 @@ public class CanineMedicalPanel extends JPanel {
 			protected void done() {
 				try {
 					VetDirectoryFileService.ImportResult result = get();
-					if (controller.getData() != incident || !isActive(this)) {
+					if (!isCurrent(operationBinding, incident, -1) || !isActive(this)) {
 						return;
 					}
 					String preview = "Imported records: " + result.directory().getFacilities().size()
@@ -1459,7 +1484,8 @@ public class CanineMedicalPanel extends JPanel {
 					}
 					if (JOptionPane.showConfirmDialog(CanineMedicalPanel.this, preview,
 							"Preview regional directory merge", JOptionPane.OK_CANCEL_OPTION)
-							!= JOptionPane.OK_OPTION || controller.getData() != incident || !isActive(this)) {
+							!= JOptionPane.OK_OPTION || !isCurrent(operationBinding, incident, -1)
+									|| !isActive(this)) {
 						return;
 					}
 					Map<String, VetDirectoryFileService.ConflictResolution> choices = new HashMap<>();
@@ -1482,10 +1508,10 @@ public class CanineMedicalPanel extends JPanel {
 						};
 						choices.put(conflict.importedId(), resolution);
 					}
-					if (controller.getData() == incident && isActive(this)) {
+					if (isCurrent(operationBinding, incident, -1) && isActive(this)) {
 						incident.setVetDirectory(fileService.resolveConflicts(result, choices));
-						refreshFromModel();
 						controller.markDirty();
+						refreshFromModel();
 					}
 				} catch (CancellationException exception) {
 					status.setText("Directory import cancelled.");
@@ -1504,7 +1530,9 @@ public class CanineMedicalPanel extends JPanel {
 	 * Explicitly exports the current incident directory after overwrite confirmation.
 	 */
 	private void exportDirectory() {
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		JFileChooser chooser = new JFileChooser(defaultDirectory.toFile());
 		chooser.setFileFilter(new FileNameExtensionFilter("JSON regional directory (*.json)", "json"));
 		chooser.addChoosableFileFilter(new FileNameExtensionFilter("CSV regional directory (*.csv)", "csv"));
@@ -1551,10 +1579,14 @@ public class CanineMedicalPanel extends JPanel {
 	 * Imports ambulance rows from the human medical plan without assuming canine capability.
 	 */
 	private void copyMedicalAmbulanceServices() {
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		int added = addAmbulanceServicesFromMedicalPlan();
 		if (added > 0) {
-			pushToModel();
+			if (!pushToModel()) {
+				return;
+			}
 			controller.markDirty();
 			status.setText(added + " ambulance service(s) copied. Confirm canine transport capability.");
 		} else {
@@ -1597,10 +1629,14 @@ public class CanineMedicalPanel extends JPanel {
 		if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
 			return;
 		}
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		try {
 			int added = appendTransportServices(fileService.importTransportCsv(chooser.getSelectedFile().toPath()));
-			pushToModel();
+			if (!pushToModel()) {
+				return;
+			}
 			controller.markDirty();
 			status.setText(added + " transport service(s) imported.");
 		} catch (IOException | IllegalArgumentException exception) {
@@ -1634,7 +1670,9 @@ public class CanineMedicalPanel extends JPanel {
 	 * Explicitly exports structured canine transportation services to CSV.
 	 */
 	private void exportTransportCsv() {
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		JFileChooser chooser = new JFileChooser(defaultDirectory.toFile());
 		chooser.setFileFilter(new FileNameExtensionFilter("Canine transport services (*.csv)", "csv"));
 		if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
@@ -1721,10 +1759,13 @@ public class CanineMedicalPanel extends JPanel {
 	 * Geocodes the staging/base address off the EDT and asks the operator to confirm a candidate.
 	 */
 	private void geocodeBase() {
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		AppData incident = controller.getData();
 		String address = incident.getStagingLocation().getAddress();
 		long baseGeneration = incident.getStagingLocation().getGeneration();
+		AppController.EditorCommitBinding operationBinding = controller.captureEditorCommitBinding();
 		startWorker(new SwingWorker<List<AddressGeocoder.Candidate>, Void>() {
 			@Override
 			protected List<AddressGeocoder.Candidate> doInBackground() throws Exception {
@@ -1735,7 +1776,7 @@ public class CanineMedicalPanel extends JPanel {
 			protected void done() {
 				try {
 					List<AddressGeocoder.Candidate> candidates = get();
-					if (!isCurrent(incident, baseGeneration) || !isActive(this)) {
+					if (!isCurrent(operationBinding, incident, baseGeneration) || !isActive(this)) {
 						return;
 					}
 					AddressGeocoder.Candidate candidate = confirmCandidate(candidates);
@@ -1744,8 +1785,8 @@ public class CanineMedicalPanel extends JPanel {
 								candidate.point().longitude(), "openrouteservice-geocoder",
 								"Operator-confirmed candidate; confidence " + candidate.confidence(),
 								UtcTimestamp.nowInstant());
-						refreshFromModel();
 						controller.markDirty();
+						refreshFromModel();
 						status.setText("Confirmed base coordinates from ORS geocoding.");
 					}
 				} catch (CancellationException exception) {
@@ -1765,12 +1806,15 @@ public class CanineMedicalPanel extends JPanel {
 	 * Geocodes selected facilities without coordinates and confirms each result on the EDT.
 	 */
 	private void geocodeSelectedVet() {
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		int[] selectedRows = directoryTable.getSelectedRows();
 		if (selectedRows.length == 0) {
 			return;
 		}
 		AppData incident = controller.getData();
+		AppController.EditorCommitBinding operationBinding = controller.captureEditorCommitBinding();
 		List<FacilityAddress> addresses = new ArrayList<>();
 		for (int viewRow : selectedRows) {
 			int row = directoryTable.convertRowIndexToModel(viewRow);
@@ -1807,9 +1851,10 @@ public class CanineMedicalPanel extends JPanel {
 			protected void done() {
 				try {
 					List<FacilityGeocodeResult> results = get();
-					if (!isCurrent(incident, baseGeneration) || !isActive(this)) {
+					if (!isCurrent(operationBinding, incident, baseGeneration) || !isActive(this)) {
 						return;
 					}
+					AppController.EditorCommitBinding currentBinding = operationBinding;
 					int confirmed = 0;
 					int failed = 0;
 					for (FacilityGeocodeResult result : results) {
@@ -1818,9 +1863,10 @@ public class CanineMedicalPanel extends JPanel {
 							continue;
 						}
 						AddressGeocoder.Candidate candidate = confirmCandidate(result.candidates());
-						if (candidate != null && applyGeocodedVetCandidate(incident, result.address().facilityId(),
-								result.address().fullAddress(), candidate)) {
+						if (candidate != null && applyGeocodedVetCandidate(currentBinding, incident,
+								result.address().facilityId(), result.address().fullAddress(), candidate)) {
 							confirmed++;
+							currentBinding = controller.captureEditorCommitBinding();
 						}
 					}
 					status.setText("Confirmed coordinates for " + confirmed + " of " + results.size()
@@ -1849,17 +1895,35 @@ public class CanineMedicalPanel extends JPanel {
 	 */
 	boolean applyGeocodedVetCandidate(AppData incident, String facilityId, String requestedAddress,
 			AddressGeocoder.Candidate candidate) {
-		if (controller.getData() != incident) {
+		return applyGeocodedVetCandidate(controller.captureEditorCommitBinding(), incident, facilityId,
+				requestedAddress, candidate);
+	}
+
+	/**
+	 * Applies a geocoding result only when its operation binding is still current.
+	 *
+	 * @param binding binding captured when the request began.
+	 * @param incident incident that owns the requested facility.
+	 * @param facilityId stable facility identifier.
+	 * @param requestedAddress requested full address.
+	 * @param candidate operator-confirmed result.
+	 * @return true when the current facility was updated.
+	 */
+	private boolean applyGeocodedVetCandidate(AppController.EditorCommitBinding binding, AppData incident,
+			String facilityId, String requestedAddress, AddressGeocoder.Candidate candidate) {
+		if (!isCurrent(binding, incident, -1)) {
 			return false;
 		}
-		VetFacility current = findFacility(incident, facilityId);
+		VetFacility current = CanineMedicalFacilityTools.findDirectoryFacility(incident, facilityId);
 		if (current == null || !geocodingAddress(current).equals(requestedAddress)) {
 			return false;
 		}
-		current.setCoordinates(candidate.point().latitude(), candidate.point().longitude(),
-				"openrouteservice-geocoder", "Operator-confirmed: " + candidate.label());
+		if (!controller.commitEditorIfCurrent(binding, AppController.LinkSource.NONE,
+				() -> current.setCoordinates(candidate.point().latitude(), candidate.point().longitude(),
+						"openrouteservice-geocoder", "Operator-confirmed: " + candidate.label()))) {
+			return false;
+		}
 		refreshFromModel();
-		controller.markDirty();
 		return true;
 	}
 
@@ -1887,8 +1951,11 @@ public class CanineMedicalPanel extends JPanel {
 	 * Requests all eligible road routes without straight-line prefiltering.
 	 */
 	private void calculateRoutes() {
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		AppData incident = controller.getData();
+		AppController.EditorCommitBinding operationBinding = controller.captureEditorCommitBinding();
 		StagingLocation base = copyStaging(incident.getStagingLocation());
 		long baseGeneration = base.getGeneration();
 		VetDirectory snapshot = copyDirectory(incident.getVetDirectory());
@@ -1896,8 +1963,8 @@ public class CanineMedicalPanel extends JPanel {
 		startWorker(new SwingWorker<RouteWorkResult, Void>() {
 			@Override
 			protected RouteWorkResult doInBackground() throws Exception {
-				VetRoutingService routing = new VetRoutingService(routeProvider);
-				VetRoutingService.CalculationReport report = routing.calculate(base, snapshot, false);
+				VetRoutingService.CalculationReport report =
+						CanineMedicalFacilityTools.calculateRoutes(routeProvider, base, snapshot, false);
 				return new RouteWorkResult(snapshot, report, limit);
 			}
 
@@ -1905,13 +1972,13 @@ public class CanineMedicalPanel extends JPanel {
 			protected void done() {
 				try {
 					RouteWorkResult result = get();
-					if (!isCurrent(incident, baseGeneration) || !isActive(this)) {
+					if (!isCurrent(operationBinding, incident, baseGeneration) || !isActive(this)) {
 						status.setText("Discarded stale route results; incident/base/directory changed.");
 						return;
 					}
 					mergeRouteResults(incident, result.directory(), baseGeneration);
-					refreshFromModel();
 					controller.markDirty();
+					refreshFromModel();
 					status.setText("Road routes calculated: " + result.report().calculated() + "; cached: "
 							+ result.report().cached() + "; skipped: "
 							+ result.report().skipped() + ". " + String.join(" ", result.report().warnings()));
@@ -1932,11 +1999,12 @@ public class CanineMedicalPanel extends JPanel {
 	 * Shows a proposal and replaces the existing accepted snapshots only after confirmation.
 	 */
 	private void previewSelection() {
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		AppData data = controller.getData();
-		List<VetFacility> proposal = shortlistSelector.propose(data.getVetDirectory().getFacilities(),
-				integer(shortlistLimit.getText(), VetShortlistSelector.DEFAULT_LIMIT),
-				data.getStagingLocation().getGeneration());
+		List<VetFacility> proposal = CanineMedicalFacilityTools.proposeFacilities(data,
+				integer(shortlistLimit.getText(), VetShortlistSelector.DEFAULT_LIMIT));
 		if (proposal.isEmpty()) {
 			JOptionPane.showMessageDialog(this,
 					"No current ORS driving results for confirmed 24-hour facilities. Resolve locations and calculate routes first.",
@@ -1973,7 +2041,9 @@ public class CanineMedicalPanel extends JPanel {
 			}
 		}
 		int added = addSnapshots(additions);
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		controller.markDirty();
 		status.setText("Added " + added + " facility/facilities; existing plan entries and duplicates were preserved.");
 	}
@@ -1982,7 +2052,9 @@ public class CanineMedicalPanel extends JPanel {
 	 * Saves validated manually entered base coordinates.
 	 */
 	private void setManualBaseCoordinates() {
-		pushToModel();
+		if (!pushToModel()) {
+			return;
+		}
 		Double latitude = coordinate(stagingLatitude.getText(), -90, 90);
 		Double longitude = coordinate(stagingLongitude.getText(), -180, 180);
 		if (latitude == null || longitude == null) {
@@ -1991,8 +2063,8 @@ public class CanineMedicalPanel extends JPanel {
 		}
 		controller.getData().getStagingLocation().setResolution(stagingAddress.getText(), latitude, longitude,
 				"manual", "Operator-entered coordinates", UtcTimestamp.nowInstant());
-		refreshFromModel();
 		controller.markDirty();
+		refreshFromModel();
 	}
 
 	/**
@@ -2082,9 +2154,11 @@ public class CanineMedicalPanel extends JPanel {
 	 * @param baseGeneration captured base generation.
 	 * @return true when the response may be applied.
 	 */
-	private boolean isCurrent(AppData incident, long baseGeneration) {
+	private boolean isCurrent(AppController.EditorCommitBinding binding, AppData incident, long baseGeneration) {
 		return controller.getData() == incident
-				&& incident.getStagingLocation().getGeneration() == baseGeneration;
+				&& controller.isCurrent(binding.incidentBinding())
+				&& controller.captureEditorCommitBinding().revision() == binding.revision()
+				&& (baseGeneration < 0 || incident.getStagingLocation().getGeneration() == baseGeneration);
 	}
 
 	/**
@@ -2127,7 +2201,7 @@ public class CanineMedicalPanel extends JPanel {
 	 */
 	private void mergeRouteResults(AppData incident, VetDirectory routedDirectory, long baseGeneration) {
 		for (VetFacility routed : routedDirectory.getFacilities()) {
-			VetFacility current = findFacility(incident, routed.getId());
+			VetFacility current = CanineMedicalFacilityTools.findDirectoryFacility(incident, routed.getId());
 			if (current != null && current.getAddress().equals(routed.getAddress())
 					&& routed.hasCurrentDistance(baseGeneration)) {
 				current.setDistance(routed.getDistanceMeters(), routed.getDurationSeconds(),
@@ -2135,18 +2209,6 @@ public class CanineMedicalPanel extends JPanel {
 						baseGeneration);
 			}
 		}
-	}
-
-	/**
-	 * Finds one regional facility by stable ID.
-	 *
-	 * @param incident incident document.
-	 * @param id stable facility ID.
-	 * @return source record or null.
-	 */
-	private VetFacility findFacility(AppData incident, String id) {
-		return incident.getVetDirectory().getFacilities().stream().filter(item -> id.equals(item.getId())).findFirst()
-				.orElse(null);
 	}
 
 	/**
@@ -2286,7 +2348,7 @@ public class CanineMedicalPanel extends JPanel {
 	 * @return Yes, No, or Unknown.
 	 */
 	private static String availability(Boolean value) {
-		return value == null ? UNKNOWN : value ? "Yes" : "No";
+		return CanineMedicalFacilityTools.availabilityLabel(value);
 	}
 
 	/**
@@ -2306,9 +2368,7 @@ public class CanineMedicalPanel extends JPanel {
 	 * @return miles to one decimal place, or blank when unavailable.
 	 */
 	private static String distanceMiles(VetFacility facility) {
-		return Double.isFinite(facility.getDistanceMeters())
-				? String.format(java.util.Locale.ROOT, "%.1f", facility.getDistanceMeters() / 1609.344)
-				: "";
+		return CanineMedicalFacilityTools.distanceValue(facility);
 	}
 
 	/**
@@ -2318,9 +2378,7 @@ public class CanineMedicalPanel extends JPanel {
 	 * @return minutes to one decimal place, or blank when unavailable.
 	 */
 	private static String durationMinutes(VetFacility facility) {
-		return Double.isFinite(facility.getDurationSeconds())
-				? String.format(java.util.Locale.ROOT, "%.1f", facility.getDurationSeconds() / 60)
-				: "";
+		return CanineMedicalFacilityTools.durationValue(facility);
 	}
 
 	/**

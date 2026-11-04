@@ -12,6 +12,7 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
@@ -63,6 +64,32 @@ public class OpenActionTrackerPanel extends JPanel {
 		setBorder(BorderFactory.createTitledBorder("Open Action Tracker — ICS 233"));
 		table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		table.setFillsViewportHeight(true);
+		table.setComponentPopupMenu(createRowPopup());
+		table.addMouseListener(new java.awt.event.MouseAdapter() {
+			/** Selects the row under a context-menu invocation. */
+			@Override
+			public void mousePressed(java.awt.event.MouseEvent event) {
+				selectRowAtPointer(event);
+			}
+
+			/** Selects the row under a context-menu invocation. */
+			@Override
+			public void mouseReleased(java.awt.event.MouseEvent event) {
+				selectRowAtPointer(event);
+			}
+
+			/** Opens the complete action editor for a double-clicked row. */
+			@Override
+			public void mouseClicked(java.awt.event.MouseEvent event) {
+				if (event.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(event)) {
+					int row = table.rowAtPoint(event.getPoint());
+					if (row >= 0) {
+						table.setRowSelectionInterval(row, row);
+						editSelectedItem();
+					}
+				}
+			}
+		});
 		JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		header.add(new JLabel("Show"));
 		header.add(filter);
@@ -75,22 +102,95 @@ public class OpenActionTrackerPanel extends JPanel {
 		JButton edit = new JButton("Edit");
 		JButton remove = new JButton("Remove");
 		add.addActionListener(event -> editItem(null));
-		edit.addActionListener(event -> {
-			if (table.getSelectedRow() >= 0) {
-				editItem(tableModel.rows.get(table.convertRowIndexToModel(table.getSelectedRow())));
-			}
-		});
-		remove.addActionListener(event -> {
-			if (table.getSelectedRow() >= 0 && JOptionPane.showConfirmDialog(this, "Remove selected action?",
-					"Remove Action", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
-				removeItem(tableModel.rows.get(table.convertRowIndexToModel(table.getSelectedRow())));
-			}
-		});
+		edit.addActionListener(event -> editSelectedItem());
+		remove.addActionListener(event -> removeSelectedItem());
 		buttons.add(add);
 		buttons.add(edit);
 		buttons.add(remove);
 		add(buttons, BorderLayout.SOUTH);
 		refreshFromModel();
+	}
+
+	/**
+	 * Creates row actions for editing or removing the selected action.
+	 *
+	 * @return context menu for action rows
+	 */
+	private JPopupMenu createRowPopup() {
+		JPopupMenu popup = new JPopupMenu();
+		javax.swing.JMenuItem edit = new javax.swing.JMenuItem("Edit");
+		javax.swing.JMenuItem remove = new javax.swing.JMenuItem("Remove");
+		edit.addActionListener(event -> editSelectedItem());
+		remove.addActionListener(event -> removeSelectedItem());
+		popup.add(edit);
+		popup.add(remove);
+		popup.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+			/** Updates row-action availability before the menu is displayed. */
+			@Override
+			public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent event) {
+				boolean selected = selectedItem() != null;
+				edit.setEnabled(selected);
+				remove.setEnabled(selected);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent event) {
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void popupMenuCanceled(javax.swing.event.PopupMenuEvent event) {
+			}
+		});
+		return popup;
+	}
+
+	/**
+	 * Selects a row when a platform context-menu trigger occurs over it.
+	 *
+	 * @param event mouse event on the action table
+	 */
+	private void selectRowAtPointer(java.awt.event.MouseEvent event) {
+		if (event.isPopupTrigger()) {
+			int row = table.rowAtPoint(event.getPoint());
+			if (row >= 0) {
+				table.setRowSelectionInterval(row, row);
+			} else {
+				table.clearSelection();
+			}
+		}
+	}
+
+	/** Opens the action editor for the selected visible row. */
+	private void editSelectedItem() {
+		OpenActionItem item = selectedItem();
+		if (item != null) {
+			editItem(item);
+		}
+	}
+
+	/** Removes the selected action after explicit confirmation. */
+	private void removeSelectedItem() {
+		OpenActionItem item = selectedItem();
+		if (item != null && JOptionPane.showConfirmDialog(this, "Remove selected action?",
+				"Remove Action", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+			removeItem(item);
+		}
+	}
+
+	/**
+	 * Resolves the selected view row to its backing action item.
+	 *
+	 * @return selected item, or null when no row is selected
+	 */
+	private OpenActionItem selectedItem() {
+		int viewRow = table.getSelectedRow();
+		if (viewRow < 0) {
+			return null;
+		}
+		int modelRow = table.convertRowIndexToModel(viewRow);
+		return modelRow >= 0 && modelRow < tableModel.rows.size() ? tableModel.rows.get(modelRow) : null;
 	}
 
 	/**

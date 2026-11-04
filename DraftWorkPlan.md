@@ -22,7 +22,8 @@ incident at a time, saved as local JSON files with revision checks, backups and
 an advisory edit lock. The core SAR form set is complete. Focused role panels
 (Safety, Medical Unit Leader, Operations, Incident Command, Communications) and
 separate human/canine medical reference windows exist alongside the full editor
-workspace, though some of that agreed scope is still outstanding (Part I).
+workspace. The Issue #46 implementation scope is delivered; the integration
+acceptance record below distinguishes automated and user-confirmed evidence.
 
 ### Where it is going
 
@@ -76,8 +77,9 @@ the later stages is allowed to make the solo-laptop case harder.
 
 ### How to read this document
 
-**Status date:** 2026-10-31. Status entries are taken from the merged source
-tree, not from issue or PR closure state.
+**Status date:** 2026-11-04. Status entries are based on the committed source
+tree, named regression tests, CI results, and the user-confirmed desktop checks
+recorded below—not on issue or PR closure state alone.
 
 - **Part I — Current status:** what is delivered, what remains of the role-panel
   plan, and where each open issue sits.
@@ -97,7 +99,7 @@ tree, not from issue or PR closure state.
 | ICS 215 planning worksheet and next-period tactics | #35 — closed | `model/Ics215Form.java`, `ui/Ics215Panel.java` | **Complete.** |
 | SAR task status ↔ ICS 214 integration, ICS 204 PDF layout | #19, #20 — closed | `ui/SarTaskPanel.java`, `pdf/Ics204PdfRenderer.java` | **Complete.** |
 | File-backed `IncidentStore` with UUID identity, revision checks, per-incident edit locks and backups | PR #34 and predecessors | `persistence/IncidentStore.java`, `persistence/FileIncidentStore.java`, `persistence/IncidentDocumentReader.java` | **Complete for standalone use;** contract hardening tracked in Part IV. |
-| Live local role panels (ten-phase plan) | #33 — closed; PR #32 merged 2026-10-26 | See phase table below | **Partially delivered.** PR #32's own description states the agreed scope remains incomplete. |
+| Live local role panels (ten-phase plan) | #33 — closed; PR #32 merged 2026-10-26; remaining implementation tracked by #46 | See phase table and acceptance record below | **Implementation delivered.** Automated coverage and user-confirmed desktop checks are recorded separately below. |
 
 ### Live local role panels — delivery status by phase
 
@@ -107,39 +109,37 @@ was agreed. Statuses were determined by inspecting the merged tree.
 | Phase | Scope | Status | Evidence / gap |
 | --- | --- | --- | --- |
 | 1 — Baseline/design | Contracts, layouts, scenarios | Delivered | Part II of this document. |
-| 2 — Live multi-view | Incident/period-bound change notifications, stale-action guards, disposable listeners, partial-text retention | **Delivered, one gap** | `ui/AppController.java:110-150` (bindings, generations, change kinds, subscriptions), `:705` (publish); `ui/Ics202Panel.java:225-240` (partial retention). **Gap:** PR #32 reports stale full-editor overwrites are not yet fully prevented and live propagation is incomplete for some editors. |
-| 3 — Objectives/linkage | `IncidentObjective` entities, migration, ordered editor, authoritative links, archives | **Partial** | `model/Ics202Form.java:20-115`, `model/ResourceAssignment.java`, `ui/Ics202Panel.java:230-405`; archived objective form in `model/AppData.java:220-240`. **Gap:** no explicit period-end objective/assignment-context archive workflow found. |
-| 4 — Review tracking | Persisted reviewed-content boundary; Not yet reviewed / Reviewed / Changed since review | Delivered | `model/PlanReviewAssertion.java`, `model/PlanReviewStatus.java`, `model/AppData.java:1750-1800`, `ui/PlanReviewStrip.java`. |
-| 5 — Reference vertical slice | Two nonmodal medical reference windows, cached async previews | Delivered | `ui/HumanMedicalReferenceWindow.java`, `ui/CanineMedicalReferenceWindow.java`, `ui/MedicalReferencePanel.java`, `ui/AsyncFormPreviewPanel.java:35-140`. |
-| 6 — Safety / MUL | Worklist, detail, preview, focused edits | Delivered | `ui/SafetyRolePanel.java`, `ui/MedicalUnitLeaderRolePanel.java`. |
-| 7 — Operations | Live task board with status/log/clue/debrief actions | Delivered | `ui/OperationsRolePanel.java`. |
-| 8 — Incident Command | Objective-centred **editable** layout with supporting assignments, results, attention list | **Partial** | `ui/IncidentCommandRolePanel.java:310-430` is a read-only overview with attention/review indicators. **Gap:** agreed editable objective / supporting-assignment / results layout not delivered; editing still only in `Ics202Panel`. |
+| 2 — Live multi-view | Incident/period-bound change notifications, stale-action guards, disposable listeners, partial-text retention | **Delivered; automated regression coverage** | `ui/AppController.java` binds guarded commits to incident, period, and revision; `ui/MainFrame.java` rejects stale flushes and retains drafts, active table edits, selection, and focus on refresh. `MainFrameDataRetentionTest.staleFullEditorCannotOverwriteSharedCommitAndLiveRefreshRetainsDraftSelection` covers the stale-write and retention path. No implementation gap is identified. |
+| 3 — Objectives/linkage | `IncidentObjective` entities, migration, ordered editor, authoritative links, archives | **Delivered; archive independence and round-trip covered** | Rollover in `model/AppData.java` snapshots ICS 202 objectives and assessments, ICS 204 assignments, and linked SAR tasks into detached period history. `IncidentObjectiveTest.periodAdvanceArchivesIndependentObjectiveAssignmentGraphAndRoundTrips` checks identity/link preservation, independent copies, task snapshots, and JSON round-trip. Archive behavior predates PR #48; PR #48 strengthens its regression evidence. |
+| 4 — Review tracking | Persisted reviewed-content boundary; Not yet reviewed / Reviewed / Changed since review | Delivered | `model/PlanReviewAssertion.java`, `model/PlanReviewStatus.java`, `model/AppData.java:1750-1800`, `ui/PlanReviewStrip.java`; content-bound lifecycle regressions are in `PlanReviewTest`. |
+| 5 — Reference vertical slice | Two nonmodal medical reference windows, cached async previews | Delivered | `ui/HumanMedicalReferenceWindow.java`, `ui/CanineMedicalReferenceWindow.java`, `ui/MedicalReferencePanel.java`, `ui/CanineMedicalFacilityTools.java`, `ui/AsyncFormPreviewPanel.java:35-140`; concurrent canine workspace/reference coverage is in `MedicalReferencePanelTest.canineWorkspaceAndReferenceCanRunConcurrentlyFromSharedDirectory`. |
+| 6 — Safety / MUL | Worklist, detail, preview, focused edits | Delivered | `ui/SafetyRolePanel.java`, `ui/MedicalUnitLeaderRolePanel.java`; role-panel and reference regressions cover the current implementation. |
+| 7 — Operations | Live task board with status/log/clue/debrief actions | Delivered | `ui/OperationsRolePanel.java`; lifecycle actions are covered in `OperationsRolePanelTest` and `SarTaskPanelTest`. |
+| 8 — Incident Command | Objective-centred **editable** layout with supporting assignments and results | **Delivered; automated regression coverage** | `ui/IncidentCommandRolePanel.java` supports objective wording and assessment edits, command emphasis and situational awareness, existing assignment links, normal prelinked assignment creation, and reported results with stated sources. Missing links are indicated in the objectives table and coverage badges; a separate observational-attention panel is not required. Automated coverage is in `IncidentCommandRolePanelTest` and `IncidentCommandPlanningProgressTest`; no achievement/readiness is computed. |
 | 9 — Communications | Role panel over ICS 205 / `ChannelLinkSource` | Delivered | `ui/CommunicationsRolePanel.java:330-450`. |
-| 10 — Consolidation/hardening | Panel entry points, retire role-driven tab ordering, canine-tool extraction, accessibility/offline evidence, docs | **Partial** | "Role Panels" menu at `ui/MainFrame.java:369-390`. **Gaps:** `View > Dashboard` role-ordered tab sets still exist (`ui/MainFrame.java:301-325, 1492-1500, 2557-2620`); `CanineMedicalPanel` not extracted into reusable components (`ui/MedicalWorkspacePanel.java:20-40`); no role-panel documentation under `docs/`; integration acceptance and final security verification not recorded. |
+| 10 — Consolidation/hardening | Panel entry points, retire role-driven tab ordering, canine-tool extraction, accessibility evidence, docs | **Implementation delivered** | Role Panels entry points and stable `WorkspaceId` navigation are in place; `View > Dashboard` ordering is retired. Shared canine directory lookup, facility presentation, routing, and shortlist operations are used by independent workspace/reference Swing instances over the same incident model; concurrent-use/isolation coverage is in `MedicalReferencePanelTest.canineWorkspaceAndReferenceCanRunConcurrentlyFromSharedDirectory`. Role-panel documentation is in [`docs/role-panels.md`](docs/role-panels.md). Resizing and second-screen use are user-confirmed; manual assistive-technology review is not recorded (see acceptance matrix). Offline workflow testing is not applicable to this scope. |
 
-### Remaining role-panel work and where it is tracked
+### Issue #46 implementation status and integration acceptance
 
-Issue #33 was closed when PR #32 merged. The remaining scope is tracked in
-**#46 — Complete live role panels: stale-write prevention, editable IC layout,
-canine-tool extraction, dashboard retirement**, which covers the following items:
+Issue #33 was closed when PR #32 merged. Issue #46 implementation is delivered:
 
-1. Prevent stale full-editor overwrites and complete live propagation for every
-   editor that participates in a role panel (Phase 2 gap).
-2. Period-end archive of objective/assignment context (Phase 3 gap).
-3. Editable Incident Command layout: focused objective editor, supporting
-   assignments with Link existing / Create supporting / Open assignment / Open
-   debrief, and reported results (Phase 8 gap).
-4. Extract reusable canine medical components from `CanineMedicalPanel` without
-   duplicating state or reparenting one Swing tree into two windows (Phase 10).
-5. Retire `View > Dashboard` role-ordered tab sets once panel entry points and
-   stable full-workspace navigation are confirmed discoverable (Phase 10). Dashboard
-   ordering must continue to use `WorkspaceId`, never display labels, until removal.
-6. Reconcile scope added during PR #32 that was not in the agreed plan:
-   planning-stage, objective-approval, radio-check and CSV-version additions.
-   Each must either be accepted into Part II contracts or removed.
-7. Integration acceptance against the regression matrix in Part II, including
-   keyboard, resizing, second-screen and offline evidence, and role-panel
-   documentation under `docs/`.
+1. Revision-bound stale-editor protection and live draft/table-state retention
+   are implemented and covered by automated regression tests (Phase 2).
+2. Period rollover archives detached ICS 202 objectives and assessments, ICS 204
+   assignments, and linked SAR tasks. Independence and JSON round-trip are covered.
+   The archive behavior predates PR #48; PR #48 strengthens its regression evidence
+   (Phase 3).
+3. The editable Incident Command objective, ICS 202 context, assignment-linking/
+   creation, and sourced-results workflows are delivered and tested. Missing links
+   appear in the objectives table and coverage badges; a separate attention panel
+   is not required (Phase 8).
+4. Shared canine directory/facility lookup and presentation, routing, and shortlist
+   operations are used by the workspace and read-only reference, with independent
+   Swing instances and automated concurrent-use/isolation coverage (Phase 10).
+5. Dashboard retirement, stable `WorkspaceId` navigation, scope decisions, and
+   [`docs/role-panels.md`](docs/role-panels.md) are delivered.
+6. Remaining acceptance evidence is limited to the specific items in the matrix
+   below. No implementation gap is currently identified.
 
 This work is independent of the persistence roadmap in Part IV and must not be
 blocked on it; conversely, it must not introduce network, authentication or
@@ -274,12 +274,12 @@ Header: Add objective / Open ICS 202 / Full workspace. Left: ordered objectives
 assignments (status/resources/result/debrief); Link existing / Create supporting /
 Open assignment / Open debrief; reported results with sources.
 
-Right: observational attention for objectives with no linked assignment,
-assignments without allocated resources, assignments without objectives and plans
-changed since review; Safety/Human/Canine/Comms plan status; deduplicated resource
-totals; Open Operations. This is not a formal command-request queue. Not every
-objective needs field work, and planned assignments without resources differ
-from no planned assignment.
+Right: Safety/Human/Canine/Comms plan status; deduplicated resource totals; Open
+Operations. The Objectives badge reports objectives without linked assignments
+and assignments without a current objective link; the objective table highlights
+the missing-link cell. There is no separate observational-attention panel or
+formal command-request queue. Not every objective needs field work, and planned
+assignments without resources differ from no planned assignment.
 
 **Communications**
 
@@ -289,41 +289,80 @@ editor/import access. Use immutable `ChannelLinkSource` snapshots: unique explic
 resolved IDs take precedence; absent/missing/ambiguous links retain legacy text
 and visible unresolved state. Channel assignment is not a radio check.
 
+### Ten phases and exit evidence
+
+| Phase | Scope | Required exit evidence | Current status |
+| --- | --- | --- | --- |
+| 1 — Baseline/design | Inspect instructions/current master/merged prerequisites; record ownership, contracts, layouts and scenarios; reconcile gaps. | Baseline results and technical contract in this document and PR; prerequisite reconciliation decided. | Baseline and contracts recorded; remaining implementation gaps identified. |
+| 2 — Live multi-view | Committed notifications/shared operations, validation/commit lifecycle, partial text/focus/selection retention, stale-write prevention, listener disposal and incident isolation. | Cross-view tests pass before adding windows; invalid input blocks action without loss; stale callbacks rejected. | **Delivered:** incident/period/revision-bound guards, stale-write rejection, live refresh, draft and active-cell/focus retention, and listener lifecycle coverage. `MainFrameDataRetentionTest` contains the key stale-editor regression. No remaining implementation gap is identified. |
+| 3 — Objectives/linkage | Entities, legacy migration, ordered/focused ICS 202 editor, compact assignment picker, assessments, authoritative links, history, deduplicated totals and debrief context. | Reorder/edit/delete-resolution, multi-objective assignment, migration/save/reload and independent archival tests. | **Delivered:** stable objectives, assessments, authoritative links, role-panel assignment workflow, and period-end snapshots of ICS 202 objectives/assessments, ICS 204 assignments, and linked SAR tasks. `IncidentObjectiveTest.periodAdvanceArchivesIndependentObjectiveAssignmentGraphAndRoundTrips` checks detached copies and JSON round-trip. Archive behavior predates PR #48; PR #48 strengthens regression evidence. |
+| 4 — Review tracking | Content boundaries, substantive/shared-change invalidation, explicit re-review, legacy treatment and fresh-period review. | Navigation/page/preview do not invalidate; content/shared edits do; persistence/rollover copies remain independent. | Review assertions, content-bound invalidation, and rollover independence are covered by model/UI regressions; no separate manual review workflow is claimed. |
+| 5 — Reference vertical slice | Modular medical tools, distinct nonmodal references, cached async snapshot previews, facility presentation, veterinary links, task context and confirmed logging. | Both windows open with no cross-type leakage; lookup has no effects; failure/cancellation/staleness leaves structured data usable. Validate before role expansion. | Separate human/canine references and medical workspace exist. Shared canine facility operations and a passing concurrent canine workspace/reference regression are delivered. `AsyncFormPreviewPanelTest` covers worker/cache lifecycle; no specific implementation gap is identified. |
+| 6 — Safety/MUL | Responsibility-filtered worklists, detail/preview, focused edits/review and full-editor links. | Preparation/review workflows work without tab hunting or access restrictions, including simple plans. | Panels are delivered; `SafetyPanelTest`, `MedicalReferencePanelTest`, and the displayed suite cover current role-panel workflows. No specific Issue #46 implementation gap is identified. |
+| 7 — Operations | Task board, every agreed direct action, recorded resources, objective/member/hazard/comms/results context. | Representative task creation/status/log/clue/debrief/resource scenarios preserve existing lifecycle rules and selection. | Panel is delivered; `OperationsRolePanelTest` and `SarTaskPanelTest` cover representative lifecycle actions. No specific Issue #46 implementation gap is identified. |
+| 8 — IC | Agreed objective-centered layout, explicit assessments, linked effort, and results. | Objective wording/assessment edits preserve identity and links; existing assignment links and normal prelinked assignment creation work; results retain stated sources; no calculated achievement, request queue or duplicate allocation count. | **Delivered and tested:** focused objective editing/assessment, visible/editable ICS 202 context, linked and newly created supporting assignments, operator-reported results with sources, and missing-link markers in the table/badges. No separate attention panel or computed achievement/readiness is required. |
+| 9 — Communications | Full workflow on PR31's model/accessor/editor/import/PDF. | Resolved/unresolved/broken-link cases preserve recorded semantics; focused edits, review and full tools work live. | Panel, explicit radio-check data, channel links, CSV import/export, and PDF workflows are delivered and covered by existing communications tests. No specific Issue #46 implementation gap is identified. |
+| 10 — Consolidation/hardening | Discoverable Panels entry points, stable full workspace/log instances, accessibility evidence, lifecycle robustness and docs. | All migrations, save/reload, standard exports, full tests, Spotless and Checkstyle pass; relevant manual desktop scenarios recorded. | **Delivered:** Role Panels entry points, typed `WorkspaceId` navigation, Dashboard retirement, shared canine operations and [`docs/role-panels.md`](docs/role-panels.md). Resizing and second-screen use are user-confirmed; no online/offline workflow was introduced or required. Automated accessible-name checks exist; a manual assistive-technology review has not been recorded and is not a keyboard-only gate. |
+
 ### Acceptance and regression matrix
 
-- Shared laptop operator changes do not conflate role view and current position.
-- Small incidents deploy while plans are incomplete or changing; larger incidents
-  use several local role/reference windows concurrently.
-- Concurrent edits retain partial narrative text, active cells, focus and
-  selection; old hidden controls cannot overwrite newer facts.
-- Invalid table values remain editable. Closing/reopening windows disposes
-  listeners/workers. Incident switch and period advance cannot mix data.
-- Objective text/reorder preserves identity and links; linked deletion requires
-  resolution; assessments round-trip; archived copies remain unchanged.
-- Carry-forward has fresh review and, if objectives are carried, new identities/
-  provenance/reset assessments; assignments do not carry automatically.
-- Substantive/shared changes stale review; navigation, preview and generated page
-  metadata do not. Legacy review strings make no current-review assertion.
-- Both medical windows show only their own instructions/transport/facilities/
-  preview/default category, including absent data and mixed-team task context.
-- Unrouted/stale facilities remain accessible; directory candidates and accepted
-  snapshots are distinct; reference lookup never triggers routing or logs.
-- Async rendering handles cancellation, failure, out-of-order completion and
-  relevant-revision cache invalidation; structured reference remains usable.
-- Multiple veterinary personnel may be assigned elsewhere; missing T-card/channel
-  links remain visible and preserve available legacy information.
-- All Operations actions invoke established operations; no inferred readiness,
-  radio checks or objective achievement.
-- Typed full-workspace navigation and separate activity-log instances remain
-  stable; all standard forms and exports remain backward compatible.
-- Keyboard access, accessible names, resizing, second screen, offline use and
-  modal/nonmodal desktop tests receive explicit evidence before release.
+#### Integration acceptance record (2026-11-04)
+
+Automated results and user-confirmed desktop checks are recorded separately.
+GitHub Actions run `41762515365` (Tests) and run `41762515527` (Style) completed
+successfully for PR revision `5665350`. The earlier Tests run `41757701865`
+reported zero jobs and no failed-job logs, so it provides no failure evidence.
+Local displayed verification of the current worktree passed 879 tests with no
+failures, errors, or skips; Spotless and Checkstyle passed. The archive test
+class includes assertions for linked SAR-task snapshots, independence, and JSON
+round-trip. Resizing and second-screen use were confirmed in the PR context on
+2026-11-04; no device-specific details were recorded.
+
+| Scenario | Automated evidence | Manual acceptance |
+| --- | --- | --- |
+| Accessible names and assistive-technology behavior in role/full-editor workflows | **Automated:** accessible-name and displayed-layout assertions cover selected components; this is not a complete screen-reader audit. | **Not manually verified.** A manual assistive-technology review is an optional outstanding check; keyboard-only navigation is not a required gate. |
+| Resizing role/reference windows and split panes at narrow and large sizes | **Automated:** Xvfb layout tests cover selected role/reference layouts and overflow. | **User-confirmed:** resizing was exercised; no display-scaling details were recorded. |
+| Opening role/reference windows across two physical displays and moving them between screens | Not automated. | **User-confirmed:** second-screen use was exercised; no hardware/display details were recorded. |
+| Online/offline desktop workflow | No online/offline workflow was introduced or required by Issue #46. Reference open/selection tests verify that no geocoder or routing provider is called implicitly. | **Not applicable** to this scope; not a pending acceptance item. |
+| Concurrent canine workspace and reference window with human/canine content isolation | **Automated:** `MedicalReferencePanelTest.canineWorkspaceAndReferenceCanRunConcurrentlyFromSharedDirectory` opens both windows, checks shared directory data and distinct human/canine content, and verifies no provider requests on open/refresh. | **Covered by automated regression.** No manual-only gap is identified. |
+| Objective-centered IC editing, objective linking, supporting assignment creation, and sourced results | **Automated:** `IncidentCommandRolePanelTest` and `IncidentCommandPlanningProgressTest` cover editing, links, assignment actions, results, missing-link indicators, and explicit boundaries. | **Automated coverage recorded.** No manual desktop session is claimed. |
+| Stale hidden-editor navigation/save after a newer role-panel commit | **Automated:** `MainFrameDataRetentionTest.staleFullEditorCannotOverwriteSharedCommitAndLiveRefreshRetainsDraftSelection` verifies stale-write rejection and retention of partial text, active cell, selection, and focus. | **Covered by automated regression.** No hands-on view/focus gap is identified. |
+
+| Additional acceptance behavior | Status / evidence |
+| --- | --- |
+| Shared-laptop operator changes do not conflate role view and current position | **Automated:** role/workspace navigation and preference tests cover the single-user view model; multi-operator behavior is outside Issue #46. |
+| Small incidents with incomplete plans and concurrent local role/reference windows | **Automated:** role-window and reference-concurrency tests cover incomplete fixtures and independent concurrent canine views. |
+| Partial narrative, active table cell, focus and selection survive concurrent edits; hidden controls cannot overwrite newer facts | **Automated:** `MainFrameDataRetentionTest.staleFullEditorCannotOverwriteSharedCommitAndLiveRefreshRetainsDraftSelection` verifies stale-write rejection and retention of partial text, active cell, selection, and focus. |
+| Invalid table values remain editable; window disposal releases listeners/workers; incident/period switches do not mix data | **Automated:** existing table-validation, lifecycle-disposal, and incident/period-binding tests cover these invariants. No specific failing or uncovered Issue #46 path is identified. |
+| Objective edit/reorder preserves identity and links; linked deletion resolves explicitly; assessments and archived copies round-trip | **Automated:** objective, link, archive, and JSON round-trip regressions exist, including detached linked SAR-task snapshots. |
+| Carry-forward refreshes review and resets/carried objective identity/provenance/assessment appropriately; assignments do not carry automatically | **Automated:** plan-reuse and archive regressions cover the current carry-forward and reset behavior. |
+| Substantive/shared changes stale review while navigation/preview/page metadata do not; legacy review strings assert no current review | **Automated:** review lifecycle/model regressions cover content-bound staleness and legacy state. |
+| Human/canine references preserve type-specific instructions, transport, facilities, preview and mixed-team task context | **Automated:** `MedicalReferencePanelTest` covers human/canine separation, concurrent canine use, and read-only refresh. |
+| Unrouted/stale facilities remain accessible, accepted snapshots remain distinct from candidates, and reference lookup has no routing/log side effects | **Automated:** canine facility and reference tests cover stable facility data and no provider calls on reference open/selection. No online/offline workflow was introduced or required. |
+| Async preview cancellation, failure, out-of-order completion, cache invalidation and structured-reference availability | **Automated:** `AsyncFormPreviewPanelTest` covers worker lifecycle and cache behavior. |
+| Veterinary personnel assignments elsewhere and missing T-card/channel links retain visible legacy information | **Automated:** medical-reference and canine-plan regressions cover linked/missing data and retained reference content. |
+| Operations actions use existing workflows without inferring readiness, radio checks or objective achievement | **Automated:** Operations/SAR-task and IC boundary tests cover representative actions and preserve the explicit status boundaries. |
+| Typed workspace navigation, separate activity-log instances, standard forms and exports remain stable | **Automated:** navigation, export, persistence, and full Maven regressions pass. |
+| Assistive-technology/accessibility inspection beyond automated accessible-name assertions | **Not manually verified.** This is the only recorded optional desktop follow-up; keyboard-only navigation is not a required gate. |
 
 Existing test infrastructure is Maven/JUnit, Swing desktop tests under Xvfb,
 PDFBox PDF regressions and persistence round trips. Extend those suites rather
 than introducing test frameworks. Baseline success is not final acceptance.
 
-### Exclusions for role-panel work
+### Reconciliation of PR #32 additions
+
+| Addition | Decision and rationale |
+| --- | --- |
+| Planning stage | Accepted as an explicitly recorded planning-cycle fact; it does not gate assignment creation, status changes, or deployment. |
+| Objective approval | Accepted as a content-bound human assertion separate from plan review; it is not authentication, an electronic signature, or a readiness gate. |
+| Radio-check status | Accepted only as an explicit operator-recorded check with person/time; channel assignment, availability, and task status never imply a check. |
+| Versioned native CSV | Accepted as a lossless, validated interchange format for channel records; CSV schema version is not a radio check or a new workflow gate. |
+
+These are retained in code for backward compatibility and because they represent
+distinct recorded facts or safe interchange behavior. The binding boundaries
+remain: channel assignment is not a radio check, and review is not approval.
+
+### Exclusions and scope boundary
 
 No permissions/authentication/e-signatures, automatic events, clinical support,
 suitable-facility choice, computed achievement, formal resource requirements/

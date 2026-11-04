@@ -53,6 +53,7 @@ import java.util.function.IntConsumer;
  */
 public class SafetyPanel extends JPanel {
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 	private final JButton bringForward = new JButton("Bring Forward…");
 	private final SafetyHazardCsvService csvService = new SafetyHazardCsvService();
 	private final SafetyHazardLibraryService libraryService = new SafetyHazardLibraryService();
@@ -118,6 +119,7 @@ public class SafetyPanel extends JPanel {
 	public SafetyPanel(AppController controller) {
 		super(new BorderLayout());
 		this.controller = controller;
+		editorCommitGuard = controller.createEditorCommitGuard();
 		sections.addTab("ICS 215A Analysis", buildAnalysisPanel());
 		reportedHazardsPanel = buildReportsPanel();
 		messagePanel = buildMessagePanel();
@@ -208,12 +210,22 @@ public class SafetyPanel extends JPanel {
 		refreshCoverage(data);
 		refreshReportedHazards(data);
 		configureReportedHazardsTab(data.getIncidentMode() == IncidentMode.SAR);
+		editorCommitGuard.rebase();
 	}
 
 	/**
 	 * Writes panel values to the active incident.
 	 */
 	public void pushToModel() {
+		if (!editorCommitGuard.commit(AppController.LinkSource.NONE, this::flushToModel)) {
+			throw new IllegalStateException("The Safety editor is stale. Keep the draft and refresh before retrying.");
+		}
+	}
+
+	/**
+	 * Writes Safety panel values after the editor binding has been validated.
+	 */
+	private void flushToModel() {
 		AppData data = controller.getData();
 		Ics215aForm analysis = data.getForm215a();
 		analysis.setIncidentNumber(incidentNumberField.getText().trim());

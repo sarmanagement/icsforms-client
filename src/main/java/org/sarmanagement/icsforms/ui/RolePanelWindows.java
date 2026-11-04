@@ -171,13 +171,27 @@ final class RolePanelWindows {
 	 */
 	static JFrame openIncidentCommand(Window owner, AppController controller,
 			Consumer<WorkspaceDestination> navigator) {
+		return openIncidentCommand(owner, controller, navigator, null);
+	}
+
+	/**
+	 * Opens or focuses the Incident Command panel with linked-assignment operations.
+	 *
+	 * @param owner parent window.
+	 * @param controller incident controller.
+	 * @param navigator typed workspace navigator.
+	 * @param assignmentActions callbacks for linked task operations.
+	 * @return role window.
+	 */
+	static JFrame openIncidentCommand(Window owner, AppController controller,
+			Consumer<WorkspaceDestination> navigator, IncidentCommandRolePanel.AssignmentActions assignmentActions) {
 		AppData incident = controller.getData();
 		JFrame existing = INCIDENT_COMMAND_WINDOWS.get(incident);
 		if (existing != null && existing.isDisplayable()) {
 			existing.toFront();
 			return existing;
 		}
-		IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller, navigator);
+		IncidentCommandRolePanel panel = new IncidentCommandRolePanel(controller, navigator, assignmentActions);
 		JFrame frame = createFrame("Incident Command — " + incident.getIncidentContext().getIncidentName(), panel,
 				ApplicationIcon.Variant.INCIDENT_COMMAND);
 		frame.addWindowListener(new java.awt.event.WindowAdapter() {
@@ -195,6 +209,20 @@ final class RolePanelWindows {
 	}
 
 	/**
+	 * Updates assessment visibility in an open Incident Command panel for one incident.
+	 *
+	 * @param incident incident whose role panel should be updated.
+	 * @param visible whether objective assessments should be shown.
+	 */
+	static void setObjectiveAssessmentsVisible(AppData incident, boolean visible) {
+		JFrame frame = INCIDENT_COMMAND_WINDOWS.get(incident);
+		if (frame != null && frame.isDisplayable()
+				&& frame.getContentPane() instanceof IncidentCommandRolePanel panel) {
+			panel.setShowObjectiveAssessments(visible);
+		}
+	}
+
+	/**
 	 * Opens or focuses the Communications Unit panel.
 	 *
 	 * @param owner parent window.
@@ -206,13 +234,31 @@ final class RolePanelWindows {
 	 */
 	static JFrame openCommunications(Window owner, AppController controller,
 			Consumer<WorkspaceDestination> navigator, Runnable importCsv, Runnable exportCsv) {
+		return openCommunications(owner, controller, navigator, importCsv, exportCsv, () -> {
+		});
+	}
+
+	/**
+	 * Opens or focuses the Communications Unit panel with an ICP log-entry action.
+	 *
+	 * @param owner parent window.
+	 * @param controller incident controller.
+	 * @param navigator typed workspace navigator.
+	 * @param importCsv established communications import workflow.
+	 * @param exportCsv established communications export workflow.
+	 * @param addIcpLogEntry opens the shared ICP 214 entry workflow.
+	 * @return role window.
+	 */
+	static JFrame openCommunications(Window owner, AppController controller,
+			Consumer<WorkspaceDestination> navigator, Runnable importCsv, Runnable exportCsv, Runnable addIcpLogEntry) {
 		AppData incident = controller.getData();
 		JFrame existing = COMMUNICATIONS_WINDOWS.get(incident);
 		if (existing != null && existing.isDisplayable()) {
 			existing.toFront();
 			return existing;
 		}
-		CommunicationsRolePanel panel = new CommunicationsRolePanel(controller, navigator, importCsv, exportCsv);
+		CommunicationsRolePanel panel = new CommunicationsRolePanel(controller, navigator, importCsv, exportCsv,
+				addIcpLogEntry);
 		JFrame frame = createFrame("Communications Unit — " + incident.getIncidentContext().getIncidentName(), panel,
 				ApplicationIcon.Variant.COMMUNICATIONS);
 		frame.addWindowListener(new java.awt.event.WindowAdapter() {

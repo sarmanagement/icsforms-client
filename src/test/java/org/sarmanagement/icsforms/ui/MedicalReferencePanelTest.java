@@ -5,6 +5,8 @@ package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.sarmanagement.icsforms.medical.AddressGeocoder;
+import org.sarmanagement.icsforms.medical.DrivingRouteProvider;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
@@ -18,16 +20,23 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.SwingUtilities;
 import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JList;
+import javax.swing.JTable;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.GraphicsEnvironment;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /** Verifies strict medical-reference separation and side-effect-free lookup. */
 class MedicalReferencePanelTest {
@@ -65,6 +74,82 @@ class MedicalReferencePanelTest {
 			panels[0].dispose();
 			panels[1].dispose();
 		});
+	}
+
+	@Test
+	void canineWorkspaceAndReferenceCanRunConcurrentlyFromSharedDirectory() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		AppData data = new AppData();
+		data.getMedicalPlan().setEmergencyProcedures("HUMAN ONLY");
+		data.getCanineMedicalPlan().setEmergencyProcedures("CANINE ONLY");
+		VetFacility accepted = new VetFacility();
+		accepted.setName("Accepted canine hospital");
+		data.getCanineMedicalPlan().setSelectedFacilities(List.of(accepted));
+		VetFacility candidate = new VetFacility();
+		candidate.setName("Directory canine hospital");
+		data.getVetDirectory().setFacilities(new java.util.ArrayList<>(List.of(candidate)));
+		AppController controller = controller(data);
+		AtomicInteger providerCalls = new AtomicInteger();
+		AddressGeocoder geocoder = address -> {
+			providerCalls.incrementAndGet();
+			return List.of();
+		};
+		DrivingRouteProvider routeProvider = (source, destinations) -> {
+			providerCalls.incrementAndGet();
+			return List.of();
+		};
+		CanineMedicalPanel caninePanel = new CanineMedicalPanel(controller, directory, geocoder, routeProvider);
+		MedicalWorkspacePanel workspace = new MedicalWorkspacePanel(new Ics206Panel(controller), caninePanel);
+		MedicalReferencePanel reference = new MedicalReferencePanel(controller, true, destination -> {
+		});
+		JFrame workspaceWindow = new JFrame("Medical workspace");
+		JFrame referenceWindow = new JFrame("Canine reference");
+
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				workspace.openCaninePlan();
+				workspaceWindow.setContentPane(workspace);
+				workspaceWindow.setSize(900, 600);
+				referenceWindow.setContentPane(reference);
+				referenceWindow.setSize(900, 600);
+				workspaceWindow.setVisible(true);
+				referenceWindow.setVisible(true);
+				assertTrue(workspaceWindow.isVisible());
+				assertTrue(referenceWindow.isVisible());
+				assertNotSame(workspace, reference);
+				assertEquals(2, reference.displayedFacilityCount());
+				assertTrue(reference.displayedInstructions().contains("CANINE ONLY"));
+				assertFalse(reference.displayedInstructions().contains("HUMAN ONLY"));
+				assertTrue(reference.displayedFacilityDetail().contains("Accepted canine hospital"));
+				assertEquals(1, CanineMedicalFacilityTools.directoryFacilities(data).size());
+				assertEquals(candidate,
+						CanineMedicalFacilityTools.findDirectoryFacility(data, candidate.getId()));
+				assertTrue(CanineMedicalFacilityTools.selectedFacility(data, candidate.getId()).detail()
+						.contains("Directory canine hospital"));
+				findComponent(reference, JList.class).setSelectedIndex(1);
+				assertTrue(reference.displayedFacilityDetail().contains("Directory canine hospital"));
+				assertEquals(1, tableWithColumnCount(workspace, 18).getRowCount());
+				VetFacility additional = new VetFacility();
+				additional.setName("New shared directory hospital");
+				data.getVetDirectory().getFacilities().add(additional);
+				controller.markDirty();
+			});
+			SwingUtilities.invokeAndWait(() -> {
+				caninePanel.refreshFromModel();
+				assertEquals(2, tableWithColumnCount(workspace, 18).getRowCount());
+				assertEquals(3, reference.displayedFacilityCount());
+				assertEquals("HUMAN ONLY", data.getMedicalPlan().getEmergencyProcedures());
+				assertEquals(0, providerCalls.get(), "Opening or refreshing views must not request routing services");
+			});
+		} finally {
+			SwingUtilities.invokeAndWait(() -> {
+				caninePanel.dispose();
+				reference.dispose();
+				workspaceWindow.dispose();
+				referenceWindow.dispose();
+				controller.close();
+			});
+		}
 	}
 
 	@Test
@@ -273,11 +358,50 @@ class MedicalReferencePanelTest {
 			if (component instanceof JButton button && button.getText().contains("Refresh")) {
 				return true;
 			}
+
 			if (component instanceof Container child && hasRefreshButton(child)) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Finds the canine directory table by its stable column count.
+	 *
+	 * @param root workspace component tree.
+	 * @param columns expected column count.
+	 * @return matching table.
+	 */
+	private JTable tableWithColumnCount(Container root, int columns) {
+		for (Component component : root.getComponents()) {
+			if (component instanceof JTable table && table.getColumnCount() == columns) {
+				return table;
+			}
+			if (component instanceof Container child) {
+				JTable table = tableWithColumnCount(child, columns);
+				if (table != null) {
+					return table;
+				}
+			}
+		}
+		return null;
+	}
+
+	@SuppressWarnings("unchecked")
+	private <T extends Component> T findComponent(Container root, Class<T> type) {
+		for (Component component : root.getComponents()) {
+			if (type.isInstance(component)) {
+				return (T) component;
+			}
+			if (component instanceof Container child) {
+				T found = findComponent(child, type);
+				if (found != null) {
+					return found;
+				}
+			}
+		}
+		return null;
 	}
 
 	/**

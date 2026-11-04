@@ -44,6 +44,20 @@ final class ActivityEntryDialog {
 	 * @param preferredLog preferred destination, or null to select ICP
 	 */
 	ActivityEntryDialog(AppController controller, LogEntryContext context, Ics214Form preferredLog) {
+		this(controller, context, preferredLog, null, "");
+	}
+
+	/**
+	 * Builds an activity editor with an optional event type and narrative preselected.
+	 *
+	 * @param controller incident controller
+	 * @param context initiating context
+	 * @param preferredLog preferred destination, or null to select ICP
+	 * @param preferredEventTypeId event type selected for a quick entry, or null
+	 * @param initialActivity initial narrative for a quick entry
+	 */
+	ActivityEntryDialog(AppController controller, LogEntryContext context, Ics214Form preferredLog,
+			String preferredEventTypeId, String initialActivity) {
 		this.controller = controller;
 		AppData data = controller.getData();
 		incident = data;
@@ -127,6 +141,7 @@ final class ActivityEntryDialog {
 			types.removeIf(type -> isClueType(type.getId()));
 		}
 		editor = new Ics214Panel.ActivityEntryEditor(types, resource, resources, this::isIcpDestination);
+		editor.setQuickEntryDefaults(preferredEventTypeId, initialActivity);
 		JPanel selectors = UiSupport.formPanel();
 		UiSupport.addRow(selectors, 0, "Destination log", destination);
 		UiSupport.addRow(selectors, 1, "Task / assignment", task);

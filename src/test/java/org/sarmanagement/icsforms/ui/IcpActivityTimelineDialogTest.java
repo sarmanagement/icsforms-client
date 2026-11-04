@@ -17,8 +17,10 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JButton;
 import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
@@ -29,6 +31,8 @@ import java.awt.GraphicsEnvironment;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.nio.file.Path;
@@ -88,6 +92,13 @@ class IcpActivityTimelineDialogTest {
 	}
 
 	@Test
+	void digitalClockUsesSelectedZoneAndTwentyFourHourFormat() {
+		assertEquals("04:34:56",
+				IcpActivityTimelineDialog.formatClockTime(Instant.parse("2026-11-02T12:34:56Z"),
+						ZoneId.of("America/Los_Angeles")));
+	}
+
+	@Test
 	void onTaskSegmentsConnectOnTaskToCompletionAndIgnoreStruckOutEvents() {
 		LocalDateTime start = LocalDateTime.of(2026, 10, 27, 8, 0);
 		var onTask = marker(start, ActivityEventType.ID_RESOURCE_ON_TASK, false);
@@ -131,6 +142,7 @@ class IcpActivityTimelineDialogTest {
 			task.setTaskId("task-1");
 			task.setAssignmentTeamNumber("T1");
 			task.setResourceIdentifier("Trackers");
+			task.setTaskLifecycleStatus("assigned - on task");
 			SarTaskResource resource = new SarTaskResource();
 			resource.setName("Tracker One");
 			resource.setFunction("Team Leader");
@@ -142,16 +154,37 @@ class IcpActivityTimelineDialogTest {
 			event.setNotableActivity("Tracker One is on task");
 			log.getActivityLog().add(event);
 			data.getActivityLogs().add(log);
+			data.setActivityEventTypes(new ArrayList<>(ActivityEventType.defaultTypes()));
+			data.getActivityEventTypes().add(new ActivityEventType("CANINE_ALERT", "Canine Alert", false, true));
 			var incidentId = store.create(data);
 			AppController controller = new AppController(data, store, incidentId,
 					new PdfExportService(), new IncidentValidator());
 			controller.getData().getSarTaskAssignments().add(task);
 			AtomicReference<LogEntryContext> context = new AtomicReference<>();
 			AtomicReference<String> openedAssignment = new AtomicReference<>();
+			AtomicReference<IcpActivityTimelineDialog.QuickLogRequest> quickLog = new AtomicReference<>();
 			SwingUtilities.invokeAndWait(() -> {
 				IcpActivityTimelineDialog dialog = new IcpActivityTimelineDialog(null, controller, context::set,
-						openedAssignment::set);
+						openedAssignment::set, quickLog::set);
 				try {
+					JLabel digitalTime = field(dialog, "currentTime", JLabel.class);
+					JLabel timeZone = field(dialog, "currentZone", JLabel.class);
+					assertTrue(digitalTime.getFont().getSize2D() >= 18f);
+					assertTrue(digitalTime.getText().matches("\\d{2}:\\d{2}:\\d{2}"));
+					assertFalse(digitalTime.getText().contains(timeZone.getText()));
+					assertEquals(digitalTime.getParent(), timeZone.getParent());
+					assertEquals(new java.awt.Dimension(270, 72),
+							field(dialog, "clockPanel", JPanel.class).getPreferredSize());
+					assertTrue(((java.awt.FlowLayout) field(dialog, "clockPanel", JPanel.class).getLayout())
+							.getAlignment() == java.awt.FlowLayout.CENTER);
+					assertTrue(((javax.swing.border.CompoundBorder) field(dialog, "clockPanel", JPanel.class)
+							.getBorder()).getInsideBorder().getBorderInsets(field(dialog, "clockPanel", JPanel.class))
+							.bottom >= 7);
+					assertTrue(descendants(dialog).stream().filter(JLabel.class::isInstance)
+							.map(JLabel.class::cast).anyMatch(label -> "ICP activity by assignment.".equals(label.getText())));
+					assertTrue(descendants(dialog).stream().filter(JLabel.class::isInstance)
+							.map(JLabel.class::cast).anyMatch(label -> label.getText()
+									.startsWith("Markers show staging, task, clue")));
 					assertFalse(button(dialog, "Event Details…").isEnabled());
 					assertFalse(button(dialog, "Open Task / Assignment…").isEnabled());
 					JScrollPane scroll = descendants(dialog).stream().filter(JScrollPane.class::isInstance)
@@ -172,10 +205,17 @@ class IcpActivityTimelineDialogTest {
 					} catch (ReflectiveOperationException exception) {
 						throw new AssertionError(exception);
 					}
-					assertEquals(List.of("Event Details…", "Add ICP Log Entry…", "Open Task / Assignment…"),
+					assertEquals(List.of("Event Details…", "Add ICP Log Entry…", "Open Task / Assignment…",
+							"Log T1 task completed", "Log T1 returned to staging", "Log T1 Canine Alert"),
 							java.util.Arrays.stream(popup.getComponents()).filter(JMenuItem.class::isInstance)
 									.map(JMenuItem.class::cast).map(JMenuItem::getText).toList());
 					assertTrue(((JMenuItem) popup.getComponent(2)).isEnabled());
+					assertFalse(popup.getComponentCount() > 0
+							&& java.util.Arrays.stream(popup.getComponents()).filter(JMenuItem.class::isInstance)
+									.map(JMenuItem.class::cast).anyMatch(item -> item.getText().contains("departed")));
+					((JMenuItem) popup.getComponent(4)).doClick();
+					assertEquals(ActivityEventType.ID_TASK_COMPLETED, quickLog.get().eventTypeId());
+					assertEquals("T1 task completed", quickLog.get().activity());
 					button(dialog, "Open Task / Assignment…").doClick();
 					assertEquals("assignment-1", openedAssignment.get());
 
@@ -197,6 +237,9 @@ class IcpActivityTimelineDialogTest {
 								assertTrue(text.stream().anyMatch(value -> value.contains("Tracker One — Team Leader")));
 								assertTrue(text.stream().anyMatch(value -> value.contains("T1: Trackers")
 										&& value.contains("Tracker One is on task")));
+								assertTrue(descendants(detail).stream().filter(JButton.class::isInstance)
+										.map(JButton.class::cast).anyMatch(candidate ->
+												"Log T1 task completed".equals(candidate.getText())));
 								button(detail, "Add ICP Log Entry…").doClick();
 							}
 						}
@@ -206,7 +249,7 @@ class IcpActivityTimelineDialogTest {
 					button(dialog, "Event Details…").doClick();
 					assertEquals("assignment-1", context.get().assignmentId());
 					assertEquals("task-1", context.get().taskId());
-					button(dialog, "Add ICP Activity…").doClick();
+					button(dialog, "Add Log Entry…").doClick();
 					assertEquals("assignment-1", context.get().assignmentId());
 					assertEquals("Trackers", context.get().resourceId());
 				} finally {
@@ -272,5 +315,24 @@ class IcpActivityTimelineDialogTest {
 			}
 		}
 		return result;
+	}
+
+	/**
+	 * Reads a private timeline component for focused visual assertions.
+	 *
+	 * @param dialog inspected timeline.
+	 * @param name component field name.
+	 * @param type expected component type.
+	 * @param <T> component type.
+	 * @return the named component.
+	 */
+	private static <T> T field(IcpActivityTimelineDialog dialog, String name, Class<T> type) {
+		try {
+			var field = IcpActivityTimelineDialog.class.getDeclaredField(name);
+			field.setAccessible(true);
+			return type.cast(field.get(dialog));
+		} catch (ReflectiveOperationException exception) {
+			throw new AssertionError(exception);
+		}
 	}
 }

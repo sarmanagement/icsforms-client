@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
+import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
@@ -15,16 +16,20 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JComboBox;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
+import java.awt.Container;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -345,6 +350,47 @@ class Ics214PanelTest {
 		assertEquals(entry.getEventTypeId(), restored.getEventTypeId());
 		assertEquals(entry.getEventTypeChangeHistory(), restored.getEventTypeChangeHistory());
 		assertFalse(panel.applyNoteClassification(entry, ActivityEventType.ID_CLUE_DETECTED, changedAt.plusMinutes(1)));
+	}
+
+	@Test
+	void classifyNoteDialogShowsTimestampResourceAndNotableActivity() {
+		ActivityLogEntry entry = new ActivityLogEntry();
+		entry.setTimestamp(LocalDateTime.of(2026, 10, 27, 8, 0));
+		entry.setResourceIdentifier("T-14: Rescue team");
+		entry.setNotableActivity("Team reported a subject located.");
+		JComboBox<ActivityEventType> choices = new JComboBox<>(new ActivityEventType[]{
+				new ActivityEventType(ActivityEventType.ID_CLUE_REPORTED, "Clue Reported", true, false)});
+		ZoneId original = UiSupport.getDateTimeDisplayZone();
+		try {
+			UiSupport.setDateTimeDisplayZone(ZoneId.of("UTC"));
+			javax.swing.JPanel panel = Ics214Panel.buildClassifyNotePanel(entry, choices);
+			List<Component> components = new ArrayList<>();
+			collectComponents(panel, components);
+
+			assertTrue(components.stream().filter(JLabel.class::isInstance).map(JLabel.class::cast)
+					.anyMatch(label -> "2026-10-27 08:00".equals(label.getText())));
+			assertTrue(components.stream().filter(JLabel.class::isInstance).map(JLabel.class::cast)
+					.anyMatch(label -> "T-14: Rescue team".equals(label.getText())));
+			assertTrue(components.stream().filter(JTextArea.class::isInstance).map(JTextArea.class::cast)
+					.anyMatch(area -> "Team reported a subject located.".equals(area.getText()) && !area.isEditable()));
+		} finally {
+			UiSupport.setDateTimeDisplayZone(original);
+		}
+	}
+
+	/**
+	 * Collects a component tree for assertions on form content.
+	 *
+	 * @param parent parent component
+	 * @param components accumulator for descendants
+	 */
+	private static void collectComponents(Container parent, List<Component> components) {
+		for (Component child : parent.getComponents()) {
+			components.add(child);
+			if (child instanceof Container container) {
+				collectComponents(container, components);
+			}
+		}
 	}
 
 	@Test

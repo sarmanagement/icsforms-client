@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.ActivityEventType;
+import org.sarmanagement.icsforms.model.ActivityEventTypeCatalog;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
@@ -86,6 +87,7 @@ public class AppController implements AutoCloseable {
 	private PersonnelCardCreator personnelCardCreator;
 	private final List<IncidentChangeListener> incidentChangeListeners = new CopyOnWriteArrayList<>();
 	private long incidentGeneration = 1;
+	private long modelRevision;
 	private long changeSequence;
 	private boolean suppressChangeNotifications;
 	private final Object incidentChangeDeliveryLock = new Object();
@@ -93,6 +95,11 @@ public class AppController implements AutoCloseable {
 	private boolean incidentChangeDeliveryScheduled;
 	private Runnable beforePlanReuse = () -> { };
 	private Runnable afterPlanReuse = () -> { };
+	private final Set<EditorCommitGuard> editorCommitGuards =
+			Collections.newSetFromMap(new java.util.WeakHashMap<>());
+	private final Set<EditorCommitGuard> transactionEditorCommitGuards =
+			Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+	private int editorCommitDepth;
 	private java.util.function.Consumer<RuntimeException> autosaveErrorHandler = exception -> {
 		throw exception;
 	};
@@ -106,7 +113,7 @@ public class AppController implements AutoCloseable {
 	 * Identifies which tab last edited a shared linked role field.
 	 */
 	public enum LinkSource {
-		NONE, SHARED, ORG_CHART, ICS202, ICS204, ICS214
+		NONE, SHARED, ORG_CHART, ICS202, ICS204, ICS205, ICS214
 	}
 
 	/**
@@ -123,6 +130,15 @@ public class AppController implements AutoCloseable {
 	 * @param generation controller incident generation.
 	 */
 	public record IncidentBinding(AppData dataIdentity, long generation) {
+	}
+
+	/**
+	 * Immutable token for a full-editor commit based on one model revision.
+	 *
+	 * @param incidentBinding identity of the incident and operational period.
+	 * @param revision controller revision observed by the editor.
+	 */
+	public record EditorCommitBinding(IncidentBinding incidentBinding, long revision) {
 	}
 
 	/**
@@ -451,6 +467,131 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
+	 * Captures the active incident, period, and model revision for a full editor.
+	 *
+	 * @return token representing the current editable model revision.
+	 */
+	public EditorCommitBinding captureEditorCommitBinding() {
+		return new EditorCommitBinding(captureIncidentBinding(), modelRevision);
+	}
+
+	/**
+	 * Applies a full-editor change only when its incident, period, and model revision
+	 * are unchanged.
+	 *
+	 * @param binding editor's captured commit token.
+	 * @param source editor that owns linked values.
+	 * @param edit synchronous editor flush that must not display a modal dialog.
+	 * @return true when the flush was applied; false when its token is stale.
+	 */
+	public boolean commitEditorIfCurrent(EditorCommitBinding binding, LinkSource source, Runnable edit) {
+		Objects.requireNonNull(edit, "edit");
+		Objects.requireNonNull(source, "source");
+		if (binding == null || !isCurrent(binding.incidentBinding()) || binding.revision() != modelRevision) {
+			return false;
+		}
+		EditorModelSnapshot snapshot = new EditorModelSnapshot();
+		snapshot.capture(data);
+		boolean previousDirty = dirty;
+		long previousRevision = modelRevision;
+		LinkSource previousSource = activeLinkSource;
+		boolean pendingAutosave = autosaveTimer.isRunning();
+		boolean previousSuppression = suppressChangeNotifications;
+		boolean outermostCommit = editorCommitDepth == 0;
+		if (outermostCommit) {
+			transactionEditorCommitGuards.clear();
+		}
+		editorCommitDepth++;
+		try {
+			suppressChangeNotifications = true;
+			edit.run();
+			markDirty(source);
+			if (outermostCommit) {
+				transactionEditorCommitGuards.forEach(EditorCommitGuard::rebase);
+			}
+			suppressChangeNotifications = previousSuppression;
+		} catch (RuntimeException exception) {
+			suppressChangeNotifications = previousSuppression;
+			autosaveTimer.stop();
+			snapshot.restore();
+			dirty = previousDirty;
+			modelRevision = previousRevision;
+			activeLinkSource = previousSource;
+			if (pendingAutosave) {
+				autosaveTimer.restart();
+			}
+			throw exception;
+		} finally {
+			editorCommitDepth--;
+			if (outermostCommit) {
+				transactionEditorCommitGuards.clear();
+			}
+		}
+		publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
+		return true;
+	}
+
+	/**
+	 * Creates a revision-bound commit helper for one full-form editor.
+	 *
+	 * @return editor commit helper registered for coordinated MainFrame flushes.
+	 */
+	EditorCommitGuard createEditorCommitGuard() {
+		EditorCommitGuard guard = new EditorCommitGuard(this);
+		editorCommitGuards.add(guard);
+		return guard;
+	}
+
+	/**
+	 * Records the guarded editor participating in a MainFrame-owned transaction.
+	 *
+	 * @param guard editor writing as part of the current transaction.
+	 */
+	void noteEditorCommit(EditorCommitGuard guard) {
+		if (editorCommitDepth > 0) {
+			transactionEditorCommitGuards.add(guard);
+		}
+	}
+
+	/**
+	 * Checks whether every registered full-form editor observes the active model revision.
+	 *
+	 * @return true when no registered editor contains a stale model binding.
+	 */
+	boolean editorCommitBindingsCurrent() {
+		return editorCommitGuards.stream().allMatch(EditorCommitGuard::isCurrent);
+	}
+
+	/**
+	 * Rebases registered editors after the main frame has refreshed all editor views.
+	 */
+	void rebaseEditorCommitGuards() {
+		for (EditorCommitGuard guard : List.copyOf(editorCommitGuards)) {
+			guard.rebase();
+		}
+	}
+
+	/**
+	 * Rebinds registered editors to an explicit shared revision.
+	 *
+	 * @param binding shared revision to apply.
+	 */
+	void rebaseEditorCommitGuards(EditorCommitBinding binding) {
+		for (EditorCommitGuard guard : List.copyOf(editorCommitGuards)) {
+			guard.rebase(binding);
+		}
+	}
+
+	/**
+	 * Returns whether a coordinated full-editor transaction is currently applying.
+	 *
+	 * @return true while the controller is synchronously flushing full editors.
+	 */
+	boolean isEditorCommitInProgress() {
+		return editorCommitDepth > 0;
+	}
+
+	/**
 	 * Applies a synchronous shared-model edit only while its originating incident
 	 * binding remains current.
 	 *
@@ -604,6 +745,7 @@ public class AppController implements AutoCloseable {
 		dirty = false;
 		activeLinkSource = LinkSource.NONE;
 		incidentGeneration++;
+		modelRevision++;
 		publishIncidentChange(IncidentChangeKind.INCIDENT_REPLACED);
 	}
 
@@ -625,6 +767,7 @@ public class AppController implements AutoCloseable {
 			return;
 		}
 		dirty = true;
+		modelRevision++;
 		if (source != LinkSource.NONE) {
 			activeLinkSource = source;
 		}
@@ -711,6 +854,7 @@ public class AppController implements AutoCloseable {
 		EditorModelSnapshot snapshot = new EditorModelSnapshot();
 		snapshot.capture(data);
 		boolean previousDirty = dirty;
+		long previousRevision = modelRevision;
 		LinkSource previousSource = activeLinkSource;
 		boolean pendingAutosave = autosaveTimer.isRunning();
 		boolean previousSuppression = suppressChangeNotifications;
@@ -725,6 +869,7 @@ public class AppController implements AutoCloseable {
 			autosaveTimer.stop();
 			snapshot.restore();
 			dirty = previousDirty;
+			modelRevision = previousRevision;
 			activeLinkSource = previousSource;
 			if (pendingAutosave) {
 				autosaveTimer.restart();
@@ -1151,6 +1296,7 @@ public class AppController implements AutoCloseable {
 		activeLinkSource = LinkSource.NONE;
 		autosaveTimer.restart();
 		incidentGeneration++;
+		modelRevision++;
 		publishIncidentChange(IncidentChangeKind.OPERATIONAL_PERIOD_CHANGED);
 	}
 
@@ -3263,17 +3409,7 @@ public class AppController implements AutoCloseable {
 		if (data.getActivityLogs() == null) {
 			data.setActivityLogs(new ArrayList<>());
 		}
-		if (data.getActivityEventTypes() == null || data.getActivityEventTypes().isEmpty()) {
-			data.setActivityEventTypes(new ArrayList<>(ActivityEventType.defaultTypes()));
-		} else {
-			// Backfill any built-in types introduced after the initial seed.
-			List<String> existing = data.getActivityEventTypes().stream().map(ActivityEventType::getId).toList();
-			for (ActivityEventType builtIn : ActivityEventType.defaultTypes()) {
-				if (!existing.contains(builtIn.getId())) {
-					data.getActivityEventTypes().add(builtIn);
-				}
-			}
-		}
+		data.setActivityEventTypes(ActivityEventTypeCatalog.forIncident(data.getActivityEventTypes()));
 		if (data.getSarTaskAssignments() == null) {
 			data.setSarTaskAssignments(new ArrayList<>());
 		}

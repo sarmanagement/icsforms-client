@@ -17,6 +17,9 @@ import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.SwingUtilities;
+import javax.swing.JButton;
+import java.awt.Component;
+import java.awt.Container;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -97,11 +100,42 @@ class CommunicationsRolePanelTest {
 		assertEquals(RadioCheckStatus.NOT_RECORDED, channel.getRadioCheckStatus());
 	}
 
+	@Test
+	void communicationsPanelExposesExplicitIcpLogEntryAction() throws Exception {
+		AppController controller = controller(new AppData());
+		CommunicationsRolePanel[] panel = new CommunicationsRolePanel[1];
+		boolean[] requested = {false};
+		SwingUtilities.invokeAndWait(() -> {
+			panel[0] = new CommunicationsRolePanel(controller, ignored -> { }, () -> { }, () -> { },
+					() -> requested[0] = true);
+			findButton(panel[0], "Add ICP 214 log entry…").doClick();
+			panel[0].dispose();
+		});
+
+		assertTrue(requested[0]);
+	}
+
 	private CommunicationsRolePanel createPanel(AppController controller) {
 		return new CommunicationsRolePanel(controller, ignored -> {
 		}, () -> {
 		}, () -> {
 		});
+	}
+
+	private static JButton findButton(Container container, String text) {
+		for (Component child : container.getComponents()) {
+			if (child instanceof JButton button && text.equals(button.getText())) {
+				return button;
+			}
+			if (child instanceof Container nested) {
+				try {
+					return findButton(nested, text);
+				} catch (IllegalArgumentException ignored) {
+					// Continue searching sibling containers.
+				}
+			}
+		}
+		throw new IllegalArgumentException("Button not found: " + text);
 	}
 
 	private AppController controller(AppData data) {

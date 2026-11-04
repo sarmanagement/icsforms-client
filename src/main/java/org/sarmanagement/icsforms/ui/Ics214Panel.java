@@ -65,6 +65,7 @@ public class Ics214Panel extends JPanel {
 	private static final Map<Ics214Form, JFrame> POP_OUT_WINDOWS = new IdentityHashMap<>();
 
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 	private final JTextField nameField = UiSupport.textField();
 	private final JTextField icsPositionField = UiSupport.textField();
 	private final JTextField homeAgencyField = UiSupport.textField();
@@ -96,6 +97,7 @@ public class Ics214Panel extends JPanel {
 	public Ics214Panel(AppController controller) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
+		editorCommitGuard = new EditorCommitGuard(controller);
 
 		JPanel form = UiSupport.formPanel();
 		form.setBorder(BorderFactory.createTitledBorder("ICS 214 Activity Log"));
@@ -299,11 +301,33 @@ public class Ics214Panel extends JPanel {
 		}
 		JComboBox<ActivityEventType> choices = new JComboBox<>(types);
 		UiSupport.configureDialogComboBox(choices, 280);
-		int result = JOptionPane.showConfirmDialog(this, choices, "Classify Note Entry",
+		int result = JOptionPane.showConfirmDialog(this, buildClassifyNotePanel(entry, choices), "Classify Note Entry",
 				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 		if (result == JOptionPane.OK_OPTION && choices.getSelectedItem() instanceof ActivityEventType selected) {
 			applyNoteClassification(entry, selected.getId(), UtcTimestamp.now());
 		}
+	}
+
+	/**
+	 * Builds the classification dialog content with the selected note's context.
+	 *
+	 * @param entry activity entry being classified
+	 * @param choices available replacement event types
+	 * @return form displaying the entry context and classification selector
+	 */
+	static JPanel buildClassifyNotePanel(ActivityLogEntry entry, JComboBox<ActivityEventType> choices) {
+		JPanel panel = UiSupport.formPanel();
+		UiSupport.addRow(panel, 0, "Date/time", new JLabel(UiSupport.formatDateTime(entry.getTimestamp())));
+		String resource = entry.getResourceIdentifier();
+		UiSupport.addRow(panel, 1, "Resource", new JLabel(resource == null || resource.isBlank()
+				? "Not recorded" : resource));
+		JTextArea activity = UiSupport.textArea(3);
+		activity.setEditable(false);
+		activity.setText(entry.getNotableActivity() == null ? "" : entry.getNotableActivity());
+		activity.getAccessibleContext().setAccessibleName("Notable activity being classified");
+		UiSupport.addRow(panel, 2, "Notable activity", new JScrollPane(activity));
+		UiSupport.addRow(panel, 3, "Classify as", choices);
+		return panel;
 	}
 
 	/**
@@ -373,6 +397,7 @@ public class Ics214Panel extends JPanel {
 			clearFields();
 			pickPreparerButton.setEnabled(false);
 			updateActivityButtonsState();
+			editorCommitGuard.rebase();
 			return;
 		}
 		nameField.setText(nullSafe(currentForm.getName()));
@@ -397,14 +422,24 @@ public class Ics214Panel extends JPanel {
 		}
 		loadedHeader = headerState();
 		loadedResources = resourceStates(resourcesTableModel.getRows());
+		editorCommitGuard.rebase();
 	}
 
 	/**
 	 * Merges locally edited fields against their loaded baselines and current
 	 * canonical values. Untouched fields adopt external changes; deliberate local
 	 * edits win same-field conflicts. Authoritative activity entries are never replaced.
+	 *
+	 * @return true when the editor binding is current and the flush succeeds.
 	 */
-	public void saveToModel() {
+	public boolean saveToModel() {
+		return editorCommitGuard.applyIfCurrent(this::flushToModel);
+	}
+
+	/**
+	 * Merges visible ICS 214 values into the bound form after validating the editor token.
+	 */
+	private void flushToModel() {
 		if (currentForm == null || currentData != controller.getData() || loadedHeader == null) {
 			return;
 		}
@@ -654,7 +689,11 @@ public class Ics214Panel extends JPanel {
 		if (currentForm == null || currentData != controller.getData()) {
 			return;
 		}
-		saveToModel();
+		if (!saveToModel()) {
+			JOptionPane.showMessageDialog(this, "This ICS 214 editor is stale. Refresh it before opening another window.",
+					"Unable to open activity log", JOptionPane.WARNING_MESSAGE);
+			return;
+		}
 		openInNewWindow(controller, currentForm, currentData, () -> {
 			if (currentData == controller.getData() && currentForm != null) {
 				refreshActivityEntries();
@@ -746,7 +785,11 @@ public class Ics214Panel extends JPanel {
 	private static void closePopOutWindow(JFrame frame, Ics214Panel popOut, Ics214Form form, AppData data,
 			Runnable onSave) {
 		if (popOut.controller.getData() == data) {
-			popOut.saveToModel();
+			if (!popOut.saveToModel()) {
+				JOptionPane.showMessageDialog(popOut, "This ICS 214 editor is stale. Refresh it before closing.",
+						"Unable to save activity log", JOptionPane.WARNING_MESSAGE);
+				return;
+			}
 			popOut.controller.markDirty();
 			if (onSave != null) {
 				onSave.run();
@@ -1509,6 +1552,25 @@ public class Ics214Panel extends JPanel {
 			return entry;
 		}
 
+		/**
+		 * Applies the event type and narrative selected by a task quick-log action.
+		 *
+		 * @param eventTypeId event type to preselect, or null.
+		 * @param activity initial narrative text.
+		 */
+		void setQuickEntryDefaults(String eventTypeId, String activity) {
+			if (eventTypeId != null) {
+				for (int index = 0; index < eventTypeField.getItemCount(); index++) {
+					ActivityEventType type = eventTypeField.getItemAt(index);
+					if (eventTypeId.equals(type.getId())) {
+						eventTypeField.setSelectedItem(type);
+						break;
+					}
+				}
+			}
+			notableActivityField.setText(activity == null ? "" : activity);
+		}
+
 		/** Repaints event type display to reflect destination changes. */
 		void refreshEventTypeDisplay() {
 			eventTypeField.revalidate();
@@ -1523,61 +1585,98 @@ public class Ics214Panel extends JPanel {
 	/** Manages configurable activity types within the owning document's dialog chain. */
 	static class EventTypeManagerDialog {
 		final JPanel panel = new JPanel(new BorderLayout(4, 4));
+		final JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		private final EventTypesTableModel tableModel;
 		private final JTable table;
+		private final JButton removeButton = new JButton("Remove Selected");
 
 		EventTypeManagerDialog(List<ActivityEventType> initial) {
-			tableModel = new EventTypesTableModel(initial);
+			tableModel = new EventTypesTableModel(initial, panel);
 			table = new JTable(tableModel);
 			table.setFillsViewportHeight(true);
 
-			JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
 			JButton add = new JButton("Add Custom Type");
-			JButton remove = new JButton("Remove Selected");
 			add.addActionListener(e -> addCustomType());
-			remove.addActionListener(e -> removeSelected());
-			buttons.add(add);
-			buttons.add(remove);
+			removeButton.setEnabled(false);
+			removeButton.addActionListener(e -> removeSelected());
+			table.getSelectionModel().addListSelectionListener(event -> updateRemoveButton());
+			actionPanel.add(add);
+			actionPanel.add(removeButton);
 
-			panel.add(new JLabel("Built-in types cannot be removed. Add custom types below."), BorderLayout.NORTH);
-			panel.add(new JScrollPane(table), BorderLayout.CENTER);
-			panel.add(buttons, BorderLayout.SOUTH);
+			panel.add(new JLabel("Built-in types cannot be removed. Custom IDs are unique; labels are limited to five words."),
+					BorderLayout.NORTH);
+			panel.add(table, BorderLayout.CENTER);
 		}
 
 		/** Adds a validated custom event type using a document-modal picker. */
 		private void addCustomType() {
 			JTextField idField = new JTextField(12);
 			JTextField labelField = new JTextField(20);
-			JPanel input = new JPanel(new FlowLayout(FlowLayout.LEFT));
-			input.add(new JLabel("ID (letters, digits, underscores):"));
-			input.add(idField);
-			input.add(new JLabel("Label:"));
-			input.add(labelField);
+			JCheckBox quickMenu = new JCheckBox("Show in quick menu");
+			JPanel input = new JPanel();
+			input.setLayout(new javax.swing.BoxLayout(input, javax.swing.BoxLayout.Y_AXIS));
+			JPanel idRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+			idRow.add(new JLabel("ID (A-Z and underscores):"));
+			idRow.add(idField);
+			JPanel labelRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+			labelRow.add(new JLabel("Label (up to five words):"));
+			labelRow.add(labelField);
+			javax.swing.JTextArea guidance = new javax.swing.JTextArea(
+					"Use a unique ID containing only A-Z and underscores, and a short label of one to five words."
+							+ "\nExample: FIELD_UPDATE — Field Update. Show in quick menu adds it to SAR task quick-log actions.");
+			guidance.setEditable(false);
+			guidance.setLineWrap(true);
+			guidance.setWrapStyleWord(true);
+			guidance.setOpaque(false);
+			input.add(idRow);
+			input.add(labelRow);
+			input.add(quickMenu);
+			input.add(guidance);
 			int result = ActivityEntryDialog.showDocumentConfirm(panel, input, "New Event Type", JOptionPane.OK_CANCEL_OPTION);
 			if (result != JOptionPane.OK_OPTION) {
 				return;
 			}
-			String id = idField.getText().trim().toUpperCase().replace(' ', '_');
+			String id = idField.getText().trim().toUpperCase(java.util.Locale.ROOT);
 			String label = labelField.getText().trim();
-			if (id.isEmpty() || label.isEmpty()) {
-				UiSupport.showDocumentMessage(panel, "Both ID and Label are required.", "Invalid Event Type",
+			if (!id.matches("[A-Z_]+")) {
+				UiSupport.showDocumentMessage(panel, "ID may only contain letters (A-Z) and underscores.",
+						"Invalid Event Type ID",
 						JOptionPane.ERROR_MESSAGE);
 				return;
 			}
-			if (!id.matches("[A-Z0-9_]+")) {
-				UiSupport.showDocumentMessage(panel,
-						"ID may only contain letters (A-Z), digits (0-9), and underscores.", "Invalid Event Type ID",
+			if (!validCustomLabel(label)) {
+				UiSupport.showDocumentMessage(panel, "Enter a label containing one to five words.",
+						"Invalid Event Type Label",
 						JOptionPane.ERROR_MESSAGE);
 				return;
 			}
-			tableModel.addType(new ActivityEventType(id, label, false));
+			if (tableModel.getTypes().stream().anyMatch(type -> id.equals(type.getId()))) {
+				UiSupport.showDocumentMessage(panel, "Event type IDs must be unique.", "Duplicate Event Type ID",
+						JOptionPane.ERROR_MESSAGE);
+				return;
+			}
+			tableModel.addType(new ActivityEventType(id, label, false, quickMenu.isSelected()));
+		}
+
+		/**
+		 * Validates the free-text label limit shared by the editor and catalog.
+		 *
+		 * @param label candidate display label.
+		 * @return true when it contains one to five words.
+		 */
+		private static boolean validCustomLabel(String label) {
+			return label != null && !label.isBlank() && label.trim().split("\\s+").length <= 5;
 		}
 
 		/** Confirms removal of a configurable event type within its owner document. */
 		private void removeSelected() {
-			int row = table.getSelectedRow();
+			int viewRow = table.getSelectedRow();
+			int row = viewRow < 0 ? -1 : table.convertRowIndexToModel(viewRow);
 			if (row >= 0) {
 				ActivityEventType type = tableModel.getTypes().get(row);
+				if (type.isBuiltIn()) {
+					return;
+				}
 				int confirm = ActivityEntryDialog.showDocumentConfirm(panel,
 						"Remove event type '" + type.getLabel() + "' (" + type.getId() + ")?", "Remove Event Type",
 						JOptionPane.YES_NO_OPTION);
@@ -1587,24 +1686,51 @@ public class Ics214Panel extends JPanel {
 			}
 		}
 
+		/** Enables removal only when the selected row represents a custom type. */
+		private void updateRemoveButton() {
+			int viewRow = table.getSelectedRow();
+			int row = viewRow < 0 ? -1 : table.convertRowIndexToModel(viewRow);
+			removeButton.setEnabled(row >= 0 && row < tableModel.getTypes().size()
+					&& !tableModel.getTypes().get(row).isBuiltIn());
+		}
+
 		List<ActivityEventType> getEventTypes() {
 			return tableModel.getTypes();
 		}
+
+		/**
+		 * Returns the dialog content with management actions outside the scrolling area.
+		 *
+		 * @return complete event-type management content.
+		 */
+		JPanel contentPanel() {
+			JScrollPane scrollPane = new JScrollPane(panel);
+			scrollPane.setBorder(javax.swing.BorderFactory.createEmptyBorder());
+			JPanel content = new JPanel(new BorderLayout(4, 4));
+			content.add(scrollPane, BorderLayout.CENTER);
+			content.add(actionPanel, BorderLayout.SOUTH);
+			return content;
+		}
 	}
 
+	/** Editable view model for stable event identifiers and custom type settings. */
 	private static class EventTypesTableModel extends AbstractTableModel {
-		private final String[] columns = {"ID", "Label", "Built-in"};
+		private final String[] columns = {"ID", "Label", "Built-in", "Show in quick menu"};
 		private final List<ActivityEventType> types;
+		private final JPanel owner;
 
-		private EventTypesTableModel(List<ActivityEventType> types) {
+		private EventTypesTableModel(List<ActivityEventType> types, JPanel owner) {
 			this.types = new ArrayList<>(types);
+			this.owner = owner;
 		}
 
+		/** Adds a custom type and notifies the table. */
 		void addType(ActivityEventType type) {
 			types.add(type);
 			fireTableRowsInserted(types.size() - 1, types.size() - 1);
 		}
 
+		/** Removes a selected custom type when its row is valid. */
 		void removeRow(int row) {
 			if (row >= 0 && row < types.size() && !types.get(row).isBuiltIn()) {
 				types.remove(row);
@@ -1612,34 +1738,69 @@ public class Ics214Panel extends JPanel {
 			}
 		}
 
+		/** Returns managed types in their current display order. */
 		List<ActivityEventType> getTypes() {
 			return types;
 		}
 
+		/** {@inheritDoc} */
 		@Override
 		public int getRowCount() {
 			return types.size();
 		}
+		/** {@inheritDoc} */
 		@Override
 		public int getColumnCount() {
 			return columns.length;
 		}
+		/** {@inheritDoc} */
 		@Override
 		public String getColumnName(int col) {
 			return columns[col];
 		}
+
+		/** {@inheritDoc} */
 		@Override
-		public boolean isCellEditable(int row, int col) {
-			return false;
+		public Class<?> getColumnClass(int col) {
+			return col == 2 || col == 3 ? Boolean.class : String.class;
 		}
 
+		/** {@inheritDoc} */
+		@Override
+		public boolean isCellEditable(int row, int col) {
+			return row >= 0 && row < types.size() && !types.get(row).isBuiltIn() && (col == 1 || col == 3);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void setValueAt(Object value, int row, int col) {
+			if (!isCellEditable(row, col)) {
+				return;
+			}
+			ActivityEventType type = types.get(row);
+			if (col == 1) {
+				String label = value == null ? "" : value.toString().trim();
+				if (!EventTypeManagerDialog.validCustomLabel(label)) {
+					UiSupport.showDocumentMessage(owner, "Enter a label containing one to five words.",
+							"Invalid Event Type Label", JOptionPane.ERROR_MESSAGE);
+					return;
+				}
+				type.setLabel(label);
+			} else if (col == 3) {
+				type.setShowInQuickMenu(Boolean.TRUE.equals(value));
+			}
+			fireTableCellUpdated(row, col);
+		}
+
+		/** {@inheritDoc} */
 		@Override
 		public Object getValueAt(int row, int col) {
 			ActivityEventType t = types.get(row);
 			return switch (col) {
 				case 0 -> t.getId();
 				case 1 -> t.getLabel();
-				default -> t.isBuiltIn() ? "Yes" : "No";
+				case 2 -> t.isBuiltIn();
+				default -> t.isShowInQuickMenu();
 			};
 		}
 	}

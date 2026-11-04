@@ -45,7 +45,11 @@ public class SafetyRolePanel extends JPanel {
 	private final JTextArea detail = new JTextArea();
 	private final JTextField safetyOfficer = new JTextField();
 	private final JTextArea safetyMessage = new JTextArea(4, 40);
+	private final RolePlanStatusBadges planBadges;
+	private final JPanel focusedSafetyFields = UiSupport.formPanel();
 	private final JPanel previewCards = new JPanel(new CardLayout());
+	private final JPanel reviewCards = new JPanel(new CardLayout());
+	private final JButton applyFocusedEditsButton = new JButton("Apply focused edits");
 	private final AsyncFormPreviewPanel safetyPreview = new AsyncFormPreviewPanel(new Ics208PdfRenderer());
 	private final AsyncFormPreviewPanel humanPreview = new AsyncFormPreviewPanel(new Ics206PdfRenderer());
 	private final AsyncFormPreviewPanel caninePreview = new AsyncFormPreviewPanel(new Ics206CaninePdfRenderer());
@@ -68,12 +72,17 @@ public class SafetyRolePanel extends JPanel {
 		this.controller = controller;
 		this.navigator = navigator;
 		binding = controller.captureIncidentBinding();
+		planBadges = new RolePlanStatusBadges(controller.getData(), "Safety", "Human medical", "Canine medical");
 		safetyReview = new PlanReviewStrip(controller, PlanReviewArea.SAFETY, this::applyFocusedEdits);
 		humanReview = new PlanReviewStrip(controller, PlanReviewArea.HUMAN_MEDICAL, () -> {
 		});
 		canineReview = new PlanReviewStrip(controller, PlanReviewArea.CANINE_MEDICAL, () -> {
 		});
-		add(new JLabel("SAFETY OFFICER | Focused live view — not an authorization boundary"), BorderLayout.NORTH);
+		JPanel header = new JPanel(new BorderLayout(6, 4));
+		header.add(new JLabel("SAFETY OFFICER | Focused live view — not an authorization boundary"),
+				BorderLayout.CENTER);
+		header.add(planBadges, BorderLayout.EAST);
+		add(header, BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
 		installFocusedDraftListeners();
 		showAll.addActionListener(event -> refreshFromModel());
@@ -115,6 +124,7 @@ public class SafetyRolePanel extends JPanel {
 			safetyMessage.setText(controller.getData().getForm208().getFreeText());
 			loadingFocusedEdits = false;
 		}
+		planBadges.refreshFromModel(controller.getData());
 		rebuildWorklist();
 		if (selected != null) {
 			worklist.setSelectedValue(selected, true);
@@ -180,22 +190,20 @@ public class SafetyRolePanel extends JPanel {
 		left.setBorder(javax.swing.BorderFactory.createTitledBorder("Responsible work"));
 		left.add(showAll, BorderLayout.NORTH);
 		left.add(new JScrollPane(worklist), BorderLayout.CENTER);
-		JPanel focused = UiSupport.formPanel();
-		UiSupport.addRow(focused, 0, "Safety Officer", safetyOfficer);
+		UiSupport.addRow(focusedSafetyFields, 0, "Safety Officer", safetyOfficer);
 		safetyMessage.setLineWrap(true);
 		safetyMessage.setWrapStyleWord(true);
-		UiSupport.addRow(focused, 1, "Focused safety message", new JScrollPane(safetyMessage));
+		UiSupport.addRow(focusedSafetyFields, 1, "Focused safety message", new JScrollPane(safetyMessage));
 		JPanel actions = new JPanel(new java.awt.GridLayout(0, 2, 4, 4));
-		JButton apply = new JButton("Apply focused edits");
-		apply.addActionListener(event -> applyFocusedEdits());
+		applyFocusedEditsButton.addActionListener(event -> applyFocusedEdits());
 		JButton source = new JButton("Open selected source");
 		source.addActionListener(event -> openSelectedSource());
-		actions.add(apply);
+		actions.add(applyFocusedEditsButton);
 		actions.add(source);
-		JPanel reviews = new JPanel(new java.awt.GridLayout(0, 1));
-		reviews.add(safetyReview);
-		reviews.add(humanReview);
-		reviews.add(canineReview);
+		reviewCards.add(safetyReview, SAFETY_PLAN);
+		reviewCards.add(humanReview, HUMAN_REVIEW);
+		reviewCards.add(canineReview, CANINE_REVIEW);
+		reviewCards.add(new JPanel(), "No plan review selected");
 		previewCards.add(safetyPreview, SAFETY_PLAN);
 		previewCards.add(humanPreview, HUMAN_REVIEW);
 		previewCards.add(caninePreview, CANINE_REVIEW);
@@ -205,11 +213,11 @@ public class SafetyRolePanel extends JPanel {
 		detail.setWrapStyleWord(true);
 		JPanel upper = new JPanel(new BorderLayout());
 		upper.add(new JScrollPane(detail), BorderLayout.CENTER);
-		upper.add(focused, BorderLayout.SOUTH);
+		upper.add(focusedSafetyFields, BorderLayout.SOUTH);
 		right.add(upper, BorderLayout.NORTH);
 		right.add(previewCards, BorderLayout.CENTER);
 		JPanel bottom = new JPanel(new BorderLayout());
-		bottom.add(reviews, BorderLayout.CENTER);
+		bottom.add(reviewCards, BorderLayout.CENTER);
 		bottom.add(actions, BorderLayout.SOUTH);
 		right.add(bottom, BorderLayout.SOUTH);
 		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right);
@@ -241,9 +249,15 @@ public class SafetyRolePanel extends JPanel {
 		}
 		String selected = worklist.getSelectedValue();
 		if (selected == null) {
+			focusedSafetyFields.setVisible(false);
+			applyFocusedEditsButton.setEnabled(false);
+			reviewCards.setVisible(false);
+			previewCards.setVisible(false);
+			cancelPreviews();
 			return;
 		}
 		AppData data = controller.getData();
+		String reviewCard = "No plan review selected";
 		if (SAFETY_PLAN.equals(selected)) {
 			long hazards = data.getSarTaskAssignments().stream().map(SarTaskAssignment::getHazardsObserved)
 					.filter(value -> value != null && !value.isBlank()).count();
@@ -251,14 +265,17 @@ public class SafetyRolePanel extends JPanel {
 					+ "\nReported task hazards: " + hazards
 					+ "\nMissing fields are shown as recorded and are not a sufficiency judgment.");
 			((CardLayout) previewCards.getLayout()).show(previewCards, SAFETY_PLAN);
+			reviewCard = SAFETY_PLAN;
 		} else if (HUMAN_REVIEW.equals(selected)) {
 			detail.setText("Human medical: " + data.getPlanReviewStatus(PlanReviewArea.HUMAN_MEDICAL).displayLabel()
 					+ "\nEmergency instruction: " + data.getMedicalPlan().getCall911Procedure());
 			((CardLayout) previewCards.getLayout()).show(previewCards, HUMAN_REVIEW);
+			reviewCard = HUMAN_REVIEW;
 		} else if (CANINE_REVIEW.equals(selected)) {
 			detail.setText("Canine medical: " + data.getPlanReviewStatus(PlanReviewArea.CANINE_MEDICAL).displayLabel()
 					+ "\nEmergency procedure: " + data.getCanineMedicalPlan().getEmergencyProcedures());
 			((CardLayout) previewCards.getLayout()).show(previewCards, CANINE_REVIEW);
+			reviewCard = CANINE_REVIEW;
 		} else if (selected.startsWith("Communications")) {
 			detail.setText("Communications: " + data.getPlanReviewStatus(PlanReviewArea.COMMUNICATIONS).displayLabel());
 		} else {
@@ -266,6 +283,10 @@ public class SafetyRolePanel extends JPanel {
 		}
 		boolean planSelected = SAFETY_PLAN.equals(selected) || HUMAN_REVIEW.equals(selected) || CANINE_REVIEW.equals(selected);
 		previewCards.setVisible(planSelected);
+		focusedSafetyFields.setVisible(SAFETY_PLAN.equals(selected));
+		applyFocusedEditsButton.setEnabled(SAFETY_PLAN.equals(selected));
+		((CardLayout) reviewCards.getLayout()).show(reviewCards, reviewCard);
+		reviewCards.setVisible(planSelected);
 		if (planSelected) {
 			previewSelected();
 		} else {

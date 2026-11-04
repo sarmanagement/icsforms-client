@@ -59,6 +59,7 @@ import java.text.ParseException;
  */
 public class OrganizationalChartPanel extends JPanel {
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 	private boolean loading;
 	private final JPanel incidentCommanderRowsPanel = new JPanel(new GridBagLayout());
 	private final JButton addIncidentCommanderButton = new JButton("Add");
@@ -191,6 +192,7 @@ public class OrganizationalChartPanel extends JPanel {
 	public OrganizationalChartPanel(AppController controller) {
 		super(new BorderLayout());
 		this.controller = controller;
+		editorCommitGuard = controller.createEditorCommitGuard();
 		RadioChannelPicker.install(agencyRepresentatives.table, 2, controller);
 		RadioChannelPicker.install(customPositionsTable, 3, controller);
 
@@ -268,7 +270,7 @@ public class OrganizationalChartPanel extends JPanel {
 
 		// Install autocomplete on all name fields.
 		installPersonAutocomplete(safetyOfficerNameField, safetyOfficerRadioField, safetyOfficerPhoneField,
-				name -> MedicalRoleSupport.setSafetyOfficerName(controller.getData(), name));
+				ignored -> updateSafetyOfficerAssignment());
 		installPersonAutocomplete(pioNameField, pioRadioField, pioPhoneField);
 		installPersonAutocomplete(liaisonNameField, liaisonRadioField, liaisonPhoneField);
 		installPersonAutocomplete(operationsSectionChiefField, operationsSectionChiefRadioField,
@@ -300,12 +302,8 @@ public class OrganizationalChartPanel extends JPanel {
 				name -> updateMedicalUnitLeaderAssignment());
 		watchRoleFields(List.of(medicalUnitLeaderNameField, medicalUnitLeaderRadioField,
 				medicalUnitLeaderPhoneField), this::updateMedicalUnitLeaderAssignment);
-		watchRoleFields(List.of(safetyOfficerNameField), () -> {
-			if (!loading) {
-				MedicalRoleSupport.setSafetyOfficerName(controller.getData(), safetyOfficerNameField.getText());
-				controller.markDirty();
-			}
-		});
+		watchRoleFields(List.of(safetyOfficerNameField, safetyOfficerRadioField, safetyOfficerPhoneField),
+				this::updateSafetyOfficerAssignment);
 		installPersonAutocomplete(timeUnitLeaderNameField, timeUnitLeaderRadioField, timeUnitLeaderPhoneField);
 		installPersonAutocomplete(procurementUnitLeaderNameField, procurementUnitLeaderRadioField,
 				procurementUnitLeaderPhoneField);
@@ -846,9 +844,23 @@ public class OrganizationalChartPanel extends JPanel {
 	 */
 	private void updateMedicalUnitLeaderAssignment() {
 		if (!loading) {
-			MedicalRoleSupport.setMedicalUnitLeader(controller.getData(), medicalUnitLeaderNameField.getText(),
-					medicalUnitLeaderRadioField.getText(), medicalUnitLeaderPhoneField.getText());
-			controller.markDirty();
+			editorCommitGuard.commitField(() -> MedicalRoleSupport.setMedicalUnitLeader(controller.getData(),
+					medicalUnitLeaderNameField.getText(), medicalUnitLeaderRadioField.getText(),
+					medicalUnitLeaderPhoneField.getText()));
+		}
+	}
+
+	/**
+	 * Saves the live Safety Officer role edit before any later panel flush.
+	 */
+	private void updateSafetyOfficerAssignment() {
+		if (!loading) {
+			editorCommitGuard.commitField(() -> {
+				MedicalRoleSupport.setSafetyOfficerName(controller.getData(), safetyOfficerNameField.getText());
+				OrganizationalChart chart = controller.getData().getOrganizationalChart();
+				chart.setSafetyOfficerRadio(safetyOfficerRadioField.getText());
+				chart.setSafetyOfficerPhone(safetyOfficerPhoneField.getText());
+			});
 		}
 	}
 
@@ -998,12 +1010,22 @@ public class OrganizationalChartPanel extends JPanel {
 		} finally {
 			loading = false;
 		}
+		editorCommitGuard.rebase();
 	}
 
 	/**
 	 * Applies field values and agency representatives to the model, committing pending representative edits.
+	 *
+	 * @return true when the editor commit succeeds.
 	 */
-	public void pushToModel() {
+	public boolean pushToModel() {
+		return editorCommitGuard.applyIfCurrent(this::flushToModel);
+	}
+
+	/**
+	 * Applies the Org Chart controls after validating the editor binding.
+	 */
+	private void flushToModel() {
 		OrganizationalChart chart = controller.getData().getOrganizationalChart();
 		chart.getAssignmentList().setAgencyRepresentatives(agencyRepresentatives.getEntries());
 		List<String> icNames = new ArrayList<>();

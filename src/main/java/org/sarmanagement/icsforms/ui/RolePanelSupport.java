@@ -30,8 +30,8 @@ final class RolePanelSupport {
 	static void banner(JLabel label, String title, String incident, String context) {
 		String name = incident == null ? "" : incident;
 		String compact = name.length() > 72 ? name.substring(0, 69) + "…" : name;
-		label.setText("<html><b>" + html(title) + "</b><br>Incident: " + html(compact)
-				+ "<br>" + html(context).replace(" | ", "<br>") + "</html>");
+		label.setText("<html><b>" + htmlText(title) + "</b><br>Incident: " + htmlText(compact)
+				+ "<br>" + htmlText(context).replace(" | ", "<br>") + "</html>");
 		label.setToolTipText(name);
 		label.getAccessibleContext().setAccessibleDescription(title + "; Incident: " + name + "; " + context);
 	}
@@ -55,7 +55,7 @@ final class RolePanelSupport {
 	 * @param text plain text.
 	 * @return escaped text.
 	 */
-	private static String html(String text) {
+	static String htmlText(String text) {
 		return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 }

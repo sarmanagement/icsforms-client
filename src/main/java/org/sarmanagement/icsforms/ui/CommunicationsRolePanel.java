@@ -44,8 +44,10 @@ public class CommunicationsRolePanel extends JPanel {
 	private final Consumer<WorkspaceDestination> navigator;
 	private final Runnable importCsv;
 	private final Runnable exportCsv;
+	private final Runnable addIcpLogEntry;
 	private final AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
+	private final RolePlanStatusBadges planBadges;
 	private final JTextField filter = new JTextField(22);
 	private final ChannelModel channelModel = new ChannelModel();
 	private final JTable channels = new JTable(channelModel);
@@ -77,12 +79,29 @@ public class CommunicationsRolePanel extends JPanel {
 	 */
 	public CommunicationsRolePanel(AppController controller, Consumer<WorkspaceDestination> navigator,
 			Runnable importCsv, Runnable exportCsv) {
+		this(controller, navigator, importCsv, exportCsv, () -> {
+		});
+	}
+
+	/**
+	 * Creates the Communications Unit panel with an explicit ICP activity-log action.
+	 *
+	 * @param controller incident controller.
+	 * @param navigator typed full-workspace navigator.
+	 * @param importCsv established native/CHIRP import workflow.
+	 * @param exportCsv established native export workflow.
+	 * @param addIcpLogEntry opens the shared ICP 214 entry workflow.
+	 */
+	public CommunicationsRolePanel(AppController controller, Consumer<WorkspaceDestination> navigator,
+			Runnable importCsv, Runnable exportCsv, Runnable addIcpLogEntry) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
 		this.navigator = navigator;
 		this.importCsv = importCsv;
 		this.exportCsv = exportCsv;
+		this.addIcpLogEntry = addIcpLogEntry;
 		binding = controller.captureIncidentBinding();
+		planBadges = new RolePlanStatusBadges(controller.getData(), "Communications");
 		review = new PlanReviewStrip(controller, PlanReviewArea.COMMUNICATIONS, this::commitFocusedEdits);
 		add(buildHeader(), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
@@ -113,6 +132,7 @@ public class CommunicationsRolePanel extends JPanel {
 		}
 		RolePanelSupport.banner(banner, "COMMUNICATIONS UNIT", data.getIncidentContext().getIncidentName(),
 				"Radio checks are explicit operator assertions; programming and coverage are not inferred");
+		planBadges.refreshFromModel(data);
 		channelModel.setRows(data.getForm205().getChannels());
 		restoreSelection(selectedId);
 		review.refreshFromModel();
@@ -154,6 +174,7 @@ public class CommunicationsRolePanel extends JPanel {
 	private JPanel buildHeader() {
 		JPanel header = new JPanel(new BorderLayout());
 		header.add(banner, BorderLayout.CENTER);
+		header.add(planBadges, BorderLayout.EAST);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JButton fullPlan = new JButton("Open full ICS 205");
 		fullPlan.addActionListener(event -> navigator.accept(WorkspaceDestination.of(WorkspaceId.ICS_205)));
@@ -161,9 +182,12 @@ public class CommunicationsRolePanel extends JPanel {
 		importButton.addActionListener(event -> importCsv.run());
 		JButton exportButton = new JButton("Export CSV…");
 		exportButton.addActionListener(event -> exportCsv.run());
+		JButton logEntry = new JButton("Add ICP 214 log entry…");
+		logEntry.addActionListener(event -> addIcpLogEntry.run());
 		actions.add(fullPlan);
 		actions.add(importButton);
 		actions.add(exportButton);
+		actions.add(logEntry);
 		header.add(actions, BorderLayout.SOUTH);
 		return header;
 	}

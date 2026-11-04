@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -35,12 +36,16 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JTabbedPane;
 import javax.swing.DefaultCellEditor;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.text.JTextComponent;
+import java.awt.EventQueue;
 import java.awt.GraphicsEnvironment;
+import java.awt.SecondaryLoop;
+import java.awt.Toolkit;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -79,18 +84,30 @@ class MainFrameDataRetentionTest {
 						for (EditorCase editor : cases) {
 							frame.openWorkspace(destination(frame, editor.destination().workspaceId()));
 							Object panel = editorPanel(frame, editor);
+							if (editor.panel().equals("ics214Panels")) {
+								assertSame(controller.getData().getActivityLogs().get(0),
+										((Ics214Panel) panel).getCurrentForm());
+							}
 							for (String name : editor.fields()) {
 								JTextComponent input = (JTextComponent) field(panel, name);
 								assertTrue(input.isEditable(), editor.panel() + "." + name);
 								input.setText(value(prefix, editor, name));
 							}
+							flushPendingSwingEvents();
 							frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.SHARED));
+							if (editor.panel().equals("ics214Panels")) {
+								assertEquals(value(prefix, editor, "nameField"),
+										controller.getData().getActivityLogs().get(0).getName());
+							}
 							frame.openWorkspace(destination(frame, editor.destination().workspaceId()));
 							assertEditor(frame, editor, prefix);
 						}
 						for (EditorCase editor : cases) {
 							assertEditor(frame, editor, prefix);
 						}
+						assertEquals(value(prefix, cases.stream().filter(testCase -> testCase.panel().equals("ics214Panels"))
+								.findFirst().orElseThrow(), "nameField"),
+								controller.getData().getActivityLogs().get(0).getName());
 						// Snapshot complete persisted content, not only the selected example fields.
 						JsonNode expected = content(controller.getData());
 						for (WorkspaceId workspace : WorkspaceId.values()) {
@@ -104,10 +121,12 @@ class MainFrameDataRetentionTest {
 						}
 						controller.save();
 						assertEquals(expected, content(store.load(id)), "Persisted content after " + prefix);
-						controller.setData(store.load(id));
+						AppData reloaded = store.load(id);
+						controller.setData(reloaded);
 						var refresh = MainFrame.class.getDeclaredMethod("refreshFromModel");
 						refresh.setAccessible(true);
 						refresh.invoke(frame);
+						assertEquals(expected, content(controller.getData()), "Reloaded model after " + prefix);
 						for (EditorCase editor : cases) {
 							assertEditor(frame, editor, prefix);
 						}
@@ -184,8 +203,17 @@ class MainFrameDataRetentionTest {
 					assertTrue(table.editCellAt(0, source.column));
 					((JTextComponent) table.getEditorComponent()).setText("Uncommitted value");
 					var flush = panel.getClass().getMethod("pushToModel");
-					var failure = assertThrows(java.lang.reflect.InvocationTargetException.class, () -> flush.invoke(panel));
-					assertInstanceOf(IllegalStateException.class, failure.getCause(), source.name());
+					if (flush.getReturnType() == boolean.class) {
+						try {
+							assertFalse((boolean) flush.invoke(panel), source.name());
+						} catch (java.lang.reflect.InvocationTargetException failure) {
+							assertInstanceOf(IllegalStateException.class, failure.getCause(), source.name());
+						}
+					} else {
+						var failure = assertThrows(java.lang.reflect.InvocationTargetException.class,
+								() -> flush.invoke(panel));
+						assertInstanceOf(IllegalStateException.class, failure.getCause(), source.name());
+					}
 					assertTrue(table.isEditing(), source.name());
 					assertEquals("Uncommitted value", ((JTextComponent) table.getEditorComponent()).getText());
 					assertEquals(previous, source.persisted(data));
@@ -193,6 +221,78 @@ class MainFrameDataRetentionTest {
 					flush.invoke(panel);
 					assertFalse(table.isEditing());
 					assertEquals("Uncommitted value", source.persisted(data));
+				} catch (Exception exception) {
+					throw new AssertionError(exception);
+				} finally {
+					((Timer) field(field(frame, "controller"), "autosaveTimer")).stop();
+					frame.dispose();
+				}
+			});
+		}
+	}
+
+	@Test
+	void staleFullEditorCannotOverwriteSharedCommitAndLiveRefreshRetainsDraftSelection() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			AppData data = populatedIncident(IncidentMode.GENERIC);
+			data.getForm202().setCommandEmphasis("Original plan text");
+			var id = store.create(data);
+			SwingUtilities.invokeAndWait(() -> {
+				MainFrame frame = new MainFrame(data, store, id, new PdfExportService(),
+						new IncidentValidator(), directory);
+				try {
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_202));
+					JTextArea editor = (JTextArea) field(field(frame, "ics202Panel"), "commandEmphasisArea");
+					setField(frame, "lastFocusedEditor", editor);
+					AppController controller = (AppController) field(frame, "controller");
+					editor.setText("Partial stale narrative");
+					editor.select(2, 9);
+					JTable objectives = (JTable) field(field(frame, "ics202Panel"), "objectivesTable");
+					assertTrue(objectives.editCellAt(0, 1));
+					JTextField objectiveEditor = (JTextField) objectives.getEditorComponent();
+					objectiveEditor.setText("Partial objective cell");
+					objectiveEditor.select(1, 9);
+					setField(frame, "lastFocusedEditor", objectiveEditor);
+
+					assertTrue(controller.commitIfCurrent(controller.captureIncidentBinding(),
+							() -> {
+								controller.getData().getForm202().setCommandEmphasis("New shared plan text");
+								controller.getData().getForm202().getStructuredObjectives().get(0)
+										.setText("New shared objective");
+							}));
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_201));
+
+					assertTrue(objectives.isEditing());
+					assertSame(field(frame, "ics202Panel"),
+							((JTabbedPane) field(frame, "tabs")).getSelectedComponent());
+					assertEquals("New shared plan text", data.getForm202().getCommandEmphasis());
+					assertEquals("New shared objective",
+							data.getForm202().getStructuredObjectives().get(0).getText());
+
+					var refresh = MainFrame.class.getDeclaredMethod("refreshEditorsAfterCommit",
+							AppController.IncidentChange.class);
+					refresh.setAccessible(true);
+					refresh.invoke(frame, new AppController.IncidentChange(controller.captureIncidentBinding(), 1,
+							AppController.IncidentChangeKind.MODEL_COMMITTED));
+
+					assertEquals("Partial stale narrative", editor.getText());
+					assertEquals(2, editor.getSelectionStart());
+					assertEquals(9, editor.getSelectionEnd());
+					assertTrue(objectives.isEditing());
+					JTextField restoredObjectiveEditor = (JTextField) objectives.getEditorComponent();
+					assertSame(restoredObjectiveEditor, field(frame, "lastFocusedEditor"));
+					assertEquals("Partial objective cell", restoredObjectiveEditor.getText());
+					assertEquals(1, restoredObjectiveEditor.getSelectionStart());
+					assertEquals(9, restoredObjectiveEditor.getSelectionEnd());
+					assertEquals("New shared plan text", controller.getData().getForm202().getCommandEmphasis());
+					assertEquals("New shared objective",
+							controller.getData().getForm202().getStructuredObjectives().get(0).getText());
+
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_201));
+					assertEquals("New shared plan text", controller.getData().getForm202().getCommandEmphasis());
+					assertEquals("New shared objective",
+							controller.getData().getForm202().getStructuredObjectives().get(0).getText());
 				} catch (Exception exception) {
 					throw new AssertionError(exception);
 				} finally {
@@ -403,6 +503,32 @@ class MainFrameDataRetentionTest {
 		} catch (ReflectiveOperationException exception) {
 			throw new AssertionError(exception);
 		}
+	}
+
+	/**
+	 * Sets a private view-state field for an integration test.
+	 *
+	 * @param owner object declaring the field.
+	 * @param name declared field name.
+	 * @param value value to install.
+	 */
+	private static void setField(Object owner, String name, Object value) {
+		try {
+			Field declared = owner.getClass().getDeclaredField(name);
+			declared.setAccessible(true);
+			declared.set(owner, value);
+		} catch (ReflectiveOperationException exception) {
+			throw new AssertionError(exception);
+		}
+	}
+
+	/**
+	 * Processes queued live-refresh notifications while a test currently owns the EDT.
+	 */
+	private static void flushPendingSwingEvents() {
+		SecondaryLoop loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
+		EventQueue.invokeLater(loop::exit);
+		assertTrue(loop.enter());
 	}
 
 	/**

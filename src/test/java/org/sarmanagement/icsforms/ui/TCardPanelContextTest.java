@@ -4,6 +4,7 @@ package org.sarmanagement.icsforms.ui;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
@@ -11,6 +12,7 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComponent;
 import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
@@ -122,6 +124,41 @@ class TCardPanelContextTest {
 		}
 		assertSame(table, requested.get().source());
 		assertEquals(expected.getPersonName(), requested.get().resourceId());
+	}
+
+	@Test
+	void plannedTaskGroupMenuOffersTaskActionsAndAvailableResourcePicker() throws Exception {
+		TCardPanel panel = panel(List.of());
+		SarTaskAssignment task = new SarTaskAssignment();
+		task.setAssignmentId("assignment-1");
+		task.setTaskLifecycleStatus("planned");
+		AtomicReference<String> requestedAction = new AtomicReference<>();
+		panel.setOnEditSarAssignmentRequest(id -> requestedAction.set("edit:" + id));
+		panel.setTaskGroupActionHandlers((source, id) -> requestedAction.set("log:" + id),
+				(source, id) -> List.of(new JMenuItem("Log task departed staging")),
+				id -> requestedAction.set("status:" + id),
+				(source, id) -> requestedAction.set("resources:" + id));
+		Method build = TCardPanel.class.getDeclaredMethod("buildTaskGroupPopupMenu", String.class,
+				SarTaskAssignment.class, boolean.class);
+		build.setAccessible(true);
+
+		JPopupMenu popup = (JPopupMenu) build.invoke(panel, "assignment-1", task, true);
+		List<JMenuItem> actions = java.util.Arrays.stream(popup.getComponents()).filter(JMenuItem.class::isInstance)
+				.map(JMenuItem.class::cast).toList();
+		assertEquals(List.of("Edit task…", "Make a log entry…", "Change status…",
+				"Log task departed staging", "Add resources…"), actions.stream().map(JMenuItem::getText).toList());
+		actions.get(0).doClick();
+		assertEquals("edit:assignment-1", requestedAction.get());
+		actions.get(1).doClick();
+		assertEquals("log:assignment-1", requestedAction.get());
+		actions.get(2).doClick();
+		assertEquals("status:assignment-1", requestedAction.get());
+		actions.get(4).doClick();
+		assertEquals("resources:assignment-1", requestedAction.get());
+
+		JPopupMenu assignedMenu = (JPopupMenu) build.invoke(panel, "assignment-1", task, false);
+		assertTrue(java.util.Arrays.stream(assignedMenu.getComponents()).filter(JMenuItem.class::isInstance)
+				.map(JMenuItem.class::cast).noneMatch(item -> "Add resources…".equals(item.getText())));
 	}
 
 	/**

@@ -33,6 +33,7 @@ public class Ics201Panel extends JPanel {
 	private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 	private final JTabbedPane pages = new JTabbedPane();
 	private final JLabel phaseNoteLabel = new JLabel();
 	private final JTextField incidentNameField = UiSupport.textField();
@@ -67,6 +68,7 @@ public class Ics201Panel extends JPanel {
 	public Ics201Panel(AppController controller) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
+		editorCommitGuard = controller.createEditorCommitGuard();
 
 		incidentNameField.setEditable(false);
 		configureNoteLabel();
@@ -92,10 +94,22 @@ public class Ics201Panel extends JPanel {
 		setPreparerValues(form, context);
 		refreshOrgChart();
 		refreshPhaseNote();
+		editorCommitGuard.rebase();
 	}
 
-	/** Applies field values to the model. */
-	public void pushToModel() {
+	/**
+	 * Applies field values to the model when the editor's incident and revision are current.
+	 *
+	 * @return true when the draft was committed.
+	 */
+	public boolean pushToModel() {
+		return editorCommitGuard.commit(AppController.LinkSource.NONE, this::flushToModel);
+	}
+
+	/**
+	 * Writes the ICS 201 controls after the editor binding has been validated.
+	 */
+	private void flushToModel() {
 		UiSupport.commitTableEdits(actionTable, resourceSummaryTable);
 		Ics201Form form = controller.getData201();
 		IncidentContext context = controller.getData().getIncidentContext();

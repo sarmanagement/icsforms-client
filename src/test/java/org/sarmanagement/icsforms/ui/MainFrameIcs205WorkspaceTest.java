@@ -26,9 +26,12 @@ import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.EventQueue;
 import java.awt.GraphicsEnvironment;
 import java.awt.Dialog;
 import java.awt.Dimension;
+import java.awt.SecondaryLoop;
+import java.awt.Toolkit;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -53,8 +56,6 @@ class MainFrameIcs205WorkspaceTest {
 				MainFrame frame = new MainFrame(data, store, id, new PdfExportService(new Ics205PdfRenderer()),
 						new IncidentValidator(), directory);
 				AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
-				var preferences = (java.util.prefs.Preferences) Ics205PanelTest.field(frame, "userPreferences");
-				String previousDashboard = preferences.get("workspace-dashboard", null);
 				try {
 					frame.setVisible(true);
 					JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame, "tabs");
@@ -86,12 +87,14 @@ class MainFrameIcs205WorkspaceTest {
 					Component radioEditor = tabs.getSelectedComponent();
 					JTextArea instructions = (JTextArea) Ics205PanelTest.field(radioEditor, "instructions");
 					instructions.setText("Pending typed navigation");
+					flushPendingSwingEvents();
 					tabs.setTitleAt(tabs.getSelectedIndex(), "Renamed radio plan");
 					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_204));
 					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_205));
 					assertSame(radioEditor, tabs.getSelectedComponent());
 					assertEquals("Pending typed navigation", data.getForm205().getSpecialInstructions());
 					instructions.setText("Pending View navigation");
+					flushPendingSwingEvents();
 					tabs.setTitleAt(tabs.getSelectedIndex(), "Renamed before toggle");
 					toggle.doClick();
 					toggle.doClick();
@@ -100,24 +103,15 @@ class MainFrameIcs205WorkspaceTest {
 					refresh(frame);
 					assertSame(radioEditor, tabs.getSelectedComponent());
 					assertEquals("ICS 205", tabs.getTitleAt(tabs.getSelectedIndex()));
-					instructions.setText("Pending dashboard navigation");
-					tabs.setTitleAt(tabs.getSelectedIndex(), "Renamed before dashboard");
-					try {
-						var select = MainFrame.class.getDeclaredMethod("selectDashboard", MainFrame.Dashboard.class);
-						select.setAccessible(true);
-						select.invoke(frame, MainFrame.Dashboard.COMMUNICATIONS);
-					} catch (ReflectiveOperationException exception) {
-						throw new AssertionError(exception);
-					}
-					assertEquals("ICS 205", tabs.getTitleAt(0));
+					instructions.setText("Pending stable workspace navigation");
+					flushPendingSwingEvents();
+					tabs.setTitleAt(tabs.getSelectedIndex(), "Renamed before workspace navigation");
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_204));
+					assertEquals("Pending stable workspace navigation", data.getForm205().getSpecialInstructions());
+					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_205));
 					assertSame(radioEditor, tabs.getSelectedComponent());
-					assertEquals("Pending dashboard navigation", data.getForm205().getSpecialInstructions());
+					assertEquals("ICS 205", tabs.getTitleAt(tabs.getSelectedIndex()));
 				} finally {
-					if (previousDashboard == null) {
-						preferences.remove("workspace-dashboard");
-					} else {
-						preferences.put("workspace-dashboard", previousDashboard);
-					}
 					((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
 					frame.dispose();
 				}
@@ -202,6 +196,15 @@ class MainFrameIcs205WorkspaceTest {
 		} catch (ReflectiveOperationException exception) {
 			throw new AssertionError(exception);
 		}
+	}
+
+	/**
+	 * Processes queued live-refresh notifications while a test currently owns the EDT.
+	 */
+	private static void flushPendingSwingEvents() {
+		SecondaryLoop loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
+		EventQueue.invokeLater(loop::exit);
+		assertTrue(loop.enter());
 	}
 
 	/**

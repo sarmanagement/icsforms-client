@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.ActivityEventType;
+import org.sarmanagement.icsforms.model.ActivityEventTypeCatalog;
 import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics204Form;
@@ -43,7 +44,9 @@ import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
+import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.text.JTextComponent;
 import javax.swing.JComboBox;
 import javax.swing.JFormattedTextField;
 import javax.swing.SpinnerNumberModel;
@@ -54,7 +57,10 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.KeyboardFocusManager;
 import java.awt.event.KeyEvent;
+import java.awt.event.KeyAdapter;
+import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.DateTimeException;
@@ -66,7 +72,6 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 import java.util.Set;
 import java.util.UUID;
@@ -84,9 +89,14 @@ public class MainFrame extends JFrame {
 	private static final String ACTION_TRACKER_GROUP = "Open Action Tracker";
 	private static final String COMMUNICATIONS_GROUP = "Communications Plan (ICS 205)";
 	private static final String ICS_215_GROUP = "Operational Planning Worksheet (ICS 215)";
-	private static final String SAFETY_DASHBOARD_GROUP = "Safety Dashboard";
-	private static final String DASHBOARD_PREFERENCE = "workspace-dashboard";
+	private static final String SAFETY_DASHBOARD_GROUP = "Safety Overview";
 	private static final String DESCRIPTIVE_TABS_PREFERENCE = "descriptive-workspace-tabs";
+	private static final String SHOW_OBJECTIVE_ASSESSMENTS_PREFERENCE = "show-objective-assessments";
+	private static final List<WorkspaceId> WORKSPACE_ORDER = List.of(WorkspaceId.SHARED, WorkspaceId.ORG_CHART,
+			WorkspaceId.ICS_201, WorkspaceId.ICS_202, WorkspaceId.ICS_204, WorkspaceId.ICS_215,
+			WorkspaceId.ICS_205, WorkspaceId.MEDICAL, WorkspaceId.SAFETY, WorkspaceId.SAFETY_OVERVIEW,
+			WorkspaceId.SAR_TASKS, WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ACTIVITY_LOG, WorkspaceId.CLUE_LOG,
+			WorkspaceId.TCARDS);
 	/** Tab group for T-Card (ICS 219) resource status tabs. */
 	private static final String T_CARDS_GROUP = "T-Cards";
 	/**
@@ -119,6 +129,7 @@ public class MainFrame extends JFrame {
 	private final JTabbedPane tabs = new JTabbedPane();
 	private final Preferences userPreferences = Preferences.userNodeForPackage(MainFrame.class);
 	private boolean descriptiveTabs = userPreferences.getBoolean(DESCRIPTIVE_TABS_PREFERENCE, false);
+	private boolean showObjectiveAssessments = userPreferences.getBoolean(SHOW_OBJECTIVE_ASSESSMENTS_PREFERENCE, false);
 	private final Map<WorkspaceId, WorkspaceDefinition> workspaces = new EnumMap<>(WorkspaceId.class);
 	private final Map<Component, WorkspaceDefinition> tabWorkspaces = new IdentityHashMap<>();
 	private final List<WorkspaceId> registeredWorkspaceIds = new ArrayList<>();
@@ -132,10 +143,32 @@ public class MainFrame extends JFrame {
 	private boolean safetyDashboardManuallyVisible;
 	private IapPhase lastKnownPhase;
 	private AppData lastRefreshedIncident;
-	private Dashboard activeDashboard = Dashboard.from(
-			Preferences.userNodeForPackage(MainFrame.class).get(DASHBOARD_PREFERENCE, "IC/ICP"));
 	private final Set<Ics214Form> closedLogForms = new HashSet<>();
 	private AppData lastData;
+	private AppController.EditorCommitBinding editorCommitBinding;
+	private AppController.IncidentChangeSubscription editorChangeSubscription;
+	private Component lastFocusedEditor;
+	private final Map<JTextComponent, String> editorTextBaselines = new IdentityHashMap<>();
+	private final List<Component> pendingDraftComponents = new ArrayList<>();
+	private final Map<Component, javax.swing.event.DocumentListener> pendingDraftDocumentListeners =
+			new IdentityHashMap<>();
+	private final KeyAdapter pendingDraftKeyListener = new KeyAdapter() {
+		/** Rebinds a preserved draft after the operator edits it against the latest model. */
+		@Override
+		public void keyTyped(java.awt.event.KeyEvent event) {
+			confirmPendingDraft(event.getComponent());
+		}
+	};
+	private boolean restoringEditorState;
+	private boolean restoringTabSelection;
+	private boolean pendingEditorConflict;
+	private final PropertyChangeListener focusOwnerListener = event -> {
+		Object owner = event.getNewValue();
+		if (!restoringEditorState && owner instanceof JTextComponent text
+				&& javax.swing.SwingUtilities.isDescendingFrom(text, this)) {
+			lastFocusedEditor = text;
+		}
+	};
 
 	/**
 	 * Creates the main application frame.
@@ -201,6 +234,7 @@ public class MainFrame extends JFrame {
 		this.medicalPlanPanel = new Ics206Panel(controller);
 		this.canineMedicalPanel = new CanineMedicalPanel(controller, defaultDirectory);
 		this.medicalWorkspacePanel = new MedicalWorkspacePanel(medicalPlanPanel, canineMedicalPanel);
+		medicalWorkspacePanel.setAfterPlanCommit(this::rebaseEditorCommitBinding);
 		this.sarTaskPanel = new SarTaskPanel(controller);
 		this.clueLogPanel = new ClueLogPanel(controller);
 		this.openActionTrackerPanel = new OpenActionTrackerPanel(controller);
@@ -208,7 +242,11 @@ public class MainFrame extends JFrame {
 		this.safetyPanel = new SafetyPanel(controller);
 		this.safetyDashboardPanel = new SafetyDashboardPanel(this::openWorkspace);
 		controller.setPlanReuseEditorCallbacks(
-				() -> pushToModel(linkSourceForTab(tabs.getSelectedIndex())), this::refreshFromModel);
+				() -> {
+					if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+						throw new IllegalStateException("Refresh the active editor before reusing a plan.");
+					}
+				}, this::refreshFromModel);
 		safetyPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		medicalPlanPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		canineMedicalPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
@@ -225,6 +263,10 @@ public class MainFrame extends JFrame {
 		sarTaskPanel.setOnAddLogEntryRequest((source, assignment) -> showAddLogEntry(
 				new LogEntryContext(source, assignment.getTaskId(), assignment.getAssignmentId(),
 						org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(assignment))));
+		sarTaskPanel.setOnQuickLogRequest(this::showQuickLogEntry);
+		tCardPanel.setTaskGroupActionHandlers(sarTaskPanel::openLogEntryForAssignment,
+				sarTaskPanel::quickLogItemsForAssignment, sarTaskPanel::openTaskStatusDialogByAssignmentId,
+				sarTaskPanel::addResourcesToPlannedAssignment);
 		tCardPanel.setOnAddLogEntryRequest(this::showAddLogEntry);
 		groupVisible.put(CORE_GROUP, true);
 		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
@@ -235,8 +277,7 @@ public class MainFrame extends JFrame {
 		groupVisible.put(COMMUNICATIONS_GROUP, controller.getData().isIcs205Enabled());
 		groupVisible.put(ICS_215_GROUP, controller.getData().isIcs215Enabled());
 		medicalWorkspacePanel.setCanineVisible(controller.getData().isCanineMedicalWorkspaceEligible());
-		groupVisible.put(SAFETY_DASHBOARD_GROUP,
-				safetyDashboardVisible(activeDashboard, safetyDashboardManuallyVisible));
+		groupVisible.put(SAFETY_DASHBOARD_GROUP, safetyDashboardManuallyVisible);
 		registerWorkspace(WorkspaceId.SHARED, incidentContextPanel, AppController.LinkSource.SHARED, CORE_GROUP);
 		registerWorkspace(WorkspaceId.ORG_CHART, organizationalChartPanel, AppController.LinkSource.ORG_CHART,
 				CORE_GROUP);
@@ -258,6 +299,7 @@ public class MainFrame extends JFrame {
 		registerWorkspace(WorkspaceId.TCARDS, tCardPanel, AppController.LinkSource.NONE, T_CARDS_GROUP);
 		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		addWindowListener(new java.awt.event.WindowAdapter() {
+			/** Saves pending edits before the window closes. */
 			/** {@inheritDoc} */
 			@Override
 			public void windowClosing(java.awt.event.WindowEvent event) {
@@ -270,6 +312,8 @@ public class MainFrame extends JFrame {
 				closeOwnedResources();
 			}
 		});
+		KeyboardFocusManager.getCurrentKeyboardFocusManager()
+				.addPropertyChangeListener("focusOwner", focusOwnerListener);
 		setPreferredSize(new Dimension(1120, 820));
 		setJMenuBar(createMenuBar(defaultDirectory));
 		setLayout(new BorderLayout(8, 8));
@@ -277,7 +321,7 @@ public class MainFrame extends JFrame {
 		JPanel content = new JPanel(new BorderLayout(8, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 		tabs.addChangeListener(event -> {
-			if (rebuildingTabs) {
+			if (rebuildingTabs || restoringTabSelection) {
 				return;
 			}
 
@@ -286,7 +330,12 @@ public class MainFrame extends JFrame {
 				return;
 			}
 			if (lastSelectedTabIndex >= 0) {
-				pushToModel(linkSourceForTab(lastSelectedTabIndex));
+				if (!pushToModel(linkSourceForTab(lastSelectedTabIndex))) {
+					restoringTabSelection = true;
+					tabs.setSelectedIndex(lastSelectedTabIndex);
+					restoringTabSelection = false;
+					return;
+				}
 			}
 			refreshFromModel();
 			lastSelectedTabIndex = tabs.getSelectedIndex();
@@ -297,57 +346,24 @@ public class MainFrame extends JFrame {
 		add(content, BorderLayout.CENTER);
 		add(validationLabel, BorderLayout.SOUTH);
 		refreshFromModel();
+		editorChangeSubscription = controller.addIncidentChangeListener(this::refreshEditorsAfterCommit);
 		lastSelectedTabIndex = tabs.getSelectedIndex();
 		pack();
 		setLocationRelativeTo(null);
 	}
 
-	/**
-	 * Builds a radio-item dashboard submenu for the View menu.
-	 *
-	 * @param selected active dashboard.
-	 * @param selector callback for a new dashboard selection.
-	 * @return dashboard submenu.
-	 */
-	static JMenu createDashboardMenu(Dashboard selected, Consumer<Dashboard> selector) {
-		JMenu menu = new JMenu("Dashboard");
-		ButtonGroup group = new ButtonGroup();
-		for (Dashboard dashboard : Dashboard.values()) {
-			String label = dashboard == Dashboard.IC_ICP ? dashboard.label() + " (default)" : dashboard.label();
-			JRadioButtonMenuItem item = new JRadioButtonMenuItem(label, dashboard == selected);
-			item.addActionListener(event -> selector.accept(dashboard));
-			group.add(item);
-			menu.add(item);
+	/** Releases live-editor listeners before disposing the frame. */
+	@Override
+	public void dispose() {
+		if (editorChangeSubscription != null) {
+			editorChangeSubscription.close();
+			editorChangeSubscription = null;
 		}
-		return menu;
-	}
-
-	/**
-	 * Determines whether the Safety Overview remains available in the current view.
-	 *
-	 * @param dashboard active role dashboard.
-	 * @param manuallyVisible whether the operator opened the overview from View.
-	 * @return true for the Safety Officer dashboard or explicit operator visibility.
-	 */
-	static boolean safetyDashboardVisible(Dashboard dashboard, boolean manuallyVisible) {
-		return manuallyVisible || dashboard == Dashboard.SAFETY_OFFICER;
-	}
-
-	/**
-	 * Applies a dashboard choice while retaining all shared editor instances.
-	 *
-	 * @param selected dashboard chosen in View > Dashboard.
-	 */
-	private void selectDashboard(Dashboard selected) {
-		if (selected == null || selected == activeDashboard) {
-			return;
-		}
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
-		activeDashboard = selected;
-		userPreferences.put(DASHBOARD_PREFERENCE, selected.label());
-		groupVisible.put(SAFETY_DASHBOARD_GROUP,
-				safetyDashboardVisible(activeDashboard, safetyDashboardManuallyVisible));
-		rebuildVisibleTabs();
+		KeyboardFocusManager.getCurrentKeyboardFocusManager()
+				.removePropertyChangeListener("focusOwner", focusOwnerListener);
+		clearPendingDraft();
+		editorTextBaselines.clear();
+		super.dispose();
 	}
 
 	/**
@@ -390,8 +406,7 @@ public class MainFrame extends JFrame {
 		JMenuItem operationsRolePanel = new JMenuItem("Operations");
 		operationsRolePanel.addActionListener(event -> openOperationsRolePanel());
 		JMenuItem incidentCommandRolePanel = new JMenuItem("Incident Command");
-		incidentCommandRolePanel.addActionListener(
-				event -> RolePanelWindows.openIncidentCommand(this, controller, this::openWorkspace));
+		incidentCommandRolePanel.addActionListener(event -> openIncidentCommandRolePanel());
 		JMenuItem communicationsRolePanel = new JMenuItem("Communications Unit");
 		communicationsRolePanel.addActionListener(event -> openCommunicationsRolePanel());
 		rolePanelsMenu.add(incidentCommandRolePanel);
@@ -403,9 +418,12 @@ public class MainFrame extends JFrame {
 		viewMenu.addSeparator();
 		JMenuItem activityTimelineItem = new JMenuItem("ICP Activity Timeline…");
 		activityTimelineItem.addActionListener(event -> {
-			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+				return;
+			}
 			new IcpActivityTimelineDialog(this, controller, this::showAddLogEntry,
-					this::openTimelineAssignment).setVisible(true);
+					this::openTimelineAssignment, request -> showAddLogEntry(request.context(), request.eventTypeId(),
+							request.activity())).setVisible(true);
 		});
 		viewMenu.add(activityTimelineItem);
 		viewMenu.addSeparator();
@@ -419,7 +437,6 @@ public class MainFrame extends JFrame {
 				event -> CanineMedicalReferenceWindow.open(this, controller, this::openWorkspace));
 		viewMenu.add(humanMedicalReference);
 		viewMenu.add(canineMedicalReference);
-		viewMenu.add(createDashboardMenu(activeDashboard, this::selectDashboard));
 		viewMenu.addSeparator();
 		JMenu openLogInNewWindowMenu = new JMenu("Open Log in New Window");
 		openLogInNewWindowMenu.setMnemonic(KeyEvent.VK_O);
@@ -472,7 +489,9 @@ public class MainFrame extends JFrame {
 		saveItem.setMnemonic(KeyEvent.VK_S);
 		saveItem.addActionListener(event -> {
 			AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-			pushToModel(source);
+			if (!pushToModel(source)) {
+				return;
+			}
 			try {
 				controller.save(source);
 				refreshStatus();
@@ -485,7 +504,9 @@ public class MainFrame extends JFrame {
 		saveAsItem.setMnemonic(KeyEvent.VK_A);
 		saveAsItem.addActionListener(event -> chooseFile(defaultDirectory, true, path -> {
 			AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-			pushToModel(source);
+			if (!pushToModel(source)) {
+				return;
+			}
 			try {
 				controller.saveAs(path, source);
 				refreshStatus();
@@ -561,7 +582,9 @@ public class MainFrame extends JFrame {
 		viewMenu.add(openCaninePlanItem);
 		communicationsPlanItem.setSelected(controller.getData().isIcs205Enabled());
 		communicationsPlanItem.addActionListener(event -> {
-			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+				return;
+			}
 			controller.getData().setIcs205Enabled(communicationsPlanItem.isSelected());
 			controller.markDirty();
 			refreshFromModel();
@@ -572,7 +595,9 @@ public class MainFrame extends JFrame {
 		viewMenu.add(communicationsPlanItem);
 		ics215Item.setSelected(controller.getData().isIcs215Enabled());
 		ics215Item.addActionListener(event -> {
-			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+				return;
+			}
 			controller.getData().setIcs215Enabled(ics215Item.isSelected());
 			controller.markDirty();
 			refreshFromModel();
@@ -667,6 +692,15 @@ public class MainFrame extends JFrame {
 		JMenuItem medicalRoutingSettingsItem = new JMenuItem("Medical Routing (OpenRouteService)…");
 		medicalRoutingSettingsItem.addActionListener(event -> openMedicalRoutingSettingsDialog());
 		configMenu.add(medicalRoutingSettingsItem);
+		JCheckBoxMenuItem showObjectiveAssessmentsItem = new JCheckBoxMenuItem("Show objective assessments",
+				showObjectiveAssessments);
+		showObjectiveAssessmentsItem.getAccessibleContext().setAccessibleName("Show objective assessments");
+		showObjectiveAssessmentsItem.addActionListener(event -> {
+			showObjectiveAssessments = showObjectiveAssessmentsItem.isSelected();
+			userPreferences.putBoolean(SHOW_OBJECTIVE_ASSESSMENTS_PREFERENCE, showObjectiveAssessments);
+			RolePanelWindows.setObjectiveAssessmentsVisible(controller.getData(), showObjectiveAssessments);
+		});
+		configMenu.add(showObjectiveAssessmentsItem);
 
 		JMenu modeMenu = new JMenu("Incident Mode");
 		modeMenu.setMnemonic(KeyEvent.VK_M);
@@ -736,8 +770,8 @@ public class MainFrame extends JFrame {
 			controller.getData().setUseSystemTimeZone(true);
 			applyConfiguredTimeZone();
 			refreshTimeZoneLabels.run();
-			refreshFromModel();
 			controller.markDirty();
+			refreshFromModel();
 		});
 		specifiedTimeZoneItem.addActionListener(e -> {
 			String current = controller.getData().getConfiguredTimeZoneId();
@@ -761,8 +795,8 @@ public class MainFrame extends JFrame {
 			controller.getData().setConfiguredTimeZoneId(chosen.trim());
 			applyConfiguredTimeZone();
 			refreshTimeZoneLabels.run();
-			refreshFromModel();
 			controller.markDirty();
+			refreshFromModel();
 		});
 		timeZoneGroup.add(systemTimeZoneItem);
 		timeZoneGroup.add(specifiedTimeZoneItem);
@@ -828,11 +862,77 @@ public class MainFrame extends JFrame {
 				() -> openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_215)));
 	}
 
+	/** Opens Incident Command with the established assignment, log, and status workflows. */
+	private void openIncidentCommandRolePanel() {
+		JFrame frame = RolePanelWindows.openIncidentCommand(this, controller, this::openWorkspace,
+				new IncidentCommandRolePanel.AssignmentActions() {
+					/** {@inheritDoc} */
+					@Override
+					public void openIcs204(String assignmentId) {
+						openIcs204EditorForAssignment(assignmentId);
+					}
+
+					/** {@inheritDoc} */
+					@Override
+					public void openSarTask(String assignmentId) {
+						openSarTaskEditorForAssignment(assignmentId);
+					}
+
+					/** {@inheritDoc} */
+					@Override
+					public void addLogEntry(String assignmentId) {
+						openAssignmentLogEntry(assignmentId);
+					}
+
+					/** {@inheritDoc} */
+					@Override
+					public void changeStatus(String assignmentId) {
+						sarTaskPanel.openTaskStatusDialogByAssignmentId(assignmentId);
+					}
+
+					/** {@inheritDoc} */
+					@Override
+					public void debrief(String assignmentId) {
+						sarTaskPanel.openDebriefByAssignmentId(assignmentId);
+					}
+
+					/** {@inheritDoc} */
+					@Override
+					public org.sarmanagement.icsforms.model.ResourceAssignment createSupportingAssignment(
+							String objectiveId) {
+						return ics204Panel.openNewAssignmentEditorForObjective(objectiveId);
+					}
+				});
+		((IncidentCommandRolePanel) frame.getContentPane()).setShowObjectiveAssessments(showObjectiveAssessments);
+	}
+
+	/**
+	 * Opens the shared activity entry for an assignment in its task context.
+	 *
+	 * @param assignmentId stable ICS 204 assignment identity.
+	 */
+	private void openAssignmentLogEntry(String assignmentId) {
+		var task = controller.getData().getSarTaskAssignments().stream()
+				.filter(candidate -> assignmentId.equals(candidate.getAssignmentId())).findFirst().orElse(null);
+		if (task != null) {
+			showAddLogEntry(new LogEntryContext(sarTaskPanel, task.getTaskId(), task.getAssignmentId(),
+					org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(task)));
+			return;
+		}
+		var assignment = controller.getAssignmentResources().stream()
+				.filter(candidate -> assignmentId.equals(candidate.getAssignmentId())).findFirst().orElse(null);
+		if (assignment != null) {
+			showAddLogEntry(new LogEntryContext(ics204Panel, "", assignment.getAssignmentId(),
+					assignment.getResourceIdentifier()));
+		}
+	}
+
 	/** Opens Communications while delegating import/export to established dialogs. */
 	private void openCommunicationsRolePanel() {
 		RolePanelWindows.openCommunications(this, controller, this::openWorkspace,
 				() -> new RadioChannelCsvDialogs(ics205Panel, controller).importCsv(),
-				() -> new RadioChannelCsvDialogs(ics205Panel, controller).exportCsv(false));
+				() -> new RadioChannelCsvDialogs(ics205Panel, controller).exportCsv(false),
+				() -> showAddLogEntry(new LogEntryContext(this, "", "", "")));
 	}
 
 	/**
@@ -851,7 +951,6 @@ public class MainFrame extends JFrame {
 	 * @param requestedFormKey form key to add to the default selections.
 	 */
 	private void openFormsExportDialog(Path defaultDirectory, String requestedFormKey) {
-		ics201Panel.pushToModel();
 		List<String> formKeys = sortExportFormKeys(controller.exportableFormKeys());
 		if (formKeys.isEmpty()) {
 			JOptionPane.showMessageDialog(this, "No PDF forms are available to export.", "Export forms as PDF",
@@ -938,7 +1037,9 @@ public class MainFrame extends JFrame {
 				if (!handleValidationBeforeExport()) {
 					return;
 				}
-				pushToModel(source);
+				if (!pushToModel(source)) {
+					return;
+				}
 				addSelectedFormsToIcs202Attachments(selected);
 				if (exportModeControls.combined().isSelected()) {
 					Path bundlePath = controller.exportSelectedIapBundle(selected, directory, source,
@@ -1057,6 +1158,7 @@ public class MainFrame extends JFrame {
 		applyPdfLayoutSettings(data, (PdfLayoutSettings.PaperSize) paperSize.getSelectedItem(),
 				((Number) marginInches.getValue()).doubleValue());
 		controller.markDirty();
+		rebaseEditorCommitBinding();
 		refreshStatus();
 	}
 
@@ -1124,6 +1226,7 @@ public class MainFrame extends JFrame {
 		Ics202Panel.synchronizeMedicalPlanInclusion(controller.getData(), merged);
 		ics202Panel.refreshFromModel();
 		controller.markDirty();
+		rebaseEditorCommitBinding();
 	}
 
 	/**
@@ -1253,7 +1356,9 @@ public class MainFrame extends JFrame {
 				if (!handleValidationBeforeExport()) {
 					return;
 				}
-				pushToModel(source);
+				if (!pushToModel(source)) {
+					return;
+				}
 				Path output = controller.exportSelected(formKey, directory, source);
 				JOptionPane.showMessageDialog(this, createExportCompletePanel(List.of(output)), "Export complete",
 						JOptionPane.INFORMATION_MESSAGE);
@@ -1267,24 +1372,77 @@ public class MainFrame extends JFrame {
 	 * Flushes all editor fields and synchronizes linked document data.
 	 * @param source editor that initiated synchronization
 	 */
-	private void pushToModel(AppController.LinkSource source) {
-		incidentContextPanel.pushToModel();
-		organizationalChartPanel.pushToModel();
-		ics201Panel.pushToModel();
-		ics202Panel.pushToModel();
-		ics204Panel.pushToModel();
-		ics205Panel.pushToModel();
-		ics215Panel.pushToModel();
-		medicalPlanPanel.pushToModel();
-		canineMedicalPanel.pushToModel();
-		safetyPanel.pushToModel();
-		for (Ics214Panel panel : ics214Panels) {
-			panel.saveToModel();
+	private boolean pushToModel(AppController.LinkSource source) {
+		if (!pendingDraftComponents.isEmpty()) {
+			validationLabel.setText("A shared value changed while this editor had a partial draft. Edit that draft "
+					+ "again before saving or navigating.");
+			return false;
 		}
-		sarTaskPanel.pushToModel();
-		clueLogPanel.pushToModel();
-		tCardPanel.pushToModel();
-		controller.markDirty(source);
+		boolean committed;
+		try {
+			if (!controller.editorCommitBindingsCurrent()) {
+				validationLabel.setText("An editor is stale after another workspace changed the incident. "
+						+ "Refresh it before saving or navigating.");
+				return false;
+			}
+			committed = controller.commitEditorIfCurrent(editorCommitBinding, source, () -> {
+				if (!incidentContextPanel.pushToModel()) {
+					throw new IllegalStateException("The incident context editor rejected its draft.");
+				}
+				if (!organizationalChartPanel.pushToModel()) {
+					throw new IllegalStateException("The Organizational Chart editor rejected its draft.");
+				}
+				if (!ics201Panel.pushToModel()) {
+					throw new IllegalStateException("The ICS 201 editor rejected its draft.");
+				}
+				if (!ics202Panel.pushToModel()) {
+					throw new IllegalStateException("The ICS 202 editor rejected its draft.");
+				}
+				if (!ics204Panel.pushToModel()) {
+					throw new IllegalStateException("The ICS 204 editor rejected its draft.");
+				}
+				if (!ics205Panel.pushToModel()) {
+					throw new IllegalStateException("The ICS 205 editor rejected its draft.");
+				}
+				if (!ics215Panel.pushToModel()) {
+					throw new IllegalStateException("The ICS 215 editor rejected its draft.");
+				}
+				if (!medicalPlanPanel.pushToModel()) {
+					throw new IllegalStateException("The human medical editor rejected its draft.");
+				}
+				if (!canineMedicalPanel.pushToModel()) {
+					throw new IllegalStateException("The canine medical editor rejected its draft.");
+				}
+				safetyPanel.pushToModel();
+				for (Ics214Panel panel : ics214Panels) {
+					if (!panel.saveToModel()) {
+						throw new IllegalStateException("An ICS 214 editor rejected its draft.");
+					}
+				}
+				sarTaskPanel.pushToModel();
+				clueLogPanel.pushToModel();
+				tCardPanel.pushToModel();
+			});
+		} catch (RuntimeException exception) {
+			validationLabel.setText("Editor changes were not committed: " + exception.getMessage()
+					+ " Correct the draft before retrying.");
+			return false;
+		}
+		if (!committed) {
+			validationLabel.setText("The incident or operational period changed since these editors were refreshed. "
+					+ "No stale editor values were saved.");
+			return false;
+		}
+		editorCommitBinding = controller.captureEditorCommitBinding();
+		controller.rebaseEditorCommitGuards();
+		captureEditorTextBaselines();
+		return true;
+	}
+
+	/** Rebinds unchanged full editors after a MainFrame-owned model update. */
+	private void rebaseEditorCommitBinding() {
+		editorCommitBinding = controller.captureEditorCommitBinding();
+		controller.rebaseEditorCommitGuards(editorCommitBinding);
 	}
 
 	/**
@@ -1305,7 +1463,11 @@ public class MainFrame extends JFrame {
 	private void rebuildLogTabs() {
 		rebuildingTabs = true;
 		try {
+			Map<Ics214Form, Ics214Panel> existingPanels = new IdentityHashMap<>();
 			for (Ics214Panel panel : new ArrayList<>(ics214Panels)) {
+				if (panel.getCurrentForm() != null) {
+					existingPanels.put(panel.getCurrentForm(), panel);
+				}
 				tabs.remove(panel);
 				tabWorkspaces.remove(panel);
 			}
@@ -1319,7 +1481,10 @@ public class MainFrame extends JFrame {
 				if (closedLogForms.contains(form)) {
 					continue;
 				}
-				Ics214Panel panel = new Ics214Panel(controller);
+				Ics214Panel panel = existingPanels.remove(form);
+				if (panel == null) {
+					panel = new Ics214Panel(controller);
+				}
 				panel.loadFromModel(form, data);
 				ics214Panels.add(panel);
 				registerActivityLogTab(panel, shortLogTabTitle(form, data), AppController.LinkSource.ICS214,
@@ -1332,7 +1497,9 @@ public class MainFrame extends JFrame {
 
 	/** Configures availability of the independent incident tracker. */
 	private void openActionSettingsDialog() {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		ActionTrackerSettingsPanel settings = new ActionTrackerSettingsPanel(controller.getData());
 		if (UiSupport.showResizableConfirmDialog(this, "Open Action Tracker", settings,
 				new Dimension(620, 220))) {
@@ -1354,7 +1521,7 @@ public class MainFrame extends JFrame {
 		incidentContextPanel.refreshFromModel();
 		organizationalChartPanel.refreshFromModel();
 		ics201Panel.refreshFromModel();
-		ics202Panel.refreshFromModel();
+		ics202Panel.refreshFromSharedModelChange();
 		ics204Panel.refreshFromModel();
 		ics205Panel.refreshFromModel();
 		ics215Panel.refreshFromModel();
@@ -1381,8 +1548,7 @@ public class MainFrame extends JFrame {
 		tCardPanel.refreshFromModel();
 		// Keep SAR-only tabs visible only in SAR mode.
 		groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
-		groupVisible.put(SAFETY_DASHBOARD_GROUP,
-				safetyDashboardVisible(activeDashboard, safetyDashboardManuallyVisible));
+		groupVisible.put(SAFETY_DASHBOARD_GROUP, safetyDashboardManuallyVisible);
 		groupVisible.put(ACTION_TRACKER_GROUP, controller.getData().isOpenActionTrackerEnabled());
 		groupVisible.put(COMMUNICATIONS_GROUP, controller.getData().isIcs205Enabled());
 		communicationsPlanItem.setSelected(controller.getData().isIcs205Enabled());
@@ -1403,6 +1569,384 @@ public class MainFrame extends JFrame {
 		rebuildVisibleTabs(selectedComponent, selectedLogIndex);
 		UiSupport.applyDateTimeDisplayZone(this);
 		refreshStatus();
+		editorCommitBinding = controller.captureEditorCommitBinding();
+		controller.rebaseEditorCommitGuards(editorCommitBinding);
+		captureEditorTextBaselines();
+	}
+
+	/**
+	 * Refreshes full editors after a shared commit while retaining active drafts and
+	 * view state.
+	 *
+	 * @param change committed incident notification.
+	 */
+	private void refreshEditorsAfterCommit(AppController.IncidentChange change) {
+		if (!controller.isCurrent(change.binding()) || editorCommitBinding == null) {
+			return;
+		}
+		AppController.EditorCommitBinding latest = controller.captureEditorCommitBinding();
+		if (change.kind() == AppController.IncidentChangeKind.MODEL_COMMITTED
+				&& editorCommitBinding.revision() == latest.revision()) {
+			return;
+		}
+		boolean sameContext = controller.isCurrent(editorCommitBinding.incidentBinding())
+				&& change.kind() == AppController.IncidentChangeKind.MODEL_COMMITTED;
+		AppController.EditorCommitBinding previousBinding = editorCommitBinding;
+		EditorViewState viewState = sameContext ? captureEditorViewState() : null;
+		if (!sameContext) {
+			clearPendingDraft();
+			lastFocusedEditor = null;
+		}
+		refreshFromModel();
+		if (viewState != null) {
+			restoreEditorViewState(viewState, previousBinding, latest);
+		}
+	}
+
+	/**
+	 * Captures dirty text inputs, table selections, active cell edits and focus.
+	 *
+	 * @return detached view state for a safe live refresh.
+	 */
+	private EditorViewState captureEditorViewState() {
+		JTextComponent focusedText = lastFocusedEditor instanceof JTextComponent text
+				&& javax.swing.SwingUtilities.isDescendingFrom(text, this) ? text : null;
+		List<TextViewState> textInputs = new ArrayList<>();
+		for (JTextComponent text : descendants(tabs, JTextComponent.class)) {
+			if (!text.isEditable() || isTableEditor(text)) {
+				continue;
+			}
+			String value = text.getText();
+			boolean edited = !java.util.Objects.equals(value, editorTextBaselines.getOrDefault(text, value));
+			if (edited || text == focusedText) {
+				textInputs.add(new TextViewState(text, value, edited, text.getSelectionStart(), text.getSelectionEnd(),
+						text.getCaretPosition()));
+			}
+		}
+		List<TableViewState> tables = new ArrayList<>();
+		for (JTable table : descendants(tabs, JTable.class)) {
+			int[] selectedRows = table.getSelectedRows();
+			int[] selectedColumns = table.getSelectedColumns();
+			int editingRow = table.isEditing() ? table.getEditingRow() : -1;
+			int editingColumn = table.isEditing() ? table.getEditingColumn() : -1;
+			Component editorComponent = table.isEditing() ? table.getEditorComponent() : null;
+			String editorText = textOf(editorComponent);
+			int selectionStart = editorComponent instanceof JTextComponent text ? text.getSelectionStart() : 0;
+			int selectionEnd = editorComponent instanceof JTextComponent text ? text.getSelectionEnd() : 0;
+			int caretPosition = editorComponent instanceof JTextComponent text ? text.getCaretPosition() : 0;
+			boolean focused = editorComponent == focusedText;
+			boolean edited = table.isEditing() && editorText != null
+					&& !java.util.Objects.equals(editorText, String.valueOf(table.getValueAt(editingRow, editingColumn)));
+			tables.add(new TableViewState(table, selectedRows, selectedColumns, editingRow, editingColumn,
+					editorText, edited, selectionStart, selectionEnd, caretPosition, focused));
+			if (table.isEditing() && table.getCellEditor() != null) {
+				table.getCellEditor().cancelCellEditing();
+			}
+		}
+		return new EditorViewState(tables, textInputs, focusedText);
+	}
+
+	/**
+	 * Restores view state and retains a conflicting partial draft without allowing it
+	 * to overwrite the shared commit.
+	 *
+	 * @param state captured editor view state.
+	 * @param previousBinding revision on which the preserved draft began.
+	 * @param latestBinding current shared-model revision.
+	 */
+	private void restoreEditorViewState(EditorViewState state,
+			AppController.EditorCommitBinding previousBinding,
+			AppController.EditorCommitBinding latestBinding) {
+		restoringEditorState = true;
+		Component focusTarget = null;
+		List<Component> conflictTargets = new ArrayList<>();
+		for (TableViewState tableState : state.tables()) {
+			JTable table = tableState.table();
+			table.clearSelection();
+			for (int row : tableState.selectedRows()) {
+				if (row >= 0 && row < table.getRowCount()) {
+					table.addRowSelectionInterval(row, row);
+				}
+			}
+			for (int column : tableState.selectedColumns()) {
+				if (column >= 0 && column < table.getColumnCount()) {
+					table.addColumnSelectionInterval(column, column);
+				}
+			}
+			if (tableState.editingRow() >= 0 && tableState.editingColumn() >= 0
+					&& tableState.editingRow() < table.getRowCount()
+					&& tableState.editingColumn() < table.getColumnCount()
+					&& table.editCellAt(tableState.editingRow(), tableState.editingColumn())) {
+				Component editor = table.getEditorComponent();
+				Object currentValue = table.getValueAt(tableState.editingRow(), tableState.editingColumn());
+				if (tableState.edited() && !java.util.Objects.equals(tableState.editorText(),
+						String.valueOf(currentValue))) {
+					setText(editor, tableState.editorText());
+					if (editor instanceof JTextComponent text) {
+						restoreTextSelection(text, tableState.selectionStart(), tableState.selectionEnd(),
+								tableState.caretPosition());
+					}
+					conflictTargets.add(editor);
+				}
+				if (tableState.focused()) {
+					focusTarget = editor;
+					if (editor instanceof JTextComponent text) {
+						lastFocusedEditor = text;
+					}
+				} else if (focusTarget == null) {
+					focusTarget = editor;
+				}
+			}
+		}
+		for (TextViewState textState : state.textInputs()) {
+			JTextComponent component = textState.component();
+			if (!javax.swing.SwingUtilities.isDescendingFrom(component, this)) {
+				continue;
+			}
+			String refreshedText = component.getText();
+			if (textState.edited() && !java.util.Objects.equals(textState.text(), refreshedText)) {
+				component.setText(textState.text());
+				conflictTargets.add(component);
+			}
+			if (component == state.focusedText() || textState.edited()) {
+				restoreTextSelection(component, textState.selectionStart(), textState.selectionEnd(),
+						textState.caretPosition());
+			}
+			if (component == state.focusedText()) {
+				lastFocusedEditor = component;
+				focusTarget = component;
+			}
+		}
+		if (focusTarget != null) {
+			focusTarget.requestFocusInWindow();
+		}
+		restoringEditorState = false;
+		if (!conflictTargets.isEmpty()) {
+			pendingEditorConflict = true;
+			for (Component conflictTarget : conflictTargets) {
+				attachPendingDraftListeners(conflictTarget);
+			}
+			editorCommitBinding = previousBinding;
+			controller.rebaseEditorCommitGuards(previousBinding);
+		} else {
+			pendingEditorConflict = false;
+			editorCommitBinding = latestBinding;
+			controller.rebaseEditorCommitGuards(latestBinding);
+		}
+	}
+
+	/**
+	 * Returns text from a text component when the active editor exposes one.
+	 *
+	 * @param component component to inspect.
+	 * @return editor text, or null for non-text components.
+	 */
+	private static String textOf(Component component) {
+		return component instanceof JTextComponent text ? text.getText() : null;
+	}
+
+	/** Records the current value of each editable full-form text input. */
+	private void captureEditorTextBaselines() {
+		Set<JTextComponent> present = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+		for (JTextComponent text : descendants(tabs, JTextComponent.class)) {
+			if (text.isEditable() && !isTableEditor(text)) {
+				present.add(text);
+				editorTextBaselines.put(text, text.getText());
+			}
+		}
+		editorTextBaselines.keySet().retainAll(present);
+	}
+
+	/**
+	 * Applies text to a text-based cell editor.
+	 *
+	 * @param component active editor component.
+	 * @param value pending text value.
+	 */
+	private static void setText(Component component, String value) {
+		if (component instanceof JTextComponent text) {
+			text.setText(value);
+		}
+	}
+
+	/**
+	 * Restores a text selection without collapsing it while repositioning the caret.
+	 *
+	 * @param component text component.
+	 * @param selectionStart selected text start.
+	 * @param selectionEnd selected text end.
+	 * @param originalCaretPosition caret location before refresh.
+	 */
+	private static void restoreTextSelection(JTextComponent component, int selectionStart, int selectionEnd,
+			int originalCaretPosition) {
+		int length = component.getText().length();
+		int start = Math.min(selectionStart, length);
+		int end = Math.min(selectionEnd, length);
+		int caretPosition = Math.max(start, Math.min(end, originalCaretPosition));
+		component.select(start, end);
+		if (start < end && caretPosition == start) {
+			component.getCaret().setDot(end);
+			component.getCaret().moveDot(start);
+		}
+	}
+
+	/**
+	 * Finds all descendants of a requested Swing component type.
+	 *
+	 * @param root container to search.
+	 * @param type component class to collect.
+	 * @param <T> component type.
+	 * @return matching descendants in component traversal order.
+	 */
+	private static <T extends Component> List<T> descendants(java.awt.Container root, Class<T> type) {
+		List<T> result = new ArrayList<>();
+		for (Component child : root.getComponents()) {
+			if (type.isInstance(child)) {
+				result.add(type.cast(child));
+			}
+			if (child instanceof java.awt.Container nested) {
+				result.addAll(descendants(nested, type));
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Determines whether text component belongs to an active table cell editor.
+	 *
+	 * @param component text component to test.
+	 * @return true when it is nested inside a JTable.
+	 */
+	private boolean isTableEditor(Component component) {
+		for (Component parent = component; parent != null && parent != this; parent = parent.getParent()) {
+			if (parent instanceof JTable) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Installs one-shot input listeners that rebase a retained draft after new input.
+	 *
+	 * @param component component containing the pending draft.
+	 */
+	private void attachPendingDraftListeners(Component component) {
+		if (pendingDraftComponents.contains(component)) {
+			return;
+		}
+		pendingDraftComponents.add(component);
+		component.addKeyListener(pendingDraftKeyListener);
+		if (component instanceof JTextComponent text) {
+			javax.swing.event.DocumentListener listener = new javax.swing.event.DocumentListener() {
+				/** {@inheritDoc} */
+				@Override
+				public void insertUpdate(javax.swing.event.DocumentEvent event) {
+					confirmPendingDraft(component);
+				}
+
+				/** {@inheritDoc} */
+				@Override
+				public void removeUpdate(javax.swing.event.DocumentEvent event) {
+					confirmPendingDraft(component);
+				}
+
+				/** {@inheritDoc} */
+				@Override
+				public void changedUpdate(javax.swing.event.DocumentEvent event) {
+					confirmPendingDraft(component);
+				}
+			};
+			text.getDocument().addDocumentListener(listener);
+			pendingDraftDocumentListeners.put(component, listener);
+		}
+	}
+
+	/**
+	 * Rebases a preserved partial draft after the operator edits that input again.
+	 *
+	 * @param component changed editor component.
+	 */
+	private void confirmPendingDraft(Component component) {
+		if (restoringEditorState || !pendingEditorConflict || !pendingDraftComponents.contains(component)) {
+			return;
+		}
+		component.removeKeyListener(pendingDraftKeyListener);
+		javax.swing.event.DocumentListener listener = pendingDraftDocumentListeners.remove(component);
+		if (listener != null && component instanceof JTextComponent text) {
+			text.getDocument().removeDocumentListener(listener);
+		}
+		pendingDraftComponents.remove(component);
+		if (!pendingDraftComponents.isEmpty()) {
+			return;
+		}
+		pendingEditorConflict = false;
+		editorCommitBinding = controller.captureEditorCommitBinding();
+		controller.rebaseEditorCommitGuards(editorCommitBinding);
+		validationLabel.setText("Partial editor draft is based on the latest shared update.");
+	}
+
+	/** Removes temporary listeners from the retained draft component. */
+	private void clearPendingDraftListeners() {
+		for (Component component : new ArrayList<>(pendingDraftComponents)) {
+			component.removeKeyListener(pendingDraftKeyListener);
+			javax.swing.event.DocumentListener listener = pendingDraftDocumentListeners.remove(component);
+			if (listener != null && component instanceof JTextComponent text) {
+				text.getDocument().removeDocumentListener(listener);
+			}
+		}
+		pendingDraftComponents.clear();
+	}
+
+	/** Discards temporary conflict state when the incident or frame is replaced. */
+	private void clearPendingDraft() {
+		clearPendingDraftListeners();
+		pendingEditorConflict = false;
+	}
+
+	/**
+	 * Captures table and editable text state across a live model refresh.
+	 *
+	 * @param tables active table states.
+	 * @param textInputs locally edited or focused text inputs.
+	 * @param focusedText most recently focused text input.
+	 */
+	private record EditorViewState(List<TableViewState> tables, List<TextViewState> textInputs,
+			JTextComponent focusedText) {
+	}
+
+	/**
+	 * Captures one dirty text input and its selection.
+	 *
+	 * @param component input component.
+	 * @param text local text before refresh.
+	 * @param edited whether local text differs from the last loaded value.
+	 * @param selectionStart selected text start.
+	 * @param selectionEnd selected text end.
+	 * @param caretPosition caret location.
+	 */
+	private record TextViewState(JTextComponent component, String text, boolean edited, int selectionStart,
+			int selectionEnd, int caretPosition) {
+	}
+
+	/**
+	 * Captures a table selection and a pending active cell edit.
+	 *
+	 * @param table table component.
+	 * @param selectedRows selected view rows.
+	 * @param selectedColumns selected view columns.
+	 * @param editingRow active view row or -1.
+	 * @param editingColumn active view column or -1.
+	 * @param editorText pending text from the active cell.
+	 * @param edited whether the active cell differs from its stored value.
+	 * @param selectionStart selected text start.
+	 * @param selectionEnd selected text end.
+	 * @param caretPosition caret location.
+	 * @param focused whether this cell editor owned focus before refresh.
+	 */
+	private record TableViewState(JTable table, int[] selectedRows, int[] selectedColumns, int editingRow,
+			int editingColumn, String editorText, boolean edited, int selectionStart, int selectionEnd,
+			int caretPosition, boolean focused) {
 	}
 
 	/**
@@ -1503,13 +2047,13 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Resolves one dashboard's ordered list of existing editor components.
+	 * Resolves the stable full-workspace order of existing editor components.
 	 *
 	 * @return ordered shared workspaces and current activity logs.
 	 */
 	private List<Component> dashboardWorkspaces() {
 		List<Component> ordered = new ArrayList<>();
-		for (WorkspaceId id : activeDashboard.workspaceIds()) {
+		for (WorkspaceId id : WORKSPACE_ORDER) {
 			if (id == WorkspaceId.ACTIVITY_LOG) {
 				if (isGroupVisible(ACTIVITY_LOGS_GROUP)) {
 					ordered.addAll(ics214Panels);
@@ -1558,7 +2102,9 @@ public class MainFrame extends JFrame {
 			return;
 		}
 		try {
-			pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+			if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+				return;
+			}
 			refreshFromModel();
 		} catch (RuntimeException exception) {
 			showSaveError(exception);
@@ -1576,25 +2122,38 @@ public class MainFrame extends JFrame {
 		}
 		if (destination.workspaceId() == WorkspaceId.HUMAN_MEDICAL_PLAN) {
 			medicalWorkspacePanel.selectHumanPlan();
+			rebaseAfterMedicalPlanSelection();
 		} else if (destination.workspaceId() == WorkspaceId.CANINE_MEDICAL_PLAN) {
 			canineMedicalManuallyOpened = true;
 			medicalWorkspacePanel.openCaninePlan();
+			rebaseAfterMedicalPlanSelection();
 		} else if (destination.workspaceId() == WorkspaceId.SAFETY_OVERVIEW) {
 			safetyDashboardManuallyVisible = true;
 			groupVisible.put(SAFETY_DASHBOARD_GROUP, true);
 		} else if (destination.workspaceId() == WorkspaceId.ICS_205) {
 			controller.getData().setIcs205Enabled(true);
 			controller.markDirty();
+			rebaseEditorCommitBinding();
 			communicationsPlanItem.setSelected(true);
 			groupVisible.put(COMMUNICATIONS_GROUP, true);
 		} else if (destination.workspaceId() == WorkspaceId.ICS_215) {
 			controller.getData().setIcs215Enabled(true);
 			controller.markDirty();
+			rebaseEditorCommitBinding();
 			ics215Item.setSelected(true);
 			groupVisible.put(ICS_215_GROUP, true);
 		}
 		rebuildVisibleTabs(definition.component(), -1);
 		refreshStatus();
+	}
+
+	/**
+	 * Rebinds all editors after switching the nested medical plan's active editor.
+	 */
+	private void rebaseAfterMedicalPlanSelection() {
+		editorCommitBinding = controller.captureEditorCommitBinding();
+		controller.rebaseEditorCommitGuards(editorCommitBinding);
+		captureEditorTextBaselines();
 	}
 
 	/**
@@ -1801,7 +2360,9 @@ public class MainFrame extends JFrame {
 		}
 		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
 		try {
-			pushToModel(source);
+			if (!pushToModel(source)) {
+				return false;
+			}
 			controller.save(source);
 			return true;
 		} catch (RuntimeException exception) {
@@ -1905,7 +2466,9 @@ public class MainFrame extends JFrame {
 	 */
 	private boolean handleValidationBeforeExport() {
 		AppController.LinkSource source = linkSourceForTab(tabs.getSelectedIndex());
-		pushToModel(source);
+		if (!pushToModel(source)) {
+			return false;
+		}
 		List<ValidationMessage> messages = controller.validate(source);
 		refreshStatus();
 		if (!messages.isEmpty()) {
@@ -1972,19 +2535,26 @@ public class MainFrame extends JFrame {
 
 	/** Opens the incident's activity-event type editor. */
 	private void manageEventTypes() {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		AppData data = controller.getData();
-		List<ActivityEventType> initial = data.getActivityEventTypes().isEmpty()
-				? ActivityEventType.defaultTypes()
-				: new ArrayList<>(data.getActivityEventTypes());
+		List<ActivityEventType> initial = new ArrayList<>(data.getActivityEventTypes());
 		Ics214Panel.EventTypeManagerDialog dialog = new Ics214Panel.EventTypeManagerDialog(initial);
-		JScrollPane scrollPane = new JScrollPane(dialog.panel);
-		scrollPane.setBorder(BorderFactory.createEmptyBorder());
-		if (UiSupport.showResizableConfirmDialog(this, "Manage event types", scrollPane, new Dimension(480, 380))) {
-			data.setActivityEventTypes(dialog.getEventTypes());
-			controller.markDirty(AppController.LinkSource.ICS214);
-			for (Ics214Panel panel : ics214Panels) {
-				panel.refreshEventTypes();
+		if (UiSupport.showResizableConfirmDialog(this, "Manage event types", dialog.contentPanel(),
+				new Dimension(760, 440))) {
+			try {
+				List<ActivityEventType> eventTypes = dialog.getEventTypes();
+				ActivityEventTypeCatalog.saveCustomTypes(ActivityEventTypeCatalog.supportedCustomTypes(eventTypes));
+				data.setActivityEventTypes(eventTypes);
+				controller.markDirty(AppController.LinkSource.ICS214);
+				rebaseEditorCommitBinding();
+				for (Ics214Panel panel : ics214Panels) {
+					panel.refreshEventTypes();
+				}
+			} catch (IllegalArgumentException | IllegalStateException exception) {
+				UiSupport.showDocumentMessage(this, exception.getMessage(), "Unable to save event types",
+						JOptionPane.ERROR_MESSAGE);
 			}
 		}
 	}
@@ -1996,7 +2566,9 @@ public class MainFrame extends JFrame {
 	 *            new incident mode.
 	 */
 	private void setIncidentMode(IncidentMode mode) {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		controller.setIncidentMode(mode);
 		groupVisible.put(SAR_ONLY_GROUP, mode == IncidentMode.SAR);
 		rebuildVisibleTabs();
@@ -2013,7 +2585,9 @@ public class MainFrame extends JFrame {
 		if (task == null) {
 			return;
 		}
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		AppData data = controller.getData();
 		String assignmentId = task.getAssignmentId();
 		for (int i = 0; i < data.getActivityLogs().size(); i++) {
@@ -2033,6 +2607,7 @@ public class MainFrame extends JFrame {
 		}
 		data.getActivityLogs().add(form);
 		controller.markDirty(AppController.LinkSource.ICS214);
+		rebaseEditorCommitBinding();
 		rebuildLogTabs();
 		openWorkspace(WorkspaceDestination.activityLog(activityLogInstanceId(form)));
 	}
@@ -2042,7 +2617,9 @@ public class MainFrame extends JFrame {
 	 * @param resource resource requesting a log
 	 */
 	private void addOrOpenLog214ForResource(ResourceAssignment resource) {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		AppData data = controller.getData();
 		String assignmentId = resource.getAssignmentId();
 		for (int i = 0; i < data.getActivityLogs().size(); i++) {
@@ -2069,6 +2646,7 @@ public class MainFrame extends JFrame {
 				}, () -> form.setIcsPosition(resource.getLeaderRole()));
 		data.getActivityLogs().add(form);
 		controller.markDirty(AppController.LinkSource.ICS214);
+		rebaseEditorCommitBinding();
 		rebuildLogTabs();
 		openWorkspace(WorkspaceDestination.activityLog(activityLogInstanceId(form)));
 	}
@@ -2133,10 +2711,35 @@ public class MainFrame extends JFrame {
 	 * @param context initiating component and task/resource context
 	 */
 	private void showAddLogEntry(LogEntryContext context) {
+		showAddLogEntry(context, null, "");
+	}
+
+	/**
+	 * Opens a task-context activity entry prefilled by a quick-log action.
+	 *
+	 * @param source component that initiated the action.
+	 * @param request quick-log event and narrative.
+	 */
+	private void showQuickLogEntry(Component source, SarTaskPanel.QuickLogRequest request) {
+		var task = request.task();
+		showAddLogEntry(new LogEntryContext(source, task.getTaskId(), task.getAssignmentId(),
+				org.sarmanagement.icsforms.model.SarTaskSupport.taskResourceDisplayLabel(task)),
+				request.eventTypeId(), request.activity());
+	}
+
+	/**
+	 * Opens the shared activity entry dialog with optional quick-log defaults.
+	 *
+	 * @param context initiating component and task/resource context.
+	 * @param eventTypeId preferred event type, or null.
+	 * @param initialActivity initial activity narrative.
+	 */
+	private void showAddLogEntry(LogEntryContext context, String eventTypeId, String initialActivity) {
 		AppData incident = controller.getData();
 		int previousLogCount = incident.getActivityLogs().size();
 		Component owner = ActivityEntryDialog.resolveOwner(context.source(), this);
-		if (!new ActivityEntryDialog(controller, context, null).show(owner) || controller.getData() != incident) {
+		if (!new ActivityEntryDialog(controller, context, null, eventTypeId, initialActivity).show(owner)
+				|| controller.getData() != incident) {
 			return;
 		}
 		if (previousLogCount != controller.getData().getActivityLogs().size()) {
@@ -2165,7 +2768,9 @@ public class MainFrame extends JFrame {
 
 	/** Creates an activity log using the selected scope and linked document. */
 	private void addLog() {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		AppData data = controller.getData();
 		ensureLogs(data);
 		javax.swing.JComboBox<ActivityLogScope> scopeCombo = new javax.swing.JComboBox<>(ActivityLogScope.values());
@@ -2195,6 +2800,7 @@ public class MainFrame extends JFrame {
 		}
 		data.getActivityLogs().add(form);
 		controller.markDirty(AppController.LinkSource.ICS214);
+		rebaseEditorCommitBinding();
 		rebuildLogTabs();
 		groupVisible.put(ACTIVITY_LOGS_GROUP, true);
 		int newIndex = ics214Panels.size() - 1;
@@ -2209,7 +2815,9 @@ public class MainFrame extends JFrame {
 	 * Removes an open activity log from the interface, deleting it only if empty and not the ICP log.
 	 */
 	void removeLog() {
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		AppData data = controller.getData();
 		ensureLogs(data);
 		List<Ics214Form> openLogs = data.getActivityLogs().stream()
@@ -2263,6 +2871,7 @@ public class MainFrame extends JFrame {
 			closedLogForms.add(formToRemove);
 		}
 		controller.markDirty(AppController.LinkSource.ICS214);
+		rebaseEditorCommitBinding();
 		rebuildLogTabs();
 		int newIndex = Math.max(0, ics214Panels.size() - 1);
 		rebuildVisibleTabs(newIndex < ics214Panels.size() ? ics214Panels.get(newIndex) : incidentContextPanel,
@@ -2305,7 +2914,9 @@ public class MainFrame extends JFrame {
 		if (log == null) {
 			return;
 		}
-		pushToModel(linkSourceForTab(tabs.getSelectedIndex()));
+		if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
+			return;
+		}
 		Ics214Panel.openInNewWindow(controller, log, controller.getData(), () -> {
 			refreshStatus();
 			for (Ics214Panel panel : ics214Panels) {
@@ -2572,81 +3183,6 @@ public class MainFrame extends JFrame {
 			return "Assignment – " + resource;
 		}
 		return "Assignment";
-	}
-
-	/**
-	 * Role-oriented orderings of the same incident workspaces.
-	 */
-	enum Dashboard {
-		IC_ICP("IC/ICP", List.of(WorkspaceId.SHARED, WorkspaceId.ORG_CHART, WorkspaceId.ICS_201,
-				WorkspaceId.ICS_202, WorkspaceId.ICS_204, WorkspaceId.ICS_215, WorkspaceId.ICS_205, WorkspaceId.MEDICAL, WorkspaceId.SAFETY,
-				WorkspaceId.SAR_TASKS, WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ACTIVITY_LOG,
-				WorkspaceId.CLUE_LOG, WorkspaceId.TCARDS)),
-		SAFETY_OFFICER("Safety Officer", List.of(WorkspaceId.SAFETY_OVERVIEW, WorkspaceId.SAFETY,
-				WorkspaceId.MEDICAL, WorkspaceId.ORG_CHART, WorkspaceId.SHARED, WorkspaceId.TCARDS,
-				WorkspaceId.ICS_204, WorkspaceId.ICS_205, WorkspaceId.SAR_TASKS, WorkspaceId.CLUE_LOG, WorkspaceId.ACTIVITY_LOG,
-				WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ICS_202, WorkspaceId.ICS_201)),
-		OPERATIONS("Operations", List.of(WorkspaceId.ICS_204, WorkspaceId.ICS_215, WorkspaceId.SAR_TASKS,
-				WorkspaceId.TCARDS, WorkspaceId.CLUE_LOG, WorkspaceId.ACTIVITY_LOG, WorkspaceId.SAFETY, WorkspaceId.ORG_CHART,
-				WorkspaceId.MEDICAL, WorkspaceId.SHARED, WorkspaceId.ICS_202, WorkspaceId.ICS_201,
-				WorkspaceId.OPEN_ACTION_TRACKER, WorkspaceId.ICS_205)),
-		COMMUNICATIONS("Communications", List.of(WorkspaceId.ICS_205, WorkspaceId.SAFETY, WorkspaceId.ORG_CHART, WorkspaceId.MEDICAL,
-				WorkspaceId.TCARDS, WorkspaceId.ACTIVITY_LOG, WorkspaceId.CLUE_LOG, WorkspaceId.ICS_204,
-				WorkspaceId.SAR_TASKS, WorkspaceId.SHARED, WorkspaceId.ICS_202, WorkspaceId.ICS_201,
-				WorkspaceId.OPEN_ACTION_TRACKER));
-
-		private final String label;
-		private final List<WorkspaceId> workspaceIds;
-
-		/**
-		 * Creates one role-specific ordering for the shared workspaces.
-		 *
-		 * @param label display label.
-		 * @param workspaceIds ordered stable workspace identifiers.
-		 */
-		Dashboard(String label, List<WorkspaceId> workspaceIds) {
-			this.label = label;
-			this.workspaceIds = workspaceIds;
-		}
-
-		/**
-		 * Returns the label presented in the dashboard selector.
-		 *
-		 * @return dashboard label.
-		 */
-		public String label() {
-			return label;
-		}
-
-		/**
-		 * Returns this dashboard's order of shared editor identifiers.
-		 *
-		 * @return ordered workspace IDs.
-		 */
-		public List<WorkspaceId> workspaceIds() {
-			return workspaceIds;
-		}
-
-		/** {@inheritDoc} */
-		@Override
-		public String toString() {
-			return label;
-		}
-
-		/**
-		 * Resolves a saved dashboard setting safely.
-		 *
-		 * @param label saved label.
-		 * @return matching dashboard or the legacy default.
-		 */
-		private static Dashboard from(String label) {
-			for (Dashboard dashboard : values()) {
-				if (dashboard.label.equals(label)) {
-					return dashboard;
-				}
-			}
-			return IC_ICP;
-		}
 	}
 
 	/**

@@ -95,6 +95,73 @@ class AppControllerLiveChangeTest {
 	}
 
 	@Test
+	void rejectsFullEditorCommitAfterNewerSharedCommit() {
+		AppController controller = controller(new AppData());
+		AppController.EditorCommitBinding staleEditor = controller.captureEditorCommitBinding();
+		controller.commitIfCurrent(controller.captureIncidentBinding(),
+				() -> controller.getData().getIncidentContext().setIncidentName("Newer shared value"));
+
+		boolean applied = controller.commitEditorIfCurrent(staleEditor, AppController.LinkSource.SHARED,
+				() -> controller.getData().getIncidentContext().setIncidentName("Stale full-editor value"));
+
+		assertFalse(applied);
+		assertEquals("Newer shared value", controller.getData().getIncidentContext().getIncidentName());
+	}
+
+	@Test
+	void rejectsFullEditorCommitAfterIncidentOrPeriodReplacement() {
+		AppController incidentController = controller(new AppData());
+		AppController.EditorCommitBinding oldIncident = incidentController.captureEditorCommitBinding();
+		incidentController.setData(new AppData());
+		assertFalse(incidentController.commitEditorIfCurrent(oldIncident, AppController.LinkSource.SHARED,
+				() -> incidentController.getData().getIncidentContext().setIncidentName("Wrong incident")));
+		assertEquals("", incidentController.getData().getIncidentContext().getIncidentName());
+
+		AppController periodController = controller(new AppData());
+		AppController.EditorCommitBinding oldPeriod = periodController.captureEditorCommitBinding();
+		periodController.newOperationalPeriod();
+		assertFalse(periodController.commitEditorIfCurrent(oldPeriod, AppController.LinkSource.SHARED,
+				() -> periodController.getData().getIncidentContext().setIncidentName("Wrong period")));
+		assertEquals("", periodController.getData().getIncidentContext().getIncidentName());
+	}
+
+	@Test
+	void fullEditorCommitAdvancesRevisionSoTheTokenCannotBeReused() {
+		AppController controller = controller(new AppData());
+		AppController.EditorCommitBinding binding = controller.captureEditorCommitBinding();
+
+		assertTrue(controller.commitEditorIfCurrent(binding, AppController.LinkSource.SHARED,
+				() -> controller.getData().getIncidentContext().setIncidentName("Committed")));
+		assertFalse(controller.commitEditorIfCurrent(binding, AppController.LinkSource.SHARED,
+				() -> controller.getData().getIncidentContext().setIncidentName("Reused token")));
+		assertEquals("Committed", controller.getData().getIncidentContext().getIncidentName());
+	}
+
+	@Test
+	void registeredEditorGuardRejectsOldRevisionIncidentAndPeriodBindings() {
+		AppController revisionController = controller(new AppData());
+		EditorCommitGuard revisionGuard = revisionController.createEditorCommitGuard();
+		revisionController.markDirty();
+		assertFalse(revisionGuard.commit(AppController.LinkSource.NONE,
+				() -> revisionController.getData().getIncidentContext().setIncidentName("Stale revision")));
+		assertEquals("", revisionController.getData().getIncidentContext().getIncidentName());
+
+		AppController incidentController = controller(new AppData());
+		EditorCommitGuard incidentGuard = incidentController.createEditorCommitGuard();
+		incidentController.setData(new AppData());
+		assertFalse(incidentGuard.commitField(
+				() -> incidentController.getData().getIncidentContext().setIncidentName("Old incident")));
+		assertEquals("", incidentController.getData().getIncidentContext().getIncidentName());
+
+		AppController periodController = controller(new AppData());
+		EditorCommitGuard periodGuard = periodController.createEditorCommitGuard();
+		periodController.newOperationalPeriod();
+		assertFalse(periodGuard.commitField(
+				() -> periodController.getData().getIncidentContext().setIncidentName("Old period")));
+		assertEquals("", periodController.getData().getIncidentContext().getIncidentName());
+	}
+
+	@Test
 	void defersAndCoalescesChangesPublishedOnEventDispatchThread() throws Exception {
 		AppController controller = controller(new AppData());
 		AtomicInteger deliveries = new AtomicInteger();

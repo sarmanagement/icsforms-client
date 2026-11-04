@@ -37,6 +37,7 @@ import java.util.List;
  */
 public class Ics202Panel extends JPanel {
 	private final AppController controller;
+private final EditorCommitGuard editorCommitGuard;
 	private final List<IncidentObjective> objectives = new ArrayList<>();
 	private final ObjectivesTableModel objectivesModel = new ObjectivesTableModel();
 	private final JTable objectivesTable = new JTable(objectivesModel);
@@ -77,6 +78,7 @@ public class Ics202Panel extends JPanel {
 	public Ics202Panel(AppController controller) {
 		super(new BorderLayout());
 		this.controller = controller;
+		editorCommitGuard = controller.createEditorCommitGuard();
 		objectiveBinding = controller.captureIncidentBinding();
 		JPanel form = UiSupport.formPanel();
 		form.setBorder(BorderFactory.createTitledBorder("ICS 202 Incident Objectives"));
@@ -386,7 +388,7 @@ public class Ics202Panel extends JPanel {
 			return;
 		}
 		controller.getData().removeObjective(objective.getObjectiveId(), "", unlink);
-		refreshObjectives(controller.getData().getForm202());
+		refreshObjectives(controller.getData().getForm202(), true);
 		controller.markDirty();
 	}
 
@@ -403,11 +405,12 @@ public class Ics202Panel extends JPanel {
 	 * Reloads stable objective rows without creating new identities.
 	 *
 	 * @param form active ICS 202 form.
+	 * @param commitPendingEdit whether an accepted table edit should be committed first.
 	 * @throws IllegalStateException if an active edit in the current incident is rejected.
 	 */
-	private void refreshObjectives(Ics202Form form) {
+	private void refreshObjectives(Ics202Form form, boolean commitPendingEdit) {
 		if (objectivesTable.isEditing()) {
-			if (controller.isCurrent(objectiveBinding)) {
+			if (commitPendingEdit && controller.isCurrent(objectiveBinding)) {
 				UiSupport.commitTableEdits(objectivesTable);
 			} else {
 				objectivesTable.getCellEditor().cancelCellEditing();
@@ -440,8 +443,24 @@ public class Ics202Panel extends JPanel {
 	 * @throws IllegalStateException if the current incident's active edit is rejected.
 	 */
 	public void refreshFromModel() {
+		refreshFromModel(true);
+	}
+
+	/**
+	 * Refreshes after a shared-model change without committing a stale active cell.
+	 */
+	void refreshFromSharedModelChange() {
+		refreshFromModel(false);
+	}
+
+	/**
+	 * Refreshes the full form with an explicit policy for a pending objective cell.
+	 *
+	 * @param commitPendingObjectiveEdit whether an accepted objective-cell edit is committed.
+	 */
+	private void refreshFromModel(boolean commitPendingObjectiveEdit) {
 		Ics202Form form = controller.getData().getForm202();
-		refreshObjectives(form);
+		refreshObjectives(form, commitPendingObjectiveEdit);
 		commandEmphasisArea.setText(nullSafe(form.getCommandEmphasis()));
 		situationalAwarenessArea.setText(nullSafe(form.getSituationalAwareness()));
 		siteSafetyPlanRequired.setSelected(form.isSiteSafetyPlanRequired());
@@ -451,16 +470,26 @@ public class Ics202Panel extends JPanel {
 		approvedByNameField.setText(nullSafe(form.getApprovedByIncidentCommanderName()));
 		approvedDateTimeField.setValue(AppController.toDate(form.getApprovedDateTime()));
 		iapPageField.setText(nullSafe(form.getIapPage()));
+		editorCommitGuard.rebase();
 	}
 
 	/**
 	 * Applies values without discarding objective text or blocking incident saves.
 	 * Unsupported PDF characters remain in the model for export-time diagnostics.
+	 *
+	 * @return true when the current editor draft was committed.
 	 */
-	public void pushToModel() {
+	public boolean pushToModel() {
+		return editorCommitGuard.commit(AppController.LinkSource.ICS202, this::flushToModel);
+	}
+
+	/**
+	 * Writes objective and form values after verifying the editor revision.
+	 */
+	private void flushToModel() {
 		if (!finishObjectiveEdit()) {
 			if (!controller.isCurrent(objectiveBinding)) {
-				return;
+				throw new IllegalStateException("The ICS 202 objective editor is stale.");
 			}
 			throw new IllegalStateException("Finish or cancel the incident objective edit before saving.");
 		}

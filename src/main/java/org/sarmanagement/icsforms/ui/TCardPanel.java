@@ -132,6 +132,10 @@ public class TCardPanel extends JPanel {
 	private final Map<String, SarTaskAssignment> sarTaskByAssignmentId = new LinkedHashMap<>();
 	private java.util.function.Consumer<String> onEditSarAssignmentRequest;
 	private java.util.function.Consumer<LogEntryContext> onAddLogEntryRequest;
+	private java.util.function.BiConsumer<Component, String> onTaskLogEntryRequest;
+	private java.util.function.BiFunction<Component, String, List<JMenuItem>> onTaskQuickLogItemsRequest;
+	private java.util.function.Consumer<String> onChangeSarTaskStatusRequest;
+	private java.util.function.BiConsumer<Component, String> onAddSarTaskResourcesRequest;
 
 	/**
 	 * Registers the shared contextual entry launcher.
@@ -168,6 +172,24 @@ public class TCardPanel extends JPanel {
 
 	public void setOnEditSarAssignmentRequest(java.util.function.Consumer<String> handler) {
 		this.onEditSarAssignmentRequest = handler;
+	}
+
+	/**
+	 * Installs task-group context actions that use the existing task workflows.
+	 *
+	 * @param logHandler opens the shared activity entry for an assignment.
+	 * @param quickLogHandler creates lifecycle-appropriate quick-log actions.
+	 * @param statusHandler opens the task status workflow.
+	 * @param addResourcesHandler opens resource selection for a planned task.
+	 */
+	public void setTaskGroupActionHandlers(java.util.function.BiConsumer<Component, String> logHandler,
+			java.util.function.BiFunction<Component, String, List<JMenuItem>> quickLogHandler,
+			java.util.function.Consumer<String> statusHandler,
+			java.util.function.BiConsumer<Component, String> addResourcesHandler) {
+		onTaskLogEntryRequest = logHandler;
+		onTaskQuickLogItemsRequest = quickLogHandler;
+		onChangeSarTaskStatusRequest = statusHandler;
+		onAddSarTaskResourcesRequest = addResourcesHandler;
 	}
 
 	/**
@@ -865,7 +887,8 @@ public class TCardPanel extends JPanel {
 				boolean collapsed = collapsedTaskKeys.contains(taskKey);
 				int people = (int) groupCards.stream().filter(c -> c.getCardType() == TCardType.PERSONNEL).count();
 				int other = groupCards.size() - people;
-				col.add(buildTaskBannerWidget(teamLabel, resId, people, other, collapsed, taskKey));
+				col.add(buildTaskBannerWidget(teamLabel, resId, people, other, collapsed, taskKey, task,
+						!isAssignedColumn));
 				if (!collapsed) {
 					addHandlerGroupedCards(col, groupCards, true);
 					// Append busy-indicator reference cards below the group's own cards.
@@ -978,7 +1001,7 @@ public class TCardPanel extends JPanel {
 	 * </p>
 	 */
 	private JPanel buildTaskBannerWidget(String teamLabel, String resId, int people, int other, boolean collapsed,
-			String taskKey) {
+			String taskKey, SarTaskAssignment task, boolean availableColumn) {
 		JPanel p = new JPanel(new BorderLayout());
 		p.setBackground(new Color(200, 220, 255));
 		p.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(100, 140, 220), 1),
@@ -1011,7 +1034,17 @@ public class TCardPanel extends JPanel {
 		}
 
 		p.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-		p.addMouseListener(new MouseAdapter() {
+		MouseAdapter headerMouseListener = new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent e) {
+				showTaskGroupPopup(e, taskKey, task, availableColumn);
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				showTaskGroupPopup(e, taskKey, task, availableColumn);
+			}
+
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				if (javax.swing.SwingUtilities.isLeftMouseButton(e)) {
@@ -1023,8 +1056,72 @@ public class TCardPanel extends JPanel {
 					rebuildRackView();
 				}
 			}
-		});
+		};
+		p.addMouseListener(headerMouseListener);
+		lbl.addMouseListener(headerMouseListener);
 		return p;
+	}
+
+	/**
+	 * Displays task actions when a task-group header receives a popup trigger.
+	 *
+	 * @param event mouse event from the header or its label.
+	 * @param taskKey stable assignment identifier.
+	 * @param task task represented by the header.
+	 * @param availableColumn whether the header is in the Available column.
+	 */
+	private void showTaskGroupPopup(MouseEvent event, String taskKey, SarTaskAssignment task,
+			boolean availableColumn) {
+		if (!event.isPopupTrigger() || task == null || !isSarMode()) {
+			return;
+		}
+		JPopupMenu popup = buildTaskGroupPopupMenu(taskKey, task, availableColumn);
+		if (popup.getComponentCount() > 0) {
+			popup.show(event.getComponent(), event.getX(), event.getY());
+		}
+	}
+
+	/**
+	 * Builds task-group actions for the requested column and current callbacks.
+	 *
+	 * @param taskKey stable assignment identifier.
+	 * @param task task represented by the header.
+	 * @param availableColumn whether the header is in the Available column.
+	 * @return the configured task context menu.
+	 */
+	private JPopupMenu buildTaskGroupPopupMenu(String taskKey, SarTaskAssignment task, boolean availableColumn) {
+		JPopupMenu popup = new JPopupMenu();
+		if (onEditSarAssignmentRequest != null) {
+			JMenuItem edit = new JMenuItem("Edit task…");
+			edit.addActionListener(action -> onEditSarAssignmentRequest.accept(taskKey));
+			popup.add(edit);
+		}
+		if (onTaskLogEntryRequest != null) {
+			JMenuItem log = new JMenuItem("Make a log entry…");
+			log.addActionListener(action -> onTaskLogEntryRequest.accept(this, taskKey));
+			popup.add(log);
+		}
+		if (onChangeSarTaskStatusRequest != null) {
+			JMenuItem status = new JMenuItem("Change status…");
+			status.addActionListener(action -> onChangeSarTaskStatusRequest.accept(taskKey));
+			popup.add(status);
+		}
+		List<JMenuItem> quickItems = onTaskQuickLogItemsRequest == null ? List.of()
+				: onTaskQuickLogItemsRequest.apply(this, taskKey);
+		if (!quickItems.isEmpty()) {
+			popup.addSeparator();
+			quickItems.forEach(popup::add);
+		}
+		if (availableColumn && "planned".equalsIgnoreCase(task.getTaskLifecycleStatus())
+				&& onAddSarTaskResourcesRequest != null) {
+			if (popup.getComponentCount() > 0) {
+				popup.addSeparator();
+			}
+			JMenuItem addResources = new JMenuItem("Add resources…");
+			addResources.addActionListener(action -> onAddSarTaskResourcesRequest.accept(this, taskKey));
+			popup.add(addResources);
+		}
+		return popup;
 	}
 
 	/**

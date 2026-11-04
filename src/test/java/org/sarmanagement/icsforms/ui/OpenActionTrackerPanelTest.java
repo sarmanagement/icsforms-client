@@ -20,7 +20,12 @@ import javax.swing.JComboBox;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
+import javax.swing.JDialog;
+import javax.swing.JOptionPane;
 import javax.swing.JTextField;
+import java.awt.Component;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -113,6 +118,19 @@ class OpenActionTrackerPanelTest {
 			assertEquals(2, table.getValueAt(0, 0));
 			filter.setSelectedItem("All");
 			assertEquals(2, table.getRowCount());
+			JPopupMenu popup = table.getComponentPopupMenu();
+			assertEquals(List.of("Edit", "Remove"), java.util.Arrays.stream(popup.getComponents())
+					.filter(JMenuItem.class::isInstance).map(JMenuItem.class::cast).map(JMenuItem::getText).toList());
+			for (var listener : popup.getPopupMenuListeners()) {
+				listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(popup));
+			}
+			assertFalse(((JMenuItem) popup.getComponent(0)).isEnabled());
+			table.setRowSelectionInterval(0, 0);
+			for (var listener : popup.getPopupMenuListeners()) {
+				listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(popup));
+			}
+			assertTrue(((JMenuItem) popup.getComponent(0)).isEnabled());
+			assertTrue(((JMenuItem) popup.getComponent(1)).isEnabled());
 			controller.getData().setIncidentMode(IncidentMode.GENERIC);
 			controller.getData().setOpenActionTrackerEnabled(false);
 			panel.refreshFromModel();
@@ -127,10 +145,10 @@ class OpenActionTrackerPanelTest {
 				try (var files = java.nio.file.Files.walk(path)) {
 					for (Path file : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
 						java.nio.file.Files.deleteIfExists(file);
-					}
 				}
 			}
 		}
+	}
 	}
 
 	@Test
@@ -156,6 +174,63 @@ class OpenActionTrackerPanelTest {
 			fail(exception);
 		} finally {
 			UiSupport.setDateTimeDisplayZone(original);
+		}
+	}
+
+	@Test
+	void doubleClickingActionRowOpensTheExistingEditDialog() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		Path path = Path.of("target/tracker-double-click-store");
+		try (FileIncidentStore store = new FileIncidentStore(path)) {
+			AppData data = new AppData();
+			AppController controller = new AppController(data, store, store.create(data),
+					new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
+							new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
+			OpenActionTrackerPanel panel = new OpenActionTrackerPanel(controller);
+			OpenActionItem item = new OpenActionItem();
+			item.setItem("Edit this action");
+			panel.addItem(item);
+			JTable table = (JTable) ((JScrollPane) panel.getComponent(1)).getViewport().getView();
+			java.util.concurrent.atomic.AtomicBoolean editorOpened = new java.util.concurrent.atomic.AtomicBoolean();
+			javax.swing.Timer closeEditor = new javax.swing.Timer(100, event -> {
+				for (java.awt.Window window : java.awt.Window.getWindows()) {
+					if (window instanceof JDialog dialog && "Edit Action".equals(dialog.getTitle())) {
+						editorOpened.set(true);
+						for (Component child : dialog.getContentPane().getComponents()) {
+							if (child instanceof JOptionPane optionPane) {
+								optionPane.setValue(JOptionPane.CANCEL_OPTION);
+							}
+						}
+					}
+				}
+			});
+			closeEditor.start();
+			try {
+				javax.swing.SwingUtilities.invokeAndWait(() -> {
+					for (var listener : table.getMouseListeners()) {
+						listener.mouseClicked(new java.awt.event.MouseEvent(table,
+								java.awt.event.MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
+								10, table.getRowHeight() / 2, 2, false, java.awt.event.MouseEvent.BUTTON1));
+					}
+				});
+			} finally {
+				closeEditor.stop();
+				for (java.awt.Window window : java.awt.Window.getWindows()) {
+					if (window instanceof JDialog dialog && "Edit Action".equals(dialog.getTitle())) {
+						dialog.dispose();
+					}
+				}
+			}
+			assertTrue(editorOpened.get());
+			controller.save();
+		} finally {
+			if (java.nio.file.Files.exists(path)) {
+				try (var files = java.nio.file.Files.walk(path)) {
+					for (Path file : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
+						java.nio.file.Files.deleteIfExists(file);
+					}
+				}
+			}
 		}
 	}
 

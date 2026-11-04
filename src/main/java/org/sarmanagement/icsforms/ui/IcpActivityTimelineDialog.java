@@ -16,12 +16,13 @@ import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
-import javax.swing.JDialog;
+import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.Timer;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -30,12 +31,15 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridLayout;
 import java.awt.RenderingHints;
 import java.awt.Window;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -50,14 +54,20 @@ import java.util.function.Consumer;
 /**
  * Proof-of-concept timeline for ICP activity, grouped by assignment.
  */
-public final class IcpActivityTimelineDialog extends JDialog {
+public final class IcpActivityTimelineDialog extends JFrame {
 	private static final int TIMELINE_LEFT = 240;
 	private static final int TIMELINE_HOUR_WIDTH = 100;
 	private final AppController controller;
 	private final Consumer<LogEntryContext> addEntry;
 	private final Consumer<String> openAssignment;
+	private final Consumer<QuickLogRequest> quickLogEntry;
 	private final TimelineCanvas canvas = new TimelineCanvas();
 	private final JLabel selectionLabel = new JLabel("Select an assignment lane or add an ICP entry.");
+	private final JLabel currentTime = new JLabel();
+	private final JLabel currentZone = new JLabel();
+	private final ClockFace clockFace = new ClockFace();
+	private final JPanel clockPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 0));
+	private final Timer clockTimer;
 	private final JButton detailsButton = new JButton("Event Details…");
 	private final JButton openAssignmentButton = new JButton("Open Task / Assignment…");
 	private List<TimelineLane> lanes = List.of();
@@ -71,7 +81,7 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	 * @param addEntry shared activity entry action.
 	 */
 	public IcpActivityTimelineDialog(Window owner, AppController controller, Consumer<LogEntryContext> addEntry) {
-		this(owner, controller, addEntry, assignmentId -> { });
+		this(owner, controller, addEntry, assignmentId -> { }, request -> { });
 	}
 
 	/**
@@ -84,15 +94,45 @@ public final class IcpActivityTimelineDialog extends JDialog {
 	 */
 	public IcpActivityTimelineDialog(Window owner, AppController controller, Consumer<LogEntryContext> addEntry,
 			Consumer<String> openAssignment) {
-		super(owner, "ICP Activity Timeline", ModalityType.MODELESS);
+		this(owner, controller, addEntry, openAssignment, request -> { });
+	}
+
+	/**
+	 * Creates a modeless ICP timeline with contextual and quick-log actions.
+	 *
+	 * @param owner parent window.
+	 * @param controller active incident controller.
+	 * @param addEntry shared activity entry action.
+	 * @param openAssignment action for opening the selected assignment or task form.
+	 * @param quickLogEntry action for opening the selected configured quick-log workflow.
+	 */
+	public IcpActivityTimelineDialog(Window owner, AppController controller, Consumer<LogEntryContext> addEntry,
+			Consumer<String> openAssignment, Consumer<QuickLogRequest> quickLogEntry) {
+		super("ICP Activity Timeline");
 		this.controller = Objects.requireNonNull(controller);
 		this.addEntry = Objects.requireNonNull(addEntry);
 		this.openAssignment = Objects.requireNonNull(openAssignment);
-		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+		this.quickLogEntry = Objects.requireNonNull(quickLogEntry);
+		setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		JPanel content = new JPanel(new BorderLayout(8, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-		content.add(new JLabel("ICP activity by assignment. Markers show staging, task, clue, subject, completion, and return events."),
-				BorderLayout.NORTH);
+		JPanel header = new JPanel(new BorderLayout(8, 0));
+		JPanel description = new JPanel(new GridLayout(0, 1));
+		description.add(new JLabel("ICP activity by assignment."));
+		description.add(new JLabel("Markers show staging, task, clue, subject, completion, and return events."));
+		header.add(description, BorderLayout.CENTER);
+		clockPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder("Current time"),
+				BorderFactory.createEmptyBorder(0, 0, 7, 0)));
+		clockPanel.setPreferredSize(new Dimension(270, 72));
+		clockFace.setPreferredSize(new Dimension(48, 48));
+		JPanel digitalClock = new JPanel(new GridLayout(2, 1, 0, 0));
+		currentTime.setFont(currentTime.getFont().deriveFont(Font.BOLD, 18f));
+		digitalClock.add(currentTime);
+		digitalClock.add(currentZone);
+		clockPanel.add(clockFace);
+		clockPanel.add(digitalClock);
+		header.add(clockPanel, BorderLayout.EAST);
+		content.add(header, BorderLayout.NORTH);
 		JScrollPane scroll = new JScrollPane(canvas);
 		scroll.setPreferredSize(new Dimension(1000, 540));
 		JPanel timelineView = new JPanel(new BorderLayout(0, 4));
@@ -102,7 +142,7 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		JPanel controls = new JPanel(new BorderLayout());
 		controls.add(selectionLabel, BorderLayout.CENTER);
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-		JButton addButton = new JButton("Add ICP Activity…");
+		JButton addButton = new JButton("Add Log Entry…");
 		addButton.addActionListener(event -> addSelectedEntry());
 		detailsButton.addActionListener(event -> showSelectedDetails());
 		openAssignmentButton.addActionListener(event -> openSelectedAssignment());
@@ -120,6 +160,16 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		controls.add(buttons, BorderLayout.EAST);
 		content.add(controls, BorderLayout.SOUTH);
 		setContentPane(content);
+		refreshCurrentTime();
+		clockTimer = new Timer(1000, event -> refreshCurrentTime());
+		clockTimer.start();
+		addWindowListener(new java.awt.event.WindowAdapter() {
+			/** {@inheritDoc} */
+			@Override
+			public void windowClosed(java.awt.event.WindowEvent event) {
+				clockTimer.stop();
+			}
+		});
 		refresh();
 		pack();
 		setMinimumSize(new Dimension(760, 420));
@@ -170,6 +220,29 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		canvas.revalidate();
 		canvas.repaint();
 		updateSelectionLabel();
+	}
+
+	/** Refreshes both clocks using the incident's selected display timezone. */
+	private void refreshCurrentTime() {
+		ZoneId zone = MainFrame.configuredZoneId(controller.getData());
+		ZonedDateTime now = UtcTimestamp.nowInstant().atZone(zone);
+		currentTime.setText(formatClockTime(now.toInstant(), zone));
+		currentZone.setText(zone.getId());
+		currentZone.setToolTipText(zone.getId());
+		currentTime.getAccessibleContext().setAccessibleName("Current time, 24-hour " + currentTime.getText()
+				+ " " + zone.getId());
+		clockFace.setTime(now);
+	}
+
+	/**
+	 * Formats a digital clock value in 24-hour time for a selected zone.
+	 *
+	 * @param instant current UTC instant.
+	 * @param zoneId selected display timezone.
+	 * @return 24-hour digital time.
+	 */
+	static String formatClockTime(Instant instant, ZoneId zoneId) {
+		return DateTimeFormatter.ofPattern("HH:mm:ss").withZone(zoneId).format(instant);
 	}
 
 	/**
@@ -235,11 +308,20 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		eventContent.add(new JScrollPane(events), BorderLayout.CENTER);
 		details.add(content, BorderLayout.NORTH);
 		details.add(eventContent, BorderLayout.CENTER);
+		List<QuickLogOption> quickLogs = quickLogOptions(lane);
+		Object[] options = new Object[quickLogs.size() + 2];
+		options[0] = "Add ICP Log Entry…";
+		for (int index = 0; index < quickLogs.size(); index++) {
+			options[index + 1] = quickLogs.get(index).label();
+		}
+		options[options.length - 1] = "Close";
 		int choice = UiSupport.showResizableOptionDialog(this, "Timeline Details", details,
-				new Dimension(650, 520), new Object[]{"Add ICP Log Entry…", "Close"}, "Close");
+				new Dimension(650, 520), options, "Close");
 		if (choice == 0) {
 			addEntry.accept(contextFor(lane));
 			refresh();
+		} else if (choice > 0 && choice <= quickLogs.size()) {
+			runQuickLog(lane, quickLogs.get(choice - 1));
 		}
 	}
 
@@ -305,7 +387,214 @@ public final class IcpActivityTimelineDialog extends JDialog {
 		popup.add(details);
 		popup.add(addLog);
 		popup.add(open);
+		List<QuickLogOption> quickLogs = hasSelectedLane() ? quickLogOptions(lanes.get(selectedLane)) : List.of();
+		if (!quickLogs.isEmpty()) {
+			popup.addSeparator();
+			for (QuickLogOption option : quickLogs) {
+				javax.swing.JMenuItem quickLog = new javax.swing.JMenuItem(option.label());
+				quickLog.addActionListener(event -> runQuickLog(lanes.get(selectedLane), option));
+				popup.add(quickLog);
+			}
+		}
 		return popup;
+	}
+
+	/**
+	 * Returns configured quick-log choices applicable to the selected task state.
+	 *
+	 * @param lane selected timeline lane.
+	 * @return ordered lifecycle and configured quick-log choices.
+	 */
+	private List<QuickLogOption> quickLogOptions(TimelineLane lane) {
+		SarTaskAssignment task = controller.getData().getSarTaskAssignments().stream()
+				.filter(candidate -> lane.assignmentId().equals(candidate.getAssignmentId())).findFirst().orElse(null);
+		List<ActivityEventType> eventTypes = controller.getData().getActivityEventTypes().isEmpty()
+				? ActivityEventType.defaultTypes() : controller.getData().getActivityEventTypes();
+		Map<String, ActivityEventType> byId = new LinkedHashMap<>();
+		eventTypes.forEach(type -> byId.put(type.getId(), type));
+		List<String> lifecycleIds = task == null ? List.of() : lifecycleQuickLogIds(task.getTaskLifecycleStatus());
+		List<QuickLogOption> options = new ArrayList<>();
+		for (String id : lifecycleIds) {
+			ActivityEventType type = byId.get(id);
+			if (type != null && type.isShowInQuickMenu()) {
+				options.add(quickLogOption(lane, task, type));
+			}
+		}
+		boolean returned = task != null && "returned".equalsIgnoreCase(safe(task.getTaskLifecycleStatus()).trim());
+		if (!returned) {
+			for (ActivityEventType type : eventTypes) {
+				if (type.isShowInQuickMenu() && !isLifecycleQuickLogType(type.getId())) {
+					options.add(quickLogOption(lane, task, type));
+				}
+			}
+		}
+		return List.copyOf(options);
+	}
+
+	/**
+	 * Creates one configured quick-log menu action and narrative.
+	 *
+	 * @param lane selected timeline lane.
+	 * @param task linked SAR task, if present.
+	 * @param type configured event type.
+	 * @return labeled quick-log option.
+	 */
+	private QuickLogOption quickLogOption(TimelineLane lane, SarTaskAssignment task, ActivityEventType type) {
+		String taskNumber = task == null
+				? (lane.label().isBlank() ? lane.resourceIdentifier() : lane.label())
+				: safe(task.getAssignmentTeamNumber()).isBlank() ? safe(task.getAssignmentId())
+						: task.getAssignmentTeamNumber();
+		String suffix = switch (type.getId()) {
+			case ActivityEventType.ID_RESOURCE_DEPARTED_STAGING -> "departed staging";
+			case ActivityEventType.ID_RESOURCE_ON_TASK -> "going on task";
+			case ActivityEventType.ID_TASK_COMPLETED -> "task completed";
+			case ActivityEventType.ID_RESOURCE_RETURNED_STAGING -> "returned to staging";
+			default -> type.getLabel();
+		};
+		return new QuickLogOption("Log " + taskNumber + " " + suffix, type.getId(), taskNumber + " " + suffix);
+	}
+
+	/**
+	 * Returns permitted lifecycle quick-log event IDs for a task state.
+	 *
+	 * @param status recorded task lifecycle status.
+	 * @return applicable lifecycle event IDs.
+	 */
+	private static List<String> lifecycleQuickLogIds(String status) {
+		return switch (safe(status).trim().toLowerCase(java.util.Locale.ROOT)) {
+			case "planned" -> List.of(ActivityEventType.ID_RESOURCE_DEPARTED_STAGING);
+			case "assigned - enroute to assignment" -> List.of(ActivityEventType.ID_RESOURCE_ON_TASK);
+			case "assigned - on task" -> List.of(ActivityEventType.ID_TASK_COMPLETED,
+					ActivityEventType.ID_RESOURCE_RETURNED_STAGING);
+			case "assigned - returning from assignment" -> List.of(ActivityEventType.ID_RESOURCE_RETURNED_STAGING);
+			default -> List.of();
+		};
+	}
+
+	/**
+	 * Identifies task lifecycle types whose quick-log visibility depends on task status.
+	 *
+	 * @param id event type ID.
+	 * @return true for task lifecycle event types.
+	 */
+	private static boolean isLifecycleQuickLogType(String id) {
+		return ActivityEventType.ID_RESOURCE_DEPARTED_STAGING.equals(id)
+				|| ActivityEventType.ID_RESOURCE_ON_TASK.equals(id) || ActivityEventType.ID_TASK_COMPLETED.equals(id)
+				|| ActivityEventType.ID_RESOURCE_RETURNED_STAGING.equals(id);
+	}
+
+	/**
+	 * Opens the shared log workflow with the selected configured quick-log defaults.
+	 *
+	 * @param lane selected timeline lane.
+	 * @param option selected event type and narrative.
+	 */
+	private void runQuickLog(TimelineLane lane, QuickLogOption option) {
+		quickLogEntry.accept(new QuickLogRequest(contextFor(lane), option.eventTypeId(), option.activity()));
+		refresh();
+	}
+
+	/**
+	 * Displays a clock face for the current time in the selected incident timezone.
+	 */
+	private final class ClockFace extends JPanel {
+		private ZonedDateTime time = ZonedDateTime.now();
+
+		/** Creates an accessible analog clock face. */
+		private ClockFace() {
+			setOpaque(false);
+			getAccessibleContext().setAccessibleName("Current time, analog clock");
+		}
+
+		/**
+		 * Updates the analog clock and its accessible description.
+		 *
+		 * @param current current zoned time.
+		 */
+		private void setTime(ZonedDateTime current) {
+			time = current;
+			getAccessibleContext().setAccessibleDescription(
+					"Current time " + formatClockTime(current.toInstant(), current.getZone()) + " "
+							+ current.getZone().getId());
+			repaint();
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		protected void paintComponent(Graphics graphics) {
+			super.paintComponent(graphics);
+			Graphics2D g = (Graphics2D) graphics.create();
+			try {
+				g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+				int size = Math.min(getWidth(), getHeight()) - 4;
+				int centerX = getWidth() / 2;
+				int centerY = getHeight() / 2;
+				int radius = size / 2;
+				g.setColor(Color.WHITE);
+				g.fillOval(centerX - radius, centerY - radius, size, size);
+				g.setColor(new Color(65, 75, 85));
+				g.setStroke(new BasicStroke(1.5f));
+				g.drawOval(centerX - radius, centerY - radius, size, size);
+				for (int tick = 0; tick < 12; tick++) {
+					double angle = Math.PI * tick / 6 - Math.PI / 2;
+					int outerX = centerX + (int) (Math.cos(angle) * (radius - 3));
+					int outerY = centerY + (int) (Math.sin(angle) * (radius - 3));
+					int inset = tick % 3 == 0 ? 8 : 5;
+					int innerX = centerX + (int) (Math.cos(angle) * (radius - inset));
+					int innerY = centerY + (int) (Math.sin(angle) * (radius - inset));
+					g.drawLine(innerX, innerY, outerX, outerY);
+				}
+				double seconds = time.getSecond() + time.getNano() / 1_000_000_000d;
+				double minutes = time.getMinute() + seconds / 60d;
+				double hours = time.getHour() % 12 + minutes / 60d;
+				drawHand(g, centerX, centerY, radius * 0.48, hours / 12d, 2.5f);
+				drawHand(g, centerX, centerY, radius * 0.7, minutes / 60d, 1.8f);
+				drawHand(g, centerX, centerY, radius * 0.76, seconds / 60d, 1f);
+				g.setColor(new Color(45, 50, 55));
+				g.fillOval(centerX - 2, centerY - 2, 4, 4);
+			} finally {
+				g.dispose();
+			}
+		}
+
+		/**
+		 * Draws one clock hand.
+		 *
+		 * @param graphics drawing context.
+		 * @param centerX clock center x.
+		 * @param centerY clock center y.
+		 * @param length hand length.
+		 * @param fraction position around the dial.
+		 * @param stroke hand width.
+		 */
+		private void drawHand(Graphics2D graphics, int centerX, int centerY, double length, double fraction,
+				float stroke) {
+			double angle = fraction * Math.PI * 2 - Math.PI / 2;
+			graphics.setColor(new Color(45, 50, 55));
+			graphics.setStroke(new BasicStroke(stroke, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+			graphics.drawLine(centerX, centerY, centerX + (int) (Math.cos(angle) * length),
+					centerY + (int) (Math.sin(angle) * length));
+		}
+	}
+
+	/**
+	 * A configured event type and its prefilled activity text.
+	 *
+	 * @param label visible menu label.
+	 * @param eventTypeId configured event type identifier.
+	 * @param activity prefilled activity text.
+	 */
+	private record QuickLogOption(String label, String eventTypeId, String activity) {
+	}
+
+	/**
+	 * Request to open the common log editor with selected quick-log defaults.
+	 *
+	 * @param context assignment-specific log context.
+	 * @param eventTypeId configured event type identifier.
+	 * @param activity prefilled activity text.
+	 */
+	record QuickLogRequest(LogEntryContext context, String eventTypeId, String activity) {
 	}
 
 	/**

@@ -211,7 +211,7 @@ class IncidentCommandPlanningProgressTest {
 		try {
 			JTable objectives = (JTable) field(panel, "objectives");
 			assertTrue(objectives.getValueAt(0, 0).toString().contains("&lt;north&gt; &amp; east"));
-			assertTrue(objectives.getValueAt(0, 0).toString().contains("assigned - on task: 1"));
+			assertTrue(objectives.getValueAt(0, 2).toString().contains("assigned - on task: 1"));
 			JComboBox<?> grouping = (JComboBox<?>) field(panel, "resourceGrouping");
 			SwingUtilities.invokeAndWait(() -> grouping.setSelectedIndex(1));
 			JTable resources = (JTable) field(panel, "resources");
@@ -221,8 +221,8 @@ class IncidentCommandPlanningProgressTest {
 			assertEquals(2, panel.displayedResourceCount("Available"));
 			task.setTaskLifecycleStatus("returned");
 			refresh(controller);
-			assertTrue(objectives.getValueAt(0, 0).toString().contains("returned: 1"));
-			assertFalse(objectives.getValueAt(0, 0).toString().contains("assigned - on task"));
+			assertTrue(objectives.getValueAt(0, 2).toString().contains("returned: 1"));
+			assertFalse(objectives.getValueAt(0, 2).toString().contains("assigned - on task"));
 		} finally {
 			SwingUtilities.invokeAndWait(panel::dispose);
 		}

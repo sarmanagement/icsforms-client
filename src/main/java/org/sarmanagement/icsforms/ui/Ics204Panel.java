@@ -48,6 +48,7 @@ public class Ics204Panel extends JPanel {
 	}
 
 	private final AppController controller;
+	private final EditorCommitGuard editorCommitGuard;
 	private java.util.function.Consumer<ResourceAssignment> on214Request;
 	private java.util.function.Consumer<String> onEditSarTaskRequest;
 	private java.util.function.Consumer<String> onChangeSarTaskStatusRequest;
@@ -89,6 +90,7 @@ public class Ics204Panel extends JPanel {
 	public Ics204Panel(AppController controller) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
+		editorCommitGuard = controller.createEditorCommitGuard();
 		RadioChannelPicker.install(operationsChiefContactField, controller);
 		RadioChannelPicker.install(branchDirectorContactField, controller);
 		RadioChannelPicker.install(supervisorContactField, controller);
@@ -214,8 +216,11 @@ public class Ics204Panel extends JPanel {
 		entry.setPrimaryContact(RadioChannelPicker.displayName(channel));
 		entry.setRadioChannelId(channel.getChannelId());
 		communicationsTableModel.addEntry(entry);
-		pushToModel();
-		controller.markDirty();
+		if (!pushToModel()) {
+			UiSupport.showDocumentMessage(this,
+					"The ICS 204 editor is stale. The channel was left in the editor draft and was not saved.",
+					"Unable to add channel", javax.swing.JOptionPane.ERROR_MESSAGE);
+		}
 	}
 
 	/**
@@ -311,10 +316,22 @@ public class Ics204Panel extends JPanel {
 		rebuildManagementContacts();
 		resourceTableModel.setRows(form.getResourcesAssigned());
 		communicationsTableModel.setRows(form.getCommunications());
+		editorCommitGuard.rebase();
 	}
 
-	/** Applies field values to the model. */
-	public void pushToModel() {
+	/**
+	 * Applies field values to the model.
+	 *
+	 * @return true when the editor values are committed; false when the editor is stale
+	 */
+	public boolean pushToModel() {
+		return editorCommitGuard.commit(AppController.LinkSource.ICS204, this::flushToModel);
+	}
+
+	/**
+	 * Writes current ICS 204 controls after the editor revision has been accepted.
+	 */
+	private void flushToModel() {
 		UiSupport.commitTableEdits(communicationsTable);
 		Ics204Form form = controller.getData().getForm204();
 		storeSelectedContextValue(activeManagementContext);
