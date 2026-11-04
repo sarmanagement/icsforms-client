@@ -18,7 +18,6 @@ import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.JButton;
-import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JList;
@@ -94,8 +93,9 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final Map<String, JLabel> progressBadges = new LinkedHashMap<>();
 	private final DefaultTableModel objectiveModel = readOnlyModel("Objective", "n", "Linked assignments", "Assessment");
 	private final JTable objectives = new JTable(objectiveModel);
-	private final JCheckBoxMenuItem showObjectiveAssessments = new JCheckBoxMenuItem("Show assessment", true);
 	private TableColumn objectiveAssessmentColumn;
+	private boolean showObjectiveAssessments;
+	private JSplitPane objectiveSplit;
 	private final JTextArea commandEmphasis = contextDisplay();
 	private final JTextArea situationalAwareness = contextDisplay();
 	private final JComboBox<String> resourceGrouping = new JComboBox<>(new String[]{"All resources", "By resource type"});
@@ -271,8 +271,6 @@ public class IncidentCommandRolePanel extends JPanel {
 		planningStage.getAccessibleContext().setAccessibleName("IAP planning-cycle stage");
 		planningStage.setPreferredSize(new Dimension(145, planningStage.getPreferredSize().height));
 		stage.add(planningStage);
-		showObjectiveAssessments.getAccessibleContext().setAccessibleName("Show objective assessments");
-		showObjectiveAssessments.setToolTipText("Show or hide the objective assessment column");
 		objectives.getAccessibleContext().setAccessibleName("Incident objectives and recorded assessments");
 		objectives.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 		objectives.getColumnModel().getColumn(0).setPreferredWidth(640);
@@ -308,8 +306,7 @@ public class IncidentCommandRolePanel extends JPanel {
 			}
 		});
 		objectiveAssessmentColumn = objectives.getColumnModel().getColumn(3);
-		showObjectiveAssessments.addActionListener(event -> setObjectiveAssessmentColumnVisible(
-				showObjectiveAssessments.isSelected()));
+		setObjectiveAssessmentColumnVisible(false);
 		objectives.addComponentListener(new java.awt.event.ComponentAdapter() {
 			/** {@inheritDoc} */
 			@Override
@@ -329,8 +326,6 @@ public class IncidentCommandRolePanel extends JPanel {
 		JMenuItem assignmentsItem = new JMenuItem("Linked work");
 		assignmentsItem.addActionListener(event -> showSelectedObjectiveAssignments());
 		objectiveMenu.add(assignmentsItem);
-		objectiveMenu.addSeparator();
-		objectiveMenu.add(showObjectiveAssessments);
 		objectiveMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
 			/** {@inheritDoc} */
 			@Override
@@ -402,8 +397,8 @@ public class IncidentCommandRolePanel extends JPanel {
 		objectiveTablePanel.add(new JScrollPane(objectives), BorderLayout.CENTER);
 		planProgress.getAccessibleContext().setAccessibleName("Recorded IAP progress summary");
 		planProgress.setBorder(javax.swing.BorderFactory.createEmptyBorder(2, 4, 2, 4));
-		for (String area : List.of("Objectives", "Assignment coverage", "Safety", "Human medical", "Canine medical",
-				"Communications")) {
+		for (String area : List.of("Objectives", "Assignment coverage", "Communications", "Safety", "Human medical",
+				"Canine medical")) {
 			JLabel badge = new JLabel();
 			badge.setBorder(javax.swing.BorderFactory.createCompoundBorder(
 					javax.swing.BorderFactory.createEtchedBorder(),
@@ -418,10 +413,19 @@ public class IncidentCommandRolePanel extends JPanel {
 			constraints.insets = new java.awt.Insets(1, 2, 1, 2);
 			planProgress.add(badge, constraints);
 		}
+		planProgress.add(new JPanel(), progressSpacerConstraints(0, 3));
+		planProgress.add(new JPanel(), progressSpacerConstraints(1, 3));
 		JPanel progress = new JPanel(new BorderLayout(4, 4));
 		progress.add(planProgress, BorderLayout.CENTER);
-		JSplitPane objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, objectiveTablePanel, progress);
-		objectiveSplit.setResizeWeight(0.62);
+		objectiveSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, objectiveTablePanel, progress);
+		objectiveSplit.setResizeWeight(1.0);
+		objectiveSplit.addComponentListener(new java.awt.event.ComponentAdapter() {
+			/** {@inheritDoc} */
+			@Override
+			public void componentResized(java.awt.event.ComponentEvent event) {
+				fitProgressSection();
+			}
+		});
 		objectiveSplit.setDividerLocation(0.62);
 		planning.add(objectiveSplit, BorderLayout.CENTER);
 		planning.add(buildApprovalPanel(), BorderLayout.SOUTH);
@@ -679,31 +683,85 @@ public class IncidentCommandRolePanel extends JPanel {
 	 */
 	private void editObjective(IncidentObjective existing) {
 		AppController.IncidentBinding editBinding = controller.captureIncidentBinding();
-		JTextArea wording = new JTextArea(existing == null ? "" : existing.getText(), 5, 48);
+		JTextArea wording = new JTextArea(existing == null ? "" : existing.getText(), 9, 48);
 		wording.setLineWrap(true);
 		wording.setWrapStyleWord(true);
 		wording.getAccessibleContext().setAccessibleName("Full objective wording");
-		JComboBox<ObjectiveAssessment> assessment = new JComboBox<>(ObjectiveAssessment.values());
-		assessment.setSelectedItem(existing == null ? ObjectiveAssessment.NOT_ASSESSED : existing.getAssessment());
-		assessment.getAccessibleContext().setAccessibleName("Objective assessment");
-		JTextArea note = new JTextArea(existing == null ? "" : existing.getAssessmentNote(), 3, 48);
-		note.setLineWrap(true);
-		note.setWrapStyleWord(true);
-		note.getAccessibleContext().setAccessibleName("Objective assessment note");
+		ObjectiveAssessment recordedAssessment = existing == null ? ObjectiveAssessment.NOT_ASSESSED
+				: existing.getAssessment();
+		String recordedNote = existing == null ? "" : existing.getAssessmentNote();
+		JComboBox<ObjectiveAssessment> assessment = null;
+		JTextArea note = null;
 		JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
 		form.add(new JLabel("Objective wording"));
 		form.add(new JScrollPane(wording));
-		form.add(new JLabel("Assessment"));
-		form.add(assessment);
-		form.add(new JLabel("Assessment note"));
-		form.add(new JScrollPane(note));
+		if (showObjectiveAssessments) {
+			assessment = new JComboBox<>(ObjectiveAssessment.values());
+			assessment.setSelectedItem(recordedAssessment);
+			assessment.getAccessibleContext().setAccessibleName("Objective assessment");
+			note = new JTextArea(recordedNote, 1, 48);
+			note.setLineWrap(true);
+			note.setWrapStyleWord(true);
+			note.getAccessibleContext().setAccessibleName("Objective assessment note");
+			form.add(new JLabel("Assessment"));
+			form.add(assessment);
+			form.add(new JLabel("Assessment note"));
+			form.add(new JScrollPane(note));
+		}
 		String title = existing == null ? "Add incident objective" : "Edit incident objective";
-		int choice = UiSupport.showResizableOptionDialog(this, title, form, new Dimension(620, 420),
+		int choice = UiSupport.showResizableOptionDialog(this, title, form, new Dimension(620, 480),
 				new Object[]{"Save", "Cancel"}, "Save");
 		if (choice == 0) {
 			saveObjective(editBinding, existing == null ? "" : existing.getObjectiveId(), wording.getText(),
-					(ObjectiveAssessment) assessment.getSelectedItem(), note.getText());
+					assessment == null ? recordedAssessment : (ObjectiveAssessment) assessment.getSelectedItem(),
+					note == null ? recordedNote : note.getText());
 		}
+	}
+
+	/**
+	 * Sets whether objective assessments are shown in the table and editor.
+	 *
+	 * @param visible true to show assessment details.
+	 */
+	void setShowObjectiveAssessments(boolean visible) {
+		showObjectiveAssessments = visible;
+		setObjectiveAssessmentColumnVisible(visible);
+	}
+
+	/**
+	 * Keeps the review badges at their preferred height beneath the objective table.
+	 */
+	private void fitProgressSection() {
+		if (objectiveSplit == null || objectiveSplit.getHeight() <= 0 || planProgress.getParent() == null) {
+			return;
+		}
+		planProgress.revalidate();
+		planProgress.getParent().revalidate();
+		int reviewHeight = planProgress.getParent().getPreferredSize().height;
+		planProgress.getParent().setMinimumSize(new Dimension(0, reviewHeight));
+		int availableHeight = objectiveSplit.getHeight() - objectiveSplit.getDividerSize();
+		int minimumReviewHeight = Math.min(reviewHeight, Math.max(48, availableHeight / 3));
+		int dividerLocation = Math.min(Math.max(80, availableHeight - reviewHeight),
+				availableHeight - minimumReviewHeight);
+		dividerLocation = Math.max(0, dividerLocation);
+		objectiveSplit.setDividerLocation(dividerLocation);
+	}
+
+	/**
+	 * Provides a flexible final row so extra space is not inserted around badges.
+	 *
+	 * @param column grid column.
+	 * @param row grid row.
+	 * @return constraints for a vertical spacer.
+	 */
+	private static java.awt.GridBagConstraints progressSpacerConstraints(int column, int row) {
+		java.awt.GridBagConstraints constraints = new java.awt.GridBagConstraints();
+		constraints.gridx = column;
+		constraints.gridy = row;
+		constraints.weightx = 1;
+		constraints.weighty = 1;
+		constraints.fill = java.awt.GridBagConstraints.BOTH;
+		return constraints;
 	}
 
 	/**

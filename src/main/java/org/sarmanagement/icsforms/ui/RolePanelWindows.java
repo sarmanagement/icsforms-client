@@ -209,6 +209,20 @@ final class RolePanelWindows {
 	}
 
 	/**
+	 * Updates assessment visibility in an open Incident Command panel for one incident.
+	 *
+	 * @param incident incident whose role panel should be updated.
+	 * @param visible whether objective assessments should be shown.
+	 */
+	static void setObjectiveAssessmentsVisible(AppData incident, boolean visible) {
+		JFrame frame = INCIDENT_COMMAND_WINDOWS.get(incident);
+		if (frame != null && frame.isDisplayable()
+				&& frame.getContentPane() instanceof IncidentCommandRolePanel panel) {
+			panel.setShowObjectiveAssessments(visible);
+		}
+	}
+
+	/**
 	 * Opens or focuses the Communications Unit panel.
 	 *
 	 * @param owner parent window.

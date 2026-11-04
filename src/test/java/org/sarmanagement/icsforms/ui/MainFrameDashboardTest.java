@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JFrame;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -21,6 +22,7 @@ import java.nio.file.Files;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -65,6 +67,7 @@ class MainFrameDashboardTest {
 					if ("Configuration".equals(menu.getText())) {
 						setting = (JCheckBoxMenuItem) menu.getItem(0);
 					}
+
 				}
 				assertTrue(setting != null);
 				JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame, "tabs");
@@ -83,6 +86,67 @@ class MainFrameDashboardTest {
 					preferences.remove("descriptive-workspace-tabs");
 				} else {
 					preferences.put("descriptive-workspace-tabs", previous);
+				}
+				AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
+				((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
+				frame.dispose();
+			}
+		});
+	}
+
+	@Test
+	void objectiveAssessmentSettingLivesInConfigurationAndUpdatesOpenRolePanel() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		var directory = Files.createTempDirectory("icsforms-objective-assessment-setting");
+		var preferences = java.util.prefs.Preferences.userNodeForPackage(MainFrame.class);
+		String key = "show-objective-assessments";
+		String previous = preferences.get(key, null);
+		preferences.putBoolean(key, false);
+		SwingUtilities.invokeAndWait(() -> {
+			MainFrame frame = new MainFrame(new AppData(), new LocalRepository(directory.resolve("incident.json")),
+					new PdfExportService(), new IncidentValidator(), directory);
+			JFrame[] roleWindow = new JFrame[1];
+			try {
+				JMenu config = java.util.stream.IntStream.range(0, frame.getJMenuBar().getMenuCount())
+						.mapToObj(frame.getJMenuBar()::getMenu)
+						.filter(menu -> "Configuration".equals(menu.getText())).findFirst().orElseThrow();
+				int medicalSettings = java.util.stream.IntStream.range(0, config.getItemCount())
+						.filter(index -> config.getItem(index) != null
+								&& config.getItem(index).getText().startsWith("Medical Routing"))
+						.findFirst().orElseThrow();
+				JCheckBoxMenuItem setting = (JCheckBoxMenuItem) config.getItem(medicalSettings + 1);
+				assertEquals("Show objective assessments", setting.getText());
+				assertFalse(setting.isSelected());
+				setting.doClick();
+				assertTrue(preferences.getBoolean(key, false));
+
+				JMenu view = frame.getJMenuBar().getMenu(1);
+				JMenu rolePanels = view.getItem(0) instanceof JMenu menu ? menu : null;
+				assertTrue(rolePanels != null);
+				for (int index = 0; index < rolePanels.getItemCount(); index++) {
+					JMenuItem item = rolePanels.getItem(index);
+					if (item != null && "Incident Command".equals(item.getText())) {
+						item.doClick();
+						break;
+					}
+				}
+				roleWindow[0] = java.util.Arrays.stream(java.awt.Window.getWindows())
+						.filter(JFrame.class::isInstance).map(JFrame.class::cast)
+						.filter(candidate -> candidate.getTitle().startsWith("Incident Command —"))
+						.findFirst().orElseThrow();
+				IncidentCommandRolePanel panel = (IncidentCommandRolePanel) roleWindow[0].getContentPane();
+				assertEquals(4, ((javax.swing.JTable) Ics205PanelTest.field(panel, "objectives")).getColumnCount());
+				setting.doClick();
+				assertFalse(preferences.getBoolean(key, true));
+				assertEquals(3, ((javax.swing.JTable) Ics205PanelTest.field(panel, "objectives")).getColumnCount());
+			} finally {
+				if (roleWindow[0] != null) {
+					roleWindow[0].dispose();
+				}
+				if (previous == null) {
+					preferences.remove(key);
+				} else {
+					preferences.put(key, previous);
 				}
 				AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
 				((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();

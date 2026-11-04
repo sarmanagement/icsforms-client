@@ -24,6 +24,7 @@ import javax.swing.JList;
 import javax.swing.LookAndFeel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -256,7 +257,7 @@ class FocusedPanelLayoutTest {
 				}
 				data.getForm208().setGeneralRequirements("Wear helmets");
 				panel.refreshFromModel();
-				assertEquals(RolePanelSupport.PENDING, badges(panel).get(2).getBackground());
+				assertEquals(RolePanelSupport.PENDING, badge(panel, "Safety").getBackground());
 				AppData recorded = populated(false);
 				AppController recordedController = controller(recorded);
 				IncidentCommandRolePanel recordedPanel = new IncidentCommandRolePanel(recordedController, ignored -> {
@@ -269,19 +270,19 @@ class FocusedPanelLayoutTest {
 					recorded.getForm202().getStructuredObjectives().get(0).setText("Changed objective");
 					recorded.getCanineMedicalPlan().setEmergencyProcedures("Changed veterinary plan");
 					recordedPanel.refreshFromModel();
-					assertEquals(RolePanelSupport.PENDING, badges(recordedPanel).get(0).getBackground());
-					assertEquals(RolePanelSupport.PENDING, badges(recordedPanel).get(1).getBackground());
-					assertEquals(RolePanelSupport.PENDING, badges(recordedPanel).get(4).getBackground());
-					assertTrue(badges(recordedPanel).get(1).getText().contains("not approval"));
+					assertEquals(RolePanelSupport.PENDING, badge(recordedPanel, "Objectives").getBackground());
+					assertEquals(RolePanelSupport.PENDING, badge(recordedPanel, "Assignment coverage").getBackground());
+					assertEquals(RolePanelSupport.PENDING, badge(recordedPanel, "Canine medical").getBackground());
+					assertTrue(badge(recordedPanel, "Assignment coverage").getText().contains("not approval"));
 				} finally {
 					recordedPanel.dispose();
 				}
 				data.recordPlanReview(PlanReviewArea.SAFETY, "Reviewer", null);
 				panel.refreshFromModel();
-				assertEquals(RolePanelSupport.CURRENT, badges(panel).get(2).getBackground());
+				assertEquals(RolePanelSupport.CURRENT, badge(panel, "Safety").getBackground());
 				data.getForm208().setGeneralRequirements("Changed safety instructions");
 				panel.refreshFromModel();
-				assertEquals(RolePanelSupport.PENDING, badges(panel).get(2).getBackground());
+				assertEquals(RolePanelSupport.PENDING, badge(panel, "Safety").getBackground());
 			} finally {
 				panel.dispose();
 			}
@@ -307,13 +308,29 @@ class FocusedPanelLayoutTest {
 				IncidentCommandRolePanel panel = (IncidentCommandRolePanel) frame[0].getContentPane();
 				List<JLabel> badges = badges(panel);
 				assertEquals(6, badges.size());
+				assertEquals(List.of("Objectives", "Assignment coverage", "Communications", "Safety", "Human medical",
+						"Canine medical"), badges.stream()
+								.map(badge -> badge.getAccessibleContext().getAccessibleName().split(":", 2)[0])
+								.toList());
 				assertNull(SwingUtilities.getAncestorOfClass(JScrollPane.class, badges.get(0)),
 						"Planning badges should not require a scroll pane");
 				JPanel content = (JPanel) badges.get(0).getParent();
-				for (int index = 2; index < badges.size(); index++) {
-					assertTrue(badges.get(index).getHeight() < badges.get(0).getHeight(),
-							"Review badge should use only its own text height: " + badges.get(index).getText());
+				for (int index = 0; index < badges.size(); index += 2) {
+					assertEquals(badges.get(index).getY(), badges.get(index + 1).getY());
+					if (index > 0) {
+						assertTrue(badges.get(index).getY() > badges.get(index - 2).getY());
+					}
 				}
+				for (int index = 2; index < badges.size(); index++) {
+					if (index == 2 || index == 4) {
+						assertTrue(badges.get(index).getHeight() < badges.get(0).getHeight(),
+							"Review badge should use only its own text height: " + badges.get(index).getText());
+					}
+				}
+				JSplitPane objectiveSplit = (JSplitPane) field(panel, "objectiveSplit");
+				Component badgeSection = objectiveSplit.getBottomComponent();
+				assertTrue(badgeSection.getHeight() <= badgeSection.getPreferredSize().height + 4,
+						"Badge section should stay at its minimum content height");
 				for (JLabel badge : badges) {
 					assertTextFits(badge);
 					Rectangle bounds = SwingUtilities.convertRectangle(badge.getParent(), badge.getBounds(), content);
@@ -326,6 +343,11 @@ class FocusedPanelLayoutTest {
 				assertBanners(frame[0]);
 				frame[0].setSize(860, 620);
 				frame[0].validate();
+			});
+			SwingUtilities.invokeAndWait(() -> {
+				IncidentCommandRolePanel panel = (IncidentCommandRolePanel) frame[0].getContentPane();
+				List<JLabel> badges = badges(panel);
+				JPanel content = (JPanel) badges.get(0).getParent();
 				for (JLabel badge : badges) {
 					assertTextFits(badge);
 					Rectangle bounds = SwingUtilities.convertRectangle(badge.getParent(), badge.getBounds(), content);
@@ -402,6 +424,19 @@ class FocusedPanelLayoutTest {
 						&& label.getAccessibleContext().getAccessibleName().matches(
 								"(Objectives|Assignment coverage|Safety|Human medical|Canine medical|Communications):.*"))
 				.toList();
+	}
+
+	/**
+	 * Finds a planning badge by its accessible label.
+	 *
+	 * @param panel command panel.
+	 * @param name badge name.
+	 * @return matching badge.
+	 */
+	private JLabel badge(IncidentCommandRolePanel panel, String name) {
+		return badges(panel).stream()
+				.filter(label -> label.getAccessibleContext().getAccessibleName().startsWith(name + ":"))
+				.findFirst().orElseThrow();
 	}
 
 	/**

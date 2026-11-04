@@ -91,6 +91,7 @@ public class MainFrame extends JFrame {
 	private static final String ICS_215_GROUP = "Operational Planning Worksheet (ICS 215)";
 	private static final String SAFETY_DASHBOARD_GROUP = "Safety Overview";
 	private static final String DESCRIPTIVE_TABS_PREFERENCE = "descriptive-workspace-tabs";
+	private static final String SHOW_OBJECTIVE_ASSESSMENTS_PREFERENCE = "show-objective-assessments";
 	private static final List<WorkspaceId> WORKSPACE_ORDER = List.of(WorkspaceId.SHARED, WorkspaceId.ORG_CHART,
 			WorkspaceId.ICS_201, WorkspaceId.ICS_202, WorkspaceId.ICS_204, WorkspaceId.ICS_215,
 			WorkspaceId.ICS_205, WorkspaceId.MEDICAL, WorkspaceId.SAFETY, WorkspaceId.SAFETY_OVERVIEW,
@@ -128,6 +129,7 @@ public class MainFrame extends JFrame {
 	private final JTabbedPane tabs = new JTabbedPane();
 	private final Preferences userPreferences = Preferences.userNodeForPackage(MainFrame.class);
 	private boolean descriptiveTabs = userPreferences.getBoolean(DESCRIPTIVE_TABS_PREFERENCE, false);
+	private boolean showObjectiveAssessments = userPreferences.getBoolean(SHOW_OBJECTIVE_ASSESSMENTS_PREFERENCE, false);
 	private final Map<WorkspaceId, WorkspaceDefinition> workspaces = new EnumMap<>(WorkspaceId.class);
 	private final Map<Component, WorkspaceDefinition> tabWorkspaces = new IdentityHashMap<>();
 	private final List<WorkspaceId> registeredWorkspaceIds = new ArrayList<>();
@@ -690,6 +692,15 @@ public class MainFrame extends JFrame {
 		JMenuItem medicalRoutingSettingsItem = new JMenuItem("Medical Routing (OpenRouteService)…");
 		medicalRoutingSettingsItem.addActionListener(event -> openMedicalRoutingSettingsDialog());
 		configMenu.add(medicalRoutingSettingsItem);
+		JCheckBoxMenuItem showObjectiveAssessmentsItem = new JCheckBoxMenuItem("Show objective assessments",
+				showObjectiveAssessments);
+		showObjectiveAssessmentsItem.getAccessibleContext().setAccessibleName("Show objective assessments");
+		showObjectiveAssessmentsItem.addActionListener(event -> {
+			showObjectiveAssessments = showObjectiveAssessmentsItem.isSelected();
+			userPreferences.putBoolean(SHOW_OBJECTIVE_ASSESSMENTS_PREFERENCE, showObjectiveAssessments);
+			RolePanelWindows.setObjectiveAssessmentsVisible(controller.getData(), showObjectiveAssessments);
+		});
+		configMenu.add(showObjectiveAssessmentsItem);
 
 		JMenu modeMenu = new JMenu("Incident Mode");
 		modeMenu.setMnemonic(KeyEvent.VK_M);
@@ -853,7 +864,7 @@ public class MainFrame extends JFrame {
 
 	/** Opens Incident Command with the established assignment, log, and status workflows. */
 	private void openIncidentCommandRolePanel() {
-		RolePanelWindows.openIncidentCommand(this, controller, this::openWorkspace,
+		JFrame frame = RolePanelWindows.openIncidentCommand(this, controller, this::openWorkspace,
 				new IncidentCommandRolePanel.AssignmentActions() {
 					/** {@inheritDoc} */
 					@Override
@@ -892,6 +903,7 @@ public class MainFrame extends JFrame {
 						return ics204Panel.openNewAssignmentEditorForObjective(objectiveId);
 					}
 				});
+		((IncidentCommandRolePanel) frame.getContentPane()).setShowObjectiveAssessments(showObjectiveAssessments);
 	}
 
 	/**

@@ -26,7 +26,6 @@ import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
-import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -217,6 +216,118 @@ class IncidentCommandRolePanelTest {
 	}
 
 	@Test
+	void objectiveEditorAdaptsToAssessmentVisibility() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		IncidentObjective objective = new IncidentObjective("Search the north ridge", 0);
+		objective.setAssessment(ObjectiveAssessment.ONGOING);
+		objective.setAssessmentNote("Check the eastern drainage");
+		IncidentCommandRolePanel panel = panel(controller(new AppData()));
+		try {
+			OpenObjectiveEditor hidden = openObjectiveEditor(panel, objective);
+			SwingUtilities.invokeAndWait(() -> {
+				List<JTextArea> areas = components(hidden.dialog(), JTextArea.class);
+				assertEquals(1, areas.size());
+				assertEquals(9, areas.get(0).getRows());
+				assertFalse(components(hidden.dialog(), JComboBox.class).stream()
+						.anyMatch(combo -> combo.getAccessibleContext().getAccessibleName() != null
+								&& combo.getAccessibleContext().getAccessibleName().contains("assessment")));
+				button(hidden.dialog(), "Cancel").doClick();
+			});
+			hidden.opener().join(2000);
+			assertFalse(hidden.opener().isAlive());
+			SwingUtilities.invokeAndWait(() -> panel.setShowObjectiveAssessments(true));
+			OpenObjectiveEditor visible = openObjectiveEditor(panel, objective);
+			SwingUtilities.invokeAndWait(() -> {
+				List<JTextArea> areas = components(visible.dialog(), JTextArea.class);
+				assertEquals(2, areas.size());
+				assertEquals(9, areas.get(0).getRows());
+				assertEquals(1, areas.get(1).getRows());
+				JComboBox<?> assessment = components(visible.dialog(), JComboBox.class).stream()
+						.filter(combo -> "Objective assessment".equals(
+								combo.getAccessibleContext().getAccessibleName()))
+						.findFirst().orElseThrow();
+				assertEquals(ObjectiveAssessment.ONGOING, assessment.getSelectedItem());
+				assertTrue(components(visible.dialog(), JLabel.class).stream()
+						.anyMatch(label -> "Assessment note".equals(label.getText())));
+				button(visible.dialog(), "Cancel").doClick();
+			});
+			visible.opener().join(2000);
+			assertFalse(visible.opener().isAlive());
+		} finally {
+			SwingUtilities.invokeAndWait(panel::dispose);
+		}
+	}
+
+	/**
+	 * Opens an objective editor on the event thread and returns its visible dialog.
+	 *
+	 * @param panel Incident Command panel.
+	 * @param objective objective to edit.
+	 * @return displayed objective editor.
+	 * @throws Exception if the dialog does not open.
+	 */
+	private OpenObjectiveEditor openObjectiveEditor(IncidentCommandRolePanel panel, IncidentObjective objective)
+			throws Exception {
+		Thread opener = new Thread(() -> {
+			try {
+				SwingUtilities.invokeAndWait(() -> {
+					try {
+						var method = IncidentCommandRolePanel.class.getDeclaredMethod("editObjective",
+								IncidentObjective.class);
+						method.setAccessible(true);
+						method.invoke(panel, objective);
+					} catch (ReflectiveOperationException exception) {
+						throw new IllegalStateException(exception);
+					}
+				});
+			} catch (Exception exception) {
+				throw new IllegalStateException(exception);
+			}
+		});
+		opener.start();
+		JDialog dialog = null;
+		for (int attempt = 0; attempt < 200 && dialog == null; attempt++) {
+			for (java.awt.Window window : java.awt.Window.getWindows()) {
+				if (window instanceof JDialog candidate && candidate.isShowing()
+						&& "Edit incident objective".equals(candidate.getTitle())) {
+					dialog = candidate;
+					break;
+				}
+			}
+			if (dialog == null) {
+				Thread.sleep(10);
+			}
+		}
+		assertTrue(dialog != null, "Objective editor did not open");
+		return new OpenObjectiveEditor(dialog, opener);
+	}
+
+	/** Holds a displayed objective dialog and the thread waiting for it to close. */
+	private record OpenObjectiveEditor(JDialog dialog, Thread opener) {
+	}
+
+	/**
+	 * Collects components of one type from a component subtree.
+	 *
+	 * @param parent subtree root.
+	 * @param type component class.
+	 * @param <T> component type.
+	 * @return matching descendant components.
+	 */
+	private <T extends java.awt.Component> List<T> components(Container parent, Class<T> type) {
+		List<T> matches = new ArrayList<>();
+		for (java.awt.Component component : parent.getComponents()) {
+			if (type.isInstance(component)) {
+				matches.add(type.cast(component));
+			}
+			if (component instanceof Container container) {
+				matches.addAll(components(container, type));
+			}
+		}
+		return matches;
+	}
+
+	@Test
 	void objectivesHighlightMissingAssignmentsAndSelectionEnablesObjectiveActions() throws Exception {
 		AppData data = new AppData();
 		IncidentObjective noAssignment = new IncidentObjective("Search sector A", 0);
@@ -261,14 +372,12 @@ class IncidentCommandRolePanelTest {
 			assertFalse(awareness.isEditable());
 			assertEquals("Prioritize the north ridge search.", emphasis.getText());
 			assertEquals("Weather remains clear; visibility is good.", awareness.getText());
-			JCheckBoxMenuItem assessmentToggle = (JCheckBoxMenuItem) field(panel, "showObjectiveAssessments");
-			assertTrue(assessmentToggle.isSelected());
-			assertSame(objectives.getComponentPopupMenu(), assessmentToggle.getParent());
-			assertEquals("Assessment", objectives.getColumnName(3));
-			SwingUtilities.invokeAndWait(() -> assessmentToggle.doClick());
+			assertFalse((boolean) field(panel, "showObjectiveAssessments"));
 			assertEquals(3, objectives.getColumnCount());
-			SwingUtilities.invokeAndWait(() -> assessmentToggle.doClick());
+			SwingUtilities.invokeAndWait(() -> panel.setShowObjectiveAssessments(true));
 			assertEquals("Assessment", objectives.getColumnName(3));
+			SwingUtilities.invokeAndWait(() -> panel.setShowObjectiveAssessments(false));
+			assertEquals(3, objectives.getColumnCount());
 
 			SwingUtilities.invokeAndWait(() -> objectives.setRowSelectionInterval(0, 0));
 			assertEquals(noAssignment.getObjectiveId(),
@@ -616,7 +725,7 @@ class IncidentCommandRolePanelTest {
 		JTable table = (JTable) field(panel, "objectives");
 		assertEquals("n", table.getColumnName(1));
 		assertEquals("Linked assignments", table.getColumnName(2));
-		assertEquals("Assessment", table.getColumnName(3));
+		assertEquals(3, table.getColumnCount());
 		assertFalse(table.getValueAt(0, 2).toString().contains("<b>None</b>"));
 		assertEquals(1L, table.getValueAt(0, 1));
 		SwingUtilities.invokeAndWait(panel::dispose);
@@ -801,8 +910,7 @@ class IncidentCommandRolePanelTest {
 		assertEquals("Signature", data.getForm202().getApprovedBySignature());
 		objective.setText("Search south");
 		controller.markDirty();
-		SwingUtilities.invokeAndWait(() -> {
-		});
+		SwingUtilities.invokeAndWait(panel::refreshFromModel);
 		assertTrue(badge(panel, "Objectives").getText().contains("Approval stale"));
 		SwingUtilities.invokeAndWait(panel::dispose);
 	}
@@ -838,6 +946,7 @@ class IncidentCommandRolePanelTest {
 					controller(new AppData()), ignored -> {
 					}));
 			SwingUtilities.invokeAndWait(() -> {
+				((IncidentCommandRolePanel) window[0].getContentPane()).setShowObjectiveAssessments(true);
 			});
 			JTable table = (JTable) field((IncidentCommandRolePanel) window[0].getContentPane(), "objectives");
 			int textWidth = table.getColumnModel().getColumn(0).getWidth();
@@ -860,6 +969,7 @@ class IncidentCommandRolePanelTest {
 		JTable table = (JTable) field(panel, "objectives");
 		int[] textWidths = new int[2];
 		SwingUtilities.invokeAndWait(() -> {
+			panel.setShowObjectiveAssessments(true);
 			table.setSize(800, 200);
 			table.doLayout();
 			textWidths[0] = table.getColumnModel().getColumn(0).getWidth();
