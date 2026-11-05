@@ -642,6 +642,10 @@ public class FileIncidentStore implements IncidentStore {
 			}
 			return merged;
 		}
+		if (original != null && original.isNumber() && updated.isNumber()
+				&& original.decimalValue().compareTo(updated.decimalValue()) == 0) {
+			return original.deepCopy();
+		}
 		return updated.deepCopy();
 	}
 
