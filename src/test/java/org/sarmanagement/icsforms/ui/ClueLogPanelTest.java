@@ -9,6 +9,7 @@ import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
@@ -24,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -111,6 +113,18 @@ class ClueLogPanelTest {
 		assertEquals("Sync to Activity Logs", ((JButton) buttons.getComponent(2)).getText());
 	}
 
+	@Test
+	void duplicateTaskLabelsRemainBoundToDistinctAssignmentIds() {
+		SarTaskAssignment first = task("assignment-1");
+		SarTaskAssignment second = task("assignment-2");
+
+		List<ClueLogPanel.TaskChoice> choices = ClueLogPanel.taskChoices(List.of(first, second));
+
+		assertEquals("assignment-1", choices.get(0).assignmentId());
+		assertEquals("assignment-2", choices.get(1).assignmentId());
+		assertNotEquals(choices.get(0).label(), choices.get(1).label());
+	}
+
 	/**
 	 * Returns the visible clue table used by inline-edit regressions.
 	 *
@@ -135,5 +149,19 @@ class ClueLogPanelTest {
 				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
 						new SarTaskAssignmentPdfRenderer()),
 				new IncidentValidator());
+	}
+
+	/**
+	 * Creates a task with a duplicate operator-facing label and a distinct link identity.
+	 *
+	 * @param assignmentId task assignment UUID
+	 * @return configured SAR task
+	 */
+	private static SarTaskAssignment task(String assignmentId) {
+		SarTaskAssignment task = new SarTaskAssignment();
+		task.setAssignmentId(assignmentId);
+		task.setAssignmentTeamNumber("Team 1");
+		task.setResourceIdentifier("Search dog");
+		return task;
 	}
 }

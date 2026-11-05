@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.UtcTimestamp;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -32,9 +33,11 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -165,33 +168,10 @@ public class ClueLogPanel extends JPanel {
 
 	/** Opens a dialog to enter clue details and adds the new entry to the log. */
 	private void addClueDialog() {
-		// Build a picklist: assignment labels first, then individual resource names.
-		Map<String, String> labelToAssignmentId = new LinkedHashMap<>();
-		List<String> individualResources = new ArrayList<>();
-		if (controller.getData().getSarTaskAssignments() != null) {
-			for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
-				String label = UiSupport.taskLabel(t);
-				if (!label.isBlank()) {
-					labelToAssignmentId.putIfAbsent(label, t.getAssignmentId());
-				}
-
-				if (t.getResourcesAssigned() != null) {
-					for (var res : t.getResourcesAssigned()) {
-						String name = res.getName() == null ? "" : res.getName().trim();
-						if (!name.isBlank() && !individualResources.contains(name)) {
-							individualResources.add(name);
-						}
-					}
-				}
-			}
-		}
-		final String OTHER = DETECTING_TASK_OTHER;
-		List<String> taskItems = new ArrayList<>(labelToAssignmentId.keySet());
-		taskItems.addAll(individualResources);
-		taskItems.add(OTHER);
+		List<TaskChoice> taskItems = taskChoices(controller.getData().getSarTaskAssignments());
 
 		JPanel form = UiSupport.formPanel();
-		javax.swing.JComboBox<String> taskCombo = new javax.swing.JComboBox<>(taskItems.toArray(new String[0]));
+		JComboBox<TaskChoice> taskCombo = new JComboBox<>(taskItems.toArray(new TaskChoice[0]));
 		taskCombo.setSelectedItem(null); // blank by default
 		taskCombo.setEditable(false);
 		JTextField detectedByField = UiSupport.textField();
@@ -199,8 +179,8 @@ public class ClueLogPanel extends JPanel {
 		// then.
 		detectedByField.setEnabled(false);
 		taskCombo.addActionListener(e -> {
-			Object sel = taskCombo.getSelectedItem();
-			detectedByField.setEnabled(OTHER.equals(sel));
+			TaskChoice selected = (TaskChoice) taskCombo.getSelectedItem();
+			detectedByField.setEnabled(selected != null && selected.other());
 		});
 
 		JSpinner dateTimeSpinner = UiSupport.dateTimeSpinner();
@@ -232,26 +212,16 @@ public class ClueLogPanel extends JPanel {
 			clue.setDateTimeCollected(UtcTimestamp.now().withSecond(0).withNano(0));
 		}
 
-		Object selectedTask = taskCombo.getSelectedItem();
-		String taskLabel = selectedTask != null ? selectedTask.toString().trim() : "";
-		if (OTHER.equals(taskLabel)) {
+		TaskChoice selectedTask = (TaskChoice) taskCombo.getSelectedItem();
+		String taskLabel = selectedTask == null ? "" : selectedTask.label().trim();
+		if (selectedTask != null && selectedTask.other()) {
 			// No task link; store free-text detected-by only.
 			clue.setDetectedBy(detectedByField.getText().trim());
 		} else {
-			// Resolve assignmentId from the picklist map.
 			// Explicit clear: detectedBy is not applicable when a specific task is chosen.
 			clue.setDetectedBy("");
-			String assignmentId = labelToAssignmentId.get(taskLabel);
-			if (assignmentId == null && !taskLabel.isBlank() && controller.getData().getSarTaskAssignments() != null) {
-				for (SarTaskAssignment t : controller.getData().getSarTaskAssignments()) {
-					if (UiSupport.taskLabel(t).equals(taskLabel)) {
-						assignmentId = t.getAssignmentId();
-						break;
-					}
-				}
-			}
-			if (assignmentId != null) {
-				clue.setAssignmentId(assignmentId);
+			if (selectedTask != null && !selectedTask.assignmentId().isBlank()) {
+				clue.setAssignmentId(selectedTask.assignmentId());
 			}
 			clue.setDetectingTask(taskLabel);
 		}
@@ -264,6 +234,71 @@ public class ClueLogPanel extends JPanel {
 		controller.recordClueInIcpActivityLog(clue);
 		controller.propagateClueToActivityLog(clue);
 		controller.markDirty();
+	}
+
+	/**
+	 * Builds task choices carrying stable assignment identities separately from labels.
+	 *
+	 * @param tasks current SAR task assignments
+	 * @return ordered task, resource, and unlinked choices
+	 */
+	static List<TaskChoice> taskChoices(List<SarTaskAssignment> tasks) {
+		List<TaskChoice> choices = new ArrayList<>();
+		Set<String> resources = new HashSet<>();
+		Map<String, Integer> labelCounts = new HashMap<>();
+		if (tasks != null) {
+			for (SarTaskAssignment task : tasks) {
+				if (task != null) {
+					String label = UiSupport.taskLabel(task);
+					if (!label.isBlank()) {
+						labelCounts.merge(label, 1, Integer::sum);
+					}
+				}
+			}
+			for (SarTaskAssignment task : tasks) {
+				if (task == null) {
+					continue;
+				}
+				String label = UiSupport.taskLabel(task);
+				if (!label.isBlank()) {
+					if (labelCounts.getOrDefault(label, 0) > 1) {
+						String suffix = task.getAssignmentId().isBlank()
+								? task.getTaskId() : task.getAssignmentId();
+						label += " [" + suffix + "]";
+					}
+					choices.add(new TaskChoice(task.getAssignmentId(), label, false));
+				}
+				if (task.getResourcesAssigned() != null) {
+					for (var resource : task.getResourcesAssigned()) {
+						String name = resource.getName() == null ? "" : resource.getName().trim();
+						if (!name.isBlank() && resources.add(name)) {
+							choices.add(new TaskChoice("", name, false));
+						}
+					}
+				}
+			}
+		}
+		choices.add(new TaskChoice("", DETECTING_TASK_OTHER, true));
+		return choices;
+	}
+
+	/**
+	 * Separates a displayed task or resource label from its optional link identity.
+	 *
+	 * @param assignmentId stable task assignment ID, or blank for an unlinked choice
+	 * @param label visible choice label
+	 * @param other whether this is the unlinked "Other" choice
+	 */
+	record TaskChoice(String assignmentId, String label, boolean other) {
+		/**
+		 * Returns the operator-facing choice label.
+		 *
+		 * @return visible choice label
+		 */
+		@Override
+		public String toString() {
+			return label;
+		}
 	}
 
 	/**

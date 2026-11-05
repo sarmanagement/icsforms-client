@@ -165,6 +165,20 @@ class ImportValidationTest {
 	}
 
 	@Test
+	void rejectsMalformedIncidentIdentityBeforeCreatingAnIncident() throws Exception {
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			Path source = write("{\"schemaVersion\":" + AppData.CURRENT_SCHEMA_VERSION
+					+ ",\"incidentId\":\"not-a-uuid\",\"form201\":{\"situationSummary\":\"Retained\"}}");
+			ImportValidationException failure = assertThrows(ImportValidationException.class,
+					() -> store.importFile(source));
+			assertTrue(failure.getProblems().stream().anyMatch(problem -> problem.path().equals("$.incidentId")
+					&& problem.severity() == Severity.ERROR));
+			assertTrue(store.list().isEmpty());
+			assertTrue(Files.readString(source).contains("not-a-uuid"));
+		}
+	}
+
+	@Test
 	void rejectsNullModelRecordsAtTheirExactIndexedPathsBeforeCreation() throws Exception {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			for (String field : List.of("sarTaskAssignments", "tcards", "activityLogs", "clueLogEntries",

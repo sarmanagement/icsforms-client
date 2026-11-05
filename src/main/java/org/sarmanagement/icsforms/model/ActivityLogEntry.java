@@ -158,8 +158,29 @@ public class ActivityLogEntry {
 	 * @param previousEventTypeId event type before the change.
 	 * @param newEventTypeId event type after the change.
 	 * @param changedAt time the change was made.
+	 * @param changeId stable UUID for this audit record.
 	 */
-	public record EventTypeChange(String previousEventTypeId, String newEventTypeId, LocalDateTime changedAt) {
+	public record EventTypeChange(String previousEventTypeId, String newEventTypeId, LocalDateTime changedAt,
+			String changeId) {
+		/**
+		 * Assigns an identity when deserializing a legacy audit record without one.
+		 */
+		public EventTypeChange {
+			if (changeId == null || changeId.isBlank()) {
+				changeId = UUID.randomUUID().toString();
+			}
+		}
+
+		/**
+		 * Creates a new audit record with a generated stable identity.
+		 *
+		 * @param previousEventTypeId event type before the change.
+		 * @param newEventTypeId event type after the change.
+		 * @param changedAt time the change was made.
+		 */
+		public EventTypeChange(String previousEventTypeId, String newEventTypeId, LocalDateTime changedAt) {
+			this(previousEventTypeId, newEventTypeId, changedAt, UUID.randomUUID().toString());
+		}
 	}
 
 	/**

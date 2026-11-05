@@ -8,6 +8,7 @@ import org.sarmanagement.icsforms.model.AppData;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -115,6 +116,64 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
 			assertThrows(IllegalStateException.class, () -> store.load(id));
 			assertEquals(original, Files.readString(document));
+		}
+	}
+
+	@Test
+	void malformedAndStringFutureSchemasAreRejectedWithoutChangingTheDocument() throws Exception {
+		IncidentId id = IncidentId.newId();
+		Path directory = tempDir.resolve("incidents");
+		Files.createDirectories(directory);
+		Path document = directory.resolve(id.value() + ".json");
+		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+			for (String version : List.of("\"" + (AppData.CURRENT_SCHEMA_VERSION + 1) + "\"", "\"future\"", "null")) {
+				String original = "{\"schemaVersion\":" + version + ",\"incidentId\":\"" + id.value()
+						+ "\",\"incidentContext\":{\"incidentName\":\"Retained\"}}";
+				Files.writeString(document, original);
+				assertThrows(IllegalStateException.class, () -> store.load(id), version);
+				assertEquals(original, Files.readString(document));
+			}
+		}
+	}
+
+	@Test
+	void legacyIdentityMigrationIsDurableAcrossLoadsAndRestarts() throws Exception {
+		IncidentId id = IncidentId.newId();
+		Path incidents = tempDir.resolve("incidents");
+		Files.createDirectories(incidents);
+		Path document = incidents.resolve(id.value() + ".json");
+		Files.writeString(document, """
+				{"schemaVersion":5,"revision":0,"futureLegacy":{"retain":true},
+				"openActionItems":[{"item":"Coordinate staging"}],
+				"archivedSafetyHazardReports":[{"taskId":"legacy-task-ref","taskLabel":"Team 1","hazards":"Low visibility"}],
+				"clueLogEntries":[{"description":"Track the trail","followUpAssignments":[{"assignee":"Responder"}]}],
+				"activityLogs":[{"activityLog":[{"notableActivity":"Search started",
+				"eventTypeChangeHistory":[{"previousEventTypeId":"FREE_TEXT","newEventTypeId":"CLUE_REPORTED",
+				"changedAt":"2026-01-01T00:00:00"}]}]}]}
+				""");
+
+		String[] identities = new String[5];
+		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+			AppData migrated = store.load(id);
+			identities[0] = migrated.getIncidentId();
+			identities[1] = migrated.getOpenActionItems().get(0).getId();
+			identities[2] = migrated.getArchivedSafetyHazardReports().get(0).getId();
+			identities[3] = migrated.getClueLogEntries().get(0).getFollowUpAssignments().get(0).getId();
+			identities[4] = migrated.getActivityLogs().get(0).getActivityLog().get(0)
+					.getEventTypeChangeHistory().get(0).changeId();
+			assertEquals(identities[0], store.load(id).getIncidentId());
+			assertEquals(0, store.load(id).getRevision());
+		}
+		assertTrue(Files.readString(document).contains("\"retain\" : true"));
+
+		try (FileIncidentStore reopened = new FileIncidentStore(tempDir)) {
+			AppData restored = reopened.load(id);
+			assertEquals(identities[0], restored.getIncidentId());
+			assertEquals(identities[1], restored.getOpenActionItems().get(0).getId());
+			assertEquals(identities[2], restored.getArchivedSafetyHazardReports().get(0).getId());
+			assertEquals(identities[3], restored.getClueLogEntries().get(0).getFollowUpAssignments().get(0).getId());
+			assertEquals(identities[4], restored.getActivityLogs().get(0).getActivityLog().get(0)
+					.getEventTypeChangeHistory().get(0).changeId());
 		}
 	}
 

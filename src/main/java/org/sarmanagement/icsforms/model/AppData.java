@@ -726,7 +726,7 @@ public class AppData {
 	}
 
 	/**
-	 * Assigns missing incident and child identities and missing document timestamps.
+	 * Assigns missing incident, child, history-entry identities, and document timestamps.
 	 * Existing identifiers, timestamps, revisions, and origin node identifiers are
 	 * preserved, except duplicate channel IDs within a single communications plan
 	 * are replaced after their first occurrence. Channel IDs may recur across
@@ -761,6 +761,27 @@ public class AppData {
 			for (ClueLogEntry entry : clueLogEntries) {
 				if (entry != null) {
 					entry.getEntryId();
+					if (entry.getFollowUpAssignments() != null) {
+						for (PocAssignment assignment : entry.getFollowUpAssignments()) {
+							if (assignment != null) {
+								assignment.getId();
+							}
+						}
+					}
+				}
+			}
+		}
+		if (openActionItems != null) {
+			for (OpenActionItem item : openActionItems) {
+				if (item != null) {
+					item.getId();
+				}
+			}
+		}
+		if (archivedSafetyHazardReports != null) {
+			for (SafetyHazardReport report : archivedSafetyHazardReports) {
+				if (report != null) {
+					report.getId();
 				}
 			}
 		}
@@ -781,6 +802,11 @@ public class AppData {
 					for (ActivityLogEntry entry : entries) {
 						if (entry != null) {
 							entry.getEntryId();
+							for (ActivityLogEntry.EventTypeChange change : entry.getEventTypeChangeHistory()) {
+								if (change != null) {
+									change.changeId();
+								}
+							}
 						}
 					}
 				}

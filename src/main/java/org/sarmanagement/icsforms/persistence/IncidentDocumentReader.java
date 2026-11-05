@@ -76,6 +76,7 @@ final class IncidentDocumentReader {
 			if (tree == null || !tree.isObject()) {
 				add(Severity.ERROR, "$", "Expected an incident JSON object.", "Export an incident as a JSON object.");
 			} else {
+				validateIncidentIdentity(tree);
 				JsonNode version = tree.get("schemaVersion");
 				if (version == null) {
 					add(Severity.WARNING, "$.schemaVersion", "Schema version is missing.",
@@ -141,6 +142,7 @@ final class IncidentDocumentReader {
 	 * @param path stored document
 	 * @return loaded incident
 	 * @throws IOException when the stored document cannot be read
+	 * @throws IllegalStateException when the schema version is malformed or newer than supported
 	 */
 	AppData readStored(Path path) throws IOException {
 		JsonNode tree = TOLERANT.readTree(path.toFile());
@@ -148,7 +150,10 @@ final class IncidentDocumentReader {
 			throw new IOException("Stored incident must be a JSON object");
 		}
 		JsonNode version = tree.get("schemaVersion");
-		if (version != null && version.canConvertToInt() && version.intValue() > AppData.CURRENT_SCHEMA_VERSION) {
+		if (version != null && (!version.isIntegralNumber() || !version.canConvertToInt() || version.intValue() < 1)) {
+			throw new IllegalStateException("Incident has an invalid schema version: " + path);
+		}
+		if (version != null && version.intValue() > AppData.CURRENT_SCHEMA_VERSION) {
 			throw new IllegalStateException("Incident schema is newer than supported schema "
 					+ AppData.CURRENT_SCHEMA_VERSION + ": " + path);
 		}
@@ -157,6 +162,30 @@ final class IncidentDocumentReader {
 			log(path, version != null && version.isIntegralNumber() ? version.asText() : "unknown", "stored-warning");
 		}
 		return TOLERANT.treeToValue(tree, AppData.class);
+	}
+
+	/**
+	 * Validates an optional external incident UUID before import replaces it with a new identity.
+	 *
+	 * @param tree external document object
+	 */
+	private void validateIncidentIdentity(JsonNode tree) {
+		JsonNode identity = tree.get("incidentId");
+		if (identity == null) {
+			return;
+		}
+		if (!identity.isTextual() || identity.asText().isBlank()) {
+			add(Severity.ERROR, "$.incidentId", "Incident identity must be a UUID string.",
+					"Use a valid UUID or omit the incident identity.");
+			return;
+		}
+		try {
+			IncidentId.of(identity.asText());
+		} catch (IllegalArgumentException e) {
+			cause = cause == null ? e : cause;
+			add(Severity.ERROR, "$.incidentId", "Incident identity must be a UUID string.",
+					"Use a valid UUID or omit the incident identity.");
+		}
 	}
 
 	/**

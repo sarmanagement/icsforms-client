@@ -4,11 +4,13 @@
 package org.sarmanagement.icsforms.model;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Archived SAR debrief hazard report retained across operational periods.
  */
 public class SafetyHazardReport {
+	private String id = UUID.randomUUID().toString();
 	private String taskId = "";
 	private String taskLabel = "";
 	private String incidentArea = "";
@@ -19,6 +21,27 @@ public class SafetyHazardReport {
 	private String analysisEntryId = "";
 	private String notedBySafetyOfficer = "";
 	private LocalDateTime notedDateTime;
+
+	/**
+	 * Returns this archived report's stable identity.
+	 *
+	 * @return report UUID, never null or blank.
+	 */
+	public String getId() {
+		if (id == null || id.isBlank()) {
+			id = UUID.randomUUID().toString();
+		}
+		return id;
+	}
+
+	/**
+	 * Sets the archived report's stable identity.
+	 *
+	 * @param id report UUID; null or blank generates a new UUID.
+	 */
+	public void setId(String id) {
+		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+	}
 
 	/**
 	 * Returns the source task identifier.

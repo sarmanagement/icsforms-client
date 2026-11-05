@@ -5,12 +5,14 @@ package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * A point-of-contact assignment recorded in chronological history, using UTC.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PocAssignment {
+	private String id = UUID.randomUUID().toString();
 	private String assignee = "";
 	private LocalDateTime assignedAt;
 
@@ -26,6 +28,27 @@ public class PocAssignment {
 	public PocAssignment(String assignee, LocalDateTime assignedAt) {
 		setAssignee(assignee);
 		this.assignedAt = assignedAt;
+	}
+
+	/**
+	 * Returns this point-of-contact history entry's stable identity.
+	 *
+	 * @return assignment UUID, never null or blank
+	 */
+	public String getId() {
+		if (id == null || id.isBlank()) {
+			id = UUID.randomUUID().toString();
+		}
+		return id;
+	}
+
+	/**
+	 * Sets this point-of-contact history entry's identity.
+	 *
+	 * @param id assignment UUID; null or blank generates a new UUID
+	 */
+	public void setId(String id) {
+		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
 	}
 
 	/**
