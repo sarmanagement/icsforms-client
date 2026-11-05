@@ -57,6 +57,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
@@ -104,7 +105,7 @@ public class CanineMedicalPanel extends JPanel {
 		}
 	};
 	private final DefaultTableModel transportModel = new DefaultTableModel(new String[] {
-			"Service", "Location", "Contact numbers", "Frequency", "Air or ground", "Level of service"
+			"Service", "Location", "Contact numbers", "Frequency", "Air or ground", "Level of service", "Record ID"
 	}, 0) {
 		@Override
 		public boolean isCellEditable(int row, int column) {
@@ -231,6 +232,7 @@ public class CanineMedicalPanel extends JPanel {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
 		editorCommitGuard = controller.createEditorCommitGuard();
+		transportTable.removeColumn(transportTable.getColumnModel().getColumn(transportModel.getColumnCount() - 1));
 		RadioChannelPicker.install(transportTable, 3, controller);
 		this.defaultDirectory = defaultDirectory;
 		this.geocoder = geocoder;
@@ -634,7 +636,8 @@ public class CanineMedicalPanel extends JPanel {
 		panel.setBorder(BorderFactory.createTitledBorder("Canine transportation services"));
 		JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		JButton add = new JButton("Add service");
-		add.addActionListener(event -> transportModel.addRow(new Object[] {"", "", "", "", "", ""}));
+		add.addActionListener(event -> transportModel.addRow(new Object[] {"", "", "", "", "", "",
+				UUID.randomUUID().toString()}));
 		JButton remove = new JButton("Remove selected");
 		remove.addActionListener(event -> removeTransportRows());
 		JButton importCsv = new JButton("Import transport CSV…");
@@ -1173,6 +1176,7 @@ public class CanineMedicalPanel extends JPanel {
 		List<MedicalPlan.TransportService> services = new ArrayList<>();
 		for (int row = 0; row < transportModel.getRowCount(); row++) {
 			MedicalPlan.TransportService service = new MedicalPlan.TransportService();
+			service.setId(transportRecordId(row));
 			service.setService(cell(transportModel, row, 0));
 			service.setLocation(cell(transportModel, row, 1));
 			service.setContactNumbers(cell(transportModel, row, 2));
@@ -1192,7 +1196,23 @@ public class CanineMedicalPanel extends JPanel {
 	 */
 	private Object[] transportRow(MedicalPlan.TransportService service) {
 		return new Object[] {service.getService(), service.getLocation(), service.getContactNumbers(),
-				service.getFrequency(), service.getAirOrGround(), service.getLevelOfService()};
+				service.getFrequency(), service.getAirOrGround(), service.getLevelOfService(), service.getId()};
+	}
+
+	/**
+	 * Returns the transport row UUID, assigning one for an uninitialized new row.
+	 *
+	 * @param row model row index.
+	 * @return stable transport record UUID.
+	 */
+	private String transportRecordId(int row) {
+		int column = transportModel.getColumnCount() - 1;
+		Object value = transportModel.getValueAt(row, column);
+		if (value == null || value.toString().isBlank()) {
+			value = UUID.randomUUID().toString();
+			transportModel.setValueAt(value, row, column);
+		}
+		return value.toString();
 	}
 
 	/**

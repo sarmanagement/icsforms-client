@@ -26,6 +26,7 @@ import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Consumer;
 
@@ -80,6 +81,9 @@ public class Ics206Panel extends JPanel {
 		super(new BorderLayout(6, 6));
 		this.controller = controller;
 		editorCommitGuard = controller.createEditorCommitGuard();
+		hideIdentityColumn(aidTable);
+		hideIdentityColumn(transportTable);
+		hideIdentityColumn(hospitalTable);
 		RadioChannelPicker.install(aidTable, 3, controller);
 		RadioChannelPicker.install(transportTable, 3, controller);
 		JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -276,7 +280,11 @@ public class Ics206Panel extends JPanel {
 		panel.add(new JScrollPane(table), BorderLayout.CENTER);
 		JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		JButton add = new JButton("Add row");
-		add.addActionListener(event -> model.addRow(new Object[model.getColumnCount()]));
+		add.addActionListener(event -> {
+			Object[] row = new Object[model.getColumnCount()];
+			row[identityColumn(model)] = UUID.randomUUID().toString();
+			model.addRow(row);
+		});
 		JButton remove = new JButton("Remove selected row");
 		remove.addActionListener(event -> {
 			int row = table.getSelectedRow();
@@ -288,6 +296,45 @@ public class Ics206Panel extends JPanel {
 		controls.add(remove);
 		panel.add(controls, BorderLayout.SOUTH);
 		return panel;
+	}
+
+	/**
+	 * Hides the table-model identity column from the editable view.
+	 *
+	 * @param table row table.
+	 */
+	private void hideIdentityColumn(JTable table) {
+		int viewIndex = table.convertColumnIndexToView(table.getModel().getColumnCount() - 1);
+		if (viewIndex >= 0) {
+			table.removeColumn(table.getColumnModel().getColumn(viewIndex));
+		}
+	}
+
+	/**
+	 * Returns the private identity-column index for a medical-plan table.
+	 *
+	 * @param model table model.
+	 * @return identity-column index.
+	 */
+	private static int identityColumn(DefaultTableModel model) {
+		return model.getColumnCount() - 1;
+	}
+
+	/**
+	 * Returns an existing row UUID or assigns one to a newly inserted row.
+	 *
+	 * @param model row table model.
+	 * @param row model row index.
+	 * @return stable record UUID.
+	 */
+	private static String recordId(DefaultTableModel model, int row) {
+		int column = identityColumn(model);
+		Object value = model.getValueAt(row, column);
+		if (value == null || value.toString().isBlank()) {
+			value = UUID.randomUUID().toString();
+			model.setValueAt(value, row, column);
+		}
+		return value.toString();
 	}
 
 	/**
@@ -530,7 +577,7 @@ public class Ics206Panel extends JPanel {
 		aidModel.setRowCount(0);
 		for (MedicalPlan.AidStation station : plan.getAidStations()) {
 			aidModel.addRow(new Object[] {station.getName(), station.getLocation(), station.getContactNumbers(),
-					station.getFrequency(), status(station.getParamedicsOnSite())});
+					station.getFrequency(), status(station.getParamedicsOnSite()), station.getId()});
 		}
 	}
 
@@ -544,7 +591,7 @@ public class Ics206Panel extends JPanel {
 		for (MedicalPlan.TransportService service : plan.getTransportServices()) {
 			transportModel.addRow(new Object[] {service.getService(), service.getLocation(),
 					service.getContactNumbers(), service.getFrequency(), service.getAirOrGround(),
-					service.getLevelOfService()});
+					service.getLevelOfService(), service.getId()});
 		}
 	}
 
@@ -561,7 +608,7 @@ public class Ics206Panel extends JPanel {
 					hospital.getCoordinateFormat(), hospital.getHelipadCoordinates(), hospital.getAirTravelTime(),
 					hospital.getAirTravelProvenance(), hospital.getGroundTravelTime(),
 					hospital.getGroundTravelProvenance(), status(hospital.getTraumaCenter()), hospital.getTraumaLevel(),
-					status(hospital.getBurnCenter()), status(hospital.getHelipad())});
+					status(hospital.getBurnCenter()), status(hospital.getHelipad()), hospital.getId()});
 		}
 	}
 
@@ -574,6 +621,7 @@ public class Ics206Panel extends JPanel {
 		List<MedicalPlan.AidStation> stations = new ArrayList<>();
 		for (int row = 0; row < aidModel.getRowCount(); row++) {
 			MedicalPlan.AidStation station = new MedicalPlan.AidStation();
+			station.setId(recordId(aidModel, row));
 			station.setName(cell(aidModel, row, 0));
 			station.setLocation(cell(aidModel, row, 1));
 			station.setContactNumbers(cell(aidModel, row, 2));
@@ -593,6 +641,7 @@ public class Ics206Panel extends JPanel {
 		List<MedicalPlan.TransportService> services = new ArrayList<>();
 		for (int row = 0; row < transportModel.getRowCount(); row++) {
 			MedicalPlan.TransportService service = new MedicalPlan.TransportService();
+			service.setId(recordId(transportModel, row));
 			service.setService(cell(transportModel, row, 0));
 			service.setLocation(cell(transportModel, row, 1));
 			service.setContactNumbers(cell(transportModel, row, 2));
@@ -614,6 +663,7 @@ public class Ics206Panel extends JPanel {
 		boolean invalidCoordinates = false;
 		for (int row = 0; row < hospitalModel.getRowCount(); row++) {
 			MedicalPlan.Hospital hospital = new MedicalPlan.Hospital();
+			hospital.setId(recordId(hospitalModel, row));
 			hospital.setName(cell(hospitalModel, row, 0));
 			hospital.setAddress(cell(hospitalModel, row, 1));
 			hospital.setContactNumbers(cell(hospitalModel, row, 2));
@@ -733,6 +783,8 @@ public class Ics206Panel extends JPanel {
 	 * @return editable table model.
 	 */
 	private static DefaultTableModel tableModel(String... columns) {
-		return new DefaultTableModel(columns, 0);
+		String[] withIdentity = java.util.Arrays.copyOf(columns, columns.length + 1);
+		withIdentity[columns.length] = "Record ID";
+		return new DefaultTableModel(withIdentity, 0);
 	}
 }

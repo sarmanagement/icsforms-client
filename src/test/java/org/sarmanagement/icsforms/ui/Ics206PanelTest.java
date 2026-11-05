@@ -75,6 +75,48 @@ class Ics206PanelTest {
 	}
 
 	@Test
+	void aidStationIdsSurviveNoOpFlushesAndRowMutations() throws Exception {
+		AppData data = new AppData();
+		MedicalPlan.AidStation first = new MedicalPlan.AidStation();
+		first.setName("First station");
+		MedicalPlan.AidStation second = new MedicalPlan.AidStation();
+		second.setName("Second station");
+		data.getMedicalPlan().getAidStations().addAll(java.util.List.of(first, second));
+		Ics206Panel panel = new Ics206Panel(controller(data));
+		String firstId = first.getId();
+		String secondId = second.getId();
+
+		SwingUtilities.invokeAndWait(() -> {
+			DefaultTableModel model = (DefaultTableModel) fieldValue(panel, "aidModel");
+			panel.pushToModel();
+			panel.pushToModel();
+			assertEquals(java.util.List.of(firstId, secondId), data.getMedicalPlan().getAidStations().stream()
+					.map(MedicalPlan.AidStation::getId).toList());
+
+			model.moveRow(0, 0, 1);
+			panel.pushToModel();
+			assertEquals(java.util.List.of(secondId, firstId), data.getMedicalPlan().getAidStations().stream()
+					.map(MedicalPlan.AidStation::getId).toList());
+
+			model.addRow(new Object[] {"New station", "", "", "", "Unknown", null});
+			panel.pushToModel();
+			String newId = data.getMedicalPlan().getAidStations().get(2).getId();
+			assertFalse(java.util.List.of(firstId, secondId).contains(newId));
+			panel.pushToModel();
+			assertEquals(newId, data.getMedicalPlan().getAidStations().get(2).getId());
+
+			model.removeRow(1);
+			panel.pushToModel();
+			assertEquals(java.util.List.of(secondId, newId), data.getMedicalPlan().getAidStations().stream()
+					.map(MedicalPlan.AidStation::getId).toList());
+			panel.refreshFromModel();
+			panel.pushToModel();
+			assertEquals(java.util.List.of(secondId, newId), data.getMedicalPlan().getAidStations().stream()
+					.map(MedicalPlan.AidStation::getId).toList());
+		});
+	}
+
+	@Test
 	void unrelatedTextChangeDoesNotFlushAnActiveHospitalCell() throws Exception {
 		AppData data = new AppData();
 		MedicalPlan.Hospital hospital = new MedicalPlan.Hospital();
