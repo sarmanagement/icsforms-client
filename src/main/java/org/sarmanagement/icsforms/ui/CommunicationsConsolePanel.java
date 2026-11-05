@@ -437,11 +437,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 				if (!resource.getResourceId().isBlank()) {
 					scopedResources.add(resource.getResourceId());
 				}
-				long occurrences = task.getResourcesAssigned().stream()
-						.filter(candidate -> resource.getResourceId().equals(candidate.getResourceId())).count();
-				String identity = !resource.getResourceId().isBlank() && occurrences == 1
-						? resource.getResourceId() : Integer.toString(rows.size());
-				rows.add(new ContactChoice("task:" + assignmentId + "/resource:" + identity,
+				rows.add(new ContactChoice("task:" + assignmentId + "/resource:" + resource.getId(),
 						resource.getName(), "Assigned resource: " + resource.getName() + " | Function: "
 								+ resource.getFunction()));
 			}
@@ -456,10 +452,9 @@ public final class CommunicationsConsolePanel extends JPanel {
 					.filter(candidate -> sourceRef.equals(candidate.getSourceRef())).count() == 1;
 			boolean inScope = assignmentId.isBlank() || uniqueId && scopedResources.contains(resourceId)
 					|| uniqueSource && sourceRef.startsWith("sar:" + assignmentId + ":");
-			if (card.getCardType() != TCardType.HEADER && inScope) {
+			if (card.getCardType() != TCardType.HEADER && inScope && (uniqueId || uniqueSource)) {
 				String prefill = card.getPersonName().isBlank() ? card.getResourceIdentifier() : card.getPersonName();
-				String identity = uniqueId ? "tcard:" + resourceId
-						: uniqueSource ? "tcard-source:" + sourceRef : "tcard-row:" + data.getTCards().indexOf(card);
+				String identity = uniqueId ? "tcard:" + resourceId : "tcard-source:" + sourceRef;
 				rows.add(new ContactChoice(identity, prefill,
 						"T-card " + card.getDisplayLabel() + " | " + card.getResourceIdentifier()
 						+ " | Agency: " + card.getHomeAgency() + " | Phone: " + card.getPhoneNumber()
@@ -508,9 +503,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 		if (List.of(ChannelLinkSource.SourceKind.SAR_COMMUNICATION, ChannelLinkSource.SourceKind.SAR_ASSIGNMENT,
 				ChannelLinkSource.SourceKind.SAR_RESOURCE, ChannelLinkSource.SourceKind.SAR_MANAGEMENT)
 				.contains(link.sourceKind()) && task != null) {
-			String id = task.peekTaskId();
-			return hasOrigin(link.sourceId(), id == null || id.isBlank()
-					? "task:" + controller.getData().getSarTaskAssignments().indexOf(task) : id);
+			return hasOrigin(link.sourceId(), task.getTaskId());
 		}
 		if (link.sourceKind() != ChannelLinkSource.SourceKind.ICS204_COMMUNICATION
 				&& link.sourceKind() != ChannelLinkSource.SourceKind.ICS204_MANAGEMENT) {
@@ -519,13 +512,10 @@ public final class CommunicationsConsolePanel extends JPanel {
 		List<Ics204Form> forms = new ArrayList<>();
 		forms.add(controller.getData().getForm204());
 		forms.addAll(controller.getData().getAdditionalForms204());
-		for (int index = 0; index < forms.size(); index++) {
-			Ics204Form form = forms.get(index);
+		for (Ics204Form form : forms) {
 			if (form.getResourcesAssigned().stream()
 					.anyMatch(assignment -> assignmentId.equals(assignment.getAssignmentId()))) {
-				String id = form.getFormId();
-				if (hasOrigin(link.sourceId(), id == null || id.isBlank()
-						? index == 0 ? "primary" : "additional:" + (index - 1) : id)) {
+				if (hasOrigin(link.sourceId(), form.getFormId())) {
 					return true;
 				}
 			}
@@ -598,7 +588,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 					continue;
 				}
 				if (assignmentId == null || !assignmentId.isBlank()
-						&& assignmentId.equals(associatedAssignmentId(data, entry))) {
+						&& assignmentId.equals(associatedAssignmentId(entry))) {
 					rows.add(new LogChoice(log, entry, ActivityEntryDialog.resolvedEventTypeLabel(data,
 							entry.getEventTypeId())));
 				}
@@ -610,32 +600,13 @@ public final class CommunicationsConsolePanel extends JPanel {
 	}
 
 	/**
-	 * Resolves stable entry context first, then the existing timeline's exact legacy labels.
+	 * Returns the stable assignment link migrated onto an activity entry.
 	 *
-	 * @param data current incident.
 	 * @param entry shared activity entry.
 	 * @return assignment identity or blank.
 	 */
-	private static String associatedAssignmentId(AppData data, ActivityLogEntry entry) {
-		if (!entry.getAssignmentId().isBlank()) {
-			return entry.getAssignmentId();
-		}
-		String resource = entry.getResourceIdentifier();
-		if (resource.isBlank()) {
-			return "";
-		}
-		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
-			if (resource.equals(task.getResourceIdentifier())
-					|| resource.equals(SarTaskSupport.taskResourceDisplayLabel(task))) {
-				return task.getAssignmentId();
-			}
-		}
-		for (ResourceAssignment assignment : data.getAllAssignmentResources()) {
-			if (resource.equals(assignment.getResourceIdentifier())) {
-				return assignment.getAssignmentId();
-			}
-		}
-		return "";
+	private static String associatedAssignmentId(ActivityLogEntry entry) {
+		return entry.getAssignmentId();
 	}
 
 	/**

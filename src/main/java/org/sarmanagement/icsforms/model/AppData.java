@@ -12,7 +12,9 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -35,6 +37,7 @@ public class AppData {
 	public static class OperationalPeriodRecord {
 		private LocalDateTime periodStart;
 		private LocalDateTime periodEnd;
+		private String recordId = UUID.randomUUID().toString();
 		private IapPlanningStage iapPlanningStage = IapPlanningStage.NOT_RECORDED;
 		private List<String> incidentCommanders = new ArrayList<>();
 		private MedicalPlan medicalPlan;
@@ -54,6 +57,28 @@ public class AppData {
 
 		/** Creates an empty record. */
 		public OperationalPeriodRecord() {
+		}
+
+		/**
+		 * Returns this operational-period snapshot's stable identity.
+		 *
+		 * @return record UUID, never null or blank
+		 */
+		public String getRecordId() {
+			if (recordId == null || recordId.isBlank()) {
+				recordId = UUID.randomUUID().toString();
+			}
+			return recordId;
+		}
+
+		/**
+		 * Sets this operational-period snapshot's stable identity.
+		 *
+		 * @param recordId record UUID; null or blank generates a UUID
+		 */
+		public void setRecordId(String recordId) {
+			this.recordId = recordId == null || recordId.isBlank()
+					? UUID.randomUUID().toString() : recordId;
 		}
 
 		/**
@@ -746,8 +771,11 @@ public class AppData {
 		}
 		getForm205().normalizeIdentity();
 		for (OperationalPeriodRecord record : operationalPeriodHistory) {
-			if (record != null && record.getForm205() != null) {
-				record.getForm205().normalizeIdentity();
+			if (record != null) {
+				record.getRecordId();
+				if (record.getForm205() != null) {
+					record.getForm205().normalizeIdentity();
+				}
 			}
 		}
 		if (tCards != null) {
@@ -795,6 +823,7 @@ public class AppData {
 		if (activityLogs != null) {
 			for (Ics214Form log : activityLogs) {
 				if (log != null) {
+					log.getLogId();
 					List<ActivityLogEntry> entries = log.getActivityLog();
 					if (entries == null) {
 						continue;
@@ -812,8 +841,82 @@ public class AppData {
 				}
 			}
 		}
+		normalizeRecordIdentities();
+		normalizeLegacyActivityLinks();
 	}
 
+	/**
+	 * Replaces unambiguous legacy activity resource labels with stable assignment links.
+	 * The original resource text remains unchanged for display.
+	 */
+	private void normalizeLegacyActivityLinks() {
+		for (Ics214Form log : getActivityLogs()) {
+			if (log == null || log.getLogScope() != ActivityLogScope.ICP) {
+				continue;
+			}
+			for (ActivityLogEntry entry : log.getActivityLog()) {
+				if (entry == null || !entry.getAssignmentId().isBlank()
+						|| entry.getResourceIdentifier().isBlank()) {
+					continue;
+				}
+				Set<String> matches = new LinkedHashSet<>();
+				for (SarTaskAssignment task : getSarTaskAssignments()) {
+					if (entry.getResourceIdentifier().equals(task.getResourceIdentifier())
+							|| entry.getResourceIdentifier().equals(SarTaskSupport.taskResourceDisplayLabel(task))) {
+						if (!task.getAssignmentId().isBlank()) {
+							matches.add(task.getAssignmentId());
+						}
+					}
+				}
+				for (ResourceAssignment assignment : getAllAssignmentResources()) {
+					if (entry.getResourceIdentifier().equals(assignment.getResourceIdentifier())
+							&& !assignment.getAssignmentId().isBlank()) {
+						matches.add(assignment.getAssignmentId());
+					}
+				}
+				if (matches.size() == 1) {
+					entry.setAssignmentId(matches.iterator().next());
+				}
+			}
+		}
+	}
+
+	/**
+	 * Repairs absent identities on ICS 215 worksheet rows and headings.
+	 */
+	private void normalizeRecordIdentities() {
+		normalizeIcs215Identity(getForm215());
+		normalizeIcs215Identity(getNextPeriodForm215());
+		for (OperationalPeriodRecord record : getOperationalPeriodHistory()) {
+			if (record != null) {
+				if (record.getForm215() != null) {
+					normalizeIcs215Identity(record.getForm215());
+				}
+				if (record.getNextPeriodForm215() != null) {
+					normalizeIcs215Identity(record.getNextPeriodForm215());
+				}
+			}
+		}
+	}
+
+	/**
+	 * Repairs missing ICS 215 worksheet identities.
+	 *
+	 * @param form ICS 215 worksheet
+	 */
+	private void normalizeIcs215Identity(Ics215Form form) {
+		form.getWorksheetId();
+		for (Ics215Form.ResourceHeading heading : form.getResourceHeadings()) {
+			if (heading != null && (heading.id == null || heading.id.isBlank())) {
+				heading.id = UUID.randomUUID().toString();
+			}
+		}
+		for (Ics215Form.WorkRow row : form.getWorkRows()) {
+			if (row != null && (row.id == null || row.id.isBlank())) {
+				row.id = UUID.randomUUID().toString();
+			}
+		}
+	}
 	/**
 	 * Returns the current communications plan, including channels hidden on output.
 	 * @return current plan, never null

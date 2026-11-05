@@ -18,7 +18,35 @@ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.CommunicationEntry;
+import org.sarmanagement.icsforms.model.Ics201Form;
+import org.sarmanagement.icsforms.model.Ics202ReportedResult;
+import org.sarmanagement.icsforms.model.Ics203Form;
+import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.Ics205Form;
+import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.Ics215Form;
+import org.sarmanagement.icsforms.model.IncidentLocation;
+import org.sarmanagement.icsforms.model.IncidentObjective;
+import org.sarmanagement.icsforms.model.IncidentResource;
+import org.sarmanagement.icsforms.model.MedicalPlan;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
+import org.sarmanagement.icsforms.model.OpenActionItem;
+import org.sarmanagement.icsforms.model.PocAssignment;
+import org.sarmanagement.icsforms.model.PodFactorRating;
+import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SafetyAnalysisEntry;
+import org.sarmanagement.icsforms.model.SafetyHazardReport;
+import org.sarmanagement.icsforms.model.SafetyMessageBlock;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.VetDirectory;
+import org.sarmanagement.icsforms.model.VetFacility;
 import org.sarmanagement.icsforms.persistence.ImportValidationException.Problem;
 import org.sarmanagement.icsforms.persistence.ImportValidationException.Severity;
 
@@ -52,7 +80,44 @@ final class IncidentDocumentReader {
 			"vetDirectory", "stagingLocation", "incidentLocations", "operationalPeriodHistory", "safetyReview",
 			"humanMedicalReview", "canineMedicalReview", "communicationsReview");
 	private static final Set<String> CHILD_IDENTITIES = Set.of("formId", "resourceId", "objectiveId", "assignmentId",
-			"taskId", "channelId", "entryId", "id");
+			"taskId", "channelId", "entryId", "changeId", "resultId", "recordId", "logId", "worksheetId", "id");
+	private static final Map<Class<?>, Set<String>> RECORD_IDENTITIES = Map.ofEntries(
+			Map.entry(AppData.class, Set.of("incidentId")),
+			Map.entry(ActivityLogEntry.class, Set.of("entryId")),
+			Map.entry(ActivityLogEntry.EventTypeChange.class, Set.of("changeId")),
+			Map.entry(ClueLogEntry.class, Set.of("entryId")),
+			Map.entry(CommunicationEntry.class, Set.of("id")),
+			Map.entry(Ics201Form.ActionEntry.class, Set.of("id")),
+			Map.entry(Ics201Form.ResourceSummaryEntry.class, Set.of("id")),
+			Map.entry(Ics202ReportedResult.class, Set.of("resultId")),
+			Map.entry(Ics203Form.Branch.class, Set.of("id")),
+			Map.entry(Ics204Form.class, Set.of("formId")),
+			Map.entry(Ics205Form.class, Set.of("formId")),
+			Map.entry(Ics214Form.class, Set.of("logId")),
+			Map.entry(Ics215Form.class, Set.of("worksheetId")),
+			Map.entry(Ics215Form.ResourceHeading.class, Set.of("id")),
+			Map.entry(Ics215Form.WorkRow.class, Set.of("id")),
+			Map.entry(IncidentLocation.class, Set.of("id")),
+			Map.entry(IncidentObjective.class, Set.of("objectiveId")),
+			Map.entry(IncidentResource.class, Set.of("resourceId")),
+			Map.entry(MedicalPlan.AidStation.class, Set.of("id")),
+			Map.entry(MedicalPlan.Hospital.class, Set.of("id")),
+			Map.entry(MedicalPlan.TransportService.class, Set.of("id")),
+			Map.entry(OrgChartEntry.class, Set.of("id")),
+			Map.entry(OpenActionItem.class, Set.of("id")),
+			Map.entry(PocAssignment.class, Set.of("id")),
+			Map.entry(PodFactorRating.class, Set.of("id")),
+			Map.entry(RadioChannel.class, Set.of("channelId")),
+			Map.entry(ResourceAssignment.class, Set.of("assignmentId")),
+			Map.entry(SafetyAnalysisEntry.class, Set.of("entryId")),
+			Map.entry(SafetyHazardReport.class, Set.of("id")),
+			Map.entry(SafetyMessageBlock.class, Set.of("id")),
+			Map.entry(SarTaskAssignment.class, Set.of("taskId")),
+			Map.entry(SarTaskResource.class, Set.of("id")),
+			Map.entry(AppData.OperationalPeriodRecord.class, Set.of("recordId")),
+			Map.entry(VetDirectory.Source.class, Set.of("id")),
+			Map.entry(TCard.class, Set.of("resourceId")),
+			Map.entry(VetFacility.class, Set.of("id")));
 	private final List<Problem> problems = new ArrayList<>();
 	private final Map<JavaType, JsonNode> defaultValues = new HashMap<>();
 	private Throwable cause;
@@ -241,6 +306,7 @@ final class IncidentDocumentReader {
 					inspect(entry.getValue(), type.getContentType(), path + "." + entry.getKey(), strict));
 		} else if (node.isObject() && type.getRawClass().getPackageName().startsWith("org.sarmanagement")) {
 			Map<String, JavaType> properties = new HashMap<>();
+			Set<String> identityProperties = new java.util.HashSet<>();
 			for (BeanPropertyDefinition property : TOLERANT.getDeserializationConfig().introspect(type).findProperties()) {
 				properties.put(property.getName(), property.couldDeserialize() ? property.getPrimaryType() : null);
 				JsonAlias aliases = property.getPrimaryMember() == null ? null
@@ -248,6 +314,12 @@ final class IncidentDocumentReader {
 				if (aliases != null) {
 					for (String alias : aliases.value()) {
 						properties.put(alias, property.getPrimaryType());
+					}
+				}
+				if (RECORD_IDENTITIES.getOrDefault(type.getRawClass(), Set.of()).contains(property.getName())) {
+					identityProperties.add(property.getName());
+					if (aliases != null) {
+						identityProperties.addAll(List.of(aliases.value()));
 					}
 				}
 			}
@@ -261,6 +333,11 @@ final class IncidentDocumentReader {
 					}
 					add(strict ? Severity.ERROR : Severity.WARNING, childPath, "Unknown property.",
 							strict ? "Remove or correct the property name." : "This client ignores this property.");
+				} else if (strict && identityProperties.contains(entry.getKey())
+						&& (entry.getValue().isNull()
+								|| entry.getValue().isTextual() && entry.getValue().asText().isBlank())) {
+					add(Severity.ERROR, childPath, "Record identity must be a non-empty string.",
+							"Omit a legacy identity or provide a non-empty record identifier.");
 				} else if (childType != null) {
 					inspect(entry.getValue(), childType, childPath, strict);
 				}

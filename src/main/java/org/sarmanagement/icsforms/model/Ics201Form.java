@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
 
 import java.time.LocalDate;
@@ -5,6 +8,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Incident Briefing (ICS 201) content captured by the desktop editor.
@@ -295,8 +299,30 @@ public class Ics201Form {
 	 * Current and planned actions row.
 	 */
 	public static class ActionEntry {
+		private String id = UUID.randomUUID().toString();
 		private String time = "";
 		private String actions = "";
+
+		/**
+		 * Returns the stable identity of this action row.
+		 *
+		 * @return row UUID, never null or blank
+		 */
+		public String getId() {
+			if (id == null || id.isBlank()) {
+				id = UUID.randomUUID().toString();
+			}
+			return id;
+		}
+
+		/**
+		 * Sets this action row's stable identity.
+		 *
+		 * @param id row UUID; null or blank generates a UUID
+		 */
+		public void setId(String id) {
+			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		}
 
 		/**
 		 * Returns the action time.
@@ -341,12 +367,34 @@ public class Ics201Form {
 	 * Resource summary row.
 	 */
 	public static class ResourceSummaryEntry {
+		private String id = UUID.randomUUID().toString();
 		private String resource = "";
 		private String resourceIdentifier = "";
 		private LocalDateTime dateTimeOrdered;
 		private LocalDateTime eta;
 		private boolean arrived;
 		private String notes = "";
+
+		/**
+		 * Returns the stable identity of this resource-summary row.
+		 *
+		 * @return row UUID, never null or blank
+		 */
+		public String getId() {
+			if (id == null || id.isBlank()) {
+				id = UUID.randomUUID().toString();
+			}
+			return id;
+		}
+
+		/**
+		 * Sets this resource-summary row's stable identity.
+		 *
+		 * @param id row UUID; null or blank generates a UUID
+		 */
+		public void setId(String id) {
+			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		}
 
 		/**
 		 * Returns the resource description.

@@ -144,36 +144,49 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		Path document = incidents.resolve(id.value() + ".json");
 		Files.writeString(document, """
 				{"schemaVersion":5,"revision":0,"futureLegacy":{"retain":true},
+				"form201":{"currentActions":[{"actions":"Brief resources"}],
+				"resources":[{"resource":"Search team"}]},
+				"organizationalChart":{"assignmentList":{"branches":[{"name":"Operations",
+				"divisions":[{"title":"Division"}]}]},"additionalPositions":[{"title":"Planning support"}]},
+				"form215":{"resourceHeadings":[{"category":"Teams","id":null}],
+				"workRows":[{"assignment":"Search","id":null}]},
+				"form204":{"resourcesAssigned":[{"assignmentId":"assigned-record",
+				"resourceIdentifier":"Legacy Unit"}],"communications":[{"primaryContact":"Command"}]},
+				"form208":{"hazardBlocks":[{"hazard":"Low visibility"}]},
+				"additionalForms204":[{"communications":[{"primaryContact":"Field"}]}],
+				"sarTaskAssignments":[{"resourcesAssigned":[{"name":"Search dog"}],
+				"communications":[{"primaryContact":"Task channel"}],
+				"qualitativePodFactors":[{"name":"Weather"}]}],
+				"medicalPlan":{"aidStations":[{"name":"Base"}],
+				"transportServices":[{"service":"Ground transport"}],"hospitals":[{"name":"Hospital"}]},
+				"canineMedicalPlan":{"transportServiceEntries":[{"service":"Canine transport"}]},
+				"vetDirectory":{"sources":[{"name":"Legacy directory"}]},
+				"operationalPeriodHistory":[{"forms204":[{}],"sarTaskAssignments":[{}]}],
 				"openActionItems":[{"item":"Coordinate staging"}],
 				"archivedSafetyHazardReports":[{"taskId":"legacy-task-ref","taskLabel":"Team 1","hazards":"Low visibility"}],
+				"commonSafetyHazards":[{"incidentArea":"Ridge","hazardsRisks":"Loose rock"}],
 				"clueLogEntries":[{"description":"Track the trail","followUpAssignments":[{"assignee":"Responder"}]}],
-				"activityLogs":[{"activityLog":[{"notableActivity":"Search started",
+				"activityLogs":[{"activityLog":[{"resourceIdentifier":"Legacy Unit",
+				"notableActivity":"Search started",
 				"eventTypeChangeHistory":[{"previousEventTypeId":"FREE_TEXT","newEventTypeId":"CLUE_REPORTED",
 				"changedAt":"2026-01-01T00:00:00"}]}]}]}
 				""");
 
-		String[] identities = new String[5];
+		List<String> identities;
 		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
 			AppData migrated = store.load(id);
-			identities[0] = migrated.getIncidentId();
-			identities[1] = migrated.getOpenActionItems().get(0).getId();
-			identities[2] = migrated.getArchivedSafetyHazardReports().get(0).getId();
-			identities[3] = migrated.getClueLogEntries().get(0).getFollowUpAssignments().get(0).getId();
-			identities[4] = migrated.getActivityLogs().get(0).getActivityLog().get(0)
-					.getEventTypeChangeHistory().get(0).changeId();
-			assertEquals(identities[0], store.load(id).getIncidentId());
+			identities = identities(migrated);
+			assertEquals("assigned-record", migrated.getActivityLogs().get(0).getActivityLog().get(0).getAssignmentId());
+			assertEquals("Legacy Unit",
+					migrated.getActivityLogs().get(0).getActivityLog().get(0).getResourceIdentifier());
+			assertEquals(identities, identities(store.load(id)));
 			assertEquals(0, store.load(id).getRevision());
 		}
 		assertTrue(Files.readString(document).contains("\"retain\" : true"));
 
 		try (FileIncidentStore reopened = new FileIncidentStore(tempDir)) {
 			AppData restored = reopened.load(id);
-			assertEquals(identities[0], restored.getIncidentId());
-			assertEquals(identities[1], restored.getOpenActionItems().get(0).getId());
-			assertEquals(identities[2], restored.getArchivedSafetyHazardReports().get(0).getId());
-			assertEquals(identities[3], restored.getClueLogEntries().get(0).getFollowUpAssignments().get(0).getId());
-			assertEquals(identities[4], restored.getActivityLogs().get(0).getActivityLog().get(0)
-					.getEventTypeChangeHistory().get(0).changeId());
+			assertEquals(identities, identities(restored));
 		}
 	}
 
@@ -221,5 +234,43 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 			IncidentId next = second.create(new AppData());
 			assertEquals(node, second.load(next).getOriginNodeId());
 		}
+	}
+
+	/**
+	 * Captures representative root and nested record identities after legacy migration.
+	 *
+	 * @param data migrated incident
+	 * @return ordered identities for persistence comparisons
+	 */
+	private static List<String> identities(AppData data) {
+		return List.of(data.getIncidentId(), data.getForm201().getCurrentActions().get(0).getId(),
+				data.getForm201().getResources().get(0).getId(),
+				data.getOrganizationalChart().getAssignmentList().getBranches().get(0).getId(),
+				data.getOrganizationalChart().getAssignmentList().getBranches().get(0).getDivisions().get(0).getId(),
+				data.getForm215().getResourceHeadings().get(0).id,
+				data.getForm215().getWorkRows().get(0).id,
+				data.getOrganizationalChart().getAdditionalPositions().get(0).getId(),
+				data.getForm204().getCommunications().get(0).getId(),
+				data.getForm208().getHazardBlocks().get(0).getId(),
+				data.getAdditionalForms204().get(0).getCommunications().get(0).getId(),
+				data.getSarTaskAssignments().get(0).getResourcesAssigned().get(0).getId(),
+				data.getSarTaskAssignments().get(0).getCommunications().get(0).getId(),
+				data.getSarTaskAssignments().get(0).getQualitativePodFactors().get(0).getId(),
+				data.getMedicalPlan().getAidStations().get(0).getId(),
+				data.getMedicalPlan().getTransportServices().get(0).getId(),
+				data.getMedicalPlan().getHospitals().get(0).getId(),
+				data.getCanineMedicalPlan().getTransportServiceEntries().get(0).getId(),
+				data.getVetDirectory().getSources().get(0).getId(),
+				data.getOperationalPeriodHistory().get(0).getRecordId(),
+				data.getOperationalPeriodHistory().get(0).getForms204().get(0).getFormId(),
+				data.getOperationalPeriodHistory().get(0).getSarTaskAssignments().get(0).getTaskId(),
+				data.getOpenActionItems().get(0).getId(),
+				data.getArchivedSafetyHazardReports().get(0).getId(),
+				data.getCommonSafetyHazards().get(0).getEntryId(),
+				data.getClueLogEntries().get(0).getFollowUpAssignments().get(0).getId(),
+				data.getActivityLogs().get(0).getLogId(),
+				data.getActivityLogs().get(0).getActivityLog().get(0).getEntryId(),
+				data.getActivityLogs().get(0).getActivityLog().get(0).getAssignmentId(),
+				data.getActivityLogs().get(0).getActivityLog().get(0).getEventTypeChangeHistory().get(0).changeId());
 	}
 }

@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -5,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * First-cut ICS 214 activity log content and prepared-by details.
@@ -20,6 +24,7 @@ import java.util.List;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Ics214Form {
+	private String logId = UUID.randomUUID().toString();
 	private String linkedIcs204FormId = "";
 	private String linkedSarTaskAssignmentId = "";
 	/**
@@ -39,6 +44,27 @@ public class Ics214Form {
 	private String preparedBySignature = "";
 	private LocalDateTime preparedDateTime;
 	private String iapPage = "";
+
+	/**
+	 * Returns this activity log's stable identity.
+	 *
+	 * @return activity log UUID, never null or blank
+	 */
+	public String getLogId() {
+		if (logId == null || logId.isBlank()) {
+			logId = UUID.randomUUID().toString();
+		}
+		return logId;
+	}
+
+	/**
+	 * Sets this activity log's stable identity.
+	 *
+	 * @param logId activity log UUID; null or blank generates a UUID
+	 */
+	public void setLogId(String logId) {
+		this.logId = logId == null || logId.isBlank() ? UUID.randomUUID().toString() : logId;
+	}
 
 	/**
 	 * Returns the operational scope derived from the typed association fields.

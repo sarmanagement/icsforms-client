@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Incident-owned reusable regional veterinary records and import provenance.
@@ -62,9 +63,31 @@ public class VetDirectory {
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class Source {
+		private String id = UUID.randomUUID().toString();
 		private String name = "";
 		private String format = "";
 		private Instant importedAt;
+
+		/**
+		 * Returns this regional import source's stable identity.
+		 *
+		 * @return source UUID, never null or blank
+		 */
+		public String getId() {
+			if (id == null || id.isBlank()) {
+				id = UUID.randomUUID().toString();
+			}
+			return id;
+		}
+
+		/**
+		 * Sets this regional import source's stable identity.
+		 *
+		 * @param id source UUID; null or blank generates a UUID
+		 */
+		public void setId(String id) {
+			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		}
 
 		/** Creates empty source metadata. */
 		public Source() {

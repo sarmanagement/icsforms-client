@@ -489,7 +489,7 @@ public class SarTaskPanel extends JPanel {
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				if (SwingUtilities.isLeftMouseButton(e)) {
-					int modelRow = tableModel.getRows().indexOf(task);
+					int modelRow = tableModel.indexOfTaskId(task.getTaskId());
 					if (modelRow >= 0) {
 						int viewRow = table.convertRowIndexToView(modelRow);
 						if (viewRow >= 0) {
@@ -538,7 +538,7 @@ public class SarTaskPanel extends JPanel {
 	 * Opens the assignment or debrief editor for a task clicked in the board view.
 	 */
 	private void openBoardTaskEditor(SarTaskAssignment task, EditorMode mode) {
-		int modelRow = tableModel.getRows().indexOf(task);
+		int modelRow = tableModel.indexOfTaskId(task.getTaskId());
 		if (modelRow >= 0) {
 			editRow(modelRow, mode);
 			if (currentSarView.equals(VIEW_BOARD)) {
@@ -3168,6 +3168,28 @@ public class SarTaskPanel extends JPanel {
 
 		List<SarTaskAssignment> getRows() {
 			return rows;
+		}
+
+		/**
+		 * Finds a uniquely identified task in the table model.
+		 *
+		 * @param taskId stable task UUID.
+		 * @return matching row, or {@code -1} when absent or ambiguous.
+		 */
+		int indexOfTaskId(String taskId) {
+			if (taskId == null || taskId.isBlank()) {
+				return -1;
+			}
+			int match = -1;
+			for (int i = 0; i < rows.size(); i++) {
+				if (taskId.equals(rows.get(i).getTaskId())) {
+					if (match >= 0) {
+						return -1;
+					}
+					match = i;
+				}
+			}
+			return match;
 		}
 
 		@Override

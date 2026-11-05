@@ -85,6 +85,28 @@ class LocalRepositoryTest {
 		assertEquals(1, LocalRepository.listLocalIncidents(directory).size());
 	}
 
+	@Test
+	void legacyIdentityMigrationPersistsIdsAndRetainsUnknownFields() throws Exception {
+		Path directory = Files.createTempDirectory("icsforms-identity-migration");
+		Path primary = directory.resolve("incident.json");
+		Files.writeString(primary, """
+				{"schemaVersion":5,"futureField":{"retain":true},
+				"openActionItems":[{"item":"Keep staging available"}],
+				"activityLogs":[{"activityLog":[{"notableActivity":"Search began"}]}]}
+				""");
+
+		AppData first = new LocalRepository(primary).loadOrDefault();
+		String incidentId = first.getIncidentId();
+		String actionId = first.getOpenActionItems().get(0).getId();
+		String entryId = first.getActivityLogs().get(0).getActivityLog().get(0).getEntryId();
+		assertTrue(Files.readString(primary).contains("\"retain\" : true"));
+
+		AppData restarted = new LocalRepository(primary).loadOrDefault();
+		assertEquals(incidentId, restarted.getIncidentId());
+		assertEquals(actionId, restarted.getOpenActionItems().get(0).getId());
+		assertEquals(entryId, restarted.getActivityLogs().get(0).getActivityLog().get(0).getEntryId());
+	}
+
 	/**
 	 * Verifies that workspace JSON preserves schema version, shared context, and
 	 * linked assignment data.

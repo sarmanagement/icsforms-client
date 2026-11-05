@@ -224,6 +224,7 @@ class CommunicationsConsolePanelTest {
 		resourceLog.setLinkedSarTaskAssignmentId(task.getAssignmentId());
 		resourceLog.getActivityLog().add(entry("Not ICP", task.getAssignmentId(), "", "2026-11-04T06:00"));
 		data.getActivityLogs().addAll(List.of(icp, resourceLog));
+		data.normalizeIdentity();
 
 		var rows = CommunicationsConsolePanel.recentEntries(data, task.getAssignmentId());
 
@@ -236,6 +237,25 @@ class CommunicationsConsolePanelTest {
 		assertTrue(rows.get(0).toString().contains("Stable\ncomplete narrative"));
 		assertEquals(1, stable.getEventTypeChangeHistory().size());
 		assertEquals("Stable\ncomplete narrative", stable.getNotableActivity());
+	}
+
+	@Test
+	void recentIcpProjectionDoesNotResolveAmbiguousLegacyResourceLinks() {
+		AppData data = incident();
+		SarTaskAssignment first = data.getSarTaskAssignments().get(0);
+		SarTaskAssignment second = data.getSarTaskAssignments().get(1);
+		second.setResourceIdentifier(first.getResourceIdentifier());
+		ActivityLogEntry legacy = entry("Ambiguous legacy link", "", first.getResourceIdentifier(),
+				"2026-11-04T03:00");
+		Ics214Form icp = new Ics214Form();
+		icp.getActivityLog().add(legacy);
+		data.getActivityLogs().add(icp);
+		data.normalizeIdentity();
+
+		assertEquals("", legacy.getAssignmentId());
+		assertEquals(first.getResourceIdentifier(), legacy.getResourceIdentifier());
+		assertTrue(CommunicationsConsolePanel.recentEntries(data, first.getAssignmentId()).isEmpty());
+		assertTrue(CommunicationsConsolePanel.recentEntries(data, second.getAssignmentId()).isEmpty());
 	}
 
 	@Test
@@ -322,7 +342,7 @@ class CommunicationsConsolePanelTest {
 	}
 
 	@Test
-	void readingLegacyCardsNeverGeneratesMissingResourceIdentities() throws Exception {
+	void consoleDoesNotGenerateMissingCardIdentity() throws Exception {
 		AppData data = incident();
 		AppController controller = controller(data);
 		TCard legacy = new TCard();
@@ -333,7 +353,7 @@ class CommunicationsConsolePanelTest {
 			CommunicationsConsolePanel panel = new CommunicationsConsolePanel(controller);
 			accessible(panel, JList.class, "Communications task assignment board").clearSelection();
 			panel.refreshFromModel();
-			assertTrue(accessible(panel, JTextArea.class, "Resource and contact lookup results").getText()
+			assertFalse(accessible(panel, JTextArea.class, "Resource and contact lookup results").getText()
 					.contains("Legacy responder"));
 			assertEquals(null, legacy.peekResourceId());
 			assertFalse(controller.isDirty());
@@ -913,6 +933,7 @@ class CommunicationsConsolePanelTest {
 	 */
 	private static TCard card(String name, String channelId, String fallback) {
 		TCard card = new TCard();
+		card.getResourceId();
 		card.setPersonName(name);
 		card.setRadioChannel(fallback);
 		card.setRadioChannelId(channelId);

@@ -179,6 +179,23 @@ class ImportValidationTest {
 	}
 
 	@Test
+	void rejectsExplicitEmptyRecordIdentitiesBeforeCreatingAnIncident() throws Exception {
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			for (String content : List.of(
+					"\"tcards\":[{\"resourceId\":\"\",\"personName\":\"Responder\"}]",
+					"\"openActionItems\":[{\"id\":null,\"item\":\"Coordinate staging\"}]",
+					"\"activityLogs\":[{\"logId\":\"\",\"name\":\"Command\"}]")) {
+				Path source = write("{\"schemaVersion\":" + AppData.CURRENT_SCHEMA_VERSION + "," + content + "}");
+				ImportValidationException failure = assertThrows(ImportValidationException.class,
+						() -> store.importFile(source), content);
+				assertTrue(failure.getProblems().stream().anyMatch(problem -> problem.path().contains("Id")
+						|| problem.path().endsWith(".id")));
+				assertTrue(store.list().isEmpty());
+			}
+		}
+	}
+
+	@Test
 	void rejectsNullModelRecordsAtTheirExactIndexedPathsBeforeCreation() throws Exception {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			for (String field : List.of("sarTaskAssignments", "tcards", "activityLogs", "clueLogEntries",

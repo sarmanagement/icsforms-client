@@ -22,12 +22,27 @@ import javax.swing.JTable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests basic safety tab persistence and optional site-plan sections.
  */
 class SafetyPanelTest {
+	@Test
+	void commonHazardChoicesResolveByIdentityEvenWhenLabelsMatch() {
+		SafetyAnalysisEntry first = new SafetyAnalysisEntry();
+		first.setIncidentArea("North");
+		first.setHazardsRisks("Flooding");
+		SafetyAnalysisEntry second = new SafetyAnalysisEntry();
+		second.setIncidentArea("North");
+		second.setHazardsRisks("Flooding");
+		second.setMitigations("Maintain an escape route.");
+
+		assertSame(second, SafetyPanel.resolveCommonHazard(java.util.List.of(first, second), second.getEntryId()));
+		assertNull(SafetyPanel.resolveCommonHazard(java.util.List.of(first, second), "missing"));
+	}
+
 	@Test
 	void refreshAndPushPreserveAnalysisAndSitePlanFields() throws Exception {
 		AppData data = new AppData();

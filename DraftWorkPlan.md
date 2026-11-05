@@ -577,6 +577,26 @@ except where noted.
 | **T2** | #44 | `Provenance` (operator name, station ID, entered-at UTC, reserved accepted-at) on append-style records; injected `OperatorContext` in `AppController`; one schema bump with fixtures. | P3, T1 | Legacy documents load unchanged; new entries carry provenance from context; ICS 214 "prepared by" prefilled only when blank. |
 | **P4** | #42 | Asynchronous persistence coordinator on detached snapshots with an abstract unit of work; "replace active document from store" path; two-dimension status (local durability vs. future sync state); failure retention and retry policy. | P0, P1, P2, P3 | Deterministic tests for out-of-order completion, incident switch during save, edits during save, failure→retry, unavailable→available; second unit type substitutes without coordinator changes. |
 
+**Issue #40 entity-ID audit:** list-held model records now have stable UUID
+identities and legacy IDs are persisted during load migration. Coverage includes
+AppData operational-period snapshots, additional ICS 204 forms, activity logs,
+SAR tasks and resources, T-cards, clue/follow-up records, open actions, archived
+hazard reports, safety-analysis rows, and incident locations; nested ICS 201
+action/resource rows, ICS 202 objectives/results, ICS 203 positions/branches,
+ICS 204 assignments/communications, ICS 205 channels, ICS 208 message blocks,
+ICS 214 logs/activity entries/resources, ICS 215 worksheets/headings/work rows,
+medical-plan facilities/transports, veterinary directory sources/facilities, and
+SAR communications/POD ratings are included. `ActivityEventType` retains its
+stable symbolic key for compatibility; ordinal fields such as action numbers and
+objective display order are not record identities. String-valued content lists
+are values, not records. Legacy activity resource labels remain unchanged for
+display; migration promotes only a uniquely resolved link to the stable
+assignment ID and leaves ambiguous links unlinked. UI selection now carries the
+record ID rather than resolving records by duplicate display text, list position,
+or object-reference equality; JTable row indices remain presentation mechanics
+only. Repeated-load/restart fixtures cover absent IDs across representative
+nested records and verify both legacy-link preservation and ambiguity handling.
+
 Parallelism: T1 is done. P2 and P3 can proceed in parallel once
 P1 lands. T2 follows P3. P4 is last and is the gate for Stage 2.
 

@@ -5,11 +5,13 @@ package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.UUID;
 
 /**
  * Communication row for ICS 204 or linked SAR task context.
  */
 public class CommunicationEntry {
+	private String id = UUID.randomUUID().toString();
 	private String name = "";
 	private String function = "";
 	private String primaryContact = "";
@@ -30,6 +32,27 @@ public class CommunicationEntry {
 			@JsonProperty("radioChannelId") String radioChannelId) {
 		this.primaryContact = primaryContact == null ? "" : primaryContact;
 		setRadioChannelId(radioChannelId);
+	}
+
+	/**
+	 * Returns this communication row's stable identity.
+	 *
+	 * @return communication UUID, never null or blank
+	 */
+	public String getId() {
+		if (id == null || id.isBlank()) {
+			id = UUID.randomUUID().toString();
+		}
+		return id;
+	}
+
+	/**
+	 * Sets this communication row's stable identity.
+	 *
+	 * @param id communication UUID; null or blank generates a UUID
+	 */
+	public void setId(String id) {
+		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
 	}
 
 	/**
