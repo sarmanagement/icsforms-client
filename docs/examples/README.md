@@ -34,6 +34,11 @@ resources, permissions and a locally approved safety/medical/communications plan
    an ICP log entry for that task, or open its task/assignment form; hover over a
    marker for event details.
    Export individual PDFs or the IAP bundle to inspect their relationships.
+4. Open **View → Role Panels → Communications Unit** and switch between
+   **Plan** and **Console**. The ICP log includes a fictional **0650
+   Communications Check** by COML Taylor Brook matching the channel's recorded
+   exercise check. It is an explicit simulated assertion, not a coverage survey
+   or a readiness inference from the teams' assignments.
 
 ### Scenario and deliberate limits
 

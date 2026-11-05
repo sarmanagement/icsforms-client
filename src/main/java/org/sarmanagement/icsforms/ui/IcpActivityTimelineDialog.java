@@ -22,16 +22,15 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
-import javax.swing.Timer;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GridLayout;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.GridLayout;
 import java.awt.RenderingHints;
 import java.awt.Window;
 import java.awt.event.MouseAdapter;
@@ -40,8 +39,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -52,22 +51,20 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Proof-of-concept timeline for ICP activity, grouped by assignment.
+ * Live timeline for committed ICP activity, grouped by stable assignment identity.
  */
 public final class IcpActivityTimelineDialog extends JFrame {
 	private static final int TIMELINE_LEFT = 240;
 	private static final int TIMELINE_HOUR_WIDTH = 100;
 	private final AppController controller;
+	private final AppController.IncidentBinding binding;
+	private final AppController.IncidentChangeSubscription subscription;
 	private final Consumer<LogEntryContext> addEntry;
 	private final Consumer<String> openAssignment;
 	private final Consumer<QuickLogRequest> quickLogEntry;
 	private final TimelineCanvas canvas = new TimelineCanvas();
 	private final JLabel selectionLabel = new JLabel("Select an assignment lane or add an ICP entry.");
-	private final JLabel currentTime = new JLabel();
-	private final JLabel currentZone = new JLabel();
-	private final ClockFace clockFace = new ClockFace();
-	private final JPanel clockPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 0));
-	private final Timer clockTimer;
+	private final IncidentClockPanel clockPanel;
 	private final JButton detailsButton = new JButton("Event Details…");
 	private final JButton openAssignmentButton = new JButton("Open Task / Assignment…");
 	private List<TimelineLane> lanes = List.of();
@@ -110,6 +107,8 @@ public final class IcpActivityTimelineDialog extends JFrame {
 			Consumer<String> openAssignment, Consumer<QuickLogRequest> quickLogEntry) {
 		super("ICP Activity Timeline");
 		this.controller = Objects.requireNonNull(controller);
+		binding = controller.captureIncidentBinding();
+		clockPanel = new IncidentClockPanel(controller);
 		this.addEntry = Objects.requireNonNull(addEntry);
 		this.openAssignment = Objects.requireNonNull(openAssignment);
 		this.quickLogEntry = Objects.requireNonNull(quickLogEntry);
@@ -121,16 +120,6 @@ public final class IcpActivityTimelineDialog extends JFrame {
 		description.add(new JLabel("ICP activity by assignment."));
 		description.add(new JLabel("Markers show staging, task, clue, subject, completion, and return events."));
 		header.add(description, BorderLayout.CENTER);
-		clockPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder("Current time"),
-				BorderFactory.createEmptyBorder(0, 0, 7, 0)));
-		clockPanel.setPreferredSize(new Dimension(270, 72));
-		clockFace.setPreferredSize(new Dimension(48, 48));
-		JPanel digitalClock = new JPanel(new GridLayout(2, 1, 0, 0));
-		currentTime.setFont(currentTime.getFont().deriveFont(Font.BOLD, 18f));
-		digitalClock.add(currentTime);
-		digitalClock.add(currentZone);
-		clockPanel.add(clockFace);
-		clockPanel.add(digitalClock);
 		header.add(clockPanel, BorderLayout.EAST);
 		content.add(header, BorderLayout.NORTH);
 		JScrollPane scroll = new JScrollPane(canvas);
@@ -160,20 +149,34 @@ public final class IcpActivityTimelineDialog extends JFrame {
 		controls.add(buttons, BorderLayout.EAST);
 		content.add(controls, BorderLayout.SOUTH);
 		setContentPane(content);
-		refreshCurrentTime();
-		clockTimer = new Timer(1000, event -> refreshCurrentTime());
-		clockTimer.start();
-		addWindowListener(new java.awt.event.WindowAdapter() {
-			/** {@inheritDoc} */
-			@Override
-			public void windowClosed(java.awt.event.WindowEvent event) {
-				clockTimer.stop();
+		refresh();
+		subscription = controller.addIncidentChangeListener(change -> {
+			if (controller.isCurrent(binding)) {
+				refresh();
 			}
 		});
-		refresh();
 		pack();
 		setMinimumSize(new Dimension(760, 420));
 		setLocationRelativeTo(owner);
+	}
+
+	/** Releases the live incident listener and shared clock before disposing the window. */
+	@Override
+	public void dispose() {
+		subscription.close();
+		clockPanel.dispose();
+		super.dispose();
+	}
+
+	/**
+	 * Retains the timeline's digital-clock formatting helper for existing callers.
+	 *
+	 * @param instant current UTC instant.
+	 * @param zoneId selected display timezone.
+	 * @return 24-hour digital time.
+	 */
+	static String formatClockTime(Instant instant, ZoneId zoneId) {
+		return IncidentClockPanel.formatClockTime(instant, zoneId);
 	}
 
 	/**
@@ -210,39 +213,26 @@ public final class IcpActivityTimelineDialog extends JFrame {
 	}
 
 	/**
-	 * Reloads assignment lanes and event markers from the active incident.
+	 * Reloads assignment lanes and event markers while retaining the selected assignment identity.
 	 */
 	private void refresh() {
+		if (!controller.isCurrent(binding)) {
+			return;
+		}
+		String selectedAssignment = hasSelectedLane() ? lanes.get(selectedLane).assignmentId() : null;
 		lanes = buildLanes(controller.getData());
-		if (selectedLane >= lanes.size()) {
-			selectedLane = -1;
+		selectedLane = -1;
+		if (selectedAssignment != null) {
+			for (int index = 0; index < lanes.size(); index++) {
+				if (selectedAssignment.equals(lanes.get(index).assignmentId())) {
+					selectedLane = index;
+					break;
+				}
+			}
 		}
 		canvas.revalidate();
 		canvas.repaint();
 		updateSelectionLabel();
-	}
-
-	/** Refreshes both clocks using the incident's selected display timezone. */
-	private void refreshCurrentTime() {
-		ZoneId zone = MainFrame.configuredZoneId(controller.getData());
-		ZonedDateTime now = UtcTimestamp.nowInstant().atZone(zone);
-		currentTime.setText(formatClockTime(now.toInstant(), zone));
-		currentZone.setText(zone.getId());
-		currentZone.setToolTipText(zone.getId());
-		currentTime.getAccessibleContext().setAccessibleName("Current time, 24-hour " + currentTime.getText()
-				+ " " + zone.getId());
-		clockFace.setTime(now);
-	}
-
-	/**
-	 * Formats a digital clock value in 24-hour time for a selected zone.
-	 *
-	 * @param instant current UTC instant.
-	 * @param zoneId selected display timezone.
-	 * @return 24-hour digital time.
-	 */
-	static String formatClockTime(Instant instant, ZoneId zoneId) {
-		return DateTimeFormatter.ofPattern("HH:mm:ss").withZone(zoneId).format(instant);
 	}
 
 	/**
@@ -251,7 +241,7 @@ public final class IcpActivityTimelineDialog extends JFrame {
 	 * @return true when a timeline lane is selected.
 	 */
 	boolean hasSelectedLane() {
-		return selectedLane >= 0 && selectedLane < lanes.size();
+		return controller.isCurrent(binding) && selectedLane >= 0 && selectedLane < lanes.size();
 	}
 
 	/**
@@ -274,6 +264,9 @@ public final class IcpActivityTimelineDialog extends JFrame {
 	 * Adds an activity entry associated with the selected assignment, when any.
 	 */
 	private void addSelectedEntry() {
+		if (!controller.isCurrent(binding)) {
+			return;
+		}
 		addEntry.accept(hasSelectedLane() ? contextFor(lanes.get(selectedLane))
 				: new LogEntryContext(this, "", "", ""));
 		refresh();
@@ -317,6 +310,9 @@ public final class IcpActivityTimelineDialog extends JFrame {
 		options[options.length - 1] = "Close";
 		int choice = UiSupport.showResizableOptionDialog(this, "Timeline Details", details,
 				new Dimension(650, 520), options, "Close");
+		if (!controller.isCurrent(binding)) {
+			return;
+		}
 		if (choice == 0) {
 			addEntry.accept(contextFor(lane));
 			refresh();
@@ -490,91 +486,11 @@ public final class IcpActivityTimelineDialog extends JFrame {
 	 * @param option selected event type and narrative.
 	 */
 	private void runQuickLog(TimelineLane lane, QuickLogOption option) {
+		if (!controller.isCurrent(binding)) {
+			return;
+		}
 		quickLogEntry.accept(new QuickLogRequest(contextFor(lane), option.eventTypeId(), option.activity()));
 		refresh();
-	}
-
-	/**
-	 * Displays a clock face for the current time in the selected incident timezone.
-	 */
-	private final class ClockFace extends JPanel {
-		private ZonedDateTime time = ZonedDateTime.now();
-
-		/** Creates an accessible analog clock face. */
-		private ClockFace() {
-			setOpaque(false);
-			getAccessibleContext().setAccessibleName("Current time, analog clock");
-		}
-
-		/**
-		 * Updates the analog clock and its accessible description.
-		 *
-		 * @param current current zoned time.
-		 */
-		private void setTime(ZonedDateTime current) {
-			time = current;
-			getAccessibleContext().setAccessibleDescription(
-					"Current time " + formatClockTime(current.toInstant(), current.getZone()) + " "
-							+ current.getZone().getId());
-			repaint();
-		}
-
-		/** {@inheritDoc} */
-		@Override
-		protected void paintComponent(Graphics graphics) {
-			super.paintComponent(graphics);
-			Graphics2D g = (Graphics2D) graphics.create();
-			try {
-				g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-				int size = Math.min(getWidth(), getHeight()) - 4;
-				int centerX = getWidth() / 2;
-				int centerY = getHeight() / 2;
-				int radius = size / 2;
-				g.setColor(Color.WHITE);
-				g.fillOval(centerX - radius, centerY - radius, size, size);
-				g.setColor(new Color(65, 75, 85));
-				g.setStroke(new BasicStroke(1.5f));
-				g.drawOval(centerX - radius, centerY - radius, size, size);
-				for (int tick = 0; tick < 12; tick++) {
-					double angle = Math.PI * tick / 6 - Math.PI / 2;
-					int outerX = centerX + (int) (Math.cos(angle) * (radius - 3));
-					int outerY = centerY + (int) (Math.sin(angle) * (radius - 3));
-					int inset = tick % 3 == 0 ? 8 : 5;
-					int innerX = centerX + (int) (Math.cos(angle) * (radius - inset));
-					int innerY = centerY + (int) (Math.sin(angle) * (radius - inset));
-					g.drawLine(innerX, innerY, outerX, outerY);
-				}
-				double seconds = time.getSecond() + time.getNano() / 1_000_000_000d;
-				double minutes = time.getMinute() + seconds / 60d;
-				double hours = time.getHour() % 12 + minutes / 60d;
-				drawHand(g, centerX, centerY, radius * 0.48, hours / 12d, 2.5f);
-				drawHand(g, centerX, centerY, radius * 0.7, minutes / 60d, 1.8f);
-				drawHand(g, centerX, centerY, radius * 0.76, seconds / 60d, 1f);
-				g.setColor(new Color(45, 50, 55));
-				g.fillOval(centerX - 2, centerY - 2, 4, 4);
-			} finally {
-				g.dispose();
-			}
-		}
-
-		/**
-		 * Draws one clock hand.
-		 *
-		 * @param graphics drawing context.
-		 * @param centerX clock center x.
-		 * @param centerY clock center y.
-		 * @param length hand length.
-		 * @param fraction position around the dial.
-		 * @param stroke hand width.
-		 */
-		private void drawHand(Graphics2D graphics, int centerX, int centerY, double length, double fraction,
-				float stroke) {
-			double angle = fraction * Math.PI * 2 - Math.PI / 2;
-			graphics.setColor(new Color(45, 50, 55));
-			graphics.setStroke(new BasicStroke(stroke, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-			graphics.drawLine(centerX, centerY, centerX + (int) (Math.cos(angle) * length),
-					centerY + (int) (Math.sin(angle) * length));
-		}
 	}
 
 	/**

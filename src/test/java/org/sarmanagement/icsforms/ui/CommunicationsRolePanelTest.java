@@ -18,6 +18,13 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.SwingUtilities;
 import javax.swing.JButton;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.JTable;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import java.awt.BorderLayout;
+import java.awt.FlowLayout;
 import java.awt.Component;
 import java.awt.Container;
 import java.nio.file.Path;
@@ -25,6 +32,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -32,6 +41,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CommunicationsRolePanelTest {
 	@TempDir
 	Path directory;
+
+	@Test
+	void headerKeepsBannerBadgesAndClockAboveRightAlignedActions() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			CommunicationsRolePanel panel = createPanel(controller(new AppData()));
+			try {
+				JPanel header = (JPanel) ((BorderLayout) panel.getLayout()).getLayoutComponent(BorderLayout.NORTH);
+				BorderLayout layout = (BorderLayout) header.getLayout();
+				assertTrue(layout.getLayoutComponent(BorderLayout.CENTER) instanceof JLabel);
+				assertNull(layout.getLayoutComponent(BorderLayout.NORTH));
+				JPanel status = (JPanel) layout.getLayoutComponent(BorderLayout.EAST);
+				BorderLayout statusLayout = (BorderLayout) status.getLayout();
+				assertTrue(statusLayout.getLayoutComponent(BorderLayout.CENTER) instanceof RolePlanStatusBadges);
+				assertTrue(statusLayout.getLayoutComponent(BorderLayout.EAST) instanceof IncidentClockPanel);
+				JPanel actions = (JPanel) layout.getLayoutComponent(BorderLayout.SOUTH);
+				assertEquals(FlowLayout.TRAILING, ((FlowLayout) actions.getLayout()).getAlignment());
+				for (String label : List.of("Plan", "Console", "Open full ICS 205", "Import CSV…",
+						"Export CSV…", "Add ICP 214 log entry…")) {
+					assertSame(actions, findButton(panel, label).getParent());
+				}
+			} finally {
+				panel.dispose();
+			}
+		});
+	}
 
 	@Test
 	void displayingStableLinksHasNoReadSideEffectsAndRetainsSelection() throws Exception {
@@ -115,6 +149,70 @@ class CommunicationsRolePanelTest {
 		assertTrue(requested[0]);
 	}
 
+	@Test
+	void switchingPlanAndConsoleKeepsSameWorkbenchSelectionFilterAndUnsavedInput() throws Exception {
+		AppData data = new AppData();
+		RadioChannel first = new RadioChannel();
+		first.setChannelName("Command");
+		RadioChannel second = new RadioChannel();
+		second.setChannelName("Tactical");
+		data.getForm205().getChannels().addAll(List.of(first, second));
+		AppController controller = controller(data);
+		SwingUtilities.invokeAndWait(() -> {
+			CommunicationsRolePanel panel = createPanel(controller);
+			JTable table = findAccessible(panel, JTable.class, "Sortable communications channels");
+			table.setRowSelectionInterval(1, 1);
+			JTextArea coverage = findAccessible(panel, JTextArea.class, "Coverage guidance");
+			coverage.setText("Unsaved workbench guidance");
+			JTextField filter = findAccessible(panel, JTextField.class, "Filter communications channels");
+			filter.setText("Tactical");
+			findButton(panel, "Console").doClick();
+			assertEquals(second.getChannelId(), panel.selectedChannelId());
+			controller.markDirty();
+			panel.refreshFromModel();
+			findButton(panel, "Plan").doClick();
+			assertTrue(coverage == findAccessible(panel, JTextArea.class, "Coverage guidance"));
+			assertTrue(table == findAccessible(panel, JTable.class, "Sortable communications channels"));
+			assertEquals("Unsaved workbench guidance", coverage.getText());
+			assertEquals("Tactical", filter.getText());
+			assertEquals(second.getChannelId(), panel.selectedChannelId());
+			assertEquals("", second.getCoverageGuidance());
+			panel.dispose();
+		});
+	}
+
+	/**
+	 * Finds a component by its accessible name across both retained cards.
+	 *
+	 * @param parent component tree.
+	 * @param type expected component type.
+	 * @param name accessible name.
+	 * @param <T> component type.
+	 * @return matching component.
+	 */
+	private static <T extends Component> T findAccessible(Container parent, Class<T> type, String name) {
+		for (Component child : parent.getComponents()) {
+			if (type.isInstance(child) && child.getAccessibleContext() != null
+					&& name.equals(child.getAccessibleContext().getAccessibleName())) {
+				return type.cast(child);
+			}
+			if (child instanceof Container nested) {
+				try {
+					return findAccessible(nested, type, name);
+				} catch (IllegalArgumentException ignored) {
+					// Continue searching sibling containers.
+				}
+			}
+		}
+		throw new IllegalArgumentException("Accessible component not found: " + name);
+	}
+
+	/**
+	 * Creates a communications workbench with inert workspace callbacks.
+	 *
+	 * @param controller test incident controller.
+	 * @return communications panel.
+	 */
 	private CommunicationsRolePanel createPanel(AppController controller) {
 		return new CommunicationsRolePanel(controller, ignored -> {
 		}, () -> {
@@ -122,6 +220,13 @@ class CommunicationsRolePanelTest {
 		});
 	}
 
+	/**
+	 * Finds a button in both retained communications views.
+	 *
+	 * @param container component tree.
+	 * @param text visible button label.
+	 * @return matching button.
+	 */
 	private static JButton findButton(Container container, String text) {
 		for (Component child : container.getComponents()) {
 			if (child instanceof JButton button && text.equals(button.getText())) {
@@ -138,6 +243,12 @@ class CommunicationsRolePanelTest {
 		throw new IllegalArgumentException("Button not found: " + text);
 	}
 
+	/**
+	 * Creates a controller with project-local test persistence.
+	 *
+	 * @param data test incident.
+	 * @return test controller.
+	 */
 	private AppController controller(AppData data) {
 		return new AppController(data, new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
 				new IncidentValidator());

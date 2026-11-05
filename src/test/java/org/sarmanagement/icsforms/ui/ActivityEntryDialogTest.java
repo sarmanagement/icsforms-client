@@ -24,6 +24,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
@@ -31,6 +32,298 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 class ActivityEntryDialogTest {
 	@TempDir
 	Path directory;
+
+	@Test
+	void replacementCommitterReceivesAcceptedDefaultsAndDoesNotRunNormalCommit() throws Exception {
+		AppData data = new AppData();
+		SarTaskAssignment task = new SarTaskAssignment();
+		task.setResourceIdentifier("Search team");
+		data.getSarTaskAssignments().add(task);
+		AppController controller = controller(data);
+		java.util.concurrent.atomic.AtomicReference<ActivityLogEntry> accepted = new java.util.concurrent.atomic.AtomicReference<>();
+		ActivityEntryDialog dialog = new ActivityEntryDialog(controller,
+				new LogEntryContext(new JPanel(), "", task.getAssignmentId(), "Robin"), null,
+				ActivityEventType.ID_COMMUNICATIONS_CHECK, "Draft check", (log, entry) -> {
+					assertTrue(log.getActivityLog().isEmpty());
+					accepted.set(entry);
+					return true;
+				});
+		ActivityLogEntry draft = editor(dialog).toEntry();
+
+		assertTrue(dialog.saveEntry(new JPanel(), draft, candidate -> {
+			throw new AssertionError("Replacement commit must not invoke a mutating clue workflow");
+		}));
+
+		assertSame(draft, accepted.get());
+		assertEquals(task.getAssignmentId(), draft.getAssignmentId());
+		assertEquals("Robin", draft.getResourceIdentifier());
+		assertEquals(ActivityEventType.ID_COMMUNICATIONS_CHECK, draft.getEventTypeId());
+		assertEquals("Draft check", draft.getNotableActivity());
+		assertTrue(data.getActivityLogs().isEmpty());
+		assertFalse(controller.isDirty());
+	}
+
+	@Test
+	void switchingCustomCheckToClueCannotCaptureClueOrMutateEitherModel() throws Exception {
+		AppData data = new AppData();
+		data.setIncidentMode(IncidentMode.SAR);
+		org.sarmanagement.icsforms.model.RadioChannel channel = new org.sarmanagement.icsforms.model.RadioChannel();
+		data.getForm205().getChannels().add(channel);
+		AppController controller = controller(data);
+		var binding = controller.captureIncidentBinding();
+		var baseline = channel.deepCopy();
+		ActivityEntryDialog dialog = new ActivityEntryDialog(controller,
+				new LogEntryContext(new JPanel(), "", "", "Robin"), null,
+				ActivityEventType.ID_COMMUNICATIONS_CHECK, "Draft check", (log, entry) -> {
+					controller.commitRadioCheckWithActivity(binding, channel.getChannelId(), baseline,
+							org.sarmanagement.icsforms.model.RadioCheckStatus.SUCCESSFUL, "COML",
+							entry.getTimestamp(), "Clear", log, entry);
+					return true;
+				});
+		editor(dialog).setQuickEntryDefaults(ActivityEventType.ID_CLUE_DETECTED, "Retained clue draft");
+
+		assertThrows(IllegalArgumentException.class,
+				() -> dialog.saveEntry(new JPanel(), editor(dialog).toEntry(), candidate -> {
+					throw new AssertionError("Atomic check must not enter the clue workflow");
+				}));
+
+		assertEquals(ActivityEventType.ID_CLUE_DETECTED, editor(dialog).toEntry().getEventTypeId());
+		assertEquals("Retained clue draft", editor(dialog).toEntry().getNotableActivity());
+		assertTrue(dialog.selectedLog().getActivityLog().isEmpty());
+		assertTrue(data.getActivityLogs().isEmpty());
+		assertTrue(data.getClueLogEntries().isEmpty());
+		assertEquals(org.sarmanagement.icsforms.model.RadioCheckStatus.NOT_RECORDED, channel.getRadioCheckStatus());
+		assertFalse(controller.isDirty());
+	}
+
+	@Test
+	void rejectedAndFailedCustomCommitsKeepTheEditorDraftWithoutNormalMutations() throws Exception {
+		AppData data = new AppData();
+		AppController controller = controller(data);
+		for (boolean throwsFailure : List.of(false, true)) {
+			ActivityEntryDialog dialog = new ActivityEntryDialog(controller,
+					new LogEntryContext(new JPanel(), "", "", "Robin"), null,
+					ActivityEventType.ID_COMMUNICATIONS_CHECK, "Retain this draft", (log, entry) -> {
+						if (throwsFailure) {
+							throw new IllegalStateException("Injected failure");
+						}
+						return false;
+					});
+			ActivityLogEntry draft = editor(dialog).toEntry();
+			if (throwsFailure) {
+				assertThrows(IllegalStateException.class, () -> dialog.saveEntry(new JPanel(), draft, candidate -> true));
+			} else {
+				assertFalse(dialog.saveEntry(new JPanel(), draft, candidate -> true));
+			}
+			assertEquals("Retain this draft", editor(dialog).toEntry().getNotableActivity());
+			assertEquals("Robin", editor(dialog).toEntry().getResourceIdentifier());
+			assertTrue(dialog.selectedLog().getActivityLog().isEmpty());
+			assertTrue(data.getActivityLogs().isEmpty());
+			assertFalse(controller.isDirty());
+		}
+	}
+
+	@Test
+	void refreshedCommitSummaryShowsCurrentCheckMetadataWithoutOverwritingRetainedNarrative() throws Exception {
+		AppController controller = controller(new AppData());
+		ActivityEntryDialog dialog = new ActivityEntryDialog(controller,
+				new LogEntryContext(new JPanel(), "", "", "Robin"), null,
+				ActivityEventType.ID_COMMUNICATIONS_CHECK, "My edited narrative", (log, entry) -> false);
+		dialog.setCommitSummary("Successful check recorded by First at 09:00 UTC");
+		dialog.setCommitSummary("Partial check recorded by Second at 10:00 UTC; relay required");
+
+		assertEquals("Partial check recorded by Second at 10:00 UTC; relay required",
+				((javax.swing.JTextPane) field(dialog, "commitSummary")).getText());
+		assertTrue(((javax.swing.JScrollPane) field(dialog, "commitSummaryScroll")).isVisible());
+		assertFalse(((javax.swing.JTextPane) field(dialog, "commitSummary")).isEditable());
+		assertEquals("My edited narrative", editor(dialog).toEntry().getNotableActivity());
+		assertEquals("Robin", editor(dialog).toEntry().getResourceIdentifier());
+		dialog.setCommitSummary(null);
+		assertFalse(((javax.swing.JScrollPane) field(dialog, "commitSummaryScroll")).isVisible());
+		assertEquals("My edited narrative", editor(dialog).toEntry().getNotableActivity());
+		assertFalse(controller.isDirty());
+	}
+
+	@Test
+	void checkTimeDefaultsUseUtcInDisplayZoneAndRetainExplicitReviewTimeEdits() throws Exception {
+		java.time.ZoneId previousZone = UiSupport.getDateTimeDisplayZone();
+		try {
+			UiSupport.setDateTimeDisplayZone(java.time.ZoneId.of("America/Toronto"));
+			ActivityEntryDialog dialog = new ActivityEntryDialog(controller(new AppData()),
+					new LogEntryContext(new JPanel(), "", "", ""), null,
+					ActivityEventType.ID_COMMUNICATIONS_CHECK, "Earlier check", (log, entry) -> false);
+			java.time.LocalDateTime checkTime = java.time.LocalDateTime.of(2026, 11, 4, 9, 0);
+			dialog.setDefaultTimestamp(checkTime);
+			assertEquals(checkTime, editor(dialog).toEntry().getTimestamp());
+			javax.swing.JSpinner spinner = (javax.swing.JSpinner) field(editor(dialog), "timestampField");
+			assertEquals("America/Toronto",
+					((javax.swing.JSpinner.DateEditor) spinner.getEditor()).getFormat().getTimeZone().getID());
+			dialog.setDefaultTimestamp(checkTime.plusHours(1));
+			assertEquals(checkTime.plusHours(1), editor(dialog).toEntry().getTimestamp());
+			java.time.LocalDateTime reviewedTime = checkTime.minusMinutes(15);
+			spinner.setValue(AppController.toDate(reviewedTime));
+			dialog.setDefaultTimestamp(checkTime.plusHours(2));
+			assertEquals(reviewedTime, editor(dialog).toEntry().getTimestamp());
+			assertEquals("Earlier check", editor(dialog).toEntry().getNotableActivity());
+		} finally {
+			UiSupport.setDateTimeDisplayZone(previousZone);
+		}
+	}
+
+	@Test
+	void staleTaskIdentityRemovedLogAndReusedIncidentCannotReachCustomCommitter() throws Exception {
+		AppData data = new AppData();
+		SarTaskAssignment task = new SarTaskAssignment();
+		task.setAssignmentId("original-task");
+		data.getSarTaskAssignments().add(task);
+		Ics214Form log = new Ics214Form();
+		data.getActivityLogs().add(log);
+		AppController controller = controller(data);
+		ActivityEntryDialog dialog = new ActivityEntryDialog(controller,
+				new LogEntryContext(new JPanel(), "", task.getAssignmentId(), ""), log,
+				ActivityEventType.ID_COMMUNICATIONS_CHECK, "Draft", (destination, entry) -> {
+					throw new AssertionError("Stale selection must not reach committer");
+				});
+		task.setAssignmentId("changed-identity");
+		assertEquals("original-task", dialog.selectedAssignmentId());
+		assertThrows(IllegalStateException.class,
+				() -> dialog.saveEntry(new JPanel(), editor(dialog).toEntry(), candidate -> true));
+		task.setAssignmentId("original-task");
+		data.getSarTaskAssignments().clear();
+		assertThrows(IllegalStateException.class,
+				() -> dialog.saveEntry(new JPanel(), editor(dialog).toEntry(), candidate -> true));
+		data.getSarTaskAssignments().add(task);
+		data.getActivityLogs().clear();
+		assertThrows(IllegalStateException.class,
+				() -> dialog.saveEntry(new JPanel(), editor(dialog).toEntry(), candidate -> true));
+		data.getActivityLogs().add(log);
+		controller.setData(new AppData());
+		controller.setData(data);
+		assertFalse(dialog.saveEntry(new JPanel(), editor(dialog).toEntry(), candidate -> true));
+		assertTrue(log.getActivityLog().isEmpty());
+	}
+
+	@Test
+	void ordinaryCommunicationsEventsNeverChangeTheChannelCheck() {
+		AppData data = new AppData();
+		org.sarmanagement.icsforms.model.RadioChannel channel = new org.sarmanagement.icsforms.model.RadioChannel();
+		data.getForm205().getChannels().add(channel);
+		AppController controller = controller(data);
+		for (String type : List.of(ActivityEventType.ID_COMMUNICATIONS_PROBLEM, ActivityEventType.ID_COMMUNICATIONS_CHECK)) {
+			ActivityEntryDialog dialog = new ActivityEntryDialog(controller,
+					new LogEntryContext(new JPanel(), "", "", ""), null, type, "Reported issue");
+			ActivityLogEntry entry = new ActivityLogEntry();
+			entry.setEventTypeId(type);
+			assertTrue(dialog.saveEntry(new JPanel(), entry, candidate -> true));
+		}
+		assertEquals(org.sarmanagement.icsforms.model.RadioCheckStatus.NOT_RECORDED, channel.getRadioCheckStatus());
+		assertEquals(null, channel.getRadioCheckedAt());
+		assertEquals(2, data.getActivityLogs().get(0).getActivityLog().size());
+	}
+
+	@Test
+	void cancelingSharedEditorNeverInvokesReplacementCommitter() throws Exception {
+		assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		AppData data = new AppData();
+		AppController controller = controller(data);
+		java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
+		javax.swing.SwingUtilities.invokeAndWait(() -> {
+			ActivityEntryDialog dialog = new ActivityEntryDialog(controller,
+					new LogEntryContext(new JPanel(), "", "", ""), null,
+					ActivityEventType.ID_COMMUNICATIONS_CHECK, "Canceled draft", (log, entry) -> {
+						throw new AssertionError("Cancel must not commit");
+					});
+			javax.swing.Timer timer = new javax.swing.Timer(75, null);
+			timer.addActionListener(event -> {
+				for (java.awt.Window window : java.awt.Window.getWindows()) {
+					if (window instanceof javax.swing.JDialog popup && popup.isShowing()
+							&& "Add log entry".equals(popup.getTitle())) {
+						component(popup, javax.swing.JOptionPane.class).setValue(javax.swing.JOptionPane.CANCEL_OPTION);
+					}
+				}
+			});
+			timer.start();
+			try {
+				assertFalse(dialog.show(new JPanel()));
+			} catch (Throwable exception) {
+				failure.set(exception);
+			} finally {
+				timer.stop();
+			}
+		});
+		if (failure.get() != null) {
+			throw new AssertionError("Cancellation failed", failure.get());
+		}
+		assertTrue(data.getActivityLogs().isEmpty());
+		assertFalse(controller.isDirty());
+	}
+
+	@Test
+	void failedCommitReopensTheSameDraftAndCanBeCanceledWithoutMutation() throws Exception {
+		assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+		AppData data = new AppData();
+		AppController controller = controller(data);
+		java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
+		java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+		javax.swing.SwingUtilities.invokeAndWait(() -> {
+			ActivityEntryDialog dialog = new ActivityEntryDialog(controller,
+					new LogEntryContext(new JPanel(), "", "", "Robin"), null,
+					ActivityEventType.ID_COMMUNICATIONS_CHECK, "Draft survives failure", (log, entry) -> {
+						attempts.incrementAndGet();
+						throw new IllegalStateException("Injected save failure");
+					});
+			java.util.concurrent.atomic.AtomicInteger stage = new java.util.concurrent.atomic.AtomicInteger();
+			javax.swing.Timer timer = new javax.swing.Timer(75, null);
+			long started = System.currentTimeMillis();
+			timer.addActionListener(event -> {
+				try {
+					if (System.currentTimeMillis() - started > 10000) {
+						throw new AssertionError("Draft retry dialog timed out");
+					}
+					for (java.awt.Window window : java.awt.Window.getWindows()) {
+						if (!(window instanceof javax.swing.JDialog popup) || !popup.isShowing()) {
+							continue;
+						}
+						if (stage.get() == 0 && "Add log entry".equals(popup.getTitle())) {
+							stage.set(1);
+							component(popup, javax.swing.JOptionPane.class).setValue(javax.swing.JOptionPane.OK_OPTION);
+						} else if (stage.get() == 1 && "Unable to add log entry".equals(popup.getTitle())) {
+							stage.set(2);
+							component(popup, javax.swing.JOptionPane.class).setValue(javax.swing.JOptionPane.OK_OPTION);
+						} else if (stage.get() == 2 && "Add log entry".equals(popup.getTitle())) {
+							assertEquals("Draft survives failure",
+									component(popup, javax.swing.JTextArea.class).getText());
+							stage.set(3);
+							component(popup, javax.swing.JOptionPane.class).setValue(javax.swing.JOptionPane.CANCEL_OPTION);
+						}
+					}
+				} catch (Throwable exception) {
+					failure.set(exception);
+					timer.stop();
+					for (java.awt.Window window : java.awt.Window.getWindows()) {
+						if (window instanceof javax.swing.JDialog popup && popup.isShowing()) {
+							popup.dispose();
+						}
+					}
+				}
+			});
+			timer.start();
+			try {
+				assertFalse(dialog.show(new JPanel()));
+				assertEquals(3, stage.get());
+			} catch (Throwable exception) {
+				failure.compareAndSet(null, exception);
+			} finally {
+				timer.stop();
+			}
+		});
+		if (failure.get() != null) {
+			throw new AssertionError("Failure draft was not preserved", failure.get());
+		}
+		assertEquals(1, attempts.get());
+		assertTrue(data.getActivityLogs().isEmpty());
+		assertFalse(controller.isDirty());
+	}
 
 	@Test
 	void persistedIcpEntryRestoresStableAssignmentBeforeConflictingResourceHeuristic() throws Exception {
@@ -612,6 +905,33 @@ class ActivityEntryDialogTest {
 		assertEquals("Note", ActivityEntryDialog.resolvedEventTypeLabel(data, ActivityEventType.ID_FREE_TEXT));
 		assertEquals("Note", ActivityEntryDialog.resolvedEventTypeLabel(data, null));
 		assertEquals("Clue Detected", ActivityEntryDialog.resolvedEventTypeLabel(data, ActivityEventType.ID_CLUE_DETECTED));
+	}
+
+	@Test
+	void sharedDetailsShowStruckStatusStableAssignmentFullNarrativeAndClassificationHistory() {
+		AppData data = new AppData();
+		ActivityLogEntry entry = new ActivityLogEntry();
+		entry.setAssignmentId("stable-selected-assignment");
+		entry.setNotableActivity("Full retained narrative\nSecond line remains visible");
+		entry.reclassifyEventType(ActivityEventType.ID_COMMUNICATIONS_PROBLEM,
+				java.time.LocalDateTime.of(2026, 11, 4, 10, 0));
+		entry.setStruckOut(true);
+
+		JPanel details = ActivityEntryDialog.buildDetailsPanel(data, entry);
+		List<String> labels = java.util.Arrays.stream(details.getComponents())
+				.filter(JLabel.class::isInstance).map(JLabel.class::cast).map(JLabel::getText).toList();
+		assertTrue(labels.contains("Struck out (retained)"));
+		assertTrue(labels.contains("stable-selected-assignment"));
+		assertTrue(labels.contains("Communications Problem"));
+		List<javax.swing.JTextArea> textAreas = java.util.Arrays.stream(details.getComponents())
+				.filter(javax.swing.JScrollPane.class::isInstance).map(javax.swing.JScrollPane.class::cast)
+				.map(scroll -> (javax.swing.JTextArea) scroll.getViewport().getView()).toList();
+		assertEquals(entry.getNotableActivity(), textAreas.get(0).getText());
+		assertTrue(textAreas.get(1).getText().contains("Note → Communications Problem"));
+		assertTrue(textAreas.stream().noneMatch(javax.swing.JTextArea::isEditable));
+		assertTrue(entry.isStruckOut());
+		assertEquals(1, entry.getEventTypeChangeHistory().size());
+		assertTrue(data.getActivityLogs().isEmpty());
 	}
 
 	/**

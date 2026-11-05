@@ -87,6 +87,7 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final AssignmentActions assignmentActions;
 	private final AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
+	private final IncidentClockPanel clockPanel;
 	private final JComboBox<IapPlanningStage> planningStage = new JComboBox<>(IapPlanningStage.values());
 	private final JPanel planProgress = new JPanel(new java.awt.GridBagLayout());
 	private final JLabel overallProgress = new JLabel();
@@ -132,6 +133,7 @@ public class IncidentCommandRolePanel extends JPanel {
 		this.controller = controller;
 		this.navigator = navigator;
 		this.assignmentActions = assignmentActions;
+		clockPanel = new IncidentClockPanel(controller);
 		binding = controller.captureIncidentBinding();
 		add(buildHeader(), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
@@ -146,9 +148,10 @@ public class IncidentCommandRolePanel extends JPanel {
 		});
 	}
 
-	/** Releases the live incident listener. */
+	/** Releases the live incident listener and header clock refresh work. */
 	public void dispose() {
 		subscription.close();
+		clockPanel.dispose();
 	}
 
 	/**
@@ -244,7 +247,8 @@ public class IncidentCommandRolePanel extends JPanel {
 	 */
 	private JPanel buildHeader() {
 		JPanel header = new JPanel(new BorderLayout(8, 0));
-		header.add(banner, BorderLayout.CENTER);
+		header.add(banner, BorderLayout.WEST);
+		header.add(clockPanel, BorderLayout.EAST);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JButton objectivesButton = new JButton("Open full ICS 202");
 		objectivesButton.addActionListener(
@@ -253,7 +257,7 @@ public class IncidentCommandRolePanel extends JPanel {
 		resourcesButton.addActionListener(event -> navigator.accept(WorkspaceDestination.of(WorkspaceId.TCARDS)));
 		actions.add(objectivesButton);
 		actions.add(resourcesButton);
-		header.add(actions, BorderLayout.EAST);
+		header.add(actions, BorderLayout.CENTER);
 		return header;
 	}
 

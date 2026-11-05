@@ -1829,6 +1829,73 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
+	 * Persists an explicit channel check and one ordinary ICP activity as a single edit.
+	 * All dialogs must finish before calling this method; unrelated live edits are retained.
+	 *
+	 * @param binding incident and operational-period identity captured before editing
+	 * @param channelId stable channel identity
+	 * @param expected detached focused channel baseline
+	 * @param status explicit recorded check result
+	 * @param checkedBy person recording the check
+	 * @param checkedAt check time
+	 * @param checkNotes check notes
+	 * @param log selected ICP destination, possibly a new detached log
+	 * @param entry accepted detached activity with its selected stable assignment identity
+	 * @throws IllegalStateException when the binding, channel, or assignment is stale
+	 * @throws IllegalArgumentException when the entry or recorded check is invalid
+	 * @throws RuntimeException when persistence fails, after restoring live identities and dirty state
+	 */
+	public void commitRadioCheckWithActivity(IncidentBinding binding, String channelId,
+			org.sarmanagement.icsforms.model.RadioChannel expected,
+			org.sarmanagement.icsforms.model.RadioCheckStatus status, String checkedBy,
+			LocalDateTime checkedAt, String checkNotes, Ics214Form log, ActivityLogEntry entry) {
+		if (!isCurrent(binding)) {
+			throw new IllegalStateException("The incident or operational period changed. Reopen the activity editor.");
+		}
+		if (expected == null || !Objects.equals(channelId, expected.getChannelId())
+				|| status == null || status == org.sarmanagement.icsforms.model.RadioCheckStatus.NOT_RECORDED
+				|| log == null || log.getLogScope() != org.sarmanagement.icsforms.model.ActivityLogScope.ICP
+				|| entry == null || entry.getTimestamp() == null
+				|| !org.sarmanagement.icsforms.model.ActivityEventType.ID_COMMUNICATIONS_CHECK.equals(entry.getEventTypeId())) {
+			throw new IllegalArgumentException("A recorded communications check requires an ICP communications-check entry.");
+		}
+		if (entry.getNotableActivity().isBlank()) {
+			throw new IllegalArgumentException("Describe the communications check in the activity entry before recording it.");
+		}
+		String assignmentId = entry.getAssignmentId();
+		if (!assignmentId.isBlank()) {
+			long tasks = data.getSarTaskAssignments().stream()
+					.filter(task -> assignmentId.equals(task.getAssignmentId())).count();
+			long resources = getAssignmentResources().stream()
+					.filter(resource -> assignmentId.equals(resource.getAssignmentId())).count();
+			if (tasks > 1 || resources > 1 || tasks + resources == 0) {
+				throw new IllegalStateException("The selected assignment is missing or ambiguous.");
+			}
+		}
+		if (log.getActivityLog().contains(entry)
+				|| data.getActivityLogs().stream().anyMatch(candidate -> candidate.getActivityLog().contains(entry))) {
+			throw new IllegalArgumentException("This activity entry has already been committed.");
+		}
+		boolean attached = data.getActivityLogs().contains(log);
+		try {
+			persistEditorChanges(() -> {
+				updateRadioChannelOperations(channelId, expected, expected.getCoverageGuidance(),
+						expected.getRelayGuidance(), status, checkedBy, checkedAt, checkNotes);
+				if (!attached) {
+					data.getActivityLogs().add(log);
+				}
+				log.getActivityLog().add(entry);
+			});
+		} catch (RuntimeException exception) {
+			if (!attached) {
+				// A detached log was outside the transaction snapshot's reachable model graph.
+				log.getActivityLog().remove(entry);
+			}
+			throw exception;
+		}
+	}
+
+	/**
 	 * Compares the focused Communications Unit fields used for optimistic editing.
 	 *
 	 * @param first current channel.

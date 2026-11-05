@@ -31,10 +31,32 @@ import java.util.List;
 final class ActivityEntryDialog {
 	private final AppController controller;
 	private final AppData incident;
+	private final AppController.IncidentBinding binding;
+	private final EntryCommitter committer;
+	private final java.util.Set<Ics214Form> existingLogs;
 	private final JComboBox<LogChoice> destination = new JComboBox<>();
 	private final JComboBox<TaskChoice> task = new JComboBox<>();
 	private final Ics214Panel.ActivityEntryEditor editor;
 	private final JPanel panel = new JPanel(new BorderLayout(8, 8));
+	private final javax.swing.JTextPane commitSummary = new javax.swing.JTextPane();
+	private final JScrollPane commitSummaryScroll = new JScrollPane(commitSummary);
+	private java.time.LocalDateTime defaultTimestamp;
+
+	/** Replaces the normal commit after the shared editor has collected an accepted entry. */
+	@FunctionalInterface
+	interface EntryCommitter {
+		/**
+		 * Commits a detached entry synchronously after the final editor acceptance.
+		 * Must not open dialogs or yield to another Swing event: destination and task
+		 * identities have already been validated. Show review metadata using
+		 * {@link ActivityEntryDialog#setCommitSummary(String)} before acceptance.
+		 *
+		 * @param log selected destination
+		 * @param entry accepted entry with its stable assignment identity
+		 * @return true when committed, false to retain the draft
+		 */
+		boolean commit(Ics214Form log, ActivityLogEntry entry);
+	}
 
 	/**
 	 * Builds a detached editor with mutable destination, task, and resource choices.
@@ -58,9 +80,28 @@ final class ActivityEntryDialog {
 	 */
 	ActivityEntryDialog(AppController controller, LogEntryContext context, Ics214Form preferredLog,
 			String preferredEventTypeId, String initialActivity) {
+		this(controller, context, preferredLog, preferredEventTypeId, initialActivity, null);
+	}
+
+	/**
+	 * Builds a shared editor whose accepted entry can use a focused atomic committer.
+	 *
+	 * @param controller incident controller
+	 * @param context initial task and resource context
+	 * @param preferredLog initial destination, or null for ICP
+	 * @param preferredEventTypeId initial event type
+	 * @param initialActivity initial narrative
+	 * @param committer synchronous nonmodal replacement commit, or null for the normal workflow
+	 */
+	ActivityEntryDialog(AppController controller, LogEntryContext context, Ics214Form preferredLog,
+			String preferredEventTypeId, String initialActivity, EntryCommitter committer) {
 		this.controller = controller;
+		this.committer = committer;
+		binding = controller.captureIncidentBinding();
 		AppData data = controller.getData();
 		incident = data;
+		existingLogs = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		existingLogs.addAll(data.getActivityLogs());
 		LogChoice preferred = null;
 		for (Ics214Form log : data.getActivityLogs()) {
 			LogChoice choice = new LogChoice(log);
@@ -147,7 +188,15 @@ final class ActivityEntryDialog {
 		UiSupport.addRow(selectors, 1, "Task / assignment", task);
 		UiSupport.configureDialogComboBox(destination, 300);
 		UiSupport.configureDialogComboBox(task, 300);
-		panel.add(selectors, BorderLayout.NORTH);
+		commitSummary.setEditable(false);
+		commitSummary.setFont(javax.swing.UIManager.getFont("Label.font"));
+		commitSummaryScroll.setBorder(BorderFactory.createTitledBorder("Details to record"));
+		commitSummaryScroll.setPreferredSize(new Dimension(580, 90));
+		commitSummaryScroll.setVisible(false);
+		JPanel heading = new JPanel(new BorderLayout(8, 8));
+		heading.add(selectors, BorderLayout.NORTH);
+		heading.add(commitSummaryScroll, BorderLayout.CENTER);
+		panel.add(heading, BorderLayout.NORTH);
 		panel.add(editor.panel, BorderLayout.CENTER);
 		destination.addActionListener(event -> editor.refreshEventTypeDisplay());
 		task.addActionListener(event -> {
@@ -156,6 +205,35 @@ final class ActivityEntryDialog {
 				editor.resourceIdentifierField.setSelectedItem(choice.resourceIdentifier());
 			}
 		});
+	}
+
+	/**
+	 * Displays current custom-commit metadata without overwriting the activity draft.
+	 * Call this before showing a retained editor after its surrounding draft changes.
+	 *
+	 * @param summary current details the custom committer will record, or blank to hide
+	 */
+	void setCommitSummary(String summary) {
+		commitSummary.setText(summary == null ? "" : summary);
+		commitSummary.setCaretPosition(0);
+		commitSummaryScroll.setVisible(summary != null && !summary.isBlank());
+		panel.revalidate();
+		panel.repaint();
+	}
+
+	/**
+	 * Prefills an explicit UTC event time, refreshing it only while the operator has
+	 * not changed the previously supplied default in the review editor.
+	 *
+	 * @param timestamp UTC event time, or null to leave the editor unchanged
+	 */
+	void setDefaultTimestamp(java.time.LocalDateTime timestamp) {
+		if (timestamp == null || defaultTimestamp != null
+				&& !defaultTimestamp.equals(editor.toEntry().getTimestamp())) {
+			return;
+		}
+		editor.setTimestamp(timestamp);
+		defaultTimestamp = AppController.toLocalDateTime(AppController.toDate(timestamp));
 	}
 
 	/**
@@ -175,19 +253,27 @@ final class ActivityEntryDialog {
 	 * @return true when a complete entry was added
 	 */
 	boolean show(Component owner) {
-		if (controller.getData() != incident) {
+		if (!controller.isCurrent(binding)) {
 			return false;
 		}
 		JScrollPane scroll = new JScrollPane(panel);
 		scroll.setBorder(BorderFactory.createEmptyBorder());
-		if (!UiSupport.showResizableConfirmDialog(owner, "Add log entry", scroll, new Dimension(680, 460))) {
-			return false;
+		while (controller.isCurrent(binding)
+				&& UiSupport.showResizableConfirmDialog(owner, "Add log entry", scroll, new Dimension(680, 460))) {
+			try {
+				ActivityLogEntry entry = editor.toEntry();
+				if (saveEntry(owner, entry, candidate -> captureClue(owner, candidate))) {
+					return true;
+				}
+				if (committer == null) {
+					return false;
+				}
+			} catch (RuntimeException exception) {
+				UiSupport.showDocumentMessage(owner, exception.getMessage(), "Unable to add log entry",
+						JOptionPane.ERROR_MESSAGE);
+			}
 		}
-		if (controller.getData() != incident) {
-			return false;
-		}
-		ActivityLogEntry entry = editor.toEntry();
-		return saveEntry(owner, entry, candidate -> captureClue(owner, candidate));
+		return false;
 	}
 
 	/**
@@ -214,19 +300,25 @@ final class ActivityEntryDialog {
 	 */
 	boolean saveEntry(Component owner, ActivityLogEntry entry,
 			java.util.function.Predicate<ActivityLogEntry> clueCapture) {
-		if (controller.getData() != incident) {
+		if (!controller.isCurrent(binding)) {
 			return false;
 		}
 		Ics214Form log = selectedLog();
 		SarTaskAssignment assignment = selectedTask();
+		validateSelection(log);
+		if (committer != null) {
+			entry.setAssignmentId(selectedAssignmentId());
+			return committer.commit(log, entry);
+		}
 		if (controller.getIncidentMode() == IncidentMode.SAR && isClueType(entry.getEventTypeId())) {
 			if (!clueCapture.test(entry)) {
 				return false;
 			}
 		}
-		if (controller.getData() != incident) {
+		if (!controller.isCurrent(binding)) {
 			return false;
 		}
+		validateSelection(log);
 		entry.setAssignmentId(selectedAssignmentId());
 		Ics214Form lifecycleContext = log;
 		if (assignment != null) {
@@ -245,6 +337,26 @@ final class ActivityEntryDialog {
 			UiSupport.showDocumentMessage(owner, result.warningMessage(), "SAR Task Status", JOptionPane.WARNING_MESSAGE);
 		}
 		return true;
+	}
+
+	/**
+	 * Rejects removed destinations and assignments rather than resurrecting stale choices.
+	 *
+	 * @param log selected destination
+	 * @throws IllegalStateException when a selected live object disappeared or was replaced
+	 */
+	private void validateSelection(Ics214Form log) {
+		if (existingLogs.contains(log) && !incident.getActivityLogs().contains(log)) {
+			throw new IllegalStateException("The selected log was removed. Reopen the activity editor.");
+		}
+		TaskChoice choice = (TaskChoice) task.getSelectedItem();
+		if (choice.assignment() != null && (!incident.getSarTaskAssignments().contains(choice.assignment())
+				|| !choice.assignmentId().equals(choice.assignment().getAssignmentId()))
+				|| choice.resourceAssignment() != null
+				&& (!controller.getAssignmentResources().contains(choice.resourceAssignment())
+				|| !choice.assignmentId().equals(choice.resourceAssignment().getAssignmentId()))) {
+			throw new IllegalStateException("The selected assignment changed. Reopen the activity editor.");
+		}
 	}
 
 	/**
@@ -335,10 +447,13 @@ final class ActivityEntryDialog {
 		UiSupport.addRow(details, 1, "Event type",
 				new JLabel(resolvedEventTypeLabel(incident, entry.getEventTypeId())));
 		UiSupport.addRow(details, 2, "Resource", new JLabel(entry.getResourceIdentifier()));
+		UiSupport.addRow(details, 3, "Assignment ID",
+				new JLabel(entry.getAssignmentId().isBlank() ? "(No task / assignment)" : entry.getAssignmentId()));
+		UiSupport.addRow(details, 4, "Status", new JLabel(entry.isStruckOut() ? "Struck out (retained)" : "Active"));
 		javax.swing.JTextArea text = UiSupport.textArea(6);
 		text.setText(entry.getNotableActivity());
 		text.setEditable(false);
-		UiSupport.addRow(details, 3, "Notable activity", new JScrollPane(text));
+		UiSupport.addRow(details, 5, "Notable activity", new JScrollPane(text));
 		if (!entry.getEventTypeChangeHistory().isEmpty()) {
 			javax.swing.JTextArea history = UiSupport.textArea(3);
 			history.setEditable(false);
@@ -347,7 +462,7 @@ final class ActivityEntryDialog {
 							+ resolvedEventTypeLabel(incident, change.previousEventTypeId()) + " → "
 							+ resolvedEventTypeLabel(incident, change.newEventTypeId()))
 					.collect(java.util.stream.Collectors.joining("\n")));
-			UiSupport.addRow(details, 4, "Classification history", new JScrollPane(history));
+			UiSupport.addRow(details, 6, "Classification history", new JScrollPane(history));
 		}
 		return details;
 	}
@@ -437,16 +552,27 @@ final class ActivityEntryDialog {
 	 *
 	 * @param assignment SAR task, when available
 	 * @param resourceAssignment ICS 204 assignment without a corresponding SAR task
+	 * @param capturedId stable identity captured when the choice was created
 	 */
-	private record TaskChoice(SarTaskAssignment assignment, ResourceAssignment resourceAssignment) {
+	private record TaskChoice(SarTaskAssignment assignment, ResourceAssignment resourceAssignment, String capturedId) {
+		/**
+		 * Captures a choice's stable identity independently of later live task changes.
+		 *
+		 * @param assignment SAR assignment, or null
+		 * @param resourceAssignment Generic resource assignment, or null
+		 */
+		private TaskChoice(SarTaskAssignment assignment, ResourceAssignment resourceAssignment) {
+			this(assignment, resourceAssignment, assignment != null ? assignment.getAssignmentId()
+					: resourceAssignment != null ? resourceAssignment.getAssignmentId() : "");
+		}
+
 		/**
 		 * Returns the stable selected assignment identity.
 		 *
 		 * @return assignment identity or an empty string for no selection
 		 */
 		String assignmentId() {
-			return assignment != null ? assignment.getAssignmentId()
-					: resourceAssignment != null ? resourceAssignment.getAssignmentId() : "";
+			return capturedId;
 		}
 
 		/**

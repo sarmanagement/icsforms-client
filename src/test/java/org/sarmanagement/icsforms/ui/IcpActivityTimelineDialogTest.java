@@ -9,10 +9,14 @@ import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.model.RadioCheckStatus;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
+import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JButton;
@@ -37,9 +41,12 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
@@ -96,6 +103,106 @@ class IcpActivityTimelineDialogTest {
 		assertEquals("04:34:56",
 				IcpActivityTimelineDialog.formatClockTime(Instant.parse("2026-11-02T12:34:56Z"),
 						ZoneId.of("America/Los_Angeles")));
+	}
+
+	@Test
+	void committedCommunicationsActivityRefreshesOpenTimelineAndPreservesAssignmentSelection() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		AppData data = new AppData();
+		SarTaskAssignment selectedTask = new SarTaskAssignment();
+		selectedTask.setAssignmentId("selected-assignment");
+		selectedTask.setResourceIdentifier("Selected team");
+		data.getSarTaskAssignments().add(selectedTask);
+		ResourceAssignment selectedAssignment = new ResourceAssignment();
+		selectedAssignment.setAssignmentId(selectedTask.getAssignmentId());
+		selectedAssignment.setResourceIdentifier("Selected team");
+		data.getForm204().getResourcesAssigned().add(selectedAssignment);
+		RadioChannel channel = new RadioChannel();
+		channel.setChannelName("Command");
+		data.getForm205().getChannels().add(channel);
+		AppController controller = new AppController(data,
+				new LocalRepository(directory.resolve("live-timeline.json")),
+				new PdfExportService(), new IncidentValidator());
+		AtomicReference<IcpActivityTimelineDialog> reference = new AtomicReference<>();
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				IcpActivityTimelineDialog timeline = new IcpActivityTimelineDialog(null, controller, ignored -> { });
+				reference.set(timeline);
+				timeline.setVisible(true);
+				selectLane(timeline, 0);
+				SarTaskAssignment inserted = new SarTaskAssignment();
+				inserted.setAssignmentId("inserted-assignment");
+				data.getSarTaskAssignments().add(0, inserted);
+				ResourceAssignment insertedAssignment = new ResourceAssignment();
+				insertedAssignment.setAssignmentId(inserted.getAssignmentId());
+				data.getForm204().getResourcesAssigned().add(0, insertedAssignment);
+				ActivityLogEntry committed = entry(selectedTask.getAssignmentId(),
+						ActivityEventType.ID_COMMUNICATIONS_CHECK);
+				controller.commitRadioCheckWithActivity(controller.captureIncidentBinding(), channel.getChannelId(),
+						channel.deepCopy(), RadioCheckStatus.SUCCESSFUL, "COML", committed.getTimestamp(), "Clear",
+						new Ics214Form(), committed);
+			});
+			SwingUtilities.invokeAndWait(() -> {
+				IcpActivityTimelineDialog timeline = reference.get();
+				List<?> lanes = field(timeline, "lanes", List.class);
+				int selected = field(timeline, "selectedLane", Integer.class);
+				assertEquals(1, selected);
+				var selectedLane = (IcpActivityTimelineDialog.TimelineLane) lanes.get(selected);
+				assertEquals(selectedTask.getAssignmentId(), selectedLane.assignmentId());
+				assertEquals(List.of(ActivityEventType.ID_COMMUNICATIONS_CHECK),
+						selectedLane.markers().stream().map(IcpActivityTimelineDialog.TimelineMarker::eventTypeId).toList());
+				assertEquals(2, field(controller, "incidentChangeListeners", Collection.class).size());
+				timeline.dispose();
+				assertEquals(0, field(controller, "incidentChangeListeners", Collection.class).size());
+				data.getSarTaskAssignments().clear();
+				controller.markDirty();
+			});
+			SwingUtilities.invokeAndWait(() -> assertEquals(3,
+					field(reference.get(), "lanes", List.class).size()));
+		} finally {
+			SwingUtilities.invokeAndWait(() -> {
+				if (reference.get() != null) {
+					reference.get().dispose();
+				}
+				controller.close();
+			});
+		}
+	}
+
+	@Test
+	void replacedIncidentCannotRefreshOrApplyStaleTimelineActions() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		AppController controller = new AppController(new AppData(),
+				new LocalRepository(directory.resolve("replaced-timeline.json")),
+				new PdfExportService(), new IncidentValidator());
+		AtomicReference<LogEntryContext> added = new AtomicReference<>();
+		AtomicReference<IcpActivityTimelineDialog> reference = new AtomicReference<>();
+		AtomicReference<List<?>> originalLanes = new AtomicReference<>();
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				IcpActivityTimelineDialog timeline = new IcpActivityTimelineDialog(null, controller, added::set);
+				reference.set(timeline);
+				timeline.setVisible(true);
+				selectLane(timeline, 0);
+				originalLanes.set(field(timeline, "lanes", List.class));
+				controller.newDocument();
+			});
+			SwingUtilities.invokeAndWait(() -> {
+				IcpActivityTimelineDialog timeline = reference.get();
+				assertFalse(timeline.hasSelectedLane());
+				button(timeline, "Refresh").doClick();
+				button(timeline, "Add Log Entry…").doClick();
+				assertNull(added.get());
+				assertSame(originalLanes.get(), field(timeline, "lanes", List.class));
+			});
+		} finally {
+			SwingUtilities.invokeAndWait(() -> {
+				if (reference.get() != null) {
+					reference.get().dispose();
+				}
+				controller.close();
+			});
+		}
 	}
 
 	@Test
@@ -167,8 +274,9 @@ class IcpActivityTimelineDialogTest {
 				IcpActivityTimelineDialog dialog = new IcpActivityTimelineDialog(null, controller, context::set,
 						openedAssignment::set, quickLog::set);
 				try {
-					JLabel digitalTime = field(dialog, "currentTime", JLabel.class);
-					JLabel timeZone = field(dialog, "currentZone", JLabel.class);
+					IncidentClockPanel clock = field(dialog, "clockPanel", IncidentClockPanel.class);
+					JLabel digitalTime = field(clock, "currentTime", JLabel.class);
+					JLabel timeZone = field(clock, "currentZone", JLabel.class);
 					assertTrue(digitalTime.getFont().getSize2D() >= 18f);
 					assertTrue(digitalTime.getText().matches("\\d{2}:\\d{2}:\\d{2}"));
 					assertFalse(digitalTime.getText().contains(timeZone.getText()));
@@ -318,19 +426,36 @@ class IcpActivityTimelineDialogTest {
 	}
 
 	/**
-	 * Reads a private timeline component for focused visual assertions.
+	 * Reads a private timeline or shared clock component for focused visual assertions.
 	 *
-	 * @param dialog inspected timeline.
+	 * @param dialog inspected timeline or clock.
 	 * @param name component field name.
 	 * @param type expected component type.
 	 * @param <T> component type.
 	 * @return the named component.
 	 */
-	private static <T> T field(IcpActivityTimelineDialog dialog, String name, Class<T> type) {
+	private static <T> T field(Object dialog, String name, Class<T> type) {
 		try {
-			var field = IcpActivityTimelineDialog.class.getDeclaredField(name);
+			var field = dialog.getClass().getDeclaredField(name);
 			field.setAccessible(true);
 			return type.cast(field.get(dialog));
+		} catch (ReflectiveOperationException exception) {
+			throw new AssertionError(exception);
+		}
+
+	}
+
+	/**
+	 * Selects a lane before testing refresh-driven reordering.
+	 *
+	 * @param timeline inspected timeline.
+	 * @param index selected lane index.
+	 */
+	private static void selectLane(IcpActivityTimelineDialog timeline, int index) {
+		try {
+			var field = IcpActivityTimelineDialog.class.getDeclaredField("selectedLane");
+			field.setAccessible(true);
+			field.setInt(timeline, index);
 		} catch (ReflectiveOperationException exception) {
 			throw new AssertionError(exception);
 		}

@@ -869,6 +869,14 @@
       "notableActivity" : "0630 command established at ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); all 42 people checked in: 36 field including four handlers and six IMT (IC, Ops, Planning, Safety, COML, MEDL); four dogs checked in as equipment.",
       "struckOut" : false
     }, {
+      "entryId" : "9e3e06de-fcac-3e95-bc69-fe52118fd0b0",
+      "timestamp" : "2026-07-18T10:50:00",
+      "eventTypeId" : "COMMUNICATIONS_CHECK",
+      "resourceIdentifier" : "Ops",
+      "assignmentId" : "",
+      "notableActivity" : "0650 Communications Check: MR SAR 1; successful; checked by Taylor Brook. Simulated exercise check at ICP, staging, IPP and rim; not a real coverage survey.",
+      "struckOut" : false
+    }, {
       "entryId" : "bb374e96-8780-3f11-b5b2-9c2210fe3211",
       "timestamp" : "2026-07-18T11:00:00",
       "eventTypeId" : "FREE_TEXT",
@@ -1063,6 +1071,14 @@
   "activityEventTypes" : [ {
     "id" : "FREE_TEXT",
     "label" : "Note",
+    "builtIn" : true
+  }, {
+    "id" : "COMMUNICATIONS_CHECK",
+    "label" : "Communications Check",
+    "builtIn" : true
+  }, {
+    "id" : "COMMUNICATIONS_PROBLEM",
+    "label" : "Communications Problem",
     "builtIn" : true
   }, {
     "id" : "RESPONDER_MEDICAL_EVENT",
