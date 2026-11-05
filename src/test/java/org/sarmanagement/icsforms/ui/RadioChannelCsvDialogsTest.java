@@ -12,7 +12,6 @@ import org.sarmanagement.icsforms.comms.RadioChannelCsvService;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics205Form;
 import org.sarmanagement.icsforms.model.RadioChannel;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics205PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -45,7 +44,7 @@ class RadioChannelCsvDialogsTest {
 		data.setIcs205Enabled(false);
 		data.getForm205().setSpecialInstructions("Local instructions");
 		data.getForm205().getChannels().add(Ics205PanelTest.channel("Existing"));
-		controller = new AppController(data, new LocalRepository(directory.resolve("incident.json")),
+		controller = IncidentStoreTestFixtures.controller(data,
 				new PdfExportService(new Ics205PdfRenderer()), new IncidentValidator());
 		SwingUtilities.invokeAndWait(() -> panel = new Ics205Panel(controller));
 		dialogs = new FakeDialogs();

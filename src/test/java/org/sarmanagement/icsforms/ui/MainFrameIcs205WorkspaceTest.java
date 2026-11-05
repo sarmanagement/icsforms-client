@@ -13,7 +13,6 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 import org.sarmanagement.icsforms.comms.RadioChannelCsvService;
 import org.sarmanagement.icsforms.comms.ChirpCsvService;
 import org.sarmanagement.icsforms.model.Ics205Form;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 
 import javax.swing.JCheckBox;
 import javax.swing.JCheckBoxMenuItem;
@@ -133,7 +132,7 @@ class MainFrameIcs205WorkspaceTest {
 			AppData data = new AppData();
 			Ics205Form original = data.getForm205();
 			original.getChannels().add(Ics205PanelTest.channel("Retained"));
-			AppController controller = new AppController(data, new LocalRepository(directory.resolve("incident.json")),
+			AppController controller = IncidentStoreTestFixtures.controller(data,
 					new PdfExportService(new Ics205PdfRenderer()), new IncidentValidator());
 			SwingUtilities.invokeAndWait(() -> {
 				JFrame frame = new JFrame("Import preview owner");

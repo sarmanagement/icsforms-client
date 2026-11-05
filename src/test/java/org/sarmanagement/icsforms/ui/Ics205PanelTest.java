@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.RadioChannel;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics205PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -25,7 +24,6 @@ import javax.swing.text.JTextComponent;
 import java.awt.Component;
 import java.awt.Container;
 import java.lang.reflect.Field;
-import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -690,8 +688,7 @@ class Ics205PanelTest {
 	 * @return controller.
 	 */
 	private AppController controller(AppData data) {
-		AppController controller = new AppController(data,
-				new LocalRepository(Path.of("target/ics205-panel-test.json")),
+		AppController controller = IncidentStoreTestFixtures.controller(data,
 				new PdfExportService(new Ics205PdfRenderer()), new IncidentValidator());
 		controllers.add(controller);
 		return controller;

@@ -19,7 +19,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 	@Override
 	protected IncidentStore createStore(Path directory) {
-		return new FileIncidentStore(directory);
+		return new ControllableIncidentStore(directory);
+	}
+
+	@Override
+	protected boolean lock(IncidentStore store, IncidentId id) {
+		return ((ControllableIncidentStore) store).lock(id);
+	}
+
+	@Override
+	protected void unlock(IncidentStore store, IncidentId id) {
+		((ControllableIncidentStore) store).unlock(id);
+	}
+
+	@Override
+	protected void failNextSave(IncidentStore store) {
+		((ControllableIncidentStore) store).failNext(ControllableIncidentStore.Operation.SAVE,
+				new IllegalStateException("Scheduled save failure"));
+	}
+
+	@Override
+	protected void failNextDelete(IncidentStore store) {
+		((ControllableIncidentStore) store).failNext(ControllableIncidentStore.Operation.DELETE,
+				new IllegalStateException("Scheduled delete failure"));
 	}
 
 	/** Backups and temporary writes are isolated per incident. */

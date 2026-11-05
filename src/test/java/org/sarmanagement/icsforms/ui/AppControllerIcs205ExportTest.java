@@ -7,7 +7,6 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics205PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics233CgPdfRenderer;
 import org.sarmanagement.icsforms.pdf.ClueLogIcs233PdfRenderer;
@@ -36,8 +35,7 @@ class AppControllerIcs205ExportTest {
 		data.getForm205().setPreparedBySignature("Retained signature");
 		PdfExportService service = new PdfExportService(new Ics205PdfRenderer(), new Ics233CgPdfRenderer(),
 				new ClueLogIcs233PdfRenderer());
-		AppController controller = new AppController(data, new LocalRepository(directory.resolve("incident.json")),
-				service, new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data, service, new IncidentValidator());
 		List<String> keys = service.formKeys();
 		try {
 			for (PdfOrientation radio : PdfOrientation.values()) {
@@ -86,7 +84,7 @@ class AppControllerIcs205ExportTest {
 		data.getForm205().setIapPage("88");
 		data.getForm205().setPreparedBySignature("Supplied signature");
 		try {
-			AppController controller = new AppController(data, new LocalRepository(directory.resolve("incident.json")),
+			AppController controller = IncidentStoreTestFixtures.controller(data,
 					new PdfExportService(new Ics205PdfRenderer()), new IncidentValidator());
 			Path individual = controller.exportSelectedForms(List.of("ICS 205"), directory,
 					AppController.LinkSource.NONE, true).get("ICS 205");

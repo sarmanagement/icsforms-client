@@ -12,7 +12,6 @@ import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.ObjectiveAssessment;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
@@ -372,10 +371,9 @@ class Ics202PanelTest {
 		AppController controller = sampleController();
 		controller.getData().getForm202().setObjectives(List.of("An objective with editable text"));
 		var directory = Files.createTempDirectory("objective-default-width");
-		var repository = new LocalRepository(directory.resolve("incident.json"));
 		SwingUtilities.invokeAndWait(() -> {
-			MainFrame window = new MainFrame(controller.getData(), repository, new PdfExportService(),
-					new IncidentValidator(), directory);
+			MainFrame window = new MainFrame(controller.getData(), IncidentStoreTestFixtures.store(controller),
+					controller.getActiveIncidentId(), new PdfExportService(), new IncidentValidator(), directory);
 			try {
 				window.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_202));
 				window.setVisible(true);
@@ -700,8 +698,7 @@ class Ics202PanelTest {
 		IncidentContext context = new IncidentContext("Test Incident", LocalDateTime.parse("2026-01-01T00:00:00"),
 				LocalDateTime.parse("2026-01-01T12:00:00"), "Planner", "Planning Section Chief");
 		AppData data = new AppData(context, new Ics202Form(), new Ics204Form(), List.of());
-		return new AppController(data,
-				new LocalRepository(Files.createTempDirectory("icsforms-ui").resolve("incident.json")),
+		return IncidentStoreTestFixtures.controller(data,
 				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
 						new SarTaskAssignmentPdfRenderer()),
 				new IncidentValidator());

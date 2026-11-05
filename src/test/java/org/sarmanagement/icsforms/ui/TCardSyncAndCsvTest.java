@@ -630,11 +630,7 @@ class TCardSyncAndCsvTest {
 	 */
 	private static final class TestAppController {
 		static AppController create(AppData data) {
-			org.sarmanagement.icsforms.persistence.LocalRepository repo = new org.sarmanagement.icsforms.persistence.LocalRepository(
-					java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "tcard_test.json"));
-			org.sarmanagement.icsforms.pdf.PdfExportService exportService = new org.sarmanagement.icsforms.pdf.PdfExportService();
-			org.sarmanagement.icsforms.validation.IncidentValidator validator = new org.sarmanagement.icsforms.validation.IncidentValidator();
-			return new AppController(data, repo, exportService, validator);
+			return IncidentStoreTestFixtures.controller(data);
 		}
 	}
 }

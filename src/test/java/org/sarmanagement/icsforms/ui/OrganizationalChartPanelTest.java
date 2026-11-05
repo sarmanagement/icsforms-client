@@ -16,7 +16,6 @@ import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -545,8 +544,7 @@ class OrganizationalChartPanelTest {
 	 * @return controller for main-tab workflow tests.
 	 */
 	private static AppController sampleController() {
-		return new AppController(new AppData(), new LocalRepository(Path.of("target", "org-chart-ui.json")),
-				new PdfExportService(), new IncidentValidator());
+		return IncidentStoreTestFixtures.controller(new AppData());
 	}
 
 	@Test

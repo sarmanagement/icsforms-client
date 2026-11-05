@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.IapPhase;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.persistence.ControllableIncidentStore;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.ImportValidationException;
@@ -318,6 +319,23 @@ class AppControllerStoreTest {
 			assertTrue(otherStore.lock(id));
 			otherStore.unlock(id);
 		}
+	}
+
+	@Test
+	void failedSavePreservesPersistedDataAndUnsavedEditorInput() {
+		AppData data = new AppData();
+		IncidentStoreTestFixtures.Fixture fixture = IncidentStoreTestFixtures.create(data);
+		AppController controller = fixture.controller();
+		data.getIncidentContext().setIncidentName("Unsaved editor input");
+		controller.markDirty();
+		fixture.store().failNext(ControllableIncidentStore.Operation.SAVE,
+				new IllegalStateException("Scheduled save failure"));
+
+		assertThrows(IllegalStateException.class, controller::save);
+
+		assertEquals("Unsaved editor input", controller.getData().getIncidentContext().getIncidentName());
+		assertTrue(controller.isDirty());
+		assertEquals("", fixture.store().load(fixture.incidentId()).getIncidentContext().getIncidentName());
 	}
 
 	/**

@@ -7,9 +7,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics215Form;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
 import javax.swing.JButton;
@@ -53,8 +50,7 @@ class Ics215PanelTest {
 	@Test
 	void resourceCountInputsUseCompactWidths() throws Exception {
 		AppData data = new AppData();
-		AppController controller = new AppController(data, new LocalRepository(directory.resolve("count-width.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		try {
 			SwingUtilities.invokeAndWait(() -> {
 				Ics215Panel panel = new Ics215Panel(controller);
@@ -89,8 +85,7 @@ class Ics215PanelTest {
 		allocation.acceptedHave = new Ics215Form.CountPair(1, 0);
 		row.resourceAllocations.put(heading.id, allocation);
 		data.getForm215().getWorkRows().add(row);
-		AppController controller = new AppController(data, new LocalRepository(directory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		Ics215Panel[] panel = new Ics215Panel[1];
 		try {
 			SwingUtilities.invokeAndWait(() -> {
@@ -132,8 +127,7 @@ class Ics215PanelTest {
 		Ics215Form.WorkRow row = new Ics215Form.WorkRow();
 		row.assignment = "Search sector";
 		data.getForm215().getWorkRows().add(row);
-		AppController controller = new AppController(data, new LocalRepository(directory.resolve("layout.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		Ics215Panel[] panel = new Ics215Panel[1];
 		try {
 			SwingUtilities.invokeAndWait(() -> {
@@ -173,8 +167,7 @@ class Ics215PanelTest {
 	@Test
 	void resourceHeadingIsRequiredBeforeAssignmentsAndMatrixHasPopupActions() throws Exception {
 		AppData data = new AppData();
-		AppController controller = new AppController(data, new LocalRepository(directory.resolve("setup.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		Ics215Panel[] panel = new Ics215Panel[1];
 		try {
 			SwingUtilities.invokeAndWait(() -> {
@@ -370,8 +363,7 @@ class Ics215PanelTest {
 	@Test
 	void invalidDateRemainsEditableAndBlocksFlush() throws Exception {
 		AppData data = new AppData();
-		AppController controller = new AppController(data, new LocalRepository(directory.resolve("invalid.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		Ics215Panel[] panel = new Ics215Panel[1];
 		try {
 			SwingUtilities.invokeAndWait(() -> {

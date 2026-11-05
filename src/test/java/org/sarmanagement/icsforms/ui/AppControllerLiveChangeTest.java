@@ -6,9 +6,6 @@ package org.sarmanagement.icsforms.ui;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
@@ -203,10 +200,7 @@ class AppControllerLiveChangeTest {
 
 	@Test
 	void isolatesListenerFailureAfterPersistingEditorChanges() throws Exception {
-		Path incident = directory.resolve("persisted-incident.json");
-		LocalRepository repository = new LocalRepository(incident);
-		AppController controller = new AppController(new AppData(), repository, new PdfExportService(),
-				new IncidentValidator());
+		AppController controller = controller(new AppData());
 		AtomicInteger laterDeliveries = new AtomicInteger();
 		controller.addIncidentChangeListener(change -> {
 			throw new IllegalStateException("Broken presentation listener");
@@ -220,7 +214,8 @@ class AppControllerLiveChangeTest {
 
 		assertEquals("Persist despite listener failure", controller.getData().getIncidentContext().getIncidentName());
 		assertEquals("Persist despite listener failure",
-				repository.loadOrDefault().getIncidentContext().getIncidentName());
+				IncidentStoreTestFixtures.store(controller).load(controller.getActiveIncidentId()).getIncidentContext()
+						.getIncidentName());
 		assertEquals(1, laterDeliveries.get());
 	}
 
@@ -271,8 +266,6 @@ class AppControllerLiveChangeTest {
 	}
 
 	private AppController controller(AppData data) {
-		return SwingTestLifecycleExtension.track(new AppController(data,
-				new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
-				new IncidentValidator()));
+		return IncidentStoreTestFixtures.controller(data);
 	}
 }

@@ -6,7 +6,6 @@ import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics201PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
@@ -65,8 +64,9 @@ class Ics201PanelTest {
 		AppData data = new AppData(context, new Ics202Form(), new Ics204Form(), List.of());
 		data.getForm201().setCurrentActions(List.of(new Ics201Form.ActionEntry()));
 		Path path = Path.of("target", "test-output", "ics201-panel-" + System.nanoTime(), "incident.json");
-		return new AppController(data, new LocalRepository(path), new PdfExportService(new Ics201PdfRenderer(),
-				new Ics202PdfRenderer(), new Ics204PdfRenderer(), new SarTaskAssignmentPdfRenderer()),
+		return IncidentStoreTestFixtures.controller(data,
+				new PdfExportService(new Ics201PdfRenderer(), new Ics202PdfRenderer(), new Ics204PdfRenderer(),
+						new SarTaskAssignmentPdfRenderer()),
 				new IncidentValidator());
 	}
 }

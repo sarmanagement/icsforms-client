@@ -16,8 +16,8 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.ui.AppController;
+import org.sarmanagement.icsforms.ui.IncidentStoreTestFixtures;
 import org.sarmanagement.icsforms.ui.Ics202Panel;
 import org.sarmanagement.icsforms.ui.MainFrame;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -264,7 +264,7 @@ class PdfTextTest {
 		SwingUtilities.invokeAndWait(() -> {
 			AppData data = new AppData();
 			data.getForm202().setObjectives(List.of("Original objective"));
-			AppController controller = new AppController(data, null, new PdfExportService(), new IncidentValidator());
+			AppController controller = IncidentStoreTestFixtures.controller(data);
 			Ics202Panel panel = new Ics202Panel(controller);
 			panel.refreshFromModel();
 			try {
@@ -305,9 +305,11 @@ class PdfTextTest {
 		SwingUtilities.invokeAndWait(() -> {
 			AppData data = new AppData();
 			data.getForm202().setObjectives(List.of("Initial objective"));
-			LocalRepository repository = new LocalRepository(directory.resolve("incident.json"));
 			PdfExportService service = new PdfExportService(new Ics202PdfRenderer());
-			MainFrame frame = new MainFrame(data, repository, service, new IncidentValidator(), directory);
+			IncidentStoreTestFixtures.Fixture fixture = IncidentStoreTestFixtures.create(data, service,
+					new IncidentValidator());
+			MainFrame frame = new MainFrame(data, fixture.store(), fixture.incidentId(), service,
+					new IncidentValidator(), directory);
 			try {
 				Ics202Panel panel = field(frame, "ics202Panel", Ics202Panel.class);
 				JTabbedPane tabs = field(frame, "tabs", JTabbedPane.class);
@@ -323,7 +325,7 @@ class PdfTextTest {
 				Method saveBeforeSwitch = MainFrame.class.getDeclaredMethod("saveBeforeSwitch");
 				saveBeforeSwitch.setAccessible(true);
 				assertTrue((Boolean) saveBeforeSwitch.invoke(frame));
-				AppData saved = repository.loadOrDefault();
+				AppData saved = fixture.store().load(fixture.incidentId());
 				assertEquals(List.of(objective), saved.getForm202().getObjectives());
 				IOException exception = assertThrows(IOException.class,
 						() -> service.exportSelected("ICS 202", saved, directory));

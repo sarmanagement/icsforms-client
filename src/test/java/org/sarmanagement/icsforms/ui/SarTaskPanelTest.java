@@ -17,7 +17,7 @@ import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.ControllableIncidentStore;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
@@ -40,7 +40,6 @@ import java.awt.Component;
 import java.lang.reflect.Method;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -60,12 +59,10 @@ class SarTaskPanelTest {
 	@Test
 	void failedSavePreservesDetachedUpdatesMadeDuringNestedDispositionPrompt() throws Exception {
 		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
-		AppData data = sampleController().getData();
-		var blockedParent = Files.createTempFile("icsforms-nested-rollback", ".file");
-		AppController controller = new AppController(data,
-				new LocalRepository(blockedParent.resolve("incident.json")),
-				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
-						new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
+		AppController controller = sampleController();
+		AppData data = controller.getData();
+		IncidentStoreTestFixtures.store(controller).failNext(
+				ControllableIncidentStore.Operation.SAVE, new IllegalStateException("Scheduled failure"));
 		SarTaskPanel panel = new SarTaskPanel(controller);
 		panel.refreshFromModel();
 		SarTaskAssignment task = data.getSarTaskAssignments().get(0);
@@ -146,12 +143,10 @@ class SarTaskPanelTest {
 
 	@Test
 	void failedLifecyclePersistenceRestoresStatusAndExistingLogCollections() throws Exception {
-		AppData data = sampleController().getData();
-		var blockedParent = Files.createTempFile("icsforms-blocked-lifecycle", ".file");
-		AppController controller = new AppController(data,
-				new LocalRepository(blockedParent.resolve("incident.json")),
-				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
-						new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
+		AppController controller = sampleController();
+		AppData data = controller.getData();
+		IncidentStoreTestFixtures.store(controller).failNext(
+				ControllableIncidentStore.Operation.SAVE, new IllegalStateException("Scheduled failure"));
 		SarTaskAssignment task = data.getSarTaskAssignments().get(0);
 		task.setTaskLifecycleStatus("planned");
 		var logs = new ArrayList<>(data.getActivityLogs());
@@ -166,12 +161,10 @@ class SarTaskPanelTest {
 
 	@Test
 	void failedDebriefSaveRestoresLiveIdentitiesAndRetainsEnteredText() throws Exception {
-		AppData data = sampleController().getData();
-		var blockedParent = Files.createTempFile("icsforms-blocked-debrief", ".file");
-		AppController controller = new AppController(data,
-				new LocalRepository(blockedParent.resolve("incident.json")),
-				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
-						new SarTaskAssignmentPdfRenderer()), new IncidentValidator());
+		AppController controller = sampleController();
+		AppData data = controller.getData();
+		IncidentStoreTestFixtures.store(controller).failNext(
+				ControllableIncidentStore.Operation.SAVE, new IllegalStateException("Scheduled failure"));
 		SarTaskPanel panel = new SarTaskPanel(controller);
 		panel.refreshFromModel();
 		SarTaskAssignment task = data.getSarTaskAssignments().get(0);
@@ -202,8 +195,6 @@ class SarTaskPanelTest {
 		assertSame(concurrent, data.getClueLogEntries().get(1));
 		assertEquals(original, task.getDebriefNotes());
 		assertEquals("Unsaved debrief retained after failure", notes.getText());
-		Files.delete(blockedParent);
-		Files.createDirectory(blockedParent);
 		save.invoke(panel, 0, task, editor, enumConstant(modeClass, "DEBRIEFING"));
 		assertEquals("Unsaved debrief retained after failure", task.getDebriefNotes());
 		assertEquals(2, data.getClueLogEntries().size());
@@ -1253,8 +1244,7 @@ class SarTaskPanelTest {
 		clue.setDetectingTask(task.getAssignmentTeamNumber());
 		clue.setDescription("Footprint");
 		data.setClueLogEntries(List.of(clue));
-		return new AppController(data,
-				new LocalRepository(Files.createTempDirectory("icsforms-ui").resolve("incident.json")),
+		return IncidentStoreTestFixtures.controller(data,
 				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
 						new SarTaskAssignmentPdfRenderer()),
 				new IncidentValidator());

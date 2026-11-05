@@ -6,7 +6,6 @@ package org.sarmanagement.icsforms.ui;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
@@ -58,7 +57,7 @@ class MainFrameDashboardTest {
 		var preferences = java.util.prefs.Preferences.userNodeForPackage(MainFrame.class);
 		String previous = preferences.get("descriptive-workspace-tabs", null);
 		SwingUtilities.invokeAndWait(() -> {
-			MainFrame frame = new MainFrame(new AppData(), new LocalRepository(directory.resolve("incident.json")),
+			MainFrame frame = IncidentStoreTestFixtures.frame(new AppData(), directory,
 					new PdfExportService(), new IncidentValidator(), directory);
 			try {
 				JCheckBoxMenuItem setting = null;
@@ -103,7 +102,7 @@ class MainFrameDashboardTest {
 		String previous = preferences.get(key, null);
 		preferences.putBoolean(key, false);
 		SwingUtilities.invokeAndWait(() -> {
-			MainFrame frame = new MainFrame(new AppData(), new LocalRepository(directory.resolve("incident.json")),
+			MainFrame frame = IncidentStoreTestFixtures.frame(new AppData(), directory,
 					new PdfExportService(), new IncidentValidator(), directory);
 			JFrame[] roleWindow = new JFrame[1];
 			try {
@@ -164,7 +163,7 @@ class MainFrameDashboardTest {
 		data.getActivityLogs().add(new Ics214Form());
 		data.getActivityLogs().add(new Ics214Form());
 		SwingUtilities.invokeAndWait(() -> {
-			MainFrame frame = new MainFrame(data, new LocalRepository(directory.resolve("incident.json")),
+			MainFrame frame = IncidentStoreTestFixtures.frame(data, directory,
 					new PdfExportService(), new IncidentValidator(), directory);
 			try {
 				JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame, "tabs");
@@ -195,7 +194,7 @@ class MainFrameDashboardTest {
 					data.getForm205().setSpecialInstructions("Contact command before changing channels.");
 					data.advanceToNewOperationalPeriod();
 				}
-				MainFrame frame = new MainFrame(data, new LocalRepository(directory.resolve("incident.json")),
+				MainFrame frame = IncidentStoreTestFixtures.frame(data, directory,
 						new PdfExportService(), new IncidentValidator(), directory);
 				try {
 					JMenuItem item = (JMenuItem) Ics205PanelTest.field(frame, "bringForwardItem");
@@ -221,7 +220,7 @@ class MainFrameDashboardTest {
 		try {
 			preferences.put("workspace-dashboard", "Operations");
 			SwingUtilities.invokeAndWait(() -> {
-				MainFrame frame = new MainFrame(new AppData(), new LocalRepository(directory.resolve("incident.json")),
+				MainFrame frame = IncidentStoreTestFixtures.frame(new AppData(), directory,
 						new PdfExportService(), new IncidentValidator(), directory);
 				try {
 					JMenu view = frame.getJMenuBar().getMenu(1);

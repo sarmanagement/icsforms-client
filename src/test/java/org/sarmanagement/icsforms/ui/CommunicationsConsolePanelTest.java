@@ -22,7 +22,7 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.SarTaskSupport;
 import org.sarmanagement.icsforms.model.TCard;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.ControllableIncidentStore;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
@@ -613,7 +613,7 @@ class CommunicationsConsolePanelTest {
 			assertTrue(entry.getNotableActivity().contains("Notes: Clear signal"));
 			assertEquals(data.getSarTaskAssignments().get(0).getAssignmentId(), entry.getAssignmentId());
 			assertEquals(List.of("Independent latest plan edit"), data.getForm202().getObjectives());
-			AppData restored = new LocalRepository(directory.resolve("incident.json")).loadOrDefault();
+			AppData restored = IncidentStoreTestFixtures.store(controller).load(controller.getActiveIncidentId());
 			assertEquals(RadioCheckStatus.SUCCESSFUL, restored.getForm205().getChannels().get(0).getRadioCheckStatus());
 			assertEquals(1, restored.getActivityLogs().get(0).getActivityLog().size());
 			assertEquals(List.of("Independent latest plan edit"), restored.getForm202().getObjectives());
@@ -750,14 +750,10 @@ class CommunicationsConsolePanelTest {
 	void actualPersistenceFailureKeepsBothDraftsAndNeverHalfCommits() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		AppData data = incident();
-		LocalRepository failing = new LocalRepository(directory.resolve("failed.json")) {
-			/** {@inheritDoc} */
-			@Override
-			public void save(AppData ignored) {
-				throw new IllegalStateException("Injected console save failure");
-			}
-		};
-		AppController controller = new AppController(data, failing, new PdfExportService(), new IncidentValidator());
+		IncidentStoreTestFixtures.Fixture fixture = IncidentStoreTestFixtures.create(data);
+		AppController controller = fixture.controller();
+		fixture.store().failNext(ControllableIncidentStore.Operation.SAVE,
+				new IllegalStateException("Injected console save failure"));
 		onEdt(() -> {
 			CommunicationsConsolePanel panel = new CommunicationsConsolePanel(controller);
 			fillCheck(panel, RadioCheckStatus.FAILED, "Radio operator", "2026-11-04 04:10", "No response");
@@ -780,6 +776,8 @@ class CommunicationsConsolePanelTest {
 			assertEquals(RadioCheckStatus.NOT_RECORDED, data.getForm205().getChannels().get(0).getRadioCheckStatus());
 			assertFalse(controller.isDirty());
 			assertEquals("No response", accessible(panel, JTextArea.class, "Communications check notes").getText());
+			assertEquals(RadioCheckStatus.NOT_RECORDED,
+					fixture.store().load(fixture.incidentId()).getForm205().getChannels().get(0).getRadioCheckStatus());
 			panel.dispose();
 		});
 	}
@@ -974,8 +972,7 @@ class CommunicationsConsolePanelTest {
 	 * @return controller.
 	 */
 	private AppController controller(AppData data) {
-		return new AppController(data, new LocalRepository(directory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		return IncidentStoreTestFixtures.controller(data, new PdfExportService(), new IncidentValidator());
 	}
 
 	/**

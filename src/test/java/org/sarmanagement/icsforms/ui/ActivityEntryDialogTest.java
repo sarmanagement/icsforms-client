@@ -10,7 +10,7 @@ import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.ControllableIncidentStore;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
@@ -343,11 +343,11 @@ class ActivityEntryDialogTest {
 		assertTrue(dialog.saveEntry(new JPanel(), original, candidate -> true));
 		assertEquals(originalTask.getAssignmentId(), original.getAssignmentId());
 		String entryId = original.getEntryId();
-		LocalRepository repository = new LocalRepository(directory.resolve("persisted-context.json"));
-		repository.save(data);
-		AppData restored = repository.loadOrDefault();
-		AppController reloadedController = new AppController(restored, repository,
-				new PdfExportService(), new IncidentValidator());
+		ControllableIncidentStore store = IncidentStoreTestFixtures.store(directory.resolve("persisted-context"));
+		var id = store.create(data);
+		AppData restored = store.load(id);
+		AppController reloadedController = SwingTestLifecycleExtension.track(
+				new AppController(restored, store, id, new PdfExportService(), new IncidentValidator()));
 		Ics214Form reloadedLog = restored.getActivityLogs().get(0);
 		ActivityLogEntry reloadedEntry = reloadedLog.getActivityLog().get(0);
 		ActivityEntryDialog followUp = new ActivityEntryDialog(reloadedController,
@@ -448,11 +448,11 @@ class ActivityEntryDialogTest {
 		assertEquals(additional.getAssignmentId(), entry.getAssignmentId());
 		assertEquals("Casey", dialog.selectedLog().getActivityLog().get(0).getResourceIdentifier());
 		assertTrue(data.getClueLogEntries().isEmpty());
-		LocalRepository repository = new LocalRepository(directory.resolve("generic-context.json"));
-		repository.save(data);
-		AppData restored = repository.loadOrDefault();
-		AppController restoredController = new AppController(restored, repository,
-				new PdfExportService(), new IncidentValidator());
+		ControllableIncidentStore store = IncidentStoreTestFixtures.store(directory.resolve("generic-context"));
+		var id = store.create(data);
+		AppData restored = store.load(id);
+		AppController restoredController = SwingTestLifecycleExtension.track(
+				new AppController(restored, store, id, new PdfExportService(), new IncidentValidator()));
 		restored.getSarTaskAssignments().clear();
 		Ics214Form restoredLog = restored.getActivityLogs().get(0);
 		ActivityLogEntry restoredEntry = restoredLog.getActivityLog().get(0);
@@ -947,8 +947,7 @@ class ActivityEntryDialogTest {
 			assignment.setResourceIdentifier(task.getResourceIdentifier());
 			data.getForm204().getResourcesAssigned().add(assignment);
 		}
-		return new AppController(data, new LocalRepository(directory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		return IncidentStoreTestFixtures.controller(data, new PdfExportService(), new IncidentValidator());
 	}
 
 	/**

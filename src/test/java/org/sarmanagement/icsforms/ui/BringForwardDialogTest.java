@@ -8,7 +8,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
@@ -42,8 +41,8 @@ class BringForwardDialogTest {
 			AppData data = new AppData();
 			data.getForm205().setSpecialInstructions("Available previous communications");
 			data.advanceToNewOperationalPeriod();
-			MainFrame frame = new MainFrame(data,
-					new LocalRepository(directory.resolve("incident.json")),
+			IncidentStoreTestFixtures.Fixture fixture = IncidentStoreTestFixtures.create(data);
+			MainFrame frame = new MainFrame(data, fixture.store(), fixture.incidentId(),
 					new PdfExportService(), new IncidentValidator(), directory) {
 				/** {@inheritDoc} */
 				@Override
@@ -71,7 +70,7 @@ class BringForwardDialogTest {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		SwingUtilities.invokeAndWait(() -> {
 			AppData data = new AppData();
-			MainFrame frame = new MainFrame(data, new LocalRepository(directory.resolve("availability.json")),
+			MainFrame frame = IncidentStoreTestFixtures.frame(data, directory,
 					new PdfExportService(), new IncidentValidator(), directory);
 			AppController controller = (AppController) field(frame, "controller");
 			try {
