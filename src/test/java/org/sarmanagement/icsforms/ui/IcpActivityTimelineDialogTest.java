@@ -16,7 +16,6 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JButton;
@@ -120,9 +119,7 @@ class IcpActivityTimelineDialogTest {
 		RadioChannel channel = new RadioChannel();
 		channel.setChannelName("Command");
 		data.getForm205().getChannels().add(channel);
-		AppController controller = new AppController(data,
-				new LocalRepository(directory.resolve("live-timeline.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		AtomicReference<IcpActivityTimelineDialog> reference = new AtomicReference<>();
 		try {
 			SwingUtilities.invokeAndWait(() -> {
@@ -172,9 +169,7 @@ class IcpActivityTimelineDialogTest {
 	@Test
 	void replacedIncidentCannotRefreshOrApplyStaleTimelineActions() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
-		AppController controller = new AppController(new AppData(),
-				new LocalRepository(directory.resolve("replaced-timeline.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(new AppData());
 		AtomicReference<LogEntryContext> added = new AtomicReference<>();
 		AtomicReference<IcpActivityTimelineDialog> reference = new AtomicReference<>();
 		AtomicReference<List<?>> originalLanes = new AtomicReference<>();

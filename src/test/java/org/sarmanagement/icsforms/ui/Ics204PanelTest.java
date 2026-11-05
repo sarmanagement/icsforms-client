@@ -10,7 +10,7 @@ import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.ControllableIncidentStore;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
@@ -27,7 +27,6 @@ import javax.swing.JTable;
 import javax.swing.SwingUtilities;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -365,9 +364,7 @@ class Ics204PanelTest {
 
 	@Test
 	void assignmentSaveValidatesPersistsAndDoesNotDuplicateOnRetry() throws Exception {
-		LocalRepository repository = new LocalRepository(
-				Files.createTempDirectory("icsforms-assignment-save").resolve("incident.json"));
-		AppController controller = sampleController(repository);
+		AppController controller = sampleController();
 		Ics204Panel panel = new Ics204Panel(controller);
 		panel.refreshFromModel();
 		ResourceAssignment row = new ResourceAssignment();
@@ -384,7 +381,8 @@ class Ics204PanelTest {
 		save.invoke(panel, row, editor);
 		assertEquals(2, controller.getAssignmentResources().size());
 		assertEquals(2, controller.getData().getSarTaskAssignments().size());
-		assertEquals(2, repository.loadOrDefault().getSarTaskAssignments().size());
+		assertEquals(2, IncidentStoreTestFixtures.store(controller).load(controller.getActiveIncidentId())
+				.getSarTaskAssignments().size());
 		assertEquals(false, controller.isDirty());
 	}
 
@@ -429,8 +427,8 @@ class Ics204PanelTest {
 
 	@Test
 	void failedPersistenceRollsBackInsertionRetainsFieldsAndAllowsRetry() throws Exception {
-		var blockedParent = Files.createTempFile("icsforms-blocked-parent", ".file");
-		AppController controller = sampleController(new LocalRepository(blockedParent.resolve("incident.json")));
+		AppController controller = sampleController();
+		ControllableIncidentStore store = IncidentStoreTestFixtures.store(controller);
 		Ics204Panel panel = new Ics204Panel(controller);
 		panel.refreshFromModel();
 		ResourceAssignment row = new ResourceAssignment();
@@ -442,13 +440,13 @@ class Ics204PanelTest {
 		field.setText("Retained entry");
 		var save = Ics204Panel.class.getDeclaredMethod("saveAssignmentEditor", ResourceAssignment.class, editorType);
 		save.setAccessible(true);
+		store.failNext(ControllableIncidentStore.Operation.SAVE, new IllegalStateException("Scheduled failure"));
 		assertThrows(java.lang.reflect.InvocationTargetException.class, () -> save.invoke(panel, row, editor));
+		store.failNext(ControllableIncidentStore.Operation.SAVE, new IllegalStateException("Scheduled failure"));
 		assertThrows(java.lang.reflect.InvocationTargetException.class, () -> save.invoke(panel, row, editor));
 		assertEquals("Retained entry", field.getText());
 		assertEquals(1, controller.getAssignmentResources().size());
 		assertEquals(false, controller.isDirty());
-		Files.delete(blockedParent);
-		Files.createDirectory(blockedParent);
 		save.invoke(panel, row, editor);
 		assertEquals(2, controller.getAssignmentResources().size());
 		assertEquals("Retained entry", controller.getAssignmentResources().get(1).getAssignmentTeamNumber());
@@ -572,16 +570,6 @@ class Ics204PanelTest {
 	 * @throws Exception if the repository path cannot be created.
 	 */
 	private static AppController sampleController() throws Exception {
-		return sampleController(new LocalRepository(Files.createTempDirectory("icsforms-ui").resolve("incident.json")));
-	}
-
-	/**
-	 * Creates an assignment fixture with configurable persistence.
-	 *
-	 * @param repository repository used when saving.
-	 * @return sample controller.
-	 */
-	private static AppController sampleController(LocalRepository repository) {
 		IncidentContext context = new IncidentContext("Test Incident", LocalDateTime.parse("2026-01-01T00:00:00"),
 				LocalDateTime.parse("2026-01-01T12:00:00"), "Planner", "Planning Section Chief");
 		Ics204Form form204 = new Ics204Form();
@@ -601,8 +589,7 @@ class Ics204PanelTest {
 		resource.setAssignment("Search trail");
 		form204.setResourcesAssigned(List.of(resource));
 		AppData data = new AppData(context, new Ics202Form(), form204, List.of());
-		return new AppController(data,
-				repository,
+		return IncidentStoreTestFixtures.controller(data,
 				new PdfExportService(new Ics202PdfRenderer(), new Ics204PdfRenderer(),
 						new SarTaskAssignmentPdfRenderer()),
 				new IncidentValidator());

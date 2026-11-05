@@ -6,7 +6,6 @@ package org.sarmanagement.icsforms.ui;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.pdf.Ics206PdfRenderer;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -165,7 +164,7 @@ class MedicalWorkspacePanelTest {
 	 * @throws Exception when a temporary repository cannot be created.
 	 */
 	private AppController controller(AppData data) throws Exception {
-		return new AppController(data, new LocalRepository(temporaryDirectory.resolve("incident.json")),
+		return IncidentStoreTestFixtures.controller(data,
 				new PdfExportService(new Ics206PdfRenderer()), new IncidentValidator());
 	}
 

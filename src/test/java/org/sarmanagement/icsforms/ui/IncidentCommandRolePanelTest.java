@@ -21,9 +21,6 @@ import org.sarmanagement.icsforms.model.SafetyAnalysisEntry;
 import org.sarmanagement.icsforms.model.SafetyMessageBlock;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
 import javax.swing.JButton;
@@ -1149,8 +1146,7 @@ class IncidentCommandRolePanelTest {
 	 * @return controller.
 	 */
 	private AppController controller(AppData data) {
-		return new AppController(data, new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
-				new IncidentValidator());
+		return IncidentStoreTestFixtures.controller(data);
 	}
 
 	/**

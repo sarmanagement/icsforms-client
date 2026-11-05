@@ -4,9 +4,6 @@ import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
 import javax.swing.JPanel;
@@ -17,7 +14,6 @@ import javax.swing.JButton;
 import javax.swing.table.TableColumnModel;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -204,9 +200,7 @@ class TCardPanelDirectoryTest {
 	}
 
 	private static AppController createController(AppData data) {
-		return new AppController(data,
-				new LocalRepository(Path.of(System.getProperty("java.io.tmpdir"), "tcard-directory-test.json")),
-				new PdfExportService(), new IncidentValidator());
+		return IncidentStoreTestFixtures.controller(data);
 	}
 
 	@SuppressWarnings("unchecked")

@@ -14,7 +14,7 @@ import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentSummary;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.ControllableIncidentStore;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
 import org.sarmanagement.icsforms.persistence.StoreDescriptor;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
@@ -44,7 +44,7 @@ class AppControllerCommunicationsActivityTest {
 		ResourceAssignment assignment = new ResourceAssignment();
 		assignment.setResourceIdentifier("Search team");
 		data.getForm204().getResourcesAssigned().add(assignment);
-		AppController controller = controller(data, new LocalRepository(directory.resolve("incident.json")));
+		AppController controller = controller(data);
 		Ics214Form log = new Ics214Form();
 		ActivityLogEntry entry = entry();
 		entry.setAssignmentId(assignment.getAssignmentId());
@@ -69,7 +69,7 @@ class AppControllerCommunicationsActivityTest {
 		assertEquals("155.500", channel.getRxFrequency());
 		assertEquals("Robin", entry.getResourceIdentifier());
 		assertFalse(controller.isDirty());
-		AppData restored = new LocalRepository(directory.resolve("incident.json")).loadOrDefault();
+		AppData restored = IncidentStoreTestFixtures.store(controller).load(controller.getActiveIncidentId());
 		assertEquals(RadioCheckStatus.SUCCESSFUL, restored.getForm205().getChannels().get(0).getRadioCheckStatus());
 		assertEquals("155.500", restored.getForm205().getChannels().get(0).getRxFrequency());
 		assertEquals(entry.getEntryId(), restored.getActivityLogs().get(0).getActivityLog().get(0).getEntryId());
@@ -90,17 +90,13 @@ class AppControllerCommunicationsActivityTest {
 					log.getActivityLog().add(previous);
 					data.getActivityLogs().add(log);
 				}
+				IncidentStoreTestFixtures.Fixture fixture = IncidentStoreTestFixtures.create(data);
+				AppController controller = fixture.controller();
 				var channels = data.getForm205().getChannels();
 				var logs = data.getActivityLogs();
 				var activities = log.getActivityLog();
-				LocalRepository failing = new LocalRepository(directory.resolve("failed.json")) {
-					/** {@inheritDoc} */
-					@Override
-					public void save(AppData ignored) {
-						throw new IllegalStateException("Injected write failure");
-					}
-				};
-				AppController controller = controller(data, failing);
+				fixture.store().failNext(ControllableIncidentStore.Operation.SAVE,
+						new IllegalStateException("Injected write failure"));
 				if (dirty) {
 					controller.markDirty();
 				}
@@ -219,7 +215,7 @@ class AppControllerCommunicationsActivityTest {
 	void focusedConcurrentCheckMissingAndAmbiguousChannelsRejectWithoutAddingEntry() {
 		AppData data = new AppData();
 		RadioChannel channel = channel(data);
-		AppController controller = controller(data, new LocalRepository(directory.resolve("stale.json")));
+		AppController controller = controller(data);
 		RadioChannel baseline = channel.deepCopy();
 		channel.setRadioCheckNotes("Other operator");
 		assertThrows(IllegalStateException.class, () -> commit(controller,
@@ -239,7 +235,7 @@ class AppControllerCommunicationsActivityTest {
 	void staleIncidentGenerationAndMissingAssignmentRejectWithoutMutation() {
 		AppData data = new AppData();
 		RadioChannel channel = channel(data);
-		AppController controller = controller(data, new LocalRepository(directory.resolve("binding.json")));
+		AppController controller = controller(data);
 		var stale = controller.captureIncidentBinding();
 		controller.setData(new AppData());
 		controller.setData(data);
@@ -257,7 +253,7 @@ class AppControllerCommunicationsActivityTest {
 	void invalidCheckAndProblemEventCannotMutateChannel() {
 		AppData data = new AppData();
 		RadioChannel channel = channel(data);
-		AppController controller = controller(data, new LocalRepository(directory.resolve("invalid.json")));
+		AppController controller = controller(data);
 		ActivityLogEntry problem = entry();
 		problem.setEventTypeId(ActivityEventType.ID_COMMUNICATIONS_PROBLEM);
 		assertThrows(IllegalArgumentException.class, () -> commit(controller,
@@ -274,7 +270,7 @@ class AppControllerCommunicationsActivityTest {
 	void blankCheckNarrativeAndMismatchedChannelIdentityRejectBeforeMutation() {
 		AppData data = new AppData();
 		RadioChannel channel = channel(data);
-		AppController controller = controller(data, new LocalRepository(directory.resolve("validation.json")));
+		AppController controller = controller(data);
 		Ics214Form log = new Ics214Form();
 		data.getActivityLogs().add(log);
 		ActivityLogEntry blank = entry();
@@ -344,12 +340,11 @@ class AppControllerCommunicationsActivityTest {
 	 * Builds a tracked controller for a test repository.
 	 *
 	 * @param data incident data
-	 * @param repository persistence implementation
+	 * @param data incident model to edit
 	 * @return controller closed by the existing Swing lifecycle extension
 	 */
-	private AppController controller(AppData data, LocalRepository repository) {
-		return SwingTestLifecycleExtension.track(
-				new AppController(data, repository, new PdfExportService(), new IncidentValidator()));
+	private AppController controller(AppData data) {
+		return IncidentStoreTestFixtures.controller(data, new PdfExportService(), new IncidentValidator());
 	}
 
 	/** Rejects an observed save through the backend-neutral store seam without file or network access. */

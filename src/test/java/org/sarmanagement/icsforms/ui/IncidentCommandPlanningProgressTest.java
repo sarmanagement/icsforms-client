@@ -13,9 +13,6 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
@@ -277,8 +274,7 @@ class IncidentCommandPlanningProgressTest {
 	 * @return controller.
 	 */
 	private AppController controller(AppData data) {
-		return new AppController(data, new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
-				new IncidentValidator());
+		return IncidentStoreTestFixtures.controller(data);
 	}
 
 	/**

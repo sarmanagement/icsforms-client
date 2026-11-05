@@ -6,9 +6,6 @@ package org.sarmanagement.icsforms.ui;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JButton;
 import javax.swing.JTable;
@@ -31,9 +28,7 @@ class IncidentContextPanelTest {
 	@Test
 	void quickAddAndEditsPersistSharedIncidentLocations() throws Exception {
 		AppData data = new AppData();
-		AppController controller = new AppController(data,
-				new LocalRepository(tempDirectory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		IncidentContextPanel[] panel = new IncidentContextPanel[1];
 
 		SwingUtilities.invokeAndWait(() -> {

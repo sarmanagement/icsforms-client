@@ -150,7 +150,7 @@ remote persistence features.
 | Issue | Title (short) | Plan location |
 | --- | --- | --- |
 | #37 | Timestamps are not consistent — **closed by PR #38** | Part IV, Stage 1, gate T1 — complete |
-| #39 | Persistence contract coverage; fake `IncidentStore` | Part IV, Stage 1, gate P1 |
+| #39 | Persistence contract coverage; fake `IncidentStore` — implementation complete; merge/closure pending | Part IV, Stage 1, gate P1 |
 | #40 | External validation vs. tolerant load; durable identity migration; entity ID audit | Part IV, Stage 1, gate P3 |
 | #41 | Backend-neutral `IncidentStore` concurrency/failure semantics | Part IV, Stage 1, gate P2 |
 | #42 | Asynchronous snapshot-based persistence | Part IV, Stage 1, gate P4 |
@@ -570,7 +570,7 @@ except where noted.
 | Gate | Issue | Scope | Depends on | Exit evidence |
 | --- | --- | --- | --- | --- |
 | **P0** | #43 | Deterministic Swing test lifecycle: explicit controller shutdown, disposed windows/listeners/timers, bounded modal tests, separate headless and Xvfb CI lanes. | — | Full and isolated runs repeatable; displayed lane reports skipped tests; unexpected persistence errors fail tests rather than block. |
-| **P1** | #39 | Contract test suite for `IncidentStore`; controllable fake store with deterministic failures and delays; controller/UI tests moved off deprecated `LocalRepository`. | P0 | Contract suite covers durability, detached loads, identity, stale writes, deletion conflicts, failures; fake store used by controller tests. |
+| **P1** | #39 | Contract test suite for `IncidentStore`; controllable fake store with deterministic failures and delays; controller/UI tests moved off deprecated `LocalRepository`. | P0 | `AbstractIncidentStoreContractTest` covers restart durability, detached loads, stable identity, concurrent/stale writes, deletion conflicts, and failed operations; `ControllableIncidentStore` supports one-shot failures and latch gates. General controller/UI tests use `IncidentStoreTestFixtures`; `LocalRepository` remains in compatibility tests. |
 | **P2** | #41 | Backend-neutral `IncidentStore` semantics: opaque revision token, optional edit-lock capability (UI never requires a lock to edit), revision-protected delete, path-free `IncidentSummary`, distinct conflict / validation / not-found / duplicate / unavailable / failed outcomes. No `instanceof FileIncidentStore` in UI. | P1 | A lock-less stub store with server-issued tokens substitutes into `AppController` without controller/UI changes; contract tests pass for both. |
 | **P3** | #40 | Strict external import vs. tolerant stored load; durable, repeatable identity migration; **entity ID audit** confirming every list-held record has a stable UUID and no form identifies rows by index/text. | P1 | Fixtures for missing IDs, legacy aliases, unknown fields, malformed versions; repeated loads yield identical IDs; invalid imports leave the store unchanged. |
 | **T1** | #37 — **complete** (PR #38) | All timestamps generated and stored in UTC through `model/UtcTimestamp` injectable clock; displayed and printed in the configured zone. | — | Delivered 2026-10-31; `UtcTimestamp` is the only timestamp source. |

@@ -14,9 +14,6 @@ import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.VetFacility;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.SwingUtilities;
 import javax.swing.JButton;
@@ -411,7 +408,6 @@ class MedicalReferencePanelTest {
 	 * @return configured controller.
 	 */
 	private AppController controller(AppData data) {
-		return new AppController(data, new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
-				new IncidentValidator());
+		return IncidentStoreTestFixtures.controller(data);
 	}
 }

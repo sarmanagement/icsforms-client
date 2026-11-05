@@ -8,9 +8,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.SwingUtilities;
 import javax.swing.JTextArea;
@@ -301,8 +298,7 @@ class PreparationRolePanelTest {
 	 * @return isolated incident controller.
 	 */
 	private AppController controller(AppData data) {
-		return new AppController(data, new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
-				new IncidentValidator());
+		return IncidentStoreTestFixtures.controller(data);
 	}
 
 	/**

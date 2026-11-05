@@ -10,9 +10,6 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -27,7 +24,6 @@ import java.awt.Component;
 import java.awt.Container;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -481,8 +477,6 @@ class Ics214PanelTest {
 	 * @throws Exception if the fixture directory cannot be created
 	 */
 	private static AppController sampleController(AppData data) throws Exception {
-		return new AppController(data,
-				new LocalRepository(Files.createTempDirectory("icsforms-214-ui").resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		return IncidentStoreTestFixtures.controller(data);
 	}
 }

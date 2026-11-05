@@ -6,9 +6,6 @@ package org.sarmanagement.icsforms.ui;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -201,8 +198,7 @@ class IncidentClockPanelTest {
 	 * @return incident controller.
 	 */
 	private AppController controller() {
-		return new AppController(new AppData(), new LocalRepository(directory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		return IncidentStoreTestFixtures.controller(new AppData());
 	}
 
 	/**

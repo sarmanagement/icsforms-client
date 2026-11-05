@@ -7,9 +7,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
@@ -35,9 +32,7 @@ class RolePanelWindowsTest {
 		assumeFalse(GraphicsEnvironment.isHeadless(), "Role windows require a display");
 		AppData data = new AppData();
 		data.getIncidentContext().setIncidentName("Window exercise");
-		AppController controller = new AppController(data,
-				new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
-				new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		List<JFrame> frames = new ArrayList<>();
 
 		SwingUtilities.invokeAndWait(() -> {

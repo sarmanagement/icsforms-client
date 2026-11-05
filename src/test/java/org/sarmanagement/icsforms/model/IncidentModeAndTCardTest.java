@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -240,9 +240,8 @@ class IncidentModeAndTCardTest {
 	// -----------------------------------------------------------------------
 
 	@Test
-	void fullAppDataWithNewFieldsRoundTripsViaLocalRepository() throws Exception {
+	void fullAppDataWithNewFieldsRoundTripsViaIncidentStore() throws Exception {
 		Path tmpDir = Files.createTempDirectory("icsforms-mode-test");
-		LocalRepository repo = new LocalRepository(tmpDir.resolve("incident.json"));
 
 		AppData data = new AppData();
 		data.setIncidentMode(IncidentMode.GENERIC);
@@ -257,8 +256,12 @@ class IncidentModeAndTCardTest {
 		chart.setSafetyOfficerName("Officer Olivia");
 		chart.setDocumentationUnitLeaderName("Doc Dylan");
 
-		repo.save(data);
-		AppData loaded = repo.loadOrDefault();
+		AppData loaded;
+		try (FileIncidentStore store = new FileIncidentStore(tmpDir)) {
+			var id = store.create(data);
+			store.save(id, data);
+			loaded = store.load(id);
+		}
 
 		assertEquals(IncidentMode.GENERIC, loaded.getIncidentMode());
 		assertEquals(1, loaded.getTCards().size());

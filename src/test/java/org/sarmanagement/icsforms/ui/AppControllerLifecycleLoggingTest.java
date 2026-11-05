@@ -10,12 +10,7 @@ import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -143,9 +138,7 @@ class AppControllerLifecycleLoggingTest {
 
 	@Test
 	void clueLoggingAddsIcpActivityEntry() throws Exception {
-		Path tempFile = Files.createTempDirectory("icsforms-clue").resolve("incident.json");
-		AppController controller = new AppController(new AppData(), new LocalRepository(tempFile),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(new AppData());
 
 		ClueLogEntry clue = new ClueLogEntry();
 		clue.setDetectingTask("T-1");
@@ -165,9 +158,7 @@ class AppControllerLifecycleLoggingTest {
 
 	@Test
 	void ensurePersonnelCardCreatesPersonnelCard() throws Exception {
-		Path tempFile = Files.createTempDirectory("icsforms-personnel").resolve("incident.json");
-		AppController controller = new AppController(new AppData(), new LocalRepository(tempFile),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(new AppData());
 
 		TCard created = controller.ensurePersonnelCard("Alex Searcher", "SAR-3", "555-1000");
 
@@ -181,9 +172,7 @@ class AppControllerLifecycleLoggingTest {
 	}
 
 	private AppController sampleControllerWithTaskLog() throws Exception {
-		Path tempFile = Files.createTempDirectory("icsforms-lifecycle").resolve("incident.json");
-		AppController controller = new AppController(new AppData(), new LocalRepository(tempFile), new PdfExportService(),
-				new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(new AppData());
 		SarTaskAssignment task = new SarTaskAssignment();
 		task.setAssignmentId("a-1");
 		task.setAssignmentTeamNumber("T-1");

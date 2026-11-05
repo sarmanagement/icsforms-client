@@ -10,9 +10,6 @@ import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.SafetyAnalysisEntry;
 import org.sarmanagement.icsforms.model.SafetyHazardReport;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.SwingUtilities;
 import javax.swing.JTabbedPane;
@@ -41,8 +38,7 @@ class SafetyPanelTest {
 		data.getForm215a().setPreparedDateTime(LocalDateTime.of(2026, 10, 10, 7, 30));
 		data.getForm208().setSiteSafetyPlanRequired(Boolean.FALSE);
 		data.getForm208().getSiteSafetyPlan().setTextSections(Map.of("Red zone controls", "Access monitored."));
-		AppController controller = new AppController(data, (LocalRepository) null, new PdfExportService(),
-				new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		SafetyPanel[] panel = new SafetyPanel[1];
 
 		SwingUtilities.invokeAndWait(() -> {
@@ -67,8 +63,7 @@ class SafetyPanelTest {
 		task.setHazardsObserved("Loose rocks near ridge.");
 		task.setDebriefingCompleted(false);
 		data.getSarTaskAssignments().add(task);
-		AppController controller = new AppController(data, (LocalRepository) null, new PdfExportService(),
-				new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 
 		SwingUtilities.invokeAndWait(() -> {
 			SafetyPanel panel = new SafetyPanel(controller);
@@ -83,8 +78,7 @@ class SafetyPanelTest {
 	void safetyTabsFollowAnalysisReviewMessageOrderAndHideReportsOutsideSar() throws Exception {
 		AppData data = new AppData();
 		data.setIncidentMode(IncidentMode.GENERIC);
-		AppController controller = new AppController(data, (LocalRepository) null, new PdfExportService(),
-				new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		SafetyPanel[] panel = new SafetyPanel[1];
 		SwingUtilities.invokeAndWait(() -> {
 			panel[0] = new SafetyPanel(controller);
@@ -165,8 +159,7 @@ class SafetyPanelTest {
 		SarTaskAssignment current = new SarTaskAssignment();
 		current.setAssignmentTeamNumber("K9-current");
 		current.setHazardsObserved("Falling branches");
-		AppController controller = new AppController(data, (LocalRepository) null, new PdfExportService(),
-				new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		data.getSarTaskAssignments().add(current);
 		SafetyPanel[] panel = new SafetyPanel[1];
 

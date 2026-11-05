@@ -11,9 +11,6 @@ import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.VetFacility;
 import org.sarmanagement.icsforms.medical.AddressGeocoder;
 import org.sarmanagement.icsforms.medical.GeoPoint;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JLabel;
 import javax.swing.JButton;
@@ -41,9 +38,7 @@ class CanineMedicalPanelTest {
 
 	@Test
 	void canineEditorUsesPersonPickersWithoutRedundantDvmOrAvailabilityRouteOption() throws Exception {
-		AppController controller = new AppController(new AppData(),
-				new LocalRepository(tempDirectory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(new AppData());
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
 
 		SwingUtilities.invokeAndWait(() -> {
@@ -59,9 +54,7 @@ class CanineMedicalPanelTest {
 	@Test
 	void staleCanineEditorInputCannotOverwriteNewerModelRevision() throws Exception {
 		AppData data = new AppData();
-		AppController controller = new AppController(data,
-				new LocalRepository(tempDirectory.resolve("stale-canine.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
 		JTextArea procedures = (JTextArea) fieldValue(panel, "procedures");
 		JLabel status = (JLabel) fieldValue(panel, "status");
@@ -84,9 +77,7 @@ class CanineMedicalPanelTest {
 		base.setName("Fictional Base");
 		base.setAddress("1 Fictional Road");
 		data.getIncidentLocations().add(base);
-		AppController controller = new AppController(data,
-				new LocalRepository(tempDirectory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
 
 		SwingUtilities.invokeAndWait(() -> {
@@ -126,10 +117,7 @@ class CanineMedicalPanelTest {
 		MedicalPlan.TransportService other = new MedicalPlan.TransportService();
 		other.setService("Air Support");
 		data.getMedicalPlan().getTransportServices().add(other);
-		CanineMedicalPanel panel = new CanineMedicalPanel(
-				new AppController(data, new LocalRepository(tempDirectory.resolve("incident.json")),
-						new PdfExportService(), new IncidentValidator()),
-				tempDirectory);
+		CanineMedicalPanel panel = new CanineMedicalPanel(IncidentStoreTestFixtures.controller(data), tempDirectory);
 
 		SwingUtilities.invokeAndWait(() -> {
 			assertEquals(1, panel.addAmbulanceServicesFromMedicalPlan());
@@ -149,9 +137,7 @@ class CanineMedicalPanelTest {
 	void removingFacilityWhileItsDirectoryCellIsBeingEditedDoesNotWriteToDeletedRow() throws Exception {
 		AppData data = new AppData();
 		data.getVetDirectory().getFacilities().add(new org.sarmanagement.icsforms.model.VetFacility());
-		AppController controller = new AppController(data,
-				new LocalRepository(tempDirectory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		CanineMedicalPanel[] panel = new CanineMedicalPanel[1];
 
 		SwingUtilities.invokeAndWait(() -> {
@@ -178,9 +164,7 @@ class CanineMedicalPanelTest {
 		facility.setState("MA");
 		facility.setPostalCode("02130");
 		data.getVetDirectory().getFacilities().add(facility);
-		AppController controller = new AppController(data,
-				new LocalRepository(tempDirectory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
 		AddressGeocoder.Candidate candidate = new AddressGeocoder.Candidate(
 				"350 South Huntington Avenue, Boston, MA", new GeoPoint(42.3, -71.1), 0.9);
@@ -207,9 +191,7 @@ class CanineMedicalPanelTest {
 		facility.setAvailable24Hours(true);
 		facility.setCoordinates(42.1, -71.1, "manual", "test");
 		data.getVetDirectory().getFacilities().add(facility);
-		AppController controller = new AppController(data,
-				new LocalRepository(tempDirectory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
 
 		SwingUtilities.invokeAndWait(() -> {
@@ -233,9 +215,7 @@ class CanineMedicalPanelTest {
 		VetFacility facility = new VetFacility();
 		facility.setAddress("2 Fictional Vet Road");
 		data.getVetDirectory().getFacilities().add(facility);
-		AppController controller = new AppController(data,
-				new LocalRepository(tempDirectory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
 		JButton geocode = (JButton) fieldValue(panel, "geocodeVetButton");
 		JTable directory = (JTable) fieldValue(panel, "directoryTable");
@@ -253,9 +233,7 @@ class CanineMedicalPanelTest {
 	@Test
 	void routeCalculationIsDisabledUntilBaseAndFacilityCoordinatesExist() throws Exception {
 		AppData data = new AppData();
-		AppController controller = new AppController(data,
-				new LocalRepository(tempDirectory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
 
 		SwingUtilities.invokeAndWait(() -> {
@@ -272,9 +250,7 @@ class CanineMedicalPanelTest {
 		VetFacility farther = facility("Farther", 3218.688, 1200);
 		VetFacility nearer = facility("Nearer", 1609.344, 360);
 		data.getVetDirectory().getFacilities().addAll(List.of(farther, nearer));
-		AppController controller = new AppController(data,
-				new LocalRepository(tempDirectory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
 		JTable directory = (JTable) fieldValue(panel, "directoryTable");
 
@@ -297,9 +273,7 @@ class CanineMedicalPanelTest {
 	@Test
 	void addingShortlistFacilitiesPreservesExistingRowsAndSkipsDuplicateIds() throws Exception {
 		AppData data = new AppData();
-		AppController controller = new AppController(data,
-				new LocalRepository(tempDirectory.resolve("incident.json")),
-				new PdfExportService(), new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(data);
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
 		VetFacility first = new VetFacility();
 		first.setName("First");
@@ -321,9 +295,7 @@ class CanineMedicalPanelTest {
 	@Test
 	void directoryContextMenuOffersLookupEditAndIncludeActions() throws Exception {
 		CanineMedicalPanel panel = new CanineMedicalPanel(
-				new AppController(new AppData(), new LocalRepository(tempDirectory.resolve("incident.json")),
-						new PdfExportService(), new IncidentValidator()),
-				tempDirectory);
+				IncidentStoreTestFixtures.controller(new AppData()), tempDirectory);
 		javax.swing.JPopupMenu menu = (javax.swing.JPopupMenu) fieldValue(panel, "directoryPopupMenu");
 
 		assertEquals(3, menu.getComponentCount());
@@ -345,10 +317,7 @@ class CanineMedicalPanelTest {
 		second.setName("Second");
 		second.setAddress("2 Fictional Road");
 		data.getVetDirectory().getFacilities().addAll(List.of(first, second));
-		CanineMedicalPanel panel = new CanineMedicalPanel(
-				new AppController(data, new LocalRepository(tempDirectory.resolve("incident.json")),
-						new PdfExportService(), new IncidentValidator()),
-				tempDirectory);
+		CanineMedicalPanel panel = new CanineMedicalPanel(IncidentStoreTestFixtures.controller(data), tempDirectory);
 		JTable directory = (JTable) fieldValue(panel, "directoryTable");
 		JButton lookup = (JButton) fieldValue(panel, "geocodeVetButton");
 

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestExecutionExceptionHandler;
+import org.sarmanagement.icsforms.persistence.IncidentStore;
 
 import javax.swing.SwingUtilities;
 import java.awt.EventQueue;
@@ -27,6 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class SwingTestLifecycleExtension
 		implements BeforeEachCallback, AfterEachCallback, TestExecutionExceptionHandler {
 	private static final ConcurrentLinkedQueue<AppController> CONTROLLERS = new ConcurrentLinkedQueue<>();
+	private static final ConcurrentLinkedQueue<IncidentStore> STORES = new ConcurrentLinkedQueue<>();
 	private static final ConcurrentLinkedQueue<Throwable> FAILURES = new ConcurrentLinkedQueue<>();
 	private static final AtomicBoolean EVENT_QUEUE_INSTALLED = new AtomicBoolean();
 	private Thread.UncaughtExceptionHandler previousUncaughtExceptionHandler;
@@ -43,6 +45,17 @@ public class SwingTestLifecycleExtension
 			FAILURES.add(new AssertionError("Unexpected autosave persistence failure", exception));
 		});
 		return controller;
+	}
+
+	/**
+	 * Registers a store for cleanup after its tracked controllers are closed.
+	 *
+	 * @param store store owned by the current test.
+	 * @return the same store for use by the test.
+	 */
+	static <T extends IncidentStore> T trackStore(T store) {
+		STORES.add(store);
+		return store;
 	}
 
 	/**
@@ -68,6 +81,7 @@ public class SwingTestLifecycleExtension
 	@Override
 	public void beforeEach(ExtensionContext context) throws Exception {
 		CONTROLLERS.clear();
+		STORES.clear();
 		FAILURES.clear();
 		previousUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler();
 		Thread.setDefaultUncaughtExceptionHandler((thread, exception) -> FAILURES.add(
@@ -96,6 +110,9 @@ public class SwingTestLifecycleExtension
 				for (AppController controller : CONTROLLERS) {
 					controller.close();
 				}
+				for (IncidentStore store : STORES) {
+					store.close();
+				}
 			});
 			runOnEdt(() -> {
 			});
@@ -106,6 +123,7 @@ public class SwingTestLifecycleExtension
 			}
 		} finally {
 			CONTROLLERS.clear();
+			STORES.clear();
 			FAILURES.clear();
 			Thread.setDefaultUncaughtExceptionHandler(previousUncaughtExceptionHandler);
 		}

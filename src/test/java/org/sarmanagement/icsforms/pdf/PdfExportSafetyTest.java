@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.ui.AppController;
+import org.sarmanagement.icsforms.ui.IncidentStoreTestFixtures;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import java.io.IOException;
@@ -56,7 +57,8 @@ class PdfExportSafetyTest {
 		Files.writeString(directory.resolve("ics-204.pdf"), "original 204");
 		PdfExportService service = new PdfExportService(new FixtureRenderer("ICS 202", false, false),
 				new FixtureRenderer("ICS 204", true, false));
-		AppController controller = new AppController(new AppData(), null, service, new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(new AppData(), service,
+				new IncidentValidator());
 		List<String> keys = List.of("ICS 202", "ICS 204");
 		assertThrows(IOException.class,
 				() -> controller.exportSelectedForms(keys, directory, AppController.LinkSource.NONE));
@@ -70,7 +72,8 @@ class PdfExportSafetyTest {
 	@Test
 	void controllerExposesTheBundleSummaryForTheCompletionDialog() throws Exception {
 		PdfExportService service = new PdfExportService(new Ics202PdfRenderer());
-		AppController controller = new AppController(new AppData(), null, service, new IncidentValidator());
+		AppController controller = IncidentStoreTestFixtures.controller(new AppData(), service,
+				new IncidentValidator());
 		controller.exportSelectedIapBundle(List.of("ICS 202"), directory, AppController.LinkSource.NONE, true);
 		assertTrue(controller.getLastPdfBundleSummary().contains("Included forms: ICS 202"));
 	}

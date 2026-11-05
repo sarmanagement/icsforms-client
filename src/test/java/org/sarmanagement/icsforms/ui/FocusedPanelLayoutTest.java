@@ -12,9 +12,6 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
-import org.sarmanagement.icsforms.persistence.LocalRepository;
-import org.sarmanagement.icsforms.pdf.PdfExportService;
-import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -498,7 +495,6 @@ class FocusedPanelLayoutTest {
 	 * @return controller.
 	 */
 	private AppController controller(AppData data) {
-		return new AppController(data, new LocalRepository(directory.resolve("incident.json")), new PdfExportService(),
-				new IncidentValidator());
+		return IncidentStoreTestFixtures.controller(data);
 	}
 }
