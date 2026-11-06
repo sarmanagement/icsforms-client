@@ -54,9 +54,12 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 /** Separates strict external import validation from tolerant on-disk compatibility. */
@@ -141,7 +144,6 @@ final class IncidentDocumentReader {
 			if (tree == null || !tree.isObject()) {
 				add(Severity.ERROR, "$", "Expected an incident JSON object.", "Export an incident as a JSON object.");
 			} else {
-				validateIncidentIdentity(tree);
 				JsonNode version = tree.get("schemaVersion");
 				if (version == null) {
 					add(Severity.WARNING, "$.schemaVersion", "Schema version is missing.",
@@ -230,30 +232,6 @@ final class IncidentDocumentReader {
 	}
 
 	/**
-	 * Validates an optional external incident UUID before import replaces it with a new identity.
-	 *
-	 * @param tree external document object
-	 */
-	private void validateIncidentIdentity(JsonNode tree) {
-		JsonNode identity = tree.get("incidentId");
-		if (identity == null) {
-			return;
-		}
-		if (!identity.isTextual() || identity.asText().isBlank()) {
-			add(Severity.ERROR, "$.incidentId", "Incident identity must be a UUID string.",
-					"Use a valid UUID or omit the incident identity.");
-			return;
-		}
-		try {
-			IncidentId.of(identity.asText());
-		} catch (IllegalArgumentException e) {
-			cause = cause == null ? e : cause;
-			add(Severity.ERROR, "$.incidentId", "Incident identity must be a UUID string.",
-					"Use a valid UUID or omit the incident identity.");
-		}
-	}
-
-	/**
 	 * Returns the immutable diagnostics from this read.
 	 *
 	 * @return collected problems
@@ -282,10 +260,25 @@ final class IncidentDocumentReader {
 	 * @param strict whether unknown fields and binding errors reject the import
 	 */
 	private void inspect(JsonNode node, JavaType type, String path, boolean strict) {
+		inspect(node, type, path, strict, null);
+	}
+
+	/**
+	 * Walks a document and validates IDs within a single array identity scope.
+	 *
+	 * @param node JSON value
+	 * @param type declared property type
+	 * @param path JSON path
+	 * @param strict whether unknown fields and binding errors reject the import
+	 * @param siblingIdentities IDs already seen for this array's records
+	 */
+	private void inspect(JsonNode node, JavaType type, String path, boolean strict,
+			Set<String> siblingIdentities) {
 		if (problems.size() >= MAX_PROBLEMS) {
 			return;
 		}
 		if (type.isCollectionLikeType() && node.isArray()) {
+			Set<String> identities = strict ? new HashSet<>() : null;
 			for (int i = 0; i < node.size() && problems.size() < MAX_PROBLEMS; i++) {
 				String elementPath = path + "[" + i + "]";
 				JavaType elementType = type.getContentType();
@@ -298,7 +291,7 @@ final class IncidentDocumentReader {
 					add(Severity.ERROR, elementPath, "Null incident records are not permitted.",
 							"Remove the null entry or replace it with a record object.");
 				} else {
-					inspect(node.get(i), elementType, elementPath, strict);
+					inspect(node.get(i), elementType, elementPath, strict, identities);
 				}
 			}
 		} else if (type.isMapLikeType() && node.isObject()) {
@@ -333,11 +326,8 @@ final class IncidentDocumentReader {
 					}
 					add(strict ? Severity.ERROR : Severity.WARNING, childPath, "Unknown property.",
 							strict ? "Remove or correct the property name." : "This client ignores this property.");
-				} else if (strict && identityProperties.contains(entry.getKey())
-						&& (entry.getValue().isNull()
-								|| entry.getValue().isTextual() && entry.getValue().asText().isBlank())) {
-					add(Severity.ERROR, childPath, "Record identity must be a non-empty string.",
-							"Omit a legacy identity or provide a non-empty record identifier.");
+				} else if (strict && identityProperties.contains(entry.getKey())) {
+					validateRecordIdentity(entry.getValue(), childPath, siblingIdentities);
 				} else if (childType != null) {
 					inspect(entry.getValue(), childType, childPath, strict);
 				}
@@ -359,6 +349,36 @@ final class IncidentDocumentReader {
 				}
 				add(Severity.ERROR, path, "Invalid value for " + type.getRawClass().getSimpleName() + ".", fix);
 			}
+		}
+	}
+
+	/**
+	 * Validates a persistent record UUID and detects duplicate IDs in its collection.
+	 *
+	 * @param value JSON identity value
+	 * @param path JSON property path
+	 * @param siblingIdentities IDs already found in the containing collection
+	 */
+	private void validateRecordIdentity(JsonNode value, String path, Set<String> siblingIdentities) {
+		if (!value.isTextual() || value.asText().isBlank()) {
+			add(Severity.ERROR, path, "Record identity must be a UUID string.",
+					"Omit a legacy identity or provide a valid UUID.");
+			return;
+		}
+		String identity = value.asText();
+		try {
+			if (!UUID.fromString(identity).toString().equalsIgnoreCase(identity)) {
+				throw new IllegalArgumentException("UUID is not in canonical form");
+			}
+		} catch (IllegalArgumentException exception) {
+			cause = cause == null ? exception : cause;
+			add(Severity.ERROR, path, "Record identity must be a UUID string.",
+					"Use a valid UUID or omit the legacy identity.");
+			return;
+		}
+		if (siblingIdentities != null && !siblingIdentities.add(identity.toLowerCase(Locale.ROOT))) {
+			add(Severity.ERROR, path, "Record identity duplicates another record in this collection.",
+					"Assign each record in the collection a distinct UUID.");
 		}
 	}
 

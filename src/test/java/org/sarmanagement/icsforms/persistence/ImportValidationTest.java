@@ -195,6 +195,46 @@ class ImportValidationTest {
 		}
 	}
 
+		@Test
+		void rejectsMalformedAndDuplicateRecordUuidsWithoutChangingTheStore() throws Exception {
+			try (FileIncidentStore store = new FileIncidentStore(directory)) {
+				org.sarmanagement.icsforms.model.AppData existing = new AppData();
+				existing.getIncidentContext().setIncidentName("Existing incident");
+				IncidentId existingId = store.create(existing);
+				String actionId = "9baf0d0a-1767-46be-a23a-c14320b635df";
+				List<String> invalid = List.of(
+						"{\"id\":\"not-a-uuid\",\"actions\":\"Search\"}",
+						"{\"id\":\"" + actionId + "\",\"actions\":\"Search\"},"
+								+ "{\"id\":\"" + actionId + "\",\"actions\":\"Rescue\"}");
+				for (String actions : invalid) {
+					String json = "{\"schemaVersion\":" + AppData.CURRENT_SCHEMA_VERSION
+							+ ",\"incidentContext\":{\"incidentName\":\"Imported incident\"},"
+							+ "\"form201\":{\"currentActions\":[" + actions + "]}}";
+					Path source = write(json);
+					ImportValidationException failure = assertThrows(ImportValidationException.class,
+							() -> store.importFile(source));
+					assertTrue(failure.getProblems().stream().anyMatch(problem ->
+							problem.severity() == Severity.ERROR && problem.path().contains("currentActions")));
+					assertEquals(json, Files.readString(source));
+					assertEquals(List.of(existingId), store.list().stream().map(IncidentSummary::incidentId).toList());
+					assertEquals("Existing incident", store.load(existingId).getIncidentContext().getIncidentName());
+				}
+			}
+		}
+
+		@Test
+		void importDoesNotTreatLegacyAssignmentTextAsPersistentRecordIdentity() throws Exception {
+			Path source = write("{\"schemaVersion\":" + AppData.CURRENT_SCHEMA_VERSION
+					+ ",\"incidentContext\":{\"incidentName\":\"Imported incident\"},"
+					+ "\"activityLogs\":[{\"activityLog\":[{\"resourceIdentifier\":\"Legacy unit\","
+					+ "\"assignmentId\":\"legacy-assignment-label\",\"notableActivity\":\"Search began\"}]}]}");
+
+			AppData imported = FileIncidentStore.readImport(source).data();
+
+			assertEquals("legacy-assignment-label",
+					imported.getActivityLogs().get(0).getActivityLog().get(0).getAssignmentId());
+		}
+
 	@Test
 	void rejectsNullModelRecordsAtTheirExactIndexedPathsBeforeCreation() throws Exception {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {

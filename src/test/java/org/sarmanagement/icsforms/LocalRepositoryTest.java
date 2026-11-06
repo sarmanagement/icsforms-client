@@ -3,6 +3,8 @@
  */
 package org.sarmanagement.icsforms;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
@@ -105,6 +107,25 @@ class LocalRepositoryTest {
 		assertEquals(incidentId, restarted.getIncidentId());
 		assertEquals(actionId, restarted.getOpenActionItems().get(0).getId());
 		assertEquals(entryId, restarted.getActivityLogs().get(0).getActivityLog().get(0).getEntryId());
+	}
+
+	@Test
+	void savedWorkspaceRetainsUnknownRootAndNestedProperties() throws Exception {
+		Path directory = Files.createTempDirectory("icsforms-unknown-fields");
+		Path primary = directory.resolve("incident.json");
+		Files.writeString(primary, """
+				{"schemaVersion":5,"futureRoot":{"preserve":"root value"},
+				"form202":{"commandEmphasis":"Existing","futureNested":{"preserve":"nested value"}}}
+				""");
+		LocalRepository repository = new LocalRepository(primary);
+		AppData data = repository.loadOrDefault();
+		data.getIncidentContext().setIncidentName("Updated workspace");
+		repository.save(data);
+
+		JsonNode saved = new ObjectMapper().readTree(primary.toFile());
+		assertEquals("root value", saved.path("futureRoot").path("preserve").asText());
+		assertEquals("nested value", saved.path("form202").path("futureNested").path("preserve").asText());
+		assertEquals("Updated workspace", saved.path("incidentContext").path("incidentName").asText());
 	}
 
 	/**

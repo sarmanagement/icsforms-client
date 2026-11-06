@@ -271,7 +271,9 @@ public class FileIncidentStore implements IncidentStore {
 		data.normalizeIdentity();
 		Path temp = path.resolveSibling(path.getFileName() + ".tmp");
 		try {
-			MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), data);
+			StoredDocument current = readWithBackupDocument(path);
+			JsonNode updatedTree = mergeKnownProperties(current.tree(), MAPPER.valueToTree(data));
+			MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), updatedTree);
 			// Never replace a good backup with a corrupt primary document.
 			try {
 				MAPPER.readValue(path.toFile(), AppData.class);
@@ -664,6 +666,7 @@ public class FileIncidentStore implements IncidentStore {
 			}
 			MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), migrated);
 			move(temp, primary);
+			Files.copy(primary, backup(primary), StandardCopyOption.REPLACE_EXISTING);
 		} catch (IOException e) {
 			throw new IllegalStateException("Cannot persist incident identity migration: " + primary, e);
 		} finally {

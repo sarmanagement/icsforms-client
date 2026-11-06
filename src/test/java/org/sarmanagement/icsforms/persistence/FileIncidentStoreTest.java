@@ -3,6 +3,8 @@
  */
 package org.sarmanagement.icsforms.persistence;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 
@@ -126,7 +128,8 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		Files.createDirectories(directory);
 		Path document = directory.resolve(id.value() + ".json");
 		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
-			for (String version : List.of("\"" + (AppData.CURRENT_SCHEMA_VERSION + 1) + "\"", "\"future\"", "null")) {
+			for (String version : List.of("\"" + (AppData.CURRENT_SCHEMA_VERSION + 1) + "\"", "\"future\"", "null",
+					AppData.CURRENT_SCHEMA_VERSION + ".5")) {
 				String original = "{\"schemaVersion\":" + version + ",\"incidentId\":\"" + id.value()
 						+ "\",\"incidentContext\":{\"incidentName\":\"Retained\"}}";
 				Files.writeString(document, original);
@@ -135,6 +138,58 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 			}
 		}
 	}
+
+		@Test
+		void storedSaveRetainsUnknownRootAndNestedProperties() throws Exception {
+			IncidentId id = IncidentId.newId();
+			Path incidents = tempDir.resolve("incidents");
+			Files.createDirectories(incidents);
+			Path document = incidents.resolve(id.value() + ".json");
+			Files.writeString(document, """
+					{"schemaVersion":5,"revision":0,"incidentId":"%s",
+					"futureRoot":{"preserve":"root value"},
+					"form202":{"commandEmphasis":"Existing","futureNested":{"preserve":"nested value"}},
+					"openActionItems":[{"item":"Coordinate staging","futureRecord":"record value"}]}
+					""".formatted(id.value()));
+
+			try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+				AppData data = store.load(id);
+				data.getIncidentContext().setIncidentName("Updated incident");
+				store.save(id, data);
+			}
+
+			JsonNode saved = new ObjectMapper().readTree(document.toFile());
+			assertEquals("root value", saved.path("futureRoot").path("preserve").asText());
+			assertEquals("nested value", saved.path("form202").path("futureNested").path("preserve").asText());
+			assertEquals("record value", saved.path("openActionItems").get(0).path("futureRecord").asText());
+			assertEquals("Updated incident", saved.path("incidentContext").path("incidentName").asText());
+		}
+
+		@Test
+		void migratedIdentityBackupSupportsRepeatableRecovery() throws Exception {
+			IncidentId id = IncidentId.newId();
+			Path incidents = tempDir.resolve("incidents");
+			Files.createDirectories(incidents);
+			Path document = incidents.resolve(id.value() + ".json");
+			Path backup = document.resolveSibling(document.getFileName() + ".bak");
+			String legacy = "{\"schemaVersion\":5,\"revision\":0,\"form201\":{\"currentActions\":[{\"actions\":\"Search\"}]}}";
+			Files.writeString(document, legacy);
+			Files.writeString(backup, legacy);
+
+			String actionId;
+			try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+				actionId = store.load(id).getForm201().getCurrentActions().get(0).getId();
+				assertEquals(actionId, new ObjectMapper().readTree(backup.toFile())
+						.path("form201").path("currentActions").get(0).path("id").asText());
+			}
+
+			for (int attempt = 0; attempt < 2; attempt++) {
+				Files.writeString(document, "{corrupt");
+				try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+					assertEquals(actionId, store.load(id).getForm201().getCurrentActions().get(0).getId());
+				}
+			}
+		}
 
 	@Test
 	void legacyIdentityMigrationIsDurableAcrossLoadsAndRestarts() throws Exception {
