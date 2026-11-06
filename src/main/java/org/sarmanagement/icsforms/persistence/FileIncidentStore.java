@@ -634,10 +634,10 @@ public class FileIncidentStore implements IncidentStore {
 			return merged;
 		}
 		if (original != null && original.isArray() && updated.isArray()) {
-			ArrayNode merged = original.deepCopy();
+			ArrayNode merged = MAPPER.createArrayNode();
 			for (int index = 0; index < updated.size(); index++) {
 				if (index < original.size()) {
-					merged.set(index, mergeKnownProperties(original.get(index), updated.get(index)));
+					merged.add(mergeKnownProperties(original.get(index), updated.get(index)));
 				} else {
 					merged.add(updated.get(index).deepCopy());
 				}
