@@ -4,10 +4,14 @@
 package org.sarmanagement.icsforms.persistence;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
@@ -19,7 +23,9 @@ import org.sarmanagement.icsforms.persistence.ImportValidationException.Severity
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -99,6 +105,21 @@ class ImportValidationTest {
 					+ newer + " is newer than supported schema " + AppData.CURRENT_SCHEMA_VERSION
 					+ "; update icsforms-client")));
 		}
+	}
+
+	/**
+	 * Historical external documents without a schema remain supported with a diagnostic warning.
+	 */
+	@Test
+	void missingSchemaVersionRemainsImportableWithWarning() throws Exception {
+		Path source = write("{\"incidentContext\":{\"incidentName\":\"Legacy named incident\"},"
+				+ "\"form201\":{\"situationSummary\":\"Legacy content\"}}");
+
+		FileIncidentStore.ImportResult imported = FileIncidentStore.readImport(source);
+
+		assertEquals("Legacy named incident", imported.data().getIncidentContext().getIncidentName());
+		assertTrue(imported.problems().stream().anyMatch(problem -> problem.path().equals("$.schemaVersion")
+				&& problem.severity() == Severity.WARNING));
 	}
 
 	@Test
@@ -191,6 +212,121 @@ class ImportValidationTest {
 				assertTrue(failure.getProblems().stream().anyMatch(problem -> problem.path().contains("Id")
 						|| problem.path().endsWith(".id")));
 				assertTrue(store.list().isEmpty());
+			}
+		}
+	}
+
+	@Test
+	void rejectsMalformedAndDuplicateIdsForEveryAuditedRecordTypeWithoutChangingTheStore() throws Exception {
+			ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+			Set<Class<?>> expectedRecordTypes = new HashSet<>(IncidentDocumentReader.RECORD_IDENTITIES.keySet());
+			expectedRecordTypes.remove(org.sarmanagement.icsforms.model.IncidentResource.class);
+			try (FileIncidentStore store = new FileIncidentStore(directory)) {
+				IncidentId existingId = store.create(new AppData());
+				for (boolean duplicate : List.of(false, true)) {
+					ObjectNode document = mapper.valueToTree(new AppData());
+					document.put("schemaVersion", AppData.CURRENT_SCHEMA_VERSION);
+					document.with("incidentContext").put("incidentName", "Imported incident");
+					document.with("form201").put("situationSummary", "Imported content");
+					Set<Class<?>> coveredTypes = new HashSet<>();
+					Set<String> identityPaths = new HashSet<>();
+					Set<String> duplicatePaths = new HashSet<>();
+					addIdentityFixtures(document, mapper.constructType(AppData.class), "$", duplicate, !duplicate,
+							coveredTypes, identityPaths, duplicatePaths, mapper);
+
+					assertEquals(expectedRecordTypes, coveredTypes);
+					Path source = write(document.toString());
+					ImportValidationException failure = assertThrows(ImportValidationException.class,
+							() -> store.importFile(source));
+					if (duplicate) {
+						assertTrue(failure.getProblems().stream().filter(problem ->
+								problem.message().contains("duplicates another record"))
+								.map(Problem::path).collect(java.util.stream.Collectors.toSet())
+								.containsAll(duplicatePaths), duplicatePaths.toString());
+					} else {
+						Set<String> errorPaths = failure.getProblems().stream()
+								.filter(problem -> problem.severity() == Severity.ERROR).map(Problem::path)
+								.collect(java.util.stream.Collectors.toSet());
+						assertTrue(errorPaths.containsAll(identityPaths), identityPaths.toString());
+					}
+					assertEquals(List.of(existingId), store.list().stream().map(IncidentSummary::incidentId).toList());
+					assertTrue(Files.readString(source).equals(document.toString()));
+				}
+		}
+	}
+
+	/**
+	 * Populates all persistent record collections and assigns invalid or duplicate identity values.
+	 *
+	 * @param node JSON node being traversed
+	 * @param type declared Jackson type of the node
+	 * @param path JSON path for the node
+	 * @param duplicate whether collection records should share an identity
+	 * @param malformed whether identities should use invalid UUID values
+	 * @param coveredTypes model record types reached
+	 * @param identityPaths paths of fields assigned invalid identities
+	 * @param duplicatePaths paths expected to report duplicate collection identities
+	 * @param mapper mapper used for type introspection
+	 */
+	private void addIdentityFixtures(JsonNode node, JavaType type, String path, boolean duplicate, boolean malformed,
+			Set<Class<?>> coveredTypes, Set<String> identityPaths, Set<String> duplicatePaths, ObjectMapper mapper) {
+		if (type.isCollectionLikeType() && node.isArray()) {
+			ArrayNode array = (ArrayNode) node;
+			JavaType elementType = type.getContentType();
+			Set<String> identityFields = IncidentDocumentReader.RECORD_IDENTITIES.get(elementType.getRawClass());
+			if (array.isEmpty() && identityFields != null) {
+				int size = duplicate ? 2 : 1;
+				for (int index = 0; index < size; index++) {
+					array.add(mapper.createObjectNode());
+					if (duplicate && index == 1) {
+						for (String field : identityFields) {
+							duplicatePaths.add(path + "[" + index + "]." + field);
+						}
+					}
+				}
+			}
+			for (int index = 0; index < array.size(); index++) {
+				addIdentityFixtures(array.get(index), elementType, path + "[" + index + "]", duplicate, malformed,
+						coveredTypes, identityPaths, duplicatePaths, mapper);
+			}
+			return;
+		}
+		if (type.isMapLikeType() && node.isObject()) {
+			node.fields().forEachRemaining(entry -> addIdentityFixtures(entry.getValue(), type.getContentType(),
+					path + "." + entry.getKey(), duplicate, malformed, coveredTypes, identityPaths, duplicatePaths,
+					mapper));
+			return;
+		}
+		if (!node.isObject() || !type.getRawClass().getPackageName().startsWith("org.sarmanagement")) {
+			return;
+		}
+		ObjectNode object = (ObjectNode) node;
+		Set<String> identityFields = IncidentDocumentReader.RECORD_IDENTITIES.get(type.getRawClass());
+		if (identityFields != null) {
+			coveredTypes.add(type.getRawClass());
+			for (String field : identityFields) {
+				String identityPath = path + "." + field;
+				object.put(field, malformed ? "not-a-uuid" : "00000000-0000-4000-8000-000000000001");
+				if (malformed) {
+					identityPaths.add(identityPath);
+				}
+			}
+		}
+		for (BeanPropertyDefinition property : mapper.getDeserializationConfig().introspect(type).findProperties()) {
+			JavaType childType = property.getPrimaryType();
+			JsonNode child = object.get(property.getName());
+			if ((child == null || child.isNull()) && childType.isCollectionLikeType()
+					&& IncidentDocumentReader.RECORD_IDENTITIES.containsKey(childType.getContentType().getRawClass())) {
+				child = mapper.createArrayNode();
+				object.set(property.getName(), child);
+			} else if ((child == null || child.isNull())
+					&& IncidentDocumentReader.RECORD_IDENTITIES.containsKey(childType.getRawClass())) {
+				child = mapper.createObjectNode();
+				object.set(property.getName(), child);
+			}
+			if (child != null && property.couldDeserialize()) {
+				addIdentityFixtures(child, childType, path + "." + property.getName(), duplicate,
+						malformed, coveredTypes, identityPaths, duplicatePaths, mapper);
 			}
 		}
 	}

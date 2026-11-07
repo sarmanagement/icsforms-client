@@ -166,6 +166,72 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		}
 
 		@Test
+		void unknownPropertiesFollowStableIdsWhenRecordsAreDeletedInsertedAndReordered() throws Exception {
+			IncidentId id = IncidentId.newId();
+			Path incidents = tempDir.resolve("incidents");
+			Files.createDirectories(incidents);
+			Path document = incidents.resolve(id.value() + ".json");
+			String actionA = "00000000-0000-4000-8000-000000000001";
+			String actionB = "00000000-0000-4000-8000-000000000002";
+			String branchA = "00000000-0000-4000-8000-000000000003";
+			String branchB = "00000000-0000-4000-8000-000000000004";
+			String divisionA = "00000000-0000-4000-8000-000000000005";
+			String divisionB = "00000000-0000-4000-8000-000000000006";
+			Files.writeString(document, """
+					{"schemaVersion":5,"revision":0,"incidentId":"%s",
+					"form201":{"currentActions":[
+						{"id":"%s","actions":"Action A","futureAction":"A"},
+						{"id":"%s","actions":"Action B","futureAction":"B"}]},
+					"organizationalChart":{"assignmentList":{"branches":[
+						{"id":"%s","name":"Branch A","futureBranch":"A"},
+						{"id":"%s","name":"Branch B","futureBranch":"B","divisions":[
+							{"id":"%s","title":"Division A","futureDivision":"A"},
+							{"id":"%s","title":"Division B","futureDivision":"B"}]}]}}}
+					""".formatted(id.value(), actionA, actionB, branchA, branchB, divisionA, divisionB));
+
+			try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+				AppData data = store.load(id);
+				var actions = data.getForm201().getCurrentActions();
+				actions.removeIf(action -> actionA.equals(action.getId()));
+				org.sarmanagement.icsforms.model.Ics201Form.ActionEntry newAction =
+						new org.sarmanagement.icsforms.model.Ics201Form.ActionEntry();
+				newAction.setId("00000000-0000-4000-8000-000000000007");
+				newAction.setActions("Action C");
+				actions.add(newAction);
+				java.util.Collections.reverse(actions);
+
+				var branches = data.getOrganizationalChart().getAssignmentList().getBranches();
+				branches.removeIf(branch -> branchA.equals(branch.getId()));
+				var divisions = branches.get(0).getDivisions();
+				java.util.Collections.reverse(divisions);
+				org.sarmanagement.icsforms.model.OrgChartEntry newDivision =
+						new org.sarmanagement.icsforms.model.OrgChartEntry();
+				newDivision.setId("00000000-0000-4000-8000-000000000008");
+				newDivision.setTitle("Division C");
+				divisions.add(newDivision);
+				store.save(id, data);
+			}
+
+			JsonNode saved = new ObjectMapper().readTree(document.toFile());
+			JsonNode savedActions = saved.path("form201").path("currentActions");
+			assertEquals(2, savedActions.size());
+			assertEquals("00000000-0000-4000-8000-000000000007", savedActions.get(0).path("id").asText());
+			assertFalse(savedActions.get(0).has("futureAction"));
+			assertEquals("B", savedActions.get(1).path("futureAction").asText());
+			JsonNode savedBranches = saved.path("organizationalChart").path("assignmentList").path("branches");
+			assertEquals(1, savedBranches.size());
+			assertEquals(branchB, savedBranches.get(0).path("id").asText());
+			assertEquals("B", savedBranches.get(0).path("futureBranch").asText());
+			JsonNode savedDivisions = savedBranches.get(0).path("divisions");
+			assertEquals(3, savedDivisions.size());
+			assertEquals(divisionB, savedDivisions.get(0).path("id").asText());
+			assertEquals("B", savedDivisions.get(0).path("futureDivision").asText());
+			assertEquals(divisionA, savedDivisions.get(1).path("id").asText());
+			assertEquals("A", savedDivisions.get(1).path("futureDivision").asText());
+			assertFalse(savedDivisions.get(2).has("futureDivision"));
+		}
+
+		@Test
 		void migratedIdentityBackupSupportsRepeatableRecovery() throws Exception {
 			IncidentId id = IncidentId.newId();
 			Path incidents = tempDir.resolve("incidents");
@@ -190,6 +256,24 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 				}
 			}
 		}
+
+	@Test
+	void migrationRejectsAmbiguousLegacyRecordArraysWithUnknownProperties() throws Exception {
+		IncidentId id = IncidentId.newId();
+		Path incidents = tempDir.resolve("incidents");
+		Files.createDirectories(incidents);
+		Path document = incidents.resolve(id.value() + ".json");
+		String original = "{\"schemaVersion\":5,\"revision\":0,\"openActionItems\":["
+				+ "{\"item\":\"Same item\",\"future\":\"unknown A\"},"
+				+ "{\"item\":\"Same item\",\"future\":\"unknown B\"}]}";
+		Files.writeString(document, original);
+
+		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+			IllegalStateException failure = assertThrows(IllegalStateException.class, () -> store.load(id));
+			assertTrue(failure.getMessage().contains("without stable IDs"));
+			assertEquals(original, Files.readString(document));
+		}
+	}
 
 	@Test
 	void legacyIdentityMigrationIsDurableAcrossLoadsAndRestarts() throws Exception {

@@ -596,6 +596,16 @@ record ID rather than resolving records by duplicate display text, list position
 or object-reference equality; JTable row indices remain presentation mechanics
 only. Repeated-load/restart fixtures cover absent IDs across representative
 nested records and verify both legacy-link preservation and ambiguity handling.
+External imports without `schemaVersion` remain supported for historical
+compatibility and emit a warning directing users to re-export with the client;
+present malformed, null, fractional, or future versions are rejected. Persistent
+record UUID fields in the import identity registry are covered for malformed and
+duplicate values, while foreign-key and legacy display-text references are not
+treated as record identities. Stored JSON saves preserve unknown properties by
+stable ID when IDs exist. Legacy arrays without IDs are matched only by unique
+known record values; if unknown data cannot be associated uniquely, saving fails
+with a path-specific error instead of guessing by array position or transferring
+properties to a different record.
 
 Parallelism: T1 is done. P2 and P3 can proceed in parallel once
 P1 lands. T2 follows P3. P4 is last and is the gate for Stage 2.

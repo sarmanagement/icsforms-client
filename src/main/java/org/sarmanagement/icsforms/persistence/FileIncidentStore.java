@@ -7,8 +7,6 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.UtcTimestamp;
@@ -624,31 +622,7 @@ public class FileIncidentStore implements IncidentStore {
 	 * @return updated value retaining unknown original properties
 	 */
 	private JsonNode mergeKnownProperties(JsonNode original, JsonNode updated) {
-		if (original != null && original.isObject() && updated.isObject()) {
-			ObjectNode merged = original.deepCopy();
-			updated.fields().forEachRemaining(entry -> {
-				JsonNode previous = original.get(entry.getKey());
-				merged.set(entry.getKey(), previous == null ? entry.getValue().deepCopy()
-						: mergeKnownProperties(previous, entry.getValue()));
-			});
-			return merged;
-		}
-		if (original != null && original.isArray() && updated.isArray()) {
-			ArrayNode merged = MAPPER.createArrayNode();
-			for (int index = 0; index < updated.size(); index++) {
-				if (index < original.size()) {
-					merged.add(mergeKnownProperties(original.get(index), updated.get(index)));
-				} else {
-					merged.add(updated.get(index).deepCopy());
-				}
-			}
-			return merged;
-		}
-		if (original != null && original.isNumber() && updated.isNumber()
-				&& original.decimalValue().compareTo(updated.decimalValue()) == 0) {
-			return original.deepCopy();
-		}
-		return updated.deepCopy();
+		return StoredJsonMerger.merge(MAPPER, original, updated);
 	}
 
 	/**

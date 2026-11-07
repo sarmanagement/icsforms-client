@@ -128,6 +128,59 @@ class LocalRepositoryTest {
 		assertEquals("Updated workspace", saved.path("incidentContext").path("incidentName").asText());
 	}
 
+	@Test
+	void workspaceUnknownPropertiesFollowStableIdsWhenRecordsAreMutated() throws Exception {
+		Path directory = Files.createTempDirectory("icsforms-local-identity-merge");
+		Path primary = directory.resolve("incident.json");
+		String actionA = "00000000-0000-4000-8000-000000000011";
+		String actionB = "00000000-0000-4000-8000-000000000012";
+		String divisionA = "00000000-0000-4000-8000-000000000013";
+		String divisionB = "00000000-0000-4000-8000-000000000014";
+		Files.writeString(primary, """
+				{"schemaVersion":5,
+				"form201":{"currentActions":[
+					{"id":"%s","actions":"Action A","futureAction":"A"},
+					{"id":"%s","actions":"Action B","futureAction":"B"}]},
+				"organizationalChart":{"assignmentList":{"branches":[{"id":"00000000-0000-4000-8000-000000000015",
+					"name":"Branch","divisions":[
+						{"id":"%s","title":"Division A","futureDivision":"A"},
+						{"id":"%s","title":"Division B","futureDivision":"B"}]}]}}}
+				""".formatted(actionA, actionB, divisionA, divisionB));
+		LocalRepository repository = new LocalRepository(primary);
+		AppData data = repository.loadOrDefault();
+		var actions = data.getForm201().getCurrentActions();
+		actions.removeIf(action -> actionA.equals(action.getId()));
+		org.sarmanagement.icsforms.model.Ics201Form.ActionEntry added =
+				new org.sarmanagement.icsforms.model.Ics201Form.ActionEntry();
+		added.setId("00000000-0000-4000-8000-000000000016");
+		added.setActions("Action C");
+		actions.add(0, added);
+		var divisions = data.getOrganizationalChart().getAssignmentList().getBranches().get(0).getDivisions();
+		java.util.Collections.reverse(divisions);
+		org.sarmanagement.icsforms.model.OrgChartEntry newDivision =
+				new org.sarmanagement.icsforms.model.OrgChartEntry();
+		newDivision.setId("00000000-0000-4000-8000-000000000017");
+		newDivision.setTitle("Division C");
+		divisions.add(newDivision);
+		repository.save(data);
+
+		JsonNode saved = new ObjectMapper().readTree(primary.toFile());
+		JsonNode savedActions = saved.path("form201").path("currentActions");
+		assertEquals(2, savedActions.size());
+		assertEquals(added.getId(), savedActions.get(0).path("id").asText());
+		assertFalse(savedActions.get(0).has("futureAction"));
+		assertEquals(actionB, savedActions.get(1).path("id").asText());
+		assertEquals("B", savedActions.get(1).path("futureAction").asText());
+		JsonNode savedDivisions = saved.path("organizationalChart").path("assignmentList")
+				.path("branches").get(0).path("divisions");
+		assertEquals(3, savedDivisions.size());
+		assertEquals(divisionB, savedDivisions.get(0).path("id").asText());
+		assertEquals("B", savedDivisions.get(0).path("futureDivision").asText());
+		assertEquals(divisionA, savedDivisions.get(1).path("id").asText());
+		assertEquals("A", savedDivisions.get(1).path("futureDivision").asText());
+		assertFalse(savedDivisions.get(2).has("futureDivision"));
+	}
+
 	/**
 	 * Verifies that workspace JSON preserves schema version, shared context, and
 	 * linked assignment data.

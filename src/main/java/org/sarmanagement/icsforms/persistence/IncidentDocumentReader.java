@@ -84,7 +84,7 @@ final class IncidentDocumentReader {
 			"humanMedicalReview", "canineMedicalReview", "communicationsReview");
 	private static final Set<String> CHILD_IDENTITIES = Set.of("formId", "resourceId", "objectiveId", "assignmentId",
 			"taskId", "channelId", "entryId", "changeId", "resultId", "recordId", "logId", "worksheetId", "id");
-	private static final Map<Class<?>, Set<String>> RECORD_IDENTITIES = Map.ofEntries(
+	static final Map<Class<?>, Set<String>> RECORD_IDENTITIES = Map.ofEntries(
 			Map.entry(AppData.class, Set.of("incidentId")),
 			Map.entry(ActivityLogEntry.class, Set.of("entryId")),
 			Map.entry(ActivityLogEntry.EventTypeChange.class, Set.of("changeId")),
