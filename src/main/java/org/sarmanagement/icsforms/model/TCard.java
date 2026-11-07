@@ -167,6 +167,7 @@ public class TCard {
 	 * @param eventAt UTC instant when the event occurred.
 	 * @param provenance optional attribution for the event.
 	 */
+	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance) {
 		/**
 		 * Requires an event type and timestamp.

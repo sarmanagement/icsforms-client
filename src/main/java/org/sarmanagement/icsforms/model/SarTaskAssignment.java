@@ -5,6 +5,7 @@ package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -97,6 +98,7 @@ public class SarTaskAssignment {
 	 *
 	 * @return lifecycle changes in recorded order, never {@code null}.
 	 */
+	@JsonInclude(JsonInclude.Include.NON_EMPTY)
 	public List<LifecycleStatusChange> getLifecycleStatusChanges() {
 		if (lifecycleStatusChanges == null) {
 			lifecycleStatusChanges = new ArrayList<>();
@@ -136,6 +138,7 @@ public class SarTaskAssignment {
 	 * @param changedAt UTC instant when the change took effect.
 	 * @param provenance optional attribution for the change.
 	 */
+	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record LifecycleStatusChange(String previousStatus, String newStatus, Instant changedAt,
 			Provenance provenance) {
 		/**

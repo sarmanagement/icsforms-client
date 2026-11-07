@@ -35,6 +35,7 @@ public class ActivityLogEntry {
 	 *
 	 * @return entry provenance, or {@code null} for legacy or unattributed entries.
 	 */
+	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public Provenance getProvenance() {
 		return provenance;
 	}

@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -72,6 +73,10 @@ class ProvenanceTest {
 		assertNull(clue.getProvenance());
 		assertTrue(task.getLifecycleStatusChanges().isEmpty());
 		assertTrue(card.getCheckInOutEvents().isEmpty());
+		assertFalse(mapper.valueToTree(activity).has("provenance"));
+		assertFalse(mapper.valueToTree(clue).has("provenance"));
+		assertFalse(mapper.valueToTree(task).has("lifecycleStatusChanges"));
+		assertFalse(mapper.valueToTree(card).has("checkInOutEvents"));
 		assertEquals(LocalDateTime.of(2026, 11, 7, 10, 0), card.getCheckInDateTime());
 	}
 

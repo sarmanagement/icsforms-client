@@ -5,6 +5,7 @@ package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -56,6 +57,7 @@ public class ClueLogEntry {
 	 * Returns the optional attribution for this clue entry.
 	 * @return clue provenance, or {@code null} for legacy or unattributed entries
 	 */
+	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public Provenance getProvenance() {
 		return provenance;
 	}
