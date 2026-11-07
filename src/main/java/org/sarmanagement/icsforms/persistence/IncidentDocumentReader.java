@@ -19,9 +19,14 @@ import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
+import org.sarmanagement.icsforms.model.AircraftResource;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.CanineResource;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
+import org.sarmanagement.icsforms.model.CrewResource;
+import org.sarmanagement.icsforms.model.EquipmentResource;
+import org.sarmanagement.icsforms.model.GenericResource;
 import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics202ReportedResult;
 import org.sarmanagement.icsforms.model.Ics203Form;
@@ -35,6 +40,7 @@ import org.sarmanagement.icsforms.model.IncidentResource;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.OpenActionItem;
+import org.sarmanagement.icsforms.model.PersonnelResource;
 import org.sarmanagement.icsforms.model.PocAssignment;
 import org.sarmanagement.icsforms.model.PodFactorRating;
 import org.sarmanagement.icsforms.model.RadioChannel;
@@ -103,6 +109,12 @@ final class IncidentDocumentReader {
 			Map.entry(IncidentLocation.class, Set.of("id")),
 			Map.entry(IncidentObjective.class, Set.of("objectiveId")),
 			Map.entry(IncidentResource.class, Set.of("resourceId")),
+			Map.entry(PersonnelResource.class, Set.of("resourceId")),
+			Map.entry(CanineResource.class, Set.of("resourceId")),
+			Map.entry(CrewResource.class, Set.of("resourceId")),
+			Map.entry(EquipmentResource.class, Set.of("resourceId")),
+			Map.entry(AircraftResource.class, Set.of("resourceId")),
+			Map.entry(GenericResource.class, Set.of("resourceId")),
 			Map.entry(MedicalPlan.AidStation.class, Set.of("id")),
 			Map.entry(MedicalPlan.Hospital.class, Set.of("id")),
 			Map.entry(MedicalPlan.TransportService.class, Set.of("id")),

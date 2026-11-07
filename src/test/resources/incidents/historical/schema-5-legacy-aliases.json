@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 5,
+  "revision": 0,
+  "incidentId": "00000000-0000-4000-8000-000000000201",
+  "incidentContext": {
+    "incidentName": "Synthetic legacy alias exercise"
+  },
+  "organizationalChart": {
+    "safetyOfficerContact": "555-0100"
+  },
+  "sarTaskAssignments": [
+    {
+      "assignment": "North Ridge",
+      "specialInstructions": "Carry water"
+    }
+  ],
+  "tcards": [
+    {
+      "cardType": "AIRCRAFT",
+      "resourceIdentifier": "Synthetic aircraft"
+    },
+    {
+      "cardType": "DOZER",
+      "resourceIdentifier": "Synthetic equipment"
+    }
+  ],
+  "futureRoot": {
+    "source": "historical fixture"
+  }
+}

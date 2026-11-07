@@ -11,6 +11,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -329,6 +330,59 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		}
 	}
 
+	@Test
+	void historicalFixturesMigrateThroughStoredLoadsAndKeepUnknownData() throws Exception {
+		Path incidents = tempDir.resolve("incidents");
+		Files.createDirectories(incidents);
+		List<String> fixtureNames = List.of("schema-5-legacy-aliases.json", "schema-5-missing-identities.json");
+		for (String fixtureName : fixtureNames) {
+			String fixtureResource = "/incidents/historical/" + fixtureName;
+			Path source;
+			try (var fixture = getClass().getResourceAsStream(fixtureResource)) {
+				assertTrue(fixture != null, fixtureResource);
+				JsonNode original = new ObjectMapper().readTree(fixture);
+				IncidentId id = IncidentId.of(original.path("incidentId").asText());
+				source = incidents.resolve(id.value() + ".json");
+				try (var reopenedFixture = getClass().getResourceAsStream(fixtureResource)) {
+					assertTrue(reopenedFixture != null, fixtureResource);
+					Files.copy(reopenedFixture, source);
+				}
+			}
+
+			List<String> migratedIds;
+			try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+				AppData migrated = store.load(IncidentId.of(
+						new ObjectMapper().readTree(source.toFile()).path("incidentId").asText()));
+				migratedIds = migrationFixtureIds(migrated);
+				assertTrue(migratedIds.size() >= 2);
+				migratedIds.forEach(identity -> assertEquals(identity, UUID.fromString(identity).toString()));
+				if (fixtureName.equals("schema-5-legacy-aliases.json")) {
+					assertEquals("555-0100", migrated.getOrganizationalChart().getSafetyOfficerPhone());
+					assertEquals("Carry water", migrated.getSarTaskAssignments().get(0).getSpecialEquipment());
+					assertEquals("FIXED_WING", migrated.getTCards().get(0).getCardType().name());
+				} else {
+					assertEquals("Locate the subject",
+							migrated.getForm201().getCurrentActions().get(0).getActions());
+					assertEquals("Legacy team label",
+							migrated.getActivityLogs().get(0).getActivityLog().get(0).getResourceIdentifier());
+					JsonNode saved = new ObjectMapper().readTree(source.toFile());
+					assertEquals("historical fixture", saved.path("futureRoot").path("source").asText());
+					assertEquals("historical fixture", saved.path("form201").path("currentActions").get(0)
+							.path("futureAction").path("source").asText());
+					assertEquals("historical fixture", saved.path("activityLogs").get(0).path("activityLog").get(0)
+							.path("futureActivity").path("source").asText());
+				}
+				assertEquals(migratedIds, migrationFixtureIds(store.load(
+						IncidentId.of(migrated.getIncidentId()))));
+			}
+
+			try (FileIncidentStore restarted = new FileIncidentStore(tempDir)) {
+				assertEquals(migratedIds, migrationFixtureIds(restarted.load(
+						IncidentId.of(new ObjectMapper().readTree(source.toFile()).path("incidentId").asText()))));
+			}
+		}
+	}
+
 	/** A second store cannot acquire an incident's advisory lock. */
 	@Test
 	void anotherStoreDetectsLock() {
@@ -411,5 +465,25 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 				data.getActivityLogs().get(0).getActivityLog().get(0).getEntryId(),
 				data.getActivityLogs().get(0).getActivityLog().get(0).getAssignmentId(),
 				data.getActivityLogs().get(0).getActivityLog().get(0).getEventTypeChangeHistory().get(0).changeId());
+	}
+
+	/**
+	 * Collects IDs present in representative historical fixtures for repeatability checks.
+	 *
+	 * @param data migrated fixture incident
+	 * @return all identities exercised by the fixture
+	 */
+	private static List<String> migrationFixtureIds(AppData data) {
+		List<String> identities = new java.util.ArrayList<>();
+		identities.add(data.getIncidentId());
+		data.getForm201().getCurrentActions().forEach(record -> identities.add(record.getId()));
+		data.getSarTaskAssignments().forEach(record -> identities.add(record.getTaskId()));
+		data.getTCards().forEach(record -> identities.add(record.getResourceId()));
+		data.getOpenActionItems().forEach(record -> identities.add(record.getId()));
+		data.getActivityLogs().forEach(log -> {
+			identities.add(log.getLogId());
+			log.getActivityLog().forEach(record -> identities.add(record.getEntryId()));
+		});
+		return List.copyOf(identities);
 	}
 }

@@ -16,7 +16,41 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.sarmanagement.icsforms.model.ActivityLogEntry;
+import org.sarmanagement.icsforms.model.AircraftResource;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.CanineResource;
+import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.CommunicationEntry;
+import org.sarmanagement.icsforms.model.CrewResource;
+import org.sarmanagement.icsforms.model.EquipmentResource;
+import org.sarmanagement.icsforms.model.GenericResource;
+import org.sarmanagement.icsforms.model.Ics201Form;
+import org.sarmanagement.icsforms.model.Ics202ReportedResult;
+import org.sarmanagement.icsforms.model.Ics203Form;
+import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.Ics205Form;
+import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.Ics215Form;
+import org.sarmanagement.icsforms.model.IncidentLocation;
+import org.sarmanagement.icsforms.model.IncidentObjective;
+import org.sarmanagement.icsforms.model.IncidentResource;
+import org.sarmanagement.icsforms.model.MedicalPlan;
+import org.sarmanagement.icsforms.model.OpenActionItem;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
+import org.sarmanagement.icsforms.model.PersonnelResource;
+import org.sarmanagement.icsforms.model.PocAssignment;
+import org.sarmanagement.icsforms.model.PodFactorRating;
+import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SafetyAnalysisEntry;
+import org.sarmanagement.icsforms.model.SafetyHazardReport;
+import org.sarmanagement.icsforms.model.SafetyMessageBlock;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.VetDirectory;
+import org.sarmanagement.icsforms.model.VetFacility;
 import org.sarmanagement.icsforms.persistence.ImportValidationException.Problem;
 import org.sarmanagement.icsforms.persistence.ImportValidationException.Severity;
 
@@ -25,6 +59,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
@@ -34,6 +69,55 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Focused coverage for strict external JSON and tolerant stored-document compatibility. */
 class ImportValidationTest {
+	// IncidentResource and its concrete variants are not currently stored in AppData;
+	// TCard is the persisted resource record and is validated independently.
+	private static final Map<Class<?>, Set<String>> AUDITED_RECORD_IDENTITIES = Map.ofEntries(
+			Map.entry(AppData.class, Set.of("incidentId")),
+			Map.entry(ActivityLogEntry.class, Set.of("entryId")),
+			Map.entry(ActivityLogEntry.EventTypeChange.class, Set.of("changeId")),
+			Map.entry(ClueLogEntry.class, Set.of("entryId")),
+			Map.entry(CommunicationEntry.class, Set.of("id")),
+			Map.entry(Ics201Form.ActionEntry.class, Set.of("id")),
+			Map.entry(Ics201Form.ResourceSummaryEntry.class, Set.of("id")),
+			Map.entry(Ics202ReportedResult.class, Set.of("resultId")),
+			Map.entry(Ics203Form.Branch.class, Set.of("id")),
+			Map.entry(Ics204Form.class, Set.of("formId")),
+			Map.entry(Ics205Form.class, Set.of("formId")),
+			Map.entry(Ics214Form.class, Set.of("logId")),
+			Map.entry(Ics215Form.class, Set.of("worksheetId")),
+			Map.entry(Ics215Form.ResourceHeading.class, Set.of("id")),
+			Map.entry(Ics215Form.WorkRow.class, Set.of("id")),
+			Map.entry(IncidentLocation.class, Set.of("id")),
+			Map.entry(IncidentObjective.class, Set.of("objectiveId")),
+			Map.entry(IncidentResource.class, Set.of("resourceId")),
+			Map.entry(PersonnelResource.class, Set.of("resourceId")),
+			Map.entry(CanineResource.class, Set.of("resourceId")),
+			Map.entry(CrewResource.class, Set.of("resourceId")),
+			Map.entry(EquipmentResource.class, Set.of("resourceId")),
+			Map.entry(AircraftResource.class, Set.of("resourceId")),
+			Map.entry(GenericResource.class, Set.of("resourceId")),
+			Map.entry(MedicalPlan.AidStation.class, Set.of("id")),
+			Map.entry(MedicalPlan.Hospital.class, Set.of("id")),
+			Map.entry(MedicalPlan.TransportService.class, Set.of("id")),
+			Map.entry(OrgChartEntry.class, Set.of("id")),
+			Map.entry(OpenActionItem.class, Set.of("id")),
+			Map.entry(PocAssignment.class, Set.of("id")),
+			Map.entry(PodFactorRating.class, Set.of("id")),
+			Map.entry(RadioChannel.class, Set.of("channelId")),
+			Map.entry(ResourceAssignment.class, Set.of("assignmentId")),
+			Map.entry(SafetyAnalysisEntry.class, Set.of("entryId")),
+			Map.entry(SafetyHazardReport.class, Set.of("id")),
+			Map.entry(SafetyMessageBlock.class, Set.of("id")),
+			Map.entry(SarTaskAssignment.class, Set.of("taskId")),
+			Map.entry(SarTaskResource.class, Set.of("id")),
+			Map.entry(AppData.OperationalPeriodRecord.class, Set.of("recordId")),
+			Map.entry(VetDirectory.Source.class, Set.of("id")),
+			Map.entry(TCard.class, Set.of("resourceId")),
+			Map.entry(VetFacility.class, Set.of("id")));
+	private static final Set<Class<?>> MODEL_ONLY_POLYMORPHIC_RESOURCE_TYPES = Set.of(IncidentResource.class,
+			PersonnelResource.class, CanineResource.class, CrewResource.class, EquipmentResource.class,
+			AircraftResource.class, GenericResource.class);
+
 	@TempDir
 	Path directory;
 
@@ -219,8 +303,9 @@ class ImportValidationTest {
 	@Test
 	void rejectsMalformedAndDuplicateIdsForEveryAuditedRecordTypeWithoutChangingTheStore() throws Exception {
 			ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
-			Set<Class<?>> expectedRecordTypes = new HashSet<>(IncidentDocumentReader.RECORD_IDENTITIES.keySet());
-			expectedRecordTypes.remove(org.sarmanagement.icsforms.model.IncidentResource.class);
+			assertEquals(AUDITED_RECORD_IDENTITIES, IncidentDocumentReader.RECORD_IDENTITIES);
+			Set<Class<?>> expectedRecordTypes = new HashSet<>(AUDITED_RECORD_IDENTITIES.keySet());
+			expectedRecordTypes.removeAll(MODEL_ONLY_POLYMORPHIC_RESOURCE_TYPES);
 			try (FileIncidentStore store = new FileIncidentStore(directory)) {
 				IncidentId existingId = store.create(new AppData());
 				for (boolean duplicate : List.of(false, true)) {
@@ -255,6 +340,40 @@ class ImportValidationTest {
 		}
 	}
 
+	@Test
+	void recordIdentityUniquenessIsLimitedToEachContainingCollection() throws Exception {
+		String sharedFormId = "00000000-0000-4000-8000-000000000101";
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			String document = """
+					{"schemaVersion":%d,"incidentContext":{"incidentName":"Historical reuse"},
+					"form201":{"situationSummary":"Search underway"},
+					"form204":{"formId":"%s"},
+					"additionalForms204":[{"formId":"%s"}],
+					"operationalPeriodHistory":[{"recordId":"00000000-0000-4000-8000-000000000102",
+						"forms204":[{"formId":"%s"}]}]}
+					""".formatted(AppData.CURRENT_SCHEMA_VERSION, sharedFormId, sharedFormId, sharedFormId);
+			IncidentId id = store.importFile(write(document)).orElseThrow();
+			AppData imported = store.load(id);
+			assertEquals(sharedFormId, imported.getForm204().getFormId());
+			assertEquals(sharedFormId, imported.getAdditionalForms204().get(0).getFormId());
+			assertEquals(sharedFormId,
+					imported.getOperationalPeriodHistory().get(0).getForms204().get(0).getFormId());
+
+			String duplicate = """
+					{"schemaVersion":%d,"incidentContext":{"incidentName":"Duplicate forms"},
+					"form201":{"situationSummary":"Search underway"},
+					"additionalForms204":[{"formId":"%s"},{"formId":"%s"}]}
+					""".formatted(AppData.CURRENT_SCHEMA_VERSION, sharedFormId, sharedFormId);
+			Path source = write(duplicate);
+			ImportValidationException failure = assertThrows(ImportValidationException.class,
+					() -> store.importFile(source));
+			assertTrue(failure.getProblems().stream().anyMatch(problem ->
+					problem.path().equals("$.additionalForms204[1].formId")
+							&& problem.message().contains("duplicates another record")));
+			assertEquals(1, store.list().size());
+		}
+	}
+
 	/**
 	 * Populates all persistent record collections and assigns invalid or duplicate identity values.
 	 *
@@ -273,7 +392,7 @@ class ImportValidationTest {
 		if (type.isCollectionLikeType() && node.isArray()) {
 			ArrayNode array = (ArrayNode) node;
 			JavaType elementType = type.getContentType();
-			Set<String> identityFields = IncidentDocumentReader.RECORD_IDENTITIES.get(elementType.getRawClass());
+			Set<String> identityFields = AUDITED_RECORD_IDENTITIES.get(elementType.getRawClass());
 			if (array.isEmpty() && identityFields != null) {
 				int size = duplicate ? 2 : 1;
 				for (int index = 0; index < size; index++) {
@@ -301,7 +420,7 @@ class ImportValidationTest {
 			return;
 		}
 		ObjectNode object = (ObjectNode) node;
-		Set<String> identityFields = IncidentDocumentReader.RECORD_IDENTITIES.get(type.getRawClass());
+		Set<String> identityFields = AUDITED_RECORD_IDENTITIES.get(type.getRawClass());
 		if (identityFields != null) {
 			coveredTypes.add(type.getRawClass());
 			for (String field : identityFields) {
@@ -316,11 +435,11 @@ class ImportValidationTest {
 			JavaType childType = property.getPrimaryType();
 			JsonNode child = object.get(property.getName());
 			if ((child == null || child.isNull()) && childType.isCollectionLikeType()
-					&& IncidentDocumentReader.RECORD_IDENTITIES.containsKey(childType.getContentType().getRawClass())) {
+					&& AUDITED_RECORD_IDENTITIES.containsKey(childType.getContentType().getRawClass())) {
 				child = mapper.createArrayNode();
 				object.set(property.getName(), child);
 			} else if ((child == null || child.isNull())
-					&& IncidentDocumentReader.RECORD_IDENTITIES.containsKey(childType.getRawClass())) {
+					&& AUDITED_RECORD_IDENTITIES.containsKey(childType.getRawClass())) {
 				child = mapper.createObjectNode();
 				object.set(property.getName(), child);
 			}
