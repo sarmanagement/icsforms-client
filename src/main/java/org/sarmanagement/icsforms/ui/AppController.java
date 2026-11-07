@@ -32,9 +32,11 @@ import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
-import org.sarmanagement.icsforms.persistence.IncidentSummary;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
+import org.sarmanagement.icsforms.persistence.RevisionToken;
+import org.sarmanagement.icsforms.persistence.StoredIncident;
+import org.sarmanagement.icsforms.persistence.StoreLockConflictException;
 import org.sarmanagement.icsforms.persistence.ImportValidationException;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -77,6 +79,7 @@ public class AppController implements AutoCloseable {
 	private final IncidentStore store;
 	private List<ImportValidationException.Problem> lastImportProblems = List.of();
 	private IncidentId activeIncidentId;
+	private RevisionToken storedRevision;
 	private final PdfExportService exportService;
 	private final IncidentValidator validator;
 	private final Timer autosaveTimer;
@@ -227,6 +230,7 @@ public class AppController implements AutoCloseable {
 	public AppController(AppData data, IncidentStore store, IncidentId incidentId, PdfExportService exportService,
 			IncidentValidator validator) {
 		this(data, store, incidentId, null, exportService, validator);
+		storedRevision = store.revisionToken(this.data);
 		claimEditLock(incidentId);
 	}
 
@@ -244,6 +248,8 @@ public class AppController implements AutoCloseable {
 			PdfExportService exportService, IncidentValidator validator) {
 		this.data = data == null ? createDefaultData() : data;
 		ensureDefaults(this.data);
+		activeLinkSource = initialLinkSource(this.data);
+		synchronizeLinkedFields(activeLinkSource);
 		this.data.reconcileMedicalUnitLeaderAssignment();
 		this.repository = repository;
 		this.store = store;
@@ -271,8 +277,7 @@ public class AppController implements AutoCloseable {
 		if (store == null) {
 			return repository.getFilePath();
 		}
-		return store.list().stream().filter(summary -> summary.incidentId().equals(activeIncidentId))
-				.map(IncidentSummary::path).findFirst().orElse(null);
+		return store.localFile(activeIncidentId).orElse(null);
 	}
 
 	/**
@@ -733,20 +738,41 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
-	 * Replaces the active document and synchronizes linked defaults.
+	 * Replaces the active document and synchronizes linked defaults. A preparation
+	 * failure retains the previous active document and editor state.
 	 *
 	 * @param data
 	 *            new active document.
 	 */
 	public void setData(AppData data) {
-		this.data = data == null ? createDefaultData() : data;
-		ensureDefaults(this.data);
-		syncSarTasks();
+		AppData replacement = data == null ? createDefaultData() : data;
+		prepareDocument(replacement);
+		this.data = replacement;
 		dirty = false;
 		activeLinkSource = LinkSource.NONE;
 		incidentGeneration++;
 		modelRevision++;
 		publishIncidentChange(IncidentChangeKind.INCIDENT_REPLACED);
+	}
+
+	/**
+	 * Prepares defaults and linked fields on a candidate without changing active state.
+	 *
+	 * @param replacement candidate incident document.
+	 */
+	private void prepareDocument(AppData replacement) {
+		AppData previous = this.data;
+		LinkSource previousSource = activeLinkSource;
+		try {
+			this.data = replacement;
+			ensureDefaults(replacement);
+			activeLinkSource = initialLinkSource(replacement);
+			synchronizeLinkedFields(activeLinkSource);
+			syncSarTasks();
+		} finally {
+			this.data = previous;
+			activeLinkSource = previousSource;
+		}
 	}
 
 	/**
@@ -802,7 +828,7 @@ public class AppController implements AutoCloseable {
 
 	/**
 	 * Stops autosave, invalidates pending incident callbacks, releases listeners, and
-	 * relinquishes any file-store edit lock. Closing does not save or discard dirty
+	 * relinquishes an advisory edit lock only while it is still owned. Closing does not save or discard dirty
 	 * data; callers should inspect {@link #hasUnsavedChanges()} before closing.
 	 *
 	 * <p>This method is safe to call from any thread and is idempotent.</p>
@@ -838,8 +864,12 @@ public class AppController implements AutoCloseable {
 			incidentChangeDeliveryScheduled = false;
 		}
 		incidentChangeListeners.clear();
-		if (store instanceof FileIncidentStore fileStore && activeIncidentId != null) {
-			fileStore.unlock(activeIncidentId);
+		if (store != null && activeIncidentId != null) {
+			store.editLocks().ifPresent(locks -> {
+				if (locks.isHeldByCaller(activeIncidentId)) {
+					locks.unlock(activeIncidentId);
+				}
+			});
 		}
 	}
 
@@ -1012,6 +1042,7 @@ public class AppController implements AutoCloseable {
 	 *
 	 * @param source
 	 *            source tab for linked role values.
+	 * @throws RuntimeException when persistence fails, retaining unsaved edits.
 	 */
 	public void save(LinkSource source) {
 		synchronizeLinkedFields(source);
@@ -1020,11 +1051,11 @@ public class AppController implements AutoCloseable {
 			repository.save(data);
 		} else {
 			try {
-				store.save(activeIncidentId, data);
-			} catch (StoreConflictException conflict) {
+				storedRevision = store.save(activeIncidentId, data, storedRevision);
+			} catch (RuntimeException failure) {
 				dirty = true;
 				autosaveTimer.stop();
-				throw conflict;
+				throw failure;
 			}
 		}
 		dirty = false;
@@ -1123,17 +1154,11 @@ public class AppController implements AutoCloseable {
 			throw new IllegalStateException("Cannot duplicate incident data", exception);
 		}
 		copy.setIncidentId(IncidentId.newId().value());
-		copy.setRevision(0);
 		copy.setCreatedAt(null);
 		copy.setUpdatedAt(null);
 		copy.setOriginNodeId(null);
 		IncidentId duplicate = store.create(copy);
-		claimEditLock(duplicate);
-		IncidentId previousId = activeIncidentId;
-		setData(copy);
-		activeIncidentId = duplicate;
-		autosaveTimer.stop();
-		releasePreviousLock(previousId);
+		activateCreatedIncident(duplicate, copy);
 		return duplicate;
 	}
 
@@ -1144,46 +1169,91 @@ public class AppController implements AutoCloseable {
 	 */
 	public void open(IncidentId incidentId) {
 		IncidentId previousId = activeIncidentId;
-		claimEditLock(incidentId);
-		AppData loaded;
+		boolean acquired = claimEditLock(incidentId);
+		StoredIncident loaded;
 		try {
-			loaded = store.load(incidentId);
+			loaded = store.loadSnapshot(incidentId);
+			setData(loaded.data());
 		} catch (RuntimeException exception) {
-			if (!incidentId.equals(previousId) && store instanceof FileIncidentStore fileStore) {
-				fileStore.unlock(incidentId);
+			if (acquired) {
+				releaseFailedSwitchLock(incidentId, exception);
 			}
 			throw exception;
 		}
 		autosaveTimer.stop();
-		setData(loaded);
 		activeIncidentId = incidentId;
+		storedRevision = loaded.revision();
 		releasePreviousLock(previousId);
 	}
 
 	/**
-	 * Releases the prior file-store lock only after an incident switch succeeds.
+	 * Releases the prior advisory lock only after an incident switch succeeds.
 	 *
 	 * @param previousId formerly active incident identifier.
 	 */
 	private void releasePreviousLock(IncidentId previousId) {
-		if (previousId != null && !previousId.equals(activeIncidentId)
-				&& store instanceof FileIncidentStore fileStore) {
-			fileStore.unlock(previousId);
+		if (previousId != null && !previousId.equals(activeIncidentId)) {
+			store.editLocks().ifPresent(locks -> locks.unlock(previousId));
 		}
 	}
 
 	/**
-	 * Acquires a file-store advisory lock before the incident can be edited.
-	 * Other store implementations manage their own concurrency.
+	 * Acquires an advisory lock when offered; lock-less stores remain editable.
 	 *
 	 * @param incidentId identifier to edit.
-	 * @throws StoreConflictException when another editor already owns the file lock.
+	 * @return whether this call acquired a new advisory lock.
+	 * @throws StoreConflictException when another editor already owns an advisory lock.
 	 */
-	private void claimEditLock(IncidentId incidentId) {
-		if (store instanceof FileIncidentStore fileStore && incidentId != null
-				&& (fileStore.isLockedElsewhere(incidentId) || !fileStore.lock(incidentId))) {
-			throw new StoreConflictException("Incident is open in another window: " + incidentId.value());
+	private boolean claimEditLock(IncidentId incidentId) {
+		if (store != null && incidentId != null) {
+			return store.editLocks().map(locks -> {
+				boolean alreadyOwned = locks.isHeldByCaller(incidentId);
+				if (locks.isLockedElsewhere(incidentId) || !locks.lock(incidentId)) {
+					throw new StoreLockConflictException("Incident is open in another window: " + incidentId.value());
+				}
+				return !alreadyOwned;
+			}).orElse(false);
 		}
+		return false;
+	}
+
+	/**
+	 * Releases only the candidate incident's resource after a failed switch.
+	 *
+	 * @param incidentId candidate incident.
+	 * @param failure original failure, retaining any cleanup failure as suppressed.
+	 */
+	private void releaseFailedSwitchLock(IncidentId incidentId, RuntimeException failure) {
+		try {
+			store.editLocks().ifPresent(locks -> locks.unlock(incidentId));
+		} catch (RuntimeException cleanupFailure) {
+			failure.addSuppressed(cleanupFailure);
+		}
+	}
+
+	/**
+	 * Activates caller-owned newly created content only after acquiring its resources.
+	 *
+	 * @param incidentId created identity.
+	 * @param created newly persisted document.
+	 */
+	private void activateCreatedIncident(IncidentId incidentId, AppData created) {
+		RevisionToken revision;
+		boolean acquired = claimEditLock(incidentId);
+		try {
+			revision = store.revisionToken(created);
+			setData(created);
+		} catch (RuntimeException failure) {
+			if (acquired) {
+				releaseFailedSwitchLock(incidentId, failure);
+			}
+			throw failure;
+		}
+		IncidentId previousId = activeIncidentId;
+		autosaveTimer.stop();
+		activeIncidentId = incidentId;
+		storedRevision = revision;
+		releasePreviousLock(previousId);
 	}
 
 	/**
@@ -1242,15 +1312,10 @@ public class AppController implements AutoCloseable {
 	 * @param created new incident with its phase, mode, and preferences configured.
 	 */
 	public void createNewIncident(AppData created) {
-		ensureDefaults(created);
+		prepareDocument(created);
 		if (store != null) {
 			IncidentId id = store.create(created);
-			claimEditLock(id);
-			IncidentId previousId = activeIncidentId;
-			autosaveTimer.stop();
-			setData(created);
-			activeIncidentId = id;
-			releasePreviousLock(previousId);
+			activateCreatedIncident(id, created);
 		} else {
 			setData(created);
 			markDirty();
@@ -1291,6 +1356,8 @@ public class AppController implements AutoCloseable {
 	public void newOperationalPeriod(boolean bringForwardCommunicationsPlan, boolean promotePlannedIcs215) {
 		data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan, promotePlannedIcs215);
 		ensureDefaults(data);
+		activeLinkSource = initialLinkSource(data);
+		synchronizeLinkedFields(activeLinkSource);
 		syncSarTasks();
 		dirty = true;
 		activeLinkSource = LinkSource.NONE;
@@ -3496,8 +3563,6 @@ public class AppController implements AutoCloseable {
 		if (data.getSchemaVersion() < AppData.CURRENT_SCHEMA_VERSION) {
 			data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
 		}
-		activeLinkSource = initialLinkSource(data);
-		synchronizeLinkedFields(activeLinkSource);
 	}
 
 	/**

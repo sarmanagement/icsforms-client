@@ -13,7 +13,6 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,27 +22,32 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** File-specific behavior of the multi-incident store. */
 class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
+	/** {@inheritDoc} */
 	@Override
 	protected IncidentStore createStore(Path directory) {
 		return new ControllableIncidentStore(directory);
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	protected boolean lock(IncidentStore store, IncidentId id) {
 		return ((ControllableIncidentStore) store).lock(id);
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	protected void unlock(IncidentStore store, IncidentId id) {
 		((ControllableIncidentStore) store).unlock(id);
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	protected void failNextSave(IncidentStore store) {
 		((ControllableIncidentStore) store).failNext(ControllableIncidentStore.Operation.SAVE,
 				new IllegalStateException("Scheduled save failure"));
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	protected void failNextDelete(IncidentStore store) {
 		((ControllableIncidentStore) store).failNext(ControllableIncidentStore.Operation.DELETE,
@@ -80,7 +84,7 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
 			assertEquals(1, store.list().size());
 			assertEquals(AppData.CURRENT_SCHEMA_VERSION, store.load(store.list().get(0).incidentId()).getSchemaVersion());
-			assertEquals(0, store.list().get(0).revision());
+			assertEquals(new RevisionToken("0"), store.list().get(0).revision());
 			assertTrue(Files.exists(tempDir.resolve("incident.json.migrated")));
 			assertEquals("{\"schemaVersion\":5}", Files.readString(tempDir.resolve("incident.json")));
 		}
@@ -162,7 +166,7 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		Files.writeString(document, original);
 
 		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
-			assertThrows(IllegalStateException.class, () -> store.load(id));
+			assertThrows(StoreValidationException.class, () -> store.load(id));
 			assertEquals(original, Files.readString(document));
 		}
 	}
@@ -179,7 +183,7 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 				String original = "{\"schemaVersion\":" + version + ",\"incidentId\":\"" + id.value()
 						+ "\",\"incidentContext\":{\"incidentName\":\"Retained\"}}";
 				Files.writeString(document, original);
-				assertThrows(IllegalStateException.class, () -> store.load(id), version);
+				assertThrows(StoreValidationException.class, () -> store.load(id), version);
 				assertEquals(original, Files.readString(document));
 			}
 		}

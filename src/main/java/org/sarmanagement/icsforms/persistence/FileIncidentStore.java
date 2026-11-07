@@ -7,11 +7,14 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import java.io.IOException;
+import java.lang.reflect.Modifier;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
@@ -27,14 +30,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.IdentityHashMap;
+import java.util.Objects;
 import java.util.logging.Logger;
 
 /** File-backed incident store with independent JSON documents and backups. */
-public class FileIncidentStore implements IncidentStore {
+public class FileIncidentStore implements IncidentStore, EditLockSupport {
 	private static final Logger LOGGER = Logger.getLogger(FileIncidentStore.class.getName());
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 			.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+	private static final ObjectMapper COPIER = MAPPER.copy()
+			.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE)
+			.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
 
 	/**
 	 * A validated stored document and its original JSON tree.
@@ -51,6 +59,8 @@ public class FileIncidentStore implements IncidentStore {
 	private final String nodeId;
 	private final Map<IncidentId, FileChannel> channels = new HashMap<>();
 	private final Map<IncidentId, FileLock> locks = new HashMap<>();
+	private final Map<IncidentId, RevisionToken> observed = new HashMap<>();
+	private boolean closed;
 	private List<ImportValidationException.Problem> lastImportProblems = List.of();
 
 	/**
@@ -101,7 +111,7 @@ public class FileIncidentStore implements IncidentStore {
 			IncidentId.of(nodeId);
 			migrateLegacy();
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot open incident store at " + root, e);
+			throw new StoreUnavailableException("Cannot open incident store at " + root, e);
 		}
 	}
 
@@ -113,6 +123,7 @@ public class FileIncidentStore implements IncidentStore {
 	 * @return true when another process or store has the lock.
 	 */
 	public synchronized boolean isLockedElsewhere(IncidentId id) {
+		ensureOpen();
 		if (locks.containsKey(id)) {
 			return false;
 		}
@@ -124,18 +135,20 @@ public class FileIncidentStore implements IncidentStore {
 		} catch (OverlappingFileLockException e) {
 			return true;
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot check incident lock: " + id, e);
+			throw new StorePersistenceException("Cannot check incident lock: " + id, e);
 		}
 	}
 
 	/**
-	 * Acquires the advisory lock for editing an incident.
+	 * Acquires the advisory lock for editing an incident. Failed acquisition closes
+	 * the newly opened channel without releasing any preexisting lock.
 	 *
 	 * @param id
 	 *            incident identifier.
 	 * @return true when this store owns the lock.
 	 */
 	public synchronized boolean lock(IncidentId id) {
+		ensureOpen();
 		if (locks.containsKey(id)) {
 			return true;
 		}
@@ -148,6 +161,13 @@ public class FileIncidentStore implements IncidentStore {
 				lock = channel.tryLock();
 			} catch (OverlappingFileLockException e) {
 				lock = null;
+			} catch (IOException | RuntimeException | Error failure) {
+				try {
+					channel.close();
+				} catch (IOException | RuntimeException | Error cleanupFailure) {
+					failure.addSuppressed(cleanupFailure);
+				}
+				throw failure;
 			}
 			if (lock == null) {
 				channel.close();
@@ -157,7 +177,7 @@ public class FileIncidentStore implements IncidentStore {
 			locks.put(id, lock);
 			return true;
 		} catch (IOException e) {
-			throw new IllegalStateException(
+			throw new StorePersistenceException(
 					"Cannot lock incident: " + id + " at " + lockPath + ": " + e.getMessage(), e);
 		}
 	}
@@ -171,43 +191,69 @@ public class FileIncidentStore implements IncidentStore {
 	public synchronized void unlock(IncidentId id) {
 		FileLock lock = locks.remove(id);
 		FileChannel channel = channels.remove(id);
+		IOException failure = null;
 		try {
 			if (lock != null) {
 				lock.release();
 			}
+		} catch (IOException e) {
+			failure = e;
+		}
+		try {
 			if (channel != null) {
 				channel.close();
 			}
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot release incident lock: " + id, e);
+			if (failure == null) {
+				failure = e;
+			} else {
+				failure.addSuppressed(e);
+			}
+		}
+		if (failure != null) {
+			throw new StorePersistenceException("Cannot release incident lock: " + id, failure);
 		}
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public synchronized IncidentId create(AppData data) {
-		IncidentId id = data.getIncidentId() == null ? IncidentId.newId() : IncidentId.of(data.getIncidentId());
+		ensureOpen();
+		AppData candidate = copy(data);
+		IncidentId id;
+		try {
+			id = candidate.getIncidentId() == null ? IncidentId.newId() : IncidentId.of(candidate.getIncidentId());
+		} catch (IllegalArgumentException e) {
+			throw new StoreValidationException("Invalid incident identity", e);
+		}
 		Path path = path(id);
 		boolean created = false;
 		try {
-			if (Files.exists(path.resolveSibling(path.getFileName() + ".deleted"))) {
-				throw new IllegalStateException("Incident identifier was previously deleted: " + id);
+			if (Files.exists(path) || Files.exists(path.resolveSibling(path.getFileName() + ".deleted"))) {
+				throw new DuplicateIncidentException("Incident identifier already exists or was deleted: " + id);
 			}
+			candidate.setIncidentId(id.value());
+			candidate.setRevision(0);
+			candidate.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
+			if (candidate.getCreatedAt() == null) {
+				candidate.setCreatedAt(UtcTimestamp.nowInstant());
+			}
+			candidate.setUpdatedAt(candidate.getCreatedAt());
+			if (candidate.getOriginNodeId() == null || candidate.getOriginNodeId().isBlank()) {
+				candidate.setOriginNodeId(nodeId);
+			}
+			normalize(candidate);
+			JsonNode prepared = MAPPER.valueToTree(candidate);
+			validateReconciliation(data, candidate, new IdentityHashMap<>());
 			try (var output = Files.newOutputStream(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
 				created = true;
-				data.setIncidentId(id.value());
-				data.setRevision(0);
-				data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
-				if (data.getCreatedAt() == null) {
-					data.setCreatedAt(UtcTimestamp.nowInstant());
-				}
-				data.setUpdatedAt(data.getCreatedAt());
-				if (data.getOriginNodeId() == null || data.getOriginNodeId().isBlank()) {
-					data.setOriginNodeId(nodeId);
-				}
-				data.normalizeIdentity();
-				MAPPER.writerWithDefaultPrettyPrinter().writeValue(output, data);
+				MAPPER.writerWithDefaultPrettyPrinter().writeValue(output, prepared);
 			}
+			applyMetadata(data, candidate);
+			observed.put(id, revision(candidate));
 			return id;
+		} catch (java.nio.file.FileAlreadyExistsException e) {
+			throw new DuplicateIncidentException("Incident identifier already exists: " + id);
 		} catch (IOException e) {
 			if (created) {
 				try {
@@ -216,22 +262,37 @@ public class FileIncidentStore implements IncidentStore {
 					e.addSuppressed(cleanupFailure);
 				}
 			}
-			throw new IllegalStateException("Cannot create incident: " + id, e);
+			throw new StorePersistenceException("Cannot create incident: " + id, e);
 		}
 	}
 
+	/** {@inheritDoc} */
+	@Deprecated
 	@Override
 	public synchronized AppData load(IncidentId id) {
+		AppData data = loadDocument(id);
+		observed.put(id, revision(data));
+		return data;
+	}
+
+	/**
+	 * Loads and migrates without advancing the legacy caller's last observed revision.
+	 *
+	 * @param id incident identity
+	 * @return detached incident
+	 */
+	private AppData loadDocument(IncidentId id) {
+		ensureOpen();
 		Path path = path(id);
 		if (!Files.exists(path)) {
-			throw new IllegalArgumentException("Incident not found: " + id);
+			throw new IncidentNotFoundException("Incident not found: " + id);
 		}
 		StoredDocument stored = readWithBackupDocument(path);
 		JsonNode migrated = prepareMigration(stored, id);
 		if (!stored.tree().equals(migrated)) {
 			boolean alreadyOwned = locks.containsKey(id);
 			if (!lock(id)) {
-				throw new StoreConflictException("Incident is open in another window: " + id);
+				throw new StoreLockConflictException("Incident is open in another window: " + id);
 			}
 			try {
 				stored = readWithBackupDocument(path);
@@ -248,68 +309,115 @@ public class FileIncidentStore implements IncidentStore {
 		return stored.data();
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public synchronized StoredIncident loadSnapshot(IncidentId id) {
+		AppData data = load(id);
+		return new StoredIncident(data, revision(data));
+	}
+
+	/** {@inheritDoc} */
+	@Deprecated
 	@Override
 	public synchronized void save(IncidentId id, AppData data) {
-		if (!id.value().equals(data.getIncidentId())) {
-			throw new IllegalArgumentException("Incident identifier does not match save target");
+		save(id, data, revision(data));
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public synchronized RevisionToken save(IncidentId id, AppData data, RevisionToken expected) {
+		ensureOpen();
+		AppData candidate = copy(data);
+		if (!id.value().equals(candidate.getIncidentId()) || expected == null) {
+			throw new StoreValidationException("Incident identity or expected revision is invalid");
 		}
+		boolean alreadyOwned = locks.containsKey(id);
 		if (!lock(id)) {
-			throw new StoreConflictException("Incident is open in another window: " + id);
+			throw new StoreLockConflictException("Incident is open in another window: " + id);
 		}
 		Path path = path(id);
-		AppData stored = load(id);
-		if (stored.getRevision() != data.getRevision()) {
-			throw new StoreConflictException("Incident was modified elsewhere: " + id);
-		}
-		long revision = data.getRevision();
-		Instant updated = data.getUpdatedAt();
 		Path temp = path.resolveSibling(path.getFileName() + ".tmp");
-		boolean committed = false;
+		Throwable failure = null;
 		try {
-			data.setRevision(revision + 1);
-			data.setUpdatedAt(UtcTimestamp.nowInstant());
-			data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
-			data.normalizeIdentity();
-			StoredDocument current = readWithBackupDocument(path);
-			JsonNode updatedTree = mergeKnownProperties(current.tree(), MAPPER.valueToTree(data));
+			AppData stored = loadDocument(id);
+			RevisionToken current = revision(stored);
+			if (!current.equals(expected)) {
+				throw new StoreConflictException("Incident was modified elsewhere: " + id, expected, current);
+			}
+			if (stored.getRevision() == Long.MAX_VALUE) {
+				throw new StorePersistenceException("File revision range is exhausted",
+						new ArithmeticException("Revision counter overflow"));
+			}
+			candidate.setRevision(stored.getRevision() + 1);
+			candidate.setUpdatedAt(UtcTimestamp.nowInstant());
+			candidate.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
+			normalize(candidate);
+			StoredDocument source = readWithBackupDocument(path);
+			JsonNode prepared = MAPPER.valueToTree(candidate);
+			validateReconciliation(data, candidate, new IdentityHashMap<>());
+			JsonNode updatedTree = mergeKnownProperties(source.tree(), prepared);
 			MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), updatedTree);
 			// Never replace a good backup with a corrupt primary document.
+			boolean readable = true;
 			try {
-				MAPPER.readValue(path.toFile(), AppData.class);
-				Files.copy(path, backup(path), StandardCopyOption.REPLACE_EXISTING);
+				readDocument(path);
 			} catch (IOException corruptPrimary) {
+				readable = false;
 				LOGGER.warning("Keeping previous backup for corrupt incident: " + path);
 			}
-			move(temp, path);
-			committed = true;
-		} catch (IOException e) {
-			throw new IllegalStateException("Cannot save incident: " + id, e);
-		} finally {
-			if (!committed) {
-				restoreSaveMetadata(data, revision, updated);
+			if (readable) {
+				Files.copy(path, backup(path), StandardCopyOption.REPLACE_EXISTING);
 			}
+			move(temp, path);
+			applyMetadata(data, candidate);
+			RevisionToken committed = revision(candidate);
+			observed.put(id, committed);
+			return committed;
+		} catch (IOException e) {
+			StorePersistenceException persistenceFailure = new StorePersistenceException("Cannot save incident: " + id, e);
+			failure = persistenceFailure;
+			throw persistenceFailure;
+		} catch (RuntimeException e) {
+			RuntimeException typed = e;
+			if (!(e instanceof StoreConflictException || e instanceof StoreValidationException
+					|| e instanceof IncidentNotFoundException || e instanceof StorePersistenceException
+					|| e instanceof StoreUnavailableException || e instanceof DuplicateIncidentException)) {
+				typed = new StorePersistenceException("Cannot save incident: " + id + ": " + e.getMessage(), e);
+			}
+			failure = typed;
+			throw typed;
+		} catch (Error e) {
+			failure = e;
+			throw e;
+		} finally {
 			try {
 				Files.deleteIfExists(temp);
-			} catch (IOException e) {
-				LOGGER.warning("Cannot remove temporary incident file: " + temp);
+			} catch (IOException | RuntimeException e) {
+				if (failure != null) {
+					failure.addSuppressed(e);
+				} else {
+					LOGGER.warning("Cannot remove temporary incident file: " + temp + ": " + e.getMessage());
+				}
+			}
+			if (!alreadyOwned) {
+				try {
+					unlock(id);
+				} catch (RuntimeException cleanupFailure) {
+					if (failure != null) {
+						failure.addSuppressed(cleanupFailure);
+					} else {
+						LOGGER.warning("Cannot release transient incident lock after save: " + id
+								+ ": " + cleanupFailure.getMessage());
+					}
+				}
 			}
 		}
 	}
 
-	/**
-	 * Restores caller-owned metadata when a save fails before replacing the stored document.
-	 *
-	 * @param data caller's incident document
-	 * @param revision original revision
-	 * @param updated original update timestamp
-	 */
-	private void restoreSaveMetadata(AppData data, long revision, Instant updated) {
-		data.setRevision(revision);
-		data.setUpdatedAt(updated);
-	}
-
+	/** {@inheritDoc} */
 	@Override
-	public List<IncidentSummary> list() {
+	public synchronized List<IncidentSummary> list() {
+		ensureOpen();
 		List<IncidentSummary> results = new ArrayList<>();
 		try (var files = Files.list(incidents)) {
 			files.filter(p -> p.getFileName().toString().endsWith(".json")).forEach(p -> {
@@ -319,40 +427,72 @@ public class FileIncidentStore implements IncidentStore {
 					Instant modified = data.getUpdatedAt() == null
 							? Files.getLastModifiedTime(p).toInstant()
 							: data.getUpdatedAt();
-					results.add(new IncidentSummary(p, data.getIncidentContext().getIncidentName(),
+					results.add(new IncidentSummary(p.toString(), data.getIncidentContext().getIncidentName(),
 							data.getIapPhase(), modified, id, data.getForm201().getIncidentNumber(),
-							data.getRevision(), root.toString()));
+							revision(data)));
 				} catch (RuntimeException | IOException e) {
 					LOGGER.warning("Skipping unreadable incident " + p + ": " + e.getMessage());
 				}
 			});
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot list incidents", e);
+			throw new StorePersistenceException("Cannot list incidents", e);
 		}
 		results.sort(Comparator.comparing(IncidentSummary::lastModified).reversed());
 		return results;
 	}
 
 	/**
-	 * Tombstones an unlocked incident, retaining its automatic backup.
+	 * Tombstones an unlocked incident using this handle's last created, loaded or
+	 * listed revision. New integrations must pass an explicit token. Already
+	 * tombstoned incidents retain legacy idempotency.
 	 *
 	 * @param id incident identifier.
 	 * @throws StoreConflictException when any editor owns the incident lock.
 	 */
 	@Override
+	@Deprecated
 	public synchronized void delete(IncidentId id) {
+		ensureOpen();
+		if (!Files.exists(path(id)) && Files.exists(path(id).resolveSibling(path(id).getFileName() + ".deleted"))) {
+			return;
+		}
+		if (!Files.exists(path(id))) {
+			throw new IncidentNotFoundException("Incident not found: " + id);
+		}
+		RevisionToken expected = observed.get(id);
+		if (expected == null) {
+			if (locks.containsKey(id) || isLockedElsewhere(id)) {
+				throw new StoreLockConflictException("Incident is open for editing: " + id);
+			}
+			throw new StoreValidationException("Load or list the incident before legacy deletion: " + id);
+		}
+		delete(id, expected);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public synchronized void delete(IncidentId id, RevisionToken expected) {
+		ensureOpen();
+		if (expected == null) {
+			throw new StoreValidationException("Expected revision is required");
+		}
 		if (locks.containsKey(id) || !lock(id)) {
-			throw new StoreConflictException("Incident is open for editing; switch to another incident first: " + id);
+			throw new StoreLockConflictException("Incident is open for editing; switch to another incident first: " + id);
 		}
 		Path path = path(id);
 		Path deleted = path.resolveSibling(path.getFileName() + ".deleted");
 		try {
-			if (!Files.exists(path) && Files.exists(deleted)) {
-				return;
+			if (!Files.exists(path)) {
+				throw new IncidentNotFoundException("Incident not found: " + id);
+			}
+			RevisionToken current = revision(loadDocument(id));
+			if (!current.equals(expected)) {
+				throw new StoreConflictException("Incident was modified elsewhere: " + id, expected, current);
 			}
 			Files.move(path, deleted);
+			observed.remove(id);
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot delete incident: " + id, e);
+			throw new StorePersistenceException("Cannot delete incident: " + id, e);
 		} finally {
 			unlock(id);
 		}
@@ -367,6 +507,7 @@ public class FileIncidentStore implements IncidentStore {
 	 */
 	@Override
 	public synchronized Optional<IncidentId> importFile(Path jsonFile) {
+		ensureOpen();
 		lastImportProblems = List.of();
 		if (jsonFile == null) {
 			return Optional.empty();
@@ -391,6 +532,7 @@ public class FileIncidentStore implements IncidentStore {
 	 */
 	@Override
 	public synchronized List<ImportValidationException.Problem> getLastImportProblems() {
+		ensureOpen();
 		return lastImportProblems;
 	}
 
@@ -433,12 +575,21 @@ public class FileIncidentStore implements IncidentStore {
 		return create(data);
 	}
 
+	/** {@inheritDoc} */
 	@Override
-	public void exportFile(IncidentId id, Path target) {
+	public synchronized void exportFile(IncidentId id, Path target) {
+		ensureOpen();
 		try {
-			MAPPER.writerWithDefaultPrettyPrinter().writeValue(target.toFile(), load(id));
+			Path destination = target.toAbsolutePath().normalize();
+			if (destination.startsWith(incidents.normalize())
+					|| destination.getParent().toRealPath().startsWith(incidents.toRealPath())
+					|| destination.equals(root.resolve("node.json"))) {
+				throw new StoreValidationException("Export destination must be outside the live incident store");
+			}
+			loadDocument(id);
+			MAPPER.writerWithDefaultPrettyPrinter().writeValue(target.toFile(), readWithBackupDocument(path(id)).tree());
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot export incident: " + id, e);
+			throw new StorePersistenceException("Cannot export incident: " + id, e);
 		}
 	}
 
@@ -464,10 +615,11 @@ public class FileIncidentStore implements IncidentStore {
 	 */
 	@Override
 	public synchronized void backupFile(IncidentId id, Path target) {
+		ensureOpen();
 		Path destination = target.toAbsolutePath().normalize();
 		boolean owned = locks.containsKey(id);
 		if (!lock(id)) {
-			throw new StoreConflictException("Incident is open in another window: " + id);
+			throw new StoreLockConflictException("Incident is open in another window: " + id);
 		}
 		boolean created = false;
 		try {
@@ -481,7 +633,7 @@ public class FileIncidentStore implements IncidentStore {
 			}
 			Path source = path(id);
 			if (!Files.exists(source)) {
-				throw new IllegalArgumentException("Incident not found: " + id);
+				throw new IncidentNotFoundException("Incident not found: " + id);
 			}
 			AppData stored;
 			try {
@@ -507,7 +659,10 @@ public class FileIncidentStore implements IncidentStore {
 					failure.addSuppressed(cleanupFailure);
 				}
 			}
-			throw new IllegalStateException("Cannot back up incident: " + failure.getMessage(), failure);
+			if (failure instanceof IncidentNotFoundException missing) {
+				throw missing;
+			}
+			throw new StorePersistenceException("Cannot back up incident: " + failure.getMessage(), failure);
 		} finally {
 			if (!owned) {
 				unlock(id);
@@ -515,11 +670,41 @@ public class FileIncidentStore implements IncidentStore {
 		}
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public StoreDescriptor describe() {
 		return new StoreDescriptor("File", root.toString());
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public Optional<EditLockSupport> editLocks() {
+		return Optional.of(this);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public RevisionToken revisionToken(AppData data) {
+		if (data == null) {
+			throw new StoreValidationException("Caller snapshot is required");
+		}
+		return revision(data);
+	}
+
+	/** {@inheritDoc} */
+	@Deprecated
+	@Override
+	public Optional<Path> localFile(IncidentId id) {
+		return Optional.of(path(id));
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public synchronized boolean isHeldByCaller(IncidentId id) {
+		return locks.containsKey(id);
+	}
+
+	/** {@inheritDoc} */
 	@Override
 	public synchronized void close() {
 		for (FileLock lock : locks.values()) {
@@ -538,6 +723,242 @@ public class FileIncidentStore implements IncidentStore {
 		}
 		locks.clear();
 		channels.clear();
+		closed = true;
+	}
+
+	/** Rejects operations on a closed store. */
+	private void ensureOpen() {
+		if (closed) {
+			throw new StoreUnavailableException("Incident store is closed");
+		}
+	}
+
+	/**
+	 * Copies fields without invoking caller getters that can normalize mutable child IDs.
+	 *
+	 * @param data caller-owned document
+	 * @return detached editable copy
+	 */
+	private AppData copy(AppData data) {
+		if (data == null || data.getSchemaVersion() > AppData.CURRENT_SCHEMA_VERSION) {
+			throw new StoreValidationException("Missing document or unsupported schema");
+		}
+		try {
+			return COPIER.treeToValue(COPIER.valueToTree(data), AppData.class);
+		} catch (IOException | IllegalArgumentException e) {
+			throw new StoreValidationException("Cannot serialize incident document", e);
+		}
+	}
+
+	/**
+	 * Applies the exact successful normalized state, including assigned child identities.
+	 * Transient UI-only fields, compatible caller child model objects and their
+	 * collection identities are retained. Unsupported structural changes to immutable
+	 * collections are rejected before committing.
+	 *
+	 * @param data caller-owned document
+	 * @param saved successfully persisted document
+	 */
+	private void applyMetadata(AppData data, AppData saved) {
+		mergeSuccessfulState(data, saved, new IdentityHashMap<>());
+	}
+
+	/**
+	 * Applies exact committed fields without regenerating identities or replacing compatible
+	 * caller child objects. Shared caller references are retained only when consistent with
+	 * the committed tree; immutable/nonmodel values are assigned directly.
+	 *
+	 * @param original existing caller value
+	 * @param saved committed candidate value
+	 * @param visited caller values already paired with committed values
+	 * @return original updated in place, or a replacement when needed
+	 */
+	@SuppressWarnings("unchecked")
+	private Object mergeSuccessfulState(Object original, Object saved, Map<Object, Object> visited) {
+		if (original == null || saved == null) {
+			return saved;
+		}
+		if (visited.containsKey(original)) {
+			return original;
+		}
+		if (original instanceof Map<?, ?> originalMap && saved instanceof Map<?, ?> savedMap) {
+			visited.put(original, saved);
+			Map<Object, Object> mutable = (Map<Object, Object>) originalMap;
+			for (var entry : savedMap.entrySet()) {
+				Object existing = originalMap.get(entry.getKey());
+				Object merged = mergeSuccessfulState(existing, entry.getValue(), visited);
+				if (!originalMap.containsKey(entry.getKey()) || !Objects.equals(existing, merged)) {
+					mutable.put(entry.getKey(), merged);
+				}
+			}
+			if (!originalMap.keySet().equals(savedMap.keySet())) {
+				mutable.keySet().removeIf(key -> !savedMap.containsKey(key));
+			}
+			return original;
+		}
+		if (saved instanceof List<?> savedList && original instanceof List<?> originalList) {
+			visited.put(original, saved);
+			List<Object> merged = new ArrayList<>(savedList.size());
+			for (int index = 0; index < savedList.size(); index++) {
+				Object existing = index < originalList.size() ? originalList.get(index) : null;
+				merged.add(mergeSuccessfulState(existing, savedList.get(index), visited));
+			}
+			List<Object> mutable = (List<Object>) originalList;
+			int common = Math.min(originalList.size(), merged.size());
+			for (int index = 0; index < common; index++) {
+				if (!Objects.equals(mutable.get(index), merged.get(index))) {
+					mutable.set(index, merged.get(index));
+				}
+			}
+			for (int index = common; index < merged.size(); index++) {
+				mutable.add(merged.get(index));
+			}
+			while (mutable.size() > merged.size()) {
+				mutable.remove(mutable.size() - 1);
+			}
+			return original;
+		}
+		if (!saved.getClass().isInstance(original)) {
+			return saved;
+		}
+		Class<?> type = saved.getClass();
+		if (type.isEnum() || type.isRecord() || !type.getPackageName().startsWith("org.sarmanagement.icsforms.model")) {
+			return Objects.equals(original, saved) ? original : saved;
+		}
+		visited.put(original, saved);
+		for (Class<?> declaring = type; declaring != Object.class; declaring = declaring.getSuperclass()) {
+			for (var field : declaring.getDeclaredFields()) {
+				if (!Modifier.isStatic(field.getModifiers()) && !Modifier.isTransient(field.getModifiers())) {
+					try {
+						field.setAccessible(true);
+						field.set(original, mergeSuccessfulState(field.get(original), field.get(saved), visited));
+					} catch (IllegalAccessException e) {
+						throw new AssertionError("Cannot apply persisted incident fields", e);
+					}
+				}
+			}
+		}
+		return original;
+	}
+
+	/**
+	 * Checks that normalized state can be applied without replacing caller collections
+	 * or inconsistently normalizing a shared child reference. No caller fields are changed.
+	 *
+	 * @param original caller-owned value
+	 * @param saved normalized candidate value
+	 * @param visited caller values already paired with normalized values
+	 */
+	private void validateReconciliation(Object original, Object saved, Map<Object, Object> visited) {
+		if (original == null || saved == null) {
+			return;
+		}
+		if (visited.containsKey(original)) {
+			if (!COPIER.valueToTree(visited.get(original)).equals(COPIER.valueToTree(saved))) {
+				throw new StoreValidationException("Shared caller references require incompatible normalization");
+			}
+			return;
+		}
+		if (original instanceof Map<?, ?> originalMap && saved instanceof Map<?, ?> savedMap) {
+			visited.put(original, saved);
+			boolean replace = !originalMap.keySet().equals(savedMap.keySet());
+			for (var entry : savedMap.entrySet()) {
+				Object existing = originalMap.get(entry.getKey());
+				replace |= requiresReplacement(existing, entry.getValue());
+				validateReconciliation(existing, entry.getValue(), visited);
+			}
+			if (replace && !(original instanceof HashMap<?, ?> || original instanceof java.util.EnumMap<?, ?>
+					|| original instanceof java.util.TreeMap<?, ?>)) {
+				throw new StoreValidationException("Normalization requires changing an unsupported caller map");
+			}
+			return;
+		}
+		if (original instanceof List<?> originalList && saved instanceof List<?> savedList) {
+			visited.put(original, saved);
+			boolean resize = originalList.size() != savedList.size();
+			boolean replace = resize;
+			int common = Math.min(originalList.size(), savedList.size());
+			for (int index = 0; index < common; index++) {
+				Object existing = originalList.get(index);
+				Object normalized = savedList.get(index);
+				replace |= requiresReplacement(existing, normalized);
+				validateReconciliation(existing, normalized, visited);
+			}
+			boolean mutable = original instanceof ArrayList<?> || original instanceof java.util.LinkedList<?>
+					|| original instanceof java.util.Vector<?>;
+			boolean fixedSizeMutable = original.getClass().getName().equals("java.util.Arrays$ArrayList");
+			if (replace && !mutable && !(fixedSizeMutable && !resize)) {
+				throw new StoreValidationException("Normalization requires changing an unsupported caller list");
+			}
+			return;
+		}
+		Class<?> type = saved.getClass();
+		if (!type.isInstance(original) || type.isEnum() || type.isRecord()
+				|| !type.getPackageName().startsWith("org.sarmanagement.icsforms.model")) {
+			return;
+		}
+		visited.put(original, saved);
+		for (Class<?> declaring = type; declaring != Object.class; declaring = declaring.getSuperclass()) {
+			for (var field : declaring.getDeclaredFields()) {
+				if (!Modifier.isStatic(field.getModifiers()) && !Modifier.isTransient(field.getModifiers())) {
+					try {
+						field.setAccessible(true);
+						validateReconciliation(field.get(original), field.get(saved), visited);
+					} catch (IllegalAccessException e) {
+						throw new StoreValidationException("Cannot reconcile caller fields", e);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Reports whether a list entry needs replacement rather than in-place model updates.
+	 *
+	 * @param original caller entry
+	 * @param saved normalized entry
+	 * @return whether the list must replace this entry
+	 */
+	private boolean requiresReplacement(Object original, Object saved) {
+		if (Objects.equals(original, saved)) {
+			return false;
+		}
+		if (original == null || saved == null) {
+			return true;
+		}
+		if ((original instanceof List<?> && saved instanceof List<?>)
+				|| (original instanceof Map<?, ?> && saved instanceof Map<?, ?>)) {
+			return false;
+		}
+		Class<?> type = saved.getClass();
+		if (!type.isInstance(original)) {
+			return true;
+		}
+		return type.isEnum() || type.isRecord()
+				|| !type.getPackageName().startsWith("org.sarmanagement.icsforms.model");
+	}
+
+	/**
+	 * Normalizes detached candidates while classifying invalid model values.
+	 *
+	 * @param data detached candidate document
+	 */
+	private void normalize(AppData data) {
+		try {
+			data.normalizeIdentity();
+		} catch (RuntimeException e) {
+			throw new StoreValidationException("Cannot normalize incident document", e);
+		}
+	}
+
+	/**
+	 * Converts the file format's numeric revision to a store-neutral token.
+	 *
+	 * @param data stored file document
+	 * @return opaque revision
+	 */
+	private RevisionToken revision(AppData data) {
+		return new RevisionToken(Long.toString(data.getRevision()));
 	}
 
 	/**
@@ -577,7 +998,7 @@ public class FileIncidentStore implements IncidentStore {
 				return readDocument(backup(path));
 			} catch (IOException backupFailure) {
 				backupFailure.addSuppressed(primaryFailure);
-				throw new IllegalStateException("Cannot read incident or backup: " + path, backupFailure);
+				throw new StorePersistenceException("Cannot read incident or backup: " + path, backupFailure);
 			}
 		}
 	}
@@ -596,7 +1017,7 @@ public class FileIncidentStore implements IncidentStore {
 				return readStoredDocument(backup(path));
 			} catch (IOException backupFailure) {
 				backupFailure.addSuppressed(primaryFailure);
-				throw new IllegalStateException("Cannot read incident or backup: " + path, backupFailure);
+				throw new StorePersistenceException("Cannot read incident or backup: " + path, backupFailure);
 			}
 		}
 	}
@@ -623,7 +1044,7 @@ public class FileIncidentStore implements IncidentStore {
 	private JsonNode prepareMigration(StoredDocument stored, IncidentId id) {
 		AppData data = stored.data();
 		if (data.getIncidentId() != null && !id.value().equals(data.getIncidentId())) {
-			throw new IllegalStateException("Incident identifier does not match file: " + id);
+			throw new StoreValidationException("Incident identifier does not match file: " + id);
 		}
 		upgrade(data, id);
 		return mergeKnownProperties(stored.tree(), MAPPER.valueToTree(data));
@@ -657,7 +1078,7 @@ public class FileIncidentStore implements IncidentStore {
 			move(temp, primary);
 			Files.copy(primary, backup(primary), StandardCopyOption.REPLACE_EXISTING);
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot persist incident identity migration: " + primary, e);
+			throw new StorePersistenceException("Cannot persist incident identity migration: " + primary, e);
 		} finally {
 			try {
 				Files.deleteIfExists(temp);
@@ -673,10 +1094,16 @@ public class FileIncidentStore implements IncidentStore {
 	 * @param path incident document path.
 	 * @return deserialized incident.
 	 * @throws IOException when the file cannot be parsed.
-	 * @throws IllegalStateException when a newer schema must not be rewritten.
+	 * @throws StoreValidationException when a newer schema must not be rewritten.
 	 */
 	private AppData readDocument(Path path) throws IOException {
-		return new IncidentDocumentReader().readStored(path);
+		try {
+			return new IncidentDocumentReader().readStored(path);
+		} catch (StoreValidationException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new StorePersistenceException("Cannot read stored incident: " + path, e);
+		}
 	}
 
 	/**
@@ -698,7 +1125,7 @@ public class FileIncidentStore implements IncidentStore {
 		if (data.getOriginNodeId() == null || data.getOriginNodeId().isBlank()) {
 			data.setOriginNodeId(nodeId);
 		}
-		data.normalizeIdentity();
+		normalize(data);
 	}
 
 	/**

@@ -77,6 +77,22 @@ class LocalRepositoryTest {
 	}
 
 	@Test
+	void legacyListingStillSkipsMalformedAndFutureSchemas() throws Exception {
+		Path directory = Files.createTempDirectory("icsforms-schema-listing");
+		Files.writeString(directory.resolve("valid.json"),
+				"{\"schemaVersion\":5,\"incidentContext\":{\"incidentName\":\"Compatible\"}}");
+		Files.writeString(directory.resolve("malformed.json"), "{\"schemaVersion\":\"invalid\"}");
+		Files.writeString(directory.resolve("future.json"),
+				"{\"schemaVersion\":" + (AppData.CURRENT_SCHEMA_VERSION + 1) + "}");
+
+		var summaries = LocalRepository.listLocalIncidents(directory);
+
+		assertEquals(1, summaries.size());
+		assertEquals("Compatible", summaries.get(0).incidentName());
+		assertEquals(directory.resolve("valid.json"), summaries.get(0).path());
+	}
+
+	@Test
 	void storedWorkspaceToleratesUnknownNestedProperties() throws Exception {
 		Path directory = Files.createTempDirectory("icsforms-compatible");
 		Path primary = directory.resolve("incident.json");

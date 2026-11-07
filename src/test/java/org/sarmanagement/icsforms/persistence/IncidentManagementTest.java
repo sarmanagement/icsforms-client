@@ -199,7 +199,7 @@ class IncidentManagementTest {
 			assertTrue(other.lock(id));
 			other.unlock(id);
 			IncidentId missing = IncidentId.newId();
-			assertThrows(IllegalStateException.class, () -> store.delete(missing));
+			assertThrows(IncidentNotFoundException.class, () -> store.delete(missing));
 			assertTrue(other.lock(missing));
 			assertEquals("{corrupt", Files.readString(source));
 		}

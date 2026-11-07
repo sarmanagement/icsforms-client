@@ -17,7 +17,7 @@ Open it with **File → Import → Import Incident JSON…**.
 
 Open **File → Manage Incidents…**, or **Manage Incidents…** in the **Open Incident**
 picker (also available during startup). The manager lists saved incident names, IDs,
-operational periods, update times and store files. Select one incident to **Backup JSON…**
+operational periods, update times and store locations. Select one incident to **Backup JSON…**
 or **Delete…**; **Refresh** reloads the list. Pending editor changes are saved before
 opening the manager from the File menu; invalid edits must be resolved first.
 
@@ -30,8 +30,9 @@ Other store implementations must explicitly support safe backups; otherwise the
 backup button is disabled.
 
 Switch to another incident before deleting the active one. Both local and other
-editors' locks block deletion, including when managing from the picker. Deletion is
-**not secure erasure**: it removes the incident from the list by moving its primary
+editors' locks block deletion, including when managing from the picker. Deletion also
+rejects changes made since the displayed listing; refresh before trying again.
+Deletion is **not secure erasure**: the file store removes the incident by moving its primary
 to `.json.deleted`, while retaining its automatic `.json.bak`. Back up first.
 
 Restore compatible JSON with **Import → Import Incident JSON…** (in the Import menu);
@@ -371,6 +372,18 @@ All production source lives under `src/main/java/org/sarmanagement/icsforms/`, w
 **`comms/`** owns native/CHIRP interchange and the UI-independent `ChannelLinkSource` read API. `links(AppData)` returns immutable, typed source/reference snapshots; `resolve(AppData, channelId, legacyFallback)` applies linked-channel-first display precedence; `legacyChannelNames(AppData)` supplies centralized presentation suggestions. `LINKED` requires one exact ID match, `UNLINKED` means no explicit ID, `MISSING` means no target, and `AMBIGUOUS` means duplicate target IDs. All non-linked outcomes retain the original fallback (null becomes empty). Labels never establish links. Structural row locations are documented as locations, not new persisted identities. Reads do not generate IDs or reconcile medical/role state.
 
 **`persistence/`** defines the store-independent `IncidentStore` contract. `FileIncidentStore` stores each incident as JSON with a separate backup, revision checks, and advisory locks; `LocalRepository` remains for compatibility with older integrations.
+
+Store-backed editing uses opaque equality-only revision tokens for saves and deletes.
+The file store converts its legacy numeric JSON revision at the persistence boundary;
+other backends may issue server tokens without filesystem paths or exclusive locks.
+Advisory edit locks are an optional capability, not a prerequisite for editing a
+lock-less store. Failed switches retain the active document and release only the
+candidate incident's newly acquired resources. Revision conflicts retain both
+expected and current tokens; validation, missing incidents, duplicate creation,
+unavailable stores, and persistence failures are distinguishable outcomes.
+Import, export, and backup paths always refer to the client's local filesystem,
+regardless of the backend's location. These full-document operations do not rule
+out future per-record tokens, partial saves, outbox logs, or server change cursors.
 
 **`validation/`** contains pre-export checks. `IncidentValidator` walks the model and collects `ValidationMessage` instances for any required fields that are missing or invalid, blocking PDF export until the workspace is clean.
 

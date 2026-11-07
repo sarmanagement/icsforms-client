@@ -32,7 +32,7 @@ public class IncidentManagerDialog extends JDialog {
 	private final IncidentId activeId;
 	private final Dialogs dialogs;
 	private final DefaultTableModel model = new DefaultTableModel(
-			new String[]{"Incident", "ID", "Operational period", "Updated", "Store file"}, 0);
+			new String[]{"Incident", "ID", "Operational period", "Updated", "Store location"}, 0);
 	private final JTable table = new JTable(model) {
 		/**
 		 * Keeps saved summary cells read-only.
@@ -154,11 +154,11 @@ public class IncidentManagerDialog extends JDialog {
 				period += " — " + (context.getOperationalPeriodEnd() == null ? "not set"
 						: UiSupport.formatIsoDateTime(context.getOperationalPeriodEnd()));
 				rows[row] = new Object[]{summary.displayLabel(), summary.incidentId().value(), period,
-						summary.lastModified(), summary.path()};
+						summary.lastModified(), summary.storeLocation()};
 			}
 			table.clearSelection();
 			summaries = updated;
-			model.setDataVector(rows, new String[]{"Incident", "ID", "Operational period", "Updated", "Store file"});
+			model.setDataVector(rows, new String[]{"Incident", "ID", "Operational period", "Updated", "Store location"});
 			for (int column = 0; column < table.getColumnCount(); column++) {
 				table.getColumnModel().getColumn(column).setPreferredWidth(column == 4 ? 350 : 230);
 			}
@@ -282,13 +282,13 @@ public class IncidentManagerDialog extends JDialog {
 			return;
 		}
 		String question = "Delete " + summary.displayLabel() + "\nID: " + summary.incidentId().value()
-				+ "\nPlease back up first. The incident will be removed from the list and tombstoned"
-				+ "\n(.json.deleted); its automatic .bak backup is retained. This is not secure erasure.";
+				+ "\nPlease back up first. The incident will no longer be available."
+				+ "\nRetained backups are not erased. This is not secure erasure.";
 		if (!dialogs.confirmDelete(this, question)) {
 			return;
 		}
 		try {
-			store.delete(summary.incidentId());
+			store.delete(summary.incidentId(), summary.revision());
 			refresh();
 		} catch (RuntimeException failure) {
 			dialogs.message(this, "Unable to delete incident: " + failure.getMessage(), true);
