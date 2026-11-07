@@ -29,6 +29,11 @@ public record Provenance(String operatorName, String stationId, Instant enteredA
 
 	/**
 	 * Normalizes optional display fields and requires an entry timestamp.
+	 *
+	 * @param operatorName display name asserted by the person entering the record.
+	 * @param stationId optional device or workstation identifier.
+	 * @param enteredAt UTC instant when the record was entered on this device.
+	 * @param acceptedAt UTC instant when an authoritative host accepted the record, if any.
 	 */
 	public Provenance {
 		operatorName = operatorName == null ? "" : operatorName.trim();

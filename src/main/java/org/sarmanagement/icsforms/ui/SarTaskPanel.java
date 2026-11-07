@@ -2889,7 +2889,7 @@ public class SarTaskPanel extends JPanel {
 					initialClueFollowUp.put(edited.getEntryId(), edited.getFollowUp());
 				}
 				if (updatedClues.stream().noneMatch(current -> edited.getEntryId().equals(current.getEntryId()))) {
-					edited.setProvenance(controller.createProvenance());
+					edited.setProvenance(controller == null ? null : controller.createProvenance());
 				}
 				initialClueIds.add(edited.getEntryId());
 			}

@@ -149,11 +149,11 @@ public class TCardPanel extends JPanel {
 	/**
 	 * Records a new check-in occurrence when an edit changes the card's check-in time.
 	 *
-	 * @param original card before editing.
+	 * @param original card before editing, or {@code null} for a new card.
 	 * @param edited cancel-safe edited card.
 	 */
 	private void recordCheckInChange(TCard original, TCard edited) {
-		if (!java.util.Objects.equals(original.getCheckInDateTime(), edited.getCheckInDateTime())
+		if ((original == null || !java.util.Objects.equals(original.getCheckInDateTime(), edited.getCheckInDateTime()))
 				&& edited.getCheckInDateTime() != null) {
 			controller.recordTCardCheckIn(edited,
 					edited.getCheckInDateTime().atOffset(java.time.ZoneOffset.UTC).toInstant());
@@ -1353,7 +1353,9 @@ public class TCardPanel extends JPanel {
 		}
 	}
 
-	/** Chooses a new resource type within the initiating document. */
+	/**
+	 * Chooses a new resource type within the initiating document.
+	 */
 	private void addCardWithTypeChoice() {
 		JComboBox<TCardType> typeChooser = new JComboBox<>(TCardType.values());
 		typeChooser.setRenderer(tCardTypeRenderer());
@@ -1366,6 +1368,7 @@ public class TCardPanel extends JPanel {
 		TCard card = new TCard();
 		card.setCardType((TCardType) typeChooser.getSelectedItem());
 		if (openEditDialog(card)) {
+			recordCheckInChange(null, card);
 			tableModel.addCard(card);
 			refreshDerivedViewsFromTableModel();
 			controller.markDirty();
@@ -1429,6 +1432,9 @@ public class TCardPanel extends JPanel {
 		}
 	}
 
+	/**
+	 * Edits the selected card without changing it when the dialog is cancelled.
+	 */
 	private void editSelectedCard() {
 		TCard selected = selectedCard();
 		if (selected == null) {

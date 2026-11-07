@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 17,
+  "revision": 0,
+  "incidentId": "0a10d9f1-64b3-4f66-9b67-a0faaf8f64e3",
+  "activityLogs": [
+    {
+      "logId": "1a10d9f1-64b3-4f66-9b67-a0faaf8f64e3",
+      "activityLog": [
+        {
+          "entryId": "2a10d9f1-64b3-4f66-9b67-a0faaf8f64e3",
+          "timestamp": "2026-11-07T10:05:00",
+          "eventTypeId": "FREE_TEXT",
+          "notableActivity": "Fictional checkpoint established",
+          "provenance": {
+            "operatorName": "Fictional Operator",
+            "stationId": "fictional-device-17",
+            "enteredAt": "2026-11-07T10:05:30Z",
+            "acceptedAt": "2026-11-07T10:06:00Z"
+          }
+        }
+      ]
+    }
+  ],
+  "clueLogEntries": [
+    {
+      "entryId": "3a10d9f1-64b3-4f66-9b67-a0faaf8f64e3",
+      "description": "Historical clue without provenance"
+    }
+  ],
+  "sarTaskAssignments": [
+    {
+      "taskId": "4a10d9f1-64b3-4f66-9b67-a0faaf8f64e3",
+      "taskLifecycleStatus": "assigned - on task",
+      "lifecycleStatusChanges": [
+        {
+          "previousStatus": "planned",
+          "newStatus": "assigned - on task",
+          "changedAt": "2026-11-07T10:07:00Z",
+          "provenance": {
+            "operatorName": "Fictional Operator",
+            "stationId": "fictional-device-17",
+            "enteredAt": "2026-11-07T10:07:00Z",
+            "acceptedAt": "2026-11-07T10:08:00Z"
+          }
+        }
+      ]
+    }
+  ],
+  "tcards": [
+    {
+      "resourceId": "5a10d9f1-64b3-4f66-9b67-a0faaf8f64e3",
+      "personName": "Fictional Responder",
+      "checkInDateTime": "2026-11-07T10:00:00",
+      "checkInOutEvents": [
+        {
+          "action": "CHECK_IN",
+          "eventAt": "2026-11-07T10:00:00Z",
+          "provenance": {
+            "operatorName": "Fictional Operator",
+            "stationId": "fictional-device-17",
+            "enteredAt": "2026-11-07T10:00:15Z"
+          }
+        },
+        {
+          "action": "CHECK_OUT",
+          "eventAt": "2026-11-07T10:09:00Z",
+          "provenance": {
+            "operatorName": "Fictional Operator",
+            "stationId": "fictional-device-17",
+            "enteredAt": "2026-11-07T10:09:20Z"
+          }
+        }
+      ]
+    }
+  ]
+}

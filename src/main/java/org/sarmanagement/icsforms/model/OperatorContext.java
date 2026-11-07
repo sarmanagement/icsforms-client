@@ -12,6 +12,9 @@ package org.sarmanagement.icsforms.model;
 public record OperatorContext(String operatorName, String stationId) {
 	/**
 	 * Normalizes a missing operator name and optional station identifier.
+	 *
+	 * @param operatorName display name entered locally, or blank when unknown.
+	 * @param stationId optional device or workstation identifier.
 	 */
 	public OperatorContext {
 		operatorName = operatorName == null ? "" : operatorName.trim();

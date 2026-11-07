@@ -8,6 +8,8 @@ import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.OperatorContext;
+import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 
@@ -25,6 +27,7 @@ import java.awt.Container;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -163,6 +166,9 @@ class Ics214PanelTest {
 		Ics214Panel panel = new Ics214Panel(sampleController());
 		AppData data = sampleDataWithTaskLog(1);
 		Ics214Form form = data.getActivityLogs().get(0);
+		Provenance provenance = Provenance.local("Incident Operator", "station-3",
+				Instant.parse("2026-10-27T09:15:00Z"));
+		form.getActivityLog().get(0).setProvenance(provenance);
 		SwingUtilities.invokeAndWait(() -> panel.loadFromModel(form, data));
 
 		Method method = Ics214Panel.class.getDeclaredMethod("strikeOutActivityEntry", int.class);
@@ -179,7 +185,24 @@ class Ics214PanelTest {
 		Component renderer = table.prepareRenderer(table.getCellRenderer(0, 3), 0, 3);
 		assertEquals(1, form.getActivityLog().size());
 		assertTrue(form.getActivityLog().get(0).isStruckOut());
+		assertEquals(provenance, form.getActivityLog().get(0).getProvenance());
 		assertTrue(((JLabel) renderer).getText().contains("<strike>"));
+	}
+
+	@Test
+	void preparedByPrefillsOnlyWhenBlank() throws Exception {
+		AppData data = sampleDataWithTaskLog(1);
+		AppController controller = sampleController(data);
+		controller.setOperatorContext(new OperatorContext("Incident Operator", null));
+		Ics214Panel panel = new Ics214Panel(controller);
+		Ics214Form form = data.getActivityLogs().get(0);
+
+		panel.loadFromModel(form, data);
+
+		assertEquals("Incident Operator", form.getPreparedByName());
+		form.setPreparedByName("Entered By User");
+		panel.loadFromModel(form, data);
+		assertEquals("Entered By User", form.getPreparedByName());
 	}
 
 	@Test
@@ -330,11 +353,15 @@ class Ics214PanelTest {
 		Ics214Panel panel = new Ics214Panel(sampleController(data));
 		Ics214Form form = data.getActivityLogs().get(0);
 		ActivityLogEntry entry = form.getActivityLog().get(0);
+		Provenance provenance = Provenance.local("Original Operator", "station-4",
+				Instant.parse("2026-10-27T09:15:00Z"));
+		entry.setProvenance(provenance);
 		panel.loadFromModel(form, data);
 		LocalDateTime changedAt = LocalDateTime.of(2026, 10, 27, 9, 15);
 
 		assertTrue(panel.applyNoteClassification(entry, ActivityEventType.ID_CLUE_REPORTED, changedAt));
 		assertEquals(ActivityEventType.ID_CLUE_REPORTED, entry.getEventTypeId());
+		assertEquals(provenance, entry.getProvenance());
 		assertEquals(1, entry.getEventTypeChangeHistory().size());
 		var change = entry.getEventTypeChangeHistory().get(0);
 		assertEquals(ActivityEventType.ID_FREE_TEXT, change.previousEventTypeId());

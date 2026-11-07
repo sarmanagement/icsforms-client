@@ -657,6 +657,12 @@ per-record optimistic concurrency, host-populated `acceptedAt`, and audit histor
 keyed by device and operator. Build clear conflict and stale-update UX. Keep the
 first role set to the five roles in Part III.
 
+Stage 1 establishes the provenance fields and controller seam only. Until operator
+claim is delivered, standalone deployments use a locally entered operator name or
+leave it blank, with no station identifier. The Stage 3 claim populates operator
+and station attribution for new records; only the authoritative host sets
+`acceptedAt`. Existing records without provenance remain unattributed.
+
 **Exit criteria:** a responder joins with a scoped invitation in under a minute;
 shared-workstation operator switch is one action; administrators see and revoke
 devices; simultaneous edits do not silently overwrite; every change is attributable.
