@@ -1527,6 +1527,10 @@ public class TCardPanel extends JPanel {
 	 * </ul>
 	 * The first card (lower index) is the target that receives the merged data; the
 	 * second (duplicate) is removed once the merge is confirmed.
+	 * Check-in/out history keeps card A's order followed by unique events from card
+	 * B in their existing order. Events with matching occurrence IDs and identical
+	 * contents are shared; legacy events without IDs use exact event contents and
+	 * retain the larger multiplicity from either card.
 	 * </p>
 	 */
 	private void mergeDuplicates() {
@@ -1735,6 +1739,7 @@ public class TCardPanel extends JPanel {
 			String resolved = isConflict[i] ? editFields[i].getText().trim() : autoResolved[i];
 			applyMergedField(merged, i, resolved);
 		}
+		merged.setCheckInOutEvents(mergeCheckInOutEvents(a, b));
 		// Preserve check-in date from whichever card has one; prefer A.
 		if (merged.getCheckInDateTime() == null && b.getCheckInDateTime() != null) {
 			merged.setCheckInDateTime(b.getCheckInDateTime());
@@ -1744,6 +1749,48 @@ public class TCardPanel extends JPanel {
 			merged.setSourceRef(b.getSourceRef());
 		}
 		return merged;
+	}
+
+	/**
+	 * Combines check-in/out history in a stable A-first order without changing events.
+	 *
+	 * <p>Identified events are shared only when both their IDs and contents match.
+	 * For legacy events without IDs, exact event contents are counted on each card
+	 * and the larger count is retained.</p>
+	 *
+	 * @param a target card whose history is ordered first.
+	 * @param b duplicate card whose unique history follows card A.
+	 * @return combined history with shared events represented once.
+	 */
+	private static List<TCard.CheckInOutEvent> mergeCheckInOutEvents(TCard a, TCard b) {
+		List<TCard.CheckInOutEvent> aEvents = List.copyOf(a.getCheckInOutEvents());
+		List<TCard.CheckInOutEvent> mergedEvents = new ArrayList<>(aEvents);
+		Map<String, List<TCard.CheckInOutEvent>> identifiedEvents = new LinkedHashMap<>();
+		Map<TCard.CheckInOutEvent, Integer> legacyACounts = new LinkedHashMap<>();
+		Map<TCard.CheckInOutEvent, Integer> legacyBCounts = new LinkedHashMap<>();
+		for (TCard.CheckInOutEvent event : aEvents) {
+			if (event.eventId() == null) {
+				legacyACounts.merge(event, 1, Integer::sum);
+			} else {
+				identifiedEvents.computeIfAbsent(event.eventId(), ignored -> new ArrayList<>()).add(event);
+			}
+		}
+		for (TCard.CheckInOutEvent event : b.getCheckInOutEvents()) {
+			if (event.eventId() == null) {
+				int occurrence = legacyBCounts.merge(event, 1, Integer::sum);
+				if (occurrence > legacyACounts.getOrDefault(event, 0)) {
+					mergedEvents.add(event);
+				}
+				continue;
+			}
+			List<TCard.CheckInOutEvent> sameIdEvents = identifiedEvents.get(event.eventId());
+			if (sameIdEvents != null && sameIdEvents.contains(event)) {
+				continue;
+			}
+			mergedEvents.add(event);
+			identifiedEvents.computeIfAbsent(event.eventId(), ignored -> new ArrayList<>()).add(event);
+		}
+		return mergedEvents;
 	}
 
 	/**

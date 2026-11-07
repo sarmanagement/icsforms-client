@@ -38,6 +38,7 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -266,6 +267,117 @@ class TCardPanelProvenanceTest {
 		assertNull(restoredDemobilized.getCheckInOutEvents().get(1).provenance().acceptedAt());
 	}
 
+	@Test
+	void duplicateMergeKeepsAOnlyAndBOnlyHistoriesAndPersistsThem() throws Exception {
+		Instant aTime = Instant.parse("2026-11-07T17:30:00Z");
+		Instant bTime = Instant.parse("2026-11-07T17:45:00Z");
+		TCard aWithHistory = personnelCard("A-only Responder");
+		aWithHistory.recordCheckIn(aTime, Provenance.local("Original A", "station-a", aTime.plusSeconds(1)));
+		aWithHistory.recordCheckOut(aTime.plusSeconds(30), null);
+		TCard aWithoutHistory = personnelCard("A-only Responder");
+		TCard bWithoutHistory = personnelCard("B-only Responder");
+		TCard bWithHistory = personnelCard("B-only Responder");
+		bWithHistory.recordCheckIn(bTime, null);
+		bWithHistory.recordCheckOut(bTime.plusSeconds(30),
+				Provenance.local("Original B", "station-b", bTime.plusSeconds(1)));
+		List<TCard.CheckInOutEvent> expectedAHistory = List.copyOf(aWithHistory.getCheckInOutEvents());
+		List<TCard.CheckInOutEvent> expectedBHistory = List.copyOf(bWithHistory.getCheckInOutEvents());
+		AppData data = new AppData();
+		data.setTCards(List.of(aWithHistory, aWithoutHistory, bWithoutHistory, bWithHistory));
+		IncidentStoreTestFixtures.Fixture fixture = IncidentStoreTestFixtures.create(data);
+		TCardPanel panel = createPanel(fixture.controller());
+
+		runDuplicateMerges(panel, "Merge", "A-only Responder", "B-only Responder");
+
+		assertEquals(expectedAHistory, cardNamed(panelCards(panel), "A-only Responder").getCheckInOutEvents());
+		assertEquals(expectedBHistory, cardNamed(panelCards(panel), "B-only Responder").getCheckInOutEvents());
+		pushToModel(panel);
+		fixture.controller().save();
+		fixture.controller().save();
+		AppData restored = fixture.store().load(fixture.incidentId());
+		assertEquals(expectedAHistory, cardNamed(restored.getTCards(), "A-only Responder").getCheckInOutEvents());
+		assertEquals(expectedBHistory, cardNamed(restored.getTCards(), "B-only Responder").getCheckInOutEvents());
+		for (TCard card : restored.getTCards()) {
+			for (TCard.CheckInOutEvent event : card.getCheckInOutEvents()) {
+				if (event.provenance() != null) {
+					assertNull(event.provenance().acceptedAt());
+				}
+			}
+		}
+	}
+
+	@Test
+	void duplicateMergeDeduplicatesSharedEventsButRetainsDistinctSameTimeEvents() throws Exception {
+		Instant eventAt = Instant.parse("2026-11-07T18:00:00Z");
+		TCard.CheckInOutEvent sharedLegacy = new TCard.CheckInOutEvent(
+				TCard.CheckInOutAction.CHECK_IN, eventAt, null, null);
+		TCard.CheckInOutEvent sharedIdentified = new TCard.CheckInOutEvent(
+				TCard.CheckInOutAction.CHECK_OUT, eventAt.plusSeconds(5), null);
+		TCard cardA = personnelCard("Shared History Responder");
+		cardA.setPhoneNumber("A phone");
+		cardA.recordCheckOut(eventAt.plusSeconds(10),
+				Provenance.local("Operator A", "station-a", eventAt.plusSeconds(20)));
+		cardA.getCheckInOutEvents().add(sharedLegacy);
+		cardA.getCheckInOutEvents().add(sharedIdentified);
+		TCard cardB = personnelCard("Shared History Responder");
+		cardB.setPhoneNumber("B phone");
+		cardB.getCheckInOutEvents().add(sharedIdentified);
+		cardB.getCheckInOutEvents().add(sharedLegacy);
+		cardB.recordCheckIn(eventAt, null);
+		TCard.CheckInOutEvent distinctSameTime = cardB.getCheckInOutEvents().get(2);
+		TCard.CheckInOutEvent aEvent = cardA.getCheckInOutEvents().get(0);
+		List<TCard.CheckInOutEvent> expected = List.of(aEvent, sharedLegacy, sharedIdentified, distinctSameTime);
+		AppData data = new AppData();
+		data.setTCards(List.of(cardA, cardB));
+		IncidentStoreTestFixtures.Fixture fixture = IncidentStoreTestFixtures.create(data);
+		TCardPanel panel = createPanel(fixture.controller());
+
+		runDuplicateMerges(panel, "Merge", "Shared History Responder");
+
+		TCard merged = cardNamed(panelCards(panel), "Shared History Responder");
+		assertEquals(expected, merged.getCheckInOutEvents());
+		assertEquals("A phone", merged.getPhoneNumber());
+		assertNotEquals(sharedIdentified.eventId(), distinctSameTime.eventId());
+		assertNull(sharedLegacy.eventId());
+		assertNull(sharedLegacy.provenance());
+		assertNull(distinctSameTime.provenance());
+		assertEquals("Operator A", merged.getCheckInOutEvents().get(0).provenance().operatorName());
+		pushToModel(panel);
+		fixture.controller().save();
+		AppData restored = fixture.store().load(fixture.incidentId());
+		TCard restoredCard = cardNamed(restored.getTCards(), "Shared History Responder");
+		assertEquals(expected, restoredCard.getCheckInOutEvents());
+		assertEquals(4, restoredCard.getCheckInOutEvents().size());
+		assertTrue(restoredCard.getCheckInOutEvents().stream()
+				.filter(event -> event.provenance() != null)
+				.allMatch(event -> event.provenance().acceptedAt() == null));
+	}
+
+	@Test
+	void cancellingDuplicateMergeLeavesBothCardsAndHistoriesUnchanged() throws Exception {
+		Instant eventAt = Instant.parse("2026-11-07T18:15:00Z");
+		TCard cardA = personnelCard("Cancelled Merge Responder");
+		cardA.recordCheckIn(eventAt, Provenance.local("A Operator", "station-a", eventAt.plusSeconds(1)));
+		TCard cardB = personnelCard("Cancelled Merge Responder");
+		cardB.recordCheckOut(eventAt.plusSeconds(10),
+				Provenance.local("B Operator", "station-b", eventAt.plusSeconds(11)));
+		List<TCard.CheckInOutEvent> aHistory = List.copyOf(cardA.getCheckInOutEvents());
+		List<TCard.CheckInOutEvent> bHistory = List.copyOf(cardB.getCheckInOutEvents());
+		AppData data = new AppData();
+		data.setTCards(List.of(cardA, cardB));
+		IncidentStoreTestFixtures.Fixture fixture = IncidentStoreTestFixtures.create(data);
+		TCardPanel panel = createPanel(fixture.controller());
+
+		runDuplicateMerges(panel, "Cancel all", "Cancelled Merge Responder");
+
+		assertEquals(2, panelCards(panel).size());
+		assertEquals(aHistory, cardNamed(panelCards(panel), "Cancelled Merge Responder").getCheckInOutEvents());
+		assertEquals(bHistory, panelCards(panel).get(1).getCheckInOutEvents());
+		assertEquals(2, fixture.controller().getData().getTCards().size());
+		assertEquals(aHistory, fixture.controller().getData().getTCards().get(0).getCheckInOutEvents());
+		assertEquals(bHistory, fixture.controller().getData().getTCards().get(1).getCheckInOutEvents());
+	}
+
 	/**
 	 * Creates a panel on the Swing event thread and loads its initial cards.
 	 *
@@ -346,6 +458,24 @@ class TCardPanelProvenanceTest {
 		if (failure.get() != null) {
 			throw new AssertionError("T-card UI workflow failed", failure.get());
 		}
+	}
+
+	/**
+	 * Runs the duplicate-merge action and resolves its merge and summary dialogs.
+	 *
+	 * @param panel T-card panel whose duplicate-merge workflow is invoked.
+	 * @param choice merge-dialog button text.
+	 * @param personNames names of duplicate pairs expected in scan order.
+	 * @throws Exception if a displayed dialog interaction fails.
+	 */
+	private static void runDuplicateMerges(TCardPanel panel, String choice, String... personNames) throws Exception {
+		DialogStep[] steps = new DialogStep[personNames.length + 1];
+		for (int index = 0; index < personNames.length; index++) {
+			steps[index] = titleStep("Merge duplicate T-cards: " + personNames[index],
+					dialog -> clickButton(dialog, choice));
+		}
+		steps[steps.length - 1] = titleStep("Merge Duplicates", TCardPanelProvenanceTest::confirm);
+		runWithDialogs(panel, frame -> invokePanelMethod(panel, "mergeDuplicates"), steps);
 	}
 
 	/**

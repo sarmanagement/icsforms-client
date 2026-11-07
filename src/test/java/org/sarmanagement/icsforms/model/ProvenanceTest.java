@@ -14,6 +14,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -78,6 +79,19 @@ class ProvenanceTest {
 		assertFalse(mapper.valueToTree(task).has("lifecycleStatusChanges"));
 		assertFalse(mapper.valueToTree(card).has("checkInOutEvents"));
 		assertEquals(LocalDateTime.of(2026, 11, 7, 10, 0), card.getCheckInDateTime());
+	}
+
+	@Test
+	void legacyCheckInOutEventsLoadWithoutOccurrenceIds() throws Exception {
+		TCard legacyCard = mapper.readValue("""
+				{"checkInOutEvents":[{"action":"CHECK_IN","eventAt":"2026-11-07T10:05:00Z"}]}
+				""", TCard.class);
+		TCard newCard = new TCard();
+		newCard.recordCheckIn(Instant.parse("2026-11-07T10:05:00Z"), null);
+
+		assertNull(legacyCard.getCheckInOutEvents().get(0).eventId());
+		assertNull(legacyCard.getCheckInOutEvents().get(0).provenance());
+		assertNotNull(newCard.getCheckInOutEvents().get(0).eventId());
 	}
 
 	@Test

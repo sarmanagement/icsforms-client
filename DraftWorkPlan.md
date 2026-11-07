@@ -584,6 +584,14 @@ the only status transition that records check-out. Cancelled edits, unrelated st
 changes, and card removal do not create events. Legacy cards remain without
 historical events until a new check-in or demobilization occurs.
 
+Confirmed duplicate T-card merges retain card A's event order, then append card B's
+non-shared events in their original order. New events carry stable occurrence IDs;
+only matching IDs with identical event contents are deduplicated, so separate events
+with the same action and effective time remain distinct. For legacy events without
+IDs, exact event contents are treated as shared and the larger repeated-event count
+from either card is retained. Skipped or cancelled merges do not change either
+history, and a merge itself does not create an event.
+
 **Issue #40 entity-ID audit:** list-held model records now have stable UUID
 identities and legacy IDs are persisted during load migration. Coverage includes
 AppData operational-period snapshots, additional ICS 204 forms, activity logs,

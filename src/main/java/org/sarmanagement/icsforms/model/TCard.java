@@ -166,15 +166,33 @@ public class TCard {
 	 * @param action check-in or check-out action.
 	 * @param eventAt UTC instant when the event occurred.
 	 * @param provenance optional attribution for the event.
+	 * @param eventId stable identity for this occurrence, absent on legacy events.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
-	public record CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance) {
+	public record CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance, String eventId) {
 		/**
-		 * Requires an event type and timestamp.
+		 * Requires an event type and timestamp and normalizes an optional event identity.
+		 *
+		 * @param action check-in or check-out action.
+		 * @param eventAt UTC instant when the event occurred.
+		 * @param provenance optional attribution for the event.
+		 * @param eventId stable identity for this occurrence, absent on legacy events.
 		 */
 		public CheckInOutEvent {
 			Objects.requireNonNull(action, "action");
 			Objects.requireNonNull(eventAt, "eventAt");
+			eventId = eventId == null || eventId.isBlank() ? null : eventId;
+		}
+
+		/**
+		 * Creates a new event occurrence with a stable identity.
+		 *
+		 * @param action check-in or check-out action.
+		 * @param eventAt UTC instant when the event occurred.
+		 * @param provenance optional attribution for the event.
+		 */
+		public CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance) {
+			this(action, eventAt, provenance, UUID.randomUUID().toString());
 		}
 	}
 
