@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** An external incident document failed validation before any incident was created. */
-public class ImportValidationException extends RuntimeException {
+public class ImportValidationException extends StoreValidationException {
 	private static final long serialVersionUID = 1L;
 	private final Path sourceFile;
 	private final List<Problem> problems;

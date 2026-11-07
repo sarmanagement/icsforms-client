@@ -221,7 +221,7 @@ final class IncidentDocumentReader {
 	 * @param path stored document
 	 * @return loaded incident
 	 * @throws IOException when the stored document cannot be read
-	 * @throws IllegalStateException when the schema version is malformed or newer than supported
+	 * @throws StoreValidationException when the schema version is malformed or newer than supported
 	 */
 	AppData readStored(Path path) throws IOException {
 		JsonNode tree = TOLERANT.readTree(path.toFile());
@@ -230,10 +230,10 @@ final class IncidentDocumentReader {
 		}
 		JsonNode version = tree.get("schemaVersion");
 		if (version != null && (!version.isIntegralNumber() || !version.canConvertToInt() || version.intValue() < 1)) {
-			throw new IllegalStateException("Incident has an invalid schema version: " + path);
+			throw new StoreValidationException("Incident has an invalid schema version: " + path);
 		}
 		if (version != null && version.intValue() > AppData.CURRENT_SCHEMA_VERSION) {
-			throw new IllegalStateException("Incident schema is newer than supported schema "
+			throw new StoreValidationException("Incident schema is newer than supported schema "
 					+ AppData.CURRENT_SCHEMA_VERSION + ": " + path);
 		}
 		inspect(tree, TOLERANT.constructType(AppData.class), "$", false);

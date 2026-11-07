@@ -21,7 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Reusable behavioral contract for incident stores. */
+/**
+ * Legacy numeric file-store compatibility checks. Backend-neutral token semantics
+ * are verified by {@link AbstractSnapshotIncidentStoreContractTest}.
+ */
 public abstract class AbstractIncidentStoreContractTest {
 	@TempDir
 	Path tempDir;
