@@ -7,8 +7,10 @@ import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.ResourceDirectoryEntry;
 import org.sarmanagement.icsforms.model.ResourceDirectorySource;
+import org.sarmanagement.icsforms.model.ResourceStatus;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
+import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -75,7 +77,7 @@ import java.util.Map;
  */
 public class TCardPanel extends JPanel {
 	private static final String[] STATUS_OPTIONS = {"", "Requested", "Enroute", "At Staging", "Assigned",
-			"Out of Service"};
+			"Out of Service", ResourceStatus.DEMOBILIZED.getLabel()};
 	private static final String VIEW_TABLE = "table";
 	private static final String VIEW_RACK = "rack";
 	private static final String VIEW_DIRECTORY = "directory";
@@ -144,6 +146,27 @@ public class TCardPanel extends JPanel {
 	 */
 	public void setOnAddLogEntryRequest(java.util.function.Consumer<LogEntryContext> handler) {
 		onAddLogEntryRequest = handler;
+	}
+
+	/**
+	 * Records check-in and demobilization events after an edit is committed.
+	 *
+	 * @param original card before editing, or {@code null} for a new card.
+	 * @param edited cancel-safe edited card.
+	 */
+	private void recordCommittedCardEvents(TCard original, TCard edited) {
+		if (edited.getCardType() != TCardType.HEADER
+				&& (original == null
+						|| !java.util.Objects.equals(original.getCheckInDateTime(), edited.getCheckInDateTime()))
+				&& edited.getCheckInDateTime() != null) {
+			controller.recordTCardCheckIn(edited,
+					edited.getCheckInDateTime().atOffset(java.time.ZoneOffset.UTC).toInstant());
+		}
+		if (original != null && edited.getCardType() != TCardType.HEADER
+				&& ResourceStatus.fromLabel(original.getStatus()) != ResourceStatus.DEMOBILIZED
+				&& ResourceStatus.fromLabel(edited.getStatus()) == ResourceStatus.DEMOBILIZED) {
+			controller.recordTCardCheckOut(edited, UtcTimestamp.nowInstant());
+		}
 	}
 
 	/**
@@ -1339,7 +1362,9 @@ public class TCardPanel extends JPanel {
 		}
 	}
 
-	/** Chooses a new resource type within the initiating document. */
+	/**
+	 * Chooses a new resource type within the initiating document.
+	 */
 	private void addCardWithTypeChoice() {
 		JComboBox<TCardType> typeChooser = new JComboBox<>(TCardType.values());
 		typeChooser.setRenderer(tCardTypeRenderer());
@@ -1353,6 +1378,7 @@ public class TCardPanel extends JPanel {
 		card.setCardType((TCardType) typeChooser.getSelectedItem());
 		if (openEditDialog(card)) {
 			tableModel.addCard(card);
+			recordCommittedCardEvents(null, card);
 			refreshDerivedViewsFromTableModel();
 			controller.markDirty();
 		}
@@ -1363,6 +1389,7 @@ public class TCardPanel extends JPanel {
 		card.setCardType(TCardType.PERSONNEL);
 		if (openEditDialog(card)) {
 			tableModel.addCard(card);
+			recordCommittedCardEvents(null, card);
 			refreshDerivedViewsFromTableModel();
 			controller.markDirty();
 		}
@@ -1400,6 +1427,7 @@ public class TCardPanel extends JPanel {
 			return null;
 		}
 		tableModel.addCard(card);
+		recordCommittedCardEvents(null, card);
 		refreshDerivedViewsFromTableModel();
 		controller.markDirty();
 		return card;
@@ -1415,6 +1443,9 @@ public class TCardPanel extends JPanel {
 		}
 	}
 
+	/**
+	 * Edits the selected card without changing it when the dialog is cancelled.
+	 */
 	private void editSelectedCard() {
 		TCard selected = selectedCard();
 		if (selected == null) {
@@ -1429,6 +1460,7 @@ public class TCardPanel extends JPanel {
 			return;
 		}
 		tableModel.replaceCard(row, copy);
+		recordCommittedCardEvents(selected, copy);
 		if (selectedRackCard == selected) {
 			selectedRackCard = copy;
 		}
@@ -1495,6 +1527,10 @@ public class TCardPanel extends JPanel {
 	 * </ul>
 	 * The first card (lower index) is the target that receives the merged data; the
 	 * second (duplicate) is removed once the merge is confirmed.
+	 * Check-in/out history keeps card A's order followed by unique events from card
+	 * B in their existing order. Events with matching occurrence IDs and identical
+	 * contents are shared; legacy events without IDs use exact event contents and
+	 * retain the larger multiplicity from either card.
 	 * </p>
 	 */
 	private void mergeDuplicates() {
@@ -1703,6 +1739,7 @@ public class TCardPanel extends JPanel {
 			String resolved = isConflict[i] ? editFields[i].getText().trim() : autoResolved[i];
 			applyMergedField(merged, i, resolved);
 		}
+		merged.setCheckInOutEvents(mergeCheckInOutEvents(a, b));
 		// Preserve check-in date from whichever card has one; prefer A.
 		if (merged.getCheckInDateTime() == null && b.getCheckInDateTime() != null) {
 			merged.setCheckInDateTime(b.getCheckInDateTime());
@@ -1712,6 +1749,48 @@ public class TCardPanel extends JPanel {
 			merged.setSourceRef(b.getSourceRef());
 		}
 		return merged;
+	}
+
+	/**
+	 * Combines check-in/out history in a stable A-first order without changing events.
+	 *
+	 * <p>Identified events are shared only when both their IDs and contents match.
+	 * For legacy events without IDs, exact event contents are counted on each card
+	 * and the larger count is retained.</p>
+	 *
+	 * @param a target card whose history is ordered first.
+	 * @param b duplicate card whose unique history follows card A.
+	 * @return combined history with shared events represented once.
+	 */
+	private static List<TCard.CheckInOutEvent> mergeCheckInOutEvents(TCard a, TCard b) {
+		List<TCard.CheckInOutEvent> aEvents = List.copyOf(a.getCheckInOutEvents());
+		List<TCard.CheckInOutEvent> mergedEvents = new ArrayList<>(aEvents);
+		Map<String, List<TCard.CheckInOutEvent>> identifiedEvents = new LinkedHashMap<>();
+		Map<TCard.CheckInOutEvent, Integer> legacyACounts = new LinkedHashMap<>();
+		Map<TCard.CheckInOutEvent, Integer> legacyBCounts = new LinkedHashMap<>();
+		for (TCard.CheckInOutEvent event : aEvents) {
+			if (event.eventId() == null) {
+				legacyACounts.merge(event, 1, Integer::sum);
+			} else {
+				identifiedEvents.computeIfAbsent(event.eventId(), ignored -> new ArrayList<>()).add(event);
+			}
+		}
+		for (TCard.CheckInOutEvent event : b.getCheckInOutEvents()) {
+			if (event.eventId() == null) {
+				int occurrence = legacyBCounts.merge(event, 1, Integer::sum);
+				if (occurrence > legacyACounts.getOrDefault(event, 0)) {
+					mergedEvents.add(event);
+				}
+				continue;
+			}
+			List<TCard.CheckInOutEvent> sameIdEvents = identifiedEvents.get(event.eventId());
+			if (sameIdEvents != null && sameIdEvents.contains(event)) {
+				continue;
+			}
+			mergedEvents.add(event);
+			identifiedEvents.computeIfAbsent(event.eventId(), ignored -> new ArrayList<>()).add(event);
+		}
+		return mergedEvents;
 	}
 
 	/**
@@ -2169,10 +2248,13 @@ public class TCardPanel extends JPanel {
 		JTextField personnelResIdField = UiSupport.textField();
 		JTextField personnelLocField = UiSupport.textField();
 		JComboBox<String> personnelStatusCombo = new JComboBox<>(STATUS_OPTIONS);
+		personnelStatusCombo.setName("personnelStatus");
 		JTextField personnelNotesField = UiSupport.textField();
 
 		SpinnerDateModel checkInModel = new SpinnerDateModel();
 		JSpinner checkInSpinner = new JSpinner(checkInModel);
+		checkInSpinner.setName("checkInDateTime");
+		boolean[] checkInTimeChanged = {false};
 		checkInSpinner.setEditor(new JSpinner.DateEditor(checkInSpinner, "yyyy-MM-dd HH:mm"));
 		UiSupport.applyDateTimeDisplayZone(checkInSpinner);
 
@@ -2189,12 +2271,14 @@ public class TCardPanel extends JPanel {
 		if (card.getCheckInDateTime() != null) {
 			checkInModel.setValue(AppController.toDate(card.getCheckInDateTime()));
 		}
+		checkInSpinner.addChangeListener(event -> checkInTimeChanged[0] = true);
 
 		// ── OTHER resource sub-form fields ────────────────────────────────
 		JTextField handlerNameField = UiSupport.textField();
 		JTextField resourceResIdField = UiSupport.textField();
 		JTextField resourceLocField = UiSupport.textField();
 		JComboBox<String> resourceStatusCombo = new JComboBox<>(STATUS_OPTIONS);
+		resourceStatusCombo.setName("resourceStatus");
 		JTextField resourceNotesField = UiSupport.textField();
 		JTextField crewSizeField = UiSupport.textField();
 		crewSizeField.setPreferredSize(new Dimension(60, crewSizeField.getPreferredSize().height));
@@ -2334,7 +2418,10 @@ public class TCardPanel extends JPanel {
 				card.setRadioChannel(radioChannelField.getText().trim());
 				card.setRadioChannelId(RadioChannelPicker.referenceId(radioChannelField));
 				Object spinnerVal = checkInSpinner.getValue();
-				if (spinnerVal instanceof Date d) {
+				boolean checkInTimeChangedFromOriginal = card.getCheckInDateTime() == null
+						? checkInTimeChanged[0]
+						: !AppController.toDate(card.getCheckInDateTime()).equals(spinnerVal);
+				if (checkInTimeChangedFromOriginal && spinnerVal instanceof Date d) {
 					card.setCheckInDateTime(AppController.toLocalDateTime(d));
 				}
 				card.setResourceIdentifier(personnelResIdField.getText().trim());
@@ -2515,13 +2602,15 @@ public class TCardPanel extends JPanel {
 	}
 
 	/**
-	 * Copies a card for cancel-safe editing, retaining its channel identity and text fallback.
+	 * Copies a card for cancel-safe editing while retaining its stable identity,
+	 * event history, and channel identity and text fallback.
 	 *
 	 * @param src source resource card.
 	 * @return detached editable copy.
 	 */
 	private static TCard copyCard(TCard src) {
 		TCard copy = new TCard();
+		copy.setResourceId(src.getResourceId());
 		copy.setCardType(src.getCardType());
 		copy.setPersonName(src.getPersonName());
 		copy.setHomeAgency(src.getHomeAgency());
@@ -2530,6 +2619,7 @@ public class TCardPanel extends JPanel {
 		copy.setRadioChannel(src.getRadioChannel());
 		copy.setRadioChannelId(src.getRadioChannelId());
 		copy.setCheckInDateTime(src.getCheckInDateTime());
+		copy.setCheckInOutEvents(src.getCheckInOutEvents());
 		copy.setResourceIdentifier(src.getResourceIdentifier());
 		copy.setLocation(src.getLocation());
 		copy.setStatus(src.getStatus());
@@ -2622,6 +2712,7 @@ public class TCardPanel extends JPanel {
 					TCard copy = copyCard(tableModel.getCard(currentIdx));
 					if (openEditDialog(copy, rows)) {
 						tableModel.replaceCard(currentIdx, copy);
+						recordCommittedCardEvents(rel, copy);
 						refreshDerivedViewsFromTableModel();
 						controller.markDirty();
 					}

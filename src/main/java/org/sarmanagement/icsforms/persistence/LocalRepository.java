@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Provenance;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -35,7 +36,8 @@ public class LocalRepository {
 	 * listing.
 	 */
 	private static final ObjectMapper SHARED_MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
-			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+			.addMixIn(Provenance.class, Provenance.LocalStorageMixin.class);
 
 	private final Path filePath;
 	private final Path backupPath;
@@ -91,6 +93,7 @@ public class LocalRepository {
 			if (Files.exists(filePath)) {
 				try {
 					existing = SHARED_MAPPER.readTree(filePath.toFile());
+					StoredJsonMerger.removeAcceptedAt(existing);
 				} catch (IOException corruptPrimary) {
 					// Preserve the established recovery behavior for a corrupt primary.
 				}
@@ -141,10 +144,12 @@ public class LocalRepository {
 	 */
 	private AppData loadAndMigrate(Path source) throws IOException {
 		JsonNode original = SHARED_MAPPER.readTree(source.toFile());
+		JsonNode localOriginal = original.deepCopy();
+		StoredJsonMerger.removeAcceptedAt(localOriginal);
 		AppData data = new IncidentDocumentReader().readStored(source);
 		data.normalizeIdentity();
 		data.reconcileMedicalUnitLeaderAssignment();
-		JsonNode migrated = mergeKnownProperties(original, SHARED_MAPPER.valueToTree(data));
+		JsonNode migrated = mergeKnownProperties(localOriginal, SHARED_MAPPER.valueToTree(data));
 		if (!original.equals(migrated)) {
 			persistMigration(source, migrated);
 		}

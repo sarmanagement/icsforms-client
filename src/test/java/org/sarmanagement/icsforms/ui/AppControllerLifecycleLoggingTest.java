@@ -7,16 +7,20 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.OperatorContext;
+import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AppControllerLifecycleLoggingTest {
@@ -44,6 +48,62 @@ class AppControllerLifecycleLoggingTest {
 		assertNotNull(taskLog);
 		assertEquals(ActivityEventType.ID_RESOURCE_ON_TASK, taskLog.getActivityLog().get(0).getEventTypeId());
 		assertEquals(effectiveTime, taskLog.getActivityLog().get(0).getTimestamp());
+		assertNull(task.getLifecycleStatusChanges().get(0).provenance());
+		assertNull(icpLog.getActivityLog().get(0).getProvenance());
+	}
+
+	@Test
+	void taskLifecycleAndMirroredActivityEntriesUseInjectedOperatorContext() throws Exception {
+		AppController controller = sampleControllerWithTaskLog();
+		controller.setOperatorContext(new OperatorContext("Incident Operator", "station-7"));
+		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(0);
+
+		controller.recordTaskLifecycleTransition(task, "planned", "assigned - on task",
+				LocalDateTime.parse("2026-01-01T16:15:00"));
+
+		Provenance lifecycleProvenance = task.getLifecycleStatusChanges().get(0).provenance();
+		assertEquals("Incident Operator", lifecycleProvenance.operatorName());
+		assertEquals("station-7", lifecycleProvenance.stationId());
+		assertNotNull(lifecycleProvenance.enteredAt());
+		assertNull(lifecycleProvenance.acceptedAt());
+		Ics214Form icpLog = controller.getData().getActivityLogs().stream()
+				.filter(log -> log.getLogScope() == ActivityLogScope.ICP).findFirst().orElseThrow();
+		Ics214Form taskLog = controller.getData().getActivityLogs().stream()
+				.filter(log -> "a-1".equals(log.getLinkedSarTaskAssignmentId())).findFirst().orElseThrow();
+		assertEquals(lifecycleProvenance, icpLog.getActivityLog().get(0).getProvenance());
+		assertEquals(lifecycleProvenance, taskLog.getActivityLog().get(0).getProvenance());
+	}
+
+	@Test
+	void emptyOperatorContextLeavesNewProvenanceAbsent() throws Exception {
+		AppController controller = sampleControllerWithTaskLog();
+		SarTaskAssignment task = controller.getData().getSarTaskAssignments().get(0);
+
+		controller.recordTaskLifecycleTransition(task, "planned", "assigned - on task",
+				LocalDateTime.parse("2026-01-01T16:15:00"));
+
+		assertNull(task.getLifecycleStatusChanges().get(0).provenance());
+		Ics214Form icpLog = controller.getData().getActivityLogs().stream()
+				.filter(log -> log.getLogScope() == ActivityLogScope.ICP).findFirst().orElseThrow();
+		assertNull(icpLog.getActivityLog().get(0).getProvenance());
+	}
+
+	@Test
+	void tCardCheckInAndOutEventsUseInjectedOperatorContext() throws Exception {
+		AppController controller = IncidentStoreTestFixtures.controller(new AppData());
+		controller.setOperatorContext(new OperatorContext("Incident Operator", null));
+		TCard card = new TCard();
+		Instant checkedInAt = Instant.parse("2026-01-01T16:15:00Z");
+		Instant checkedOutAt = Instant.parse("2026-01-01T20:15:00Z");
+
+		controller.recordTCardCheckIn(card, checkedInAt);
+		controller.recordTCardCheckOut(card, checkedOutAt);
+
+		assertEquals(2, card.getCheckInOutEvents().size());
+		assertEquals("Incident Operator", card.getCheckInOutEvents().get(0).provenance().operatorName());
+		assertEquals(checkedInAt, card.getCheckInOutEvents().get(0).eventAt());
+		assertEquals(TCard.CheckInOutAction.CHECK_OUT, card.getCheckInOutEvents().get(1).action());
+		assertNull(card.getCheckInOutEvents().get(1).provenance().acceptedAt());
 	}
 
 	@Test
@@ -139,6 +199,7 @@ class AppControllerLifecycleLoggingTest {
 	@Test
 	void clueLoggingAddsIcpActivityEntry() throws Exception {
 		AppController controller = IncidentStoreTestFixtures.controller(new AppData());
+		controller.setOperatorContext(new OperatorContext("Incident Operator", "station-2"));
 
 		ClueLogEntry clue = new ClueLogEntry();
 		clue.setDetectingTask("T-1");
@@ -154,6 +215,7 @@ class AppControllerLifecycleLoggingTest {
 		assertFalse(icpLog.getActivityLog().isEmpty());
 		assertEquals("T-1", icpLog.getActivityLog().get(0).getResourceIdentifier());
 		assertTrue(icpLog.getActivityLog().get(0).getNotableActivity().contains("Clue logged"));
+		assertEquals("Incident Operator", icpLog.getActivityLog().get(0).getProvenance().operatorName());
 	}
 
 	@Test

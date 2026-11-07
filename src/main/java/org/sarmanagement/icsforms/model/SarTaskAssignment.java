@@ -5,9 +5,12 @@ package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -76,6 +79,7 @@ public class SarTaskAssignment {
 	 * </p>
 	 */
 	private String taskLifecycleStatus = "planned";
+	private List<LifecycleStatusChange> lifecycleStatusChanges = new ArrayList<>();
 	/**
 	 * Whether the debriefing for this task assignment has been formally completed.
 	 *
@@ -88,6 +92,64 @@ public class SarTaskAssignment {
 	 */
 	private boolean debriefingCompleted = false;
 	private String iapPage = "";
+
+	/**
+	 * Returns the append-only lifecycle status history.
+	 *
+	 * @return lifecycle changes in recorded order, never {@code null}.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_EMPTY)
+	public List<LifecycleStatusChange> getLifecycleStatusChanges() {
+		if (lifecycleStatusChanges == null) {
+			lifecycleStatusChanges = new ArrayList<>();
+		}
+		return lifecycleStatusChanges;
+	}
+
+	/**
+	 * Replaces lifecycle history during deserialization or migration.
+	 *
+	 * @param lifecycleStatusChanges recorded lifecycle changes; null becomes empty.
+	 */
+	public void setLifecycleStatusChanges(List<LifecycleStatusChange> lifecycleStatusChanges) {
+		this.lifecycleStatusChanges = lifecycleStatusChanges == null
+				? new ArrayList<>() : new ArrayList<>(lifecycleStatusChanges);
+	}
+
+	/**
+	 * Appends an attributed lifecycle status change without changing the current
+	 * task status.
+	 *
+	 * @param previousStatus status before the change.
+	 * @param newStatus status after the change.
+	 * @param changedAt UTC instant when the change took effect.
+	 * @param provenance optional attribution for the change.
+	 */
+	public void recordLifecycleStatusChange(String previousStatus, String newStatus, Instant changedAt,
+			Provenance provenance) {
+		getLifecycleStatusChanges().add(new LifecycleStatusChange(previousStatus, newStatus, changedAt, provenance));
+	}
+
+	/**
+	 * Immutable history record for a lifecycle status change.
+	 *
+	 * @param previousStatus status before the change.
+	 * @param newStatus status after the change.
+	 * @param changedAt UTC instant when the change took effect.
+	 * @param provenance optional attribution for the change.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public record LifecycleStatusChange(String previousStatus, String newStatus, Instant changedAt,
+			Provenance provenance) {
+		/**
+		 * Requires the lifecycle transition to have both statuses and a timestamp.
+		 */
+		public LifecycleStatusChange {
+			Objects.requireNonNull(previousStatus, "previousStatus");
+			Objects.requireNonNull(newStatus, "newStatus");
+			Objects.requireNonNull(changedAt, "changedAt");
+		}
+	}
 
 	/**
 	 * Creates a SAR scaffold from a linked ICS 204 resource assignment, preserving

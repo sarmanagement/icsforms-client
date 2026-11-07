@@ -2151,6 +2151,7 @@ public class SarTaskPanel extends JPanel {
 	 */
 	private static void copyFollowUp(ClueLogEntry source, ClueLogEntry target) {
 		target.setEntryId(source.getEntryId());
+		target.setProvenance(source.getProvenance());
 		target.setDetectedBy(source.getDetectedBy());
 		target.setFollowUpAssignments(source.getFollowUpAssignments());
 		target.setFollowUpBriefed(source.isFollowUpBriefed());
@@ -2211,6 +2212,7 @@ public class SarTaskPanel extends JPanel {
 				for (ClueLogEntry clue : clues) {
 					ClueLogEntry copy = new ClueLogEntry();
 					copy.setAssignmentId(clue.getAssignmentId());
+					copy.setProvenance(clue.getProvenance());
 					copy.setDetectingTask(clue.getDetectingTask());
 					copy.setDateTimeCollected(clue.getDateTimeCollected());
 					copy.setLocation(clue.getLocation());
@@ -2835,7 +2837,9 @@ public class SarTaskPanel extends JPanel {
 				row.setResourceType(selectedComboValue(resourceTypeField));
 				row.setTaskType(selectedComboValue(taskTypeField));
 				if (java.util.Objects.equals(initialLifecycleStatus, row.getTaskLifecycleStatus())) {
+					String previousStatus = initialLifecycleStatus;
 					row.setTaskLifecycleStatus((String) taskLifecycleField.getSelectedItem());
+					controller.recordTaskLifecycleStatusEdit(row, previousStatus, row.getTaskLifecycleStatus());
 					initialLifecycleStatus = row.getTaskLifecycleStatus();
 				}
 				row.setResourcesAssigned(resourceValuesFrom(resourceEntryTableModel));
@@ -2883,6 +2887,9 @@ public class SarTaskPanel extends JPanel {
 				}
 				if (!externalFollowUp) {
 					initialClueFollowUp.put(edited.getEntryId(), edited.getFollowUp());
+				}
+				if (updatedClues.stream().noneMatch(current -> edited.getEntryId().equals(current.getEntryId()))) {
+					edited.setProvenance(controller == null ? null : controller.createProvenance());
 				}
 				initialClueIds.add(edited.getEntryId());
 			}

@@ -182,6 +182,7 @@ final class ActivityEntryDialog {
 			types.removeIf(type -> isClueType(type.getId()));
 		}
 		editor = new Ics214Panel.ActivityEntryEditor(types, resource, resources, this::isIcpDestination);
+		editor.setProvenance(controller.createProvenance());
 		editor.setQuickEntryDefaults(preferredEventTypeId, initialActivity);
 		JPanel selectors = UiSupport.formPanel();
 		UiSupport.addRow(selectors, 0, "Destination log", destination);

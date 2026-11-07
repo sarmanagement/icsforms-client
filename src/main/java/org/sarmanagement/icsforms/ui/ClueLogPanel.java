@@ -205,6 +205,7 @@ public class ClueLogPanel extends JPanel {
 		}
 
 		ClueLogEntry clue = new ClueLogEntry();
+		clue.setProvenance(controller.createProvenance());
 		Object spinnerValue = dateTimeSpinner.getValue();
 		if (spinnerValue instanceof Date) {
 			clue.setDateTimeCollected(AppController.toLocalDateTime((Date) spinnerValue));

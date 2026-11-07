@@ -10,7 +10,9 @@ import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.OperatorContext;
 import org.sarmanagement.icsforms.model.PodFactorRating;
+import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
@@ -41,6 +43,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -51,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -382,6 +386,9 @@ class SarTaskPanelTest {
 		ClueLogEntry original = new ClueLogEntry();
 		original.setAssignmentId(task.getAssignmentId());
 		original.setDescription("Original clue");
+		Provenance provenance = Provenance.local("Original Operator", "station-5",
+				Instant.parse("2026-10-27T09:15:00Z"));
+		original.setProvenance(provenance);
 		Object editor = createEditor(task, "DEBRIEFING", 1, List.of(), null, List.of(original));
 		original.setFollowUp("Updated externally");
 		ClueLogEntry concurrent = new ClueLogEntry();
@@ -396,7 +403,31 @@ class SarTaskPanelTest {
 		assertTrue(merged.contains(concurrent));
 		assertEquals("Updated externally", merged.stream()
 				.filter(clue -> clue.getEntryId().equals(original.getEntryId())).findFirst().orElseThrow().getFollowUp());
+		assertEquals(provenance, merged.stream()
+				.filter(clue -> clue.getEntryId().equals(original.getEntryId())).findFirst().orElseThrow().getProvenance());
 		assertEquals("Externally renamed", task.getAssignmentTeamNumber());
+	}
+
+	@Test
+	void debriefCreatesNewClueWithCurrentOperatorProvenance() throws Exception {
+		SarTaskAssignment task = sampleTask();
+		AppController controller = IncidentStoreTestFixtures.controller(new AppData());
+		controller.setOperatorContext(new OperatorContext("Incident Operator", "station-6"));
+		Object editor = createEditor(task, "DEBRIEFING", 1, List.of(), controller, List.of());
+		Field modelField = editor.getClass().getDeclaredField("clueEntryTableModel");
+		modelField.setAccessible(true);
+		AbstractTableModel clues = (AbstractTableModel) modelField.get(editor);
+		clues.setValueAt("New clue", 0, 2);
+		Method apply = editor.getClass().getDeclaredMethod("applyTo", SarTaskAssignment.class, List.class);
+		apply.setAccessible(true);
+
+		@SuppressWarnings("unchecked")
+		List<ClueLogEntry> created = (List<ClueLogEntry>) apply.invoke(editor, task, List.of());
+
+		assertEquals(1, created.size());
+		assertEquals("Incident Operator", created.get(0).getProvenance().operatorName());
+		assertEquals("station-6", created.get(0).getProvenance().stationId());
+		assertNull(created.get(0).getProvenance().acceptedAt());
 	}
 
 	@Test

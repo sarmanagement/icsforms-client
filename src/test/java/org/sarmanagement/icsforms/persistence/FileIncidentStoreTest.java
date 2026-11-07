@@ -17,6 +17,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -412,6 +413,7 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 				} else {
 					assertEquals("Locate the subject",
 							migrated.getForm201().getCurrentActions().get(0).getActions());
+					assertNull(migrated.getActivityLogs().get(0).getActivityLog().get(0).getProvenance());
 					assertEquals("Legacy team label",
 							migrated.getActivityLogs().get(0).getActivityLog().get(0).getResourceIdentifier());
 					JsonNode saved = new ObjectMapper().readTree(source.toFile());
@@ -430,6 +432,48 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 						IncidentId.of(new ObjectMapper().readTree(source.toFile()).path("incidentId").asText()))));
 			}
 		}
+	}
+
+	@Test
+	void provenanceFixtureRoundTripsAndLocalStoresDiscardHostAcceptanceTimes() throws Exception {
+		Path incidents = tempDir.resolve("incidents");
+		Files.createDirectories(incidents);
+		Path source = incidents.resolve("0a10d9f1-64b3-4f66-9b67-a0faaf8f64e3.json");
+		try (var fixture = getClass().getResourceAsStream("/incidents/historical/schema-17-provenance.json")) {
+			assertTrue(fixture != null);
+			Files.copy(fixture, source);
+		}
+
+		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+			IncidentId id = IncidentId.of("0a10d9f1-64b3-4f66-9b67-a0faaf8f64e3");
+			AppData loaded = store.load(id);
+			assertEquals(AppData.CURRENT_SCHEMA_VERSION, loaded.getSchemaVersion());
+			assertEquals("Fictional Operator",
+					loaded.getActivityLogs().get(0).getActivityLog().get(0).getProvenance().operatorName());
+			assertNull(loaded.getActivityLogs().get(0).getActivityLog().get(0).getProvenance().acceptedAt());
+			assertNull(loaded.getClueLogEntries().get(0).getProvenance());
+			assertEquals(1, loaded.getSarTaskAssignments().get(0).getLifecycleStatusChanges().size());
+			assertEquals(2, loaded.getTCards().get(0).getCheckInOutEvents().size());
+			assertNull(loaded.getTCards().get(0).getCheckInOutEvents().get(0).provenance().acceptedAt());
+
+			JsonNode saved = new ObjectMapper().readTree(source.toFile());
+			assertTrue(saved.path("activityLogs").get(0).path("activityLog").get(0).path("provenance")
+					.get("acceptedAt") == null);
+			assertTrue(saved.path("sarTaskAssignments").get(0).path("lifecycleStatusChanges").get(0)
+					.path("provenance").get("acceptedAt") == null);
+			assertEquals(loaded.getActivityLogs().get(0).getActivityLog().get(0).getProvenance(),
+					store.load(id).getActivityLogs().get(0).getActivityLog().get(0).getProvenance());
+		}
+
+		Path legacyLocalFile = tempDir.resolve("legacy-local.json");
+		try (var fixture = getClass().getResourceAsStream("/incidents/historical/schema-17-provenance.json")) {
+			assertTrue(fixture != null);
+			Files.copy(fixture, legacyLocalFile);
+		}
+		AppData localData = new LocalRepository(legacyLocalFile).loadOrDefault();
+		assertNull(localData.getActivityLogs().get(0).getActivityLog().get(0).getProvenance().acceptedAt());
+		assertTrue(new ObjectMapper().readTree(legacyLocalFile.toFile()).path("activityLogs").get(0).path("activityLog")
+				.get(0).path("provenance").get("acceptedAt") == null);
 	}
 
 	/** A second store cannot acquire an incident's advisory lock. */

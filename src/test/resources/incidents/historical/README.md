@@ -9,6 +9,7 @@ is reserved for documents that omit `schemaVersion`.
 | --- | --- | --- | --- |
 | `schema-5-legacy-aliases.json` | 5 | Historical field aliases and legacy T-card labels | Aliases bind to current fields; missing record IDs are assigned once and persisted. |
 | `schema-5-missing-identities.json` | 5 | Missing child IDs, nested unknown properties, and a linked activity record | IDs are stable across reload/restart; unknown root and record properties remain; legacy text stays available. |
+| `schema-17-provenance.json` | 17 | Attributed and legacy records, lifecycle and T-card event histories, and host-only acceptance stamps | Existing provenance round-trips; local stores remove `acceptedAt`; unattributed records remain unattributed. |
 
 When a supported schema or migration changes, add or update a representative
 fixture and its assertions in `FileIncidentStoreTest`. Keep narrow inline

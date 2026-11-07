@@ -9,9 +9,14 @@ package org.sarmanagement.icsforms.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -56,6 +61,7 @@ public class TCard {
 	private String radioChannelId = "";
 	/** Date and time of check-in at the incident. */
 	private LocalDateTime checkInDateTime;
+	private List<CheckInOutEvent> checkInOutEvents = new ArrayList<>();
 
 	// Common fields used across card types
 	/** Resource or unit identifier. */
@@ -103,6 +109,87 @@ public class TCard {
 	 * crew of N people) and PERSONNEL cards (always 1). Zero means unspecified.
 	 */
 	private int numberOfPersons = 0;
+
+	/**
+	 * Returns check-in and check-out events in recorded order.
+	 *
+	 * @return event history, never {@code null}.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_EMPTY)
+	public List<CheckInOutEvent> getCheckInOutEvents() {
+		if (checkInOutEvents == null) {
+			checkInOutEvents = new ArrayList<>();
+		}
+		return checkInOutEvents;
+	}
+
+	/**
+	 * Sets check-in and check-out history during deserialization or migration.
+	 *
+	 * @param checkInOutEvents event history; null becomes empty.
+	 */
+	public void setCheckInOutEvents(List<CheckInOutEvent> checkInOutEvents) {
+		this.checkInOutEvents = checkInOutEvents == null
+				? new ArrayList<>() : new ArrayList<>(checkInOutEvents);
+	}
+
+	/**
+	 * Appends a check-in event.
+	 *
+	 * @param eventAt UTC instant of the check-in event.
+	 * @param provenance optional attribution for the event.
+	 */
+	public void recordCheckIn(Instant eventAt, Provenance provenance) {
+		getCheckInOutEvents().add(new CheckInOutEvent(CheckInOutAction.CHECK_IN, eventAt, provenance));
+	}
+
+	/**
+	 * Appends a check-out event.
+	 *
+	 * @param eventAt UTC instant of the check-out event.
+	 * @param provenance optional attribution for the event.
+	 */
+	public void recordCheckOut(Instant eventAt, Provenance provenance) {
+		getCheckInOutEvents().add(new CheckInOutEvent(CheckInOutAction.CHECK_OUT, eventAt, provenance));
+	}
+
+	/**
+	 * Identifies a T-card check-in or check-out event.
+	 */
+	public enum CheckInOutAction {
+		CHECK_IN, CHECK_OUT
+	}
+
+	/**
+	 * Immutable record of a T-card check-in or check-out.
+	 *
+	 * @param action check-in or check-out action.
+	 * @param eventAt UTC instant when the event occurred.
+	 * @param provenance optional attribution for the event.
+	 * @param eventId stable identity for this occurrence, absent on legacy events.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public record CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance, String eventId) {
+		/**
+		 * Requires an event type and timestamp and normalizes an optional event identity.
+		 */
+		public CheckInOutEvent {
+			Objects.requireNonNull(action, "action");
+			Objects.requireNonNull(eventAt, "eventAt");
+			eventId = eventId == null || eventId.isBlank() ? null : eventId;
+		}
+
+		/**
+		 * Creates a new event occurrence with a stable identity.
+		 *
+		 * @param action check-in or check-out action.
+		 * @param eventAt UTC instant when the event occurred.
+		 * @param provenance optional attribution for the event.
+		 */
+		public CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance) {
+			this(action, eventAt, provenance, UUID.randomUUID().toString());
+		}
+	}
 
 	/**
 	 * Creates an empty T-card defaulting to a Personnel card.
