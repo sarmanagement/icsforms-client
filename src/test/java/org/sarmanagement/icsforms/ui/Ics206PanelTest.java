@@ -164,6 +164,7 @@ class Ics206PanelTest {
 
 		SwingUtilities.invokeAndWait(() -> {
 			((javax.swing.JTextArea) fieldValue(panel, "procedures")).setText("Old-period draft");
+			controller.save();
 			controller.newOperationalPeriod();
 			AppController.EditorCommitBinding newPeriod = controller.captureEditorCommitBinding();
 			assertTrue(controller.commitEditorIfCurrent(newPeriod, AppController.LinkSource.NONE,

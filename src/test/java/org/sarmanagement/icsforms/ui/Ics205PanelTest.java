@@ -675,6 +675,7 @@ class Ics205PanelTest {
 			assertEquals("", data.getForm205().getPreparedBySignature());
 			assertNull(data.getForm205().getPreparedDateTime());
 			assertEquals("", data.getForm205().getIapPage());
+			controller.save();
 			controller.newOperationalPeriod();
 			assertTrue(data.getForm205().getChannels().isEmpty());
 			assertEquals("", data.getForm205().getSpecialInstructions());

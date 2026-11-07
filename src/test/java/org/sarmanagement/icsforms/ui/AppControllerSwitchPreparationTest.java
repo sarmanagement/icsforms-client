@@ -57,7 +57,7 @@ class AppControllerSwitchPreparationTest {
 			Files.createDirectory(lockPath);
 			try (AppController controller = controller(store, activeId, active)) {
 				controller.markDirty();
-				assertThrows(StorePersistenceException.class, () -> controller.open(candidateId));
+				assertThrows(StorePersistenceException.class, () -> controller.replaceActiveDocumentFromStore(candidateId));
 				assertSame(active, controller.getData());
 				assertEquals(activeId, controller.getActiveIncidentId());
 				assertTrue(controller.isDirty());
@@ -84,7 +84,7 @@ class AppControllerSwitchPreparationTest {
 				store.candidateId = candidateId;
 				store.candidate = new StoredIncident(candidate, store.loadSnapshot(candidateId).revision());
 				IllegalStateException failure = assertThrows(IllegalStateException.class,
-						() -> controller.open(candidateId));
+						() -> controller.replaceActiveDocumentFromStore(candidateId));
 				assertEquals("Candidate preparation failed", failure.getMessage());
 				assertSame(active, controller.getData());
 				assertEquals(activeId, controller.getActiveIncidentId());

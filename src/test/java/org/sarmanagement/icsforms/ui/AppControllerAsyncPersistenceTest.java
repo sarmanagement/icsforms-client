@@ -11,6 +11,7 @@ import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.persistence.PersistenceStatus;
 import org.sarmanagement.icsforms.persistence.RevisionToken;
+import org.sarmanagement.icsforms.persistence.SaveCoordinator;
 import org.sarmanagement.icsforms.persistence.StorePersistenceException;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
@@ -72,16 +73,207 @@ class AppControllerAsyncPersistenceTest {
 				await(store.entered);
 				AppData replacement = new AppData();
 				SwingUtilities.invokeAndWait(() -> {
-					controller.setData(replacement);
+					assertThrows(IllegalStateException.class, () -> controller.setData(replacement));
+					controller.discardUnsavedChangesAndSetData(replacement);
 					replacement.getIncidentContext().setIncidentName("Unsaved replacement");
 					controller.markDirty();
 				});
+				PersistenceStatus replacementStatus = controller.getPersistenceStatus();
 				store.release.countDown();
 				controller.close();
 				assertSame(replacement, controller.getData());
 				assertEquals("Unsaved replacement", replacement.getIncidentContext().getIncidentName());
 				assertTrue(controller.isDirty());
 				assertEquals(1, replacement.getRevision());
+				assertEquals(replacementStatus, controller.getPersistenceStatus());
+			}
+		}
+	}
+
+	@Test
+	void failedSavesRejectDirectReplacementWithoutDroppingRecoveryWork() throws Exception {
+		for (RuntimeException problem : replacementFailures()) {
+			try (BlockingStore store = new BlockingStore(directory())) {
+				AppData live = new AppData();
+				IncidentId id = store.create(live);
+				IncidentId candidate = store.create(new AppData());
+				try (AppController controller = controller(store, id, live)) {
+					SaveCoordinator coordinator = coordinator(controller);
+					SwingUtilities.invokeAndWait(() -> {
+						live.getIncidentContext().setIncidentName("Retained unsaved edits");
+						controller.markDirty();
+						store.failure = problem;
+						assertSame(problem, assertThrows(problem.getClass(), controller::save));
+						PersistenceStatus status = controller.getPersistenceStatus();
+						var pending = coordinator.pendingChanges();
+						var binding = controller.captureEditorCommitBinding();
+						long revision = live.getRevision();
+						assertFalse(pending.isEmpty());
+						int loads = store.loads;
+						assertSame(problem, assertThrows(problem.getClass(), () -> controller.open(candidate)));
+						assertSame(problem, assertThrows(problem.getClass(), () -> controller.setData(new AppData())));
+						assertSame(problem, assertThrows(problem.getClass(), controller::newOperationalPeriod));
+						assertEquals(loads, store.loads);
+						assertSame(live, controller.getData());
+						assertEquals(id, controller.getActiveIncidentId());
+						assertTrue(controller.isDirty());
+						assertEquals("Retained unsaved edits", live.getIncidentContext().getIncidentName());
+						assertEquals(status, controller.getPersistenceStatus());
+						assertEquals(pending, coordinator.pendingChanges());
+						assertEquals(binding, controller.captureEditorCommitBinding());
+						assertEquals(revision, live.getRevision());
+						store.failure = null;
+						controller.save();
+						assertFalse(controller.isDirty());
+						assertTrue(coordinator.pendingChanges().isEmpty());
+						AppData replacement = new AppData();
+						controller.setData(replacement);
+						assertSame(replacement, controller.getData());
+						controller.open(candidate);
+						assertEquals(candidate, controller.getActiveIncidentId());
+						assertEquals(PersistenceStatus.Durability.SAVED, controller.getPersistenceStatus().durability());
+					});
+				}
+			}
+		}
+	}
+
+	@Test
+	void explicitDiscardAndRecoveryReloadAuthorizeReplacementAfterEachSaveFailure() throws Exception {
+		for (RuntimeException problem : replacementFailures()) {
+			try (BlockingStore store = new BlockingStore(directory())) {
+				AppData live = new AppData();
+				IncidentId id = store.create(live);
+				try (AppController controller = controller(store, id, live)) {
+					SaveCoordinator coordinator = coordinator(controller);
+					SwingUtilities.invokeAndWait(() -> {
+						controller.markDirty();
+						store.failure = problem;
+						assertThrows(problem.getClass(), controller::save);
+						PersistenceStatus retainedStatus = controller.getPersistenceStatus();
+						var pending = coordinator.pendingChanges();
+						store.loadFailure = new org.sarmanagement.icsforms.persistence.StoreUnavailableException("Reload failed");
+						assertSame(store.loadFailure,
+								assertThrows(store.loadFailure.getClass(), controller::replaceActiveDocumentFromStore));
+						assertSame(live, controller.getData());
+						assertTrue(controller.isDirty());
+						assertEquals(retainedStatus, controller.getPersistenceStatus());
+						assertEquals(pending, coordinator.pendingChanges());
+						store.loadFailure = null;
+						AppData replacement = new AppData();
+						controller.discardUnsavedChangesAndSetData(replacement);
+						assertSame(replacement, controller.getData());
+						assertFalse(controller.isDirty());
+						assertTrue(coordinator.pendingChanges().isEmpty());
+						replacement.getIncidentContext().setIncidentName("Discard for reload");
+						controller.markDirty();
+						assertThrows(problem.getClass(), controller::save);
+						controller.replaceActiveDocumentFromStore();
+						assertNotSame(replacement, controller.getData());
+						assertEquals("", controller.getData().getIncidentContext().getIncidentName());
+						assertEquals(id, controller.getActiveIncidentId());
+						assertFalse(controller.isDirty());
+						assertTrue(coordinator.pendingChanges().isEmpty());
+						assertNull(controller.getPersistenceStatus().failure());
+						assertEquals(store.loadSnapshot(id).revision(), controller.getPersistenceStatus().revision());
+					});
+				}
+			}
+		}
+	}
+
+	@Test
+	void unscheduledEditsRejectOpenAndSetDataUntilSaved() throws Exception {
+		try (BlockingStore store = new BlockingStore(directory())) {
+			AppData live = new AppData();
+			IncidentId id = store.create(live);
+			IncidentId candidate = store.create(new AppData());
+			try (AppController controller = controller(store, id, live)) {
+				SwingUtilities.invokeAndWait(() -> {
+					controller.markDirty();
+					PersistenceStatus status = controller.getPersistenceStatus();
+					assertThrows(IllegalStateException.class, () -> controller.open(candidate));
+					assertThrows(IllegalStateException.class, () -> controller.setData(new AppData()));
+					assertThrows(IllegalStateException.class, controller::newOperationalPeriod);
+					assertSame(live, controller.getData());
+					assertEquals(id, controller.getActiveIncidentId());
+					assertTrue(controller.isDirty());
+					assertEquals(status, controller.getPersistenceStatus());
+					controller.save();
+					controller.open(candidate);
+					assertEquals(candidate, controller.getActiveIncidentId());
+				});
+			}
+		}
+	}
+
+	@Test
+	void openDrainsIssuedSaveAndRequiresTheLatestEditToBeDurable() throws Exception {
+		for (int outcome : java.util.List.of(0, 1, 2)) {
+			try (BlockingStore store = new BlockingStore(directory())) {
+				AppData live = new AppData();
+				IncidentId id = store.create(live);
+				IncidentId candidate = store.create(new AppData());
+				try (AppController controller = controller(store, id, live)) {
+					SaveCoordinator coordinator = coordinator(controller);
+					store.blockNextSave();
+					SwingUtilities.invokeAndWait(() -> {
+						controller.markDirty();
+						controller.saveAsync(AppController.LinkSource.NONE, failure -> { });
+					});
+					await(store.entered);
+					CountDownLatch draining = new CountDownLatch(1);
+					controller.setPersistenceWaitHandler(waiting -> {
+						if (waiting) {
+							draining.countDown();
+						}
+					});
+					CountDownLatch finished = new CountDownLatch(1);
+					AtomicReference<Throwable> openFailure = new AtomicReference<>();
+					SwingUtilities.invokeLater(() -> {
+						try {
+							controller.open(candidate);
+						} catch (Throwable problem) {
+							openFailure.set(problem);
+						} finally {
+							finished.countDown();
+						}
+					});
+					await(draining);
+					SwingUtilities.invokeAndWait(() -> {
+						if (outcome == 1) {
+							store.failure = new StorePersistenceException("Save failed while opening", null);
+						} else if (outcome == 0) {
+							live.getIncidentContext().setIncidentName("Newer edit during drain");
+							controller.markDirty();
+						}
+					});
+					store.release.countDown();
+					await(finished);
+					SwingUtilities.invokeAndWait(() -> {
+						if (outcome == 2) {
+							assertNull(openFailure.get());
+							assertNotSame(live, controller.getData());
+							assertEquals(candidate, controller.getActiveIncidentId());
+							assertFalse(controller.isDirty());
+							assertEquals(store.loadSnapshot(candidate).revision(),
+									controller.getPersistenceStatus().revision());
+							return;
+						}
+						assertNotNull(openFailure.get());
+						assertSame(live, controller.getData());
+						assertEquals(id, controller.getActiveIncidentId());
+						assertTrue(controller.isDirty());
+						if (outcome == 1) {
+							assertSame(store.failure, openFailure.get());
+							assertFalse(coordinator.pendingChanges().isEmpty());
+						} else {
+							assertInstanceOf(IllegalStateException.class, openFailure.get());
+							assertEquals(PersistenceStatus.Durability.PENDING,
+									controller.getPersistenceStatus().durability());
+						}
+					});
+				}
 			}
 		}
 	}
@@ -300,6 +492,31 @@ class AppControllerAsyncPersistenceTest {
 		assertTrue(latch.await(10, TimeUnit.SECONDS), "Persistence signal timed out");
 	}
 
+	/**
+	 * Supplies the distinct retained-work failure states.
+	 *
+	 * @return deterministic backend failures.
+	 */
+	private java.util.List<RuntimeException> replacementFailures() {
+		return java.util.List.of(new StorePersistenceException("Cannot write", null),
+				new org.sarmanagement.icsforms.persistence.StoreUnavailableException("Unavailable"),
+				new org.sarmanagement.icsforms.persistence.StoreConflictException("Conflict",
+						new RevisionToken("expected"), new RevisionToken("current")));
+	}
+
+	/**
+	 * Reads the scheduler to assert retained request identities without exposing a UI API.
+	 *
+	 * @param controller controller under test.
+	 * @return active scheduler.
+	 * @throws ReflectiveOperationException when the scheduler cannot be inspected.
+	 */
+	private SaveCoordinator coordinator(AppController controller) throws ReflectiveOperationException {
+		var field = AppController.class.getDeclaredField("saves");
+		field.setAccessible(true);
+		return (SaveCoordinator) field.get(controller);
+	}
+
 	/** Real local store with a controllable worker write boundary. */
 	static final class BlockingStore extends FileIncidentStore {
 		private CountDownLatch entered = new CountDownLatch(0);
@@ -307,6 +524,8 @@ class AppControllerAsyncPersistenceTest {
 		private volatile AppData savedDocument;
 		private volatile boolean saveOnEdt;
 		private volatile RuntimeException failure;
+		private volatile RuntimeException loadFailure;
+		private volatile int loads;
 
 		/**
 		 * Opens a local backend.
@@ -321,6 +540,16 @@ class AppControllerAsyncPersistenceTest {
 		private void blockNextSave() {
 			entered = new CountDownLatch(1);
 			release = new CountDownLatch(1);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public org.sarmanagement.icsforms.persistence.StoredIncident loadSnapshot(IncidentId id) {
+			loads++;
+			if (loadFailure != null) {
+				throw loadFailure;
+			}
+			return super.loadSnapshot(id);
 		}
 
 		/** {@inheritDoc} */

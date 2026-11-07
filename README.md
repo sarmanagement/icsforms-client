@@ -399,9 +399,15 @@ configured store, not synchronized with a remote authority; synchronization is
 a separate status dimension (currently not applicable). Failed and unavailable
 writes retain work for retry. Switching, closing, and stored-document export
 coordinate with issued saves; recovery export writes the current detached,
-unsaved document without requiring a successful store save. Store reload and
+unsaved document without requiring a successful store save. Direct `open()`,
+`setData()`, and operational-period replacement reject dirty, pending, or failed
+work until a save succeeds. Rejected replacement leaves the active document,
+status, and retained save requests intact. Callers choosing to discard local work
+can use `discardUnsavedChangesAndSetData()` or an explicitly approved store reload.
+Store reload and
 failed-switch restoration use the same editor-flush/refresh replacement path,
-which can also be invoked without a user dialog.
+which can also be invoked without a user dialog; the caller is responsible for
+obtaining approval to discard. Reload failure still retains local work.
 Recovery destinations still obey backend-owned local-file safety checks; they
 cannot overwrite live incident documents or node metadata through filesystem
 aliases, even when persistence has failed.

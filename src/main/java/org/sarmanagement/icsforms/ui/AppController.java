@@ -1167,17 +1167,52 @@ public class AppController implements AutoCloseable {
 
 	/**
 	 * Replaces the active document and synchronizes linked defaults. A preparation
-	 * failure retains the previous active document and editor state.
+	 * failure retains the previous active document and editor state. Unsaved work
+	 * must be saved or explicitly discarded before replacement.
 	 *
 	 * @param data
 	 *            new active document.
+	 * @throws RuntimeException when unsaved work or preparation failure prevents replacement.
 	 */
 	public void setData(AppData data) {
+		replaceData(data, false);
+	}
+
+	/**
+	 * Replaces the document after the caller explicitly approves discarding local
+	 * edits and retained recovery work. Issued writes cannot be undone, but their
+	 * stale completions cannot affect the replacement.
+	 *
+	 * @param data new active document.
+	 * @throws IllegalStateException when an atomic editor commit is pending.
+	 */
+	public void discardUnsavedChangesAndSetData(AppData data) {
+		replaceData(data, true);
+	}
+
+	/**
+	 * Installs a prepared document only after replacement has been authorized.
+	 *
+	 * @param data candidate document.
+	 * @param discardUnsavedChanges whether the caller explicitly approved discard.
+	 */
+	private void replaceData(AppData data, boolean discardUnsavedChanges) {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			onOwner(() -> {
+				replaceData(data, discardUnsavedChanges);
+				return null;
+			});
+			return;
+		}
 		if (atomicSave) {
 			throw new IllegalStateException("An atomic editor commit is being persisted.");
 		}
+		if (!discardUnsavedChanges) {
+			requireSavedForReplacement();
+		}
 		AppData replacement = data == null ? createDefaultData() : data;
 		prepareDocument(replacement);
+		autosaveTimer.stop();
 		this.data = replacement;
 		dirty = false;
 		activeLinkSource = LinkSource.NONE;
@@ -1186,6 +1221,24 @@ public class AppController implements AutoCloseable {
 		editVersion++;
 		bindPersistence();
 		publishIncidentChange(IncidentChangeKind.INCIDENT_REPLACED);
+	}
+
+	/**
+	 * Rejects replacement without changing the active binding or retained work.
+	 *
+	 * @throws RuntimeException when persistence failed or local work is unsaved.
+	 */
+	private void requireSavedForReplacement() {
+		PersistenceStatus status = saves.status();
+		if (status.failure() != null) {
+			throw status.failure();
+		}
+		if (dirty || status.durability() != PersistenceStatus.Durability.SAVED
+				|| !saves.pendingChanges().isEmpty()) {
+			throw new IllegalStateException(
+					"Unsaved incident work prevents replacement. Save successfully, export recovery data, "
+							+ "or explicitly discard local changes before replacing the document.");
+		}
 	}
 
 	/**
@@ -1696,19 +1749,31 @@ public class AppController implements AutoCloseable {
 		copy.setUpdatedAt(null);
 		copy.setOriginNodeId(null);
 		IncidentId duplicate = workerIo(() -> store.create(copy));
-		activateCreatedIncident(duplicate, copy);
+		activateCreatedIncident(duplicate, copy, true);
 		return duplicate;
 	}
 
 	/**
-	 * Opens a saved incident, leaving the active one unchanged if loading fails.
+	 * Opens a saved incident only after issued writes drain and the active document
+	 * is saved. Failed or incomplete saves and failed loads retain local work.
 	 *
 	 * @param incidentId identifier to open.
+	 * @throws RuntimeException when unsaved work or a load failure prevents opening.
 	 */
 	public void open(IncidentId incidentId) {
+		open(incidentId, false);
+	}
+
+	/**
+	 * Loads a candidate without discarding local work until replacement succeeds.
+	 *
+	 * @param incidentId identifier to open.
+	 * @param discardUnsavedChanges whether the caller explicitly approved recovery.
+	 */
+	private void open(IncidentId incidentId, boolean discardUnsavedChanges) {
 		if (!SwingUtilities.isEventDispatchThread()) {
 			onOwner(() -> {
-				open(incidentId);
+				open(incidentId, discardUnsavedChanges);
 				return null;
 			});
 			return;
@@ -1717,12 +1782,15 @@ public class AppController implements AutoCloseable {
 			throw new IllegalStateException("An atomic editor commit is pending.");
 		}
 		drainSaves();
+		if (!discardUnsavedChanges) {
+			requireSavedForReplacement();
+		}
 		IncidentId previousId = activeIncidentId;
 		boolean acquired = claimEditLock(incidentId);
 		StoredIncident loaded;
 		try {
 			loaded = workerIo(() -> store.loadSnapshot(incidentId));
-			setData(loaded.data());
+			replaceData(loaded.data(), discardUnsavedChanges);
 		} catch (RuntimeException exception) {
 			if (acquired) {
 				releaseFailedSwitchLock(incidentId, exception);
@@ -1738,7 +1806,8 @@ public class AppController implements AutoCloseable {
 
 	/**
 	 * Explicitly replaces the active document from its store between editor callbacks.
-	 * A failed load refreshes the retained document rather than discarding its drafts.
+	 * The caller must have explicitly approved discarding local changes. A failed
+	 * load refreshes the retained document rather than discarding its drafts.
 	 */
 	public void replaceActiveDocumentFromStore() {
 		replaceActiveDocumentFromStore(activeIncidentId);
@@ -1746,12 +1815,13 @@ public class AppController implements AutoCloseable {
 
 	/**
 	 * Restores an explicitly chosen stored incident after a failed multi-step switch.
+	 * The caller explicitly authorizes discarding the current document's local work.
 	 *
 	 * @param incidentId stored identity to restore.
 	 */
 	public void replaceActiveDocumentFromStore(IncidentId incidentId) {
 		onOwner(() -> {
-			withPlanReuseEditors(() -> open(incidentId));
+			withPlanReuseEditors(() -> open(incidentId, true));
 			return null;
 		});
 	}
@@ -1828,13 +1898,14 @@ public class AppController implements AutoCloseable {
 	 *
 	 * @param incidentId created identity.
 	 * @param created newly persisted document.
+	 * @param discardUnsavedChanges whether the original work is preserved in a duplicate.
 	 */
-	private void activateCreatedIncident(IncidentId incidentId, AppData created) {
+	private void activateCreatedIncident(IncidentId incidentId, AppData created, boolean discardUnsavedChanges) {
 		RevisionToken revision;
 		boolean acquired = claimEditLock(incidentId);
 		try {
 			revision = store.revisionToken(created);
-			setData(created);
+			replaceData(created, discardUnsavedChanges);
 		} catch (RuntimeException failure) {
 			if (acquired) {
 				releaseFailedSwitchLock(incidentId, failure);
@@ -1916,7 +1987,7 @@ public class AppController implements AutoCloseable {
 		if (store != null) {
 			AppData detached = FullDocumentSnapshot.detach(created);
 			IncidentId id = workerIo(() -> store.create(detached));
-			activateCreatedIncident(id, detached);
+			activateCreatedIncident(id, detached, false);
 		} else {
 			setData(created);
 			markDirty();
@@ -1934,6 +2005,8 @@ public class AppController implements AutoCloseable {
 	 * {@link org.sarmanagement.icsforms.model.AppData#advanceToNewOperationalPeriod()}
 	 * for the full list of fields that are reset.
 	 * </p>
+	 *
+	 * @throws RuntimeException when unsaved work prevents advancing the period.
 	 */
 	public void newOperationalPeriod() {
 		newOperationalPeriod(false);
@@ -1943,6 +2016,7 @@ public class AppController implements AutoCloseable {
 	 * Advances the period with an explicit choice to carry communications data forward.
 	 *
 	 * @param bringForwardCommunicationsPlan whether to deep-copy ICS 205 channels and instructions.
+	 * @throws RuntimeException when unsaved work prevents advancing the period.
 	 */
 	public void newOperationalPeriod(boolean bringForwardCommunicationsPlan) {
 		newOperationalPeriod(bringForwardCommunicationsPlan, false);
@@ -1953,6 +2027,7 @@ public class AppController implements AutoCloseable {
 	 *
 	 * @param bringForwardCommunicationsPlan whether to carry forward ICS 205 data.
 	 * @param promotePlannedIcs215 true to apply the next worksheet's target dates.
+	 * @throws RuntimeException when unsaved work prevents advancing the period.
 	 */
 	public void newOperationalPeriod(boolean bringForwardCommunicationsPlan, boolean promotePlannedIcs215) {
 		if (!SwingUtilities.isEventDispatchThread()) {
@@ -1966,6 +2041,7 @@ public class AppController implements AutoCloseable {
 			throw new IllegalStateException("An atomic editor commit is pending.");
 		}
 		drainSaves();
+		requireSavedForReplacement();
 		data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan, promotePlannedIcs215);
 		ensureDefaults(data);
 		activeLinkSource = initialLinkSource(data);

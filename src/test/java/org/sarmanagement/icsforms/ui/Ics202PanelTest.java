@@ -224,7 +224,7 @@ class Ics202PanelTest {
 			assertTrue(objective.getAssessedAt() != null);
 			showAndAct(panel, "editSelectedObjective", "Edit incident objective", dialog -> {
 				((javax.swing.JTextArea) fieldValue(panel, "objectiveTextArea")).setText("Stale");
-				controller.setData(new AppData());
+				controller.discardUnsavedChangesAndSetData(new AppData());
 				findButton(dialog, "Save").doClick();
 			});
 			assertEquals("Saved", objective.getText());
@@ -255,7 +255,7 @@ class Ics202PanelTest {
 			assertEquals(List.of(objective.getObjectiveId()), assignment.getObjectiveIds());
 			showAndAct(panel, "applySelectedObjective", "Apply objective to assignments", dialog -> {
 				findTable(dialog).setValueAt(false, 0, 0);
-				controller.setData(new AppData());
+				controller.discardUnsavedChangesAndSetData(new AppData());
 				findButton(dialog, "Apply").doClick();
 			});
 			assertEquals(List.of(objective.getObjectiveId()), assignment.getObjectiveIds());
@@ -284,7 +284,7 @@ class Ics202PanelTest {
 			assertEquals(List.of(second), controller.getData().getForm202().getStructuredObjectives());
 			assertEquals(List.of(second.getObjectiveId()), assignment.getObjectiveIds());
 			showAndAct(panel, "removeSelectedObjective", "Resolve objective links", dialog -> {
-				controller.setData(new AppData());
+				controller.discardUnsavedChangesAndSetData(new AppData());
 				findButton(dialog, "OK").doClick();
 			});
 			assertEquals(List.of(second.getObjectiveId()), assignment.getObjectiveIds());

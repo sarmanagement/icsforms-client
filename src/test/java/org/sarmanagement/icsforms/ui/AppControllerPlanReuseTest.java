@@ -79,6 +79,7 @@ class AppControllerPlanReuseTest {
 			controller.newOperationalPeriod();
 			assertFalse(controller.hasPreviousPlans());
 			data.getForm208().setFreeText("Previous safety plan");
+			controller.save();
 			controller.newOperationalPeriod();
 			assertTrue(controller.hasPreviousPlans());
 			assertTrue(controller.canReusePlans());
