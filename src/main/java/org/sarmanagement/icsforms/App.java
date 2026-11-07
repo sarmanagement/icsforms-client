@@ -9,6 +9,8 @@ import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
+import org.sarmanagement.icsforms.persistence.StoredIncident;
+import org.sarmanagement.icsforms.persistence.StoreLockConflictException;
 import org.sarmanagement.icsforms.pdf.ClueLogPdfRenderer;
 import org.sarmanagement.icsforms.pdf.ClueLogIcs233PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics233CgPdfRenderer;
@@ -81,11 +83,9 @@ public final class App {
 				switch (action) {
 					case OPEN_EXISTING, OPEN_NEW_PERIOD -> {
 						id = startup.getChosenIncidentId();
-						if (store instanceof FileIncidentStore fileStore
-								&& (fileStore.isLockedElsewhere(id) || !fileStore.lock(id))) {
-							throw new StoreConflictException("Incident is open in another window: " + id.value());
-						}
-						data = store.load(id);
+						claimEditLock(store, id);
+						StoredIncident loaded = store.loadSnapshot(id);
+						data = loaded.data();
 						if (action == StartupDialog.StartupAction.OPEN_NEW_PERIOD) {
 							boolean promote = startup.isPromotePlannedIcs215();
 							if (promote && !Ics215PromotionDialog.confirm(null, data)) {
@@ -93,7 +93,7 @@ public final class App {
 								return;
 							}
 							data.advanceToNewOperationalPeriod(startup.isBringForwardCommunicationsPlan(), promote);
-							store.save(id, data);
+							store.save(id, data, loaded.revision());
 						}
 					}
 					default -> {
@@ -106,9 +106,7 @@ public final class App {
 						data.setIapPhase(phase);
 						data.setIncidentMode(startup.getChosenMode());
 						id = store.create(data);
-						if (store instanceof FileIncidentStore fileStore && !fileStore.lock(id)) {
-							throw new StoreConflictException("Incident is open in another window: " + id.value());
-						}
+						claimEditLock(store, id);
 					}
 				}
 			} catch (RuntimeException exception) {
@@ -127,6 +125,21 @@ public final class App {
 				JOptionPane.showMessageDialog(null, exception.getMessage(), "Unable to start editor",
 						JOptionPane.ERROR_MESSAGE);
 				store.close();
+			}
+		});
+	}
+
+	/**
+	 * Acquires an optional advisory edit lock without restricting lock-less stores.
+	 *
+	 * @param store selected backend.
+	 * @param id incident to edit.
+	 * @throws StoreConflictException when an advisory lock is owned elsewhere.
+	 */
+	private static void claimEditLock(IncidentStore store, IncidentId id) {
+		store.editLocks().ifPresent(locks -> {
+			if (locks.isLockedElsewhere(id) || !locks.lock(id)) {
+				throw new StoreLockConflictException("Incident is open in another window: " + id.value());
 			}
 		});
 	}
@@ -157,10 +170,11 @@ public final class App {
 	 */
 	static AppData loadExistingIncident(IncidentStore store, IncidentId id, boolean newPeriod,
 			boolean bringForwardCommunicationsPlan, boolean promotePlannedIcs215) {
-		AppData data = store.load(id);
+		StoredIncident loaded = store.loadSnapshot(id);
+		AppData data = loaded.data();
 		if (newPeriod) {
 			data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan, promotePlannedIcs215);
-			store.save(id, data);
+			store.save(id, data, loaded.revision());
 		}
 		return data;
 	}

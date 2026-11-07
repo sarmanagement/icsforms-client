@@ -212,7 +212,7 @@ public class LocalRepository {
 	 * for each one, sorted by last-modified time (most recent first).
 	 *
 	 * <p>
-	 * Files that cannot be read are silently skipped. Backup ({@code .bak}) files
+	 * Files that cannot be read or have unsupported schemas are skipped. Backup ({@code .bak}) files
 	 * are excluded.
 	 * </p>
 	 *
@@ -237,7 +237,7 @@ public class LocalRepository {
 					}
 					org.sarmanagement.icsforms.model.IapPhase phase = data.getIapPhase();
 					results.add(new IncidentSummary(p, name, phase, modified));
-				} catch (IOException | IllegalStateException ignored) {
+				} catch (IOException | IllegalStateException | StoreValidationException ignored) {
 					// skip unreadable or non-incident files
 				}
 			});

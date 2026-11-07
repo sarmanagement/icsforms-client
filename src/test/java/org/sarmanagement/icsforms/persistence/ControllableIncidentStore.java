@@ -63,6 +63,16 @@ public final class ControllableIncidentStore implements IncidentStore {
 	}
 
 	/**
+	 * Reports exact delegate lock ownership for resource-lifetime tests.
+	 *
+	 * @param id incident identity
+	 * @return whether this store already owns the edit lock
+	 */
+	public boolean isHeldByCaller(IncidentId id) {
+		return delegate.isHeldByCaller(id);
+	}
+
+	/**
 	 * Releases the delegate's edit lock.
 	 *
 	 * @param id incident identifier.
@@ -87,9 +97,23 @@ public final class ControllableIncidentStore implements IncidentStore {
 
 	/** {@inheritDoc} */
 	@Override
+	public StoredIncident loadSnapshot(IncidentId id) {
+		before(Operation.LOAD);
+		return delegate.loadSnapshot(id);
+	}
+
+	/** {@inheritDoc} */
+	@Override
 	public void save(IncidentId id, AppData data) {
 		before(Operation.SAVE);
 		delegate.save(id, data);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public RevisionToken save(IncidentId id, AppData data, RevisionToken expected) {
+		before(Operation.SAVE);
+		return delegate.save(id, data, expected);
 	}
 
 	/** {@inheritDoc} */
@@ -104,6 +128,32 @@ public final class ControllableIncidentStore implements IncidentStore {
 	public void delete(IncidentId id) {
 		before(Operation.DELETE);
 		delegate.delete(id);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void delete(IncidentId id, RevisionToken expected) {
+		before(Operation.DELETE);
+		delegate.delete(id, expected);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public Optional<EditLockSupport> editLocks() {
+		return delegate.editLocks();
+	}
+
+	/** {@inheritDoc} */
+	@Deprecated
+	@Override
+	public Optional<Path> localFile(IncidentId id) {
+		return delegate.localFile(id);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public RevisionToken revisionToken(AppData data) {
+		return delegate.revisionToken(data);
 	}
 
 	/** {@inheritDoc} */

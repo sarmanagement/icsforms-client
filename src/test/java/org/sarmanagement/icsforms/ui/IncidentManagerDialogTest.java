@@ -9,6 +9,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentSummary;
+import org.sarmanagement.icsforms.persistence.RevisionToken;
 
 import javax.swing.JButton;
 import javax.swing.JDialog;
@@ -70,7 +71,7 @@ class IncidentManagerDialogTest {
 					assertEquals(id.value(), table.getValueAt(0, 1));
 					assertTrue(table.getValueAt(0, 2).toString().contains("2026-10-27T09:00"));
 					assertNotNull(table.getValueAt(0, 3));
-					assertEquals(store.list().get(0).path(), table.getValueAt(0, 4));
+					assertEquals(store.list().get(0).storeLocation(), table.getValueAt(0, 4));
 					assertFalse(table.isCellEditable(0, 0));
 					table.setRowSelectionInterval(0, 0);
 					button(dialog, "Backup JSON…").doClick();
@@ -81,7 +82,7 @@ class IncidentManagerDialogTest {
 					assertTrue(prompts.question.contains("Ridge search"));
 					assertTrue(prompts.question.contains(id.value()));
 					assertTrue(prompts.question.contains("back up first"));
-					assertTrue(prompts.question.contains(".bak"));
+					assertTrue(prompts.question.contains("Retained backups are not erased"));
 					assertTrue(prompts.question.contains("not secure erasure"));
 					assertTrue(prompts.messages.isEmpty());
 					assertEquals(1, store.list().size());
@@ -126,6 +127,39 @@ class IncidentManagerDialogTest {
 					assertFalse(button(dialog, "Delete…").isEnabled());
 					assertTrue(labels(dialog).stream().anyMatch(label -> label.startsWith("No saved incidents.")));
 					assertTrue(Files.exists(target));
+				} finally {
+					dialog.dispose();
+				}
+			});
+		}
+	}
+
+	@Test
+	void deletionRejectsChangesSinceTheDisplayedListing() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (TestStore store = new TestStore(directory.resolve("store"))) {
+			IncidentId id = store.create(named());
+			SwingUtilities.invokeAndWait(() -> {
+				Prompts prompts = new Prompts();
+				prompts.approve = true;
+				IncidentManagerDialog dialog = new IncidentManagerDialog(null, store, null, prompts);
+				try {
+					JTable table = component(dialog, JTable.class);
+					table.setRowSelectionInterval(0, 0);
+					var updated = store.loadSnapshot(id);
+					updated.data().getIncidentContext().setIncidentName("Changed after listing");
+					store.save(id, updated.data(), updated.revision());
+					store.unlock(id);
+					button(dialog, "Delete…").doClick();
+					assertTrue(prompts.lastError);
+					assertEquals(0, table.getSelectedRow());
+					assertEquals(1, table.getRowCount());
+					assertEquals("Changed after listing",
+							store.load(id).getIncidentContext().getIncidentName());
+					button(dialog, "Refresh").doClick();
+					button(dialog, "Delete…").doClick();
+					assertEquals(0, table.getRowCount());
+					assertTrue(store.list().isEmpty());
 				} finally {
 					dialog.dispose();
 				}
@@ -469,12 +503,12 @@ class IncidentManagerDialogTest {
 
 		/** {@inheritDoc} */
 		@Override
-		public void delete(IncidentId id) {
+		public void delete(IncidentId id, RevisionToken expected) {
 			deletions++;
 			if (failDelete) {
 				throw new IllegalStateException("Backend deletion failed");
 			}
-			super.delete(id);
+			super.delete(id, expected);
 		}
 
 		/** {@inheritDoc} */
