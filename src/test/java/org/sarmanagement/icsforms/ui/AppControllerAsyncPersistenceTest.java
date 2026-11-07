@@ -134,6 +134,8 @@ class AppControllerAsyncPersistenceTest {
 			IncidentId id = store.create(live);
 			try (AppController controller = controller(store, id, live)) {
 				store.blockNextSave();
+				java.util.concurrent.atomic.AtomicBoolean inputPaused = new java.util.concurrent.atomic.AtomicBoolean();
+				controller.setPersistenceWaitHandler(inputPaused::set);
 				CountDownLatch completed = new CountDownLatch(1);
 				AtomicReference<Throwable> failure = new AtomicReference<>();
 				SwingUtilities.invokeLater(() -> {
@@ -149,12 +151,14 @@ class AppControllerAsyncPersistenceTest {
 				SwingUtilities.invokeAndWait(() -> {
 					assertNotSame(live, store.savedDocument);
 					assertEquals(PersistenceStatus.Durability.SAVING, controller.getPersistenceStatus().durability());
+					assertTrue(inputPaused.get());
 				});
 				store.release.countDown();
 				await(completed);
 				assertNull(failure.get());
 				assertFalse(store.saveOnEdt);
 				assertFalse(controller.isDirty());
+				assertFalse(inputPaused.get());
 			}
 		}
 	}

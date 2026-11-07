@@ -277,8 +277,9 @@ public final class SaveCoordinator implements AutoCloseable {
 				RuntimeException failure = null;
 				try {
 					revision = Objects.requireNonNull(request.persist(), "Store returned no accepted revision.");
-				} catch (RuntimeException exception) {
-					failure = exception;
+				} catch (Throwable exception) {
+					failure = exception instanceof RuntimeException runtime ? runtime
+							: new StorePersistenceException("Persistence worker could not complete the write", exception);
 				}
 				Completion result = new Completion(request, revision, failure);
 				owner.execute(() -> finish(attempt, result));

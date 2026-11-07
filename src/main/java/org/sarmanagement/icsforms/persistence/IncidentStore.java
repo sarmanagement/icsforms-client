@@ -234,6 +234,22 @@ public interface IncidentStore extends AutoCloseable {
 	void exportFile(IncidentId id, Path target);
 
 	/**
+	 * Validates a client-side document export destination without reading an incident
+	 * or contacting the backend. Stores with managed local files must reject targets
+	 * that could overwrite those files, including filesystem aliases. This safety
+	 * query remains usable when the store is unavailable or closed so recovery
+	 * export does not require a successful store operation.
+	 *
+	 * @param target requested client-local destination
+	 * @return normalized destination that the caller must use for writing
+	 * @throws StoreValidationException when the destination overlaps managed files
+	 * @throws StorePersistenceException when local path safety cannot be established
+	 */
+	default Path validateLocalExportTarget(Path target) {
+		return target.toAbsolutePath().normalize();
+	}
+
+	/**
 	 * Reports whether this store supports safe, non-overwriting backups.
 	 *
 	 * @return true when {@link #backupFile} is supported.

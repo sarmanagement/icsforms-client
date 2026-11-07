@@ -102,6 +102,8 @@ public class AppController implements AutoCloseable {
 	private long editVersion;
 	private boolean flushingEditors;
 	private boolean atomicSave;
+	private int synchronousWaitDepth;
+	private java.util.function.Consumer<Boolean> persistenceWaitHandler = waiting -> { };
 	private java.util.function.Consumer<PersistenceStatus> persistenceStatusHandler = status -> { };
 	private AppData data;
 	private OperatorContext operatorContext = OperatorContext.empty();
@@ -347,6 +349,24 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
+	 * Reports synchronous persistence waits that must not admit another user edit.
+	 *
+	 * @return true while a synchronous operation dispatches Swing events awaiting IO.
+	 */
+	public boolean isPersistenceWaitPending() {
+		return synchronousWaitDepth > 0;
+	}
+
+	/**
+	 * Installs a UI input guard for synchronous worker waits, excluding asynchronous autosave.
+	 *
+	 * @param handler receives true when input must pause and false when it can resume.
+	 */
+	public void setPersistenceWaitHandler(java.util.function.Consumer<Boolean> handler) {
+		persistenceWaitHandler = Objects.requireNonNull(handler);
+	}
+
+	/**
 	 * Delivers a persistence status without refreshing or flushing editors.
 	 *
 	 * @param status new active status.
@@ -507,8 +527,19 @@ public class AppController implements AutoCloseable {
 			finished.set(true);
 			loop.exit();
 		});
-		if (!finished.get() && !loop.enter()) {
-			throw new IllegalStateException("Cannot dispatch while waiting for persistence");
+		if (!finished.get()) {
+			synchronousWaitDepth++;
+			try {
+				persistenceWaitHandler.accept(true);
+				if (!finished.get() && !loop.enter()) {
+					throw new IllegalStateException("Cannot dispatch while waiting for persistence");
+				}
+			} finally {
+				synchronousWaitDepth--;
+				if (synchronousWaitDepth == 0) {
+					persistenceWaitHandler.accept(false);
+				}
+			}
 		}
 	}
 

@@ -17,6 +17,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -207,6 +208,42 @@ class SaveCoordinatorTest {
 		coordinator.close();
 		assertEquals(1, coordinator.pendingChanges().size());
 		assertThrows(IllegalStateException.class, coordinator::retry);
+	}
+
+	@Test
+	void unexpectedWorkerErrorsCompleteTheDrainAndRetainRetryableWork() {
+		Harness harness = new Harness(IncidentId.newId(), new RevisionToken("host/initial"));
+		List<String> accepted = new ArrayList<>() {
+			private boolean fail = true;
+
+			/**
+			 * Simulates a worker error before accepting the first operation.
+			 *
+			 * @param operation operation payload
+			 * @return true after acceptance
+			 */
+			@Override
+			public boolean add(String operation) {
+				if (fail) {
+					fail = false;
+					throw new AssertionError("Unexpected worker failure");
+				}
+				return super.add(operation);
+			}
+		};
+		boolean[] drained = {false};
+		harness.coordinator.submit(operation(harness, 1, "one", accepted));
+		harness.coordinator.whenIdle(() -> drained[0] = true);
+		harness.complete();
+		assertTrue(drained[0]);
+		assertFalse(harness.coordinator.isBusy());
+		assertEquals(PersistenceStatus.Durability.FAILED, harness.coordinator.status().durability());
+		assertInstanceOf(AssertionError.class, harness.coordinator.status().failure().getCause());
+		assertEquals(1, harness.coordinator.pendingChanges().size());
+		harness.coordinator.retry();
+		harness.complete();
+		assertEquals(List.of("one"), accepted);
+		assertEquals(PersistenceStatus.Durability.SAVED, harness.coordinator.status().durability());
 	}
 
 	@Test

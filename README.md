@@ -402,6 +402,9 @@ coordinate with issued saves; recovery export writes the current detached,
 unsaved document without requiring a successful store save. Store reload and
 failed-switch restoration use the same editor-flush/refresh replacement path,
 which can also be invoked without a user dialog.
+Recovery destinations still obey backend-owned local-file safety checks; they
+cannot overwrite live incident documents or node metadata through filesystem
+aliases, even when persistence has failed.
 
 `RetryPolicy` is replaceable by a backend: explicit retry, bounded immediate
 retry, and delayed backoff do not change scheduling or completion matching.

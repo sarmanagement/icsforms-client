@@ -64,6 +64,7 @@ class MainFramePersistenceStatusTest {
 				store.release.countDown();
 				assertTrue(completed.await(10, TimeUnit.SECONDS));
 				assertNull(failure.get());
+				waitUntil(frame::isEnabled);
 				SwingUtilities.invokeAndWait(() -> {
 					assertTrue(frame.isEnabled());
 					assertEquals("Atomic candidate", live.getForm201().getIncidentNumber());
@@ -100,6 +101,7 @@ class MainFramePersistenceStatusTest {
 					JLabel status = field(frame, "persistenceLabel");
 					assertTrue(status.getText().contains("saving"));
 					assertTrue(status.getText().contains("Synchronization: not applicable"));
+					assertTrue(frame.isEnabled(), "Asynchronous saves must not pause editor input");
 					JTextField input = field(field(frame, "incidentContextPanel"), "incidentNameField");
 					input.setText("Newer partial editor text");
 				});

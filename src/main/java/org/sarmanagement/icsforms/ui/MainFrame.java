@@ -354,6 +354,7 @@ public class MainFrame extends JFrame {
 		retryPersistenceButton.addActionListener(event -> controller.retryPersistence());
 		statusPanel.add(persistencePanel, BorderLayout.EAST);
 		controller.setPersistenceStatusHandler(this::refreshPersistenceStatus);
+		controller.setPersistenceWaitHandler(waiting -> refreshIncidentInputAvailability());
 		add(content, BorderLayout.CENTER);
 		add(statusPanel, BorderLayout.SOUTH);
 		refreshFromModel();
@@ -2395,7 +2396,24 @@ public class MainFrame extends JFrame {
 	 * @param status current persistence state.
 	 */
 	private void refreshPersistenceStatus(org.sarmanagement.icsforms.persistence.PersistenceStatus status) {
-		if (controller.isAtomicSavePending()) {
+		refreshIncidentInputAvailability();
+		if (status.durability() == org.sarmanagement.icsforms.persistence.PersistenceStatus.Durability.SAVED
+				&& editorCommitBinding != null && controller.isCurrent(editorCommitBinding.incidentBinding())
+				&& (editorTextBaselines.entrySet().stream()
+						.anyMatch(entry -> !java.util.Objects.equals(entry.getValue(), entry.getKey().getText()))
+						|| descendants(tabs, JTable.class).stream().anyMatch(JTable::isEditing))) {
+			controller.markEditorDraftDirty();
+			return;
+		}
+		persistenceLabel.setText("Durability: " + status.durability().name().toLowerCase(java.util.Locale.ROOT)
+				+ " | Synchronization: not applicable");
+		persistenceLabel.setToolTipText(status.failure() == null ? null : status.failure().getMessage());
+		retryPersistenceButton.setEnabled(status.failure() != null);
+	}
+
+	/** Pauses user input during synchronous worker waits without blocking Swing dispatch or asynchronous saves. */
+	private void refreshIncidentInputAvailability() {
+		if (controller.isAtomicSavePending() || controller.isPersistenceWaitPending()) {
 			List<java.awt.Window> windows = new ArrayList<>(UiSupport.outstandingIncidentWindows(this,
 					controller.getData()));
 			windows.add(this);
@@ -2409,18 +2427,6 @@ public class MainFrame extends JFrame {
 			atomicDisabledWindows.forEach(window -> window.setEnabled(true));
 			atomicDisabledWindows.clear();
 		}
-		if (status.durability() == org.sarmanagement.icsforms.persistence.PersistenceStatus.Durability.SAVED
-				&& editorCommitBinding != null && controller.isCurrent(editorCommitBinding.incidentBinding())
-				&& (editorTextBaselines.entrySet().stream()
-						.anyMatch(entry -> !java.util.Objects.equals(entry.getValue(), entry.getKey().getText()))
-						|| descendants(tabs, JTable.class).stream().anyMatch(JTable::isEditing))) {
-			controller.markEditorDraftDirty();
-			return;
-		}
-		persistenceLabel.setText("Durability: " + status.durability().name().toLowerCase(java.util.Locale.ROOT)
-				+ " | Synchronization: not applicable");
-		persistenceLabel.setToolTipText(status.failure() == null ? null : status.failure().getMessage());
-		retryPersistenceButton.setEnabled(status.failure() != null);
 	}
 
 	/**

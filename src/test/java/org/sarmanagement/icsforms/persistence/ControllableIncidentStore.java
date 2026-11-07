@@ -178,6 +178,12 @@ public final class ControllableIncidentStore implements IncidentStore {
 
 	/** {@inheritDoc} */
 	@Override
+	public Path validateLocalExportTarget(Path target) {
+		return delegate.validateLocalExportTarget(target);
+	}
+
+	/** {@inheritDoc} */
+	@Override
 	public boolean supportsBackup() {
 		return delegate.supportsBackup();
 	}
