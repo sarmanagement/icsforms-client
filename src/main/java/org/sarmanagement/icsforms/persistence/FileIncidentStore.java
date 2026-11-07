@@ -263,12 +263,13 @@ public class FileIncidentStore implements IncidentStore {
 		}
 		long revision = data.getRevision();
 		Instant updated = data.getUpdatedAt();
-		data.setRevision(revision + 1);
-		data.setUpdatedAt(UtcTimestamp.nowInstant());
-		data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
-		data.normalizeIdentity();
 		Path temp = path.resolveSibling(path.getFileName() + ".tmp");
+		boolean committed = false;
 		try {
+			data.setRevision(revision + 1);
+			data.setUpdatedAt(UtcTimestamp.nowInstant());
+			data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
+			data.normalizeIdentity();
 			StoredDocument current = readWithBackupDocument(path);
 			JsonNode updatedTree = mergeKnownProperties(current.tree(), MAPPER.valueToTree(data));
 			MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), updatedTree);
@@ -280,17 +281,31 @@ public class FileIncidentStore implements IncidentStore {
 				LOGGER.warning("Keeping previous backup for corrupt incident: " + path);
 			}
 			move(temp, path);
+			committed = true;
 		} catch (IOException e) {
-			data.setRevision(revision);
-			data.setUpdatedAt(updated);
 			throw new IllegalStateException("Cannot save incident: " + id, e);
 		} finally {
+			if (!committed) {
+				restoreSaveMetadata(data, revision, updated);
+			}
 			try {
 				Files.deleteIfExists(temp);
 			} catch (IOException e) {
 				LOGGER.warning("Cannot remove temporary incident file: " + temp);
 			}
 		}
+	}
+
+	/**
+	 * Restores caller-owned metadata when a save fails before replacing the stored document.
+	 *
+	 * @param data caller's incident document
+	 * @param revision original revision
+	 * @param updated original update timestamp
+	 */
+	private void restoreSaveMetadata(AppData data, long revision, Instant updated) {
+		data.setRevision(revision);
+		data.setUpdatedAt(updated);
 	}
 
 	@Override

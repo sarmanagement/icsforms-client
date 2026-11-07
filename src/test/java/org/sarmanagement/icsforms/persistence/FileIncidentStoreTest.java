@@ -10,7 +10,9 @@ import org.sarmanagement.icsforms.model.AppData;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -102,6 +104,49 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 			assertEquals(0, upgraded.getRevision());
 			store.save(id, upgraded);
 			assertEquals(1, store.load(id).getRevision());
+		}
+	}
+
+	@Test
+	void mergerFailureRestoresCallerMetadataAndCanRetrySameInstance() throws Exception {
+		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+			IncidentId id = store.create(new AppData());
+			AppData data = store.load(id);
+			var actions = data.getForm201().getCurrentActions();
+			org.sarmanagement.icsforms.model.Ics201Form.ActionEntry first =
+					new org.sarmanagement.icsforms.model.Ics201Form.ActionEntry();
+			first.setActions("First action");
+			actions.add(first);
+			org.sarmanagement.icsforms.model.Ics201Form.ActionEntry second =
+					new org.sarmanagement.icsforms.model.Ics201Form.ActionEntry();
+			second.setActions("Second action");
+			actions.add(second);
+			store.save(id, data);
+
+			AppData retryData = store.load(id);
+			actions = retryData.getForm201().getCurrentActions();
+			actions.get(1).setId(actions.get(0).getId());
+			long originalRevision = retryData.getRevision();
+			Instant originalUpdatedAt = retryData.getUpdatedAt();
+			Path document = tempDir.resolve("incidents").resolve(id.value() + ".json");
+			Path backup = document.resolveSibling(document.getFileName() + ".bak");
+			String originalFile = Files.readString(document);
+			String originalBackup = Files.readString(backup);
+			IllegalStateException failure = assertThrows(IllegalStateException.class, () -> store.save(id, retryData));
+
+			assertTrue(failure.getMessage().contains("duplicate id"));
+			assertEquals(originalRevision, retryData.getRevision());
+			assertEquals(originalUpdatedAt, retryData.getUpdatedAt());
+			assertEquals(originalFile, Files.readString(document));
+			assertTrue(Files.exists(backup));
+			assertEquals(originalBackup, Files.readString(backup));
+			assertFalse(Files.exists(document.resolveSibling(document.getFileName() + ".tmp")));
+
+			actions.get(1).setId(UUID.randomUUID().toString());
+			store.save(id, retryData);
+			assertEquals(originalRevision + 1, retryData.getRevision());
+			assertEquals(originalRevision + 1, store.load(id).getRevision());
+			assertNotEquals(actions.get(0).getId(), actions.get(1).getId());
 		}
 	}
 
