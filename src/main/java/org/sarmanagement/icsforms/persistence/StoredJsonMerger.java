@@ -41,6 +41,28 @@ final class StoredJsonMerger {
 	}
 
 	/**
+	 * Removes host-only acceptance timestamps from every provenance object in a
+	 * locally stored document.
+	 *
+	 * @param node JSON tree to sanitize in place.
+	 */
+	static void removeAcceptedAt(JsonNode node) {
+		if (node == null) {
+			return;
+		}
+		if (node.isObject()) {
+			ObjectNode object = (ObjectNode) node;
+			JsonNode provenance = object.get("provenance");
+			if (provenance instanceof ObjectNode provenanceObject) {
+				provenanceObject.remove("acceptedAt");
+			}
+			object.elements().forEachRemaining(StoredJsonMerger::removeAcceptedAt);
+		} else if (node.isArray()) {
+			node.elements().forEachRemaining(StoredJsonMerger::removeAcceptedAt);
+		}
+	}
+
+	/**
 	 * Recursively merges an object, array, or scalar value at a known JSON path.
 	 *
 	 * @param mapper mapper used to create JSON containers

@@ -28,6 +28,25 @@ public class ActivityLogEntry {
 	private String notableActivity = "";
 	private boolean struckOut;
 	private List<EventTypeChange> eventTypeChangeHistory = new ArrayList<>();
+	private Provenance provenance;
+
+	/**
+	 * Returns the optional attribution for this activity entry.
+	 *
+	 * @return entry provenance, or {@code null} for legacy or unattributed entries.
+	 */
+	public Provenance getProvenance() {
+		return provenance;
+	}
+
+	/**
+	 * Sets the optional attribution for this activity entry.
+	 *
+	 * @param provenance entry provenance, or {@code null} when unattributed.
+	 */
+	public void setProvenance(Provenance provenance) {
+		this.provenance = provenance;
+	}
 
 	/**
 	 * Returns this activity row's stable identity, assigning a UUID to legacy

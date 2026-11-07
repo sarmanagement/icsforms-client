@@ -41,6 +41,7 @@ import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.OpenActionItem;
 import org.sarmanagement.icsforms.model.PersonnelResource;
+import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.PocAssignment;
 import org.sarmanagement.icsforms.model.PodFactorRating;
 import org.sarmanagement.icsforms.model.RadioChannel;
@@ -73,9 +74,11 @@ final class IncidentDocumentReader {
 	private static final Logger LOGGER = Logger.getLogger(IncidentDocumentReader.class.getName());
 	private static final int MAX_PROBLEMS = 100;
 	private static final ObjectMapper TOLERANT = JsonMapper.builder().addModule(new JavaTimeModule())
+			.addMixIn(Provenance.class, Provenance.LocalStorageMixin.class)
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 			.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
 	private static final ObjectMapper STRICT = JsonMapper.builder().addModule(new JavaTimeModule())
+			.addMixIn(Provenance.class, Provenance.LocalStorageMixin.class)
 			.enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
 			.disable(MapperFeature.ALLOW_COERCION_OF_SCALARS)
 			.disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
@@ -153,6 +156,7 @@ final class IncidentDocumentReader {
 		log(path, schema, "attempt");
 		try {
 			JsonNode tree = STRICT.readTree(path.toFile());
+			StoredJsonMerger.removeAcceptedAt(tree);
 			if (tree == null || !tree.isObject()) {
 				add(Severity.ERROR, "$", "Expected an incident JSON object.", "Export an incident as a JSON object.");
 			} else {
@@ -225,6 +229,7 @@ final class IncidentDocumentReader {
 	 */
 	AppData readStored(Path path) throws IOException {
 		JsonNode tree = TOLERANT.readTree(path.toFile());
+		StoredJsonMerger.removeAcceptedAt(tree);
 		if (tree == null || !tree.isObject()) {
 			throw new IOException("Stored incident must be a JSON object");
 		}

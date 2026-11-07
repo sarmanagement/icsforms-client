@@ -147,6 +147,20 @@ public class TCardPanel extends JPanel {
 	}
 
 	/**
+	 * Records a new check-in occurrence when an edit changes the card's check-in time.
+	 *
+	 * @param original card before editing.
+	 * @param edited cancel-safe edited card.
+	 */
+	private void recordCheckInChange(TCard original, TCard edited) {
+		if (!java.util.Objects.equals(original.getCheckInDateTime(), edited.getCheckInDateTime())
+				&& edited.getCheckInDateTime() != null) {
+			controller.recordTCardCheckIn(edited,
+					edited.getCheckInDateTime().atOffset(java.time.ZoneOffset.UTC).toInstant());
+		}
+	}
+
+	/**
 	 * Launches logging for a specific card rather than a stale table selection.
 	 *
 	 * @param source initiating component
@@ -1424,6 +1438,7 @@ public class TCardPanel extends JPanel {
 		if (!openEditDialog(copy)) {
 			return;
 		}
+		recordCheckInChange(selected, copy);
 		int row = tableModel.indexOfIdentity(selected.peekResourceId());
 		if (row < 0) {
 			return;
@@ -2530,6 +2545,7 @@ public class TCardPanel extends JPanel {
 		copy.setRadioChannel(src.getRadioChannel());
 		copy.setRadioChannelId(src.getRadioChannelId());
 		copy.setCheckInDateTime(src.getCheckInDateTime());
+		copy.setCheckInOutEvents(src.getCheckInOutEvents());
 		copy.setResourceIdentifier(src.getResourceIdentifier());
 		copy.setLocation(src.getLocation());
 		copy.setStatus(src.getStatus());
@@ -2621,6 +2637,7 @@ public class TCardPanel extends JPanel {
 				if (currentIdx >= 0) {
 					TCard copy = copyCard(tableModel.getCard(currentIdx));
 					if (openEditDialog(copy, rows)) {
+						recordCheckInChange(rel, copy);
 						tableModel.replaceCard(currentIdx, copy);
 						refreshDerivedViewsFromTableModel();
 						controller.markDirty();

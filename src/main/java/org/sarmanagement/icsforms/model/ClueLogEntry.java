@@ -50,6 +50,23 @@ public class ClueLogEntry {
 	private LocalDateTime followUpTargetDate;
 	private LocalDateTime followUpCompletedDate;
 	private String followUpStatus = "";
+	private Provenance provenance;
+
+	/**
+	 * Returns the optional attribution for this clue entry.
+	 * @return clue provenance, or {@code null} for legacy or unattributed entries
+	 */
+	public Provenance getProvenance() {
+		return provenance;
+	}
+
+	/**
+	 * Sets the optional attribution for this clue entry.
+	 * @param provenance clue provenance, or {@code null} when unattributed
+	 */
+	public void setProvenance(Provenance provenance) {
+		this.provenance = provenance;
+	}
 
 	/**
 	 * Returns this clue's stable identity, assigning a UUID to legacy entries

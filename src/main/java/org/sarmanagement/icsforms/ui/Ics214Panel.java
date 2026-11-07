@@ -7,6 +7,7 @@ import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
@@ -400,6 +401,7 @@ public class Ics214Panel extends JPanel {
 			editorCommitGuard.rebase();
 			return;
 		}
+		controller.prefillPreparedBy(currentForm);
 		nameField.setText(nullSafe(currentForm.getName()));
 		icsPositionField.setText(nullSafe(currentForm.getIcsPosition()));
 		homeAgencyField.setText(nullSafe(currentForm.getHomeAgency()));
@@ -936,6 +938,7 @@ public class Ics214Panel extends JPanel {
 
 		ClueLogEntry clue = new ClueLogEntry();
 		clue.setDateTimeCollected(sourceEntry.getTimestamp());
+		clue.setProvenance(controller.createProvenance());
 		clue.setDetectedBy(detectedBy);
 		clue.setLocation(locationField.getText().trim());
 		clue.setDescription(descriptionArea.getText().trim());
@@ -1465,6 +1468,7 @@ public class Ics214Panel extends JPanel {
 		final JComboBox<ActivityEventType> eventTypeField;
 		final JComboBox<String> resourceIdentifierField;
 		private final JTextArea notableActivityField = UiSupport.textArea(4);
+		private Provenance provenance;
 
 		/**
 		 * Builds editable activity fields.
@@ -1537,12 +1541,22 @@ public class Ics214Panel extends JPanel {
 		}
 
 		/**
+		 * Sets attribution for the new entry created from these detached fields.
+		 *
+		 * @param provenance attribution to retain on the new activity entry.
+		 */
+		void setProvenance(Provenance provenance) {
+			this.provenance = provenance;
+		}
+
+		/**
 		 * Creates a detached entry from the fields.
 		 *
 		 * @return new entry, not yet added to any log
 		 */
 		ActivityLogEntry toEntry() {
 			ActivityLogEntry entry = new ActivityLogEntry();
+			entry.setProvenance(provenance);
 			entry.setTimestamp(AppController.toLocalDateTime((Date) timestampField.getValue()));
 			ActivityEventType selected = (ActivityEventType) eventTypeField.getSelectedItem();
 			entry.setEventTypeId(selected != null ? selected.getId() : ActivityEventType.ID_FREE_TEXT);

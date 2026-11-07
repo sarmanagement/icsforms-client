@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.UtcTimestamp;
 
 import java.io.IOException;
@@ -39,7 +40,8 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 	private static final Logger LOGGER = Logger.getLogger(FileIncidentStore.class.getName());
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-			.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+			.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+			.addMixIn(Provenance.class, Provenance.LocalStorageMixin.class);
 	private static final ObjectMapper COPIER = MAPPER.copy()
 			.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE)
 			.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
@@ -1058,7 +1060,9 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 	 * @return updated value retaining unknown original properties
 	 */
 	private JsonNode mergeKnownProperties(JsonNode original, JsonNode updated) {
-		return StoredJsonMerger.merge(MAPPER, original, updated);
+		JsonNode localOriginal = original.deepCopy();
+		StoredJsonMerger.removeAcceptedAt(localOriginal);
+		return StoredJsonMerger.merge(MAPPER, localOriginal, updated);
 	}
 
 	/**

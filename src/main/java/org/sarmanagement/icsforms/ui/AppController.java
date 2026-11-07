@@ -17,9 +17,11 @@ import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.OperatorContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.ActivityLogScope;
+import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.SarTaskResource;
@@ -47,6 +49,7 @@ import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.ZoneOffset;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -84,6 +87,7 @@ public class AppController implements AutoCloseable {
 	private final IncidentValidator validator;
 	private final Timer autosaveTimer;
 	private AppData data;
+	private OperatorContext operatorContext = OperatorContext.empty();
 	private boolean dirty;
 	private volatile boolean closed;
 	private LinkSource activeLinkSource = LinkSource.NONE;
@@ -232,6 +236,22 @@ public class AppController implements AutoCloseable {
 		this(data, store, incidentId, null, exportService, validator);
 		storedRevision = store.revisionToken(this.data);
 		claimEditLock(incidentId);
+	}
+
+	/**
+	 * Creates a store-backed controller with an injected operator context.
+	 *
+	 * @param data initial incident document.
+	 * @param store incident store.
+	 * @param incidentId identifier of the active incident.
+	 * @param exportService PDF export service.
+	 * @param validator validation service.
+	 * @param operatorContext self-asserted operator and optional station identity.
+	 */
+	public AppController(AppData data, IncidentStore store, IncidentId incidentId, PdfExportService exportService,
+			IncidentValidator validator, OperatorContext operatorContext) {
+		this(data, store, incidentId, exportService, validator);
+		setOperatorContext(operatorContext);
 	}
 
 	/**
@@ -448,6 +468,80 @@ public class AppController implements AutoCloseable {
 	 */
 	public AppData getData() {
 		return data;
+	}
+
+	/**
+	 * Returns the currently configured operator identity.
+	 *
+	 * @return operator context, never {@code null}.
+	 */
+	public OperatorContext getOperatorContext() {
+		return operatorContext;
+	}
+
+	/**
+	 * Replaces the self-asserted operator identity used for future records.
+	 *
+	 * @param operatorContext operator display name and optional station identifier;
+	 *            null selects the empty context.
+	 */
+	public void setOperatorContext(OperatorContext operatorContext) {
+		this.operatorContext = operatorContext == null ? OperatorContext.empty() : operatorContext;
+	}
+
+	/**
+	 * Creates provenance for the current operator when the context has an identity.
+	 *
+	 * @return local provenance with a UTC entry instant, or {@code null} for an
+	 *         empty operator context.
+	 */
+	public Provenance createProvenance() {
+		if (operatorContext.isEmpty()) {
+			return null;
+		}
+		return Provenance.local(operatorContext.operatorName(), operatorContext.stationId(), UtcTimestamp.nowInstant());
+	}
+
+	/**
+	 * Prefills an ICS 214 preparer name only when both the form field is blank and
+	 * the current operator name is available.
+	 *
+	 * @param form ICS 214 form to update.
+	 * @return {@code true} when the operator name was applied.
+	 */
+	public boolean prefillPreparedBy(Ics214Form form) {
+		if (form == null || !safe(form.getPreparedByName()).isBlank() || operatorContext.operatorName().isBlank()) {
+			return false;
+		}
+		form.setPreparedByName(operatorContext.operatorName());
+		markDirty();
+		return true;
+	}
+
+	/**
+	 * Appends a T-card check-in event attributed to the current operator.
+	 *
+	 * @param card card receiving the event.
+	 * @param eventAt UTC instant when the check-in occurred.
+	 */
+	public void recordTCardCheckIn(TCard card, Instant eventAt) {
+		if (card != null) {
+			card.recordCheckIn(eventAt, createProvenance());
+			markDirty();
+		}
+	}
+
+	/**
+	 * Appends a T-card check-out event attributed to the current operator.
+	 *
+	 * @param card card receiving the event.
+	 * @param eventAt UTC instant when the check-out occurred.
+	 */
+	public void recordTCardCheckOut(TCard card, Instant eventAt) {
+		if (card != null) {
+			card.recordCheckOut(eventAt, createProvenance());
+			markDirty();
+		}
 	}
 
 	/**
@@ -2851,6 +2945,8 @@ public class AppController implements AutoCloseable {
 			task.setTaskLifecycleStatus(normalized);
 			applyDebriefLifecycleTimes(task, previous, normalized, effectiveTime);
 			TransitionRecord transition = transitionRecordForStatus(task, normalized, effectiveTime);
+			task.recordLifecycleStatusChange(previous, normalized, toUtcInstant(transition.timestamp()),
+					transition.provenance());
 			appendIcpLifecycleEntry(transition);
 			appendTaskLifecycleEntry(task, transition);
 			return new TaskLifecycleChangeResult(true, "");
@@ -2890,8 +2986,42 @@ public class AppController implements AutoCloseable {
 			return new TaskLifecycleChangeResult(false, lifecycleTransitionWarning(previousStatus, normalized));
 		}
 		task.setTaskLifecycleStatus(normalized);
-		applyDebriefLifecycleTimes(task, previousStatus, normalized, entry == null ? null : entry.getTimestamp());
-		return new TaskLifecycleChangeResult(!java.util.Objects.equals(previousStatus, normalized), "");
+		LocalDateTime effectiveTime = entry == null ? null : entry.getTimestamp();
+		applyDebriefLifecycleTimes(task, previousStatus, normalized, effectiveTime);
+		boolean changed = !java.util.Objects.equals(previousStatus, normalized);
+		if (changed) {
+			task.recordLifecycleStatusChange(previousStatus, normalized,
+					effectiveTime == null ? UtcTimestamp.nowInstant() : toUtcInstant(effectiveTime),
+					createProvenance());
+		}
+		return new TaskLifecycleChangeResult(changed, "");
+	}
+
+	/**
+	 * Records lifecycle attribution for a status edit made in the task editor.
+	 *
+	 * @param task task whose status was edited.
+	 * @param previousStatus status before the edit.
+	 * @param newStatus status after the edit.
+	 */
+	public void recordTaskLifecycleStatusEdit(SarTaskAssignment task, String previousStatus, String newStatus) {
+		if (task == null || java.util.Objects.equals(normalizeLifecycleStatus(previousStatus),
+				normalizeLifecycleStatus(newStatus))) {
+			return;
+		}
+		task.recordLifecycleStatusChange(normalizeLifecycleStatus(previousStatus), normalizeLifecycleStatus(newStatus),
+				UtcTimestamp.nowInstant(), createProvenance());
+		markDirty();
+	}
+
+	/**
+	 * Converts an existing UTC local date/time field to its absolute instant.
+	 *
+	 * @param timestamp UTC local date/time.
+	 * @return matching UTC instant.
+	 */
+	private Instant toUtcInstant(LocalDateTime timestamp) {
+		return timestamp.atOffset(ZoneOffset.UTC).toInstant();
 	}
 
 	/**
@@ -3071,7 +3201,8 @@ public class AppController implements AutoCloseable {
 		String taskReference = SarTaskSupport.taskResourceDisplayLabel(task);
 		String taskLogReference = taskReference.isBlank() ? safe(task.getLeader()) : taskReference;
 		return new TransitionRecord(effectiveTime == null ? UtcTimestamp.now().withSecond(0).withNano(0) : effectiveTime,
-				eventTypeId, "Task status changed to " + normalizedStatus, taskReference, taskLogReference);
+				eventTypeId, "Task status changed to " + normalizedStatus, taskReference, taskLogReference,
+				createProvenance());
 	}
 
 	/**
@@ -3093,6 +3224,7 @@ public class AppController implements AutoCloseable {
 		icpEntry.setEventTypeId(ActivityEventType.ID_FREE_TEXT);
 		icpEntry.setResourceIdentifier(transition.icpResourceIdentifier());
 		icpEntry.setNotableActivity(transition.description());
+		icpEntry.setProvenance(transition.provenance());
 		icpLog.getActivityLog().add(icpEntry);
 	}
 
@@ -3117,6 +3249,7 @@ public class AppController implements AutoCloseable {
 				entry.setEventTypeId(transition.eventTypeId());
 				entry.setResourceIdentifier(transition.taskResourceIdentifier());
 				entry.setNotableActivity(transition.description());
+				entry.setProvenance(transition.provenance());
 				log.getActivityLog().add(entry);
 				return;
 			}
@@ -3136,9 +3269,10 @@ public class AppController implements AutoCloseable {
 	 *            resource identifier used for the ICP note.
 	 * @param taskResourceIdentifier
 	 *            resource identifier used for the task-linked note.
+	 * @param provenance attribution shared by the transition records.
 	 */
 	private record TransitionRecord(LocalDateTime timestamp, String eventTypeId, String description,
-			String icpResourceIdentifier, String taskResourceIdentifier) {
+			String icpResourceIdentifier, String taskResourceIdentifier, Provenance provenance) {
 	}
 
 	/**
@@ -3217,6 +3351,7 @@ public class AppController implements AutoCloseable {
 		entry.setTimestamp(UtcTimestamp.now().withSecond(0).withNano(0));
 		entry.setEventTypeId(eventTypeId);
 		entry.setNotableActivity(note.trim());
+		entry.setProvenance(createProvenance());
 		if (assignmentId != null && !assignmentId.isBlank()) {
 			entry.setResourceIdentifier(data.getSarTaskAssignments().stream()
 					.filter(task -> assignmentId.equals(task.getAssignmentId()))
@@ -3679,6 +3814,7 @@ public class AppController implements AutoCloseable {
 					activity = safe(clue.getLocation()) + (activity.isBlank() ? "" : ": " + activity);
 				}
 				entry.setNotableActivity(activity);
+				entry.setProvenance(clue.getProvenance() == null ? createProvenance() : clue.getProvenance());
 				log.getActivityLog().add(entry);
 				return true;
 			}
@@ -3722,6 +3858,7 @@ public class AppController implements AutoCloseable {
 		entry.setEventTypeId(ActivityEventType.ID_CLUE_DETECTED);
 		entry.setResourceIdentifier(safe(clue.getDetectingTask()));
 		entry.setNotableActivity(activity);
+		entry.setProvenance(clue.getProvenance() == null ? createProvenance() : clue.getProvenance());
 		icpLog.getActivityLog().add(entry);
 	}
 
