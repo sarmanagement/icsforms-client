@@ -52,7 +52,7 @@ public class ActivityEventType {
 	private String id = "";
 	private String label = "";
 	private boolean builtIn = false;
-	private boolean showInQuickMenu = false;
+	private transient boolean showInQuickMenu = false;
 
 	/**
 	 * Creates an empty event type (required for JSON deserialisation).
