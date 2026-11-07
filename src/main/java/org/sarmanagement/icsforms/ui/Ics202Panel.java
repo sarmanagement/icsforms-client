@@ -303,15 +303,40 @@ private final EditorCommitGuard editorCommitGuard;
 			objective.setAssessedAt(UtcTimestamp.now().withSecond(0).withNano(0));
 		}
 		controller.getData().getForm202().setStructuredObjectives(modelObjectives());
-		int row = objectives.indexOf(objective);
-		objectivesModel.fireTableRowsUpdated(row, row);
-		int viewRow = objectivesTable.convertRowIndexToView(row);
-		if (viewRow >= 0) {
-			objectivesTable.setRowSelectionInterval(viewRow, viewRow);
+		int row = objectiveIndex(objectives, objective.getObjectiveId());
+		if (row >= 0) {
+			objectivesModel.fireTableRowsUpdated(row, row);
+			int viewRow = objectivesTable.convertRowIndexToView(row);
+			if (viewRow >= 0) {
+				objectivesTable.setRowSelectionInterval(viewRow, viewRow);
+			}
 		}
 		objectiveTextArea.setText("");
 		updateObjectiveWarning();
 		controller.markDirty();
+	}
+
+	/**
+	 * Finds a unique objective by its stable identity.
+	 *
+	 * @param rows objective records.
+	 * @param objectiveId stable objective UUID.
+	 * @return matching model row, or {@code -1} when absent or ambiguous.
+	 */
+	private static int objectiveIndex(List<IncidentObjective> rows, String objectiveId) {
+		if (objectiveId == null || objectiveId.isBlank()) {
+			return -1;
+		}
+		int match = -1;
+		for (int i = 0; i < rows.size(); i++) {
+			if (objectiveId.equals(rows.get(i).getObjectiveId())) {
+				if (match >= 0) {
+					return -1;
+				}
+				match = i;
+			}
+		}
+		return match;
 	}
 
 	/** Selects existing assignments grouped by branch, division and group. */

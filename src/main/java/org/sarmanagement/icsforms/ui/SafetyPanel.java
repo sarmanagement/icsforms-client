@@ -669,19 +669,41 @@ public class SafetyPanel extends JPanel {
 					JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
-		String[] labels = library.stream()
-				.map(entry -> entry.getIncidentArea() + " — " + entry.getHazardsRisks()).toArray(String[]::new);
+		List<CommonHazardChoice> choices = library.stream()
+				.map(entry -> new CommonHazardChoice(entry.getEntryId(),
+						entry.getIncidentArea() + " — " + entry.getHazardsRisks())).toList();
 		Object selected = JOptionPane.showInputDialog(this, "Select a common hazard to add to this analysis.",
-				"Add common hazard", JOptionPane.PLAIN_MESSAGE, null, labels, labels[0]);
-		if (selected == null) {
+				"Add common hazard", JOptionPane.PLAIN_MESSAGE, null, choices.toArray(), choices.get(0));
+		if (!(selected instanceof CommonHazardChoice choice)) {
 			return;
 		}
-		SafetyAnalysisEntry source = library.get(java.util.Arrays.asList(labels).indexOf(selected));
+		SafetyAnalysisEntry source = resolveCommonHazard(library, choice.entryId());
+		if (source == null) {
+			JOptionPane.showMessageDialog(this, "The selected common hazard is no longer uniquely identifiable.",
+					"Could not add common hazard", JOptionPane.ERROR_MESSAGE);
+			return;
+		}
 		SafetyAnalysisEntry entry = copyEntry(source);
 		controller.getData().getForm215a().getEntries().add(entry);
 		analysisTableModel.addRow(new Object[] {entry.getIncidentArea(), entry.getHazardsRisks(), entry.getMitigations()});
 		controller.markDirty();
 		refreshCoverage(controller.getData());
+	}
+
+	/**
+	 * Resolves one common hazard by its stable record identity.
+	 *
+	 * @param library common hazard records.
+	 * @param entryId selected stable identity.
+	 * @return the unique matching record, or null when absent or ambiguous.
+	 */
+	static SafetyAnalysisEntry resolveCommonHazard(List<SafetyAnalysisEntry> library, String entryId) {
+		if (entryId == null || entryId.isBlank()) {
+			return null;
+		}
+		List<SafetyAnalysisEntry> matches = library.stream()
+				.filter(entry -> entryId.equals(entry.getEntryId())).toList();
+		return matches.size() == 1 ? matches.get(0) : null;
 	}
 
 	/**
@@ -1080,6 +1102,24 @@ public class SafetyPanel extends JPanel {
 		 */
 		private String hazards() {
 			return task == null ? archivedReport.getHazards() : task.getHazardsObserved();
+		}
+	}
+
+	/**
+	 * Presents common-hazard text while retaining the record's stable identity.
+	 *
+	 * @param entryId common hazard UUID.
+	 * @param label visible hazard text.
+	 */
+	private record CommonHazardChoice(String entryId, String label) {
+		/**
+		 * Returns the visible label for this choice.
+		 *
+		 * @return hazard text.
+		 */
+		@Override
+		public String toString() {
+			return label;
 		}
 	}
 }

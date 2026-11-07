@@ -1050,7 +1050,7 @@ class MapleRidgeExampleTest {
 				+ "Check in every 30 minutes. Buddy contact, tick checks, water and shaded rest per ICS 208. "
 				+ "Seven teams initially active; Ops reassesses span before later launches and staggers/pauses work "
 				+ "rather than assuming eight active teams manageable. No simultaneous tasks for any member.");
-		form.setCommunications(contacts(data));
+		form.setCommunications(contacts(data, "form204"));
 		form.setPreparedByName(PLANNING);
 		form.setPreparedByPositionTitle("Planning Section Chief");
 		form.setPreparedDateTime(time(6, 50));
@@ -1245,7 +1245,7 @@ class MapleRidgeExampleTest {
 				? "Radio, map, GPS, first-aid kit" : "Live-find canine, radio, GPS, canine water");
 		task.setTransportationInstructions(
 				"Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.");
-		task.setCommunications(contacts(data));
+		task.setCommunications(contacts(data, task.getTaskId()));
 		task.setPreparedByName(PLANNING);
 		task.setPreparedByPositionTitle("Planning Section Chief");
 		task.setPreparedDateTime(time(6, 50));
@@ -1257,12 +1257,12 @@ class MapleRidgeExampleTest {
 			String function = i == first ? task.getLeaderRole()
 					: dogIndex >= 0 && i == members.get(1) ? "Communications"
 							: dogIndex >= 0 && i == members.get(2) ? "Navigation" : "Ground Searcher";
-			task.getResourcesAssigned().add(taskResource(card, function));
+			task.getResourcesAssigned().add(taskResource(card, function, task.getTaskId()));
 		}
 		if (dogIndex >= 0) {
 			TCard dog = data.getTCards().stream()
 					.filter(c -> c.getResourceIdentifier().equals("MR-K9-" + (dogIndex + 1))).findFirst().orElseThrow();
-			task.getResourcesAssigned().add(taskResource(dog, "Live Find K9"));
+			task.getResourcesAssigned().add(taskResource(dog, "Live Find K9", task.getTaskId()));
 			task.setCanineSearchType("Area / live find");
 			task.setCanineDayNight("Day");
 			task.setCanineCloudCover("Partly cloudy (fictional forecast)");
@@ -1276,10 +1276,12 @@ class MapleRidgeExampleTest {
 	 *
 	 * @param card source card.
 	 * @param function task function.
+	 * @param ownerId deterministic identity scope for the containing task or log.
 	 * @return linked task resource.
 	 */
-	private static SarTaskResource taskResource(TCard card, String function) {
+	private static SarTaskResource taskResource(TCard card, String function, String ownerId) {
 		SarTaskResource resource = new SarTaskResource();
+		resource.setId(id(ownerId + "-resource-" + card.getResourceId()));
 		resource.setResourceId(card.getResourceId());
 		resource.setCardType(card.getCardType());
 		resource.setName(card.getCardType() == TCardType.PERSONNEL ? card.getPersonName() : card.getResourceIdentifier());
@@ -1292,15 +1294,18 @@ class MapleRidgeExampleTest {
 	 * Creates named IC phone and Operations radio contacts without linking the phone to a channel.
 	 *
 	 * @param data incident containing the IC personnel card.
+	 * @param ownerId deterministic identity scope for the containing form or task.
 	 * @return IC phone followed by the linked Operations radio contact.
 	 */
-	private static List<CommunicationEntry> contacts(AppData data) {
+	private static List<CommunicationEntry> contacts(AppData data, String ownerId) {
 		CommunicationEntry ic = new CommunicationEntry();
+		ic.setId(id(ownerId + "-contact-ic"));
 		ic.setName(IC);
 		ic.setFunction("IC");
 		ic.setPrimaryContact(data.getTCards().stream().filter(c -> IC.equals(c.getPersonName()))
 				.findFirst().orElseThrow().getPhoneNumber());
 		CommunicationEntry ops = new CommunicationEntry();
+		ops.setId(id(ownerId + "-contact-ops"));
 		ops.setName(OPS);
 		ops.setFunction("Ops");
 		ops.setPrimaryContact(CHANNEL + " / 155.160 MHz");
@@ -1338,6 +1343,7 @@ class MapleRidgeExampleTest {
 			entry.setEquipmentPpe(i == 0 ? "Repellent, tick-removal kit" : i == 1 ? "Boots, map, radio" : "Water, shade, canine cooling supplies");
 			data.getForm215a().getEntries().add(entry);
 			SafetyMessageBlock block = new SafetyMessageBlock();
+			block.setId(id("safety-message-" + i));
 			block.setHazard(hazards.get(i));
 			block.setIncidentArea(entry.getIncidentArea());
 			block.setPrecautions(mitigations.get(i));
@@ -1374,6 +1380,7 @@ class MapleRidgeExampleTest {
 		plan.setDesignatedMedicalUnitName(MEDL);
 		plan.setDesignatedMedicalUnitContact(CHANNEL + "; 202-555-0107 (fictional)");
 		MedicalPlan.AidStation aid = new MedicalPlan.AidStation();
+		aid.setId(id("aid-station-base"));
 		aid.setName("Exercise Base human first-aid supplies/cache (fictional, unstaffed)");
 		aid.setLocation(BASE);
 		aid.setContactNumbers("202-555-0107 (fictional)");
@@ -1381,6 +1388,7 @@ class MapleRidgeExampleTest {
 		aid.setParamedicsOnSite(false);
 		plan.getAidStations().add(aid);
 		MedicalPlan.TransportService ambulance = new MedicalPlan.TransportService();
+		ambulance.setId(id("transport-ambulance"));
 		ambulance.setService("Fictional Maple Ridge Ambulance");
 		ambulance.setLocation("Exercise station, 2 Illustration Lane (fictional)");
 		ambulance.setContactNumbers("202-555-0110 (fictional, non-operational)");
@@ -1389,6 +1397,7 @@ class MapleRidgeExampleTest {
 		ambulance.setLevelOfService("BLS - simulated requested service; not a confirmed operational resource");
 		plan.getTransportServices().add(ambulance);
 		MedicalPlan.Hospital hospital = new MedicalPlan.Hospital();
+		hospital.setId(id("hospital-community"));
 		hospital.setName("Fictional Maple Ridge Community Hospital");
 		hospital.setAddress("100 Illustration Avenue, fictional Maple Ridge, MA");
 		hospital.setContactNumbers("202-555-0111 (fictional, non-operational)");
@@ -1398,6 +1407,7 @@ class MapleRidgeExampleTest {
 		hospital.setHelipad(false);
 		plan.getHospitals().add(hospital);
 		MedicalPlan.Hospital trauma = new MedicalPlan.Hospital();
+		trauma.setId(id("hospital-trauma"));
 		trauma.setName("Fictional Pine County Regional Trauma Center");
 		trauma.setAddress("200 Example Boulevard, fictional Pine County, MA");
 		trauma.setContactNumbers("202-555-0112 (fictional, non-operational)");
@@ -1496,6 +1506,7 @@ class MapleRidgeExampleTest {
 		List<LocalDateTime> due = List.of(time(10, 0), time(9, 0), time(13, 0), time(18, 30));
 		for (int i = 0; i < items.size(); i++) {
 			OpenActionItem action = new OpenActionItem();
+			action.setId(id("open-action-" + (i + 1)));
 			action.setNumber(i + 1);
 			action.setItem(items.get(i));
 			action.setPoc(pocs.get(i));
@@ -1506,6 +1517,7 @@ class MapleRidgeExampleTest {
 			data.getOpenActionItems().add(action);
 		}
 		Ics214Form log = new Ics214Form();
+		log.setLogId(id("ics214-log-ops"));
 		log.setName(OPS);
 		log.setIcsPosition("Operations Section Chief");
 		log.setHomeAgency(AGENCY);
@@ -1513,11 +1525,13 @@ class MapleRidgeExampleTest {
 		log.setPreparedByPositionTitle("Operations Section Chief");
 		log.setPreparedDateTime(time(8, 15));
 		data.getTCards().stream().filter(card -> "ICP".equals(card.getStatus()))
-				.forEach(card -> log.getResourcesAssigned().add(taskResource(card, "ICP overhead")));
+				.forEach(card -> log.getResourcesAssigned()
+						.add(taskResource(card, "ICP overhead", "ics214-overhead")));
 		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
 			if (!"planned".equals(task.getTaskLifecycleStatus())) {
 				for (SarTaskResource assigned : task.getResourcesAssigned()) {
 					SarTaskResource resource = new SarTaskResource();
+					resource.setId(id("ics214-resource-" + task.getTaskId() + "-" + assigned.getId()));
 					resource.setResourceId(assigned.getResourceId());
 					resource.setCardType(assigned.getCardType());
 					resource.setName(assigned.getName());

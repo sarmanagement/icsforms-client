@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.persistence;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -34,6 +35,17 @@ public class FileIncidentStore implements IncidentStore {
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 			.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+	/**
+	 * A validated stored document and its original JSON tree.
+	 *
+	 * @param source source path, including backup when recovering
+	 * @param tree original document tree
+	 * @param data deserialized incident data
+	 */
+	private record StoredDocument(Path source, JsonNode tree, AppData data) {
+	}
+
 	private final Path root;
 	private final Path incidents;
 	private final String nodeId;
@@ -209,17 +221,31 @@ public class FileIncidentStore implements IncidentStore {
 	}
 
 	@Override
-	public AppData load(IncidentId id) {
+	public synchronized AppData load(IncidentId id) {
 		Path path = path(id);
 		if (!Files.exists(path)) {
 			throw new IllegalArgumentException("Incident not found: " + id);
 		}
-		AppData data = readWithBackup(path);
-		if (data.getIncidentId() != null && !id.value().equals(data.getIncidentId())) {
-			throw new IllegalStateException("Incident identifier does not match file: " + id);
+		StoredDocument stored = readWithBackupDocument(path);
+		JsonNode migrated = prepareMigration(stored, id);
+		if (!stored.tree().equals(migrated)) {
+			boolean alreadyOwned = locks.containsKey(id);
+			if (!lock(id)) {
+				throw new StoreConflictException("Incident is open in another window: " + id);
+			}
+			try {
+				stored = readWithBackupDocument(path);
+				migrated = prepareMigration(stored, id);
+				if (!stored.tree().equals(migrated)) {
+					persistMigration(path, stored, migrated);
+				}
+			} finally {
+				if (!alreadyOwned) {
+					unlock(id);
+				}
+			}
 		}
-		upgrade(data, id);
-		return data;
+		return stored.data();
 	}
 
 	@Override
@@ -237,13 +263,16 @@ public class FileIncidentStore implements IncidentStore {
 		}
 		long revision = data.getRevision();
 		Instant updated = data.getUpdatedAt();
-		data.setRevision(revision + 1);
-		data.setUpdatedAt(UtcTimestamp.nowInstant());
-		data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
-		data.normalizeIdentity();
 		Path temp = path.resolveSibling(path.getFileName() + ".tmp");
+		boolean committed = false;
 		try {
-			MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), data);
+			data.setRevision(revision + 1);
+			data.setUpdatedAt(UtcTimestamp.nowInstant());
+			data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
+			data.normalizeIdentity();
+			StoredDocument current = readWithBackupDocument(path);
+			JsonNode updatedTree = mergeKnownProperties(current.tree(), MAPPER.valueToTree(data));
+			MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), updatedTree);
 			// Never replace a good backup with a corrupt primary document.
 			try {
 				MAPPER.readValue(path.toFile(), AppData.class);
@@ -252,17 +281,31 @@ public class FileIncidentStore implements IncidentStore {
 				LOGGER.warning("Keeping previous backup for corrupt incident: " + path);
 			}
 			move(temp, path);
+			committed = true;
 		} catch (IOException e) {
-			data.setRevision(revision);
-			data.setUpdatedAt(updated);
 			throw new IllegalStateException("Cannot save incident: " + id, e);
 		} finally {
+			if (!committed) {
+				restoreSaveMetadata(data, revision, updated);
+			}
 			try {
 				Files.deleteIfExists(temp);
 			} catch (IOException e) {
 				LOGGER.warning("Cannot remove temporary incident file: " + temp);
 			}
 		}
+	}
+
+	/**
+	 * Restores caller-owned metadata when a save fails before replacing the stored document.
+	 *
+	 * @param data caller's incident document
+	 * @param revision original revision
+	 * @param updated original update timestamp
+	 */
+	private void restoreSaveMetadata(AppData data, long revision, Instant updated) {
+		data.setRevision(revision);
+		data.setUpdatedAt(updated);
 	}
 
 	@Override
@@ -535,6 +578,91 @@ public class FileIncidentStore implements IncidentStore {
 			} catch (IOException backupFailure) {
 				backupFailure.addSuppressed(primaryFailure);
 				throw new IllegalStateException("Cannot read incident or backup: " + path, backupFailure);
+			}
+		}
+	}
+
+	/**
+	 * Reads and validates the primary document or its last-known-good backup.
+	 *
+	 * @param path primary incident document
+	 * @return validated source tree and incident data
+	 */
+	private StoredDocument readWithBackupDocument(Path path) {
+		try {
+			return readStoredDocument(path);
+		} catch (IOException primaryFailure) {
+			try {
+				return readStoredDocument(backup(path));
+			} catch (IOException backupFailure) {
+				backupFailure.addSuppressed(primaryFailure);
+				throw new IllegalStateException("Cannot read incident or backup: " + path, backupFailure);
+			}
+		}
+	}
+
+	/**
+	 * Reads one supported stored document while retaining unknown JSON fields.
+	 *
+	 * @param path stored document path
+	 * @return validated source tree and incident data
+	 * @throws IOException when the document cannot be read
+	 */
+	private StoredDocument readStoredDocument(Path path) throws IOException {
+		AppData data = readDocument(path);
+		return new StoredDocument(path, MAPPER.readTree(path.toFile()), data);
+	}
+
+	/**
+	 * Normalizes a legacy incident and overlays the result onto its original JSON.
+	 *
+	 * @param stored validated stored document
+	 * @param id file's assigned incident identity
+	 * @return migrated tree with unknown properties retained
+	 */
+	private JsonNode prepareMigration(StoredDocument stored, IncidentId id) {
+		AppData data = stored.data();
+		if (data.getIncidentId() != null && !id.value().equals(data.getIncidentId())) {
+			throw new IllegalStateException("Incident identifier does not match file: " + id);
+		}
+		upgrade(data, id);
+		return mergeKnownProperties(stored.tree(), MAPPER.valueToTree(data));
+	}
+
+	/**
+	 * Merges serialized model properties into an original tree without dropping unknown fields.
+	 *
+	 * @param original original JSON value
+	 * @param updated normalized model value
+	 * @return updated value retaining unknown original properties
+	 */
+	private JsonNode mergeKnownProperties(JsonNode original, JsonNode updated) {
+		return StoredJsonMerger.merge(MAPPER, original, updated);
+	}
+
+	/**
+	 * Atomically persists identity migration, preserving the original as a backup.
+	 *
+	 * @param primary primary incident document
+	 * @param stored validated source document
+	 * @param migrated normalized JSON tree
+	 */
+	private void persistMigration(Path primary, StoredDocument stored, JsonNode migrated) {
+		Path temp = primary.resolveSibling(primary.getFileName() + ".tmp");
+		try {
+			if (stored.source().equals(primary)) {
+				Files.copy(primary, backup(primary), StandardCopyOption.REPLACE_EXISTING);
+			}
+			MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), migrated);
+			move(temp, primary);
+			Files.copy(primary, backup(primary), StandardCopyOption.REPLACE_EXISTING);
+		} catch (IOException e) {
+			throw new IllegalStateException("Cannot persist incident identity migration: " + primary, e);
+		} finally {
+			try {
+				Files.deleteIfExists(temp);
+			} catch (IOException e) {
+				LOGGER.warning("Cannot remove temporary incident migration file: " + temp);
 			}
 		}
 	}

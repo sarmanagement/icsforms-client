@@ -3,6 +3,8 @@
  */
 package org.sarmanagement.icsforms;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
@@ -83,6 +85,100 @@ class LocalRepositoryTest {
 		LocalRepository repository = new LocalRepository(primary);
 		assertEquals("Retained", repository.loadOrDefault().getForm202().getCommandEmphasis());
 		assertEquals(1, LocalRepository.listLocalIncidents(directory).size());
+	}
+
+	@Test
+	void legacyIdentityMigrationPersistsIdsAndRetainsUnknownFields() throws Exception {
+		Path directory = Files.createTempDirectory("icsforms-identity-migration");
+		Path primary = directory.resolve("incident.json");
+		Files.writeString(primary, """
+				{"schemaVersion":5,"futureField":{"retain":true},
+				"openActionItems":[{"item":"Keep staging available"}],
+				"activityLogs":[{"activityLog":[{"notableActivity":"Search began"}]}]}
+				""");
+
+		AppData first = new LocalRepository(primary).loadOrDefault();
+		String incidentId = first.getIncidentId();
+		String actionId = first.getOpenActionItems().get(0).getId();
+		String entryId = first.getActivityLogs().get(0).getActivityLog().get(0).getEntryId();
+		assertTrue(Files.readString(primary).contains("\"retain\" : true"));
+
+		AppData restarted = new LocalRepository(primary).loadOrDefault();
+		assertEquals(incidentId, restarted.getIncidentId());
+		assertEquals(actionId, restarted.getOpenActionItems().get(0).getId());
+		assertEquals(entryId, restarted.getActivityLogs().get(0).getActivityLog().get(0).getEntryId());
+	}
+
+	@Test
+	void savedWorkspaceRetainsUnknownRootAndNestedProperties() throws Exception {
+		Path directory = Files.createTempDirectory("icsforms-unknown-fields");
+		Path primary = directory.resolve("incident.json");
+		Files.writeString(primary, """
+				{"schemaVersion":5,"futureRoot":{"preserve":"root value"},
+				"form202":{"commandEmphasis":"Existing","futureNested":{"preserve":"nested value"}}}
+				""");
+		LocalRepository repository = new LocalRepository(primary);
+		AppData data = repository.loadOrDefault();
+		data.getIncidentContext().setIncidentName("Updated workspace");
+		repository.save(data);
+
+		JsonNode saved = new ObjectMapper().readTree(primary.toFile());
+		assertEquals("root value", saved.path("futureRoot").path("preserve").asText());
+		assertEquals("nested value", saved.path("form202").path("futureNested").path("preserve").asText());
+		assertEquals("Updated workspace", saved.path("incidentContext").path("incidentName").asText());
+	}
+
+	@Test
+	void workspaceUnknownPropertiesFollowStableIdsWhenRecordsAreMutated() throws Exception {
+		Path directory = Files.createTempDirectory("icsforms-local-identity-merge");
+		Path primary = directory.resolve("incident.json");
+		String actionA = "00000000-0000-4000-8000-000000000011";
+		String actionB = "00000000-0000-4000-8000-000000000012";
+		String divisionA = "00000000-0000-4000-8000-000000000013";
+		String divisionB = "00000000-0000-4000-8000-000000000014";
+		Files.writeString(primary, """
+				{"schemaVersion":5,
+				"form201":{"currentActions":[
+					{"id":"%s","actions":"Action A","futureAction":"A"},
+					{"id":"%s","actions":"Action B","futureAction":"B"}]},
+				"organizationalChart":{"assignmentList":{"branches":[{"id":"00000000-0000-4000-8000-000000000015",
+					"name":"Branch","divisions":[
+						{"id":"%s","title":"Division A","futureDivision":"A"},
+						{"id":"%s","title":"Division B","futureDivision":"B"}]}]}}}
+				""".formatted(actionA, actionB, divisionA, divisionB));
+		LocalRepository repository = new LocalRepository(primary);
+		AppData data = repository.loadOrDefault();
+		var actions = data.getForm201().getCurrentActions();
+		actions.removeIf(action -> actionA.equals(action.getId()));
+		org.sarmanagement.icsforms.model.Ics201Form.ActionEntry added =
+				new org.sarmanagement.icsforms.model.Ics201Form.ActionEntry();
+		added.setId("00000000-0000-4000-8000-000000000016");
+		added.setActions("Action C");
+		actions.add(0, added);
+		var divisions = data.getOrganizationalChart().getAssignmentList().getBranches().get(0).getDivisions();
+		java.util.Collections.reverse(divisions);
+		org.sarmanagement.icsforms.model.OrgChartEntry newDivision =
+				new org.sarmanagement.icsforms.model.OrgChartEntry();
+		newDivision.setId("00000000-0000-4000-8000-000000000017");
+		newDivision.setTitle("Division C");
+		divisions.add(newDivision);
+		repository.save(data);
+
+		JsonNode saved = new ObjectMapper().readTree(primary.toFile());
+		JsonNode savedActions = saved.path("form201").path("currentActions");
+		assertEquals(2, savedActions.size());
+		assertEquals(added.getId(), savedActions.get(0).path("id").asText());
+		assertFalse(savedActions.get(0).has("futureAction"));
+		assertEquals(actionB, savedActions.get(1).path("id").asText());
+		assertEquals("B", savedActions.get(1).path("futureAction").asText());
+		JsonNode savedDivisions = saved.path("organizationalChart").path("assignmentList")
+				.path("branches").get(0).path("divisions");
+		assertEquals(3, savedDivisions.size());
+		assertEquals(divisionB, savedDivisions.get(0).path("id").asText());
+		assertEquals("B", savedDivisions.get(0).path("futureDivision").asText());
+		assertEquals(divisionA, savedDivisions.get(1).path("id").asText());
+		assertEquals("A", savedDivisions.get(1).path("futureDivision").asText());
+		assertFalse(savedDivisions.get(2).has("futureDivision"));
 	}
 
 	/**

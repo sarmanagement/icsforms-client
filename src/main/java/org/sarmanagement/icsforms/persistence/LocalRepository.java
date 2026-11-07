@@ -5,6 +5,7 @@ package org.sarmanagement.icsforms.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
 
@@ -12,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -85,10 +87,18 @@ public class LocalRepository {
 			if (parent != null) {
 				Files.createDirectories(parent);
 			}
+			JsonNode existing = null;
 			if (Files.exists(filePath)) {
+				try {
+					existing = SHARED_MAPPER.readTree(filePath.toFile());
+				} catch (IOException corruptPrimary) {
+					// Preserve the established recovery behavior for a corrupt primary.
+				}
 				Files.copy(filePath, backupPath, StandardCopyOption.REPLACE_EXISTING);
 			}
-			objectMapper.writerWithDefaultPrettyPrinter().writeValue(filePath.toFile(), appData);
+			JsonNode updated = SHARED_MAPPER.valueToTree(appData);
+			objectMapper.writerWithDefaultPrettyPrinter().writeValue(filePath.toFile(),
+					existing == null ? updated : mergeKnownProperties(existing, updated));
 			Files.copy(filePath, backupPath, StandardCopyOption.REPLACE_EXISTING);
 		} catch (IOException e) {
 			throw new IllegalStateException("Failed to save local data", e);
@@ -108,23 +118,83 @@ public class LocalRepository {
 			return new AppData();
 		}
 		try {
-			AppData data = new IncidentDocumentReader().readStored(filePath);
-			data.normalizeIdentity();
-			data.reconcileMedicalUnitLeaderAssignment();
-			return data;
+			return loadAndMigrate(filePath);
 		} catch (IOException primaryFailure) {
 			if (Files.exists(backupPath)) {
 				try {
-					AppData data = new IncidentDocumentReader().readStored(backupPath);
-					data.normalizeIdentity();
-					data.reconcileMedicalUnitLeaderAssignment();
-					return data;
+					return loadAndMigrate(backupPath);
 				} catch (IOException backupFailure) {
 					backupFailure.addSuppressed(primaryFailure);
 					throw new IllegalStateException("Failed to load local data or backup", backupFailure);
 				}
 			}
 			throw new IllegalStateException("Failed to load existing local data", primaryFailure);
+		}
+	}
+
+	/**
+	 * Loads legacy data, assigns missing identities, and persists the migration once.
+	 *
+	 * @param source primary or backup document
+	 * @return normalized incident data
+	 * @throws IOException when the source cannot be read or migration cannot be written
+	 */
+	private AppData loadAndMigrate(Path source) throws IOException {
+		JsonNode original = SHARED_MAPPER.readTree(source.toFile());
+		AppData data = new IncidentDocumentReader().readStored(source);
+		data.normalizeIdentity();
+		data.reconcileMedicalUnitLeaderAssignment();
+		JsonNode migrated = mergeKnownProperties(original, SHARED_MAPPER.valueToTree(data));
+		if (!original.equals(migrated)) {
+			persistMigration(source, migrated);
+		}
+		return data;
+	}
+
+	/**
+	 * Merges normalized fields while retaining unknown legacy properties.
+	 *
+	 * @param original original JSON value
+	 * @param updated normalized model value
+	 * @return merged JSON value
+	 */
+	private JsonNode mergeKnownProperties(JsonNode original, JsonNode updated) {
+		return StoredJsonMerger.merge(SHARED_MAPPER, original, updated);
+	}
+
+	/**
+	 * Atomically writes migrated local data and refreshes its backup.
+	 *
+	 * @param source source document used for migration
+	 * @param migrated normalized JSON tree
+	 * @throws IOException when the migration cannot be written
+	 */
+	private void persistMigration(Path source, JsonNode migrated) throws IOException {
+		Path temp = filePath.resolveSibling(filePath.getFileName() + ".tmp");
+		try {
+			if (source.equals(filePath)) {
+				Files.copy(filePath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+			}
+			SHARED_MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), migrated);
+			move(temp, filePath);
+			Files.copy(filePath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+		} finally {
+			Files.deleteIfExists(temp);
+		}
+	}
+
+	/**
+	 * Replaces the destination atomically where supported.
+	 *
+	 * @param source temporary file
+	 * @param destination local workspace
+	 * @throws IOException when the move fails
+	 */
+	private void move(Path source, Path destination) throws IOException {
+		try {
+			Files.move(source, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		} catch (AtomicMoveNotSupportedException e) {
+			Files.move(source, destination, StandardCopyOption.REPLACE_EXISTING);
 		}
 	}
 

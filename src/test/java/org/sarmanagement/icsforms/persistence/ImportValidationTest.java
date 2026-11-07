@@ -4,22 +4,63 @@
 package org.sarmanagement.icsforms.persistence;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.sarmanagement.icsforms.model.ActivityLogEntry;
+import org.sarmanagement.icsforms.model.AircraftResource;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.CanineResource;
+import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.CommunicationEntry;
+import org.sarmanagement.icsforms.model.CrewResource;
+import org.sarmanagement.icsforms.model.EquipmentResource;
+import org.sarmanagement.icsforms.model.GenericResource;
+import org.sarmanagement.icsforms.model.Ics201Form;
+import org.sarmanagement.icsforms.model.Ics202ReportedResult;
+import org.sarmanagement.icsforms.model.Ics203Form;
+import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.Ics205Form;
+import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.Ics215Form;
+import org.sarmanagement.icsforms.model.IncidentLocation;
+import org.sarmanagement.icsforms.model.IncidentObjective;
+import org.sarmanagement.icsforms.model.IncidentResource;
+import org.sarmanagement.icsforms.model.MedicalPlan;
+import org.sarmanagement.icsforms.model.OpenActionItem;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
+import org.sarmanagement.icsforms.model.PersonnelResource;
+import org.sarmanagement.icsforms.model.PocAssignment;
+import org.sarmanagement.icsforms.model.PodFactorRating;
+import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SafetyAnalysisEntry;
+import org.sarmanagement.icsforms.model.SafetyHazardReport;
+import org.sarmanagement.icsforms.model.SafetyMessageBlock;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.VetDirectory;
+import org.sarmanagement.icsforms.model.VetFacility;
 import org.sarmanagement.icsforms.persistence.ImportValidationException.Problem;
 import org.sarmanagement.icsforms.persistence.ImportValidationException.Severity;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -28,6 +69,55 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Focused coverage for strict external JSON and tolerant stored-document compatibility. */
 class ImportValidationTest {
+	// IncidentResource and its concrete variants are not currently stored in AppData;
+	// TCard is the persisted resource record and is validated independently.
+	private static final Map<Class<?>, Set<String>> AUDITED_RECORD_IDENTITIES = Map.ofEntries(
+			Map.entry(AppData.class, Set.of("incidentId")),
+			Map.entry(ActivityLogEntry.class, Set.of("entryId")),
+			Map.entry(ActivityLogEntry.EventTypeChange.class, Set.of("changeId")),
+			Map.entry(ClueLogEntry.class, Set.of("entryId")),
+			Map.entry(CommunicationEntry.class, Set.of("id")),
+			Map.entry(Ics201Form.ActionEntry.class, Set.of("id")),
+			Map.entry(Ics201Form.ResourceSummaryEntry.class, Set.of("id")),
+			Map.entry(Ics202ReportedResult.class, Set.of("resultId")),
+			Map.entry(Ics203Form.Branch.class, Set.of("id")),
+			Map.entry(Ics204Form.class, Set.of("formId")),
+			Map.entry(Ics205Form.class, Set.of("formId")),
+			Map.entry(Ics214Form.class, Set.of("logId")),
+			Map.entry(Ics215Form.class, Set.of("worksheetId")),
+			Map.entry(Ics215Form.ResourceHeading.class, Set.of("id")),
+			Map.entry(Ics215Form.WorkRow.class, Set.of("id")),
+			Map.entry(IncidentLocation.class, Set.of("id")),
+			Map.entry(IncidentObjective.class, Set.of("objectiveId")),
+			Map.entry(IncidentResource.class, Set.of("resourceId")),
+			Map.entry(PersonnelResource.class, Set.of("resourceId")),
+			Map.entry(CanineResource.class, Set.of("resourceId")),
+			Map.entry(CrewResource.class, Set.of("resourceId")),
+			Map.entry(EquipmentResource.class, Set.of("resourceId")),
+			Map.entry(AircraftResource.class, Set.of("resourceId")),
+			Map.entry(GenericResource.class, Set.of("resourceId")),
+			Map.entry(MedicalPlan.AidStation.class, Set.of("id")),
+			Map.entry(MedicalPlan.Hospital.class, Set.of("id")),
+			Map.entry(MedicalPlan.TransportService.class, Set.of("id")),
+			Map.entry(OrgChartEntry.class, Set.of("id")),
+			Map.entry(OpenActionItem.class, Set.of("id")),
+			Map.entry(PocAssignment.class, Set.of("id")),
+			Map.entry(PodFactorRating.class, Set.of("id")),
+			Map.entry(RadioChannel.class, Set.of("channelId")),
+			Map.entry(ResourceAssignment.class, Set.of("assignmentId")),
+			Map.entry(SafetyAnalysisEntry.class, Set.of("entryId")),
+			Map.entry(SafetyHazardReport.class, Set.of("id")),
+			Map.entry(SafetyMessageBlock.class, Set.of("id")),
+			Map.entry(SarTaskAssignment.class, Set.of("taskId")),
+			Map.entry(SarTaskResource.class, Set.of("id")),
+			Map.entry(AppData.OperationalPeriodRecord.class, Set.of("recordId")),
+			Map.entry(VetDirectory.Source.class, Set.of("id")),
+			Map.entry(TCard.class, Set.of("resourceId")),
+			Map.entry(VetFacility.class, Set.of("id")));
+	private static final Set<Class<?>> MODEL_ONLY_POLYMORPHIC_RESOURCE_TYPES = Set.of(IncidentResource.class,
+			PersonnelResource.class, CanineResource.class, CrewResource.class, EquipmentResource.class,
+			AircraftResource.class, GenericResource.class);
+
 	@TempDir
 	Path directory;
 
@@ -101,6 +191,21 @@ class ImportValidationTest {
 		}
 	}
 
+	/**
+	 * Historical external documents without a schema remain supported with a diagnostic warning.
+	 */
+	@Test
+	void missingSchemaVersionRemainsImportableWithWarning() throws Exception {
+		Path source = write("{\"incidentContext\":{\"incidentName\":\"Legacy named incident\"},"
+				+ "\"form201\":{\"situationSummary\":\"Legacy content\"}}");
+
+		FileIncidentStore.ImportResult imported = FileIncidentStore.readImport(source);
+
+		assertEquals("Legacy named incident", imported.data().getIncidentContext().getIncidentName());
+		assertTrue(imported.problems().stream().anyMatch(problem -> problem.path().equals("$.schemaVersion")
+				&& problem.severity() == Severity.WARNING));
+	}
+
 	@Test
 	void planningStageSuggestionsUseJsonLiteralsInsteadOfDisplayLabels() throws Exception {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
@@ -163,6 +268,227 @@ class ImportValidationTest {
 			}
 		}
 	}
+
+	@Test
+	void rejectsMalformedIncidentIdentityBeforeCreatingAnIncident() throws Exception {
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			Path source = write("{\"schemaVersion\":" + AppData.CURRENT_SCHEMA_VERSION
+					+ ",\"incidentId\":\"not-a-uuid\",\"form201\":{\"situationSummary\":\"Retained\"}}");
+			ImportValidationException failure = assertThrows(ImportValidationException.class,
+					() -> store.importFile(source));
+			assertTrue(failure.getProblems().stream().anyMatch(problem -> problem.path().equals("$.incidentId")
+					&& problem.severity() == Severity.ERROR));
+			assertTrue(store.list().isEmpty());
+			assertTrue(Files.readString(source).contains("not-a-uuid"));
+		}
+	}
+
+	@Test
+	void rejectsExplicitEmptyRecordIdentitiesBeforeCreatingAnIncident() throws Exception {
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			for (String content : List.of(
+					"\"tcards\":[{\"resourceId\":\"\",\"personName\":\"Responder\"}]",
+					"\"openActionItems\":[{\"id\":null,\"item\":\"Coordinate staging\"}]",
+					"\"activityLogs\":[{\"logId\":\"\",\"name\":\"Command\"}]")) {
+				Path source = write("{\"schemaVersion\":" + AppData.CURRENT_SCHEMA_VERSION + "," + content + "}");
+				ImportValidationException failure = assertThrows(ImportValidationException.class,
+						() -> store.importFile(source), content);
+				assertTrue(failure.getProblems().stream().anyMatch(problem -> problem.path().contains("Id")
+						|| problem.path().endsWith(".id")));
+				assertTrue(store.list().isEmpty());
+			}
+		}
+	}
+
+	@Test
+	void rejectsMalformedAndDuplicateIdsForEveryAuditedRecordTypeWithoutChangingTheStore() throws Exception {
+			ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+			assertEquals(AUDITED_RECORD_IDENTITIES, IncidentDocumentReader.RECORD_IDENTITIES);
+			Set<Class<?>> expectedRecordTypes = new HashSet<>(AUDITED_RECORD_IDENTITIES.keySet());
+			expectedRecordTypes.removeAll(MODEL_ONLY_POLYMORPHIC_RESOURCE_TYPES);
+			try (FileIncidentStore store = new FileIncidentStore(directory)) {
+				IncidentId existingId = store.create(new AppData());
+				for (boolean duplicate : List.of(false, true)) {
+					ObjectNode document = mapper.valueToTree(new AppData());
+					document.put("schemaVersion", AppData.CURRENT_SCHEMA_VERSION);
+					document.with("incidentContext").put("incidentName", "Imported incident");
+					document.with("form201").put("situationSummary", "Imported content");
+					Set<Class<?>> coveredTypes = new HashSet<>();
+					Set<String> identityPaths = new HashSet<>();
+					Set<String> duplicatePaths = new HashSet<>();
+					addIdentityFixtures(document, mapper.constructType(AppData.class), "$", duplicate, !duplicate,
+							coveredTypes, identityPaths, duplicatePaths, mapper);
+
+					assertEquals(expectedRecordTypes, coveredTypes);
+					Path source = write(document.toString());
+					ImportValidationException failure = assertThrows(ImportValidationException.class,
+							() -> store.importFile(source));
+					if (duplicate) {
+						assertTrue(failure.getProblems().stream().filter(problem ->
+								problem.message().contains("duplicates another record"))
+								.map(Problem::path).collect(java.util.stream.Collectors.toSet())
+								.containsAll(duplicatePaths), duplicatePaths.toString());
+					} else {
+						Set<String> errorPaths = failure.getProblems().stream()
+								.filter(problem -> problem.severity() == Severity.ERROR).map(Problem::path)
+								.collect(java.util.stream.Collectors.toSet());
+						assertTrue(errorPaths.containsAll(identityPaths), identityPaths.toString());
+					}
+					assertEquals(List.of(existingId), store.list().stream().map(IncidentSummary::incidentId).toList());
+					assertTrue(Files.readString(source).equals(document.toString()));
+				}
+		}
+	}
+
+	@Test
+	void recordIdentityUniquenessIsLimitedToEachContainingCollection() throws Exception {
+		String sharedFormId = "00000000-0000-4000-8000-000000000101";
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			String document = """
+					{"schemaVersion":%d,"incidentContext":{"incidentName":"Historical reuse"},
+					"form201":{"situationSummary":"Search underway"},
+					"form204":{"formId":"%s"},
+					"additionalForms204":[{"formId":"%s"}],
+					"operationalPeriodHistory":[{"recordId":"00000000-0000-4000-8000-000000000102",
+						"forms204":[{"formId":"%s"}]}]}
+					""".formatted(AppData.CURRENT_SCHEMA_VERSION, sharedFormId, sharedFormId, sharedFormId);
+			IncidentId id = store.importFile(write(document)).orElseThrow();
+			AppData imported = store.load(id);
+			assertEquals(sharedFormId, imported.getForm204().getFormId());
+			assertEquals(sharedFormId, imported.getAdditionalForms204().get(0).getFormId());
+			assertEquals(sharedFormId,
+					imported.getOperationalPeriodHistory().get(0).getForms204().get(0).getFormId());
+
+			String duplicate = """
+					{"schemaVersion":%d,"incidentContext":{"incidentName":"Duplicate forms"},
+					"form201":{"situationSummary":"Search underway"},
+					"additionalForms204":[{"formId":"%s"},{"formId":"%s"}]}
+					""".formatted(AppData.CURRENT_SCHEMA_VERSION, sharedFormId, sharedFormId);
+			Path source = write(duplicate);
+			ImportValidationException failure = assertThrows(ImportValidationException.class,
+					() -> store.importFile(source));
+			assertTrue(failure.getProblems().stream().anyMatch(problem ->
+					problem.path().equals("$.additionalForms204[1].formId")
+							&& problem.message().contains("duplicates another record")));
+			assertEquals(1, store.list().size());
+		}
+	}
+
+	/**
+	 * Populates all persistent record collections and assigns invalid or duplicate identity values.
+	 *
+	 * @param node JSON node being traversed
+	 * @param type declared Jackson type of the node
+	 * @param path JSON path for the node
+	 * @param duplicate whether collection records should share an identity
+	 * @param malformed whether identities should use invalid UUID values
+	 * @param coveredTypes model record types reached
+	 * @param identityPaths paths of fields assigned invalid identities
+	 * @param duplicatePaths paths expected to report duplicate collection identities
+	 * @param mapper mapper used for type introspection
+	 */
+	private void addIdentityFixtures(JsonNode node, JavaType type, String path, boolean duplicate, boolean malformed,
+			Set<Class<?>> coveredTypes, Set<String> identityPaths, Set<String> duplicatePaths, ObjectMapper mapper) {
+		if (type.isCollectionLikeType() && node.isArray()) {
+			ArrayNode array = (ArrayNode) node;
+			JavaType elementType = type.getContentType();
+			Set<String> identityFields = AUDITED_RECORD_IDENTITIES.get(elementType.getRawClass());
+			if (array.isEmpty() && identityFields != null) {
+				int size = duplicate ? 2 : 1;
+				for (int index = 0; index < size; index++) {
+					array.add(mapper.createObjectNode());
+					if (duplicate && index == 1) {
+						for (String field : identityFields) {
+							duplicatePaths.add(path + "[" + index + "]." + field);
+						}
+					}
+				}
+			}
+			for (int index = 0; index < array.size(); index++) {
+				addIdentityFixtures(array.get(index), elementType, path + "[" + index + "]", duplicate, malformed,
+						coveredTypes, identityPaths, duplicatePaths, mapper);
+			}
+			return;
+		}
+		if (type.isMapLikeType() && node.isObject()) {
+			node.fields().forEachRemaining(entry -> addIdentityFixtures(entry.getValue(), type.getContentType(),
+					path + "." + entry.getKey(), duplicate, malformed, coveredTypes, identityPaths, duplicatePaths,
+					mapper));
+			return;
+		}
+		if (!node.isObject() || !type.getRawClass().getPackageName().startsWith("org.sarmanagement")) {
+			return;
+		}
+		ObjectNode object = (ObjectNode) node;
+		Set<String> identityFields = AUDITED_RECORD_IDENTITIES.get(type.getRawClass());
+		if (identityFields != null) {
+			coveredTypes.add(type.getRawClass());
+			for (String field : identityFields) {
+				String identityPath = path + "." + field;
+				object.put(field, malformed ? "not-a-uuid" : "00000000-0000-4000-8000-000000000001");
+				if (malformed) {
+					identityPaths.add(identityPath);
+				}
+			}
+		}
+		for (BeanPropertyDefinition property : mapper.getDeserializationConfig().introspect(type).findProperties()) {
+			JavaType childType = property.getPrimaryType();
+			JsonNode child = object.get(property.getName());
+			if ((child == null || child.isNull()) && childType.isCollectionLikeType()
+					&& AUDITED_RECORD_IDENTITIES.containsKey(childType.getContentType().getRawClass())) {
+				child = mapper.createArrayNode();
+				object.set(property.getName(), child);
+			} else if ((child == null || child.isNull())
+					&& AUDITED_RECORD_IDENTITIES.containsKey(childType.getRawClass())) {
+				child = mapper.createObjectNode();
+				object.set(property.getName(), child);
+			}
+			if (child != null && property.couldDeserialize()) {
+				addIdentityFixtures(child, childType, path + "." + property.getName(), duplicate,
+						malformed, coveredTypes, identityPaths, duplicatePaths, mapper);
+			}
+		}
+	}
+
+		@Test
+		void rejectsMalformedAndDuplicateRecordUuidsWithoutChangingTheStore() throws Exception {
+			try (FileIncidentStore store = new FileIncidentStore(directory)) {
+				org.sarmanagement.icsforms.model.AppData existing = new AppData();
+				existing.getIncidentContext().setIncidentName("Existing incident");
+				IncidentId existingId = store.create(existing);
+				String actionId = "9baf0d0a-1767-46be-a23a-c14320b635df";
+				List<String> invalid = List.of(
+						"{\"id\":\"not-a-uuid\",\"actions\":\"Search\"}",
+						"{\"id\":\"" + actionId + "\",\"actions\":\"Search\"},"
+								+ "{\"id\":\"" + actionId + "\",\"actions\":\"Rescue\"}");
+				for (String actions : invalid) {
+					String json = "{\"schemaVersion\":" + AppData.CURRENT_SCHEMA_VERSION
+							+ ",\"incidentContext\":{\"incidentName\":\"Imported incident\"},"
+							+ "\"form201\":{\"currentActions\":[" + actions + "]}}";
+					Path source = write(json);
+					ImportValidationException failure = assertThrows(ImportValidationException.class,
+							() -> store.importFile(source));
+					assertTrue(failure.getProblems().stream().anyMatch(problem ->
+							problem.severity() == Severity.ERROR && problem.path().contains("currentActions")));
+					assertEquals(json, Files.readString(source));
+					assertEquals(List.of(existingId), store.list().stream().map(IncidentSummary::incidentId).toList());
+					assertEquals("Existing incident", store.load(existingId).getIncidentContext().getIncidentName());
+				}
+			}
+		}
+
+		@Test
+		void importDoesNotTreatLegacyAssignmentTextAsPersistentRecordIdentity() throws Exception {
+			Path source = write("{\"schemaVersion\":" + AppData.CURRENT_SCHEMA_VERSION
+					+ ",\"incidentContext\":{\"incidentName\":\"Imported incident\"},"
+					+ "\"activityLogs\":[{\"activityLog\":[{\"resourceIdentifier\":\"Legacy unit\","
+					+ "\"assignmentId\":\"legacy-assignment-label\",\"notableActivity\":\"Search began\"}]}]}");
+
+			AppData imported = FileIncidentStore.readImport(source).data();
+
+			assertEquals("legacy-assignment-label",
+					imported.getActivityLogs().get(0).getActivityLog().get(0).getAssignmentId());
+		}
 
 	@Test
 	void rejectsNullModelRecordsAtTheirExactIndexedPathsBeforeCreation() throws Exception {

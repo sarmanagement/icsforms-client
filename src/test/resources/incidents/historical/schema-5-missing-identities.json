@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 5,
+  "revision": 0,
+  "incidentId": "00000000-0000-4000-8000-000000000202",
+  "incidentContext": {
+    "incidentName": "Synthetic identity migration exercise"
+  },
+  "form201": {
+    "currentActions": [
+      {
+        "actions": "Locate the subject",
+        "futureAction": {
+          "source": "historical fixture"
+        }
+      }
+    ]
+  },
+  "openActionItems": [
+    {
+      "item": "Coordinate staging"
+    }
+  ],
+  "activityLogs": [
+    {
+      "name": "Synthetic search team",
+      "activityLog": [
+        {
+          "resourceIdentifier": "Legacy team label",
+          "notableActivity": "Search began",
+          "futureActivity": {
+            "source": "historical fixture"
+          }
+        }
+      ]
+    }
+  ],
+  "futureRoot": {
+    "source": "historical fixture"
+  }
+}

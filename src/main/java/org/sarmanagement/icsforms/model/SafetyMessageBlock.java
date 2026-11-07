@@ -5,16 +5,39 @@ package org.sarmanagement.icsforms.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Editable hazard and precaution block linked to one or more 215A rows.
  */
 public class SafetyMessageBlock {
+	private String id = UUID.randomUUID().toString();
 	private String hazard = "";
 	private String incidentArea = "All";
 	private String precautions = "";
 	private List<String> sourceEntryIds = new ArrayList<>();
 	private boolean needsReview;
+
+	/**
+	 * Returns this safety message block's stable identity.
+	 *
+	 * @return message block UUID, never null or blank
+	 */
+	public String getId() {
+		if (id == null || id.isBlank()) {
+			id = UUID.randomUUID().toString();
+		}
+		return id;
+	}
+
+	/**
+	 * Sets this safety message block's stable identity.
+	 *
+	 * @param id message block UUID; null or blank generates a UUID
+	 */
+	public void setId(String id) {
+		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+	}
 
 	/**
 	 * Returns the hazard heading.

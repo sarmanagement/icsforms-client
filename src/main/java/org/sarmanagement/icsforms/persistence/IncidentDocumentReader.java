@@ -18,7 +18,41 @@ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.sarmanagement.icsforms.model.ActivityLogEntry;
+import org.sarmanagement.icsforms.model.AircraftResource;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.CanineResource;
+import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.CommunicationEntry;
+import org.sarmanagement.icsforms.model.CrewResource;
+import org.sarmanagement.icsforms.model.EquipmentResource;
+import org.sarmanagement.icsforms.model.GenericResource;
+import org.sarmanagement.icsforms.model.Ics201Form;
+import org.sarmanagement.icsforms.model.Ics202ReportedResult;
+import org.sarmanagement.icsforms.model.Ics203Form;
+import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.Ics205Form;
+import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.Ics215Form;
+import org.sarmanagement.icsforms.model.IncidentLocation;
+import org.sarmanagement.icsforms.model.IncidentObjective;
+import org.sarmanagement.icsforms.model.IncidentResource;
+import org.sarmanagement.icsforms.model.MedicalPlan;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
+import org.sarmanagement.icsforms.model.OpenActionItem;
+import org.sarmanagement.icsforms.model.PersonnelResource;
+import org.sarmanagement.icsforms.model.PocAssignment;
+import org.sarmanagement.icsforms.model.PodFactorRating;
+import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.SafetyAnalysisEntry;
+import org.sarmanagement.icsforms.model.SafetyHazardReport;
+import org.sarmanagement.icsforms.model.SafetyMessageBlock;
+import org.sarmanagement.icsforms.model.SarTaskAssignment;
+import org.sarmanagement.icsforms.model.SarTaskResource;
+import org.sarmanagement.icsforms.model.TCard;
+import org.sarmanagement.icsforms.model.VetDirectory;
+import org.sarmanagement.icsforms.model.VetFacility;
 import org.sarmanagement.icsforms.persistence.ImportValidationException.Problem;
 import org.sarmanagement.icsforms.persistence.ImportValidationException.Severity;
 
@@ -26,9 +60,12 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 /** Separates strict external import validation from tolerant on-disk compatibility. */
@@ -52,7 +89,50 @@ final class IncidentDocumentReader {
 			"vetDirectory", "stagingLocation", "incidentLocations", "operationalPeriodHistory", "safetyReview",
 			"humanMedicalReview", "canineMedicalReview", "communicationsReview");
 	private static final Set<String> CHILD_IDENTITIES = Set.of("formId", "resourceId", "objectiveId", "assignmentId",
-			"taskId", "channelId", "entryId", "id");
+			"taskId", "channelId", "entryId", "changeId", "resultId", "recordId", "logId", "worksheetId", "id");
+	static final Map<Class<?>, Set<String>> RECORD_IDENTITIES = Map.ofEntries(
+			Map.entry(AppData.class, Set.of("incidentId")),
+			Map.entry(ActivityLogEntry.class, Set.of("entryId")),
+			Map.entry(ActivityLogEntry.EventTypeChange.class, Set.of("changeId")),
+			Map.entry(ClueLogEntry.class, Set.of("entryId")),
+			Map.entry(CommunicationEntry.class, Set.of("id")),
+			Map.entry(Ics201Form.ActionEntry.class, Set.of("id")),
+			Map.entry(Ics201Form.ResourceSummaryEntry.class, Set.of("id")),
+			Map.entry(Ics202ReportedResult.class, Set.of("resultId")),
+			Map.entry(Ics203Form.Branch.class, Set.of("id")),
+			Map.entry(Ics204Form.class, Set.of("formId")),
+			Map.entry(Ics205Form.class, Set.of("formId")),
+			Map.entry(Ics214Form.class, Set.of("logId")),
+			Map.entry(Ics215Form.class, Set.of("worksheetId")),
+			Map.entry(Ics215Form.ResourceHeading.class, Set.of("id")),
+			Map.entry(Ics215Form.WorkRow.class, Set.of("id")),
+			Map.entry(IncidentLocation.class, Set.of("id")),
+			Map.entry(IncidentObjective.class, Set.of("objectiveId")),
+			Map.entry(IncidentResource.class, Set.of("resourceId")),
+			Map.entry(PersonnelResource.class, Set.of("resourceId")),
+			Map.entry(CanineResource.class, Set.of("resourceId")),
+			Map.entry(CrewResource.class, Set.of("resourceId")),
+			Map.entry(EquipmentResource.class, Set.of("resourceId")),
+			Map.entry(AircraftResource.class, Set.of("resourceId")),
+			Map.entry(GenericResource.class, Set.of("resourceId")),
+			Map.entry(MedicalPlan.AidStation.class, Set.of("id")),
+			Map.entry(MedicalPlan.Hospital.class, Set.of("id")),
+			Map.entry(MedicalPlan.TransportService.class, Set.of("id")),
+			Map.entry(OrgChartEntry.class, Set.of("id")),
+			Map.entry(OpenActionItem.class, Set.of("id")),
+			Map.entry(PocAssignment.class, Set.of("id")),
+			Map.entry(PodFactorRating.class, Set.of("id")),
+			Map.entry(RadioChannel.class, Set.of("channelId")),
+			Map.entry(ResourceAssignment.class, Set.of("assignmentId")),
+			Map.entry(SafetyAnalysisEntry.class, Set.of("entryId")),
+			Map.entry(SafetyHazardReport.class, Set.of("id")),
+			Map.entry(SafetyMessageBlock.class, Set.of("id")),
+			Map.entry(SarTaskAssignment.class, Set.of("taskId")),
+			Map.entry(SarTaskResource.class, Set.of("id")),
+			Map.entry(AppData.OperationalPeriodRecord.class, Set.of("recordId")),
+			Map.entry(VetDirectory.Source.class, Set.of("id")),
+			Map.entry(TCard.class, Set.of("resourceId")),
+			Map.entry(VetFacility.class, Set.of("id")));
 	private final List<Problem> problems = new ArrayList<>();
 	private final Map<JavaType, JsonNode> defaultValues = new HashMap<>();
 	private Throwable cause;
@@ -141,6 +221,7 @@ final class IncidentDocumentReader {
 	 * @param path stored document
 	 * @return loaded incident
 	 * @throws IOException when the stored document cannot be read
+	 * @throws IllegalStateException when the schema version is malformed or newer than supported
 	 */
 	AppData readStored(Path path) throws IOException {
 		JsonNode tree = TOLERANT.readTree(path.toFile());
@@ -148,7 +229,10 @@ final class IncidentDocumentReader {
 			throw new IOException("Stored incident must be a JSON object");
 		}
 		JsonNode version = tree.get("schemaVersion");
-		if (version != null && version.canConvertToInt() && version.intValue() > AppData.CURRENT_SCHEMA_VERSION) {
+		if (version != null && (!version.isIntegralNumber() || !version.canConvertToInt() || version.intValue() < 1)) {
+			throw new IllegalStateException("Incident has an invalid schema version: " + path);
+		}
+		if (version != null && version.intValue() > AppData.CURRENT_SCHEMA_VERSION) {
 			throw new IllegalStateException("Incident schema is newer than supported schema "
 					+ AppData.CURRENT_SCHEMA_VERSION + ": " + path);
 		}
@@ -188,10 +272,25 @@ final class IncidentDocumentReader {
 	 * @param strict whether unknown fields and binding errors reject the import
 	 */
 	private void inspect(JsonNode node, JavaType type, String path, boolean strict) {
+		inspect(node, type, path, strict, null);
+	}
+
+	/**
+	 * Walks a document and validates IDs within a single array identity scope.
+	 *
+	 * @param node JSON value
+	 * @param type declared property type
+	 * @param path JSON path
+	 * @param strict whether unknown fields and binding errors reject the import
+	 * @param siblingIdentities IDs already seen for this array's records
+	 */
+	private void inspect(JsonNode node, JavaType type, String path, boolean strict,
+			Set<String> siblingIdentities) {
 		if (problems.size() >= MAX_PROBLEMS) {
 			return;
 		}
 		if (type.isCollectionLikeType() && node.isArray()) {
+			Set<String> identities = strict ? new HashSet<>() : null;
 			for (int i = 0; i < node.size() && problems.size() < MAX_PROBLEMS; i++) {
 				String elementPath = path + "[" + i + "]";
 				JavaType elementType = type.getContentType();
@@ -204,7 +303,7 @@ final class IncidentDocumentReader {
 					add(Severity.ERROR, elementPath, "Null incident records are not permitted.",
 							"Remove the null entry or replace it with a record object.");
 				} else {
-					inspect(node.get(i), elementType, elementPath, strict);
+					inspect(node.get(i), elementType, elementPath, strict, identities);
 				}
 			}
 		} else if (type.isMapLikeType() && node.isObject()) {
@@ -212,6 +311,7 @@ final class IncidentDocumentReader {
 					inspect(entry.getValue(), type.getContentType(), path + "." + entry.getKey(), strict));
 		} else if (node.isObject() && type.getRawClass().getPackageName().startsWith("org.sarmanagement")) {
 			Map<String, JavaType> properties = new HashMap<>();
+			Set<String> identityProperties = new java.util.HashSet<>();
 			for (BeanPropertyDefinition property : TOLERANT.getDeserializationConfig().introspect(type).findProperties()) {
 				properties.put(property.getName(), property.couldDeserialize() ? property.getPrimaryType() : null);
 				JsonAlias aliases = property.getPrimaryMember() == null ? null
@@ -219,6 +319,12 @@ final class IncidentDocumentReader {
 				if (aliases != null) {
 					for (String alias : aliases.value()) {
 						properties.put(alias, property.getPrimaryType());
+					}
+				}
+				if (RECORD_IDENTITIES.getOrDefault(type.getRawClass(), Set.of()).contains(property.getName())) {
+					identityProperties.add(property.getName());
+					if (aliases != null) {
+						identityProperties.addAll(List.of(aliases.value()));
 					}
 				}
 			}
@@ -232,6 +338,8 @@ final class IncidentDocumentReader {
 					}
 					add(strict ? Severity.ERROR : Severity.WARNING, childPath, "Unknown property.",
 							strict ? "Remove or correct the property name." : "This client ignores this property.");
+				} else if (strict && identityProperties.contains(entry.getKey())) {
+					validateRecordIdentity(entry.getValue(), childPath, siblingIdentities);
 				} else if (childType != null) {
 					inspect(entry.getValue(), childType, childPath, strict);
 				}
@@ -253,6 +361,36 @@ final class IncidentDocumentReader {
 				}
 				add(Severity.ERROR, path, "Invalid value for " + type.getRawClass().getSimpleName() + ".", fix);
 			}
+		}
+	}
+
+	/**
+	 * Validates a persistent record UUID and detects duplicate IDs in its collection.
+	 *
+	 * @param value JSON identity value
+	 * @param path JSON property path
+	 * @param siblingIdentities IDs already found in the containing collection
+	 */
+	private void validateRecordIdentity(JsonNode value, String path, Set<String> siblingIdentities) {
+		if (!value.isTextual() || value.asText().isBlank()) {
+			add(Severity.ERROR, path, "Record identity must be a UUID string.",
+					"Omit a legacy identity or provide a valid UUID.");
+			return;
+		}
+		String identity = value.asText();
+		try {
+			if (!UUID.fromString(identity).toString().equalsIgnoreCase(identity)) {
+				throw new IllegalArgumentException("UUID is not in canonical form");
+			}
+		} catch (IllegalArgumentException exception) {
+			cause = cause == null ? exception : cause;
+			add(Severity.ERROR, path, "Record identity must be a UUID string.",
+					"Use a valid UUID or omit the legacy identity.");
+			return;
+		}
+		if (siblingIdentities != null && !siblingIdentities.add(identity.toLowerCase(Locale.ROOT))) {
+			add(Severity.ERROR, path, "Record identity duplicates another record in this collection.",
+					"Assign each record in the collection a distinct UUID.");
 		}
 	}
 

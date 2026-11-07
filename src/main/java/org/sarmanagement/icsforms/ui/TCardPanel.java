@@ -1424,7 +1424,7 @@ public class TCardPanel extends JPanel {
 		if (!openEditDialog(copy)) {
 			return;
 		}
-		int row = tableModel.indexOfIdentity(selected);
+		int row = tableModel.indexOfIdentity(selected.peekResourceId());
 		if (row < 0) {
 			return;
 		}
@@ -1442,7 +1442,7 @@ public class TCardPanel extends JPanel {
 		if (selected == null) {
 			return;
 		}
-		int row = tableModel.indexOfIdentity(selected);
+		int row = tableModel.indexOfIdentity(selected.peekResourceId());
 		if (row < 0) {
 			return;
 		}
@@ -2615,9 +2615,9 @@ public class TCardPanel extends JPanel {
 			btnConstraints.insets = new Insets(2, 0, 2, 4);
 			JButton openBtn = new JButton("Open…");
 			final TCard relCard = rel;
+			final String resourceId = rel.peekResourceId();
 			openBtn.addActionListener(ev -> {
-				// Re-resolve the index at click time to handle any intervening model changes.
-				int currentIdx = tableModel.getCards().indexOf(relCard);
+				int currentIdx = tableModel.indexOfIdentity(resourceId);
 				if (currentIdx >= 0) {
 					TCard copy = copyCard(tableModel.getCard(currentIdx));
 					if (openEditDialog(copy, rows)) {
@@ -2669,13 +2669,26 @@ public class TCardPanel extends JPanel {
 			return cards.get(row);
 		}
 
-		int indexOfIdentity(TCard card) {
+		/**
+		 * Finds a uniquely identified card in the table model.
+		 *
+		 * @param resourceId stable card UUID.
+		 * @return matching row, or {@code -1} when absent or ambiguous.
+		 */
+		int indexOfIdentity(String resourceId) {
+			if (resourceId == null || resourceId.isBlank()) {
+				return -1;
+			}
+			int match = -1;
 			for (int i = 0; i < cards.size(); i++) {
-				if (cards.get(i) == card) {
-					return i;
+				if (resourceId.equals(cards.get(i).peekResourceId())) {
+					if (match >= 0) {
+						return -1;
+					}
+					match = i;
 				}
 			}
-			return -1;
+			return match;
 		}
 
 		void addCard(TCard card) {

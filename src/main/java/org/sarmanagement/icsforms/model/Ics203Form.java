@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Supplemental ICS 203 Organization Assignment List data, alongside the shared chart.
@@ -241,10 +242,32 @@ public class Ics203Form {
 	/** An operations branch with divisions/groups kept under its director and deputy. */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class Branch {
+		private String id = UUID.randomUUID().toString();
 		private String name = "";
 		private String director = "";
 		private String deputy = "";
 		private List<OrgChartEntry> divisions = new ArrayList<>();
+
+		/**
+		 * Returns the stable identity of this branch.
+		 *
+		 * @return branch UUID, never null or blank.
+		 */
+		public String getId() {
+			if (id == null || id.isBlank()) {
+				id = UUID.randomUUID().toString();
+			}
+			return id;
+		}
+
+		/**
+		 * Sets this branch's stable identity.
+		 *
+		 * @param id branch UUID; null or blank generates a UUID.
+		 */
+		public void setId(String id) {
+			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		}
 
 		/**
 		 * Returns the branch label.

@@ -410,11 +410,19 @@ public class Ics201Panel extends JPanel {
 			fireTableRowsDeleted(index, index);
 		}
 
+		/**
+		 * Copies action rows from the model while retaining their stable identities.
+		 *
+		 * @param entries source rows.
+		 */
 		void setRows(List<Ics201Form.ActionEntry> entries) {
 			rows.clear();
 			if (entries != null) {
 				for (Ics201Form.ActionEntry entry : entries) {
 					Ics201Form.ActionEntry copy = new Ics201Form.ActionEntry();
+					if (entry != null) {
+						copy.setId(entry.getId());
+					}
 					copy.setTime(entry == null ? "" : entry.getTime());
 					copy.setActions(entry == null ? "" : entry.getActions());
 					rows.add(copy);
@@ -423,10 +431,16 @@ public class Ics201Panel extends JPanel {
 			fireTableDataChanged();
 		}
 
+		/**
+		 * Returns detached action rows with the same stable identities.
+		 *
+		 * @return copied action rows.
+		 */
 		List<Ics201Form.ActionEntry> getRows() {
 			List<Ics201Form.ActionEntry> copy = new ArrayList<>();
 			for (Ics201Form.ActionEntry entry : rows) {
 				Ics201Form.ActionEntry row = new Ics201Form.ActionEntry();
+				row.setId(entry.getId());
 				row.setTime(entry.getTime());
 				row.setActions(entry.getActions());
 				copy.add(row);
@@ -505,12 +519,18 @@ public class Ics201Panel extends JPanel {
 			fireTableRowsDeleted(index, index);
 		}
 
+		/**
+		 * Copies resource summary rows while retaining their stable identities.
+		 *
+		 * @param entries source rows.
+		 */
 		void setRows(List<Ics201Form.ResourceSummaryEntry> entries) {
 			rows.clear();
 			if (entries != null) {
 				for (Ics201Form.ResourceSummaryEntry entry : entries) {
 					Ics201Form.ResourceSummaryEntry copy = new Ics201Form.ResourceSummaryEntry();
 					if (entry != null) {
+						copy.setId(entry.getId());
 						copy.setResource(entry.getResource());
 						copy.setResourceIdentifier(entry.getResourceIdentifier());
 						copy.setDateTimeOrdered(entry.getDateTimeOrdered());
@@ -524,10 +544,16 @@ public class Ics201Panel extends JPanel {
 			fireTableDataChanged();
 		}
 
+		/**
+		 * Returns detached resource rows with the same stable identities.
+		 *
+		 * @return copied resource rows.
+		 */
 		List<Ics201Form.ResourceSummaryEntry> getRows() {
 			List<Ics201Form.ResourceSummaryEntry> copy = new ArrayList<>();
 			for (Ics201Form.ResourceSummaryEntry entry : rows) {
 				Ics201Form.ResourceSummaryEntry row = new Ics201Form.ResourceSummaryEntry();
+				row.setId(entry.getId());
 				row.setResource(entry.getResource());
 				row.setResourceIdentifier(entry.getResourceIdentifier());
 				row.setDateTimeOrdered(entry.getDateTimeOrdered());

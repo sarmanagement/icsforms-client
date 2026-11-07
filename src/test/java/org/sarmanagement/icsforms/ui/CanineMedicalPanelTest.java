@@ -20,6 +20,7 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.table.DefaultTableModel;
 import java.awt.Component;
 import java.awt.Container;
 import java.lang.reflect.Field;
@@ -131,6 +132,48 @@ class CanineMedicalPanelTest {
 		assertEquals("555-0100", copied.getContactNumbers());
 		assertEquals("BLS", copied.getLevelOfService());
 		assertEquals(1, ((JTable) fieldValue(panel, "transportTable")).getRowCount());
+	}
+
+	@Test
+	void canineTransportIdsSurviveNoOpFlushesAndRowMutations() throws Exception {
+		AppData data = new AppData();
+		MedicalPlan.TransportService first = new MedicalPlan.TransportService();
+		first.setService("First transport");
+		MedicalPlan.TransportService second = new MedicalPlan.TransportService();
+		second.setService("Second transport");
+		data.getCanineMedicalPlan().getTransportServiceEntries().addAll(List.of(first, second));
+		CanineMedicalPanel panel = new CanineMedicalPanel(IncidentStoreTestFixtures.controller(data), tempDirectory);
+		String firstId = first.getId();
+		String secondId = second.getId();
+
+		SwingUtilities.invokeAndWait(() -> {
+			DefaultTableModel model = (DefaultTableModel) fieldValue(panel, "transportModel");
+			panel.pushToModel();
+			panel.pushToModel();
+			assertEquals(List.of(firstId, secondId), data.getCanineMedicalPlan().getTransportServiceEntries().stream()
+					.map(MedicalPlan.TransportService::getId).toList());
+
+			model.moveRow(0, 0, 1);
+			panel.pushToModel();
+			assertEquals(List.of(secondId, firstId), data.getCanineMedicalPlan().getTransportServiceEntries().stream()
+					.map(MedicalPlan.TransportService::getId).toList());
+
+			model.addRow(new Object[] {"New transport", "", "", "", "", "", null});
+			panel.pushToModel();
+			String newId = data.getCanineMedicalPlan().getTransportServiceEntries().get(2).getId();
+			assertFalse(List.of(firstId, secondId).contains(newId));
+			panel.pushToModel();
+			assertEquals(newId, data.getCanineMedicalPlan().getTransportServiceEntries().get(2).getId());
+
+			model.removeRow(1);
+			panel.pushToModel();
+			assertEquals(List.of(secondId, newId), data.getCanineMedicalPlan().getTransportServiceEntries().stream()
+					.map(MedicalPlan.TransportService::getId).toList());
+			panel.refreshFromModel();
+			panel.pushToModel();
+			assertEquals(List.of(secondId, newId), data.getCanineMedicalPlan().getTransportServiceEntries().stream()
+					.map(MedicalPlan.TransportService::getId).toList());
+		});
 	}
 
 	@Test

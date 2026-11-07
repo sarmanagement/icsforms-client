@@ -1,9 +1,15 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 package org.sarmanagement.icsforms.model;
+
+import java.util.UUID;
 
 /**
  * Resource entry printed on the SAR task assignment form.
  */
 public class SarTaskResource {
+	private String id = UUID.randomUUID().toString();
 	private String function = "";
 	private String icsPosition = "";
 	private String homeAgency = "";
@@ -18,6 +24,28 @@ public class SarTaskResource {
 	 * was introduced.
 	 */
 	private String resourceId = "";
+
+	/**
+	 * Returns this assignment resource row's identity, distinct from its optional
+	 * link to a T-card.
+	 *
+	 * @return row UUID, never null or blank
+	 */
+	public String getId() {
+		if (id == null || id.isBlank()) {
+			id = UUID.randomUUID().toString();
+		}
+		return id;
+	}
+
+	/**
+	 * Sets this assignment resource row's identity.
+	 *
+	 * @param id row UUID; null or blank generates a UUID
+	 */
+	public void setId(String id) {
+		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+	}
 
 	/** @return resource function or role. */
 	public String getFunction() {

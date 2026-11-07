@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Incident-period human medical plan content for the standard ICS 206.
@@ -407,11 +408,33 @@ public class MedicalPlan {
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class AidStation {
+		private String id = UUID.randomUUID().toString();
 		private String name = "";
 		private String location = "";
 		private String contactNumbers = "";
 		private String frequency = "";
 		private Boolean paramedicsOnSite;
+
+		/**
+		 * Returns this aid station's stable identity.
+		 *
+		 * @return aid station UUID, never null or blank
+		 */
+		public String getId() {
+			if (id == null || id.isBlank()) {
+				id = UUID.randomUUID().toString();
+			}
+			return id;
+		}
+
+		/**
+		 * Sets this aid station's stable identity.
+		 *
+		 * @param id aid station UUID; null or blank generates a UUID
+		 */
+		public void setId(String id) {
+			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		}
 
 		/** Creates an empty aid station. */
 		public AidStation() {
@@ -473,12 +496,34 @@ public class MedicalPlan {
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class TransportService {
+		private String id = UUID.randomUUID().toString();
 		private String service = "";
 		private String location = "";
 		private String contactNumbers = "";
 		private String frequency = "";
 		private String airOrGround = "";
 		private String levelOfService = "";
+
+		/**
+		 * Returns this transport service's stable identity.
+		 *
+		 * @return transport service UUID, never null or blank
+		 */
+		public String getId() {
+			if (id == null || id.isBlank()) {
+				id = UUID.randomUUID().toString();
+			}
+			return id;
+		}
+
+		/**
+		 * Sets this transport service's stable identity.
+		 *
+		 * @param id transport service UUID; null or blank generates a UUID
+		 */
+		public void setId(String id) {
+			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		}
 
 		/** Creates an empty transport service. */
 		public TransportService() {
@@ -550,6 +595,7 @@ public class MedicalPlan {
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class Hospital {
+		private String id = UUID.randomUUID().toString();
 		private String name = "";
 		private String address = "";
 		private String contactNumbers = "";
@@ -566,6 +612,27 @@ public class MedicalPlan {
 		private String traumaLevel = "";
 		private Boolean burnCenter;
 		private Boolean helipad;
+
+		/**
+		 * Returns this hospital's stable identity.
+		 *
+		 * @return hospital UUID, never null or blank
+		 */
+		public String getId() {
+			if (id == null || id.isBlank()) {
+				id = UUID.randomUUID().toString();
+			}
+			return id;
+		}
+
+		/**
+		 * Sets this hospital's stable identity.
+		 *
+		 * @param id hospital UUID; null or blank generates a UUID
+		 */
+		public void setId(String id) {
+			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		}
 
 		/** Creates an empty hospital. */
 		public Hospital() {
