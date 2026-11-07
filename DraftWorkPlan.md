@@ -577,6 +577,13 @@ except where noted.
 | **T2** | #44 | `Provenance` (operator name, station ID, entered-at UTC, reserved accepted-at) on append-style records; injected `OperatorContext` in `AppController`; one schema bump with fixtures. | P3, T1 | Legacy documents load unchanged; new entries carry provenance from context; ICS 214 "prepared by" prefilled only when blank. |
 | **P4** | #42 | Asynchronous persistence coordinator on detached snapshots with an abstract unit of work; "replace active document from store" path; two-dimension status (local durability vs. future sync state); failure retention and retry policy. | P0, P1, P2, P3 | Deterministic tests for out-of-order completion, incident switch during save, edits during save, failure→retry, unavailable→available; second unit type substitutes without coordinator changes. |
 
+T-card check-in history is appended only after an accepted edit changes the check-in
+time; corrections retain prior events and record the newly selected effective time.
+The explicit **Demobilized** status means formal release from the incident and is
+the only status transition that records check-out. Cancelled edits, unrelated status
+changes, and card removal do not create events. Legacy cards remain without
+historical events until a new check-in or demobilization occurs.
+
 **Issue #40 entity-ID audit:** list-held model records now have stable UUID
 identities and legacy IDs are persisted during load migration. Coverage includes
 AppData operational-period snapshots, additional ICS 204 forms, activity logs,
