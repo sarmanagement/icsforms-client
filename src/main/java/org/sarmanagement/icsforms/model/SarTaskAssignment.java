@@ -143,11 +143,6 @@ public class SarTaskAssignment {
 			Provenance provenance) {
 		/**
 		 * Requires the lifecycle transition to have both statuses and a timestamp.
-		 *
-		 * @param previousStatus status before the change.
-		 * @param newStatus status after the change.
-		 * @param changedAt UTC instant when the change took effect.
-		 * @param provenance optional attribution for the change.
 		 */
 		public LifecycleStatusChange {
 			Objects.requireNonNull(previousStatus, "previousStatus");

@@ -171,10 +171,6 @@ public class TCard {
 	public record CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance) {
 		/**
 		 * Requires an event type and timestamp.
-		 *
-		 * @param action check-in or check-out action.
-		 * @param eventAt UTC instant when the event occurred.
-		 * @param provenance optional attribution for the event.
 		 */
 		public CheckInOutEvent {
 			Objects.requireNonNull(action, "action");
