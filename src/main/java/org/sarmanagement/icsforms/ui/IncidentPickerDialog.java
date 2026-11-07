@@ -25,18 +25,19 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Window;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Modal picker for incidents listed by the configured store.
+ * Modal picker that loads and imports detached incidents on a persistence worker.
  */
 public class IncidentPickerDialog extends JDialog {
 
 	private IncidentId chosenIncidentId;
 
 	/**
-	 * Creates the incident picker with access to saved-incident management.
+	 * Creates the picker, waiting responsively for saved-incident metadata.
 	 *
 	 * @param owner
 	 *            owning window (may be {@code null}).
@@ -46,7 +47,7 @@ public class IncidentPickerDialog extends JDialog {
 		super(owner, "Open Incident", ModalityType.APPLICATION_MODAL);
 		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
-		List<IncidentSummary> summaries = new ArrayList<>(store.list());
+		List<IncidentSummary> summaries = new ArrayList<>(PersistenceWorker.call(this, store::list));
 
 		JPanel content = new JPanel(new BorderLayout(8, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(12, 12, 10, 12));
@@ -61,7 +62,7 @@ public class IncidentPickerDialog extends JDialog {
 		JScrollPane scroll = new JScrollPane(list);
 		scroll.setPreferredSize(new Dimension(520, 200));
 
-		var descriptor = store.describe();
+		var descriptor = PersistenceWorker.call(this, store::describe);
 		String location = descriptor.type() + ": " + descriptor.location();
 		JLabel hint = new JLabel((summaries.isEmpty() ? "No saved incidents in " : "Select an incident from ")
 				+ location + ", or browse for JSON.", SwingConstants.LEFT);
@@ -94,7 +95,7 @@ public class IncidentPickerDialog extends JDialog {
 			try {
 				int selected = list.getSelectedIndex();
 				IncidentId previous = selected < 0 ? null : summaries.get(selected).incidentId();
-				List<IncidentSummary> updated = store.list();
+				List<IncidentSummary> updated = PersistenceWorker.call(this, store::list);
 				summaries.clear();
 				summaries.addAll(updated);
 				list.setListData(summaries.stream().map(this::buildLabel).toArray(String[]::new));
@@ -117,20 +118,7 @@ public class IncidentPickerDialog extends JDialog {
 			JFileChooser chooser = new JFileChooser();
 			chooser.setFileFilter(new FileNameExtensionFilter("Incident JSON (*.json)", "json"));
 			if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-				try {
-					IncidentId imported = store.importFile(chooser.getSelectedFile().toPath()).orElse(null);
-					if (imported != null) {
-						ImportReportDialog.show(this, chooser.getSelectedFile().toPath(), true,
-								store.getLastImportProblems());
-						chosenIncidentId = imported;
-						dispose();
-					}
-				} catch (ImportValidationException exception) {
-					ImportReportDialog.show(this, exception.getSourceFile(), false, exception.getProblems());
-				} catch (RuntimeException exception) {
-					JOptionPane.showMessageDialog(this, exception.getMessage(), "Unable to import incident",
-							JOptionPane.ERROR_MESSAGE);
-				}
+				importIncident(store, chooser.getSelectedFile().toPath());
 			}
 		});
 
@@ -165,6 +153,30 @@ public class IncidentPickerDialog extends JDialog {
 		pack();
 		setMinimumSize(new Dimension(540, getHeight()));
 		setLocationRelativeTo(owner);
+	}
+
+	/**
+	 * Imports a detached document on the worker, reporting validation before selecting it.
+	 *
+	 * @param store configured persistence store.
+	 * @param source selected external JSON file.
+	 */
+	private void importIncident(IncidentStore store, Path source) {
+		try {
+			var result = PersistenceWorker.call(this, () -> java.util.Map.entry(
+					store.importFile(source), List.copyOf(store.getLastImportProblems())));
+			IncidentId imported = result.getKey().orElse(null);
+			if (imported != null) {
+				ImportReportDialog.show(this, source, true, result.getValue());
+				chosenIncidentId = imported;
+				dispose();
+			}
+		} catch (ImportValidationException exception) {
+			ImportReportDialog.show(this, exception.getSourceFile(), false, exception.getProblems());
+		} catch (RuntimeException exception) {
+			JOptionPane.showMessageDialog(this, exception.getMessage(), "Unable to import incident",
+					JOptionPane.ERROR_MESSAGE);
+		}
 	}
 
 	/**

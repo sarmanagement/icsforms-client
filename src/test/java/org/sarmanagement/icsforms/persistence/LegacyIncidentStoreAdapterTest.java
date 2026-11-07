@@ -9,6 +9,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.ArrayDeque;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -39,6 +40,46 @@ class LegacyIncidentStoreAdapterTest {
 			assertEquals(2, data.getRevision());
 			assertTrue(store.saveCalled);
 			assertFalse(store.loadCalled);
+		}
+	}
+
+	@Test
+	void queuedDetachedSnapshotsCarryLegacyMetadataWithoutParsingAcceptedTokens() {
+		try (LegacyStore store = new LegacyStore()) {
+			IncidentId id = IncidentId.newId();
+			AppData live = new AppData();
+			live.setIncidentId(id.value());
+			live.setRevision(1);
+			ArrayDeque<Runnable> worker = new ArrayDeque<>();
+			ArrayDeque<Runnable> owner = new ArrayDeque<>();
+			SaveCoordinator coordinator = new SaveCoordinator(worker::addLast, owner::addLast,
+					completion -> { }, status -> { }, RetryPolicy.explicit());
+			coordinator.bind(id, 1, 0, store.revisionToken(live));
+			coordinator.submit(new FullDocumentSnapshot(id, 1, 1, store.revisionToken(live),
+					FullDocumentSnapshot.detach(live), store));
+			coordinator.submit(new FullDocumentSnapshot(id, 1, 2, store.revisionToken(live),
+					FullDocumentSnapshot.detach(live), store));
+			worker.removeFirst().run();
+			owner.removeFirst().run();
+			assertEquals(new RevisionToken("2"), coordinator.pendingChanges().get(0).expectedRevision());
+			worker.removeFirst().run();
+			owner.removeFirst().run();
+			assertEquals(PersistenceStatus.Durability.SAVED, coordinator.status().durability());
+			assertEquals(new RevisionToken("3"), coordinator.status().revision());
+			assertEquals(1, live.getRevision());
+			assertFalse(store.loadCalled);
+			AppData competitor = FullDocumentSnapshot.detach(live);
+			competitor.setRevision(3);
+			store.save(id, competitor);
+			AppData stale = FullDocumentSnapshot.detach(live);
+			stale.setRevision(3);
+			coordinator.submit(new FullDocumentSnapshot(id, 1, 3, coordinator.status().revision(), stale, store));
+			worker.removeFirst().run();
+			owner.removeFirst().run();
+			assertEquals(PersistenceStatus.Durability.CONFLICTED, coordinator.status().durability());
+			assertEquals(new RevisionToken("3"), coordinator.status().revision());
+			assertEquals(1, coordinator.pendingChanges().size());
+			assertEquals(4, store.revision);
 		}
 	}
 

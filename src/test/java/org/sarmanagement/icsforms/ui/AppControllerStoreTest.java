@@ -374,11 +374,11 @@ class AppControllerStoreTest {
 			assertNotSame(data, saved.data());
 			assertEquals("Remote edit", saved.data().getIncidentContext().getIncidentName());
 			assertNotEquals(created, saved.revision());
-			assertEquals(saved.revision(), store.revisionToken(data));
+			assertEquals(saved.revision(), controller.getPersistenceStatus().revision());
 			data.getIncidentContext().setIncidentName("Second remote edit");
 			controller.markDirty();
 			controller.save();
-			assertNotEquals(saved.revision(), store.revisionToken(data));
+			assertNotEquals(saved.revision(), controller.getPersistenceStatus().revision());
 			assertEquals("Second remote edit", store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
 			assertFalse(controller.isDirty());
 		}

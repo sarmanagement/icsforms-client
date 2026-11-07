@@ -5,6 +5,7 @@ package org.sarmanagement.icsforms;
 
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IapPhase;
+import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
@@ -32,6 +33,7 @@ import org.sarmanagement.icsforms.pdf.SarTaskAssignmentPdfRenderer;
 import org.sarmanagement.icsforms.ui.MainFrame;
 import org.sarmanagement.icsforms.ui.Ics215PromotionDialog;
 import org.sarmanagement.icsforms.ui.StartupDialog;
+import org.sarmanagement.icsforms.ui.PersistenceWorker;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.SwingUtilities;
@@ -48,7 +50,7 @@ public final class App {
 	}
 
 	/**
-	 * Launches the Swing desktop application.
+	 * Launches the Swing desktop application with worker-backed startup persistence.
 	 *
 	 * @param args
 	 *            command line arguments; currently unused.
@@ -65,7 +67,7 @@ public final class App {
 			Path homeDir = Path.of(System.getProperty("user.home"));
 			Path defaultDir = homeDir.resolve(".icsforms");
 
-			IncidentStore store = new FileIncidentStore(defaultDir);
+			IncidentStore store = PersistenceWorker.call(null, () -> new FileIncidentStore(defaultDir));
 			StartupDialog startup = new StartupDialog(null, store, true);
 			startup.setVisible(true);
 
@@ -73,7 +75,7 @@ public final class App {
 			StartupDialog.StartupAction action = startup.getChosenAction();
 			if (action == null) {
 				// Window was closed without a selection; release store resources.
-				store.close();
+				closeStore(store);
 				return;
 			}
 
@@ -83,37 +85,41 @@ public final class App {
 				switch (action) {
 					case OPEN_EXISTING, OPEN_NEW_PERIOD -> {
 						id = startup.getChosenIncidentId();
-						claimEditLock(store, id);
-						StoredIncident loaded = store.loadSnapshot(id);
+						IncidentId selectedId = id;
+						StoredIncident loaded = PersistenceWorker.call(null, () -> {
+							claimEditLock(store, selectedId);
+							return store.loadSnapshot(selectedId);
+						});
 						data = loaded.data();
 						if (action == StartupDialog.StartupAction.OPEN_NEW_PERIOD) {
 							boolean promote = startup.isPromotePlannedIcs215();
 							if (promote && !Ics215PromotionDialog.confirm(null, data)) {
-								store.close();
+								closeStore(store);
 								return;
 							}
-							data.advanceToNewOperationalPeriod(startup.isBringForwardCommunicationsPlan(), promote);
-							store.save(id, data, loaded.revision());
+							boolean carry = startup.isBringForwardCommunicationsPlan();
+							PersistenceWorker.call(null, () -> {
+								loaded.data().advanceToNewOperationalPeriod(carry, promote);
+								return store.save(selectedId, loaded.data(), loaded.revision());
+							});
 						}
 					}
 					default -> {
-						data = new AppData();
 						IapPhase phase = switch (action) {
 							case NEW_INITIAL_RESPONSE -> IapPhase.INITIAL_RESPONSE;
 							case NEW_OPERATIONAL_PERIOD -> IapPhase.DURING_OP;
 							default -> IapPhase.PRE_OP;
 						};
-						data.setIapPhase(phase);
-						data.setIncidentMode(startup.getChosenMode());
-						id = store.create(data);
-						claimEditLock(store, id);
+						var created = createNewIncident(store, phase, startup.getChosenMode());
+						data = created.getValue();
+						id = created.getKey();
 					}
 				}
 			} catch (RuntimeException exception) {
 				JOptionPane.showMessageDialog(null, exception.getMessage(),
 						exception instanceof StoreConflictException ? "Incident already open" : "Unable to open incident",
 						JOptionPane.ERROR_MESSAGE);
-				store.close();
+				closeStore(store);
 				return;
 			}
 
@@ -124,8 +130,40 @@ public final class App {
 			} catch (RuntimeException exception) {
 				JOptionPane.showMessageDialog(null, exception.getMessage(), "Unable to start editor",
 						JOptionPane.ERROR_MESSAGE);
-				store.close();
+				closeStore(store);
 			}
+		});
+	}
+
+	/**
+	 * Creates and locks a detached startup document on the persistence worker.
+	 *
+	 * @param store selected backend.
+	 * @param phase initial incident phase.
+	 * @param mode selected incident mode.
+	 * @return created identity and detached initial document.
+	 */
+	static java.util.Map.Entry<IncidentId, AppData> createNewIncident(IncidentStore store, IapPhase phase,
+			IncidentMode mode) {
+		return PersistenceWorker.call(null, () -> {
+			AppData data = new AppData();
+			data.setIapPhase(phase);
+			data.setIncidentMode(mode);
+			IncidentId id = store.create(data);
+			claimEditLock(store, id);
+			return java.util.Map.entry(id, data);
+		});
+	}
+
+	/**
+	 * Releases store resources outside Swing dispatch after startup cancellation.
+	 *
+	 * @param store store to close.
+	 */
+	private static void closeStore(IncidentStore store) {
+		PersistenceWorker.call(null, () -> {
+			store.close();
+			return null;
 		});
 	}
 
@@ -159,7 +197,7 @@ public final class App {
 	}
 
 	/**
-	 * Loads an incident and optionally promotes its explicitly planned ICS 215 worksheet.
+	 * Loads a detached incident on the worker and optionally promotes its planned ICS 215 worksheet.
 	 *
 	 * @param store selected incident store.
 	 * @param id selected incident identity.
@@ -170,13 +208,15 @@ public final class App {
 	 */
 	static AppData loadExistingIncident(IncidentStore store, IncidentId id, boolean newPeriod,
 			boolean bringForwardCommunicationsPlan, boolean promotePlannedIcs215) {
-		StoredIncident loaded = store.loadSnapshot(id);
-		AppData data = loaded.data();
-		if (newPeriod) {
-			data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan, promotePlannedIcs215);
-			store.save(id, data, loaded.revision());
-		}
-		return data;
+		return PersistenceWorker.call(null, () -> {
+			StoredIncident loaded = store.loadSnapshot(id);
+			AppData data = loaded.data();
+			if (newPeriod) {
+				data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan, promotePlannedIcs215);
+				store.save(id, data, loaded.revision());
+			}
+			return data;
+		});
 	}
 
 	/**

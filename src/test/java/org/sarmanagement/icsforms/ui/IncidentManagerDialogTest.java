@@ -275,7 +275,6 @@ class IncidentManagerDialogTest {
 						}
 					}
 				});
-				closeReport.setRepeats(false);
 				try {
 					closeReport.start();
 					button(dialog, "Load JSON…").doClick();
@@ -343,7 +342,6 @@ class IncidentManagerDialogTest {
 						}
 					}
 				});
-				closeManager.setRepeats(false);
 				try {
 					component(picker, JList.class).setSelectedIndex(0);
 					closeManager.start();

@@ -385,6 +385,33 @@ Import, export, and backup paths always refer to the client's local filesystem,
 regardless of the backend's location. These full-document operations do not rule
 out future per-record tokens, partial saves, outbox logs, or server change cursors.
 
+Autosave flushes editor drafts on Swing's event thread, then hands detached work
+to a serialized background persistence coordinator. Edits made while a save is
+in flight remain pending; only a completion for the active incident, binding
+generation, and represented edit can mark that edit durable. Full document
+snapshots can coalesce, but the `SaveRequest` contract leaves this policy to the
+unit type: ordered operations need not discard intermediate work. Accepted
+revisions remain opaque, including server-issued tokens.
+
+The persistence indicator distinguishes **pending**, **saving**, **saved**,
+**conflicted**, **failed**, and **unavailable**. Saved means durable in the
+configured store, not synchronized with a remote authority; synchronization is
+a separate status dimension (currently not applicable). Failed and unavailable
+writes retain work for retry. Switching, closing, and stored-document export
+coordinate with issued saves; recovery export writes the current detached,
+unsaved document without requiring a successful store save. Store reload and
+failed-switch restoration use the same editor-flush/refresh replacement path,
+which can also be invoked without a user dialog.
+
+`RetryPolicy` is replaceable by a backend: explicit retry, bounded immediate
+retry, and delayed backoff do not change scheduling or completion matching.
+`FullDocumentSnapshotTest` measures capture on the EDT without a timing-based
+pass/fail threshold. On Java 17 in the development runner, a fixture with 2,000
+resources, 500 tasks, 500 clues, and 10 archived periods took a median **10.81 ms**
+over seven captures after warm-up. Larger payloads should be measured rather
+than sharing live editor models; per-record units are the intended next step if
+copy cost becomes significant.
+
 **`validation/`** contains pre-export checks. `IncidentValidator` walks the model and collects `ValidationMessage` instances for any required fields that are missing or invalid, blocking PDF export until the workspace is clean.
 
 ## Build
