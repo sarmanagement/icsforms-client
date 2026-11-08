@@ -58,34 +58,105 @@ class AppControllerAsyncPersistenceTest {
 	}
 
 	@Test
-	void oldGenerationCompletionCannotTouchTheReplacementDocument() throws Exception {
-		try (BlockingStore store = new BlockingStore(directory())) {
-			AppData live = new AppData();
-			IncidentId id = store.create(live);
-			try (AppController controller = controller(store, id, live)) {
-				store.blockNextSave();
-				SwingUtilities.invokeAndWait(() -> {
-					live.getIncidentContext().setIncidentName("Old generation");
-					controller.markDirty();
-					controller.saveAsync(AppController.LinkSource.NONE,
-							failure -> fail("Old generation UI completion must be discarded"));
-				});
-				await(store.entered);
-				AppData replacement = new AppData();
-				SwingUtilities.invokeAndWait(() -> {
-					assertThrows(IllegalStateException.class, () -> controller.setData(replacement));
-					controller.discardUnsavedChangesAndSetData(replacement);
-					replacement.getIncidentContext().setIncidentName("Unsaved replacement");
-					controller.markDirty();
-				});
-				PersistenceStatus replacementStatus = controller.getPersistenceStatus();
-				store.release.countDown();
-				controller.close();
-				assertSame(replacement, controller.getData());
-				assertEquals("Unsaved replacement", replacement.getIncidentContext().getIncidentName());
-				assertTrue(controller.isDirty());
-				assertEquals(1, replacement.getRevision());
-				assertEquals(replacementStatus, controller.getPersistenceStatus());
+	void explicitDiscardWaitsForIssuedWritesBeforeReplacingAndClearingRetainedWork() throws Exception {
+		for (boolean failSave : java.util.List.of(false, true)) {
+			try (BlockingStore store = new BlockingStore(directory())) {
+				AppData live = new AppData();
+				IncidentId id = store.create(live);
+				try (AppController controller = controller(store, id, live)) {
+					SaveCoordinator coordinator = coordinator(controller);
+					RuntimeException problem = new StorePersistenceException("Issued save failed", null);
+					store.failure = failSave ? problem : null;
+					CountDownLatch saveCompleted = new CountDownLatch(1);
+					store.blockNextSave();
+					SwingUtilities.invokeAndWait(() -> {
+						live.getIncidentContext().setIncidentName("Old generation");
+						controller.markDirty();
+						controller.saveAsync(AppController.LinkSource.NONE, failure -> {
+							assertSame(live, controller.getData());
+							assertSame(failSave ? problem : null, failure);
+							saveCompleted.countDown();
+						});
+					});
+					await(store.entered);
+					long oldGeneration = controller.getPersistenceStatus().generation();
+					AppData replacement = new AppData();
+					AtomicReference<PersistenceStatus> settledStatus = new AtomicReference<>();
+					AtomicReference<PersistenceStatus> replacementStatus = new AtomicReference<>();
+					CountDownLatch draining = new CountDownLatch(1);
+					CountDownLatch replaced = new CountDownLatch(1);
+					AtomicReference<Throwable> replacementFailure = new AtomicReference<>();
+					SwingUtilities.invokeAndWait(() -> {
+						live.getIncidentContext().setIncidentName("Queued old edit");
+						controller.markDirty();
+						controller.saveAsync(AppController.LinkSource.NONE, failure -> { });
+						assertThrows(IllegalStateException.class, () -> controller.setData(replacement));
+						controller.setPersistenceWaitHandler(waiting -> {
+							if (waiting) {
+								draining.countDown();
+							}
+						});
+						controller.setPersistenceStatusHandler(status -> {
+							if (status.generation() == oldGeneration
+									&& status.durability() == PersistenceStatus.Durability.FAILED) {
+								assertSame(live, controller.getData());
+								assertEquals(2, coordinator.pendingChanges().size());
+								settledStatus.set(status);
+							}
+						});
+					});
+					SwingUtilities.invokeLater(() -> {
+						try {
+							controller.discardUnsavedChangesAndSetData(replacement);
+							assertEquals(0, saveCompleted.getCount());
+							assertFalse(coordinator.isBusy());
+							assertTrue(coordinator.pendingChanges().isEmpty());
+							assertFalse(controller.isDirty());
+							assertEquals(PersistenceStatus.Durability.SAVED,
+									controller.getPersistenceStatus().durability());
+							assertNull(controller.getPersistenceStatus().failure());
+							replacement.getIncidentContext().setIncidentName("Unsaved replacement");
+							controller.markDirty();
+							replacementStatus.set(controller.getPersistenceStatus());
+						} catch (Throwable failure) {
+							replacementFailure.set(failure);
+						} finally {
+							replaced.countDown();
+						}
+					});
+					await(draining);
+					SwingUtilities.invokeAndWait(() -> {
+						assertSame(live, controller.getData());
+						assertTrue(controller.isDirty());
+						assertTrue(coordinator.isBusy());
+						assertEquals(2, coordinator.pendingChanges().size());
+						assertEquals(1, replaced.getCount());
+						assertEquals(oldGeneration, controller.getPersistenceStatus().generation());
+						assertEquals("", replacement.getIncidentContext().getIncidentName());
+					});
+					store.release.countDown();
+					await(replaced);
+					assertNull(replacementFailure.get());
+					if (failSave) {
+						assertNotNull(settledStatus.get());
+						assertSame(problem, settledStatus.get().failure());
+					}
+					RevisionToken persistedRevision = store.loadSnapshot(id).revision();
+					assertEquals(failSave ? "" : "Queued old edit",
+							store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
+					SwingUtilities.invokeAndWait(() -> {
+						assertEquals(id, controller.getPersistenceStatus().incidentId());
+						assertEquals(persistedRevision, controller.getPersistenceStatus().revision());
+						assertEquals(oldGeneration + 1, controller.getPersistenceStatus().generation());
+					});
+					controller.close();
+					assertSame(replacement, controller.getData());
+					assertEquals("Unsaved replacement", replacement.getIncidentContext().getIncidentName());
+					assertTrue(controller.isDirty());
+					assertEquals(1, replacement.getRevision());
+					assertEquals(replacementStatus.get(), controller.getPersistenceStatus());
+					assertEquals(persistedRevision, store.loadSnapshot(id).revision());
+				}
 			}
 		}
 	}

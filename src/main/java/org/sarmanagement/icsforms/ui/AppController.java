@@ -1180,8 +1180,8 @@ public class AppController implements AutoCloseable {
 
 	/**
 	 * Replaces the document after the caller explicitly approves discarding local
-	 * edits and retained recovery work. Issued writes cannot be undone, but their
-	 * stale completions cannot affect the replacement.
+	 * edits and retained recovery work. Issued writes cannot be undone, so they
+	 * must settle before the replacement is installed or persistence is rebound.
 	 *
 	 * @param data new active document.
 	 * @throws IllegalStateException when an atomic editor commit is pending.
@@ -1207,7 +1207,9 @@ public class AppController implements AutoCloseable {
 		if (atomicSave) {
 			throw new IllegalStateException("An atomic editor commit is being persisted.");
 		}
-		if (!discardUnsavedChanges) {
+		if (discardUnsavedChanges) {
+			drainSaves();
+		} else {
 			requireSavedForReplacement();
 		}
 		AppData replacement = data == null ? createDefaultData() : data;

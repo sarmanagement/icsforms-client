@@ -404,6 +404,8 @@ unsaved document without requiring a successful store save. Direct `open()`,
 work until a save succeeds. Rejected replacement leaves the active document,
 status, and retained save requests intact. Callers choosing to discard local work
 can use `discardUnsavedChangesAndSetData()` or an explicitly approved store reload.
+Explicit discard waits for issued saves to settle before installing the document
+or rebinding persistence; only then can retained unsaved work be discarded.
 Store reload and
 failed-switch restoration use the same editor-flush/refresh replacement path,
 which can also be invoked without a user dialog; the caller is responsible for
