@@ -23,6 +23,36 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** File-specific behavior of the multi-incident store. */
 class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
+	@Test
+	void recoveryTargetsCannotOverwriteManagedDocumentsOrNodeThroughAliases() throws Exception {
+		Path root = tempDir.resolve("store");
+		try (FileIncidentStore store = new FileIncidentStore(root)) {
+			IncidentId first = store.create(new AppData());
+			IncidentId second = store.create(new AppData());
+			Path firstFile = root.resolve("incidents").resolve(first.value() + ".json");
+			Path secondFile = root.resolve("incidents").resolve(second.value() + ".json");
+			Path nodeFile = root.resolve("node.json");
+			String firstBefore = Files.readString(firstFile);
+			String secondBefore = Files.readString(secondFile);
+			String nodeBefore = Files.readString(nodeFile);
+			Path fileAlias = Files.createSymbolicLink(tempDir.resolve("incident-alias.json"), firstFile);
+			Path nodeAlias = Files.createSymbolicLink(tempDir.resolve("node-alias.json"), nodeFile);
+			Path directoryAlias = Files.createSymbolicLink(tempDir.resolve("incident-directory"), root.resolve("incidents"));
+			for (Path target : List.of(firstFile, secondFile, nodeFile, fileAlias, nodeAlias,
+					directoryAlias.resolve("new-incident.json"))) {
+				assertThrows(StoreValidationException.class, () -> store.validateLocalExportTarget(target));
+			}
+			assertEquals(firstBefore, Files.readString(firstFile));
+			assertEquals(secondBefore, Files.readString(secondFile));
+			assertEquals(nodeBefore, Files.readString(nodeFile));
+			store.close();
+			Path external = tempDir.resolve("new-directory").resolve("recovery.json");
+			assertEquals(external.toAbsolutePath().normalize(), store.validateLocalExportTarget(external));
+			Files.move(root, tempDir.resolve("unavailable-store"));
+			assertEquals(external.toAbsolutePath().normalize(), store.validateLocalExportTarget(external));
+		}
+	}
+
 	/** {@inheritDoc} */
 	@Override
 	protected IncidentStore createStore(Path directory) {

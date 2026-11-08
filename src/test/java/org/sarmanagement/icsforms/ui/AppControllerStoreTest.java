@@ -374,11 +374,11 @@ class AppControllerStoreTest {
 			assertNotSame(data, saved.data());
 			assertEquals("Remote edit", saved.data().getIncidentContext().getIncidentName());
 			assertNotEquals(created, saved.revision());
-			assertEquals(saved.revision(), store.revisionToken(data));
+			assertEquals(saved.revision(), controller.getPersistenceStatus().revision());
 			data.getIncidentContext().setIncidentName("Second remote edit");
 			controller.markDirty();
 			controller.save();
-			assertNotEquals(saved.revision(), store.revisionToken(data));
+			assertNotEquals(saved.revision(), controller.getPersistenceStatus().revision());
 			assertEquals("Second remote edit", store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
 			assertFalse(controller.isDirty());
 		}
@@ -408,7 +408,7 @@ class AppControllerStoreTest {
 			assertEquals(expected, store.revisionToken(data));
 			assertEquals("Server edit", store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
 
-			controller.open(id);
+			controller.replaceActiveDocumentFromStore(id);
 
 			assertNotSame(data, controller.getData());
 			assertFalse(controller.isDirty());
@@ -472,7 +472,7 @@ class AppControllerStoreTest {
 			assertTrue(controller.isDirty());
 			assertEquals("Unsaved deletion conflict edit", data.getIncidentContext().getIncidentName());
 			assertEquals("New server revision", store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
-			controller.open(id);
+			controller.replaceActiveDocumentFromStore(id);
 			store.delete(id, store.revisionToken(controller.getData()));
 			assertThrows(IncidentNotFoundException.class, () -> store.loadSnapshot(id));
 			assertTrue(store.list().isEmpty());
@@ -494,21 +494,23 @@ class AppControllerStoreTest {
 				controller.markDirty();
 				store.failNext(ControllableIncidentStore.Operation.LOAD, failure);
 
-				assertSame(failure, assertThrows(failure.getClass(), () -> controller.open(candidate)));
+				assertSame(failure, assertThrows(failure.getClass(),
+						() -> controller.replaceActiveDocumentFromStore(candidate)));
 				assertSame(data, controller.getData());
 				assertEquals(active, controller.getActiveIncidentId());
 				assertTrue(controller.isDirty());
 				assertEquals(expected, store.revisionToken(data));
 				store.failNext(ControllableIncidentStore.Operation.LOAD, failure);
 
-				assertSame(failure, assertThrows(failure.getClass(), () -> controller.open(active)));
+				assertSame(failure, assertThrows(failure.getClass(),
+						() -> controller.replaceActiveDocumentFromStore(active)));
 				assertSame(data, controller.getData());
 				assertEquals(active, controller.getActiveIncidentId());
 				assertTrue(controller.isDirty());
 				store.failNext(ControllableIncidentStore.Operation.CREATE, failure);
 
-				assertSame(failure, assertThrows(failure.getClass(), () -> controller.newDocument(IapPhase.PRE_OP,
-						IncidentMode.SAR)));
+				assertThrows(IllegalStateException.class, () -> controller.newDocument(IapPhase.PRE_OP,
+						IncidentMode.SAR));
 				assertSame(data, controller.getData());
 				assertEquals(active, controller.getActiveIncidentId());
 				assertEquals("Retained remote editor input", data.getIncidentContext().getIncidentName());
@@ -517,6 +519,11 @@ class AppControllerStoreTest {
 				assertEquals(2, store.list().size());
 				controller.save();
 				assertFalse(controller.isDirty());
+				assertSame(failure, assertThrows(failure.getClass(), () -> controller.newDocument(IapPhase.PRE_OP,
+						IncidentMode.SAR)));
+				assertSame(data, controller.getData());
+				assertEquals(active, controller.getActiveIncidentId());
+				assertEquals(2, store.list().size());
 				assertEquals("Retained remote editor input",
 						store.loadSnapshot(active).data().getIncidentContext().getIncidentName());
 			}
@@ -587,7 +594,8 @@ class AppControllerStoreTest {
 			StorePersistenceException failure = new StorePersistenceException("Cannot load candidate", null);
 			store.loadFailure = failure;
 
-			assertSame(failure, assertThrows(StorePersistenceException.class, () -> controller.open(candidate)));
+			assertSame(failure, assertThrows(StorePersistenceException.class,
+					() -> controller.replaceActiveDocumentFromStore(candidate)));
 
 			assertSame(data, controller.getData());
 			assertEquals(active, controller.getActiveIncidentId());
@@ -611,7 +619,7 @@ class AppControllerStoreTest {
 			assertTrue(store.lock(candidate));
 			store.loadFailure = new StorePersistenceException("Cannot load already held candidate", null);
 
-			assertThrows(StorePersistenceException.class, () -> controller.open(candidate));
+			assertThrows(StorePersistenceException.class, () -> controller.replaceActiveDocumentFromStore(candidate));
 
 			assertSame(data, controller.getData());
 			assertEquals(active, controller.getActiveIncidentId());
@@ -633,7 +641,7 @@ class AppControllerStoreTest {
 			controller.markDirty();
 			store.loadFailure = new StorePersistenceException("Cannot reload active incident", null);
 
-			assertThrows(StorePersistenceException.class, () -> controller.open(active));
+			assertThrows(StorePersistenceException.class, () -> controller.replaceActiveDocumentFromStore(active));
 
 			assertSame(data, controller.getData());
 			assertEquals(active, controller.getActiveIncidentId());
@@ -658,7 +666,8 @@ class AppControllerStoreTest {
 			store.loadFailure = failure;
 			store.unlockFailure = cleanupFailure;
 
-			assertSame(failure, assertThrows(StorePersistenceException.class, () -> controller.open(candidate)));
+			assertSame(failure, assertThrows(StorePersistenceException.class,
+					() -> controller.replaceActiveDocumentFromStore(candidate)));
 
 			assertEquals(List.of(cleanupFailure), List.of(failure.getSuppressed()));
 			assertSame(data, controller.getData());
@@ -687,7 +696,8 @@ class AppControllerStoreTest {
 			malformed.setIncidentId(candidate.value());
 			store.nextSnapshot = new StoredIncident(malformed, store.revisionToken(candidateData));
 
-			assertSame(failure, assertThrows(IllegalStateException.class, () -> controller.open(candidate)));
+			assertSame(failure, assertThrows(IllegalStateException.class,
+					() -> controller.replaceActiveDocumentFromStore(candidate)));
 
 			assertSame(activeData, controller.getData());
 			assertEquals(active, controller.getActiveIncidentId());
@@ -708,7 +718,6 @@ class AppControllerStoreTest {
 				AppData activeData = new AppData();
 				IncidentId active = store.create(activeData);
 				AppController controller = controller(store, active, activeData);
-				controller.markDirty(AppController.LinkSource.ICS202);
 				activeData.getOrganizationalChart().setIncidentCommanders(List.of("Unsaved chart commander"));
 				activeData.getForm202().setApprovedByIncidentCommanderName("Unsaved form commander");
 				AppData candidate = new AppData();

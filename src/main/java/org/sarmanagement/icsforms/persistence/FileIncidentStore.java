@@ -35,8 +35,21 @@ import java.util.IdentityHashMap;
 import java.util.Objects;
 import java.util.logging.Logger;
 
-/** File-backed incident store with independent JSON documents and backups. */
+/**
+ * File-backed incident store with independent JSON documents and backups.
+ * Client exports, including recovery copies, cannot overwrite managed files.
+ */
 public class FileIncidentStore implements IncidentStore, EditLockSupport {
+	/**
+	 * Retries transient local writes at most twice before retaining work for recovery.
+	 *
+	 * @return bounded immediate local-file retry policy.
+	 */
+	@Override
+	public RetryPolicy saveRetryPolicy() {
+		return RetryPolicy.immediate(2);
+	}
+
 	private static final Logger LOGGER = Logger.getLogger(FileIncidentStore.class.getName());
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
@@ -582,17 +595,61 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 	public synchronized void exportFile(IncidentId id, Path target) {
 		ensureOpen();
 		try {
-			Path destination = target.toAbsolutePath().normalize();
-			if (destination.startsWith(incidents.normalize())
-					|| destination.getParent().toRealPath().startsWith(incidents.toRealPath())
-					|| destination.equals(root.resolve("node.json"))) {
-				throw new StoreValidationException("Export destination must be outside the live incident store");
-			}
+			Path destination = validateLocalExportTarget(target);
 			loadDocument(id);
-			MAPPER.writerWithDefaultPrettyPrinter().writeValue(target.toFile(), readWithBackupDocument(path(id)).tree());
+			MAPPER.writerWithDefaultPrettyPrinter().writeValue(destination.toFile(), readWithBackupDocument(path(id)).tree());
 		} catch (IOException e) {
 			throw new StorePersistenceException("Cannot export incident: " + id, e);
 		}
+	}
+
+	/**
+	 * Protects incident files and node identity during stored and unsaved exports,
+	 * including through symlinks. No open store or readable incident is required.
+	 *
+	 * @param target requested local export destination
+	 * @return normalized safe destination
+	 * @throws StoreValidationException when managed files could be overwritten
+	 * @throws StorePersistenceException when the local destination cannot be resolved
+	 */
+	@Override
+	public Path validateLocalExportTarget(Path target) {
+		Path destination = target.toAbsolutePath().normalize();
+		Path nodeFile = root.resolve("node.json");
+		if (destination.startsWith(incidents.toAbsolutePath().normalize())
+				|| destination.equals(nodeFile.toAbsolutePath().normalize())) {
+			throw new StoreValidationException("Export destination must be outside the live incident store");
+		}
+		try {
+			Path resolved = resolveExportPath(destination);
+			if (resolved.startsWith(resolveExportPath(incidents)) || resolved.equals(resolveExportPath(nodeFile))) {
+				throw new StoreValidationException("Export destination must be outside the live incident store");
+			}
+			return destination;
+		} catch (IOException exception) {
+			throw new StorePersistenceException("Cannot validate local export destination: " + target, exception);
+		}
+	}
+
+	/**
+	 * Resolves existing aliases while permitting a new directory or an unavailable
+	 * store directory. Every existing path component is resolved before appending
+	 * the still-missing suffix.
+	 *
+	 * @param path requested local path
+	 * @return physical path through its closest existing ancestor
+	 * @throws IOException when an existing ancestor cannot be resolved
+	 */
+	private Path resolveExportPath(Path path) throws IOException {
+		Path absolute = path.toAbsolutePath();
+		Path existing = absolute;
+		while (!Files.exists(existing, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+			existing = existing.getParent();
+			if (existing == null) {
+				throw new IOException("No existing ancestor for " + path);
+			}
+		}
+		return existing.toRealPath().resolve(existing.relativize(absolute)).normalize();
 	}
 
 	/**

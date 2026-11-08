@@ -26,7 +26,7 @@ import java.awt.Window;
 import java.nio.file.Path;
 import java.util.List;
 
-/** Manages saved incidents without opening or changing the active editor. */
+/** Manages saved incidents using worker-backed I/O without changing the active editor. */
 public class IncidentManagerDialog extends JDialog {
 	private final IncidentStore store;
 	private final IncidentId activeId;
@@ -56,7 +56,7 @@ public class IncidentManagerDialog extends JDialog {
 	private org.sarmanagement.icsforms.model.IncidentMode chosenMode;
 
 	/**
-	 * Creates a modal manager using desktop prompts.
+	 * Creates a worker-backed modal manager using desktop prompts.
 	 *
 	 * @param owner owning window.
 	 * @param store configured persistence store.
@@ -67,7 +67,7 @@ public class IncidentManagerDialog extends JDialog {
 	}
 
 	/**
-	 * Creates a manager with injectable prompts for deterministic UI tests.
+	 * Creates a manager with injectable prompts, waiting responsively for stored rows.
 	 *
 	 * @param owner owning window.
 	 * @param store configured persistence store.
@@ -104,7 +104,7 @@ public class IncidentManagerDialog extends JDialog {
 		buttons.add(closeButton);
 		JPanel content = new JPanel(new BorderLayout(8, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
-		var descriptor = store.describe();
+		var descriptor = PersistenceWorker.call(this, store::describe);
 		JPanel header = new JPanel(new BorderLayout(0, 6));
 		header.add(new JLabel(descriptor.type() + ": " + descriptor.location()), BorderLayout.NORTH);
 		header.add(hint, BorderLayout.SOUTH);
@@ -140,15 +140,21 @@ public class IncidentManagerDialog extends JDialog {
 		deleteButton.setEnabled(selected && !summary.incidentId().equals(activeId));
 	}
 
-	/** Refreshes atomically, retaining the selection and previous rows on failure. */
+	/** Loads detached summaries on a worker and refreshes atomically, retaining rows on failure. */
 	private void refresh() {
 		IncidentSummary previous = selected();
 		try {
-			List<IncidentSummary> updated = List.copyOf(store.list());
+			var listing = PersistenceWorker.call(this, () -> {
+				List<IncidentSummary> updated = List.copyOf(store.list());
+				var contexts = updated.stream()
+						.map(summary -> store.load(summary.incidentId()).getIncidentContext()).toList();
+				return java.util.Map.entry(updated, contexts);
+			});
+			List<IncidentSummary> updated = listing.getKey();
 			Object[][] rows = new Object[updated.size()][];
 			for (int row = 0; row < updated.size(); row++) {
 				IncidentSummary summary = updated.get(row);
-				var context = store.load(summary.incidentId()).getIncidentContext();
+				var context = listing.getValue().get(row);
 				String period = context.getOperationalPeriodStart() == null ? "not set"
 						: UiSupport.formatIsoDateTime(context.getOperationalPeriodStart());
 				period += " — " + (context.getOperationalPeriodEnd() == null ? "not set"
@@ -178,7 +184,7 @@ public class IncidentManagerDialog extends JDialog {
 		updateButtons();
 	}
 
-	/** Backs up the selected saved document without changing selection or identity. */
+	/** Backs up on a worker without changing selection or identity before completion. */
 	private void backupSelected() {
 		IncidentSummary summary = selected();
 		if (summary == null) {
@@ -187,7 +193,10 @@ public class IncidentManagerDialog extends JDialog {
 		try {
 			Path target = dialogs.chooseBackup(this, summary);
 			if (target != null) {
-				store.backupFile(summary.incidentId(), target);
+				PersistenceWorker.call(this, () -> {
+					store.backupFile(summary.incidentId(), target);
+					return null;
+				});
 				dialogs.message(this, "Backup saved to " + target, false);
 			}
 		} catch (RuntimeException failure) {
@@ -222,7 +231,7 @@ public class IncidentManagerDialog extends JDialog {
 	}
 
 	/**
-	 * Imports a strictly validated external incident and selects it for opening.
+	 * Imports on a worker and selects the strictly validated incident only after completion.
 	 */
 	private void importIncident() {
 		try {
@@ -230,9 +239,11 @@ public class IncidentManagerDialog extends JDialog {
 			if (source == null) {
 				return;
 			}
-			IncidentId imported = store.importFile(source).orElse(null);
+			var result = PersistenceWorker.call(this, () -> java.util.Map.entry(
+					store.importFile(source), List.copyOf(store.getLastImportProblems())));
+			IncidentId imported = result.getKey().orElse(null);
 			if (imported != null) {
-				ImportReportDialog.show(this, source, true, store.getLastImportProblems());
+				ImportReportDialog.show(this, source, true, result.getValue());
 				chosenIncidentId = imported;
 				chosenAction = StartupDialog.StartupAction.OPEN_EXISTING;
 				dispose();
@@ -271,7 +282,7 @@ public class IncidentManagerDialog extends JDialog {
 		return chosenMode;
 	}
 
-	/** Confirms a soft deletion, forbidding deletion of the active editor. */
+	/** Confirms and performs a worker-backed soft deletion, forbidding deletion of the active editor. */
 	private void deleteSelected() {
 		IncidentSummary summary = selected();
 		if (summary == null) {
@@ -288,7 +299,10 @@ public class IncidentManagerDialog extends JDialog {
 			return;
 		}
 		try {
-			store.delete(summary.incidentId(), summary.revision());
+			PersistenceWorker.call(this, () -> {
+				store.delete(summary.incidentId(), summary.revision());
+				return null;
+			});
 			refresh();
 		} catch (RuntimeException failure) {
 			dialogs.message(this, "Unable to delete incident: " + failure.getMessage(), true);

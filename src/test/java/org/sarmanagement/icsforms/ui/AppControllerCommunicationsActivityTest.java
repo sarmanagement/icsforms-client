@@ -28,6 +28,7 @@ import java.util.function.BiConsumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -168,14 +169,18 @@ class AppControllerCommunicationsActivityTest {
 			IncidentId id = IncidentId.newId();
 			RejectingIncidentStore store = new RejectingIncidentStore((savedId, savedData) -> {
 				assertEquals(id, savedId);
-				assertSame(data, savedData);
+				assertNotSame(data, savedData);
+				assertFalse(javax.swing.SwingUtilities.isEventDispatchThread());
 				assertEquals(17, savedData.getRevision());
-				assertSame(channel, savedData.getForm205().getChannels().get(0));
-				assertEquals(RadioCheckStatus.SUCCESSFUL, channel.getRadioCheckStatus());
-				assertEquals("COML", channel.getRadioCheckedBy());
-				assertEquals(draft.getTimestamp(), channel.getRadioCheckedAt());
-				assertSame(log, savedData.getActivityLogs().get(0));
-				assertEquals(List.of(previous, draft), log.getActivityLog());
+				RadioChannel savedChannel = savedData.getForm205().getChannels().get(0);
+				assertNotSame(channel, savedChannel);
+				assertEquals(RadioCheckStatus.SUCCESSFUL, savedChannel.getRadioCheckStatus());
+				assertEquals("COML", savedChannel.getRadioCheckedBy());
+				assertEquals(draft.getTimestamp(), savedChannel.getRadioCheckedAt());
+				Ics214Form savedLog = savedData.getActivityLogs().get(0);
+				assertNotSame(log, savedLog);
+				assertEquals(List.of(previous.getNotableActivity(), draft.getNotableActivity()),
+						savedLog.getActivityLog().stream().map(ActivityLogEntry::getNotableActivity).toList());
 				assertEquals(List.of("Latest independent edits"), savedData.getForm202().getObjectives());
 			});
 			AppController controller = SwingTestLifecycleExtension.track(

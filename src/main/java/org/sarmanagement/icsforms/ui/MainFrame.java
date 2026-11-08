@@ -106,6 +106,9 @@ public class MainFrame extends JFrame {
 
 	private final AppController controller;
 	private final JLabel validationLabel = new JLabel("Ready", SwingConstants.LEFT);
+	private final JLabel persistenceLabel = new JLabel("Durability: saved | Synchronization: not applicable");
+	private final javax.swing.JButton retryPersistenceButton = new javax.swing.JButton("Retry save");
+	private final List<java.awt.Window> atomicDisabledWindows = new ArrayList<>();
 	private final IncidentContextPanel incidentContextPanel;
 	private final OrganizationalChartPanel organizationalChartPanel;
 	private final Ics201Panel ics201Panel;
@@ -343,8 +346,17 @@ public class MainFrame extends JFrame {
 		content.add(tabs, BorderLayout.CENTER);
 
 		validationLabel.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+		JPanel statusPanel = new JPanel(new BorderLayout());
+		statusPanel.add(validationLabel, BorderLayout.CENTER);
+		JPanel persistencePanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
+		persistencePanel.add(persistenceLabel);
+		persistencePanel.add(retryPersistenceButton);
+		retryPersistenceButton.addActionListener(event -> controller.retryPersistence());
+		statusPanel.add(persistencePanel, BorderLayout.EAST);
+		controller.setPersistenceStatusHandler(this::refreshPersistenceStatus);
+		controller.setPersistenceWaitHandler(waiting -> refreshIncidentInputAvailability());
 		add(content, BorderLayout.CENTER);
-		add(validationLabel, BorderLayout.SOUTH);
+		add(statusPanel, BorderLayout.SOUTH);
 		refreshFromModel();
 		editorChangeSubscription = controller.addIncidentChangeListener(this::refreshEditorsAfterCommit);
 		lastSelectedTabIndex = tabs.getSelectedIndex();
@@ -453,6 +465,7 @@ public class MainFrame extends JFrame {
 			if (action == null) {
 				return; // cancelled
 			}
+			IncidentId previousIncidentId = controller.getActiveIncidentId();
 			try {
 				switch (action) {
 					case OPEN_EXISTING -> controller.open(startup.getChosenIncidentId());
@@ -474,6 +487,7 @@ public class MainFrame extends JFrame {
 				}
 				refreshFromModel();
 			} catch (RuntimeException exception) {
+				restoreActiveSnapshot(previousIncidentId, exception);
 				showSaveError(exception);
 			}
 		});
@@ -493,8 +507,13 @@ public class MainFrame extends JFrame {
 				return;
 			}
 			try {
-				controller.save(source);
-				refreshStatus();
+				controller.saveAsync(source, failure -> {
+					if (failure == null) {
+						refreshStatus();
+					} else {
+						showSaveError(failure);
+					}
+				});
 			} catch (RuntimeException exception) {
 				showSaveError(exception);
 			}
@@ -826,6 +845,7 @@ public class MainFrame extends JFrame {
 		}
 		IncidentManagerDialog manager = new IncidentManagerDialog(this, controller.getStore(),
 				controller.getActiveIncidentId());
+		IncidentId previousIncidentId = controller.getActiveIncidentId();
 		manager.setVisible(true);
 		try {
 			StartupDialog.StartupAction action = manager.getChosenAction();
@@ -846,7 +866,27 @@ public class MainFrame extends JFrame {
 			}
 			refreshFromModel();
 		} catch (RuntimeException exception) {
+			restoreActiveSnapshot(previousIncidentId, exception);
 			showSaveError(exception);
+		}
+	}
+
+	/**
+	 * Restores the original stored document after a partially completed incident switch.
+	 * Failed loads that never replaced the document retain its live unsaved content.
+	 *
+	 * @param incidentId identity active before switching.
+	 * @param failure original operation failure receiving suppressed recovery failures.
+	 */
+	private void restoreActiveSnapshot(IncidentId incidentId, RuntimeException failure) {
+		try {
+			if (incidentId != null && !incidentId.equals(controller.getActiveIncidentId())) {
+				controller.replaceActiveDocumentFromStore(incidentId);
+			} else {
+				controller.withPlanReuseEditors(() -> { });
+			}
+		} catch (RuntimeException recoveryFailure) {
+			failure.addSuppressed(recoveryFailure);
 		}
 	}
 
@@ -1587,6 +1627,7 @@ public class MainFrame extends JFrame {
 		AppController.EditorCommitBinding latest = controller.captureEditorCommitBinding();
 		if (change.kind() == AppController.IncidentChangeKind.MODEL_COMMITTED
 				&& editorCommitBinding.revision() == latest.revision()) {
+			refreshStatus();
 			return;
 		}
 		boolean sameContext = controller.isCurrent(editorCommitBinding.incidentBinding())
@@ -2349,6 +2390,46 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
+	 * Displays store durability separately from authority synchronization and validation.
+	 * Status updates never reload editors or overwrite partial drafts.
+	 *
+	 * @param status current persistence state.
+	 */
+	private void refreshPersistenceStatus(org.sarmanagement.icsforms.persistence.PersistenceStatus status) {
+		refreshIncidentInputAvailability();
+		if (status.durability() == org.sarmanagement.icsforms.persistence.PersistenceStatus.Durability.SAVED
+				&& editorCommitBinding != null && controller.isCurrent(editorCommitBinding.incidentBinding())
+				&& (editorTextBaselines.entrySet().stream()
+						.anyMatch(entry -> !java.util.Objects.equals(entry.getValue(), entry.getKey().getText()))
+						|| descendants(tabs, JTable.class).stream().anyMatch(JTable::isEditing))) {
+			controller.markEditorDraftDirty();
+			return;
+		}
+		persistenceLabel.setText("Durability: " + status.durability().name().toLowerCase(java.util.Locale.ROOT)
+				+ " | Synchronization: not applicable");
+		persistenceLabel.setToolTipText(status.failure() == null ? null : status.failure().getMessage());
+		retryPersistenceButton.setEnabled(status.failure() != null);
+	}
+
+	/** Pauses user input during synchronous worker waits without blocking Swing dispatch or asynchronous saves. */
+	private void refreshIncidentInputAvailability() {
+		if (controller.isAtomicSavePending() || controller.isPersistenceWaitPending()) {
+			List<java.awt.Window> windows = new ArrayList<>(UiSupport.outstandingIncidentWindows(this,
+					controller.getData()));
+			windows.add(this);
+			for (java.awt.Window window : windows) {
+				if (window.isEnabled()) {
+					atomicDisabledWindows.add(window);
+					window.setEnabled(false);
+				}
+			}
+		} else {
+			atomicDisabledWindows.forEach(window -> window.setEnabled(true));
+			atomicDisabledWindows.clear();
+		}
+	}
+
+	/**
 	 * Saves pending edits before switching or managing incidents so rejected edits
 	 * and failed saves cannot discard them or expose stale management backups.
 	 *
@@ -2364,7 +2445,7 @@ public class MainFrame extends JFrame {
 				return false;
 			}
 			controller.save(source);
-			return true;
+			return !controller.hasUnsavedChanges();
 		} catch (RuntimeException exception) {
 			showSaveError(exception);
 			return false;
@@ -2404,12 +2485,37 @@ public class MainFrame extends JFrame {
 	 */
 	private void closeAfterSave() {
 		if (!saveBeforeSwitch()) {
+			Object[] choices = {"Keep editing", "Export unsaved changes and close", "Discard changes and close"};
+			int selected = JOptionPane.showOptionDialog(this,
+					"The incident has not been saved. Export a recovery copy of your current edits "
+							+ "before closing, or keep this window open.",
+					"Unsaved incident", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE,
+					null, choices, choices[0]);
+			if (selected == 1) {
+				chooseFile(controller.getFilePath() == null ? Path.of(".") : controller.getFilePath().getParent(),
+						true, path -> {
+							try {
+								controller.exportUnsavedIncident(path,
+										linkSourceForTab(tabs.getSelectedIndex()));
+								finishClose();
+							} catch (RuntimeException failure) {
+								showError("Could not export unsaved incident", failure);
+							}
+						});
+			} else if (selected == 2 && JOptionPane.showConfirmDialog(this,
+					"Discard unsaved incident changes?", "Discard changes", JOptionPane.YES_NO_OPTION,
+					JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION) {
+				finishClose();
+			}
 			return;
 		}
+		finishClose();
+	}
+
+	/** Closes resources only after save, recovery export, or explicit discard has resolved pending edits. */
+	private void finishClose() {
 		closeOwnedResources();
-		if (controller.getStore() != null) {
-			controller.getStore().close();
-		}
+		controller.closeStore();
 		dispose();
 	}
 
@@ -2428,7 +2534,8 @@ public class MainFrame extends JFrame {
 	 */
 	private void showSaveError(RuntimeException exception) {
 		if (exception instanceof StoreConflictException && controller.getStore() != null) {
-			Object[] choices = {"Duplicate my changes", "Reload stored incident", "Keep editing"};
+			Object[] choices = {"Duplicate my changes", "Reload stored incident", "Keep editing",
+					"Export unsaved changes"};
 			int selected = JOptionPane.showOptionDialog(this,
 					"Another editor changed or locked this incident. Your edits are still in this window.\n"
 							+ exception.getMessage() + "\nDuplicate to preserve your edits, or reload to discard them.",
@@ -2446,16 +2553,38 @@ public class MainFrame extends JFrame {
 							"Discard local changes", JOptionPane.YES_NO_OPTION,
 							JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION) {
 				try {
-					controller.open(controller.getActiveIncidentId());
-					refreshFromModel();
+					controller.replaceActiveDocumentFromStore();
 				} catch (RuntimeException reloadFailure) {
 					showError("Could not reload incident", reloadFailure);
 				}
+			} else if (selected == 3) {
+				exportRecoveryCopy();
 			}
 		} else {
-			showError("Incident operation failed", exception);
+			Object[] choices = {"Keep editing", "Retry save", "Export unsaved changes"};
+			int selected = JOptionPane.showOptionDialog(this,
+					"Your edits remain in this window.\n" + exception.getMessage(),
+					"Incident operation failed", JOptionPane.DEFAULT_OPTION, JOptionPane.ERROR_MESSAGE,
+					null, choices, choices[0]);
+			if (selected == 1) {
+				controller.retryPersistence();
+			} else if (selected == 2) {
+				exportRecoveryCopy();
+			}
 		}
+
 		refreshStatus();
+	}
+
+	/** Offers a detached recovery export without requiring a successful store save. */
+	private void exportRecoveryCopy() {
+		chooseFile(Path.of("."), true, path -> {
+			try {
+				controller.exportUnsavedIncident(path, linkSourceForTab(tabs.getSelectedIndex()));
+			} catch (RuntimeException failure) {
+				showError("Could not export unsaved incident", failure);
+			}
+		});
 	}
 
 	/**

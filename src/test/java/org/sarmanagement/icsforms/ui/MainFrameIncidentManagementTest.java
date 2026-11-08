@@ -63,7 +63,7 @@ class MainFrameIncidentManagementTest {
 						}
 					}
 				});
-				close.setRepeats(false);
+				close.setRepeats(true);
 				try {
 					Object panel = field(frame, "incidentContextPanel");
 					((JTextField) field(panel, "incidentNameField")).setText("Pending incident name");
@@ -106,7 +106,7 @@ class MainFrameIncidentManagementTest {
 						}
 					}
 				});
-				dismissError.setRepeats(false);
+				dismissError.setRepeats(true);
 				try {
 					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_202));
 					JTable table = (JTable) field(field(frame, "ics202Panel"), "objectivesTable");
@@ -164,15 +164,21 @@ class MainFrameIncidentManagementTest {
 							try {
 								JTable table = descendants(manager).stream().filter(JTable.class::isInstance)
 										.map(JTable.class::cast).findFirst().orElseThrow();
+								boolean selected = false;
 								for (int row = 0; row < table.getRowCount(); row++) {
 									if (nextId.value().equals(table.getValueAt(row, 1))) {
 										table.setRowSelectionInterval(row, row);
+										selected = true;
 										break;
 									}
 								}
-								descendants(manager).stream().filter(JButton.class::isInstance)
+								JButton open = descendants(manager).stream().filter(JButton.class::isInstance)
 										.map(JButton.class::cast).filter(button -> "Open".equals(button.getText()))
-										.findFirst().orElseThrow().doClick();
+										.findFirst().orElseThrow();
+								if (!selected || !open.isEnabled()) {
+									return;
+								}
+								open.doClick();
 								switched.set(true);
 							} catch (Throwable problem) {
 								failure.set(problem);
@@ -180,7 +186,7 @@ class MainFrameIncidentManagementTest {
 						}
 					}
 				});
-				chooseIncident.setRepeats(false);
+				chooseIncident.setRepeats(true);
 				try {
 					chooseIncident.start();
 					manageItem(frame).doClick();

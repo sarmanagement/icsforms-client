@@ -4,6 +4,10 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.pdf.PdfOrientation;
+import org.sarmanagement.icsforms.persistence.FullDocumentSnapshot;
+import org.sarmanagement.icsforms.persistence.SaveCoordinator;
+import org.sarmanagement.icsforms.persistence.SaveRequest;
+import org.sarmanagement.icsforms.persistence.PersistenceStatus;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -32,6 +36,7 @@ import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.model.PlanReuseService;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.LocalRepositorySaveAdapter;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
@@ -80,12 +85,27 @@ public class AppController implements AutoCloseable {
 
 	private final LocalRepository repository;
 	private final IncidentStore store;
+	private final IncidentStore saveStore;
 	private List<ImportValidationException.Problem> lastImportProblems = List.of();
 	private IncidentId activeIncidentId;
-	private RevisionToken storedRevision;
+	private RevisionToken storedRevision = new RevisionToken("legacy");
 	private final PdfExportService exportService;
 	private final IncidentValidator validator;
 	private final Timer autosaveTimer;
+	private final java.util.concurrent.ExecutorService persistenceWorker =
+			java.util.concurrent.Executors.newSingleThreadExecutor(task -> {
+				Thread thread = new Thread(task, "incident-persistence");
+				thread.setDaemon(true);
+				return thread;
+			});
+	private final SaveCoordinator saves;
+	private final IncidentId legacyIncidentId = IncidentId.newId();
+	private long editVersion;
+	private boolean flushingEditors;
+	private boolean atomicSave;
+	private int synchronousWaitDepth;
+	private java.util.function.Consumer<Boolean> persistenceWaitHandler = waiting -> { };
+	private java.util.function.Consumer<PersistenceStatus> persistenceStatusHandler = status -> { };
 	private AppData data;
 	private OperatorContext operatorContext = OperatorContext.empty();
 	private boolean dirty;
@@ -236,6 +256,7 @@ public class AppController implements AutoCloseable {
 		this(data, store, incidentId, null, exportService, validator);
 		storedRevision = store.revisionToken(this.data);
 		claimEditLock(incidentId);
+		bindPersistence();
 	}
 
 	/**
@@ -273,18 +294,289 @@ public class AppController implements AutoCloseable {
 		this.data.reconcileMedicalUnitLeaderAssignment();
 		this.repository = repository;
 		this.store = store;
+		this.saveStore = store == null ? new LocalRepositorySaveAdapter(repository) : store;
 		this.activeIncidentId = incidentId;
 		this.exportService = exportService;
 		this.validator = validator;
+		this.saves = new SaveCoordinator(persistenceWorker, SwingUtilities::invokeLater,
+				this::saveCompleted, this::persistenceStatusChanged, saveStore.saveRetryPolicy());
+		bindPersistence();
 		this.autosaveTimer = new Timer(AUTOSAVE_DELAY_MS, event -> {
 			try {
-				save();
+				saveAsync(activeLinkSource, failure -> {
+					if (failure != null) {
+						autosaveErrorHandler.accept(failure);
+					}
+				});
 			} catch (RuntimeException exception) {
 				autosaveErrorHandler.accept(exception);
 			}
 		});
 		this.autosaveTimer.setRepeats(false);
 		syncSarTasks();
+	}
+
+	/** Binds persistence to the currently active document without retaining old callbacks. */
+	private void bindPersistence() {
+		saves.bind(activeIncidentId == null ? legacyIncidentId : activeIncidentId,
+				incidentGeneration, editVersion, storedRevision);
+	}
+
+	/**
+	 * Installs a presentation listener for durability and synchronization changes.
+	 *
+	 * @param handler owner-thread status listener.
+	 */
+	public void setPersistenceStatusHandler(java.util.function.Consumer<PersistenceStatus> handler) {
+		persistenceStatusHandler = Objects.requireNonNull(handler);
+		handler.accept(saves.status());
+	}
+
+	/**
+	 * Returns the persistence state independently of validation.
+	 *
+	 * @return active incident durability and synchronization state.
+	 */
+	public PersistenceStatus getPersistenceStatus() {
+		return saves.status();
+	}
+
+	/**
+	 * Reports whether an atomic editor candidate is waiting for durability.
+	 *
+	 * @return true while incident input must not start another transaction.
+	 */
+	public boolean isAtomicSavePending() {
+		return atomicSave;
+	}
+
+	/**
+	 * Reports synchronous persistence waits that must not admit another user edit.
+	 *
+	 * @return true while a synchronous operation dispatches Swing events awaiting IO.
+	 */
+	public boolean isPersistenceWaitPending() {
+		return synchronousWaitDepth > 0;
+	}
+
+	/**
+	 * Installs a UI input guard for synchronous worker waits, excluding asynchronous autosave.
+	 *
+	 * @param handler receives true when input must pause and false when it can resume.
+	 */
+	public void setPersistenceWaitHandler(java.util.function.Consumer<Boolean> handler) {
+		persistenceWaitHandler = Objects.requireNonNull(handler);
+	}
+
+	/**
+	 * Delivers a persistence status without refreshing or flushing editors.
+	 *
+	 * @param status new active status.
+	 */
+	private void persistenceStatusChanged(PersistenceStatus status) {
+		persistenceStatusHandler.accept(status);
+	}
+
+	/**
+	 * Applies committed metadata only to the matching incident and edit generation.
+	 *
+	 * @param completion completed detached save.
+	 */
+	private void saveCompleted(SaveCoordinator.Completion completion) {
+		SaveRequest request = completion.request();
+		if (closed || request.generation() != incidentGeneration
+				|| !request.incidentId().equals(saves.status().incidentId())) {
+			return;
+		}
+		if (completion.failure() == null) {
+			storedRevision = saves.status().revision();
+			if (store != null && !atomicSave && request instanceof FullDocumentSnapshot full) {
+				copyPersistenceMetadata(full.snapshot());
+			}
+			if (request.editVersion() == editVersion && !atomicSave) {
+				dirty = false;
+			}
+		} else {
+			dirty = true;
+		}
+		publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
+	}
+
+	/**
+	 * Copies backend-assigned metadata without replacing any live editor objects.
+	 *
+	 * @param persisted successfully persisted detached document.
+	 */
+	private void copyPersistenceMetadata(AppData persisted) {
+		data.setIncidentId(persisted.getIncidentId());
+		data.setCreatedAt(persisted.getCreatedAt());
+		data.setUpdatedAt(persisted.getUpdatedAt());
+		data.setOriginNodeId(persisted.getOriginNodeId());
+		data.setRevision(persisted.getRevision());
+	}
+
+	/**
+	 * Flushes every registered editor once before capturing a detached save request.
+	 *
+	 * @param source authoritative linked-field source.
+	 * @return detached persistence request.
+	 */
+	private FullDocumentSnapshot captureSave(LinkSource source) {
+		if (!flushingEditors && !atomicSave) {
+			flushingEditors = true;
+			try {
+				beforePlanReuse.run();
+			} finally {
+				flushingEditors = false;
+			}
+		}
+		synchronizeLinkedFields(source);
+		syncSarTasks();
+		data.normalizeIdentity();
+		AppData detached = FullDocumentSnapshot.detach(data);
+		return new FullDocumentSnapshot(saves.status().incidentId(), incidentGeneration, editVersion,
+				saves.status().revision(), detached, saveStore);
+	}
+
+	/**
+	 * Schedules a detached save and invokes completion later on the owner thread.
+	 *
+	 * @param source authoritative linked-field source.
+	 * @param completed receives null on success or the persistence failure.
+	 */
+	public void saveAsync(LinkSource source, java.util.function.Consumer<RuntimeException> completed) {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			SwingUtilities.invokeLater(() -> saveAsync(source, completed));
+			return;
+		}
+		if (closed || atomicSave) {
+			return;
+		}
+		try {
+			SaveRequest request = captureSave(source);
+			autosaveTimer.stop();
+			saves.submit(request);
+			if (saves.status().failure() != null) {
+				saves.retry();
+			}
+			saves.whenIdle(() -> {
+				if (!closed && request.generation() == incidentGeneration
+						&& request.incidentId().equals(saves.status().incidentId())) {
+					completed.accept(saves.status().failure());
+				}
+			});
+		} catch (RuntimeException failure) {
+			dirty = true;
+			completed.accept(failure);
+		}
+	}
+
+	/** Retries the current detached changes, retaining editor drafts on failure. */
+	public void retryPersistence() {
+		saveAsync(activeLinkSource, failure -> {
+			if (failure != null) {
+				autosaveErrorHandler.accept(failure);
+			}
+		});
+	}
+
+	/**
+	 * Executes owner-thread work synchronously, preserving the public legacy API.
+	 *
+	 * @param operation owner-thread operation.
+	 * @param <T> result type.
+	 * @return operation result.
+	 */
+	private <T> T onOwner(java.util.concurrent.Callable<T> operation) {
+		if (SwingUtilities.isEventDispatchThread()) {
+			try {
+				return operation.call();
+			} catch (RuntimeException failure) {
+				throw failure;
+			} catch (Exception failure) {
+				throw new IllegalStateException(failure);
+			}
+		}
+		java.util.concurrent.FutureTask<T> task = new java.util.concurrent.FutureTask<>(operation);
+		try {
+			SwingUtilities.invokeAndWait(task);
+			return task.get();
+		} catch (InterruptedException failure) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException("Interrupted waiting for incident operation", failure);
+		} catch (java.util.concurrent.ExecutionException | InvocationTargetException failure) {
+			if (failure.getCause() instanceof RuntimeException runtime) {
+				throw runtime;
+			}
+			throw new IllegalStateException(failure.getCause());
+		}
+	}
+
+	/**
+	 * Waits without blocking Swing dispatch; only detached data may be in flight.
+	 *
+	 * @param register registers a callback that ends the wait.
+	 */
+	private void awaitOwner(java.util.function.Consumer<Runnable> register) {
+		java.awt.SecondaryLoop loop = java.awt.Toolkit.getDefaultToolkit().getSystemEventQueue()
+				.createSecondaryLoop();
+		java.util.concurrent.atomic.AtomicBoolean finished = new java.util.concurrent.atomic.AtomicBoolean();
+		register.accept(() -> {
+			finished.set(true);
+			loop.exit();
+		});
+		if (!finished.get()) {
+			synchronousWaitDepth++;
+			try {
+				persistenceWaitHandler.accept(true);
+				if (!finished.get() && !loop.enter()) {
+					throw new IllegalStateException("Cannot dispatch while waiting for persistence");
+				}
+			} finally {
+				synchronousWaitDepth--;
+				if (synchronousWaitDepth == 0) {
+					persistenceWaitHandler.accept(false);
+				}
+			}
+		}
+	}
+
+	/** Drains issued saves, including writes started by another drain continuation. */
+	private void drainSaves() {
+		do {
+			awaitOwner(saves::whenIdle);
+		} while (saves.isBusy());
+	}
+
+	/**
+	 * Performs persistence IO on the single worker while Swing continues dispatching.
+	 *
+	 * @param operation detached IO operation.
+	 * @param <T> result type.
+	 * @return IO result.
+	 */
+	private <T> T workerIo(java.util.concurrent.Callable<T> operation) {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			return onOwner(() -> workerIo(operation));
+		}
+		java.util.concurrent.atomic.AtomicReference<T> result = new java.util.concurrent.atomic.AtomicReference<>();
+		java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
+		awaitOwner(done -> persistenceWorker.execute(() -> {
+			try {
+				result.set(operation.call());
+			} catch (Throwable problem) {
+				failure.set(problem);
+			} finally {
+				SwingUtilities.invokeLater(done);
+			}
+		}));
+		if (failure.get() instanceof RuntimeException runtime) {
+			throw runtime;
+		}
+		if (failure.get() != null) {
+			throw new IllegalStateException("Incident IO failed", failure.get());
+		}
+		return result.get();
 	}
 
 	/**
@@ -351,7 +643,7 @@ public class AppController implements AutoCloseable {
 	 * @return true when previous plans exist or another saved incident can be browsed.
 	 */
 	public boolean canReusePlans() {
-		return hasPreviousPlans() || store != null && store.list().stream()
+		return hasPreviousPlans() || store != null && workerIo(store::list).stream()
 				.anyMatch(summary -> summary.incidentId() != null
 						&& !summary.incidentId().equals(activeIncidentId));
 	}
@@ -375,7 +667,15 @@ public class AppController implements AutoCloseable {
 	 * @param interaction modal plan selection and import interaction.
 	 */
 	public void withPlanReuseEditors(Runnable interaction) {
-		beforePlanReuse.run();
+		boolean previousFlushing = flushingEditors;
+		flushingEditors = true;
+		try {
+			if (!previousFlushing) {
+				beforePlanReuse.run();
+			}
+		} finally {
+			flushingEditors = previousFlushing;
+		}
 		try {
 			interaction.run();
 		} finally {
@@ -394,7 +694,7 @@ public class AppController implements AutoCloseable {
 		if (store == null || incidentId == null || incidentId.equals(activeIncidentId)) {
 			throw new IllegalArgumentException("Choose another saved incident.");
 		}
-		AppData source = store.load(incidentId);
+		AppData source = workerIo(() -> store.load(incidentId));
 		List<AppData.OperationalPeriodRecord> sources = new ArrayList<>();
 		AppData.OperationalPeriodRecord current = PlanReuseService.snapshot(source);
 		if (!PlanReuseService.availablePlans(current).isEmpty() || PlanReuseService.hasIcs215Plan(current)) {
@@ -561,7 +861,7 @@ public class AppController implements AutoCloseable {
 	 * @return true only while the exact incident generation remains active.
 	 */
 	public boolean isCurrent(IncidentBinding binding) {
-		return !closed && binding != null && binding.dataIdentity() == data
+		return !closed && !atomicSave && binding != null && binding.dataIdentity() == data
 				&& binding.generation() == incidentGeneration;
 	}
 
@@ -833,20 +1133,80 @@ public class AppController implements AutoCloseable {
 
 	/**
 	 * Replaces the active document and synchronizes linked defaults. A preparation
-	 * failure retains the previous active document and editor state.
+	 * failure retains the previous active document and editor state. Unsaved work
+	 * must be saved or explicitly discarded before replacement.
 	 *
 	 * @param data
 	 *            new active document.
+	 * @throws RuntimeException when unsaved work or preparation failure prevents replacement.
 	 */
 	public void setData(AppData data) {
+		replaceData(data, false);
+	}
+
+	/**
+	 * Replaces the document after the caller explicitly approves discarding local
+	 * edits and retained recovery work. Issued writes cannot be undone, so they
+	 * must settle before the replacement is installed or persistence is rebound.
+	 *
+	 * @param data new active document.
+	 * @throws IllegalStateException when an atomic editor commit is pending.
+	 */
+	public void discardUnsavedChangesAndSetData(AppData data) {
+		replaceData(data, true);
+	}
+
+	/**
+	 * Installs a prepared document only after replacement has been authorized.
+	 *
+	 * @param data candidate document.
+	 * @param discardUnsavedChanges whether the caller explicitly approved discard.
+	 */
+	private void replaceData(AppData data, boolean discardUnsavedChanges) {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			onOwner(() -> {
+				replaceData(data, discardUnsavedChanges);
+				return null;
+			});
+			return;
+		}
+		if (atomicSave) {
+			throw new IllegalStateException("An atomic editor commit is being persisted.");
+		}
+		if (discardUnsavedChanges) {
+			drainSaves();
+		} else {
+			requireSavedForReplacement();
+		}
 		AppData replacement = data == null ? createDefaultData() : data;
 		prepareDocument(replacement);
+		autosaveTimer.stop();
 		this.data = replacement;
 		dirty = false;
 		activeLinkSource = LinkSource.NONE;
 		incidentGeneration++;
 		modelRevision++;
+		editVersion++;
+		bindPersistence();
 		publishIncidentChange(IncidentChangeKind.INCIDENT_REPLACED);
+	}
+
+	/**
+	 * Rejects replacement without changing the active binding or retained work.
+	 *
+	 * @throws RuntimeException when persistence failed or local work is unsaved.
+	 */
+	private void requireSavedForReplacement() {
+		PersistenceStatus status = saves.status();
+		if (status.failure() != null) {
+			throw status.failure();
+		}
+		if (dirty || status.durability() != PersistenceStatus.Durability.SAVED
+				|| !saves.pendingChanges().isEmpty()) {
+			throw new IllegalStateException(
+					"Unsaved incident work prevents replacement. Save successfully, export recovery data, "
+							+ "or explicitly discard local changes before replacing the document.");
+		}
 	}
 
 	/**
@@ -877,6 +1237,20 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
+	 * Accounts for a retained editor draft without pretending its incomplete text is
+	 * already a committed model change. Autosave will flush all editors before capture.
+	 */
+	public void markEditorDraftDirty() {
+		if (closed || atomicSave) {
+			return;
+		}
+		dirty = true;
+		editVersion++;
+		saves.markDirty(editVersion);
+		autosaveTimer.restart();
+	}
+
+	/**
 	 * Marks the document dirty, synchronizes linked fields, and schedules autosave.
 	 *
 	 * @param source
@@ -886,8 +1260,13 @@ public class AppController implements AutoCloseable {
 		if (closed) {
 			return;
 		}
+		if (atomicSave) {
+			throw new IllegalStateException("Wait for the atomic editor commit before editing.");
+		}
 		dirty = true;
 		modelRevision++;
+		editVersion++;
+		saves.markDirty(editVersion);
 		if (source != LinkSource.NONE) {
 			activeLinkSource = source;
 		}
@@ -950,6 +1329,7 @@ public class AppController implements AutoCloseable {
 		if (closed) {
 			return;
 		}
+		drainSaves();
 		closed = true;
 		autosaveTimer.stop();
 		incidentGeneration++;
@@ -959,12 +1339,17 @@ public class AppController implements AutoCloseable {
 		}
 		incidentChangeListeners.clear();
 		if (store != null && activeIncidentId != null) {
-			store.editLocks().ifPresent(locks -> {
+			workerIo(() -> {
+				store.editLocks().ifPresent(locks -> {
 				if (locks.isHeldByCaller(activeIncidentId)) {
 					locks.unlock(activeIncidentId);
 				}
+				});
+				return null;
 			});
 		}
+		saves.close();
+		persistenceWorker.shutdown();
 	}
 
 	/**
@@ -975,10 +1360,22 @@ public class AppController implements AutoCloseable {
 	 * @throws RuntimeException when edits or persistence fail, after restoring the model.
 	 */
 	public void persistEditorChanges(Runnable edits) {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			onOwner(() -> {
+				persistEditorChanges(edits);
+				return null;
+			});
+			return;
+		}
+		if (atomicSave) {
+			throw new IllegalStateException("An atomic editor commit is already pending.");
+		}
+		drainSaves();
 		EditorModelSnapshot snapshot = new EditorModelSnapshot();
 		snapshot.capture(data);
 		boolean previousDirty = dirty;
 		long previousRevision = modelRevision;
+		long previousEditVersion = editVersion;
 		LinkSource previousSource = activeLinkSource;
 		boolean pendingAutosave = autosaveTimer.isRunning();
 		boolean previousSuppression = suppressChangeNotifications;
@@ -986,14 +1383,40 @@ public class AppController implements AutoCloseable {
 			suppressChangeNotifications = true;
 			edits.run();
 			markDirty();
-			save();
+			atomicSave = true;
+			SaveRequest request = captureSave(activeLinkSource);
+			EditorModelSnapshot committed = new EditorModelSnapshot();
+			committed.capture(data);
+			snapshot.restore();
+			dirty = previousDirty;
+			modelRevision = previousRevision;
+			autosaveTimer.stop();
+			saves.submit(request);
+			if (saves.status().failure() != null) {
+				saves.retry();
+			}
+			drainSaves();
+			if (saves.status().failure() != null) {
+				throw saves.status().failure();
+			}
+			committed.restore();
+			modelRevision = previousRevision + 1;
+			if (store != null && request instanceof FullDocumentSnapshot full) {
+				copyPersistenceMetadata(full.snapshot());
+			}
+			dirty = false;
+			atomicSave = false;
+			persistenceStatusChanged(saves.status());
 			suppressChangeNotifications = previousSuppression;
 		} catch (RuntimeException exception) {
+			atomicSave = false;
 			suppressChangeNotifications = previousSuppression;
 			autosaveTimer.stop();
 			snapshot.restore();
 			dirty = previousDirty;
 			modelRevision = previousRevision;
+			editVersion = previousEditVersion;
+			bindPersistence();
 			activeLinkSource = previousSource;
 			if (pendingAutosave) {
 				autosaveTimer.restart();
@@ -1139,21 +1562,31 @@ public class AppController implements AutoCloseable {
 	 * @throws RuntimeException when persistence fails, retaining unsaved edits.
 	 */
 	public void save(LinkSource source) {
-		synchronizeLinkedFields(source);
-		syncSarTasks();
-		if (store == null) {
-			repository.save(data);
-		} else {
+		onOwner(() -> {
+			if (closed) {
+				return null;
+			}
+			if (atomicSave) {
+				throw new IllegalStateException("An atomic editor commit is pending.");
+			}
 			try {
-				storedRevision = store.save(activeIncidentId, data, storedRevision);
+				SaveRequest request = captureSave(source);
+				autosaveTimer.stop();
+				saves.submit(request);
+				if (saves.status().failure() != null) {
+					saves.retry();
+				}
+				drainSaves();
+				if (saves.status().failure() != null) {
+					throw saves.status().failure();
+				}
 			} catch (RuntimeException failure) {
 				dirty = true;
 				autosaveTimer.stop();
 				throw failure;
 			}
-		}
-		dirty = false;
-		autosaveTimer.stop();
+			return null;
+		});
 	}
 
 	/**
@@ -1178,10 +1611,7 @@ public class AppController implements AutoCloseable {
 	 */
 	public void saveAs(Path path, LinkSource source) {
 		if (store == null) {
-			synchronizeLinkedFields(source);
-			syncSarTasks();
-			new LocalRepository(path).save(data);
-			dirty = false;
+			exportUnsavedIncident(path, source);
 		} else {
 			exportIncident(path, source);
 		}
@@ -1195,7 +1625,29 @@ public class AppController implements AutoCloseable {
 	 */
 	public void exportIncident(Path path, LinkSource source) {
 		save(source);
-		store.exportFile(activeIncidentId, path);
+		IncidentId id = activeIncidentId;
+		workerIo(() -> {
+			store.exportFile(id, path);
+			return null;
+		});
+	}
+
+	/**
+	 * Writes current unsaved editor content independently of backend availability.
+	 * Export does not mark that content durable in its incident store.
+	 *
+	 * @param path recovery destination.
+	 * @param source authoritative linked-field source.
+	 */
+	public void exportUnsavedIncident(Path path, LinkSource source) {
+		onOwner(() -> {
+			AppData snapshot = captureSave(source).snapshot();
+			workerIo(() -> {
+				new LocalRepository(path).save(snapshot);
+				return null;
+			});
+			return null;
+		});
 	}
 
 	/**
@@ -1212,12 +1664,12 @@ public class AppController implements AutoCloseable {
 			if (path == null) {
 				return false;
 			}
-			FileIncidentStore.ImportResult result = FileIncidentStore.readImport(path);
+			FileIncidentStore.ImportResult result = workerIo(() -> FileIncidentStore.readImport(path));
 			setData(result.data());
 			lastImportProblems = result.problems();
 			return true;
 		}
-		IncidentId imported = store.importFile(path).orElse(null);
+		IncidentId imported = workerIo(() -> store.importFile(path)).orElse(null);
 		if (imported == null) {
 			return false;
 		}
@@ -1241,6 +1693,17 @@ public class AppController implements AutoCloseable {
 	 * @return identifier of the duplicate.
 	 */
 	public IncidentId duplicateIncident() {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			return onOwner(this::duplicateIncident);
+		}
+		if (!flushingEditors) {
+			flushingEditors = true;
+			try {
+				beforePlanReuse.run();
+			} finally {
+				flushingEditors = false;
+			}
+		}
 		AppData copy;
 		try {
 			copy = INCIDENT_COPIER.readValue(INCIDENT_COPIER.writeValueAsBytes(data), AppData.class);
@@ -1251,23 +1714,49 @@ public class AppController implements AutoCloseable {
 		copy.setCreatedAt(null);
 		copy.setUpdatedAt(null);
 		copy.setOriginNodeId(null);
-		IncidentId duplicate = store.create(copy);
-		activateCreatedIncident(duplicate, copy);
+		IncidentId duplicate = workerIo(() -> store.create(copy));
+		activateCreatedIncident(duplicate, copy, true);
 		return duplicate;
 	}
 
 	/**
-	 * Opens a saved incident, leaving the active one unchanged if loading fails.
+	 * Opens a saved incident only after issued writes drain and the active document
+	 * is saved. Failed or incomplete saves and failed loads retain local work.
 	 *
 	 * @param incidentId identifier to open.
+	 * @throws RuntimeException when unsaved work or a load failure prevents opening.
 	 */
 	public void open(IncidentId incidentId) {
+		open(incidentId, false);
+	}
+
+	/**
+	 * Loads a candidate without discarding local work until replacement succeeds.
+	 *
+	 * @param incidentId identifier to open.
+	 * @param discardUnsavedChanges whether the caller explicitly approved recovery.
+	 */
+	private void open(IncidentId incidentId, boolean discardUnsavedChanges) {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			onOwner(() -> {
+				open(incidentId, discardUnsavedChanges);
+				return null;
+			});
+			return;
+		}
+		if (atomicSave) {
+			throw new IllegalStateException("An atomic editor commit is pending.");
+		}
+		drainSaves();
+		if (!discardUnsavedChanges) {
+			requireSavedForReplacement();
+		}
 		IncidentId previousId = activeIncidentId;
 		boolean acquired = claimEditLock(incidentId);
 		StoredIncident loaded;
 		try {
-			loaded = store.loadSnapshot(incidentId);
-			setData(loaded.data());
+			loaded = workerIo(() -> store.loadSnapshot(incidentId));
+			replaceData(loaded.data(), discardUnsavedChanges);
 		} catch (RuntimeException exception) {
 			if (acquired) {
 				releaseFailedSwitchLock(incidentId, exception);
@@ -1277,7 +1766,46 @@ public class AppController implements AutoCloseable {
 		autosaveTimer.stop();
 		activeIncidentId = incidentId;
 		storedRevision = loaded.revision();
+		bindPersistence();
 		releasePreviousLock(previousId);
+	}
+
+	/**
+	 * Explicitly replaces the active document from its store between editor callbacks.
+	 * The caller must have explicitly approved discarding local changes. A failed
+	 * load refreshes the retained document rather than discarding its drafts.
+	 */
+	public void replaceActiveDocumentFromStore() {
+		replaceActiveDocumentFromStore(activeIncidentId);
+	}
+
+	/**
+	 * Restores an explicitly chosen stored incident after a failed multi-step switch.
+	 * The caller explicitly authorizes discarding the current document's local work.
+	 *
+	 * @param incidentId stored identity to restore.
+	 */
+	public void replaceActiveDocumentFromStore(IncidentId incidentId) {
+		onOwner(() -> {
+			withPlanReuseEditors(() -> open(incidentId, true));
+			return null;
+		});
+	}
+
+	/** Releases the configured store on a worker after this controller has drained saves. */
+	public void closeStore() {
+		if (store == null) {
+			return;
+		}
+		java.util.concurrent.CompletableFuture<Void> release =
+				java.util.concurrent.CompletableFuture.runAsync(store::close);
+		onOwner(() -> {
+			awaitOwner(done -> release.whenComplete((ignored, failure) -> SwingUtilities.invokeLater(done)));
+			if (release.isCompletedExceptionally()) {
+				release.join();
+			}
+			return null;
+		});
 	}
 
 	/**
@@ -1287,7 +1815,10 @@ public class AppController implements AutoCloseable {
 	 */
 	private void releasePreviousLock(IncidentId previousId) {
 		if (previousId != null && !previousId.equals(activeIncidentId)) {
-			store.editLocks().ifPresent(locks -> locks.unlock(previousId));
+			workerIo(() -> {
+				store.editLocks().ifPresent(locks -> locks.unlock(previousId));
+				return null;
+			});
 		}
 	}
 
@@ -1300,13 +1831,13 @@ public class AppController implements AutoCloseable {
 	 */
 	private boolean claimEditLock(IncidentId incidentId) {
 		if (store != null && incidentId != null) {
-			return store.editLocks().map(locks -> {
+			return workerIo(() -> store.editLocks().map(locks -> {
 				boolean alreadyOwned = locks.isHeldByCaller(incidentId);
 				if (locks.isLockedElsewhere(incidentId) || !locks.lock(incidentId)) {
 					throw new StoreLockConflictException("Incident is open in another window: " + incidentId.value());
 				}
 				return !alreadyOwned;
-			}).orElse(false);
+			}).orElse(false));
 		}
 		return false;
 	}
@@ -1319,7 +1850,10 @@ public class AppController implements AutoCloseable {
 	 */
 	private void releaseFailedSwitchLock(IncidentId incidentId, RuntimeException failure) {
 		try {
-			store.editLocks().ifPresent(locks -> locks.unlock(incidentId));
+			workerIo(() -> {
+				store.editLocks().ifPresent(locks -> locks.unlock(incidentId));
+				return null;
+			});
 		} catch (RuntimeException cleanupFailure) {
 			failure.addSuppressed(cleanupFailure);
 		}
@@ -1330,13 +1864,14 @@ public class AppController implements AutoCloseable {
 	 *
 	 * @param incidentId created identity.
 	 * @param created newly persisted document.
+	 * @param discardUnsavedChanges whether the original work is preserved in a duplicate.
 	 */
-	private void activateCreatedIncident(IncidentId incidentId, AppData created) {
+	private void activateCreatedIncident(IncidentId incidentId, AppData created, boolean discardUnsavedChanges) {
 		RevisionToken revision;
 		boolean acquired = claimEditLock(incidentId);
 		try {
 			revision = store.revisionToken(created);
-			setData(created);
+			replaceData(created, discardUnsavedChanges);
 		} catch (RuntimeException failure) {
 			if (acquired) {
 				releaseFailedSwitchLock(incidentId, failure);
@@ -1347,6 +1882,7 @@ public class AppController implements AutoCloseable {
 		autosaveTimer.stop();
 		activeIncidentId = incidentId;
 		storedRevision = revision;
+		bindPersistence();
 		releasePreviousLock(previousId);
 	}
 
@@ -1404,12 +1940,25 @@ public class AppController implements AutoCloseable {
 	 * Creates and activates an incident after applying its startup preferences.
 	 *
 	 * @param created new incident with its phase, mode, and preferences configured.
+	 * @throws RuntimeException when unsaved work prevents replacement or creation fails.
 	 */
 	public void createNewIncident(AppData created) {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			onOwner(() -> {
+				createNewIncident(created);
+				return null;
+			});
+			return;
+		}
+		if (atomicSave) {
+			throw new IllegalStateException("An atomic editor commit is pending.");
+		}
+		requireSavedForReplacement();
 		prepareDocument(created);
 		if (store != null) {
-			IncidentId id = store.create(created);
-			activateCreatedIncident(id, created);
+			AppData detached = FullDocumentSnapshot.detach(created);
+			IncidentId id = workerIo(() -> store.create(detached));
+			activateCreatedIncident(id, detached, false);
 		} else {
 			setData(created);
 			markDirty();
@@ -1427,6 +1976,8 @@ public class AppController implements AutoCloseable {
 	 * {@link org.sarmanagement.icsforms.model.AppData#advanceToNewOperationalPeriod()}
 	 * for the full list of fields that are reset.
 	 * </p>
+	 *
+	 * @throws RuntimeException when unsaved work prevents advancing the period.
 	 */
 	public void newOperationalPeriod() {
 		newOperationalPeriod(false);
@@ -1436,6 +1987,7 @@ public class AppController implements AutoCloseable {
 	 * Advances the period with an explicit choice to carry communications data forward.
 	 *
 	 * @param bringForwardCommunicationsPlan whether to deep-copy ICS 205 channels and instructions.
+	 * @throws RuntimeException when unsaved work prevents advancing the period.
 	 */
 	public void newOperationalPeriod(boolean bringForwardCommunicationsPlan) {
 		newOperationalPeriod(bringForwardCommunicationsPlan, false);
@@ -1446,8 +1998,21 @@ public class AppController implements AutoCloseable {
 	 *
 	 * @param bringForwardCommunicationsPlan whether to carry forward ICS 205 data.
 	 * @param promotePlannedIcs215 true to apply the next worksheet's target dates.
+	 * @throws RuntimeException when unsaved work prevents advancing the period.
 	 */
 	public void newOperationalPeriod(boolean bringForwardCommunicationsPlan, boolean promotePlannedIcs215) {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			onOwner(() -> {
+				newOperationalPeriod(bringForwardCommunicationsPlan, promotePlannedIcs215);
+				return null;
+			});
+			return;
+		}
+		if (atomicSave) {
+			throw new IllegalStateException("An atomic editor commit is pending.");
+		}
+		drainSaves();
+		requireSavedForReplacement();
 		data.advanceToNewOperationalPeriod(bringForwardCommunicationsPlan, promotePlannedIcs215);
 		ensureDefaults(data);
 		activeLinkSource = initialLinkSource(data);
@@ -1458,6 +2023,9 @@ public class AppController implements AutoCloseable {
 		autosaveTimer.restart();
 		incidentGeneration++;
 		modelRevision++;
+		editVersion++;
+		bindPersistence();
+		saves.markDirty(editVersion);
 		publishIncidentChange(IncidentChangeKind.OPERATIONAL_PERIOD_CHANGED);
 	}
 
@@ -1513,9 +2081,8 @@ public class AppController implements AutoCloseable {
 	 *             when export fails.
 	 */
 	public Path exportSelected(String formKey, Path outputDirectory, LinkSource source) throws IOException {
-		synchronizeLinkedFields(source);
-		syncSarTasks();
-		return exportService.exportSelected(formKey, data, outputDirectory);
+		AppData snapshot = exportSnapshot(source);
+		return exportIo(() -> exportService.exportSelected(formKey, snapshot, outputDirectory));
 	}
 
 	/**
@@ -1543,10 +2110,8 @@ public class AppController implements AutoCloseable {
 	 *             when export fails.
 	 */
 	public java.util.Map<String, Path> exportAll(Path outputDirectory, LinkSource source) throws IOException {
-		synchronizeLinkedFields(source);
-		syncSarTasks();
-		syncTCards();
-		return exportService.exportAll(data, outputDirectory);
+		AppData snapshot = exportSnapshot(source);
+		return exportIo(() -> exportService.exportAll(snapshot, outputDirectory));
 	}
 
 	/**
@@ -1561,10 +2126,8 @@ public class AppController implements AutoCloseable {
 	 *             when export or merge fails.
 	 */
 	public Path exportIapBundle(Path outputDirectory, LinkSource source) throws IOException {
-		synchronizeLinkedFields(source);
-		syncSarTasks();
-		syncTCards();
-		return exportService.exportIapBundle(data, outputDirectory);
+		AppData snapshot = exportSnapshot(source);
+		return exportIo(() -> exportService.exportIapBundle(snapshot, outputDirectory));
 	}
 
 	/**
@@ -1587,13 +2150,11 @@ public class AppController implements AutoCloseable {
 	 */
 	public java.util.Map<String, Path> exportSelectedForms(List<String> formKeys, Path outputDirectory,
 			LinkSource source) throws IOException {
-		synchronizeLinkedFields(source);
-		syncSarTasks();
-		syncTCards();
+		AppData snapshot = exportSnapshot(source);
 		List<String> supported = formKeys == null ? List.of()
 				: formKeys.stream().distinct().filter(exportService::supports).toList();
 		return supported.isEmpty() ? new LinkedHashMap<>()
-				: exportService.exportForms(supported, data, outputDirectory);
+				: exportIo(() -> exportService.exportForms(supported, snapshot, outputDirectory));
 	}
 
 	/**
@@ -1607,10 +2168,8 @@ public class AppController implements AutoCloseable {
 	 */
 	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source)
 			throws IOException {
-		synchronizeLinkedFields(source);
-		syncSarTasks();
-		syncTCards();
-		return exportService.exportIapBundle(data, outputDirectory, formKeys);
+		AppData snapshot = exportSnapshot(source);
+		return exportIo(() -> exportService.exportIapBundle(snapshot, outputDirectory, formKeys));
 	}
 
 	/**
@@ -1629,7 +2188,7 @@ public class AppController implements AutoCloseable {
 		List<String> supported = formKeys == null ? List.of()
 				: formKeys.stream().distinct().filter(exportService::supports).toList();
 		return supported.isEmpty() ? new LinkedHashMap<>()
-				: exportService.exportForms(supported, exportData, outputDirectory);
+				: exportIo(() -> exportService.exportForms(supported, exportData, outputDirectory));
 	}
 
 	/**
@@ -1670,7 +2229,8 @@ public class AppController implements AutoCloseable {
 		List<String> supported = formKeys == null ? List.of()
 				: formKeys.stream().distinct().filter(exportService::supports).toList();
 		return supported.isEmpty() ? new LinkedHashMap<>()
-				: exportService.exportForms(supported, snapshot, outputDirectory, ics205Orientation, ics233Orientation);
+				: exportIo(() -> exportService.exportForms(supported, snapshot, outputDirectory,
+						ics205Orientation, ics233Orientation));
 	}
 
 	/**
@@ -1710,8 +2270,9 @@ public class AppController implements AutoCloseable {
 	 */
 	public Path exportSelectedIapBundle(List<String> formKeys, Path outputDirectory, LinkSource source,
 			boolean portrait, boolean ics205NativeLandscape) throws IOException {
-		return exportService.exportIapBundle(createPrintSnapshot(source, portrait), outputDirectory, formKeys,
-				ics205NativeLandscape);
+		AppData snapshot = createPrintSnapshot(source, portrait);
+		return exportIo(() -> exportService.exportIapBundle(snapshot, outputDirectory, formKeys,
+				ics205NativeLandscape));
 	}
 
 	/**
@@ -1750,7 +2311,8 @@ public class AppController implements AutoCloseable {
 		java.util.Objects.requireNonNull(ics233Orientation, "ics233Orientation");
 		AppData snapshot = createPrintSnapshot(source, ics233Orientation == PdfOrientation.PORTRAIT);
 		snapshot.setIcs215ExportNextPeriod(ics215NextPeriod);
-		return exportService.exportIapBundle(snapshot, outputDirectory, formKeys, ics205Orientation, ics233Orientation);
+		return exportIo(() -> exportService.exportIapBundle(snapshot, outputDirectory, formKeys,
+				ics205Orientation, ics233Orientation));
 	}
 
 	/**
@@ -1762,13 +2324,41 @@ public class AppController implements AutoCloseable {
 	 * @throws IOException when the incident cannot be copied
 	 */
 	private AppData createPrintSnapshot(LinkSource source, boolean portrait) throws IOException {
-		synchronizeLinkedFields(source);
-		syncSarTasks();
-		syncTCards();
-		AppData snapshot = INCIDENT_COPIER.readValue(INCIDENT_COPIER.writeValueAsBytes(data), AppData.class);
+		AppData snapshot = exportSnapshot(source);
 		snapshot.setIcs233Portrait(portrait);
 		snapshot.setClueLogIcs233Enabled(false);
 		return snapshot;
+	}
+
+	/**
+	 * Captures flushed editor data on Swing before handing it to an export worker.
+	 *
+	 * @param source authoritative linked-field source.
+	 * @return detached export document.
+	 */
+	private AppData exportSnapshot(LinkSource source) {
+		return onOwner(() -> {
+			return captureSave(source).snapshot();
+		});
+	}
+
+	/**
+	 * Preserves checked export errors while performing all rendering and file IO off Swing.
+	 *
+	 * @param operation detached export operation.
+	 * @param <T> export result type.
+	 * @return export result.
+	 * @throws IOException when rendering or publishing fails.
+	 */
+	private <T> T exportIo(java.util.concurrent.Callable<T> operation) throws IOException {
+		try {
+			return workerIo(operation);
+		} catch (IllegalStateException failure) {
+			if (failure.getCause() instanceof IOException io) {
+				throw io;
+			}
+			throw failure;
+		}
 	}
 
 	/**

@@ -43,6 +43,17 @@ import java.util.Optional;
  */
 public interface IncidentStore extends AutoCloseable {
 	/**
+	 * Selects the save retry policy at the persistence boundary. The default
+	 * requires an explicit retry; backends may supply bounded retries or backoff.
+	 * Conflicts always require recovery regardless of this policy.
+	 *
+	 * @return policy for consecutive save failures.
+	 */
+	default RetryPolicy saveRetryPolicy() {
+		return RetryPolicy.explicit();
+	}
+
+	/**
 	 * Creates an incident without replacing an existing one.
 	 *
 	 * @param data
@@ -232,6 +243,22 @@ public interface IncidentStore extends AutoCloseable {
 	 * @throws UnsupportedOperationException when local transfers are not supported
 	 */
 	void exportFile(IncidentId id, Path target);
+
+	/**
+	 * Validates a client-side document export destination without reading an incident
+	 * or contacting the backend. Stores with managed local files must reject targets
+	 * that could overwrite those files, including filesystem aliases. This safety
+	 * query remains usable when the store is unavailable or closed so recovery
+	 * export does not require a successful store operation.
+	 *
+	 * @param target requested client-local destination
+	 * @return normalized destination that the caller must use for writing
+	 * @throws StoreValidationException when the destination overlaps managed files
+	 * @throws StorePersistenceException when local path safety cannot be established
+	 */
+	default Path validateLocalExportTarget(Path target) {
+		return target.toAbsolutePath().normalize();
+	}
 
 	/**
 	 * Reports whether this store supports safe, non-overwriting backups.

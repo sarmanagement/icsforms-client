@@ -385,6 +385,53 @@ Import, export, and backup paths always refer to the client's local filesystem,
 regardless of the backend's location. These full-document operations do not rule
 out future per-record tokens, partial saves, outbox logs, or server change cursors.
 
+Autosave flushes editor drafts on Swing's event thread, then hands detached work
+to a serialized background persistence coordinator. Edits made while a save is
+in flight remain pending; only a completion for the active incident, binding
+generation, and represented edit can mark that edit durable. Full document
+snapshots can coalesce, but the `SaveRequest` contract leaves this policy to the
+unit type: ordered operations need not discard intermediate work. Accepted
+revisions remain opaque, including server-issued tokens.
+`FullDocumentSnapshot` is the only production save-unit implementation. Legacy
+single-document repositories use a save-only store adapter, so their saves also
+receive detached snapshots off the EDT without adding another unit type.
+
+The persistence indicator distinguishes **pending**, **saving**, **saved**,
+**conflicted**, **failed**, and **unavailable**. Saved means durable in the
+configured store, not synchronized with a remote authority; synchronization is
+a separate status dimension (currently not applicable). Failed and unavailable
+writes retain work for retry. Switching, closing, and stored-document export
+coordinate with issued saves; recovery export writes the current detached,
+unsaved document without requiring a successful store save. Direct `open()`,
+`setData()`, and operational-period replacement reject dirty, pending, or failed
+work until a save succeeds. Rejected replacement leaves the active document,
+status, and retained save requests intact. Callers choosing to discard local work
+can use `discardUnsavedChangesAndSetData()` or an explicitly approved store reload.
+Explicit discard waits for issued saves to settle before installing the document
+or rebinding persistence; only then can retained unsaved work be discarded.
+New-incident creation checks replacement eligibility before creating or locking
+a candidate; rejection preserves the active work without leaving an unused incident.
+Store reload and
+failed-switch restoration use the same editor-flush/refresh replacement path,
+which can also be invoked without a user dialog; the caller is responsible for
+obtaining approval to discard. Reload failure still retains local work.
+Recovery destinations still obey backend-owned local-file safety checks; they
+cannot overwrite live incident documents or node metadata through filesystem
+aliases, even when persistence has failed.
+
+`RetryPolicy` is replaceable by a backend: explicit retry, bounded immediate
+retry, and delayed backoff do not change scheduling or completion matching.
+`IncidentStore.saveRetryPolicy()` defaults to explicit retry. The file store
+selects at most two immediate retries after the initial save attempt, within the
+same drain; exhaustion retains work for manual retry or recovery. Conflicts never
+retry automatically. Other stores can override the policy at the persistence boundary.
+`FullDocumentSnapshotTest` measures capture on the EDT without a timing-based
+pass/fail threshold. On Java 17 in the development runner, a fixture with 2,000
+resources, 500 tasks, 500 clues, and 10 archived periods took a median **10.81 ms**
+over seven captures after warm-up. Larger payloads should be measured rather
+than sharing live editor models; per-record units are the intended next step if
+copy cost becomes significant.
+
 **`validation/`** contains pre-export checks. `IncidentValidator` walks the model and collects `ValidationMessage` instances for any required fields that are missing or invalid, blocking PDF export until the workspace is clean.
 
 ## Build
