@@ -5,7 +5,7 @@
 ### What the system is for
 
 `icsforms-client` supports the command post of an incident run under the
-Incident Command System.  It is intended to scale It lets a person in the
+Incident Command System. It lets a person in the
 incident management or an incident management team produce and keep current
 the documents an incident runs on — ICS 201–208, 214, 215/215A, medical and
 communications plans, T-cards, including SAR specific extensions for SAR
@@ -24,6 +24,9 @@ an advisory edit lock. The core SAR form set is complete. Focused role panels
 separate human/canine medical reference windows exist alongside the full editor
 workspace. The Issue #46 implementation scope is delivered; the integration
 acceptance record below distinguishes automated and user-confirmed evidence.
+The Stage 1 persistence issues are merged: local saves use detached snapshots
+and a background coordinator, with backend-neutral revision and failure seams.
+This is still standalone operation, not a local-host deployment.
 
 ### Where it is going
 
@@ -58,31 +61,33 @@ Three ideas carry the whole design:
 
 ### How we get there
 
-Work proceeds in two independent streams, then converges:
+The two standalone preparation streams have delivered their tracked work:
 
-- **Role-panel completion** (Part I, #46): finish the outstanding #33 scope in the
-  standalone application — no network, no authentication.
+- **Role-panel completion** (Part I, #46): the outstanding #33 scope is
+  delivered in the standalone application — no network, no authentication.
 - **Persistence foundation** (Part IV, Stage 1): make the existing `IncidentStore`
   seam backend-neutral and asynchronous, with contract tests, strict imports,
   durable identity migration, UTC time and a provenance seam — still no network
-  code. Tracked by #39–#44 (#37, UTC timestamps, is already closed). Its exit
-  test is that a remote store stub drops
-  into the controller with no UI change.
-- **Then** Stage 2 adds the incident API and the first local host (T1); Stage 3
-  adds the trust boundary, operator claim, roles and audit (T2); Stages 4–7 add
-  offline sync, field-host packaging, hosted deployment and a mobile client (T3).
+  code. #37 and #39–#44 are closed and their changes merged. The remaining
+  Stage 1 exit evidence is assessed in Part IV.
+- **Next**, finish Stage 0's written decisions and resolve the remaining Stage 1
+  exit evidence before beginning Stage 2, which adds the incident API and the
+  first local host (T1). Stage 3 expands the trust boundary, operator claim,
+  roles and audit; Stages 4–7 add offline sync, field-host packaging, hosted
+  deployment and a mobile client.
 
 Every stage ends with a usable, recoverable standalone application. Nothing in
 the later stages is allowed to make the solo-laptop case harder.
 
 ### How to read this document
 
-**Status date:** 2026-11-04. Status entries are based on the committed source
-tree, named regression tests, CI results, and the user-confirmed desktop checks
-recorded below—not on issue or PR closure state alone.
+**Status date:** 2026-11-08, against master at `6119235`. Status entries are
+based on the committed source tree, named regression tests, CI results, and the
+user-confirmed desktop checks recorded below—not on issue or PR closure state
+alone. Historical acceptance records retain their original dates.
 
 - **Part I — Current status:** what is delivered, what remains of the role-panel
-  plan, and where each open issue sits.
+  plan, and where the completed foundation issues sit.
 - **Part II — Design contracts:** binding invariants for all role-panel and
   persistence work.
 - **Part III — Architecture and topologies:** target architecture, the device
@@ -98,8 +103,8 @@ recorded below—not on issue or PR closure state alone.
 | Core SAR form set (ICS 203, 205, 215A/208, 206 + canine 206, ICS 233-CG clue log), training fixes | #13, #14, #15, #16, #17, #18 — all closed | Models, panels and PDF renderers for each form are in `src/main/java/org/sarmanagement/icsforms/{model,ui,pdf}`; IAP bundle numbering in `pdf/PdfExportService.java` | **Complete.** Former "Stage A" is no longer a prerequisite. |
 | ICS 215 planning worksheet and next-period tactics | #35 — closed | `model/Ics215Form.java`, `ui/Ics215Panel.java` | **Complete.** |
 | SAR task status ↔ ICS 214 integration, ICS 204 PDF layout | #19, #20 — closed | `ui/SarTaskPanel.java`, `pdf/Ics204PdfRenderer.java` | **Complete.** |
-| File-backed `IncidentStore` with UUID identity, revision checks, per-incident edit locks and backups | PR #34 and predecessors | `persistence/IncidentStore.java`, `persistence/FileIncidentStore.java`, `persistence/IncidentDocumentReader.java` | **Complete for standalone use;** contract hardening tracked in Part IV. |
-| Live local role panels (ten-phase plan) | #33 — closed; PR #32 merged 2026-10-26; remaining implementation tracked by #46 | See phase table and acceptance record below | **Implementation delivered.** Automated coverage and user-confirmed desktop checks are recorded separately below. |
+| File-backed `IncidentStore` with UUID identity, revision checks, per-incident edit locks and backups | PR #34 and predecessors; hardening in #39–#42 | `persistence/IncidentStore.java`, `persistence/FileIncidentStore.java`, `persistence/IncidentDocumentReader.java` | **Complete for standalone use;** backend-neutral contract and asynchronous saving are delivered. |
+| Live local role panels (ten-phase plan) | #33 and #46 — closed; PRs #32 and #48 merged | See phase table and acceptance record below | **Implementation delivered.** Automated coverage and user-confirmed desktop checks are recorded separately below. |
 
 ### Live local role panels — delivery status by phase
 
@@ -145,18 +150,22 @@ This work is independent of the persistence roadmap in Part IV and must not be
 blocked on it; conversely, it must not introduce network, authentication or
 remote persistence features.
 
-### Open issues and their place in the plan
+### Completed foundation issues and their place in the plan
 
-| Issue | Title (short) | Plan location |
+| Issue | Delivered by | Plan location |
 | --- | --- | --- |
-| #37 | Timestamps are not consistent — **closed by PR #38** | Part IV, Stage 1, gate T1 — complete |
-| #39 | Persistence contract coverage; fake `IncidentStore` — implementation complete; merge/closure pending | Part IV, Stage 1, gate P1 |
-| #40 | External validation vs. tolerant load; durable identity migration; entity ID audit | Part IV, Stage 1, gate P3 |
-| #41 | Backend-neutral `IncidentStore` concurrency/failure semantics | Part IV, Stage 1, gate P2 |
-| #42 | Asynchronous snapshot-based persistence | Part IV, Stage 1, gate P4 |
-| #43 | Deterministic Swing test lifecycle; displayed-test CI | Part IV, Stage 1, gate P0 |
-| #44 | Provenance seam and injected operator context | Part IV, Stage 1, gate T2 |
-| #46 | Complete live role panels (remaining #33 scope) | Part I — role-panel stream, independent of Part IV |
+| #37 — UTC timestamps and display timezone | PR #38 | Part IV, Stage 1, time gate T1 |
+| #39 — persistence contract coverage and controllable store | PR #51 | Part IV, Stage 1, P1 |
+| #40 — import validation and durable identity migration | PR #52 | Part IV, Stage 1, P3 |
+| #41 — backend-neutral concurrency and failure semantics | PR #53 | Part IV, Stage 1, P2 |
+| #42 — asynchronous snapshot-based persistence | PR #55 | Part IV, Stage 1, P4 |
+| #43 — deterministic Swing lifecycle and displayed-test CI | PR #47 | Part IV, Stage 1, P0 |
+| #44 — provenance seam and operator context | PR #54 | Part IV, Stage 1, time gate T2 |
+| #46 — complete live role panels | PR #48 | Part I — independent role-panel stream |
+| #49 — communications console mode | PR #50 | Part I — communications role-panel extension |
+
+These issues are closed and their PRs merged. Their closure does not by itself
+establish that every stage-level exit criterion below has been demonstrated.
 
 ---
 
@@ -384,14 +393,16 @@ edit a local incident.
 
 | Topology | Description | Persistence | Identity and trust |
 | --- | --- | --- | --- |
-| **T0 Standalone** | One device, one operator, no network. Today's application. | `FileIncidentStore` (local JSON) | Operating-system user; optional locally entered operator name (#44). |
+| **T0 Standalone** | One device, one operator, no network. Today's application. | `FileIncidentStore` (local JSON) | Operating-system user; injectable operator context defaults to blank (#44). |
 | **T1 Local host** | Several workstations on incident Wi-Fi; one of them runs the authoritative incident service (embedded in the desktop application or as a small local process) and houses the store. No internet required. | Host: file or embedded database. Clients: `RemoteIncidentStore` over an incident-scoped API, with a durable local cache/outbox. | Device admission by invitation (QR/short code) issued by an incident administrator; device-bound revocable credential; operator claim per workstation. |
 | **T2 Networked store, mixed clients** | A networked persistence service (field host or site server) with multiple client devices: single-user phones/tablets and multi-user shared workstations. | Same API as T1; service may be backed by a database. | Same device trust boundary as T1. Shared workstations distinguish *device admission* (once) from *operator claim* (per shift). |
 | **T3 Hosted** | Cloud-hosted authoritative service with remote access and read-only mirrors; planned authority transfer between field and hosted. | Managed database; encrypted export/import for transfer. | Same boundary plus durable administrator accounts and TLS host identity. |
 
+The table describes the eventual topologies, not features already delivered.
 Stage 1 (Part IV) prepares T0 for T1 without implementing any network code.
-Stage 2 delivers T1. Stage 3 delivers the trust boundary needed for T2. Stages 4–7
-deliver offline sync, field-host packaging, T3 and the mobile client.
+Stage 2 delivers the initial T1 host and basic device admission. Stage 3 expands
+the trust boundary and adds operator claim; Stage 4 adds the durable outbox and
+offline sync. Later stages add field-host packaging, T3 and the mobile client.
 
 ### Device trust boundary and low-friction joining
 
@@ -557,25 +568,30 @@ Stage 1; it must finish before Stage 2 begins.
 
 **Exit criteria:** written decisions, threat and recovery assumptions, first
 API/domain boundary, success measures, and a deliberately limited T1 pilot plan.
+**Status:** not yet evidenced as complete in the repository. The topology and
+design contracts below describe targets, not a record that all required decisions,
+threat/recovery assumptions, API boundaries, success measures and pilot scope have
+been agreed. Record those decisions before starting Stage 2 implementation.
 **Rough size:** 1–2 person-weeks.
 
 ### Stage 1 — Local persistence foundation (prerequisite for any remote store)
 
 Stage 1 makes the existing standalone application ready to accept a remote
 `IncidentStore` without controller or UI change. It adds **no network code, no
-authentication and no server**. The gates below are ordered by dependency; each
-is an open issue and must be complete, with its tests, before the next begins
-except where noted.
+authentication and no server**. The gates below are ordered by dependency; all
+tracked issues are closed and their implementations merged. Stage-level exit
+evidence is assessed separately after the table. The time gates T1 and T2 below
+are not the similarly named deployment topologies.
 
 | Gate | Issue | Scope | Depends on | Exit evidence |
 | --- | --- | --- | --- | --- |
-| **P0** | #43 | Deterministic Swing test lifecycle: explicit controller shutdown, disposed windows/listeners/timers, bounded modal tests, separate headless and Xvfb CI lanes. | — | Full and isolated runs repeatable; displayed lane reports skipped tests; unexpected persistence errors fail tests rather than block. |
-| **P1** | #39 | Contract test suite for `IncidentStore`; controllable fake store with deterministic failures and delays; controller/UI tests moved off deprecated `LocalRepository`. | P0 | `AbstractIncidentStoreContractTest` covers restart durability, detached loads, stable identity, concurrent/stale writes, deletion conflicts, and failed operations; `ControllableIncidentStore` supports one-shot failures and latch gates. General controller/UI tests use `IncidentStoreTestFixtures`; `LocalRepository` remains in compatibility tests. |
-| **P2** | #41 | Backend-neutral `IncidentStore` semantics: opaque revision token, optional edit-lock capability (UI never requires a lock to edit), revision-protected delete, path-free `IncidentSummary`, distinct conflict / validation / not-found / duplicate / unavailable / failed outcomes. No `instanceof FileIncidentStore` in UI. | P1 | A lock-less stub store with server-issued tokens substitutes into `AppController` without controller/UI changes; contract tests pass for both. |
-| **P3** | #40 | Strict external import vs. tolerant stored load; durable, repeatable identity migration; **entity ID audit** confirming every list-held record has a stable UUID and no form identifies rows by index/text. | P1 | Fixtures for missing IDs, legacy aliases, unknown fields, malformed versions; repeated loads yield identical IDs; invalid imports leave the store unchanged. |
+| **P0** | #43 — complete (PR #47) | Deterministic Swing test lifecycle: explicit controller shutdown, disposed windows/listeners/timers, bounded modal tests, separate headless and Xvfb CI lanes. | — | Full and isolated runs repeatable; displayed lane reports skipped tests; unexpected persistence errors fail tests rather than block. |
+| **P1** | #39 — complete (PR #51) | Contract test suite for `IncidentStore`; controllable fake store with deterministic failures and delays; controller/UI tests moved off deprecated `LocalRepository`. | P0 | `AbstractIncidentStoreContractTest` covers file-store compatibility; `AbstractSnapshotIncidentStoreContractTest` covers the shared snapshot/token contract. `ControllableIncidentStore` supports one-shot failures and latch gates. General controller/UI tests use `IncidentStoreTestFixtures`; `LocalRepository` remains in compatibility tests. |
+| **P2** | #41 — complete (PR #53) | Backend-neutral `IncidentStore` semantics: opaque revision token, optional edit-lock capability (UI never requires a lock to edit), revision-protected delete, path-free `IncidentSummary`, distinct conflict / validation / not-found / duplicate / unavailable / failed outcomes. No `instanceof FileIncidentStore` in UI. | P1 | A lockless, pathless in-memory `RemoteIncidentStore` test double uses opaque server-style tokens in controller tests; file and test-double implementations run the shared snapshot contract. |
+| **P3** | #40 — complete (PR #52) | Strict external import vs. tolerant stored load; durable, repeatable identity migration; **entity ID audit** confirming every list-held record has a stable UUID and no form identifies rows by index/text. | P1 | Fixtures for missing IDs, legacy aliases, unknown fields, malformed versions; repeated loads yield identical IDs; invalid imports leave the store unchanged. |
 | **T1** | #37 — **complete** (PR #38) | All timestamps generated and stored in UTC through `model/UtcTimestamp` injectable clock; displayed and printed in the configured zone. | — | Delivered 2026-10-31; `UtcTimestamp` is the only timestamp source. |
-| **T2** | #44 | `Provenance` (operator name, station ID, entered-at UTC, reserved accepted-at) on append-style records; injected `OperatorContext` in `AppController`; one schema bump with fixtures. | P3, T1 | Legacy documents load unchanged; new entries carry provenance from context; ICS 214 "prepared by" prefilled only when blank. |
-| **P4** | #42 | Asynchronous persistence coordinator on detached snapshots with an abstract unit of work; "replace active document from store" path; two-dimension status (local durability vs. future sync state); failure retention and retry policy. | P0, P1, P2, P3 | Deterministic tests for out-of-order completion, incident switch during save, edits during save, failure→retry, unavailable→available; second unit type substitutes without coordinator changes. |
+| **T2** | #44 — complete (PR #54) | `Provenance` (operator name, station ID, entered-at UTC, reserved accepted-at) on append-style records; injected `OperatorContext` in `AppController`; one schema bump with fixtures. | P3, T1 | Legacy documents load unchanged; new entries carry provenance from a nonempty injected context; ICS 214 "prepared by" is prefilled only when blank. |
+| **P4** | #42 — complete (PR #55) | Asynchronous persistence coordinator on detached snapshots with an abstract unit of work; "replace active document from store" path; two-dimension status (local durability vs. future sync state); failure retention and retry policy. | P0, P1, P2, P3 | Deterministic tests for out-of-order completion, incident switch during save, edits during save, failure→retry, unavailable→available; second unit type substitutes without coordinator changes. |
 
 T-card check-in history is appended only after an accepted edit changes the check-in
 time; corrections retain prior events and record the newly selected effective time.
@@ -639,13 +655,31 @@ Sanitized synthetic historical JSON fixtures live in
 purpose, and expected migration. When a supported schema or migration changes,
 contributors should add or update a representative fixture and its assertions.
 
-Parallelism: T1 is done. P2 and P3 can proceed in parallel once
-P1 lands. T2 follows P3. P4 is last and is the gate for Stage 2.
-
 **Stage exit criteria:** all gates closed; released-format fixtures load and
 round-trip; migrations preserve data and identity; exports unchanged; the
 standalone application behaves as before; a `RemoteIncidentStore` stub passes the
 contract suite in a spike branch (not merged).
+
+**Exit assessment, 2026-11-08:** all tracked gates are closed and merged.
+Historical fixture, migration, export and standalone regression coverage is in
+the merged tree. PR #55 CI at `c64edc1` passed the Java 17 headless suite
+(1,073 tests, 140 skipped), displayed Xvfb suite (1,073 tests, none skipped),
+and Spotless/Checkstyle. This is automated evidence, not a new field exercise.
+The merged test-only, lockless `RemoteIncidentStore` double passes the shared
+snapshot/token contract alongside the file store and is exercised through
+`AppController`; no separate unmerged spike branch was found. That provides
+substantial substitute-store evidence but does not literally satisfy the stated
+spike-branch criterion or demonstrate a network-backed store. Either complete
+the specified spike or explicitly accept the merged double as equivalent
+evidence before marking the stage exit complete.
+
+**Topology T0 / T1 readiness:** standalone T0 and the tracked foundation work
+are delivered; T1 local-host functionality has not been built. Planning and
+Stage 0 decisions can proceed now. Stage 2 implementation is not yet a cleared
+start under this plan: Stage 0 decisions must be recorded and the remaining
+Stage 1 exit-evidence decision above must be resolved. This does not require
+building an API, authentication or an outbox in Stage 1.
+
 **Rough size:** 4–7 person-weeks.
 
 ### Stage 2 — Incident API and single local host (delivers T1)
@@ -672,11 +706,12 @@ per-record optimistic concurrency, host-populated `acceptedAt`, and audit histor
 keyed by device and operator. Build clear conflict and stale-update UX. Keep the
 first role set to the five roles in Part III.
 
-Stage 1 establishes the provenance fields and controller seam only. Until operator
-claim is delivered, standalone deployments use a locally entered operator name or
-leave it blank, with no station identifier. The Stage 3 claim populates operator
-and station attribution for new records; only the authoritative host sets
-`acceptedAt`. Existing records without provenance remain unattributed.
+Stage 1 establishes the provenance fields and controller seam only. The production
+standalone startup currently uses the empty default `OperatorContext`; it does not
+wire a locally entered name to that context. Injected nonempty contexts are covered
+by tests. The Stage 3 claim is intended to populate operator and station attribution
+for new records; only the authoritative host sets `acceptedAt`. Existing records
+without provenance remain unattributed.
 
 **Exit criteria:** a responder joins with a scoped invitation in under a minute;
 shared-workstation operator switch is one action; administrators see and revoke
@@ -735,7 +770,7 @@ documented.
 | Step | Where | What |
 | --- | --- | --- |
 | 1 | Stage 1 gate T1 (#37, done) | UTC generation and storage; zone-aware display and print. |
-| 2 | Stage 1 gate T2 (#44) | `Provenance` on append-style records; injected `OperatorContext`; `acceptedAt` reserved and unused locally. |
+| 2 | Stage 1 gate T2 (#44, done) | `Provenance` on append-style records; injected `OperatorContext` seam; `acceptedAt` reserved and unused locally. |
 | 3 | Stage 2 | Host records receive time; device clocks treated as untrusted for ordering. |
 | 4 | Stage 3 | Host populates `acceptedAt`; operator claim fills `operatorName`/`stationId`; audit history keyed by device and operator. |
 | 5 | Stage 4 | Ordered host change cursor replaces wall-clock ordering for sync; local timestamps retained for display and audit. |
