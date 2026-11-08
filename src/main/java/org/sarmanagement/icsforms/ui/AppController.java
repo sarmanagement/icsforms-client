@@ -914,7 +914,11 @@ public class AppController implements AutoCloseable {
 				suppressChangeNotifications = previousSuppression;
 				return true;
 			}
-			markDirty(source);
+			if (outermostCommit) {
+				recordModelCommit(source);
+			} else {
+				markDirty(source);
+			}
 			if (outermostCommit) {
 				transactionEditorCommitGuards.forEach(EditorCommitGuard::rebase);
 			}
@@ -948,7 +952,7 @@ public class AppController implements AutoCloseable {
 	 */
 	private byte[] serializedEditorState() {
 		try {
-			return INCIDENT_COPIER.writeValueAsBytes(data);
+			return UiRefreshState.serialize(data);
 		} catch (IOException exception) {
 			throw new IllegalStateException("Unable to compare editor state", exception);
 		}
@@ -1279,8 +1283,28 @@ public class AppController implements AutoCloseable {
 	 *
 	 * @param source
 	 *            source tab for linked role values.
+	 * @throws IllegalStateException when an atomic save is in progress.
 	 */
 	public void markDirty(LinkSource source) {
+		if (closed) {
+			return;
+		}
+		if (atomicSave) {
+			throw new IllegalStateException("Wait for the atomic editor commit before editing.");
+		}
+		if (editorCommitDepth > 0) {
+			return;
+		}
+		recordModelCommit(source);
+	}
+
+	/**
+	 * Accounts for a committed model change after an editor transaction has changed content.
+	 *
+	 * @param source authoritative editor for linked fields.
+	 * @throws IllegalStateException when an atomic save is in progress.
+	 */
+	private void recordModelCommit(LinkSource source) {
 		if (closed) {
 			return;
 		}

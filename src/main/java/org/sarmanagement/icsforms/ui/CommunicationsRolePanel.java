@@ -42,6 +42,7 @@ import java.util.function.Consumer;
 public class CommunicationsRolePanel extends JPanel {
 	private static final DateTimeFormatter CHECK_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	private final AppController controller;
+	private final UiRefreshState refreshState = new UiRefreshState();
 	private final Consumer<WorkspaceDestination> navigator;
 	private final Runnable importCsv;
 	private final Runnable exportCsv;
@@ -135,8 +136,12 @@ public class CommunicationsRolePanel extends JPanel {
 	 * identity and unsaved focused input.
 	 */
 	public void refreshFromModel() {
-		refreshing = true;
 		AppData data = controller.getData();
+		if (!refreshState.roleChanged(data, data.getForm205(), data.getAllAssignmentResources(),
+				data.getSarTaskAssignments(), editorDirty)) {
+			return;
+		}
+		refreshing = true;
 		String selectedId = selectedChannelId();
 		if (selectedId.isBlank()) {
 			selectedId = loadedChannelId;

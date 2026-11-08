@@ -83,6 +83,7 @@ public class IncidentCommandRolePanel extends JPanel {
 
 	private static final DateTimeFormatter APPROVAL_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	private final AppController controller;
+	private final UiRefreshState refreshState = new UiRefreshState();
 	private final Consumer<WorkspaceDestination> navigator;
 	private final AssignmentActions assignmentActions;
 	private final AppController.IncidentBinding binding;
@@ -158,8 +159,14 @@ public class IncidentCommandRolePanel extends JPanel {
 	 * Refreshes recorded command facts while retaining approval drafts being typed.
 	 */
 	public void refreshFromModel() {
-		refreshing = true;
 		AppData data = controller.getData();
+		if (!refreshState.roleChanged(data, data.getIapPlanningStage(), data.getForm202(),
+				data.getAllAssignmentResources(), data.getSarTaskAssignments(), data.getForm205(),
+				data.getForm215a(), data.getForm208(), data.getMedicalPlan(), data.getCanineMedicalPlan(),
+				showObjectiveAssessments, approvalDraftDirty)) {
+			return;
+		}
+		refreshing = true;
 		RolePanelSupport.banner(banner, "INCIDENT COMMAND", data.getIncidentContext().getIncidentName(),
 				"Operational period: " + periodLabel(data)
 						+ " | Recorded resource states, not readiness certification");

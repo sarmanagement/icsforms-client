@@ -88,7 +88,7 @@ public class AsyncFormPreviewPanel extends JPanel {
 		AppData snapshot;
 		String key;
 		try {
-			byte[] content = COPIER.writeValueAsBytes(source);
+			byte[] content = UiRefreshState.serialize(source);
 			key = renderer.getFormKey() + ":" + contentKey + ":"
 					+ java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
 			if (key.equals(currentKey)) {

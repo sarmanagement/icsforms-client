@@ -37,6 +37,8 @@ public class SafetyRolePanel extends JPanel {
 	private static final String HUMAN_REVIEW = "Human medical plan review";
 	private static final String CANINE_REVIEW = "Canine medical plan review";
 	private final AppController controller;
+	private final UiRefreshState refreshState = new UiRefreshState();
+	private boolean refreshingWorklist;
 	private final Consumer<WorkspaceDestination> navigator;
 	private final AppController.IncidentBinding binding;
 	private final DefaultListModel<String> workModel = new DefaultListModel<>();
@@ -87,7 +89,7 @@ public class SafetyRolePanel extends JPanel {
 		installFocusedDraftListeners();
 		showAll.addActionListener(event -> refreshFromModel());
 		worklist.addListSelectionListener(event -> {
-			if (!event.getValueIsAdjusting()) {
+			if (!event.getValueIsAdjusting() && !refreshingWorklist) {
 				refreshSelectedItem();
 			}
 		});
@@ -117,6 +119,13 @@ public class SafetyRolePanel extends JPanel {
 			cancelPreviews();
 			return;
 		}
+		AppData data = controller.getData();
+		if (!refreshState.roleChanged(data, data.getForm202(), data.getForm205(), data.getForm215a(),
+				data.getForm208(), data.getMedicalPlan(), data.getCanineMedicalPlan(),
+				data.getSarTaskAssignments(), data.getStagingLocation(), data.getIncidentLocations(),
+				showAll.isSelected(), focusedEditsDirty)) {
+			return;
+		}
 		String selected = worklist.getSelectedValue();
 		if (!focusedEditsDirty) {
 			loadingFocusedEdits = true;
@@ -125,6 +134,7 @@ public class SafetyRolePanel extends JPanel {
 			loadingFocusedEdits = false;
 		}
 		planBadges.refreshFromModel(controller.getData());
+		refreshingWorklist = true;
 		rebuildWorklist();
 		if (selected != null) {
 			worklist.setSelectedValue(selected, true);
@@ -132,6 +142,7 @@ public class SafetyRolePanel extends JPanel {
 		if (worklist.getSelectedIndex() < 0 && !workModel.isEmpty()) {
 			worklist.setSelectedIndex(0);
 		}
+		refreshingWorklist = false;
 		safetyReview.refreshFromModel();
 		humanReview.refreshFromModel();
 		canineReview.refreshFromModel();

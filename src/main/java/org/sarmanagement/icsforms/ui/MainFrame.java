@@ -146,6 +146,8 @@ public class MainFrame extends JFrame {
 	private boolean safetyDashboardManuallyVisible;
 	private IapPhase lastKnownPhase;
 	private AppData lastRefreshedIncident;
+	private final Map<Component, UiRefreshState> editorRefreshStates = new IdentityHashMap<>();
+	private final UiRefreshState tabRefreshState = new UiRefreshState();
 	private final Set<Ics214Form> closedLogForms = new HashSet<>();
 	private AppData lastData;
 	private AppController.EditorCommitBinding editorCommitBinding;
@@ -342,7 +344,7 @@ public class MainFrame extends JFrame {
 				}
 			}
 			if (previousRevision != controller.captureEditorCommitBinding().revision()) {
-				refreshFromModel();
+				refreshFromModel(false);
 			}
 			lastSelectedTabIndex = tabs.getSelectedIndex();
 		});
@@ -1414,6 +1416,7 @@ public class MainFrame extends JFrame {
 	/**
 	 * Flushes all editor fields and synchronizes linked document data.
 	 * @param source editor that initiated synchronization
+	 * @return true when all editors accepted the flush.
 	 */
 	private boolean pushToModel(AppController.LinkSource source) {
 		if (!pendingDraftComponents.isEmpty()) {
@@ -1553,6 +1556,20 @@ public class MainFrame extends JFrame {
 
 	/** Reloads panel state from the active incident document. */
 	private void refreshFromModel() {
+		refreshFromModel(true);
+	}
+
+	/**
+	 * Refreshes changed editor inputs, reserving full reloads for structural changes.
+	 *
+	 * @param fullRefresh whether every editor must be reloaded.
+	 */
+	private void refreshFromModel(boolean fullRefresh) {
+		AppData data = controller.getData();
+		ensureLogs(data);
+		fullRefresh |= tabRefreshState.changed(data, data.getIncidentMode(), data.getIapPhase(),
+				data.isOpenActionTrackerEnabled(), data.isIcs205Enabled(), data.isIcs215Enabled(),
+				data.isCanineMedicalWorkspaceEligible(), activityLogTabState(data), configuredZoneId(data).getId());
 		if (lastRefreshedIncident != null && lastRefreshedIncident != controller.getData()) {
 			canineMedicalManuallyOpened = false;
 		}
@@ -1560,19 +1577,31 @@ public class MainFrame extends JFrame {
 		applyConfiguredTimeZone();
 		Component selectedComponent = tabs.getSelectedComponent();
 		int selectedLogIndex = selectedLogIndex(selectedComponent);
-		incidentContextPanel.refreshFromModel();
-		organizationalChartPanel.refreshFromModel();
-		ics201Panel.refreshFromModel();
-		ics202Panel.refreshFromSharedModelChange();
-		ics204Panel.refreshFromModel();
-		ics205Panel.refreshFromModel();
-		ics215Panel.refreshFromModel();
-		medicalPlanPanel.refreshFromModel();
-		canineMedicalPanel.refreshFromModel();
+		refreshEditor(fullRefresh, incidentContextPanel, incidentContextPanel::refreshFromModel,
+				data.getIncidentLocations(), data.getCanineRoutingBaseLocationId(), data.getOperationalPeriodHistory());
+		refreshEditor(fullRefresh, organizationalChartPanel, organizationalChartPanel::refreshFromModel,
+				data.getForm207(), data.getMedicalUnitLeaderAssignment());
+		refreshEditor(fullRefresh, ics201Panel, ics201Panel::refreshFromModel, data.getForm201());
+		refreshEditor(fullRefresh, ics202Panel, ics202Panel::refreshFromSharedModelChange,
+				data.getForm202(), data.getMedicalPlan(), data.getCanineMedicalPlan());
+		refreshEditor(fullRefresh, ics204Panel, ics204Panel::refreshFromModel,
+				data.getForm202(), data.getForm204(), data.getAdditionalForms204(), data.getSarTaskAssignments());
+		refreshEditor(fullRefresh, ics205Panel, ics205Panel::refreshFromModel, data.getForm205());
+		refreshEditor(fullRefresh, ics215Panel, ics215Panel::refreshFromModel,
+				data.getForm215(), data.getNextPeriodForm215());
+		refreshEditor(fullRefresh, medicalPlanPanel, medicalPlanPanel::refreshFromModel,
+				data.getMedicalPlan(), data.getMedicalUnitLeaderAssignment());
+		refreshEditor(fullRefresh, canineMedicalPanel, canineMedicalPanel::refreshFromModel,
+				data.getCanineMedicalPlan(), data.getMedicalPlan(), data.getVetDirectory(), data.getStagingLocation(),
+				data.getIncidentLocations(), data.getCanineRoutingBaseLocationId());
 		medicalWorkspacePanel.setCanineVisible(
 				canineMedicalManuallyOpened || controller.getData().isCanineMedicalWorkspaceEligible());
-		safetyPanel.refreshFromModel();
-		safetyDashboardPanel.refreshFromModel(controller.getData());
+		refreshEditor(fullRefresh, safetyPanel, safetyPanel::refreshFromModel,
+				data.getForm215a(), data.getForm208(), data.getSarTaskAssignments(),
+				data.getCommonSafetyHazards(), data.getArchivedSafetyHazardReports());
+		refreshEditor(fullRefresh, safetyDashboardPanel, () -> safetyDashboardPanel.refreshFromModel(data),
+				data.getForm215a(), data.getForm208(), data.getMedicalPlan(), data.getCanineMedicalPlan(),
+				data.getStagingLocation(), data.getPdfLayoutSettings());
 		if (lastData != controller.getData()) {
 			closedLogForms.clear();
 			activityLogInstanceIds.clear();
@@ -1582,12 +1611,20 @@ public class MainFrame extends JFrame {
 		} else {
 			closedLogForms.retainAll(controller.getData().getActivityLogs());
 		}
-		ensureLogs(controller.getData());
-		rebuildLogTabs();
-		sarTaskPanel.refreshFromModel();
-		clueLogPanel.refreshFromModel();
-		openActionTrackerPanel.refreshFromModel();
-		tCardPanel.refreshFromModel();
+		if (fullRefresh) {
+			rebuildLogTabs();
+		}
+		for (Ics214Panel panel : ics214Panels) {
+			refreshEditor(fullRefresh, panel, () -> panel.loadFromModel(panel.getCurrentForm(), data),
+					panel.getCurrentForm());
+		}
+		refreshEditor(fullRefresh, sarTaskPanel, sarTaskPanel::refreshFromModel,
+				data.getSarTaskAssignments(), data.getClueLogEntries(), data.getActivityEventTypes());
+		refreshEditor(fullRefresh, clueLogPanel, clueLogPanel::refreshFromModel,
+				data.getClueLogEntries(), data.getSarTaskAssignments());
+		refreshEditor(fullRefresh, openActionTrackerPanel, openActionTrackerPanel::refreshFromModel,
+				data.getOpenActionItems());
+		refreshEditor(fullRefresh, tCardPanel, tCardPanel::refreshFromModel, data.getSarTaskAssignments());
 		// Keep SAR-only tabs visible only in SAR mode.
 		groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
 		groupVisible.put(SAFETY_DASHBOARD_GROUP, safetyDashboardManuallyVisible);
@@ -1608,12 +1645,48 @@ public class MainFrame extends JFrame {
 			groupVisible.put(ICS_201_GROUP, currentPhase == IapPhase.INITIAL_RESPONSE);
 			lastKnownPhase = currentPhase;
 		}
-		rebuildVisibleTabs(selectedComponent, selectedLogIndex);
-		UiSupport.applyDateTimeDisplayZone(this);
+		if (fullRefresh) {
+			rebuildVisibleTabs(selectedComponent, selectedLogIndex);
+			UiSupport.applyDateTimeDisplayZone(this);
+		}
 		refreshStatus();
 		editorCommitBinding = controller.captureEditorCommitBinding();
 		controller.rebaseEditorCommitGuards(editorCommitBinding);
 		captureEditorTextBaselines();
+		tabRefreshState.changed(data, data.getIncidentMode(), data.getIapPhase(),
+				data.isOpenActionTrackerEnabled(), data.isIcs205Enabled(), data.isIcs215Enabled(),
+				data.isCanineMedicalWorkspaceEligible(), activityLogTabState(data), configuredZoneId(data).getId());
+	}
+
+	/**
+	 * Captures log identities, order, and titles without treating entry edits as tab changes.
+	 *
+	 * @param data active incident.
+	 * @return tab-relevant log inputs.
+	 */
+	private List<String> activityLogTabState(AppData data) {
+		return data.getActivityLogs().stream()
+				.map(form -> activityLogInstanceId(form) + ":" + shortLogTabTitle(form, data)).toList();
+	}
+
+	/**
+	 * Reloads an editor only when its shared or form-specific display inputs change.
+	 *
+	 * @param fullRefresh whether to force reloading.
+	 * @param component editor identity.
+	 * @param refresh editor reload callback.
+	 * @param inputs form-specific display dependencies.
+	 */
+	private void refreshEditor(boolean fullRefresh, Component component, Runnable refresh, Object... inputs) {
+		AppData data = controller.getData();
+		boolean changed = editorRefreshStates.computeIfAbsent(component, ignored -> new UiRefreshState())
+				.changed(data, data.getIncidentContext(), data.getOrganizationalChart(), data.getTCards(),
+						data.getAllAssignmentResources(), configuredZoneId(data).getId(), inputs);
+		if (fullRefresh || changed) {
+			refresh.run();
+			editorRefreshStates.get(component).changed(data, data.getIncidentContext(), data.getOrganizationalChart(),
+					data.getTCards(), data.getAllAssignmentResources(), configuredZoneId(data).getId(), inputs);
+		}
 	}
 
 	/**
@@ -2161,10 +2234,13 @@ public class MainFrame extends JFrame {
 			return;
 		}
 		try {
+			long previousRevision = controller.captureEditorCommitBinding().revision();
 			if (!pushToModel(linkSourceForTab(tabs.getSelectedIndex()))) {
 				return;
 			}
-			refreshFromModel();
+			if (previousRevision != controller.captureEditorCommitBinding().revision()) {
+				refreshFromModel(false);
+			}
 		} catch (RuntimeException exception) {
 			showSaveError(exception);
 			return;

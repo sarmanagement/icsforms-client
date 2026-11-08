@@ -58,6 +58,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 	private static final DateTimeFormatter CHECK_TIME = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
 			.withResolverStyle(java.time.format.ResolverStyle.STRICT);
 	private final AppController controller;
+	private final UiRefreshState refreshState = new UiRefreshState();
 	private final AppController.IncidentBinding binding;
 	private final AppController.IncidentChangeSubscription subscription;
 	private final DefaultListModel<TaskChoice> taskModel = new DefaultListModel<>();
@@ -173,6 +174,12 @@ public final class CommunicationsConsolePanel extends JPanel {
 	/** Refreshes projections while retaining stable selections, filters and entered drafts. */
 	public void refreshFromModel() {
 		if (disposed || !controller.isCurrent(binding)) {
+			return;
+		}
+		AppData data = controller.getData();
+		if (!refreshState.changed(data, data.getSarTaskAssignments(), data.getAllAssignmentResources(),
+				data.getForm205(), data.getTCards(), data.getActivityLogs(),
+				MainFrame.configuredZoneId(data).getId())) {
 			return;
 		}
 		rememberCheckDraft();

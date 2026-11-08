@@ -41,6 +41,7 @@ import java.util.function.Supplier;
 public class OperationsRolePanel extends JPanel {
 	private static final DateTimeFormatter PERIOD_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	private final AppController controller;
+	private final UiRefreshState refreshState = new UiRefreshState();
 	private final Supplier<ResourceAssignment> newAssignment;
 	private final Consumer<String> editTask;
 	private final Consumer<String> changeStatus;
@@ -157,10 +158,14 @@ public class OperationsRolePanel extends JPanel {
 
 	/** Refreshes the board while retaining task and resource selection identities. */
 	public void refreshFromModel() {
+		AppData data = controller.getData();
+		if (!refreshState.roleChanged(data, data.getForm202(), data.getAllAssignmentResources(),
+				data.getSarTaskAssignments())) {
+			return;
+		}
 		String selectedAssignment = selectedTask() == null ? "" : selectedTask().getAssignmentId();
 		List<String> selectedResources = availableResources.getSelectedValuesList().stream()
 				.map(ResourceChoice::resourceId).toList();
-		AppData data = controller.getData();
 		String start = data.getIncidentContext().getOperationalPeriodStart() == null
 				? "unspecified"
 				: UiSupport.formatDateTime(data.getIncidentContext().getOperationalPeriodStart(), PERIOD_TIME);

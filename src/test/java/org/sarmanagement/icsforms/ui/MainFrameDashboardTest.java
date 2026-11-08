@@ -4,6 +4,8 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
@@ -50,15 +52,34 @@ class MainFrameDashboardTest {
 		assertEquals("ICS 214 – ICP", MainFrame.activityLogTabLabel(log, "ICS 214 – ICP", false));
 	}
 
-	@Test
-	void unchangedTabSwitchRetainsComponentsWithoutCommitting() throws Exception {
+	@ParameterizedTest
+	@ValueSource(booleans = {false, true})
+	void unchangedTabSwitchRetainsComponentsWithoutCommitting(boolean populated) throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		var directory = Files.createTempDirectory("icsforms-tab-flicker");
 		var notifications = new java.util.ArrayList<AppController.IncidentChange>();
 		MainFrame[] frame = new MainFrame[1];
 		try {
 			SwingUtilities.invokeAndWait(() -> {
-				frame[0] = IncidentStoreTestFixtures.frame(new AppData(), directory,
+				AppData data = new AppData();
+				if (populated) {
+					var timestamp = java.time.LocalDateTime.of(2026, 11, 8, 14, 30, 27, 123456789);
+					data.setIapPhase(org.sarmanagement.icsforms.model.IapPhase.DURING_OP);
+					data.getIncidentContext().setIncidentName("Populated incident");
+					data.getIncidentContext().setOperationalPeriodStart(timestamp);
+					data.getIncidentContext().setOperationalPeriodEnd(timestamp.plusHours(12));
+					data.getForm202().setObjectives(List.of("Search the north sector"));
+					data.getForm201().setPreparedDateTime(timestamp);
+					data.getForm202().setApprovedDateTime(timestamp);
+					data.getForm204().setPreparedDateTime(timestamp);
+					data.getForm215a().setPreparedDateTime(timestamp);
+					data.getForm208().setPreparedDateTime(timestamp);
+					data.getMedicalPlan().setPreparedAt(timestamp);
+					data.getCanineMedicalPlan().setPreparedAt(timestamp);
+					data.setIcs205Enabled(true);
+					data.setIcs215Enabled(true);
+				}
+				frame[0] = IncidentStoreTestFixtures.frame(data, directory,
 						new PdfExportService(), new IncidentValidator(), directory);
 				AppController controller = (AppController) Ics205PanelTest.field(frame[0], "controller");
 				JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame[0], "tabs");
@@ -73,11 +94,21 @@ class MainFrameDashboardTest {
 				});
 				controller.addIncidentChangeListener(notifications::add);
 				var binding = controller.captureEditorCommitBinding();
-				tabs.setSelectedIndex(1);
-				assertEquals(1, tabs.getSelectedIndex());
+				var baseline = UiRefreshStateTest.modelState(data);
+				for (int pass = 0; pass < 2; pass++) {
+					for (int index = 1; index < tabs.getTabCount(); index++) {
+						tabs.setSelectedIndex(index);
+						assertEquals(index, tabs.getSelectedIndex());
+					}
+					frame[0].openWorkspace(WorkspaceDestination.of(WorkspaceId.SHARED));
+					assertEquals(0, tabs.getSelectedIndex());
+				}
 				assertEquals(0, removals.get());
 				assertEquals(components, java.util.stream.IntStream.range(0, tabs.getTabCount())
 						.mapToObj(tabs::getComponentAt).toList());
+				var after = UiRefreshStateTest.modelState(data);
+				baseline.fields().forEachRemaining(entry ->
+						assertEquals(entry.getValue(), after.get(entry.getKey()), entry.getKey()));
 				assertEquals(binding, controller.captureEditorCommitBinding());
 				assertFalse(controller.hasUnsavedChanges());
 				assertFalse(((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).isRunning());
@@ -102,14 +133,28 @@ class MainFrameDashboardTest {
 		MainFrame[] frame = new MainFrame[1];
 		try {
 			SwingUtilities.invokeAndWait(() -> {
-				frame[0] = IncidentStoreTestFixtures.frame(new AppData(), directory,
+				AppData data = new AppData();
+				AppController.ensureDefaultHeaderCards(data.getTCards(), data.getIapPhase());
+				frame[0] = IncidentStoreTestFixtures.frame(data, directory,
 						new PdfExportService(), new IncidentValidator(), directory);
 				AppController controller = (AppController) Ics205PanelTest.field(frame[0], "controller");
 				controller.addIncidentChangeListener(notifications::add);
-				Object panel = Ics205PanelTest.field(frame[0], "incidentContextPanel");
-				((javax.swing.JTextField) Ics205PanelTest.field(panel, "incidentNameField")).setText("Edited incident");
+				javax.swing.JTable cards = (javax.swing.JTable) Ics205PanelTest.field(
+						Ics205PanelTest.field(frame[0], "tCardPanel"), "table");
+				java.util.concurrent.atomic.AtomicInteger cardRefreshes = new java.util.concurrent.atomic.AtomicInteger();
+				cards.getModel().addTableModelListener(event -> cardRefreshes.incrementAndGet());
+				Object objectives = Ics205PanelTest.field(frame[0], "ics202Panel");
+				var before = UiRefreshStateTest.modelState(controller.getData());
+				((javax.swing.JTextArea) Ics205PanelTest.field(objectives, "commandEmphasisArea"))
+						.setText("Edited command emphasis");
 				((JTabbedPane) Ics205PanelTest.field(frame[0], "tabs")).setSelectedIndex(1);
-				assertEquals("Edited incident", controller.getData().getIncidentContext().getIncidentName());
+				assertEquals("Edited command emphasis", controller.getData().getForm202().getCommandEmphasis());
+				var after = UiRefreshStateTest.modelState(controller.getData());
+				for (String key : List.of("incidentContext", "organizationalChart", "tCards", "sarTaskAssignments",
+						"form204", "additionalForms204")) {
+					assertEquals(before.get(key), after.get(key), key);
+				}
+				assertEquals(0, cardRefreshes.get());
 				assertTrue(controller.hasUnsavedChanges());
 			});
 			SwingUtilities.invokeAndWait(() -> assertEquals(1, notifications.stream()

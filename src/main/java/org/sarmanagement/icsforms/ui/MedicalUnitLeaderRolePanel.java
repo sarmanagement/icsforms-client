@@ -34,6 +34,8 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 	private static final String HUMAN_PLAN = "Human medical plan preparation";
 	private static final String CANINE_PLAN = "Canine medical plan preparation";
 	private final AppController controller;
+	private final UiRefreshState refreshState = new UiRefreshState();
+	private boolean refreshingWorklist;
 	private final Consumer<WorkspaceDestination> navigator;
 	private final AppController.IncidentBinding binding;
 	private final DefaultListModel<String> workModel = new DefaultListModel<>();
@@ -81,7 +83,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		installFocusedDraftListeners();
 		showAll.addActionListener(event -> refreshFromModel());
 		worklist.addListSelectionListener(event -> {
-			if (!event.getValueIsAdjusting()) {
+			if (!event.getValueIsAdjusting() && !refreshingWorklist) {
 				refreshSelectedItem();
 			}
 		});
@@ -110,8 +112,14 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 			cancelPreviews();
 			return;
 		}
-		String selected = worklist.getSelectedValue();
 		AppData data = controller.getData();
+		if (!refreshState.roleChanged(data, data.getMedicalUnitLeaderAssignment(), data.getMedicalPlan(),
+				data.getCanineMedicalPlan(), data.getForm202(), data.getForm205(), data.getForm215a(),
+				data.getForm208(), data.getStagingLocation(), data.getIncidentLocations(),
+				showAll.isSelected(), focusedEditsDirty)) {
+			return;
+		}
+		String selected = worklist.getSelectedValue();
 		if (!focusedEditsDirty) {
 			loadingFocusedEdits = true;
 			leaderName.setText(data.getMedicalUnitLeaderAssignment().getName());
@@ -122,6 +130,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 			loadingFocusedEdits = false;
 		}
 		planBadges.refreshFromModel(data);
+		refreshingWorklist = true;
 		rebuildWorklist();
 		if (selected != null) {
 			worklist.setSelectedValue(selected, true);
@@ -129,6 +138,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		if (worklist.getSelectedIndex() < 0 && !workModel.isEmpty()) {
 			worklist.setSelectedIndex(0);
 		}
+		refreshingWorklist = false;
 		humanReview.refreshFromModel();
 		canineReview.refreshFromModel();
 		refreshSelectedItem();
