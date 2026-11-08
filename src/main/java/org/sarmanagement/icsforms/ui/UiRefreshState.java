@@ -66,4 +66,15 @@ final class UiRefreshState {
 	static byte[] serialize(Object value) throws IOException {
 		return COPIER.writeValueAsBytes(value);
 	}
+
+	/**
+	 * Restores a detached incident using the same field names as the snapshot writer.
+	 *
+	 * @param content serialized incident fields.
+	 * @return detached incident retaining all snapshot fields.
+	 * @throws IOException when the snapshot cannot be read.
+	 */
+	static AppData readIncident(byte[] content) throws IOException {
+		return COPIER.readValue(content, AppData.class);
+	}
 }

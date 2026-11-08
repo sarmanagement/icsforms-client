@@ -1535,6 +1535,8 @@ public class MainFrame extends JFrame {
 						ACTIVITY_LOGS_GROUP, instanceId);
 			}
 			existingPanels.values().forEach(tabWorkspaces::remove);
+			editorRefreshStates.keySet().removeIf(component ->
+					component instanceof Ics214Panel && !ics214Panels.contains(component));
 		} finally {
 			rebuildingTabs = false;
 		}

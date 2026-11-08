@@ -19,9 +19,47 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** Verifies asynchronous preview failure and stale-result handling. */
 class AsyncFormPreviewPanelTest {
+	@Test
+	void snapshotPreservesTCardsWithoutGeneratingLiveIdentities() throws Exception {
+		AppData source = new AppData();
+		var card = new org.sarmanagement.icsforms.model.TCard();
+		card.setPersonName("Recorded responder");
+		source.getTCards().add(card);
+		AtomicReference<AppData> rendered = new AtomicReference<>();
+		AsyncFormPreviewPanel panel = new AsyncFormPreviewPanel(new PdfFormRenderer() {
+			/** {@inheritDoc} */
+			@Override
+			public String getFormKey() {
+				return "T-card snapshot test";
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void render(AppData data, Path outputFile) throws IOException {
+				rendered.set(data);
+				try (PDDocument document = new PDDocument()) {
+					document.addPage(new PDPage());
+					document.save(outputFile.toFile());
+				}
+			}
+		});
+		try {
+			SwingUtilities.invokeAndWait(() -> panel.requestPreview(source, "t-card-snapshot"));
+			waitFor(() -> panel.displayedPageCount() == 1);
+			assertEquals(1, rendered.get().getTCards().size());
+			assertEquals("Recorded responder", rendered.get().getTCards().get(0).getPersonName());
+			assertNotSame(card, rendered.get().getTCards().get(0));
+			assertNull(card.peekResourceId());
+		} finally {
+			SwingUtilities.invokeAndWait(panel::cancel);
+		}
+	}
+
 	@Test
 	void failureLeavesPreviewSurfaceAvailable() throws Exception {
 		AsyncFormPreviewPanel panel = new AsyncFormPreviewPanel(new PdfFormRenderer() {

@@ -196,6 +196,18 @@ class MainFrameDashboardTest {
 					throw new AssertionError(exception);
 				}
 				assertSame(selected, tabs.getSelectedComponent());
+				Ics214Form retired = data.getActivityLogs().remove(0);
+				try {
+					var refresh = MainFrame.class.getDeclaredMethod("refreshFromModel");
+					refresh.setAccessible(true);
+					refresh.invoke(frame);
+				} catch (ReflectiveOperationException exception) {
+					throw new AssertionError(exception);
+				}
+				var states = (java.util.Map<?, ?>) Ics205PanelTest.field(frame, "editorRefreshStates");
+				assertTrue(states.keySet().stream().noneMatch(component ->
+						component instanceof Ics214Panel log && log.getCurrentForm() == retired));
+				assertSame(selected, tabs.getSelectedComponent());
 			} finally {
 				frame.dispose();
 				controller.close();

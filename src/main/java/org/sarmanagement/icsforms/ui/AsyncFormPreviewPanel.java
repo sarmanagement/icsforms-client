@@ -3,9 +3,6 @@
  */
 package org.sarmanagement.icsforms.ui;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
@@ -37,8 +34,6 @@ import java.util.concurrent.ExecutionException;
  * Asynchronously renders detached incident snapshots with bounded image caching.
  */
 public class AsyncFormPreviewPanel extends JPanel {
-	private static final ObjectMapper COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
-			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 	private static final int MAX_CACHE_ENTRIES = 8;
 	private static final Map<String, List<BufferedImage>> CACHE = new LinkedHashMap<>(16, 0.75f, true) {
 		/** {@inheritDoc} */
@@ -94,7 +89,7 @@ public class AsyncFormPreviewPanel extends JPanel {
 			if (key.equals(currentKey)) {
 				return;
 			}
-			snapshot = COPIER.readValue(content, AppData.class);
+			snapshot = UiRefreshState.readIncident(content);
 		} catch (IOException | NoSuchAlgorithmException exception) {
 			cancel();
 			showImages(List.of(), "Unable to load PDF content: " + exception.getMessage());
