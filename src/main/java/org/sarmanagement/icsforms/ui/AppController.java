@@ -8,7 +8,6 @@ import org.sarmanagement.icsforms.persistence.FullDocumentSnapshot;
 import org.sarmanagement.icsforms.persistence.SaveCoordinator;
 import org.sarmanagement.icsforms.persistence.SaveRequest;
 import org.sarmanagement.icsforms.persistence.PersistenceStatus;
-import org.sarmanagement.icsforms.persistence.RetryPolicy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -37,6 +36,7 @@ import org.sarmanagement.icsforms.model.UtcTimestamp;
 import org.sarmanagement.icsforms.model.PlanReuseService;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.persistence.LocalRepository;
+import org.sarmanagement.icsforms.persistence.LocalRepositorySaveAdapter;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
@@ -85,6 +85,7 @@ public class AppController implements AutoCloseable {
 
 	private final LocalRepository repository;
 	private final IncidentStore store;
+	private final IncidentStore saveStore;
 	private List<ImportValidationException.Problem> lastImportProblems = List.of();
 	private IncidentId activeIncidentId;
 	private RevisionToken storedRevision = new RevisionToken("legacy");
@@ -293,11 +294,12 @@ public class AppController implements AutoCloseable {
 		this.data.reconcileMedicalUnitLeaderAssignment();
 		this.repository = repository;
 		this.store = store;
+		this.saveStore = store == null ? new LocalRepositorySaveAdapter(repository) : store;
 		this.activeIncidentId = incidentId;
 		this.exportService = exportService;
 		this.validator = validator;
 		this.saves = new SaveCoordinator(persistenceWorker, SwingUtilities::invokeLater,
-				this::saveCompleted, this::persistenceStatusChanged, RetryPolicy.explicit());
+				this::saveCompleted, this::persistenceStatusChanged, saveStore.saveRetryPolicy());
 		bindPersistence();
 		this.autosaveTimer = new Timer(AUTOSAVE_DELAY_MS, event -> {
 			try {
@@ -388,7 +390,7 @@ public class AppController implements AutoCloseable {
 		}
 		if (completion.failure() == null) {
 			storedRevision = saves.status().revision();
-			if (!atomicSave && request instanceof FullDocumentSnapshot full) {
+			if (store != null && !atomicSave && request instanceof FullDocumentSnapshot full) {
 				copyPersistenceMetadata(full.snapshot());
 			}
 			if (request.editVersion() == editVersion && !atomicSave) {
@@ -419,7 +421,7 @@ public class AppController implements AutoCloseable {
 	 * @param source authoritative linked-field source.
 	 * @return detached persistence request.
 	 */
-	private SaveRequest captureSave(LinkSource source) {
+	private FullDocumentSnapshot captureSave(LinkSource source) {
 		if (!flushingEditors && !atomicSave) {
 			flushingEditors = true;
 			try {
@@ -432,12 +434,8 @@ public class AppController implements AutoCloseable {
 		syncSarTasks();
 		data.normalizeIdentity();
 		AppData detached = FullDocumentSnapshot.detach(data);
-		if (store != null) {
-			return new FullDocumentSnapshot(activeIncidentId, incidentGeneration, editVersion,
-					saves.status().revision(), detached, store);
-		}
-		return new LegacySaveRequest(saves.status().incidentId(), incidentGeneration, editVersion,
-				saves.status().revision(), detached, repository);
+		return new FullDocumentSnapshot(saves.status().incidentId(), incidentGeneration, editVersion,
+				saves.status().revision(), detached, saveStore);
 	}
 
 	/**
@@ -579,38 +577,6 @@ public class AppController implements AutoCloseable {
 			throw new IllegalStateException("Incident IO failed", failure.get());
 		}
 		return result.get();
-	}
-
-	/**
-	 * Legacy whole-document request; the worker never receives the live model.
-	 *
-	 * @param incidentId legacy document identity.
-	 * @param generation active generation.
-	 * @param editVersion captured edit version.
-	 * @param expectedRevision unused legacy revision.
-	 * @param snapshot detached document.
-	 * @param repository legacy persistence backend.
-	 */
-	private record LegacySaveRequest(IncidentId incidentId, long generation, long editVersion,
-			RevisionToken expectedRevision, AppData snapshot, LocalRepository repository) implements SaveRequest {
-		/** {@inheritDoc} */
-		@Override
-		public SaveRequest withExpectedRevision(RevisionToken revision) {
-			return new LegacySaveRequest(incidentId, generation, editVersion, revision, snapshot, repository);
-		}
-
-		/** {@inheritDoc} */
-		@Override
-		public java.util.Optional<SaveRequest> coalesce(SaveRequest newer) {
-			return newer instanceof LegacySaveRequest ? java.util.Optional.of(newer) : java.util.Optional.empty();
-		}
-
-		/** {@inheritDoc} */
-		@Override
-		public RevisionToken persist() {
-			repository.save(snapshot);
-			return expectedRevision;
-		}
 	}
 
 	/**
@@ -1435,7 +1401,7 @@ public class AppController implements AutoCloseable {
 			}
 			committed.restore();
 			modelRevision = previousRevision + 1;
-			if (request instanceof FullDocumentSnapshot full) {
+			if (store != null && request instanceof FullDocumentSnapshot full) {
 				copyPersistenceMetadata(full.snapshot());
 			}
 			dirty = false;
@@ -1675,9 +1641,7 @@ public class AppController implements AutoCloseable {
 	 */
 	public void exportUnsavedIncident(Path path, LinkSource source) {
 		onOwner(() -> {
-			SaveRequest request = captureSave(source);
-			AppData snapshot = request instanceof FullDocumentSnapshot full
-					? full.snapshot() : ((LegacySaveRequest) request).snapshot();
+			AppData snapshot = captureSave(source).snapshot();
 			workerIo(() -> {
 				new LocalRepository(path).save(snapshot);
 				return null;
@@ -1976,6 +1940,7 @@ public class AppController implements AutoCloseable {
 	 * Creates and activates an incident after applying its startup preferences.
 	 *
 	 * @param created new incident with its phase, mode, and preferences configured.
+	 * @throws RuntimeException when unsaved work prevents replacement or creation fails.
 	 */
 	public void createNewIncident(AppData created) {
 		if (!SwingUtilities.isEventDispatchThread()) {
@@ -1985,6 +1950,10 @@ public class AppController implements AutoCloseable {
 			});
 			return;
 		}
+		if (atomicSave) {
+			throw new IllegalStateException("An atomic editor commit is pending.");
+		}
+		requireSavedForReplacement();
 		prepareDocument(created);
 		if (store != null) {
 			AppData detached = FullDocumentSnapshot.detach(created);
@@ -2369,9 +2338,7 @@ public class AppController implements AutoCloseable {
 	 */
 	private AppData exportSnapshot(LinkSource source) {
 		return onOwner(() -> {
-			SaveRequest request = captureSave(source);
-			return request instanceof FullDocumentSnapshot full
-					? full.snapshot() : ((LegacySaveRequest) request).snapshot();
+			return captureSave(source).snapshot();
 		});
 	}
 

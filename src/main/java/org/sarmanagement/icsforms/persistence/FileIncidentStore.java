@@ -40,6 +40,16 @@ import java.util.logging.Logger;
  * Client exports, including recovery copies, cannot overwrite managed files.
  */
 public class FileIncidentStore implements IncidentStore, EditLockSupport {
+	/**
+	 * Retries transient local writes at most twice before retaining work for recovery.
+	 *
+	 * @return bounded immediate local-file retry policy.
+	 */
+	@Override
+	public RetryPolicy saveRetryPolicy() {
+		return RetryPolicy.immediate(2);
+	}
+
 	private static final Logger LOGGER = Logger.getLogger(FileIncidentStore.class.getName());
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)

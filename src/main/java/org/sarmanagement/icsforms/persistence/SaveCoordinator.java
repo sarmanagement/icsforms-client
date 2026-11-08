@@ -356,6 +356,11 @@ public final class SaveCoordinator implements AutoCloseable {
 			if (delay.isEmpty()) {
 				return;
 			}
+			if (delay.get().isZero()) {
+				retryEpoch++;
+				halted = false;
+				return;
+			}
 			long epoch = ++retryEpoch;
 			retryScheduler.accept(delay.get(), () -> owner.execute(() -> {
 				if (!closed && halted && retryEpoch == epoch) {

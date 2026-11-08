@@ -9,6 +9,7 @@ import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.RevisionToken;
+import org.sarmanagement.icsforms.persistence.RetryPolicy;
 import org.sarmanagement.icsforms.persistence.StoreUnavailableException;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
@@ -221,7 +222,7 @@ class MainFramePersistenceStatusTest {
 		fail("Persistence presentation did not reach its expected state");
 	}
 
-	/** Local backend exposing a delayed and one-shot unavailable write. */
+	/** Backend with explicit retry, exposing a delayed and one-shot unavailable write. */
 	private static final class DelayedStore extends FileIncidentStore {
 		private volatile CountDownLatch entered = new CountDownLatch(0);
 		private volatile CountDownLatch release = new CountDownLatch(0);
@@ -235,6 +236,12 @@ class MainFramePersistenceStatusTest {
 		 */
 		private DelayedStore(Path root) {
 			super(root);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public RetryPolicy saveRetryPolicy() {
+			return RetryPolicy.explicit();
 		}
 
 		/** {@inheritDoc} */

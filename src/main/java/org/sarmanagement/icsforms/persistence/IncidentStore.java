@@ -43,6 +43,17 @@ import java.util.Optional;
  */
 public interface IncidentStore extends AutoCloseable {
 	/**
+	 * Selects the save retry policy at the persistence boundary. The default
+	 * requires an explicit retry; backends may supply bounded retries or backoff.
+	 * Conflicts always require recovery regardless of this policy.
+	 *
+	 * @return policy for consecutive save failures.
+	 */
+	default RetryPolicy saveRetryPolicy() {
+		return RetryPolicy.explicit();
+	}
+
+	/**
 	 * Creates an incident without replacing an existing one.
 	 *
 	 * @param data

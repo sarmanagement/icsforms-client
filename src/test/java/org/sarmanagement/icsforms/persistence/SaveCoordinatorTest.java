@@ -99,6 +99,31 @@ class SaveCoordinatorTest {
 	}
 
 	@Test
+	void immediateRetryKeepsSubstituteOperationsOrderedAndDrainPendingUntilSuccess() {
+		Harness harness = new Harness(IncidentId.newId(), new RevisionToken("host/initial"), RetryPolicy.immediate(2));
+		List<String> accepted = new FailOnceLog();
+		boolean[] drained = {false};
+		harness.coordinator.submit(operation(harness, 1, "one", accepted));
+		harness.coordinator.submit(operation(harness, 2, "two", accepted));
+		harness.coordinator.whenIdle(() -> drained[0] = true);
+		harness.complete();
+		assertFalse(drained[0]);
+		assertTrue(harness.coordinator.isBusy());
+		assertEquals(2, harness.coordinator.pendingChanges().size());
+		assertEquals(PersistenceStatus.Durability.SAVING, harness.coordinator.status().durability());
+		harness.complete();
+		assertFalse(drained[0]);
+		assertEquals(List.of("one"), accepted);
+		assertEquals(new RevisionToken("host/accepted/one"), harness.coordinator.pendingChanges().get(0).expectedRevision());
+		harness.complete();
+		assertTrue(drained[0]);
+		assertEquals(List.of("one", "two"), accepted);
+		assertEquals(new RevisionToken("host/accepted/two"), harness.coordinator.status().revision());
+		assertEquals(PersistenceStatus.Durability.SAVED, harness.coordinator.status().durability());
+		assertTrue(harness.coordinator.pendingChanges().isEmpty());
+	}
+
+	@Test
 	void failedNoncoalescingWorkRetainsItsEntireOrderedOperationQueue() {
 		Harness harness = new Harness(IncidentId.newId(), new RevisionToken("host/initial"));
 		List<String> accepted = new FailOnceLog();
@@ -439,8 +464,7 @@ class SaveCoordinatorTest {
 		private final ManualExecutor worker = new ManualExecutor();
 		private final ManualExecutor owner = new ManualExecutor();
 		private final List<SaveCoordinator.Completion> completions = new ArrayList<>();
-		private final SaveCoordinator coordinator =
-				new SaveCoordinator(worker, owner, completions::add, status -> { }, RetryPolicy.explicit());
+		private final SaveCoordinator coordinator;
 
 		/**
 		 * Binds the initial fixture.
@@ -449,6 +473,18 @@ class SaveCoordinatorTest {
 		 * @param revision starting store token
 		 */
 		private Harness(IncidentId id, RevisionToken revision) {
+			this(id, revision, RetryPolicy.explicit());
+		}
+
+		/**
+		 * Binds the fixture with a backend-selected retry policy.
+		 *
+		 * @param id incident identity.
+		 * @param revision initial store token.
+		 * @param retryPolicy backend retry policy.
+		 */
+		private Harness(IncidentId id, RevisionToken revision, RetryPolicy retryPolicy) {
+			coordinator = new SaveCoordinator(worker, owner, completions::add, status -> { }, retryPolicy);
 			coordinator.bind(id, 1, 0, revision);
 		}
 

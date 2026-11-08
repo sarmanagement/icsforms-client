@@ -509,8 +509,8 @@ class AppControllerStoreTest {
 				assertTrue(controller.isDirty());
 				store.failNext(ControllableIncidentStore.Operation.CREATE, failure);
 
-				assertSame(failure, assertThrows(failure.getClass(), () -> controller.newDocument(IapPhase.PRE_OP,
-						IncidentMode.SAR)));
+				assertThrows(IllegalStateException.class, () -> controller.newDocument(IapPhase.PRE_OP,
+						IncidentMode.SAR));
 				assertSame(data, controller.getData());
 				assertEquals(active, controller.getActiveIncidentId());
 				assertEquals("Retained remote editor input", data.getIncidentContext().getIncidentName());
@@ -519,6 +519,11 @@ class AppControllerStoreTest {
 				assertEquals(2, store.list().size());
 				controller.save();
 				assertFalse(controller.isDirty());
+				assertSame(failure, assertThrows(failure.getClass(), () -> controller.newDocument(IapPhase.PRE_OP,
+						IncidentMode.SAR)));
+				assertSame(data, controller.getData());
+				assertEquals(active, controller.getActiveIncidentId());
+				assertEquals(2, store.list().size());
 				assertEquals("Retained remote editor input",
 						store.loadSnapshot(active).data().getIncidentContext().getIncidentName());
 			}

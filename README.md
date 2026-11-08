@@ -392,6 +392,9 @@ generation, and represented edit can mark that edit durable. Full document
 snapshots can coalesce, but the `SaveRequest` contract leaves this policy to the
 unit type: ordered operations need not discard intermediate work. Accepted
 revisions remain opaque, including server-issued tokens.
+`FullDocumentSnapshot` is the only production save-unit implementation. Legacy
+single-document repositories use a save-only store adapter, so their saves also
+receive detached snapshots off the EDT without adding another unit type.
 
 The persistence indicator distinguishes **pending**, **saving**, **saved**,
 **conflicted**, **failed**, and **unavailable**. Saved means durable in the
@@ -406,6 +409,8 @@ status, and retained save requests intact. Callers choosing to discard local wor
 can use `discardUnsavedChangesAndSetData()` or an explicitly approved store reload.
 Explicit discard waits for issued saves to settle before installing the document
 or rebinding persistence; only then can retained unsaved work be discarded.
+New-incident creation checks replacement eligibility before creating or locking
+a candidate; rejection preserves the active work without leaving an unused incident.
 Store reload and
 failed-switch restoration use the same editor-flush/refresh replacement path,
 which can also be invoked without a user dialog; the caller is responsible for
@@ -416,6 +421,10 @@ aliases, even when persistence has failed.
 
 `RetryPolicy` is replaceable by a backend: explicit retry, bounded immediate
 retry, and delayed backoff do not change scheduling or completion matching.
+`IncidentStore.saveRetryPolicy()` defaults to explicit retry. The file store
+selects at most two immediate retries after the initial save attempt, within the
+same drain; exhaustion retains work for manual retry or recovery. Conflicts never
+retry automatically. Other stores can override the policy at the persistence boundary.
 `FullDocumentSnapshotTest` measures capture on the EDT without a timing-based
 pass/fail threshold. On Java 17 in the development runner, a fixture with 2,000
 resources, 500 tasks, 500 clues, and 10 archived periods took a median **10.81 ms**

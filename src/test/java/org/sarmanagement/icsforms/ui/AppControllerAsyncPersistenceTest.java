@@ -12,6 +12,8 @@ import org.sarmanagement.icsforms.persistence.LocalRepository;
 import org.sarmanagement.icsforms.persistence.PersistenceStatus;
 import org.sarmanagement.icsforms.persistence.RevisionToken;
 import org.sarmanagement.icsforms.persistence.SaveCoordinator;
+import org.sarmanagement.icsforms.persistence.FullDocumentSnapshot;
+import org.sarmanagement.icsforms.persistence.RetryPolicy;
 import org.sarmanagement.icsforms.persistence.StorePersistenceException;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
@@ -511,23 +513,178 @@ class AppControllerAsyncPersistenceTest {
 	}
 
 	@Test
+	void rejectedCreationHasNoStoreOrLockSideEffectsAndPreservesActiveWork() throws Exception {
+		for (RuntimeException problem : replacementFailures()) {
+			try (BlockingStore store = new BlockingStore(directory())) {
+				AppData live = new AppData();
+				IncidentId id = store.create(live);
+				try (AppController controller = controller(store, id, live)) {
+					SaveCoordinator coordinator = coordinator(controller);
+					SwingUtilities.invokeAndWait(() -> {
+						live.getIncidentContext().setIncidentName("Retained active work");
+						controller.markDirty();
+						int creations = store.creations;
+						AppData candidate = new AppData();
+						IncidentId candidateId = IncidentId.newId();
+						candidate.setIncidentId(candidateId.value());
+						PersistenceStatus pendingStatus = controller.getPersistenceStatus();
+						assertThrows(IllegalStateException.class, () -> controller.createNewIncident(candidate));
+						assertEquals(pendingStatus, controller.getPersistenceStatus());
+						assertEquals(creations, store.creations);
+						store.failure = problem;
+						assertSame(problem, assertThrows(problem.getClass(), controller::save));
+						PersistenceStatus failedStatus = controller.getPersistenceStatus();
+						var pending = coordinator.pendingChanges();
+						var binding = controller.captureEditorCommitBinding();
+						assertSame(problem, assertThrows(problem.getClass(),
+								() -> controller.createNewIncident(candidate)));
+						assertSame(live, controller.getData());
+						assertTrue(controller.isDirty());
+						assertEquals(id, controller.getActiveIncidentId());
+						assertEquals(failedStatus, controller.getPersistenceStatus());
+						assertEquals(pending, coordinator.pendingChanges());
+						assertEquals(binding, controller.captureEditorCommitBinding());
+						assertEquals(creations, store.creations);
+						assertEquals(1, store.list().size());
+						assertFalse(store.isHeldByCaller(candidateId));
+						store.failure = null;
+						controller.save();
+						controller.createNewIncident(candidate);
+						assertEquals(creations + 1, store.creations);
+						assertEquals(2, store.list().size());
+						assertEquals(candidateId, controller.getActiveIncidentId());
+						assertTrue(store.isHeldByCaller(candidateId));
+						assertFalse(controller.isDirty());
+						assertEquals(store.loadSnapshot(candidateId).revision(),
+								controller.getPersistenceStatus().revision());
+					});
+				}
+			}
+		}
+	}
+
+	@Test
+	void localTransientSavesRetryWithinTheBoundBeforeReportingSuccess() throws Exception {
+		for (int failures : java.util.List.of(1, 2)) {
+			try (BlockingStore store = new BlockingStore(directory())) {
+				AppData live = new AppData();
+				IncidentId id = store.create(live);
+				try (AppController controller = controller(store, id, live)) {
+					SaveCoordinator coordinator = coordinator(controller);
+					store.failure = new StorePersistenceException("Transient local write failure", null);
+					store.failuresRemaining = failures;
+					SwingUtilities.invokeAndWait(() -> {
+						live.getIncidentContext().setIncidentName("Retry content");
+						controller.markDirty();
+						controller.save();
+						assertEquals(failures + 1, store.saveAttempts);
+						assertFalse(controller.isDirty());
+						assertNull(controller.getPersistenceStatus().failure());
+						assertTrue(coordinator.pendingChanges().isEmpty());
+						assertEquals(PersistenceStatus.Durability.SAVED, controller.getPersistenceStatus().durability());
+					});
+					assertEquals("Retry content", store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
+				}
+			}
+		}
+	}
+
+	@Test
+	void exhaustedLocalRetriesRetainWorkAndConfiguredExplicitRetryDoesNotRetryAutomatically() throws Exception {
+		for (boolean explicit : java.util.List.of(false, true)) {
+			try (BlockingStore store = new BlockingStore(directory())) {
+				if (explicit) {
+					store.retryPolicy = RetryPolicy.explicit();
+				}
+				AppData live = new AppData();
+				IncidentId id = store.create(live);
+				try (AppController controller = controller(store, id, live)) {
+					SaveCoordinator coordinator = coordinator(controller);
+					store.failure = new StorePersistenceException("Cannot write", null);
+					SwingUtilities.invokeAndWait(() -> {
+						live.getIncidentContext().setIncidentName("Recoverable edit");
+						controller.markDirty();
+						assertSame(store.failure, assertThrows(store.failure.getClass(), controller::save));
+						assertEquals(explicit ? 1 : 3, store.saveAttempts);
+						assertSame(live, controller.getData());
+						assertTrue(controller.isDirty());
+						assertEquals(1, coordinator.pendingChanges().size());
+						assertSame(store.failure, controller.getPersistenceStatus().failure());
+						store.failure = null;
+						controller.save();
+						assertEquals(explicit ? 2 : 4, store.saveAttempts);
+						assertTrue(coordinator.pendingChanges().isEmpty());
+						assertFalse(controller.isDirty());
+					});
+					assertEquals("Recoverable edit", store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
+				}
+			}
+		}
+	}
+
+	@Test
+	void localConflictsNeverRetryAutomatically() throws Exception {
+		try (BlockingStore store = new BlockingStore(directory())) {
+			AppData live = new AppData();
+			IncidentId id = store.create(live);
+			try (AppController controller = controller(store, id, live)) {
+				store.failure = new org.sarmanagement.icsforms.persistence.StoreConflictException("Conflict",
+						new RevisionToken("expected"), new RevisionToken("current"));
+				SwingUtilities.invokeAndWait(() -> {
+					controller.markDirty();
+					assertSame(store.failure, assertThrows(store.failure.getClass(), controller::save));
+					assertEquals(1, store.saveAttempts);
+					assertTrue(controller.isDirty());
+					assertEquals(PersistenceStatus.Durability.CONFLICTED, controller.getPersistenceStatus().durability());
+				});
+			}
+		}
+	}
+
+	@Test
 	void legacyRepositoryAlsoReceivesDetachedDataOffEdt() throws Exception {
 		AppData live = new AppData();
 		AtomicReference<AppData> saved = new AtomicReference<>();
 		AtomicReference<Boolean> savedOnEdt = new AtomicReference<>();
+		CountDownLatch entered = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		CountDownLatch completed = new CountDownLatch(1);
 		LocalRepository repository = new LocalRepository(directory().resolve("workspace.json")) {
 			/** {@inheritDoc} */
 			@Override
 			public void save(AppData snapshot) {
 				saved.set(snapshot);
 				savedOnEdt.set(SwingUtilities.isEventDispatchThread());
+				entered.countDown();
+				try {
+					assertTrue(release.await(10, TimeUnit.SECONDS));
+				} catch (InterruptedException failure) {
+					Thread.currentThread().interrupt();
+					throw new IllegalStateException(failure);
+				}
 			}
 		};
 		try (AppController controller = new AppController(live, repository,
 				new PdfExportService(), new IncidentValidator())) {
-			SwingUtilities.invokeAndWait(controller::save);
+			SaveCoordinator coordinator = coordinator(controller);
+			SwingUtilities.invokeAndWait(() -> {
+				controller.markDirty();
+				controller.saveAsync(AppController.LinkSource.NONE, failure -> {
+					assertNull(failure);
+					completed.countDown();
+				});
+			});
+			await(entered);
+			SwingUtilities.invokeAndWait(() -> {
+				assertInstanceOf(FullDocumentSnapshot.class, coordinator.pendingChanges().get(0));
+				assertEquals(PersistenceStatus.Durability.SAVING, controller.getPersistenceStatus().durability());
+			});
+			release.countDown();
+			await(completed);
 			assertNotSame(live, saved.get());
 			assertFalse(savedOnEdt.get());
+			assertFalse(controller.isDirty());
+			assertEquals(PersistenceStatus.Durability.SAVED, controller.getPersistenceStatus().durability());
 		}
 	}
 
@@ -597,6 +754,10 @@ class AppControllerAsyncPersistenceTest {
 		private volatile RuntimeException failure;
 		private volatile RuntimeException loadFailure;
 		private volatile int loads;
+		private volatile int creations;
+		private volatile int saveAttempts;
+		private volatile int failuresRemaining = -1;
+		private RetryPolicy retryPolicy;
 
 		/**
 		 * Opens a local backend.
@@ -625,7 +786,21 @@ class AppControllerAsyncPersistenceTest {
 
 		/** {@inheritDoc} */
 		@Override
+		public RetryPolicy saveRetryPolicy() {
+			return retryPolicy == null ? super.saveRetryPolicy() : retryPolicy;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public IncidentId create(AppData data) {
+			creations++;
+			return super.create(data);
+		}
+
+		/** {@inheritDoc} */
+		@Override
 		public RevisionToken save(IncidentId id, AppData snapshot, RevisionToken expected) {
+			saveAttempts++;
 			saveOnEdt |= SwingUtilities.isEventDispatchThread();
 			savedDocument = snapshot;
 			entered.countDown();
@@ -637,7 +812,10 @@ class AppControllerAsyncPersistenceTest {
 				Thread.currentThread().interrupt();
 				throw new IllegalStateException(exception);
 			}
-			if (failure != null) {
+			if (failure != null && failuresRemaining != 0) {
+				if (failuresRemaining > 0) {
+					failuresRemaining--;
+				}
 				throw failure;
 			}
 			return super.save(id, snapshot, expected);
