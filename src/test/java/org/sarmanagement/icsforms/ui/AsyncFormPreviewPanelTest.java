@@ -190,9 +190,58 @@ class AsyncFormPreviewPanelTest {
 			data.recordPlanReview(org.sarmanagement.icsforms.model.PlanReviewArea.HUMAN_MEDICAL, "Reviewer", null);
 			panel.requestPreview(data, "same-content");
 		});
-		waitFor(() -> invocation.get() == 2 && panel.displayedPageCount() == 1);
+		waitFor(() -> invocation.get() == 2 && panel.previewStateText().contains("Current PDF"));
 		assertTrue(panel.previewStateText().contains("Current PDF"));
 		SwingUtilities.invokeAndWait(panel::cancel);
+	}
+
+	@Test
+	void keepsPreviousPagesWhileReplacementRenders() throws Exception {
+		CountDownLatch replacementStarted = new CountDownLatch(1);
+		CountDownLatch releaseReplacement = new CountDownLatch(1);
+		AtomicInteger invocation = new AtomicInteger();
+		AsyncFormPreviewPanel panel = new AsyncFormPreviewPanel(new PdfFormRenderer() {
+			/** {@inheritDoc} */
+			@Override
+			public String getFormKey() {
+				return "Retained pages test";
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void render(AppData data, Path outputFile) throws IOException {
+				if (invocation.incrementAndGet() == 2) {
+					replacementStarted.countDown();
+					try {
+						if (!releaseReplacement.await(5, TimeUnit.SECONDS)) {
+							throw new IOException("Replacement timed out");
+						}
+					} catch (InterruptedException exception) {
+						Thread.currentThread().interrupt();
+						throw new IOException(exception);
+					}
+				}
+				try (PDDocument document = new PDDocument()) {
+					document.addPage(new PDPage());
+					document.save(outputFile.toFile());
+				}
+			}
+		});
+		try {
+			SwingUtilities.invokeAndWait(() -> panel.requestPreview(new AppData(), "first"));
+			waitFor(() -> panel.displayedPageCount() == 1);
+			SwingUtilities.invokeAndWait(() -> panel.requestPreview(new AppData(), "second"));
+			assertTrue(replacementStarted.await(2, TimeUnit.SECONDS));
+			SwingUtilities.invokeAndWait(() -> {
+				assertEquals(1, panel.displayedPageCount());
+				assertTrue(panel.previewStateText().contains("Rendering"));
+			});
+			releaseReplacement.countDown();
+			waitFor(() -> panel.previewStateText().contains("Current PDF"));
+		} finally {
+			releaseReplacement.countDown();
+			SwingUtilities.invokeAndWait(panel::cancel);
+		}
 	}
 
 	/**

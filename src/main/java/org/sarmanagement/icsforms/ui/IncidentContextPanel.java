@@ -179,8 +179,8 @@ public class IncidentContextPanel extends JPanel {
 	public void refreshFromModel() {
 		IncidentContext context = controller.getData().getIncidentContext();
 		incidentNameField.setText(nullSafe(context.getIncidentName()));
-		startField.setValue(toDate(context.getOperationalPeriodStart()));
-		endField.setValue(toDate(context.getOperationalPeriodEnd()));
+		UiSupport.loadDateTime(startField, context.getOperationalPeriodStart());
+		UiSupport.loadDateTime(endField, context.getOperationalPeriodEnd());
 		taskMapField.setText(nullSafe(context.getTaskMap()));
 		currentUserField.setText(nullSafe(context.getCurrentUser()));
 		currentUserPositionCombo.setSelectedItem(nullSafe(context.getCurrentUserPositionTitle()));
@@ -238,8 +238,8 @@ public class IncidentContextPanel extends JPanel {
 	private void flushToModel() {
 		IncidentContext context = controller.getData().getIncidentContext();
 		context.setIncidentName(incidentNameField.getText().trim());
-		context.setOperationalPeriodStart(AppController.toLocalDateTime((Date) startField.getValue()));
-		context.setOperationalPeriodEnd(AppController.toLocalDateTime((Date) endField.getValue()));
+		context.setOperationalPeriodStart(UiSupport.readDateTime(startField));
+		context.setOperationalPeriodEnd(UiSupport.readDateTime(endField));
 		context.setTaskMap(taskMapField.getText().trim());
 		context.setCurrentUser(currentUserField.getText().trim());
 		Object posVal = currentUserPositionCombo.getSelectedItem();

@@ -123,6 +123,25 @@ class AppControllerLiveChangeTest {
 	}
 
 	@Test
+	void unchangedEditorFlushDoesNotDirtyOrNotify() throws Exception {
+		AppController controller = controller(new AppData());
+		List<AppController.IncidentChange> changes = new ArrayList<>();
+		controller.addIncidentChangeListener(changes::add);
+		AppController.EditorCommitBinding binding = controller.captureEditorCommitBinding();
+		SwingUtilities.invokeAndWait(() -> {
+			assertTrue(controller.commitEditorIfCurrent(binding, AppController.LinkSource.SHARED, () -> {
+				controller.getData().getIncidentContext().setIncidentName("");
+			}));
+			assertEquals(binding, controller.captureEditorCommitBinding());
+			assertFalse(controller.hasUnsavedChanges());
+			assertFalse(((javax.swing.Timer) Ics205PanelTest.field(controller, "autosaveTimer")).isRunning());
+		});
+		SwingUtilities.invokeAndWait(() -> { });
+		assertTrue(changes.isEmpty());
+		controller.close();
+	}
+
+	@Test
 	void fullEditorCommitAdvancesRevisionSoTheTokenCannotBeReused() {
 		AppController controller = controller(new AppData());
 		AppController.EditorCommitBinding binding = controller.captureEditorCommitBinding();

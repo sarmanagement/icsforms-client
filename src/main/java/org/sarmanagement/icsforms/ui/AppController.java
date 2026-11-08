@@ -891,6 +891,7 @@ public class AppController implements AutoCloseable {
 		}
 		EditorModelSnapshot snapshot = new EditorModelSnapshot();
 		snapshot.capture(data);
+		byte[] beforeEdit = serializedEditorState();
 		boolean previousDirty = dirty;
 		long previousRevision = modelRevision;
 		LinkSource previousSource = activeLinkSource;
@@ -904,6 +905,15 @@ public class AppController implements AutoCloseable {
 		try {
 			suppressChangeNotifications = true;
 			edit.run();
+			if (previousRevision == modelRevision
+					&& java.util.Arrays.equals(beforeEdit, serializedEditorState())) {
+				snapshot.restore();
+				if (outermostCommit) {
+					transactionEditorCommitGuards.forEach(EditorCommitGuard::rebase);
+				}
+				suppressChangeNotifications = previousSuppression;
+				return true;
+			}
 			markDirty(source);
 			if (outermostCommit) {
 				transactionEditorCommitGuards.forEach(EditorCommitGuard::rebase);
@@ -928,6 +938,20 @@ public class AppController implements AutoCloseable {
 		}
 		publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
 		return true;
+	}
+
+	/**
+	 * Serializes the persisted editor state for a structural no-op comparison.
+	 *
+	 * @return serialized incident state.
+	 * @throws IllegalStateException if the incident cannot be serialized.
+	 */
+	private byte[] serializedEditorState() {
+		try {
+			return INCIDENT_COPIER.writeValueAsBytes(data);
+		} catch (IOException exception) {
+			throw new IllegalStateException("Unable to compare editor state", exception);
+		}
 	}
 
 	/**

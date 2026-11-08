@@ -1006,7 +1006,7 @@ public class OrganizationalChartPanel extends JPanel {
 		Ics207Form form207 = controller.getData().getForm207();
 		ics207PreparedByNameField.setText(safe(form207.getPreparedByName()));
 		ics207PreparedByPositionTitleField.setText(safe(form207.getPreparedByPositionTitle()));
-		ics207PreparedDateTimeSpinner.setValue(AppController.toDate(form207.getPreparedDateTime()));
+		UiSupport.loadDateTime(ics207PreparedDateTimeSpinner, form207.getPreparedDateTime());
 		} finally {
 			loading = false;
 		}
@@ -1174,7 +1174,7 @@ public class OrganizationalChartPanel extends JPanel {
 		form207.setPreparedByName(ics207PreparedByNameField.getText().trim());
 		form207.setPreparedByPositionTitle(ics207PreparedByPositionTitleField.getText().trim());
 		form207.setPreparedDateTime(
-				AppController.toLocalDateTime((java.util.Date) ics207PreparedDateTimeSpinner.getValue()));
+				UiSupport.readDateTime(ics207PreparedDateTimeSpinner));
 	}
 
 	private void addIncidentCommanderRow(String name, String radio, String phone, boolean propagate) {

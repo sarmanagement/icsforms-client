@@ -332,6 +332,7 @@ public class MainFrame extends JFrame {
 			if (selectedIndex == lastSelectedTabIndex) {
 				return;
 			}
+			long previousRevision = controller.captureEditorCommitBinding().revision();
 			if (lastSelectedTabIndex >= 0) {
 				if (!pushToModel(linkSourceForTab(lastSelectedTabIndex))) {
 					restoringTabSelection = true;
@@ -340,7 +341,9 @@ public class MainFrame extends JFrame {
 					return;
 				}
 			}
-			refreshFromModel();
+			if (previousRevision != controller.captureEditorCommitBinding().revision()) {
+				refreshFromModel();
+			}
 			lastSelectedTabIndex = tabs.getSelectedIndex();
 		});
 		content.add(tabs, BorderLayout.CENTER);
@@ -1508,8 +1511,6 @@ public class MainFrame extends JFrame {
 				if (panel.getCurrentForm() != null) {
 					existingPanels.put(panel.getCurrentForm(), panel);
 				}
-				tabs.remove(panel);
-				tabWorkspaces.remove(panel);
 			}
 			ics214Panels.clear();
 			activityLogPanelsById.clear();
@@ -1530,6 +1531,7 @@ public class MainFrame extends JFrame {
 				registerActivityLogTab(panel, shortLogTabTitle(form, data), AppController.LinkSource.ICS214,
 						ACTIVITY_LOGS_GROUP, instanceId);
 			}
+			existingPanels.values().forEach(tabWorkspaces::remove);
 		} finally {
 			rebuildingTabs = false;
 		}
@@ -2071,9 +2073,25 @@ public class MainFrame extends JFrame {
 	private void rebuildVisibleTabs(Component preferredComponent, int preferredLogIndex) {
 		rebuildingTabs = true;
 		try {
-			tabs.removeAll();
-			for (Component component : dashboardWorkspaces()) {
-				addVisibleTab(component);
+			List<Component> desired = dashboardWorkspaces().stream()
+					.filter(component -> visibleTabLabel(component) != null).toList();
+			for (int index = tabs.getTabCount() - 1; index >= 0; index--) {
+				if (!desired.contains(tabs.getComponentAt(index))) {
+					tabs.removeTabAt(index);
+				}
+			}
+			for (int index = 0; index < desired.size(); index++) {
+				Component component = desired.get(index);
+				String label = visibleTabLabel(component);
+				int existing = tabs.indexOfComponent(component);
+				if (existing != index) {
+					if (existing >= 0) {
+						tabs.removeTabAt(existing);
+					}
+					tabs.insertTab(label, null, component, null, index);
+				} else if (!label.equals(tabs.getTitleAt(index))) {
+					tabs.setTitleAt(index, label);
+				}
 			}
 			Component selection = resolveSelection(preferredComponent, preferredLogIndex);
 			if (selection != null && tabs.indexOfComponent(selection) >= 0) {
@@ -2226,29 +2244,29 @@ public class MainFrame extends JFrame {
 	 * @return available editor, or null when none exists
 	 */
 	private Component resolveSelection(Component preferredComponent, int preferredLogIndex) {
-		if (preferredLogIndex >= 0 && preferredLogIndex < ics214Panels.size() && isGroupVisible(ACTIVITY_LOGS_GROUP)) {
-			return ics214Panels.get(preferredLogIndex);
-		}
 		if (preferredComponent != null && tabs.indexOfComponent(preferredComponent) >= 0) {
 			return preferredComponent;
+		}
+		if (preferredLogIndex >= 0 && preferredLogIndex < ics214Panels.size() && isGroupVisible(ACTIVITY_LOGS_GROUP)) {
+			return ics214Panels.get(preferredLogIndex);
 		}
 		return incidentContextPanel;
 	}
 
 	/**
-	 * Adds an editor only when its group is visible.
+	 * Computes the label for an editor whose group is visible.
 	 * @param component registered editor
+	 * @return label, or null when the editor is hidden
 	 */
-	private void addVisibleTab(Component component) {
+	private String visibleTabLabel(Component component) {
 		WorkspaceDefinition definition = tabWorkspaces.get(component);
 		if (definition == null || (!CORE_GROUP.equals(definition.group())
 				&& !isGroupVisible(definition.group()))) {
-			return;
+			return null;
 		}
-		String label = component instanceof Ics214Panel logPanel
+		return component instanceof Ics214Panel logPanel
 				? activityLogTabLabel(logPanel.getCurrentForm(), definition.displayLabel(), descriptiveTabs)
 				: workspaceTabLabel(definition.id(), definition.displayLabel(), descriptiveTabs);
-		tabs.addTab(label, component);
 	}
 
 	/**

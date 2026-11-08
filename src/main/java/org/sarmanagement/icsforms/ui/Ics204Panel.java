@@ -311,7 +311,7 @@ public class Ics204Panel extends JPanel {
 		specialInstructionsArea.setText(nullSafe(form.getSpecialInstructions()));
 		preparedByNameField.setText(nullSafe(form.getPreparedByName()));
 		preparedByPositionField.setText(nullSafe(form.getPreparedByPositionTitle()));
-		preparedDateTimeField.setValue(AppController.toDate(form.getPreparedDateTime()));
+		UiSupport.loadDateTime(preparedDateTimeField, form.getPreparedDateTime());
 		iapPageField.setText(nullSafe(form.getIapPage()));
 		rebuildManagementContacts();
 		resourceTableModel.setRows(form.getResourcesAssigned());
@@ -360,7 +360,7 @@ public class Ics204Panel extends JPanel {
 		form.setSpecialInstructions(specialInstructionsArea.getText().trim());
 		form.setPreparedByName(preparedByNameField.getText().trim());
 		form.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
-		form.setPreparedDateTime(AppController.toLocalDateTime((java.util.Date) preparedDateTimeField.getValue()));
+		form.setPreparedDateTime(UiSupport.readDateTime(preparedDateTimeField));
 		form.setIapPage(iapPageField.getText().trim());
 		form.setResourcesAssigned(resourceTableModel.getRows());
 		form.setCommunications(communicationsTableModel.getRows());

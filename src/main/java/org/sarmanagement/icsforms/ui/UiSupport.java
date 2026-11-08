@@ -375,6 +375,40 @@ final class UiSupport {
 	}
 
 	/**
+	 * Loads a nullable timestamp while retaining the original value until edited.
+	 *
+	 * @param spinner timestamp editor.
+	 * @param value original UTC value, possibly null.
+	 */
+	static void loadDateTime(JSpinner spinner, java.time.LocalDateTime value) {
+		spinner.setValue(AppController.toDate(value));
+		spinner.putClientProperty("icsforms.dateTimeBaseline", spinner.getValue());
+		spinner.putClientProperty("icsforms.dateTimeOriginal", value);
+	}
+
+	/**
+	 * Returns whether a timestamp spinner still shows its loaded value.
+	 *
+	 * @param spinner timestamp editor.
+	 * @return true when unchanged since loading.
+	 */
+	static boolean dateTimeUnchanged(JSpinner spinner) {
+		return java.util.Objects.equals(spinner.getValue(), spinner.getClientProperty("icsforms.dateTimeBaseline"));
+	}
+
+	/**
+	 * Reads a timestamp without turning an untouched null into the spinner's default.
+	 *
+	 * @param spinner timestamp editor.
+	 * @return original or edited UTC timestamp.
+	 */
+	static java.time.LocalDateTime readDateTime(JSpinner spinner) {
+		return dateTimeUnchanged(spinner)
+				? (java.time.LocalDateTime) spinner.getClientProperty("icsforms.dateTimeOriginal")
+				: AppController.toLocalDateTime((Date) spinner.getValue());
+	}
+
+	/**
 	 * Scrolls a table so its last row is visible.
 	 *
 	 * @param table

@@ -111,7 +111,7 @@ public class AsyncFormPreviewPanel extends JPanel {
 			showImages(cached, "Current PDF — " + cached.size() + " page(s)");
 			return;
 		}
-		showImages(List.of(), "Rendering current PDF…");
+		state.setText("Rendering current PDF…");
 		worker = new SwingWorker<>() {
 			/** {@inheritDoc} */
 			@Override

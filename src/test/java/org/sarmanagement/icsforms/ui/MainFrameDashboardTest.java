@@ -51,6 +51,114 @@ class MainFrameDashboardTest {
 	}
 
 	@Test
+	void unchangedTabSwitchRetainsComponentsWithoutCommitting() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		var directory = Files.createTempDirectory("icsforms-tab-flicker");
+		var notifications = new java.util.ArrayList<AppController.IncidentChange>();
+		MainFrame[] frame = new MainFrame[1];
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				frame[0] = IncidentStoreTestFixtures.frame(new AppData(), directory,
+						new PdfExportService(), new IncidentValidator(), directory);
+				AppController controller = (AppController) Ics205PanelTest.field(frame[0], "controller");
+				JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame[0], "tabs");
+				var components = java.util.stream.IntStream.range(0, tabs.getTabCount())
+						.mapToObj(tabs::getComponentAt).toList();
+				java.util.concurrent.atomic.AtomicInteger removals = new java.util.concurrent.atomic.AtomicInteger();
+				tabs.addContainerListener(new java.awt.event.ContainerAdapter() {
+					@Override
+					public void componentRemoved(java.awt.event.ContainerEvent event) {
+						removals.incrementAndGet();
+					}
+				});
+				controller.addIncidentChangeListener(notifications::add);
+				var binding = controller.captureEditorCommitBinding();
+				tabs.setSelectedIndex(1);
+				assertEquals(1, tabs.getSelectedIndex());
+				assertEquals(0, removals.get());
+				assertEquals(components, java.util.stream.IntStream.range(0, tabs.getTabCount())
+						.mapToObj(tabs::getComponentAt).toList());
+				assertEquals(binding, controller.captureEditorCommitBinding());
+				assertFalse(controller.hasUnsavedChanges());
+				assertFalse(((Timer) Ics205PanelTest.field(controller, "autosaveTimer")).isRunning());
+			});
+			SwingUtilities.invokeAndWait(() -> assertTrue(notifications.isEmpty()));
+		} finally {
+			SwingUtilities.invokeAndWait(() -> {
+				if (frame[0] != null) {
+					AppController controller = (AppController) Ics205PanelTest.field(frame[0], "controller");
+					frame[0].dispose();
+					controller.close();
+				}
+			});
+		}
+	}
+
+	@Test
+	void changedEditorCommitsAndNotifiesOnTabSwitch() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		var directory = Files.createTempDirectory("icsforms-tab-edit");
+		var notifications = new java.util.ArrayList<AppController.IncidentChange>();
+		MainFrame[] frame = new MainFrame[1];
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				frame[0] = IncidentStoreTestFixtures.frame(new AppData(), directory,
+						new PdfExportService(), new IncidentValidator(), directory);
+				AppController controller = (AppController) Ics205PanelTest.field(frame[0], "controller");
+				controller.addIncidentChangeListener(notifications::add);
+				Object panel = Ics205PanelTest.field(frame[0], "incidentContextPanel");
+				((javax.swing.JTextField) Ics205PanelTest.field(panel, "incidentNameField")).setText("Edited incident");
+				((JTabbedPane) Ics205PanelTest.field(frame[0], "tabs")).setSelectedIndex(1);
+				assertEquals("Edited incident", controller.getData().getIncidentContext().getIncidentName());
+				assertTrue(controller.hasUnsavedChanges());
+			});
+			SwingUtilities.invokeAndWait(() -> assertEquals(1, notifications.stream()
+					.filter(change -> change.kind() == AppController.IncidentChangeKind.MODEL_COMMITTED).count()));
+		} finally {
+			SwingUtilities.invokeAndWait(() -> {
+				if (frame[0] != null) {
+					AppController controller = (AppController) Ics205PanelTest.field(frame[0], "controller");
+					frame[0].dispose();
+					controller.close();
+				}
+			});
+		}
+	}
+
+	@Test
+	void reorderedActivityLogsKeepSelectedPanelIdentity() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		var directory = Files.createTempDirectory("icsforms-reordered-logs");
+		AppData data = new AppData();
+		data.getActivityLogs().add(new Ics214Form());
+		data.getActivityLogs().add(new Ics214Form());
+		SwingUtilities.invokeAndWait(() -> {
+			MainFrame frame = IncidentStoreTestFixtures.frame(data, directory,
+					new PdfExportService(), new IncidentValidator(), directory);
+			AppController controller = (AppController) Ics205PanelTest.field(frame, "controller");
+			try {
+				JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame, "tabs");
+				java.awt.Component selected = java.util.stream.IntStream.range(0, tabs.getTabCount())
+						.mapToObj(tabs::getComponentAt).filter(Ics214Panel.class::isInstance)
+						.findFirst().orElseThrow();
+				tabs.setSelectedComponent(selected);
+				java.util.Collections.swap(data.getActivityLogs(), 0, 1);
+				try {
+					var refresh = MainFrame.class.getDeclaredMethod("refreshFromModel");
+					refresh.setAccessible(true);
+					refresh.invoke(frame);
+				} catch (ReflectiveOperationException exception) {
+					throw new AssertionError(exception);
+				}
+				assertSame(selected, tabs.getSelectedComponent());
+			} finally {
+				frame.dispose();
+				controller.close();
+			}
+		});
+	}
+
+	@Test
 	void tabLabelConfigurationUpdatesExistingEditorsAndPersistsChoice() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		var directory = Files.createTempDirectory("icsforms-tab-labels");
