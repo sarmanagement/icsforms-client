@@ -111,5 +111,6 @@ views. A saved legacy dashboard preference is ignored.
 The Incident Command panel provides focused objective editing, assessment,
 assignment linking/creation, and reported results with stated sources. Automated
 coverage and the remaining optional accessibility follow-up are recorded in
-[`DraftWorkPlan.md`](../DraftWorkPlan.md); resizing and second-screen use are
+[`DraftWorkPlan.md`](../DraftWorkPlan.md) and
+[`completed-work.md`](completed-work.md); resizing and second-screen use are
 user-confirmed. Keyboard-only navigation is not an acceptance gate.
