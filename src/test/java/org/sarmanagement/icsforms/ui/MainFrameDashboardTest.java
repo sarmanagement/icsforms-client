@@ -126,6 +126,93 @@ class MainFrameDashboardTest {
 	}
 
 	@Test
+	void showingFrameKeepsInitialTabsBuiltBeforeDisplay() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		var directory = Files.createTempDirectory("icsforms-initial-tabs");
+		MainFrame[] frame = new MainFrame[1];
+		var before = new java.util.ArrayList<java.awt.Component>();
+		var titles = new java.util.ArrayList<String>();
+		java.util.concurrent.atomic.AtomicInteger changes = new java.util.concurrent.atomic.AtomicInteger();
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				frame[0] = IncidentStoreTestFixtures.frame(new AppData(), directory,
+						new PdfExportService(), new IncidentValidator(), directory);
+				JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame[0], "tabs");
+				for (int index = 0; index < tabs.getTabCount(); index++) {
+					before.add(tabs.getComponentAt(index));
+					titles.add(tabs.getTitleAt(index));
+				}
+				tabs.addContainerListener(new java.awt.event.ContainerAdapter() {
+					@Override
+					public void componentRemoved(java.awt.event.ContainerEvent event) {
+						changes.incrementAndGet();
+					}
+
+					@Override
+					public void componentAdded(java.awt.event.ContainerEvent event) {
+						changes.incrementAndGet();
+					}
+				});
+				frame[0].setVisible(true);
+			});
+			SwingUtilities.invokeAndWait(() -> {
+			});
+			SwingUtilities.invokeAndWait(() -> {
+				JTabbedPane tabs = (JTabbedPane) Ics205PanelTest.field(frame[0], "tabs");
+				assertFalse(before.isEmpty());
+				assertEquals(before.size(), tabs.getTabCount());
+				for (int index = 0; index < before.size(); index++) {
+					assertSame(before.get(index), tabs.getComponentAt(index));
+					assertEquals(titles.get(index), tabs.getTitleAt(index));
+				}
+				assertEquals(0, changes.get());
+			});
+		} finally {
+			SwingUtilities.invokeAndWait(() -> {
+				if (frame[0] != null) {
+					AppController controller = (AppController) Ics205PanelTest.field(frame[0], "controller");
+					frame[0].dispose();
+					controller.close();
+				}
+			});
+		}
+	}
+
+	@Test
+	void repeatedPlanReuseChecksDoNotPauseIncidentWindows() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		var directory = Files.createTempDirectory("icsforms-reuse-wait");
+		MainFrame[] frame = new MainFrame[1];
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				frame[0] = IncidentStoreTestFixtures.frame(new AppData(), directory,
+						new PdfExportService(), new IncidentValidator(), directory);
+				AppController controller = (AppController) Ics205PanelTest.field(frame[0], "controller");
+				java.util.concurrent.atomic.AtomicInteger waits = new java.util.concurrent.atomic.AtomicInteger();
+				controller.setPersistenceWaitHandler(waiting -> {
+					if (waiting) {
+						waits.incrementAndGet();
+					}
+				});
+				controller.canReusePlans();
+				int first = waits.get();
+				for (int index = 0; index < 5; index++) {
+					controller.canReusePlans();
+				}
+				assertEquals(first, waits.get());
+			});
+		} finally {
+			SwingUtilities.invokeAndWait(() -> {
+				if (frame[0] != null) {
+					AppController controller = (AppController) Ics205PanelTest.field(frame[0], "controller");
+					frame[0].dispose();
+					controller.close();
+				}
+			});
+		}
+	}
+
+	@Test
 	void changedEditorCommitsAndNotifiesOnTabSwitch() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		var directory = Files.createTempDirectory("icsforms-tab-edit");
