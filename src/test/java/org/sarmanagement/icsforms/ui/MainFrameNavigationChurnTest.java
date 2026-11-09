@@ -50,6 +50,63 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /** Measures descendant events and retained view state on a shown, event-separated workspace. */
 class MainFrameNavigationChurnTest {
+	@org.junit.jupiter.api.Test
+	void liveSafetyOfficerAndModeChangesReachGuardedMedicalAndSafetyEditors() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		var directory = Files.createTempDirectory("icsforms-live-safety-refresh");
+		AppData data = populatedIncident();
+		data.getOrganizationalChart().setIncidentCommanderName("Shared officer");
+		data.getOrganizationalChart().setSafetyOfficerName("Shared officer");
+		data.getMedicalPlan().setReviewedBySafetyOfficer("");
+		data.getCanineMedicalPlan().setReviewedBySafetyOfficer("");
+		data.setIncidentMode(org.sarmanagement.icsforms.model.IncidentMode.GENERIC);
+		MainFrame[] frame = new MainFrame[1];
+		AppController[] controller = new AppController[1];
+		Object[] medical = new Object[1];
+		Object[] canine = new Object[1];
+		JTabbedPane[] safetySections = new JTabbedPane[1];
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				frame[0] = IncidentStoreTestFixtures.frame(data, directory, new PdfExportService(),
+						new IncidentValidator(), directory);
+				controller[0] = (AppController) Ics205PanelTest.field(frame[0], "controller");
+				medical[0] = Ics205PanelTest.field(frame[0], "medicalPlanPanel");
+				canine[0] = Ics205PanelTest.field(frame[0], "canineMedicalPanel");
+				safetySections[0] = (JTabbedPane) Ics205PanelTest.field(
+						Ics205PanelTest.field(frame[0], "safetyPanel"), "sections");
+				frame[0].setVisible(true);
+				assertEquals("Shared officer", ((JTextField) Ics205PanelTest.field(medical[0], "reviewedBy")).getText());
+				assertEquals("Shared officer", ((JTextField) Ics205PanelTest.field(canine[0], "safetyOfficer")).getText());
+				assertEquals(-1, safetySections[0].indexOfTab("Reported SAR Hazards"));
+			});
+			new Robot().waitForIdle();
+			var cards = java.util.Base64.getEncoder().encodeToString(UiRefreshState.serialize(data.getTCards()));
+			SwingUtilities.invokeAndWait(() -> {
+				assertTrue(controller[0].commitIfCurrent(controller[0].captureIncidentBinding(),
+						() -> data.getOrganizationalChart().setSafetyOfficerName("")));
+				((Timer) Ics205PanelTest.field(controller[0], "autosaveTimer")).stop();
+			});
+			SwingUtilities.invokeAndWait(() -> {
+				assertEquals("", ((JTextField) Ics205PanelTest.field(medical[0], "reviewedBy")).getText());
+				assertEquals("", ((JTextField) Ics205PanelTest.field(canine[0], "safetyOfficer")).getText());
+				assertTrue(controller[0].commitIfCurrent(controller[0].captureIncidentBinding(),
+						() -> data.setIncidentMode(org.sarmanagement.icsforms.model.IncidentMode.SAR)));
+				((Timer) Ics205PanelTest.field(controller[0], "autosaveTimer")).stop();
+			});
+			SwingUtilities.invokeAndWait(() ->
+					assertTrue(safetySections[0].indexOfTab("Reported SAR Hazards") >= 0));
+			assertEquals(cards, java.util.Base64.getEncoder().encodeToString(UiRefreshState.serialize(data.getTCards())),
+					"shared command card remains unchanged; no incidental T-card invalidation");
+		} finally {
+			SwingUtilities.invokeAndWait(() -> {
+				if (frame[0] != null) {
+					frame[0].dispose();
+					controller[0].close();
+				}
+			});
+		}
+	}
+
 	@ParameterizedTest
 	@ValueSource(strings = {"accepted", "rejected", "stale"})
 	void visibleNavigationCommitsOrRetainsActiveCommunicationsDraft(String outcome) throws Exception {
@@ -139,6 +196,20 @@ class MainFrameNavigationChurnTest {
 		Map<JTextComponent, int[]> carets = new IdentityHashMap<>();
 		Map<JTable, AtomicInteger> tableEvents = new IdentityHashMap<>();
 		Map<JTextComponent, AtomicInteger> documentEvents = new IdentityHashMap<>();
+		Map<javax.swing.JList<?>, AtomicInteger> listEvents = new IdentityHashMap<>();
+		Map<AsyncFormPreviewPanel, Object> previewGenerations = new IdentityHashMap<>();
+		Map<AsyncFormPreviewPanel, Component[]> previewPages = new IdentityHashMap<>();
+		AtomicInteger roleChildEvents = new AtomicInteger();
+		AtomicInteger paintBatches = new AtomicInteger();
+		javax.swing.RepaintManager originalRepaints = javax.swing.RepaintManager.currentManager(null);
+		javax.swing.RepaintManager measuredRepaints = new javax.swing.RepaintManager() {
+			/** {@inheritDoc} */
+			@Override
+			public void paintDirtyRegions() {
+				paintBatches.incrementAndGet();
+				super.paintDirtyRegions();
+			}
+		};
 		AtomicInteger additions = new AtomicInteger();
 		AtomicInteger removals = new AtomicInteger();
 		AtomicInteger tabRemovals = new AtomicInteger();
@@ -173,6 +244,12 @@ class MainFrameNavigationChurnTest {
 				frames[0].toFront();
 			});
 			robot.waitForIdle();
+			if (roleWindows) {
+				AsyncFormPreviewPanelTest.waitFor(() -> roles.stream().flatMap(role -> descendants(role).stream())
+						.filter(AsyncFormPreviewPanel.class::isInstance).map(AsyncFormPreviewPanel.class::cast)
+						.filter(preview -> Ics205PanelTest.field(preview, "currentKey") != null)
+						.allMatch(preview -> preview.displayedPageCount() > 0));
+			}
 			SwingUtilities.invokeAndWait(() -> tabs[0].setSelectedComponent(
 					(Component) Ics205PanelTest.field(frames[0], "ics204Panel")));
 			robot.waitForIdle();
@@ -215,7 +292,36 @@ class MainFrameNavigationChurnTest {
 						tabRemovals.incrementAndGet();
 					}
 				});
-				for (Component component : descendants(tabs[0])) {
+				List<Component> measuredDescendants = new ArrayList<>(descendants(tabs[0]));
+				for (JFrame role : roles) {
+					List<Component> components = descendants(role);
+					measuredDescendants.addAll(components);
+					for (Component component : components) {
+						if (component instanceof Container container) {
+							container.addContainerListener(new ContainerAdapter() {
+								/** {@inheritDoc} */
+								@Override
+								public void componentAdded(ContainerEvent event) {
+									roleChildEvents.incrementAndGet();
+								}
+
+								/** {@inheritDoc} */
+								@Override
+								public void componentRemoved(ContainerEvent event) {
+									roleChildEvents.incrementAndGet();
+								}
+							});
+						}
+						if (component instanceof AsyncFormPreviewPanel preview && preview.displayedPageCount() > 0) {
+							previewGenerations.put(preview, Ics205PanelTest.field(preview, "requestGeneration"));
+							previewPages.put(preview, ((JPanel) Ics205PanelTest.field(preview, "pages")).getComponents());
+						}
+					}
+				}
+				if (roleWindows) {
+					assertTrue(previewPages.size() >= 2, "completed safety and medical previews");
+				}
+				for (Component component : measuredDescendants) {
 					if (component instanceof JTable table) {
 						AtomicInteger count = new AtomicInteger();
 						tableEvents.put(table, count);
@@ -224,6 +330,10 @@ class MainFrameNavigationChurnTest {
 						AtomicInteger count = new AtomicInteger();
 						documentEvents.put(text, count);
 						watchDocument(text, count);
+					} else if (component instanceof javax.swing.JList<?> list) {
+						AtomicInteger count = new AtomicInteger();
+						listEvents.put(list, count);
+						UiRefreshStateTest.watchList(list, count);
 					}
 				}
 				for (Component editor : List.of(logs[0],
@@ -240,6 +350,7 @@ class MainFrameNavigationChurnTest {
 				assertFalse(controllers[0].hasUnsavedChanges());
 				controllers[0].addIncidentChangeListener(change -> notifications.incrementAndGet());
 				captureFrame(frames[0], roleWindows, "before");
+				javax.swing.RepaintManager.setCurrentManager(measuredRepaints);
 			});
 			for (int pass = 0; pass < 10; pass++) {
 				boolean showLog = pass % 2 == 1;
@@ -250,6 +361,15 @@ class MainFrameNavigationChurnTest {
 					assertEquals(0, additions.get(), "ICS 204 management child additions");
 					assertEquals(0, removals.get(), "ICS 204 management child removals");
 					assertEquals(0, tabRemovals.get(), "top-level tab removals");
+					assertEquals(0, roleChildEvents.get(), "role descendant additions/removals");
+					listEvents.forEach((list, count) -> assertEquals(0, count.get(), "role worklist notifications"));
+					previewGenerations.forEach((preview, generation) ->
+							assertEquals(generation, Ics205PanelTest.field(preview, "requestGeneration"),
+									"no replacement preview submitted"));
+					previewPages.forEach((preview, pages) -> {
+						Component[] current = ((JPanel) Ics205PanelTest.field(preview, "pages")).getComponents();
+						org.junit.jupiter.api.Assertions.assertArrayEquals(pages, current, "completed preview pages retained");
+					});
 					tableEvents.forEach((table, count) -> assertEquals(0, count.get(),
 							"table event: " + table.getModel().getClass().getSimpleName()));
 					documentEvents.forEach((text, count) -> assertEquals(0, count.get(),
@@ -278,14 +398,18 @@ class MainFrameNavigationChurnTest {
 			SwingUtilities.invokeAndWait(() -> {
 				assertSame(logs[0], tabs[0].getSelectedComponent());
 				assertTrue(frames[0].isShowing());
+				assertTrue(paintBatches.get() > 0, "newly selected visible content was painted");
 				captureFrame(frames[0], roleWindows, "after");
 			});
 			System.out.println("Visible navigation: " + System.getProperty("os.name") + ", Java "
 					+ System.getProperty("java.version") + ", " + GraphicsEnvironment.getLocalGraphicsEnvironment()
 							.getDefaultScreenDevice().getDisplayMode()
-					+ ", role windows=" + roleWindows + "; 10 switches; descendant counters=0; view state retained.");
+					+ ", role windows=" + roleWindows + "; 10 switches; descendant counters=0; view state retained; "
+					+ previewPages.size() + " completed previews retained; paint batches=" + paintBatches.get()
+					+ ". Structural/paint evidence, not a human flicker assessment.");
 		} finally {
 			SwingUtilities.invokeAndWait(() -> {
+				javax.swing.RepaintManager.setCurrentManager(originalRepaints);
 				roles.forEach(JFrame::dispose);
 				if (frames[0] != null) {
 					frames[0].dispose();
@@ -406,7 +530,7 @@ class MainFrameNavigationChurnTest {
 		}
 		try {
 			var image = new Robot().createScreenCapture(new java.awt.Rectangle(frame.getLocationOnScreen(), frame.getSize()));
-			java.nio.file.Path directory = java.nio.file.Path.of("target", "navigation-screenshots");
+			java.nio.file.Path directory = java.nio.file.Path.of("/tmp", "icsforms-navigation-screenshots");
 			java.nio.file.Files.createDirectories(directory);
 			javax.imageio.ImageIO.write(image, "png", directory.resolve(
 					"icsforms-navigation-" + roles + "-" + stage + ".png").toFile());

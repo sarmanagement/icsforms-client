@@ -137,11 +137,14 @@ public class CommunicationsRolePanel extends JPanel {
 	 */
 	public void refreshFromModel() {
 		AppData data = controller.getData();
-		if (!refreshState.roleChanged(data, data.getForm205(), data.getAllAssignmentResources(),
-				data.getSarTaskAssignments(), editorDirty)) {
+		if (!refreshState.roleChanged(data, planBadges.displayInputs(data), data.getForm205(), data.getAllAssignmentResources(),
+				data.getSarTaskAssignments(), ChannelLinkSource.links(data),
+				data.getCommunicationsReview(), data.getPlanReviewStatus(PlanReviewArea.COMMUNICATIONS),
+				editorDirty)) {
 			return;
 		}
 		refreshing = true;
+		try {
 		String selectedId = selectedChannelId();
 		if (selectedId.isBlank()) {
 			selectedId = loadedChannelId;
@@ -157,6 +160,10 @@ public class CommunicationsRolePanel extends JPanel {
 			loadSelectedChannel();
 		} else {
 			rebuildLinks(loadedChannelId);
+		}
+		refreshState.complete();
+		} finally {
+			refreshing = false;
 		}
 	}
 
@@ -347,6 +354,9 @@ public class CommunicationsRolePanel extends JPanel {
 	 * @param channelId prior channel identity.
 	 */
 	private void restoreSelection(String channelId) {
+		if (!channelId.isBlank() && channelId.equals(selectedChannelId())) {
+			return;
+		}
 		channels.clearSelection();
 		for (int modelRow = 0; modelRow < channelModel.getRowCount(); modelRow++) {
 			if (channelId.equals(channelModel.row(modelRow).channelId())) {
@@ -372,13 +382,13 @@ public class CommunicationsRolePanel extends JPanel {
 			if (!editorDirty) {
 				loadedChannelId = "";
 				baseline = null;
-				assignment.setText("");
-				coverage.setText("");
-				relay.setText("");
+				UiSupport.setTextIfChanged(assignment, "");
+				UiSupport.setTextIfChanged(coverage, "");
+				UiSupport.setTextIfChanged(relay, "");
 				checkStatus.setSelectedItem(RadioCheckStatus.NOT_RECORDED);
-				checkedBy.setText("");
+				UiSupport.setTextIfChanged(checkedBy, "");
 				checkedAt.setText("Not recorded");
-				checkNotes.setText("");
+				UiSupport.setTextIfChanged(checkNotes, "");
 			}
 			rebuildLinks("");
 			saveStatus.setText(editorDirty ? "Selected channel changed; reload before saving" : " ");
@@ -387,14 +397,14 @@ public class CommunicationsRolePanel extends JPanel {
 		}
 		loadedChannelId = id;
 		baseline = channel.deepCopy();
-		assignment.setText(channel.getAssignment());
-		coverage.setText(channel.getCoverageGuidance());
-		relay.setText(channel.getRelayGuidance());
+		UiSupport.setTextIfChanged(assignment, channel.getAssignment());
+		UiSupport.setTextIfChanged(coverage, channel.getCoverageGuidance());
+		UiSupport.setTextIfChanged(relay, channel.getRelayGuidance());
 		checkStatus.setSelectedItem(channel.getRadioCheckStatus());
-		checkedBy.setText(channel.getRadioCheckedBy());
+		UiSupport.setTextIfChanged(checkedBy, channel.getRadioCheckedBy());
 		checkedAt.setText(channel.getRadioCheckedAt() == null ? "Not recorded"
 				: UiSupport.formatDateTime(channel.getRadioCheckedAt(), CHECK_TIME));
-		checkNotes.setText(channel.getRadioCheckNotes());
+		UiSupport.setTextIfChanged(checkNotes, channel.getRadioCheckNotes());
 		rebuildLinks(id);
 		editorDirty = false;
 		saveStatus.setText(" ");
@@ -407,17 +417,18 @@ public class CommunicationsRolePanel extends JPanel {
 	 * @param channelId selected channel identity.
 	 */
 	private void rebuildLinks(String channelId) {
-		linkModel.clear();
+		List<String> rows = new ArrayList<>();
 		for (ChannelLinkSource.ChannelLink link : ChannelLinkSource.links(controller.getData())) {
 			if (channelId.equals(link.channelId())
 					&& link.status() == ChannelLinkSource.LinkStatus.LINKED
 					&& link.sourceKind() != ChannelLinkSource.SourceKind.ICS205_ASSIGNMENT) {
-				linkModel.addElement(link.sourceKind() + " — " + link.sourceLabel());
+				rows.add(link.sourceKind() + " — " + link.sourceLabel());
 			}
 		}
-		if (linkModel.isEmpty() && !channelId.isBlank()) {
-			linkModel.addElement("No stable current-period references");
+		if (rows.isEmpty() && !channelId.isBlank()) {
+			rows.add("No stable current-period references");
 		}
+		UiSupport.reconcileList(linkModel, rows);
 	}
 
 	/** Saves focused edits and presents validation or stale-edit feedback. */
@@ -511,8 +522,10 @@ public class CommunicationsRolePanel extends JPanel {
 						channel.getFunction(), channel.getAssignment(), channel.getRxFrequency(),
 						channel.getTxFrequency(), channel.getRadioCheckStatus().displayLabel()));
 			}
-			rows = List.copyOf(updated);
-			fireTableDataChanged();
+			if (!rows.equals(updated)) {
+				rows = List.copyOf(updated);
+				fireTableDataChanged();
+			}
 		}
 
 		/**

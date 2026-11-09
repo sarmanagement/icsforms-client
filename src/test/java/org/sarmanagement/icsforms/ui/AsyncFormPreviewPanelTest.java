@@ -25,6 +25,84 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /** Verifies asynchronous preview failure and stale-result handling. */
 class AsyncFormPreviewPanelTest {
 	@Test
+	void narrowInputsReusePagesAndFailedReplacementCanRetry() throws Exception {
+		AppData source = new AppData();
+		AtomicInteger renders = new AtomicInteger();
+		CountDownLatch replacementStarted = new CountDownLatch(1);
+		CountDownLatch releaseReplacement = new CountDownLatch(1);
+		AsyncFormPreviewPanel panel = new AsyncFormPreviewPanel(new PdfFormRenderer() {
+			/** {@inheritDoc} */
+			@Override
+			public String getFormKey() {
+				return "Narrow input retry regression";
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void render(AppData data, Path outputFile) throws IOException {
+				int invocation = renders.incrementAndGet();
+				if (invocation == 2) {
+					replacementStarted.countDown();
+					try {
+						if (!releaseReplacement.await(10, TimeUnit.SECONDS)) {
+							throw new IOException("replacement release timed out");
+						}
+					} catch (InterruptedException exception) {
+						Thread.currentThread().interrupt();
+						throw new IOException(exception);
+					}
+				}
+				if (invocation == 3) {
+					throw new IOException("expected retryable failure");
+				}
+				try (PDDocument document = new PDDocument()) {
+					for (int page = 0; page < invocation; page++) {
+						document.addPage(new PDPage());
+					}
+					document.save(outputFile.toFile());
+				}
+			}
+		});
+		try {
+			SwingUtilities.invokeAndWait(() -> panel.requestPreview(source, "same-review", source.getMedicalPlan()));
+			waitFor(() -> panel.displayedPageCount() == 1);
+			SwingUtilities.invokeAndWait(() -> {
+				Object generation = Ics205PanelTest.field(panel, "requestGeneration");
+				Object pages = ((javax.swing.JPanel) Ics205PanelTest.field(panel, "pages")).getComponent(0);
+				source.getForm201().setMapSketch("irrelevant");
+				panel.requestPreview(source, "same-review", source.getMedicalPlan());
+				assertEquals(generation, Ics205PanelTest.field(panel, "requestGeneration"));
+				org.junit.jupiter.api.Assertions.assertSame(pages,
+						((javax.swing.JPanel) Ics205PanelTest.field(panel, "pages")).getComponent(0));
+				assertEquals(1, renders.get());
+				source.getMedicalPlan().setCall911Procedure("Relevant change");
+				panel.requestPreview(source, "same-review", source.getMedicalPlan());
+			});
+			assertTrue(replacementStarted.await(5, TimeUnit.SECONDS));
+			SwingUtilities.invokeAndWait(() -> {
+				assertEquals(1, panel.displayedPageCount(), "previous pages remain while replacement renders");
+				assertTrue(panel.previewStateText().contains("Rendering"));
+			});
+			releaseReplacement.countDown();
+			waitFor(() -> panel.displayedPageCount() == 2);
+			SwingUtilities.invokeAndWait(() -> {
+				source.getMedicalPlan().setCall911Procedure("Retryable change");
+				panel.requestPreview(source, "same-review", source.getMedicalPlan());
+			});
+			waitFor(() -> panel.previewStateText().contains("expected retryable failure"));
+			SwingUtilities.invokeAndWait(() -> {
+				assertEquals(2, panel.displayedPageCount(), "failed replacement does not clear completed pages");
+				panel.requestPreview(source, "same-review", source.getMedicalPlan());
+			});
+			waitFor(() -> panel.displayedPageCount() == 4);
+			assertEquals(4, renders.get());
+		} finally {
+			releaseReplacement.countDown();
+			SwingUtilities.invokeAndWait(panel::cancel);
+		}
+	}
+
+	@Test
 	void snapshotPreservesTCardsWithoutGeneratingLiveIdentities() throws Exception {
 		AppData source = new AppData();
 		var card = new org.sarmanagement.icsforms.model.TCard();
@@ -288,13 +366,18 @@ class AsyncFormPreviewPanelTest {
 	 * @param condition expected state.
 	 * @throws Exception when the EDT cannot be synchronized or the wait is interrupted.
 	 */
-	private void waitFor(java.util.function.BooleanSupplier condition) throws Exception {
-		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-		while (!condition.getAsBoolean() && System.nanoTime() < deadline) {
-			Thread.sleep(25);
-			SwingUtilities.invokeAndWait(() -> {
-			});
+	static void waitFor(java.util.function.BooleanSupplier condition) throws Exception {
+		CountDownLatch completed = new CountDownLatch(1);
+		javax.swing.Timer timer = new javax.swing.Timer(10, event -> {
+			if (condition.getAsBoolean()) {
+				completed.countDown();
+			}
+		});
+		try {
+			SwingUtilities.invokeAndWait(timer::start);
+			assertTrue(completed.await(10, TimeUnit.SECONDS), "bounded asynchronous completion");
+		} finally {
+			SwingUtilities.invokeAndWait(timer::stop);
 		}
-		assertTrue(condition.getAsBoolean());
 	}
 }

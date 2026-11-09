@@ -62,6 +62,7 @@ import java.util.stream.Collectors;
  * </p>
  */
 public class Ics214Panel extends JPanel {
+	private final UiRefreshState activityRefreshState = new UiRefreshState();
 	private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	private static final Map<Ics214Form, JFrame> POP_OUT_WINDOWS = new IdentityHashMap<>();
 
@@ -403,15 +404,24 @@ public class Ics214Panel extends JPanel {
 			return;
 		}
 		controller.prefillPreparedBy(currentForm);
-		nameField.setText(nullSafe(currentForm.getName()));
-		icsPositionField.setText(nullSafe(currentForm.getIcsPosition()));
-		homeAgencyField.setText(nullSafe(currentForm.getHomeAgency()));
-		preparedByNameField.setText(nullSafe(currentForm.getPreparedByName()));
-		preparedByPositionField.setText(nullSafe(currentForm.getPreparedByPositionTitle()));
-		preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
-		resourcesTableModel.setRows(copyResources(currentForm.getResourcesAssigned()));
-		activityLogTableModel.setRows(currentForm.getActivityLog(), resolvedEventTypes());
-		scrollActivityLogToLatestEntry();
+		UiSupport.setTextIfChanged(nameField, currentForm.getName());
+		UiSupport.setTextIfChanged(icsPositionField, currentForm.getIcsPosition());
+		UiSupport.setTextIfChanged(homeAgencyField, currentForm.getHomeAgency());
+		UiSupport.setTextIfChanged(preparedByNameField, currentForm.getPreparedByName());
+		UiSupport.setTextIfChanged(preparedByPositionField, currentForm.getPreparedByPositionTitle());
+		if (!java.util.Objects.equals(loadedCanonicalPreparedDateTime, currentForm.getPreparedDateTime())
+				|| loadedHeader == null) {
+			preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
+		}
+		if (!resourceStates(resourcesTableModel.getRows()).equals(resourceStates(currentForm.getResourcesAssigned()))) {
+			adoptCanonicalResources();
+		}
+		List<ActivityEventType> eventTypes = resolvedEventTypes();
+		activityRefreshState.refresh(currentData, () -> {
+			activityLogTableModel.setRows(currentForm.getActivityLog(), eventTypes);
+			scrollActivityLogToLatestEntry();
+		}, currentForm.getActivityLog(), eventTypes, System.identityHashCode(currentForm),
+				UiSupport.getDateTimeDisplayZone().getId());
 		updateActivityButtonsState();
 		boolean isTask = currentForm.getLogScope() == ActivityLogScope.TASK_ASSIGNMENT;
 		pickPreparerButton.setEnabled(isTask && !linkedTaskResources().isEmpty());

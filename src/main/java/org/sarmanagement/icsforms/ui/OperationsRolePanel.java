@@ -42,6 +42,8 @@ public class OperationsRolePanel extends JPanel {
 	private static final DateTimeFormatter PERIOD_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	private final AppController controller;
 	private final UiRefreshState refreshState = new UiRefreshState();
+	private final UiRefreshState taskRefreshState = new UiRefreshState();
+	private final UiRefreshState resourceRefreshState = new UiRefreshState();
 	private final Supplier<ResourceAssignment> newAssignment;
 	private final Consumer<String> editTask;
 	private final Consumer<String> changeStatus;
@@ -160,7 +162,7 @@ public class OperationsRolePanel extends JPanel {
 	public void refreshFromModel() {
 		AppData data = controller.getData();
 		if (!refreshState.roleChanged(data, data.getForm202(), data.getAllAssignmentResources(),
-				data.getSarTaskAssignments())) {
+				data.getSarTaskAssignments(), data.getTCards(), ChannelLinkSource.links(data), planBadges.displayInputs(data))) {
 			return;
 		}
 		String selectedAssignment = selectedTask() == null ? "" : selectedTask().getAssignmentId();
@@ -176,10 +178,9 @@ public class OperationsRolePanel extends JPanel {
 				"Operational period: " + start + " — " + end
 						+ " | Recorded status/location, not readiness confirmation");
 		planBadges.refreshFromModel(data);
-		taskModel.clear();
-		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
-			taskModel.addElement(new TaskChoice(task));
-		}
+		List<TaskChoice> taskRows = data.getSarTaskAssignments().stream().map(TaskChoice::new).toList();
+		taskRefreshState.refresh(data, () -> UiSupport.reconcileList(taskModel, taskRows),
+				taskRows.stream().map(row -> List.of(row.toString(), System.identityHashCode(row.task()))).toList());
 		for (int index = 0; index < taskModel.size(); index++) {
 			if (selectedAssignment.equals(taskModel.get(index).task().getAssignmentId())) {
 				taskBoard.setSelectedIndex(index);
@@ -189,23 +190,27 @@ public class OperationsRolePanel extends JPanel {
 		if (taskBoard.getSelectedIndex() < 0 && !taskModel.isEmpty()) {
 			taskBoard.setSelectedIndex(0);
 		}
-		resourceModel.clear();
+		List<ResourceChoice> resourceRows = new ArrayList<>();
 		for (TCard card : data.getTCards()) {
 			if (card.getCardType() != TCardType.HEADER
 					&& card.getStatus() != null
 					&& card.getStatus().trim().toLowerCase(java.util.Locale.ROOT).startsWith("available")) {
-				resourceModel.addElement(new ResourceChoice(card));
+				resourceRows.add(new ResourceChoice(card));
 			}
 		}
+		resourceRefreshState.refresh(data, () -> UiSupport.reconcileList(resourceModel, resourceRows),
+				resourceRows.stream().map(row -> List.of(row.toString(), row.resourceId(),
+						System.identityHashCode(row.card()))).toList());
 		resourceHint.setText(resourceModel.isEmpty() ? "No T-cards are recorded as available."
 				: "Select for New assignment; operator must confirm readiness.");
-		for (int index = 0; index < resourceModel.size(); index++) {
-			if (selectedResources.contains(resourceModel.get(index).resourceId())) {
-				availableResources.addSelectionInterval(index, index);
-			}
+		int[] desiredSelection = java.util.stream.IntStream.range(0, resourceModel.size())
+				.filter(index -> selectedResources.contains(resourceModel.get(index).resourceId())).toArray();
+		if (!java.util.Arrays.equals(desiredSelection, availableResources.getSelectedIndices())) {
+			availableResources.setSelectedIndices(desiredSelection);
 		}
 		refreshDetail();
 		refreshDebriefAvailability();
+		refreshState.complete();
 	}
 
 	/**
@@ -404,7 +409,7 @@ public class OperationsRolePanel extends JPanel {
 	private void refreshDetail() {
 		SarTaskAssignment task = selectedTask();
 		if (task == null) {
-			detail.setText("No task selected.");
+			UiSupport.setTextIfChanged(detail, "No task selected.");
 			return;
 		}
 		ResourceAssignment assignment = controller.getData().getAllAssignmentResources().stream()
@@ -431,7 +436,7 @@ public class OperationsRolePanel extends JPanel {
 					.map(entry -> entry.getName() + ": " + entry.getPrimaryContact())
 					.collect(java.util.stream.Collectors.joining(", "));
 		}
-		detail.setText("Assignment: " + task.getAssignment() + "\nStatus: " + task.getTaskLifecycleStatus()
+		UiSupport.setTextIfChanged(detail, "Assignment: " + task.getAssignment() + "\nStatus: " + task.getTaskLifecycleStatus()
 				+ "\nObjectives: " + (objectives.isEmpty() ? "[No objective linked]" : String.join("; ", objectives))
 				+ "\nLeader/team: " + SarTaskSupport.taskResourceDisplayLabel(task) + "\nMembers/resources: " + members
 				+ "\nCommunications: " + communications + "\nHazards: " + task.getHazardsObserved()
@@ -465,15 +470,23 @@ public class OperationsRolePanel extends JPanel {
 	 * Task-board label.
 	 *
 	 * @param task canonical task, or null.
+	 * @param label detached displayed task label.
 	 */
-	private record TaskChoice(SarTaskAssignment task) {
+	private record TaskChoice(SarTaskAssignment task, String label) {
+		/**
+		 * Captures a task label so in-place model mutations remain observable.
+		 *
+		 * @param task canonical task, possibly null.
+		 */
+		private TaskChoice(SarTaskAssignment task) {
+			this(task, task == null ? "" : task.getAssignmentTeamNumber() + " | " + task.getTaskLifecycleStatus()
+					+ " | " + task.getAssignment());
+		}
+
 		/** @return board label. */
 		@Override
 		public String toString() {
-			return task == null
-					? ""
-					: task.getAssignmentTeamNumber() + " | " + task.getTaskLifecycleStatus() + " | "
-							+ task.getAssignment();
+			return label;
 		}
 	}
 
@@ -481,8 +494,18 @@ public class OperationsRolePanel extends JPanel {
 	 * Recorded available-resource label.
 	 *
 	 * @param card canonical T-card.
+	 * @param label detached displayed resource label.
 	 */
-	private record ResourceChoice(TCard card) {
+	private record ResourceChoice(TCard card, String label) {
+		/**
+		 * Captures a resource label without retaining a mutable display baseline.
+		 *
+		 * @param card canonical resource card.
+		 */
+		private ResourceChoice(TCard card) {
+			this(card, card.getDisplayLabel() + " | status: " + card.getStatus() + " | location: " + card.getLocation());
+		}
+
 		/** @return stable resource identity. */
 		private String resourceId() {
 			return card.getResourceId();
@@ -491,7 +514,7 @@ public class OperationsRolePanel extends JPanel {
 		/** @return recorded resource label. */
 		@Override
 		public String toString() {
-			return card.getDisplayLabel() + " | status: " + card.getStatus() + " | location: " + card.getLocation();
+			return label;
 		}
 	}
 }

@@ -1569,7 +1569,7 @@ public class MainFrame extends JFrame {
 	private void refreshFromModel(boolean fullRefresh) {
 		AppData data = controller.getData();
 		ensureLogs(data);
-		fullRefresh |= tabRefreshState.changed(data, data.getIncidentMode(), data.getIapPhase(),
+		boolean reconcileTabs = fullRefresh || tabRefreshState.needsRefresh(data, data.getIncidentMode(), data.getIapPhase(),
 				data.isOpenActionTrackerEnabled(), data.isIcs205Enabled(), data.isIcs215Enabled(),
 				data.isCanineMedicalWorkspaceEligible(), activityLogTabState(data), configuredZoneId(data).getId());
 		if (lastRefreshedIncident != null && lastRefreshedIncident != controller.getData()) {
@@ -1580,28 +1580,45 @@ public class MainFrame extends JFrame {
 		Component selectedComponent = tabs.getSelectedComponent();
 		int selectedLogIndex = selectedLogIndex(selectedComponent);
 		refreshEditor(fullRefresh, incidentContextPanel, incidentContextPanel::refreshFromModel,
+				data.getIncidentContext(), data.getIapPhase(), controller.getStoreDisplayLabel(), data.getOrganizationalChart(), data.getTCards(),
 				data.getIncidentLocations(), data.getCanineRoutingBaseLocationId(), data.getOperationalPeriodHistory());
 		refreshEditor(fullRefresh, organizationalChartPanel, organizationalChartPanel::refreshFromModel,
+				data.getIncidentContext(), data.getOrganizationalChart(), data.getTCards(),
 				data.getForm207(), data.getMedicalUnitLeaderAssignment());
-		refreshEditor(fullRefresh, ics201Panel, ics201Panel::refreshFromModel, data.getForm201());
+		refreshEditor(fullRefresh, ics201Panel, ics201Panel::refreshFromModel,
+				data.getIncidentContext(), data.getIapPhase(), data.getOrganizationalChart(), data.getTCards(), data.getForm201());
 		refreshEditor(fullRefresh, ics202Panel, ics202Panel::refreshFromSharedModelChange,
+				data.getIncidentContext(), data.getOrganizationalChart(), data.getTCards(), data.getAllAssignmentResources(),
 				data.getForm202(), data.getMedicalPlan(), data.getCanineMedicalPlan());
 		refreshEditor(fullRefresh, ics204Panel, ics204Panel::refreshFromModel,
+				data.getIncidentContext(), data.getOrganizationalChart(), data.getTCards(),
 				data.getForm202(), data.getForm204(), data.getAdditionalForms204(), data.getSarTaskAssignments());
-		refreshEditor(fullRefresh, ics205Panel, ics205Panel::refreshFromModel, data.getForm205());
+		refreshEditor(fullRefresh, ics205Panel, ics205Panel::refreshFromModel,
+				data.getIncidentContext(), data.getOrganizationalChart(), data.getTCards(), data.getForm205(),
+				data.getCommunicationsReview(), data.getPlanReviewStatus(org.sarmanagement.icsforms.model.PlanReviewArea.COMMUNICATIONS));
 		refreshEditor(fullRefresh, ics215Panel, ics215Panel::refreshFromModel,
-				data.getForm215(), data.getNextPeriodForm215());
+				data.getIncidentContext(), data.getTCards(), data.getAllAssignmentResources(),
+				data.getForm205(), data.getForm215(), data.getNextPeriodForm215());
 		refreshEditor(fullRefresh, medicalPlanPanel, medicalPlanPanel::refreshFromModel,
-				data.getMedicalPlan(), data.getMedicalUnitLeaderAssignment());
+				data.getIncidentContext(), data.getTCards(), data.getMedicalPlan(), data.getMedicalUnitLeaderAssignment(),
+				MedicalRoleSupport.safetyOfficerName(data),
+				data.getHumanMedicalReview(), data.getPlanReviewStatus(org.sarmanagement.icsforms.model.PlanReviewArea.HUMAN_MEDICAL));
 		refreshEditor(fullRefresh, canineMedicalPanel, canineMedicalPanel::refreshFromModel,
+				data.getIncidentContext(), data.getTCards(),
+				MedicalRoleSupport.safetyOfficerName(data),
 				data.getCanineMedicalPlan(), data.getMedicalPlan(), data.getVetDirectory(), data.getStagingLocation(),
+				data.getMedicalUnitLeaderAssignment(), data.getCanineMedicalReview(),
+				data.getPlanReviewStatus(org.sarmanagement.icsforms.model.PlanReviewArea.CANINE_MEDICAL),
 				data.getIncidentLocations(), data.getCanineRoutingBaseLocationId());
 		medicalWorkspacePanel.setCanineVisible(
 				canineMedicalManuallyOpened || controller.getData().isCanineMedicalWorkspaceEligible());
 		refreshEditor(fullRefresh, safetyPanel, safetyPanel::refreshFromModel,
+				data.getIncidentContext(), data.getIncidentMode(), data.getOrganizationalChart(), data.getTCards(),
+				data.getSafetyReview(), data.getPlanReviewStatus(org.sarmanagement.icsforms.model.PlanReviewArea.SAFETY),
 				data.getForm215a(), data.getForm208(), data.getSarTaskAssignments(),
 				data.getCommonSafetyHazards(), data.getArchivedSafetyHazardReports());
 		refreshEditor(fullRefresh, safetyDashboardPanel, () -> safetyDashboardPanel.refreshFromModel(data),
+				data.getIncidentContext(), data.getMedicalUnitLeaderAssignment(), MedicalRoleSupport.safetyOfficerName(data),
 				data.getForm215a(), data.getForm208(), data.getMedicalPlan(), data.getCanineMedicalPlan(),
 				data.getStagingLocation(), data.getPdfLayoutSettings());
 		if (lastData != controller.getData()) {
@@ -1613,20 +1630,21 @@ public class MainFrame extends JFrame {
 		} else {
 			closedLogForms.retainAll(controller.getData().getActivityLogs());
 		}
-		if (fullRefresh) {
+		if (reconcileTabs) {
 			rebuildLogTabs();
 		}
 		for (Ics214Panel panel : ics214Panels) {
 			refreshEditor(fullRefresh, panel, () -> panel.loadFromModel(panel.getCurrentForm(), data),
-					panel.getCurrentForm());
+					data.getIncidentContext(), data.getTCards(), data.getAllAssignmentResources(),
+					data.getSarTaskAssignments(), data.getActivityEventTypes(), panel.getCurrentForm());
 		}
 		refreshEditor(fullRefresh, sarTaskPanel, sarTaskPanel::refreshFromModel,
-				data.getSarTaskAssignments(), data.getClueLogEntries(), data.getActivityEventTypes());
+				data.getAllAssignmentResources(), data.getSarTaskAssignments(), data.getClueLogEntries(), data.getActivityEventTypes());
 		refreshEditor(fullRefresh, clueLogPanel, clueLogPanel::refreshFromModel,
 				data.getClueLogEntries(), data.getSarTaskAssignments());
 		refreshEditor(fullRefresh, openActionTrackerPanel, openActionTrackerPanel::refreshFromModel,
 				data.getOpenActionItems());
-		refreshEditor(fullRefresh, tCardPanel, tCardPanel::refreshFromModel, data.getSarTaskAssignments());
+		refreshEditor(fullRefresh, tCardPanel, tCardPanel::refreshFromModel, data.getIncidentMode(), data.getTCards(), data.getSarTaskAssignments());
 		// Keep SAR-only tabs visible only in SAR mode.
 		groupVisible.put(SAR_ONLY_GROUP, controller.getIncidentMode() == IncidentMode.SAR);
 		groupVisible.put(SAFETY_DASHBOARD_GROUP, safetyDashboardManuallyVisible);
@@ -1647,7 +1665,7 @@ public class MainFrame extends JFrame {
 			groupVisible.put(ICS_201_GROUP, currentPhase == IapPhase.INITIAL_RESPONSE);
 			lastKnownPhase = currentPhase;
 		}
-		if (fullRefresh) {
+		if (reconcileTabs) {
 			rebuildVisibleTabs(selectedComponent, selectedLogIndex);
 			UiSupport.applyDateTimeDisplayZone(this);
 		}
@@ -1655,9 +1673,10 @@ public class MainFrame extends JFrame {
 		editorCommitBinding = controller.captureEditorCommitBinding();
 		controller.rebaseEditorCommitGuards(editorCommitBinding);
 		captureEditorTextBaselines();
-		tabRefreshState.changed(data, data.getIncidentMode(), data.getIapPhase(),
+		tabRefreshState.needsRefresh(data, data.getIncidentMode(), data.getIapPhase(),
 				data.isOpenActionTrackerEnabled(), data.isIcs205Enabled(), data.isIcs215Enabled(),
 				data.isCanineMedicalWorkspaceEligible(), activityLogTabState(data), configuredZoneId(data).getId());
+		tabRefreshState.complete();
 	}
 
 	/**
@@ -1682,12 +1701,11 @@ public class MainFrame extends JFrame {
 	private void refreshEditor(boolean fullRefresh, Component component, Runnable refresh, Object... inputs) {
 		AppData data = controller.getData();
 		boolean changed = editorRefreshStates.computeIfAbsent(component, ignored -> new UiRefreshState())
-				.changed(data, data.getIncidentContext(), data.getOrganizationalChart(), data.getTCards(),
-						data.getAllAssignmentResources(), configuredZoneId(data).getId(), inputs);
+				.needsRefresh(data, configuredZoneId(data).getId(), inputs);
 		if (fullRefresh || changed) {
 			refresh.run();
-			editorRefreshStates.get(component).changed(data, data.getIncidentContext(), data.getOrganizationalChart(),
-					data.getTCards(), data.getAllAssignmentResources(), configuredZoneId(data).getId(), inputs);
+			editorRefreshStates.get(component).needsRefresh(data, configuredZoneId(data).getId(), inputs);
+			editorRefreshStates.get(component).complete();
 		}
 	}
 
@@ -1715,7 +1733,7 @@ public class MainFrame extends JFrame {
 			clearPendingDraft();
 			lastFocusedEditor = null;
 		}
-		refreshFromModel();
+		refreshFromModel(!sameContext);
 		if (viewState != null) {
 			restoreEditorViewState(viewState, previousBinding, latest);
 		}

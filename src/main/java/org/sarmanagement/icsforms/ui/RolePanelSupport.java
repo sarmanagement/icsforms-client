@@ -30,8 +30,11 @@ final class RolePanelSupport {
 	static void banner(JLabel label, String title, String incident, String context) {
 		String name = incident == null ? "" : incident;
 		String compact = name.length() > 72 ? name.substring(0, 69) + "…" : name;
-		label.setText("<html><b>" + htmlText(title) + "</b><br>Incident: " + htmlText(compact)
-				+ "<br>" + htmlText(context).replace(" | ", "<br>") + "</html>");
+		String text = "<html><b>" + htmlText(title) + "</b><br>Incident: " + htmlText(compact)
+				+ "<br>" + htmlText(context).replace(" | ", "<br>") + "</html>";
+		if (!text.equals(label.getText())) {
+			label.setText(text);
+		}
 		label.setToolTipText(name);
 		label.getAccessibleContext().setAccessibleDescription(title + "; Incident: " + name + "; " + context);
 	}
@@ -46,7 +49,9 @@ final class RolePanelSupport {
 		label.setOpaque(true);
 		label.setForeground(Color.BLACK);
 		label.setBackground(color);
-		label.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
+		if (label.getBorder() == null) {
+			label.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
+		}
 	}
 
 	/**

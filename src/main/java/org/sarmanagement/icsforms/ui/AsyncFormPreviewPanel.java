@@ -92,9 +92,40 @@ public class AsyncFormPreviewPanel extends JPanel {
 			snapshot = UiRefreshState.readIncident(content);
 		} catch (IOException | NoSuchAlgorithmException exception) {
 			cancel();
-			showImages(List.of(), "Unable to load PDF content: " + exception.getMessage());
+			state.setText("Unable to load PDF content: " + exception.getMessage());
 			return;
 		}
+		startPreview(snapshot, key);
+	}
+
+	/**
+	 * Reuses a preview by its complete renderer inputs without snapshotting an unrelated incident change.
+	 *
+	 * @param source live incident to snapshot only when the rendering inputs differ.
+	 * @param contentKey content-bound review key.
+	 * @param inputs complete form-specific rendering inputs supplied by the view.
+	 */
+	public void requestPreview(AppData source, String contentKey, Object... inputs) {
+		try {
+			String key = renderer.getFormKey() + ":inputs:" + contentKey + ":"
+					+ java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+							.digest(UiRefreshState.serialize(inputs)));
+			if (!key.equals(currentKey)) {
+				startPreview(UiRefreshState.readIncident(UiRefreshState.serialize(source)), key);
+			}
+		} catch (IOException | NoSuchAlgorithmException exception) {
+			cancel();
+			state.setText("Unable to load PDF content: " + exception.getMessage());
+		}
+	}
+
+	/**
+	 * Starts rendering a successfully detached snapshot and retains existing pages until replacement.
+	 *
+	 * @param snapshot detached rendering source.
+	 * @param key complete rendering cache key.
+	 */
+	private void startPreview(AppData snapshot, String key) {
 		cancel();
 		currentKey = key;
 		long generation = ++requestGeneration;

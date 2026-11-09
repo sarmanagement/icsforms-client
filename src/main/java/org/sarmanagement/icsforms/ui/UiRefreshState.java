@@ -8,7 +8,6 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
-import org.sarmanagement.icsforms.model.PlanReviewArea;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -20,20 +19,75 @@ final class UiRefreshState {
 			.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
 	private AppData incident;
 	private byte[] content;
+	private AppData pendingIncident;
+	private Object[] pendingInputs;
 
 	/**
-	 * Compares a role view's inputs, including shared context and content-bound review states.
+	 * Checks inputs without accepting a baseline before the view has updated successfully.
+	 *
+	 * @param data active incident.
+	 * @param inputs view-specific model and local display inputs.
+	 * @return true when the view needs an update.
+	 * @throws IllegalStateException when the display inputs cannot be serialized.
+	 */
+	boolean needsRefresh(AppData data, Object... inputs) {
+		try {
+			pendingIncident = data;
+			pendingInputs = inputs;
+			return incident != data || !Arrays.equals(content, serialize(inputs));
+		} catch (IOException exception) {
+			throw new IllegalStateException("Unable to compare display inputs", exception);
+		}
+	}
+
+	/**
+	 * Accepts the pending inputs only after the synchronous presentation update succeeds.
+	 *
+	 * @throws IllegalStateException when the displayed inputs cannot be serialized.
+	 */
+	void complete() {
+		try {
+			byte[] displayed = serialize(pendingInputs);
+			incident = pendingIncident;
+			content = displayed;
+		} catch (IOException exception) {
+			throw new IllegalStateException("Unable to compare display inputs", exception);
+		}
+	}
+
+	/**
+	 * Refreshes changed display inputs and records a baseline only after successful presentation.
+	 *
+	 * @param data active incident.
+	 * @param refresh synchronous presentation update.
+	 * @param inputs detached projection inputs.
+	 * @return true when the presentation was updated.
+	 * @throws IllegalStateException when display inputs cannot be serialized.
+	 */
+	boolean refresh(AppData data, Runnable refresh, Object... inputs) {
+		try {
+			byte[] next = serialize(inputs);
+			if (incident == data && Arrays.equals(content, next)) {
+				return false;
+			}
+			refresh.run();
+			incident = data;
+			content = serialize(inputs);
+			return true;
+		} catch (IOException exception) {
+			throw new IllegalStateException("Unable to compare display inputs", exception);
+		}
+	}
+
+	/**
+	 * Checks a role view's inputs with its shared incident banner and display timezone.
 	 *
 	 * @param data active incident.
 	 * @param inputs role-specific model facts and local display options.
 	 * @return true when displayed information has changed.
 	 */
 	boolean roleChanged(AppData data, Object... inputs) {
-		return changed(data, data.getIncidentContext(), data.getOrganizationalChart(), data.getTCards(),
-				MainFrame.configuredZoneId(data).getId(), data.getPdfLayoutSettings(),
-				data.getSafetyReview(), data.getHumanMedicalReview(), data.getCanineMedicalReview(),
-				data.getCommunicationsReview(),
-				Arrays.stream(PlanReviewArea.values()).map(data::getPlanReviewStatus).toList(), inputs);
+		return needsRefresh(data, data.getIncidentContext(), MainFrame.configuredZoneId(data).getId(), inputs);
 	}
 
 	/**

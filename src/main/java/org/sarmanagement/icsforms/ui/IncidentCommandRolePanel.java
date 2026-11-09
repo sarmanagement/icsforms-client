@@ -163,10 +163,14 @@ public class IncidentCommandRolePanel extends JPanel {
 		if (!refreshState.roleChanged(data, data.getIapPlanningStage(), data.getForm202(),
 				data.getAllAssignmentResources(), data.getSarTaskAssignments(), data.getForm205(),
 				data.getForm215a(), data.getForm208(), data.getMedicalPlan(), data.getCanineMedicalPlan(),
+				data.getTCards(), data.getSafetyReview(), data.getHumanMedicalReview(),
+				data.getCanineMedicalReview(), data.getCommunicationsReview(),
+				java.util.Arrays.stream(PlanReviewArea.values()).map(data::getPlanReviewStatus).toList(),
 				showObjectiveAssessments, approvalDraftDirty)) {
 			return;
 		}
 		refreshing = true;
+		try {
 		RolePanelSupport.banner(banner, "INCIDENT COMMAND", data.getIncidentContext().getIncidentName(),
 				"Operational period: " + periodLabel(data)
 						+ " | Recorded resource states, not readiness certification");
@@ -174,8 +178,8 @@ public class IncidentCommandRolePanel extends JPanel {
 		rebuildObjectives(data);
 		rebuildResources(data);
 		rebuildProgress(data);
-		commandEmphasis.setText(data.getForm202().getCommandEmphasis());
-		situationalAwareness.setText(data.getForm202().getSituationalAwareness());
+		UiSupport.setTextIfChanged(commandEmphasis, data.getForm202().getCommandEmphasis());
+		UiSupport.setTextIfChanged(situationalAwareness, data.getForm202().getSituationalAwareness());
 		String approval = data.getForm202().getObjectiveApprovalStatus().displayLabel();
 		if (data.getForm202().getApprovedDateTime() != null) {
 			approval += " by " + data.getForm202().getApprovedByIncidentCommanderName() + " at "
@@ -188,11 +192,15 @@ public class IncidentCommandRolePanel extends JPanel {
 		if (!approvalDraftDirty) {
 			loadingApprovalDraft = true;
 			String current = data.getForm202().getApprovedByIncidentCommanderName();
-			approver.setText(current.isBlank() ? data.getIncidentContext().getCurrentUser() : current);
-			signature.setText(data.getForm202().getApprovedBySignature());
+			UiSupport.setTextIfChanged(approver, current.isBlank() ? data.getIncidentContext().getCurrentUser() : current);
+			UiSupport.setTextIfChanged(signature, data.getForm202().getApprovedBySignature());
 			loadingApprovalDraft = false;
 		}
-		refreshing = false;
+		refreshState.complete();
+		} finally {
+			refreshing = false;
+			loadingApprovalDraft = false;
+		}
 	}
 
 	/** Tracks approval drafts so live changes cannot replace partially typed values. */
@@ -590,16 +598,17 @@ public class IncidentCommandRolePanel extends JPanel {
 	 * @param data active incident.
 	 */
 	private void rebuildObjectives(AppData data) {
-		objectiveModel.setRowCount(0);
+		List<Object[]> rows = new java.util.ArrayList<>();
 		for (IncidentObjective objective : data.getForm202().getStructuredObjectives()) {
 			long links = controller.getAssignmentResources().stream()
 					.filter(assignment -> assignment.getObjectiveIds().contains(objective.getObjectiveId())).count();
 			String states = IncidentCommandSummary.assignmentStates(data, objective.getObjectiveId());
 			String assignmentSummary = links == 0 ? "<html><b>None</b></html>"
 					: states.replace("; ", " · ");
-			objectiveModel.addRow(new Object[]{"<html>" + html(objective.toString()) + "</html>", links,
+			rows.add(new Object[]{"<html>" + html(objective.toString()) + "</html>", links,
 					assignmentSummary, objective.getAssessment().displayLabel()});
 		}
+		UiSupport.reconcileTable(objectiveModel, rows);
 		updateObjectiveRowHeights();
 	}
 
@@ -1426,15 +1435,20 @@ public class IncidentCommandRolePanel extends JPanel {
 		columns.add("Resource type");
 		columns.addAll(statuses);
 		columns.add("Total");
-		resourceModel.setColumnIdentifiers(columns.toArray());
-		resourceModel.setRowCount(0);
+		List<String> displayedColumns = java.util.stream.IntStream.range(0, resourceModel.getColumnCount())
+				.mapToObj(resourceModel::getColumnName).toList();
+		if (!columns.equals(displayedColumns)) {
+			resourceModel.setColumnIdentifiers(columns.toArray());
+		}
+		List<Object[]> rows = new java.util.ArrayList<>();
 		groups.forEach((group, counts) -> {
 			List<Object> row = new java.util.ArrayList<>();
 			row.add(group);
 			statuses.forEach(status -> row.add(counts.getOrDefault(status, 0)));
 			row.add(counts.values().stream().mapToInt(Integer::intValue).sum());
-			resourceModel.addRow(row.toArray());
+			rows.add(row.toArray());
 		});
+		UiSupport.reconcileTable(resourceModel, rows);
 		resources.getColumnModel().getColumn(0).setPreferredWidth(185);
 		for (int column = 1; column < resources.getColumnCount(); column++) {
 			resources.getColumnModel().getColumn(column).setPreferredWidth(110);

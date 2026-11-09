@@ -26,6 +26,25 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 /** Verifies refresh comparisons are detached, read-only, and incident-sensitive. */
 class UiRefreshStateTest {
+	@Test
+	void failedProjectionDoesNotAcceptAnUndisplayedBaseline() {
+		AppData data = new AppData();
+		UiRefreshState state = new UiRefreshState();
+		assertTrue(state.refresh(data, () -> { }, "initial"));
+		org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+				() -> state.refresh(data, () -> {
+					throw new IllegalStateException("projection failed");
+				}, "changed"));
+		assertTrue(state.refresh(data, () -> { }, "changed"));
+		assertFalse(state.refresh(data, () -> {
+			throw new AssertionError("unchanged projection");
+		}, "changed"));
+		assertTrue(state.needsRefresh(data, "not displayed yet"));
+		assertTrue(state.needsRefresh(data, "not displayed yet"));
+		state.complete();
+		assertFalse(state.needsRefresh(data, "not displayed yet"));
+	}
+
 	/**
 	 * Captures stored model fields for precise no-op assertions.
 	 *
@@ -161,7 +180,7 @@ class UiRefreshStateTest {
 	 * @param list displayed role worklist.
 	 * @param changes notification counter.
 	 */
-	private static void watchList(JList<?> list, AtomicInteger changes) {
+	static void watchList(JList<?> list, AtomicInteger changes) {
 		list.getModel().addListDataListener(new ListDataListener() {
 			/** {@inheritDoc} */
 			@Override
