@@ -1798,15 +1798,17 @@ public class MainFrame extends JFrame {
 		List<Component> conflictTargets = new ArrayList<>();
 		for (TableViewState tableState : state.tables()) {
 			JTable table = tableState.table();
-			table.clearSelection();
-			for (int row : tableState.selectedRows()) {
-				if (row >= 0 && row < table.getRowCount()) {
-					table.addRowSelectionInterval(row, row);
+			if (ics214Panels.stream().noneMatch(panel -> panel.resourcesTable() == table)) {
+				table.clearSelection();
+				for (int row : tableState.selectedRows()) {
+					if (row >= 0 && row < table.getRowCount()) {
+						table.addRowSelectionInterval(row, row);
+					}
 				}
-			}
-			for (int column : tableState.selectedColumns()) {
-				if (column >= 0 && column < table.getColumnCount()) {
-					table.addColumnSelectionInterval(column, column);
+				for (int column : tableState.selectedColumns()) {
+					if (column >= 0 && column < table.getColumnCount()) {
+						table.addColumnSelectionInterval(column, column);
+					}
 				}
 			}
 			if (tableState.editingRow() >= 0 && tableState.editingColumn() >= 0
