@@ -547,7 +547,7 @@ skipped run does not validate native input.
 ## Run
 
 ```bash
-java -jar target/icsforms-client-0.1.2.jar
+java -jar target/icsforms-client-0.1.3-SNAPSHOT.jar
 ```
 
 ## Notes
