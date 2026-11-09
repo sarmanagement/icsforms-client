@@ -147,6 +147,56 @@ File → New always creates a separate incident. File → Duplicate Incident cop
 - **ICS 203 – Organization Assignment List** PDF from the Org Chart, alongside the existing ICS 207 chart. Select ICS 203 in **Export forms as PDF…** for an individual PDF or a combined IAP. Its optional **Include ICS 203 in IAP** setting defaults on, but a bundle includes it only when the Org Chart has entries, immediately after ICS 202. Unused positions remain blank labeled rows. When no Operations branches are entered, division/group rows come from ICS 204 and SAR task assignments. Additional entries continue on further pages; paper size, margins, and display timezone follow the shared PDF settings.
 - Validation that blocks export when required fields are missing.
 
+### Supported forms
+
+Based on the FEMA NIMS ICS Forms Booklet (with the U.S. Coast Guard additions).
+
+| Supported | Form | Name |
+|---|---|---|
+| Yes | ICS 201 | Incident Briefing |
+| Yes | ICS 202 | Incident Objectives |
+| Yes | ICS 203 | Organization Assignment List |
+| Yes | ICS 204 | Assignment List |
+| Yes | ICS 205 | Incident Radio Communications Plan |
+| Yes | ICS 205A | Communications List |
+| Yes | ICS 206 | Medical Plan (plus a canine variant) |
+| Yes | ICS 207 | Incident Organization Chart |
+| Yes | ICS 208 | Safety Message/Plan |
+| No | ICS 208 HM | Site Safety and Control Plan |
+| No | ICS 209 | Incident Status Summary |
+| No | ICS 210 | Resource Status Change |
+| No | ICS 211 | Incident Check-In List |
+| No | ICS 213 | General Message |
+| No | ICS 213 RR | Resource Request |
+| Yes | ICS 214 | Activity Log |
+| Yes | ICS 215 | Operational Planning Worksheet |
+| Yes | ICS 215A | IAP Safety Analysis |
+| No | ICS 217A | Communications Resource Availability Worksheet |
+| No | ICS 218 | Support Vehicle/Equipment Inventory |
+| Yes | ICS 219-1 | T-Card: Header (gray) |
+| Yes | ICS 219-2 | T-Card: Crew/Team |
+| Yes | ICS 219-3 | T-Card: Engine (rose) |
+| Yes | ICS 219-4 | T-Card: Helicopter |
+| Yes | ICS 219-5 | T-Card: Personnel (white) |
+| Yes | ICS 219-6 | T-Card: Fixed-Wing |
+| Yes | ICS 219-7 | T-Card: Equipment (yellow; includes canine) |
+| Yes | ICS 219-8 | T-Card: Miscellaneous Equipment |
+| N/A | ICS 219-9 | Does not exist in the booklet |
+| Yes | ICS 219-10 | T-Card: Generic |
+| No | ICS 220 | Air Operations Summary Worksheet |
+| No | ICS 221 | Demobilization Check-Out |
+| No | ICS 225 | Incident Personnel Performance Rating |
+| No | ICS 230-CG | Daily Meeting Schedule |
+| Yes | ICS 233-CG | Incident Open Action Tracker |
+
+#### SAR-mode forms
+
+| Supported | Form | Name |
+|---|---|---|
+| Yes | SAR Task Assignment | Task assignment form (editor and PDF) |
+| Yes | Clue Log | Clue log (editor and PDF) |
+| Yes | Clue Log, ICS 233 layout | Clue log PDF in the ICS 233 format |
+
 ### Open actions and clue follow-up
 
 Enable the tracker under **Configuration → Open Action Tracker** to track incident
