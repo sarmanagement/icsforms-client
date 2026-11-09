@@ -49,6 +49,9 @@ public class IncidentManagerDialog extends JDialog {
 	private final JButton backupButton = new JButton("Backup JSON…");
 	private final JButton deleteButton = new JButton("Delete…");
 	private final JButton openButton = new JButton("Open");
+	private final JButton openNewPeriodButton = new JButton("Open and add new operational period…");
+	private final javax.swing.JCheckBox promotePlannedIcs215 = new javax.swing.JCheckBox(
+			"Promote planned ICS 215 target period when advancing");
 	private final JLabel hint = new JLabel();
 	private List<IncidentSummary> summaries = List.of();
 	private StartupDialog.StartupAction chosenAction;
@@ -86,6 +89,9 @@ public class IncidentManagerDialog extends JDialog {
 		backupButton.addActionListener(event -> backupSelected());
 		deleteButton.addActionListener(event -> deleteSelected());
 		openButton.addActionListener(event -> openSelected());
+		openNewPeriodButton.setToolTipText("Opens the selected incident and advances it to a new operational period, "
+				+ "archiving the current plan. You are asked to confirm.");
+		openNewPeriodButton.addActionListener(event -> openSelectedWithNewPeriod());
 		JButton refreshButton = new JButton("Refresh");
 		refreshButton.addActionListener(event -> refresh());
 		JButton importButton = new JButton("Load JSON…");
@@ -96,6 +102,7 @@ public class IncidentManagerDialog extends JDialog {
 		closeButton.addActionListener(event -> dispose());
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
 		buttons.add(openButton);
+		buttons.add(openNewPeriodButton);
 		buttons.add(newButton);
 		buttons.add(importButton);
 		buttons.add(backupButton);
@@ -133,6 +140,7 @@ public class IncidentManagerDialog extends JDialog {
 		boolean selected = table.getSelectedRow() >= 0;
 		IncidentSummary summary = selected();
 		openButton.setEnabled(selected && !summary.incidentId().equals(activeId));
+		openNewPeriodButton.setEnabled(selected && !summary.incidentId().equals(activeId));
 		backupButton.setEnabled(selected && store.supportsBackup());
 		backupButton.setToolTipText(store.supportsBackup()
 				? "Create a new JSON file outside the live store; existing files are never overwritten."
@@ -214,6 +222,34 @@ public class IncidentManagerDialog extends JDialog {
 			chosenAction = StartupDialog.StartupAction.OPEN_EXISTING;
 			dispose();
 		}
+	}
+
+	/**
+	 * Opens the selected incident and advances it to a new operational period, but only after the operator
+	 * explicitly confirms that the current plan will be archived and cleared.
+	 */
+	private void openSelectedWithNewPeriod() {
+		IncidentSummary summary = selected();
+		if (summary == null || summary.incidentId().equals(activeId)) {
+			return;
+		}
+		String question = "Open " + summary.displayLabel() + " and add a new operational period?\n"
+				+ "The current operational plan (tasks, ICS 202/204/205/215 and reviews) is archived and the\n"
+				+ "operational forms are cleared. Choose Open instead to continue the current period.";
+		if (dialogs.confirmNewPeriod(this, question, promotePlannedIcs215)) {
+			chosenIncidentId = summary.incidentId();
+			chosenAction = StartupDialog.StartupAction.OPEN_NEW_PERIOD;
+			dispose();
+		}
+	}
+
+	/**
+	 * Returns whether the operator asked to promote the planned ICS 215 target period.
+	 *
+	 * @return true when promotion was selected while confirming a new operational period.
+	 */
+	public boolean isPromotePlannedIcs215() {
+		return promotePlannedIcs215.isSelected();
 	}
 
 	/**
@@ -338,6 +374,16 @@ public class IncidentManagerDialog extends JDialog {
 		boolean confirmDelete(Window owner, String question);
 
 		/**
+		 * Confirms advancing an incident to a new operational period.
+		 *
+		 * @param owner parent window.
+		 * @param question consequences and incident identity.
+		 * @param promoteOption option shown with the confirmation for ICS 215 promotion.
+		 * @return true only on explicit approval.
+		 */
+		boolean confirmNewPeriod(Window owner, String question, javax.swing.JCheckBox promoteOption);
+
+		/**
 		 * Shows outcome feedback.
 		 *
 		 * @param owner parent window.
@@ -379,6 +425,14 @@ public class IncidentManagerDialog extends JDialog {
 		public boolean confirmDelete(Window owner, String question) {
 			return JOptionPane.showConfirmDialog(owner, question, "Delete saved incident",
 					JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public boolean confirmNewPeriod(Window owner, String question, javax.swing.JCheckBox promoteOption) {
+			return JOptionPane.showConfirmDialog(owner, new Object[]{question, promoteOption},
+					"Add new operational period", JOptionPane.OK_CANCEL_OPTION,
+					JOptionPane.WARNING_MESSAGE) == JOptionPane.OK_OPTION;
 		}
 
 		/** {@inheritDoc} */

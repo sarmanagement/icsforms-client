@@ -861,7 +861,10 @@ public class MainFrame extends JFrame {
 				case OPEN_EXISTING -> controller.open(manager.getChosenIncidentId());
 				case OPEN_NEW_PERIOD -> {
 					controller.open(manager.getChosenIncidentId());
-					controller.newOperationalPeriod();
+					boolean promote = manager.isPromotePlannedIcs215();
+					if (!promote || Ics215PromotionDialog.confirm(this, controller.getData())) {
+						controller.newOperationalPeriod(false, promote);
+					}
 				}
 				case NEW_PRE_OP -> controller.newDocument(IapPhase.PRE_OP, manager.getChosenMode());
 				case NEW_INITIAL_RESPONSE ->

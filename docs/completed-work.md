@@ -342,3 +342,13 @@ waits (saves, loads, imports).
 
 Evidence: `SarTaskStageViewsTest`, `CommunicationsRolePanelTest`,
 `CommunicationsConsolePanelTest`.
+
+## Safer "new operational period" opening (PR #56)
+
+The startup dialog previously had separate "Open existing incident" and "Open
+existing incident and add a new operational period" buttons, and the second
+archived and cleared the plan with no confirmation. There is now one open
+button; the incident list offers **Open** and **Open and add new operational
+period…**, and the latter asks for confirmation (with the ICS 215 promotion
+option). Evidence: `IncidentManagerDialogTest.openingWithNewOperationalPeriodRequiresConfirmation`,
+`MainFrameIcs205WorkspaceTest.startupOffersSingleOpenActionWithoutNewPeriodShortcut`.

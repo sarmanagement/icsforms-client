@@ -159,7 +159,7 @@ class MainFrameIcs205WorkspaceTest {
 	}
 
 	@Test
-	void startupOffersIcs215PromotionWithoutPlanReuseCheckbox() throws Exception {
+	void startupOffersSingleOpenActionWithoutNewPeriodShortcut() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		Path directory = Files.createDirectories(Path.of("target", "ics205-startup-" + UUID.randomUUID()));
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
@@ -168,11 +168,9 @@ class MainFrameIcs205WorkspaceTest {
 				try {
 					assertFalse(dialog.isBringForwardCommunicationsPlan());
 					assertFalse(dialog.isPromotePlannedIcs215());
-					JCheckBox checkbox = promoteIcs215Checkbox(dialog);
-					assertNotNull(checkbox);
-					assertEquals("Promote planned ICS 215 target period when advancing", checkbox.getText());
-					checkbox.doClick();
-					assertTrue(dialog.isPromotePlannedIcs215());
+					assertNull(promoteIcs215Checkbox(dialog));
+					assertFalse(hasButtonContaining(dialog, "add a new operational period"));
+					assertTrue(hasButtonContaining(dialog, "Open existing incident"));
 				} finally {
 					dialog.dispose();
 				}
@@ -204,6 +202,27 @@ class MainFrameIcs205WorkspaceTest {
 		SecondaryLoop loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
 		EventQueue.invokeLater(loop::exit);
 		assertTrue(loop.enter());
+	}
+
+	/**
+	 * Reports whether a button's text contains the given text.
+	 *
+	 * @param component component tree.
+	 * @param text text to look for.
+	 * @return true when a matching button exists.
+	 */
+	private static boolean hasButtonContaining(Component component, String text) {
+		if (component instanceof javax.swing.JButton button && button.getText().contains(text)) {
+			return true;
+		}
+		if (component instanceof Container container) {
+			for (Component child : container.getComponents()) {
+				if (hasButtonContaining(child, text)) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**

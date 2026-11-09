@@ -50,8 +50,7 @@ This project is open source under the GNU General Public License, version 3 or l
    - **New incident — Pre-Operational (planning):** start a workspace before the incident response begins.
    - **New incident — Initial Incident Response:** an incident has started; ICS 201 is the primary capture tool.
    - **New incident — Subsequent Operational Period:** open a fresh workspace for a new operational period, with ICS 201 read-only.
-   - **Open existing incident:** continue working on a previously saved incident.
-   - **Open existing incident and add a new operational period:** load an existing workspace and advance it to the next operational period, preserving the org chart and ICS 201 history while clearing operational-period forms. After opening it, use **File → Bring Forward…** to select ICS 205 or other plans to reuse.
+   - **Open existing incident:** pick a saved incident from the list. **Open** continues it as is. **Open and add new operational period…** (a separate button on that list, with a confirmation) advances it to the next operational period, archiving the current plan, preserving the org chart and ICS 201 history while clearing operational-period forms. After opening it, use **File → Bring Forward…** to select ICS 205 or other plans to reuse.
 2. Select the incident mode: **SAR** (default) or **Generic**.
    - SAR mode enables SAR Task Assignment forms that provide further detail for each Assignment listed on a ICS 204 and a clue log.
    - SAR Task Assignment forms support debriefing, including structured capture of POD factors for SAR operations.

@@ -346,6 +346,12 @@ class DialogPersistenceWorkerTest {
 
 		/** {@inheritDoc} */
 		@Override
+		public boolean confirmNewPeriod(Window owner, String question, javax.swing.JCheckBox promoteOption) {
+			return false;
+		}
+
+		/** {@inheritDoc} */
+		@Override
 		public void message(Window owner, String message, boolean error) {
 			assertFalse(error, message);
 			messages++;
