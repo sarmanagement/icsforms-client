@@ -148,6 +148,15 @@ delivery evidence is in [`docs/completed-work.md`](docs/completed-work.md).
   signature fields and semantics independently.
 - Opening a reference or preview has no incident effects: no log creation,
   response declaration, task change or automatic event. No network sync is added.
+- Current information, visibly current. Every view shows the committed model
+  and updates only the parts whose inputs changed: no flicker, no lost
+  selection, scroll, focus or draft text, and no windows disabled by a
+  refresh. Unsaved edits are never overwritten by a refresh. Switching tabs
+  or windows commits nothing when nothing changed. Where a view cannot be
+  current (offline, mirror, stale projection) it says so; no warning means
+  current. New panels and refresh paths must come with tests that show
+  unchanged data causes no rebuild. The full requirements are in
+  [Current information and freshness](#current-information-and-freshness).
 
 ### Objective, assignment and review contracts
 
