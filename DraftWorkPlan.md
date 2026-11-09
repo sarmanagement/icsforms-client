@@ -32,15 +32,12 @@ deployment. Details of delivered work are in
 The same application, unchanged for the solo user, grows into a system that can
 run in four topologies without ever removing the earlier ones:
 
-```text
-T0  Standalone        one laptop, local files                         (today)
-T1  Local host        several workstations on incident Wi-Fi; one of
-                      them hosts the incident service and store        (Stage 2)
-T2  Networked store   a field or site server; single-user phones and
-                      multi-user shared workstations as clients         (Stage 3-4)
-T3  Hosted            cloud service, remote access, read-only mirrors,
-                      planned authority transfer with the field         (Stage 5-7)
-```
+| Topology | Description | Stage |
+| --- | --- | --- |
+| **T0 Standalone** | One laptop, local files (today). | Today |
+| **T1 Local host** | Several workstations on incident Wi-Fi; one of them hosts the incident service and store. | Stage 2 |
+| **T2 Networked store** | A field or site server; single-user phones and multi-user shared workstations as clients. | Stages 3–4 |
+| **T3 Hosted** | Cloud service, remote access, read-only mirrors, planned authority transfer with the field. | Stages 5–7 |
 
 Four ideas are central to the design:
 
@@ -72,16 +69,26 @@ Four ideas are central to the design:
 
 ### How we get there
 
-1. **Done: standalone preparation.** Role panels (issues #33, #46, #49) and the
-   Stage 1 persistence foundation (issues #37, #39–#44) are merged.
-2. **In review: live refresh (idea 4, standalone part).** PR #56 removes
-   avoidable rebuilds and flicker from tab switches and commits. See Stage 1A.
-3. **Next: decide, then build T1.** Record the Stage 0 decisions and resolve the
-   remaining Stage 1 exit-evidence question, then Stage 2 adds the incident API
-   and first local host. Stage 3 adds operator claim, roles and audit; Stages
-   4–7 add offline sync, field-host packaging, hosted deployment and a mobile
-   client. Idea 4 extends through these stages as visible staleness and
-   conflict handling (see "Current information and freshness" in Part III).
+1. **Done: standalone preparation (T0).** Role panels (issues #33, #46, #49)
+   and Stage 1, the persistence foundation (issues #37, #39–#44) together with
+   the live-refresh work that removed avoidable rebuilds and flicker (PR #56,
+   the standalone part of idea 4), are complete.
+2. **Next: decide, then build T1 (Stages 0 and 2).** Record the Stage 0
+   decisions and resolve the remaining Stage 1 exit-evidence question. Stage 2
+   then adds the incident API, a `RemoteIncidentStore` and the first local host
+   with simple device admission, so two workstations can share an incident on
+   incident Wi-Fi.
+3. **Then: shared and offline use (T2, Stages 3–4).** Stage 3 adds the full
+   invitation lifecycle, operator claim, roles, per-record concurrency and
+   audit. Stage 4 adds the durable outbox, offline sync, conflict workflows and
+   attachments, so devices keep working when disconnected.
+4. **Finally: field packaging and hosting (T3, Stages 5–7).** Stage 5
+   packages a field host that runs without internet, with backup, restore and
+   planned authority transfer. Stage 6 adds a hosted deployment with read-only
+   mirrors. Stage 7 adds a mobile client and operational hardening.
+5. **Throughout: idea 4.** Visible staleness, explicit conflicts and
+   no-flicker refresh extend through every stage (see "Current information and
+   freshness" in Part III).
 
 Every stage ends with a usable, recoverable standalone application. Nothing in
 the later stages may make the solo-laptop case harder.
@@ -106,7 +113,7 @@ tree, named regression tests and CI results, not on issue or PR closure alone.
 | Core SAR forms (ICS 203, 205, 206 and canine 206, 215/215A, 208, 233-CG clue log), ICS 215, SAR task ↔ ICS 214 integration, ICS 204 layout | #13–#20, #35 | Complete |
 | File-backed `IncidentStore` with UUID identity, revision checks, edit-lock capability and backups | PR #34, #39–#42 | Complete for standalone use |
 | Live local role panels (ten phases): live multi-view, objectives and linkage, review tracking, medical references, Safety/MUL, Operations, Incident Command, Communications and console | #33, #46, #49 | Implementation delivered; automated coverage recorded. Manual assistive-technology review is not recorded (optional). |
-| Stage 1 persistence foundation: deterministic Swing tests, store contract suite, backend-neutral semantics, strict imports and identity migration, UTC time, provenance seam, asynchronous snapshot persistence | #37, #39–#44 | Merged; exit-evidence question open (Stage 1) |
+| Stage 1 persistence foundation: deterministic Swing tests, store contract suite, backend-neutral semantics, strict imports and identity migration, UTC time, provenance seam, asynchronous snapshot persistence, and live refresh without flicker | #37, #39–#44, PR #56 | Complete; exit-evidence question open (Stage 1) |
 
 Role-panel work is independent of the persistence roadmap and must not
 introduce network, authentication or remote persistence features.
@@ -455,8 +462,7 @@ recoverable standalone application. Completed stages are recorded in
 | Stage | Delivers | State | Size |
 | --- | --- | --- | --- |
 | 0 | Written decisions and constraints | Not evidenced as complete | 1–2 weeks |
-| 1 | Local persistence foundation | Merged; exit-evidence question open | done (4–7 weeks) |
-| 1A | Live refresh without flicker (standalone idea 4) | In review, PR #56 | small |
+| 1 | Local persistence foundation, including live refresh without flicker | Complete; exit-evidence question open | done (4–7 weeks) |
 | 2 | Incident API and local host (T1) | Not started | 4–8 weeks |
 | 3 | Multi-user editing, operator claim, roles, audit (T2) | Not started | 4–7 weeks |
 | 4 | Offline sync and attachments | Not started | 5–9 weeks |
@@ -481,13 +487,22 @@ threat/recovery assumptions, API boundaries, success measures and pilot scope ha
 been agreed. Record those decisions before starting Stage 2 implementation.
 **Rough size:** 1–2 person-weeks.
 
-### Stage 1 — Local persistence foundation (merged)
+### Stage 1 — Local persistence foundation (complete)
 
 All gates (deterministic Swing tests, store contract suite, backend-neutral
 semantics, strict import and identity migration, UTC time, provenance seam,
 asynchronous snapshot persistence) are closed and merged, with no network code,
 authentication or server. Gate details, the entity-ID audit and CI evidence are
 in [`docs/completed-work.md`](docs/completed-work.md).
+
+Live refresh was an unanticipated part of this stage (PR #56). Open views now
+update only what changed and no longer flicker: no-op flushes commit nothing,
+the tab strip is reconciled in place, role panels skip unchanged rebuilds,
+organizational chart identities and recorded review statuses are stable, and
+plan-reuse checks no longer pause incident windows. The behaviour was checked
+by hand against the Maple Ridge example for tab switches and ICS 214 log-entry
+adds with role panels open. This is the standalone part of idea 4; the
+requirements that extend it to multiple stations are in Part III.
 
 **Open exit question:** the stage criteria asked for a `RemoteIncidentStore`
 stub passing the contract suite in an unmerged spike branch. The merged
@@ -499,21 +514,6 @@ spike or explicitly accept the merged double as equivalent evidence.
 **T0/T1 readiness:** Stage 2 is not yet a cleared start: record the Stage 0
 decisions and resolve the question above. Neither requires an API,
 authentication or outbox in Stage 1.
-
-### Stage 1A — Live refresh without flicker (in review, PR #56)
-
-Standalone part of idea 4. Delivered on the branch (detail and evidence in
-[`docs/completed-work.md`](docs/completed-work.md)): no-op flushes commit
-nothing, in-place tab reconciliation, light versus full refresh, role panels
-skipping unchanged rebuilds, stable org-chart identities, retained recorded
-review statuses, and plan-reuse checks that no longer pause incident windows.
-
-**Remaining before merge:** CodeQL and a manual check of the Maple Ridge example
-for tab switches and log-entry adds with role panels open.
-
-**Follow-on, not yet planned in detail:** apply the same inputs-unchanged skip
-to remaining views that still rebuild on every commit, and audit other
-refresh paths that wait on persistence on the EDT.
 
 ### Stage 2 — Incident API and single local host (delivers T1)
 

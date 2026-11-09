@@ -316,8 +316,10 @@ Evidence: `MainFrameDashboardTest.unchangedTabSwitchRetainsComponentsWithoutComm
 `Ics206PanelTest.pushRetainsCustomRecordedReviewStatus`,
 `MainFrameNavigationChurnTest`, `MainFrameDataRetentionTest`. Full Maven,
 Spotless and Checkstyle passed at `ff349fc` (1120 tests, 14 skipped). CodeQL
-had not been run. The log-entry fix was not re-checked by hand against the
-Maple Ridge example (`docs/examples/maple-ridge-dementia-op1.json`).
+had not been run. The maintainer checked tab switches and ICS 214 log-entry
+adds with role panels open against the Maple Ridge example
+(`docs/examples/maple-ridge-dementia-op1.json`) by hand on 2026-11-08 and
+confirmed they work as expected.
 
 Known limits: the plan-reuse cache is invalidated only by this controller's
 own store operations, so an incident added by another process is seen after the
