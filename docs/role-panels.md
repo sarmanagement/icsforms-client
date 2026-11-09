@@ -20,10 +20,15 @@ does not calculate objective achievement, resource readiness, or duplicate
 resource totals. The assessment column is hidden by default and can be toggled
 from **Configuration > Show objective assessments**; the objective editor omits
 assessment fields when the column is hidden. The recorded resource overview
-initially groups counts by resource type.
+initially groups counts by resource type; its count columns are sized to their
+content so all or most are visible at the default panel size. In SAR mode a
+**Task board** button swaps the table for a compact, colour-coded board of SAR
+tasks (double-click a task to open it) and **Resource table** swaps back.
 
 The Operations task board offers the same assignment, status, logging, clue, and
-debrief actions in its task context menu. Debrief is enabled only for returned
+debrief actions in its task context menu. Its task list is colour-coded by
+lifecycle stage using the same colours as the SAR Tasks board and table
+(planned, assigned, returned not debriefed, completed). Debrief is enabled only for returned
 tasks. Its available-resource list reflects T-cards recorded as available.
 SAR-task quick-log entries open the shared activity editor with the event type
 and task narrative prefilled. The application-wide event-type manager controls
@@ -33,15 +38,16 @@ application preferences.
 ### Communications: Plan and Console
 
 The Communications Unit role panel has **Plan** and **Console** modes in the
-same window. Plan retains the ICS 205 inventory, focused channel operations
+same window, switched with a single **Console View** / **Plan View** toggle button. Plan retains the ICS 205 inventory, focused channel operations
 editor, explicit radio-check fields, review, CSV import/export, and navigation to
 the full ICS 205 workspace. Switching modes retains focused drafts and selection;
 it does not save or discard them.
 
 Console provides a task/assignment board, recorded resource/contact lookup,
 channel context, and recent ICP ICS 214 activity. Selecting a task scopes lookup
-and activity to that task; **All incident ICP entries** shows incident-wide
-activity without changing the selected task. Activity association uses stable
+and activity to that task; **Show all log entries** (right of the log bar) shows
+incident-wide activity without changing the selected task. The left of the bar
+shows the selected task, truncated to fit, or "All log entries from the ICP log". Activity association uses stable
 assignment identities and the supported legacy resource association, not guesses
 based on current task status. Full entry details remain available through the
 shared activity-entry workflow.

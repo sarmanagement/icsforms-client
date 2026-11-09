@@ -100,6 +100,13 @@ public class IncidentCommandRolePanel extends JPanel {
 	private JSplitPane objectiveSplit;
 	private final JTextArea commandEmphasis = contextDisplay();
 	private final JTextArea situationalAwareness = contextDisplay();
+	private static final String RESOURCE_TABLE = "table";
+	private static final String RESOURCE_BOARD = "board";
+	private final java.awt.CardLayout resourceCards = new java.awt.CardLayout();
+	private final JPanel resourceCardPanel = new JPanel(resourceCards);
+	private final JButton resourceBoardToggle = new JButton("Task board");
+	private final SarTaskMiniBoard resourceTaskBoard;
+	private String currentResourceCard = RESOURCE_TABLE;
 	private final JComboBox<String> resourceGrouping = new JComboBox<>(new String[]{"All resources", "By resource type"});
 	private final DefaultTableModel resourceModel = readOnlyModel("Resource group", "Total");
 	private final JTable resources = new JTable(resourceModel);
@@ -135,6 +142,8 @@ public class IncidentCommandRolePanel extends JPanel {
 		this.navigator = navigator;
 		this.assignmentActions = assignmentActions;
 		clockPanel = new IncidentClockPanel(controller);
+		resourceTaskBoard = new SarTaskMiniBoard(
+				assignmentActions == null ? null : assignmentActions::openSarTask);
 		binding = controller.captureIncidentBinding();
 		add(buildHeader(), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
@@ -459,11 +468,18 @@ public class IncidentCommandRolePanel extends JPanel {
 		JPanel grouping = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING));
 		grouping.add(new JLabel("Group by"));
 		grouping.add(resourceGrouping);
+		resourceBoardToggle.setVisible(false);
+		resourceBoardToggle.getAccessibleContext().setAccessibleName("Toggle resource table and SAR task board");
+		resourceBoardToggle.addActionListener(event -> showResourceCard(
+				RESOURCE_BOARD.equals(currentResourceCard) ? RESOURCE_TABLE : RESOURCE_BOARD));
+		grouping.add(resourceBoardToggle);
 		resourcePanel.add(grouping, BorderLayout.NORTH);
 		JScrollPane resourceScroll = new JScrollPane(resources);
 		resourceScroll.setPreferredSize(new Dimension(resourceScroll.getPreferredSize().width,
 				resources.getTableHeader().getPreferredSize().height + 10 * resources.getRowHeight()));
-		resourcePanel.add(resourceScroll, BorderLayout.CENTER);
+		resourceCardPanel.add(resourceScroll, RESOURCE_TABLE);
+		resourceCardPanel.add(resourceTaskBoard, RESOURCE_BOARD);
+		resourcePanel.add(resourceCardPanel, BorderLayout.CENTER);
 		resourcePanel.add(new JLabel("<html>Unspecified is not Available.<br>No radio check or readiness is inferred.</html>"),
 				BorderLayout.SOUTH);
 
@@ -1449,10 +1465,44 @@ public class IncidentCommandRolePanel extends JPanel {
 			rows.add(row.toArray());
 		});
 		UiSupport.reconcileTable(resourceModel, rows);
-		resources.getColumnModel().getColumn(0).setPreferredWidth(185);
-		for (int column = 1; column < resources.getColumnCount(); column++) {
-			resources.getColumnModel().getColumn(column).setPreferredWidth(110);
+		fitResourceColumns();
+		boolean sar = controller.getIncidentMode() == org.sarmanagement.icsforms.model.IncidentMode.SAR;
+		resourceBoardToggle.setVisible(sar);
+		if (!sar && RESOURCE_BOARD.equals(currentResourceCard)) {
+			showResourceCard(RESOURCE_TABLE);
 		}
+		resourceTaskBoard.refresh(data.getSarTaskAssignments());
+	}
+
+	/**
+	 * Sizes each resource column to its header and cell text so the count columns stay narrow.
+	 */
+	private void fitResourceColumns() {
+		java.awt.FontMetrics metrics = resources.getFontMetrics(resources.getFont());
+		java.awt.FontMetrics headerMetrics = resources.getTableHeader()
+				.getFontMetrics(resources.getTableHeader().getFont());
+		for (int column = 0; column < resources.getColumnCount(); column++) {
+			int width = headerMetrics.stringWidth(String.valueOf(resources.getColumnModel().getColumn(column)
+					.getHeaderValue()));
+			for (int row = 0; row < resources.getRowCount(); row++) {
+				width = Math.max(width, metrics.stringWidth(String.valueOf(resources.getValueAt(row, column))));
+			}
+			width += 16;
+			int limit = column == 0 ? 220 : 90;
+			resources.getColumnModel().getColumn(column).setPreferredWidth(Math.min(width, limit));
+		}
+	}
+
+	/**
+	 * Shows the resource table or the compact SAR task board.
+	 *
+	 * @param card card name, either the table or the board.
+	 */
+	private void showResourceCard(String card) {
+		currentResourceCard = card;
+		resourceCards.show(resourceCardPanel, card);
+		resourceBoardToggle.setText(RESOURCE_BOARD.equals(card) ? "Resource table" : "Task board");
+		resourceGrouping.setEnabled(RESOURCE_TABLE.equals(card));
 	}
 
 	/**

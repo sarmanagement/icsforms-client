@@ -66,6 +66,8 @@ public class CommunicationsRolePanel extends JPanel {
 	private final JLabel saveStatus = new JLabel(" ");
 	private final PlanReviewStrip review;
 	private final AppController.IncidentChangeSubscription subscription;
+	private static final String CONSOLE_VIEW = "Console View";
+	private static final String PLAN_VIEW = "Plan View";
 	private final CardLayout viewLayout = new CardLayout();
 	private final JPanel views = new JPanel(viewLayout);
 	private final CommunicationsConsolePanel console;
@@ -203,19 +205,15 @@ public class CommunicationsRolePanel extends JPanel {
 		header.add(status, BorderLayout.EAST);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JLabel activeMode = new JLabel("Mode: Plan");
-		JButton planView = new JButton("Plan");
-		planView.addActionListener(event -> {
-			viewLayout.show(views, "Plan");
-			activeMode.setText("Mode: Plan");
-		});
-		JButton consoleView = new JButton("Console");
-		consoleView.addActionListener(event -> {
-			viewLayout.show(views, "Console");
-			activeMode.setText("Mode: Console");
+		JButton toggleView = new JButton(CONSOLE_VIEW);
+		toggleView.addActionListener(event -> {
+			boolean toConsole = CONSOLE_VIEW.equals(toggleView.getText());
+			viewLayout.show(views, toConsole ? "Console" : "Plan");
+			activeMode.setText(toConsole ? "Mode: Console" : "Mode: Plan");
+			toggleView.setText(toConsole ? PLAN_VIEW : CONSOLE_VIEW);
 		});
 		actions.add(activeMode);
-		actions.add(planView);
-		actions.add(consoleView);
+		actions.add(toggleView);
 		JButton fullPlan = new JButton("Open full ICS 205");
 		fullPlan.addActionListener(event -> navigator.accept(WorkspaceDestination.of(WorkspaceId.ICS_205)));
 		JButton importButton = new JButton("Import CSV…");

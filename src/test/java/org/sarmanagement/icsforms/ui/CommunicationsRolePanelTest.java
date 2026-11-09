@@ -54,7 +54,7 @@ class CommunicationsRolePanelTest {
 				assertTrue(statusLayout.getLayoutComponent(BorderLayout.EAST) instanceof IncidentClockPanel);
 				JPanel actions = (JPanel) layout.getLayoutComponent(BorderLayout.SOUTH);
 				assertEquals(FlowLayout.TRAILING, ((FlowLayout) actions.getLayout()).getAlignment());
-				for (String label : List.of("Plan", "Console", "Open full ICS 205", "Import CSV…",
+				for (String label : List.of("Console View", "Open full ICS 205", "Import CSV…",
 						"Export CSV…", "Add ICP 214 log entry…")) {
 					assertSame(actions, findButton(panel, label).getParent());
 				}
@@ -163,11 +163,11 @@ class CommunicationsRolePanelTest {
 			coverage.setText("Unsaved workbench guidance");
 			JTextField filter = findAccessible(panel, JTextField.class, "Filter communications channels");
 			filter.setText("Tactical");
-			findButton(panel, "Console").doClick();
+			findButton(panel, "Console View").doClick();
 			assertEquals(second.getChannelId(), panel.selectedChannelId());
 			controller.markDirty();
 			panel.refreshFromModel();
-			findButton(panel, "Plan").doClick();
+			findButton(panel, "Plan View").doClick();
 			assertTrue(coverage == findAccessible(panel, JTextArea.class, "Coverage guidance"));
 			assertTrue(table == findAccessible(panel, JTable.class, "Sortable communications channels"));
 			assertEquals("Unsaved workbench guidance", coverage.getText());

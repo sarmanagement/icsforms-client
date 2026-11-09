@@ -332,33 +332,19 @@ public class SarTaskPanel extends JPanel {
 	private void rebuildBoardView() {
 		List<SarTaskAssignment> tasks = tableModel.getRows();
 
-		List<SarTaskAssignment> planning = new ArrayList<>();
-		List<SarTaskAssignment> onTask = new ArrayList<>();
-		List<SarTaskAssignment> returned = new ArrayList<>();
-		List<SarTaskAssignment> completed = new ArrayList<>();
-
+		java.util.Map<SarTaskStage, List<SarTaskAssignment>> byStage = new java.util.EnumMap<>(SarTaskStage.class);
+		for (SarTaskStage stage : SarTaskStage.values()) {
+			byStage.put(stage, new ArrayList<>());
+		}
 		for (SarTaskAssignment task : tasks) {
-			String lc = task.getTaskLifecycleStatus();
-			String normalized = lc == null ? "" : lc.trim().toLowerCase(java.util.Locale.ROOT);
-			if (normalized.startsWith("assigned -")) {
-				onTask.add(task);
-			} else if ("returned".equals(normalized)) {
-				if (task.getDebriefingSupervisor() != null && !task.getDebriefingSupervisor().isBlank()) {
-					completed.add(task);
-				} else {
-					returned.add(task);
-				}
-			} else {
-				planning.add(task); // "Planned" or unknown
-			}
+			byStage.get(SarTaskStage.of(task)).add(task);
 		}
 
 		JPanel board = new JPanel(new GridLayout(1, 4, 8, 0));
 		board.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-		board.add(buildBoardColumn("planned", new Color(173, 216, 230), planning));
-		board.add(buildBoardColumn("assigned", new Color(255, 200, 100), onTask));
-		board.add(buildBoardColumn("returned (not debriefed)", new Color(144, 238, 144), returned));
-		board.add(buildBoardColumn("Completed", new Color(200, 200, 200), completed));
+		for (SarTaskStage stage : SarTaskStage.values()) {
+			board.add(buildBoardColumn(stage.label(), stage.color(), byStage.get(stage)));
+		}
 
 		// Override getPreferredSize so the wrapper never exceeds the viewport width,
 		// allowing GridLayout to divide the available space into four equal columns.
@@ -3425,10 +3411,10 @@ public class SarTaskPanel extends JPanel {
 	 * Completed=grey).
 	 */
 	private static class LifecycleStatusCellRenderer extends DefaultTableCellRenderer {
-		private static final Color COLOR_PLANNING = new Color(173, 216, 230);
-		private static final Color COLOR_ON_TASK = new Color(255, 200, 100);
-		private static final Color COLOR_RETURNED = new Color(144, 238, 144);
-		private static final Color COLOR_COMPLETED = new Color(200, 200, 200);
+		private static final Color COLOR_PLANNING = SarTaskStage.PLANNED.color();
+		private static final Color COLOR_ON_TASK = SarTaskStage.ASSIGNED.color();
+		private static final Color COLOR_RETURNED = SarTaskStage.RETURNED.color();
+		private static final Color COLOR_COMPLETED = SarTaskStage.COMPLETED.color();
 
 		@Override
 		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,

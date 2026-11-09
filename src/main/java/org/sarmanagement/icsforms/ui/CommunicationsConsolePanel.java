@@ -76,7 +76,8 @@ public final class CommunicationsConsolePanel extends JPanel {
 	private final JTextField checkedAt = new JTextField(22);
 	private final JTextArea notes = area("Communications check notes", true);
 	private final JLabel feedback = new JLabel("Checks are explicit assertions, not inferred readiness.");
-	private final JCheckBox allIncident = new JCheckBox("All incident ICP entries");
+	private final JCheckBox allIncident = new JCheckBox("Show all log entries");
+	private final JLabel logScope = new JLabel(" ");
 	private final DefaultListModel<LogChoice> logModel = new DefaultListModel<>();
 	private final JList<LogChoice> logs = new JList<>(logModel);
 	private final JButton details = new JButton("View full entry details…");
@@ -333,7 +334,13 @@ public final class CommunicationsConsolePanel extends JPanel {
 	 */
 	private JPanel buildLogs() {
 		JPanel panel = new JPanel(new BorderLayout(4, 4));
-		panel.add(allIncident, BorderLayout.NORTH);
+		logScope.putClientProperty("html.disable", Boolean.TRUE);
+		logScope.getAccessibleContext().setAccessibleName("Recent ICP log scope");
+		logScope.setMinimumSize(new Dimension(0, logScope.getPreferredSize().height));
+		JPanel scopeBar = new JPanel(new BorderLayout(8, 0));
+		scopeBar.add(logScope, BorderLayout.CENTER);
+		scopeBar.add(allIncident, BorderLayout.EAST);
+		panel.add(scopeBar, BorderLayout.NORTH);
 		logs.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		logs.getAccessibleContext().setAccessibleName("Recent ICP log entries");
 		panel.add(new JScrollPane(logs), BorderLayout.CENTER);
@@ -396,7 +403,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 		if (task == null) {
 			ResourceAssignment assignment = selectedResourceAssignment();
 			String summary = assignment == null
-					? "No task filter. Showing all incident contacts; choose All incident ICP entries to browse activity."
+					? "No task filter. Showing all incident contacts; choose Show all log entries to browse activity."
 					: "ICS 204 assignment: " + assignment.getAssignment() + "\nTeam: "
 							+ assignment.getAssignmentTeamNumber() + "\nResource: " + assignment.getResourceIdentifier()
 							+ "\nLeader: " + assignment.getLeader() + "\nContact: " + assignment.getContact()
@@ -575,6 +582,13 @@ public final class CommunicationsConsolePanel extends JPanel {
 	private void refreshLogs() {
 		if (selectedAssignmentId().isBlank()) {
 			allIncident.setSelected(true);
+		}
+		TaskChoice scopeTask = tasks.getSelectedValue();
+		String scope = allIncident.isSelected() || scopeTask == null ? "All log entries from the ICP log"
+				: scopeTask.label();
+		if (!scope.equals(logScope.getText())) {
+			logScope.setText(scope);
+			logScope.setToolTipText(scope);
 		}
 		ActivityLogEntry selected = logs.getSelectedValue() == null ? null : logs.getSelectedValue().entry();
 		List<LogChoice> rows = recentEntries(controller.getData(), allIncident.isSelected() ? null

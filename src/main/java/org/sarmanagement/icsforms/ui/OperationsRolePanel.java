@@ -181,6 +181,7 @@ public class OperationsRolePanel extends JPanel {
 		List<TaskChoice> taskRows = data.getSarTaskAssignments().stream().map(TaskChoice::new).toList();
 		taskRefreshState.refresh(data, () -> UiSupport.reconcileList(taskModel, taskRows),
 				taskRows.stream().map(row -> List.of(row.toString(), System.identityHashCode(row.task()))).toList());
+		taskBoard.repaint();
 		for (int index = 0; index < taskModel.size(); index++) {
 			if (selectedAssignment.equals(taskModel.get(index).task().getAssignmentId())) {
 				taskBoard.setSelectedIndex(index);
@@ -260,6 +261,7 @@ public class OperationsRolePanel extends JPanel {
 	private JSplitPane buildBody() {
 		JPanel left = new JPanel(new BorderLayout());
 		left.setBorder(javax.swing.BorderFactory.createTitledBorder("Task board"));
+		taskBoard.setCellRenderer(new TaskRowRenderer());
 		left.add(new JScrollPane(taskBoard), BorderLayout.CENTER);
 		JPanel right = new JPanel(new BorderLayout(4, 4));
 		right.setBorder(javax.swing.BorderFactory.createTitledBorder("Selected task and direct actions"));
@@ -464,6 +466,34 @@ public class OperationsRolePanel extends JPanel {
 	private SarTaskAssignment selectedTask() {
 		TaskChoice choice = taskBoard.getSelectedValue();
 		return choice == null ? null : choice.task();
+	}
+
+	/** Colours each task row by its SAR lifecycle stage, matching the SAR task board. */
+	private static final class TaskRowRenderer extends javax.swing.DefaultListCellRenderer {
+		private static final long serialVersionUID = 1L;
+
+		/**
+		 * Prepares a row, colour-coding it unless it is selected.
+		 *
+		 * @param list task list.
+		 * @param value task choice.
+		 * @param index row index.
+		 * @param isSelected whether the row is selected.
+		 * @param cellHasFocus whether the row has focus.
+		 * @return configured row component.
+		 */
+		@Override
+		public java.awt.Component getListCellRendererComponent(JList<?> list, Object value, int index,
+				boolean isSelected, boolean cellHasFocus) {
+			java.awt.Component row = super.getListCellRendererComponent(list, value, index, isSelected,
+					cellHasFocus);
+			putClientProperty("html.disable", Boolean.TRUE);
+			if (!isSelected && value instanceof TaskChoice choice && choice.task() != null) {
+				row.setBackground(SarTaskStage.of(choice.task()).color());
+				row.setForeground(java.awt.Color.BLACK);
+			}
+			return row;
+		}
 	}
 
 	/**

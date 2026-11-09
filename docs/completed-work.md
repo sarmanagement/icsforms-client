@@ -325,3 +325,18 @@ Known limits: the plan-reuse cache is invalidated only by this controller's
 own store operations, so an incident added by another process is seen after the
 next such operation. Windows are still disabled during genuine persistence
 waits (saves, loads, imports).
+
+## Role-panel usability tweaks (PR #56)
+
+- Shared `SarTaskStage` supplies the SAR lifecycle stage and colour to the SAR
+  Tasks board and table, the Operations task list, and the new compact board.
+- Communications Console: "Show all log entries" moved to the right of the log
+  bar; the left shows the selected task (truncated) or the all-entries scope.
+- Communications panel: Plan/Console buttons became one toggle button.
+- Incident Command: resource count columns sized to content; in SAR mode a
+  `SarTaskMiniBoard` can replace the table and only rebuilds when its content
+  changes.
+- Operations: task list colour-coded by stage.
+
+Evidence: `SarTaskStageViewsTest`, `CommunicationsRolePanelTest`,
+`CommunicationsConsolePanelTest`.
