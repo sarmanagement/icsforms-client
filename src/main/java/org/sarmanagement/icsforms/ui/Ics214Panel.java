@@ -404,6 +404,7 @@ public class Ics214Panel extends JPanel {
 			editorCommitGuard.rebase();
 			return;
 		}
+
 		controller.prefillPreparedBy(currentForm);
 		UiSupport.setTextIfChanged(nameField, currentForm.getName());
 		UiSupport.setTextIfChanged(icsPositionField, currentForm.getIcsPosition());
@@ -438,6 +439,15 @@ public class Ics214Panel extends JPanel {
 		loadedCanonicalPreparedDateTime = currentForm.getPreparedDateTime();
 		loadedResources = resourceStates(resourcesTableModel.getRows());
 		editorCommitGuard.rebase();
+	}
+
+	/**
+	 * Exposes the table whose canonical adoption preserves selection by resource identity.
+	 *
+	 * @return displayed resource table.
+	 */
+	JTable resourcesTable() {
+		return resourcesTable;
 	}
 
 	/**

@@ -435,6 +435,18 @@ class MainFrameNavigationChurnTest {
 					+ ", role windows=" + roleWindows + "; 10 switches; descendant counters=0; view state retained; "
 					+ previewPages.size() + " completed previews retained; paint batches=" + paintBatches.get()
 					+ ". Structural/paint evidence, not a human flicker assessment.");
+			SwingUtilities.invokeAndWait(() -> {
+				assertTrue(controllers[0].commitIfCurrent(controllers[0].captureIncidentBinding(),
+						() -> logs[0].getCurrentForm().getResourcesAssigned().remove(0)));
+				((Timer) Ics205PanelTest.field(controllers[0], "autosaveTimer")).stop();
+			});
+			AsyncFormPreviewPanelTest.waitFor(() -> refreshComplete(frames[0], controllers[0]));
+			SwingUtilities.invokeAndWait(() -> {
+				assertEquals(4, resources[0].getSelectedRow(), "canonical resource identity, not the previous row index");
+				assertEquals("resource-5", logs[0].getCurrentForm().getResourcesAssigned().get(
+						resources[0].convertRowIndexToModel(resources[0].getSelectedRow())).getResourceId());
+				assertTrue(tableEvents.get(resources[0]).get() > 0, "genuine resource updates notify the table");
+			});
 		} finally {
 			SwingUtilities.invokeAndWait(() -> {
 				javax.swing.RepaintManager.setCurrentManager(originalRepaints);
