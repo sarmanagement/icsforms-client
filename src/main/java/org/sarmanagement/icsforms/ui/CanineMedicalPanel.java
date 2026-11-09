@@ -320,7 +320,7 @@ public class CanineMedicalPanel extends JPanel {
 			preparedBy.setText(MedicalRoleSupport.medicalUnitLeaderName(data));
 			preparedAt.setText(UiSupport.formatIsoDateTime(plan.getPreparedAt()));
 			safetyOfficer.setText(MedicalRoleSupport.safetyOfficerName(data));
-			reviewStatus.setSelectedItem(plan.getReviewStatus());
+			UiSupport.selectOrAddItem(reviewStatus, plan.getReviewStatus());
 			loadDirectory(CanineMedicalFacilityTools.directoryFacilities(data));
 			loadSelection(plan.getSelectedFacilities());
 		} finally {

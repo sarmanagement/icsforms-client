@@ -96,6 +96,29 @@ class OrganizationalChartPanelTest {
 	}
 
 	@Test
+	void unchangedPushKeepsEntryIdentitiesStable() throws Exception {
+		SwingUtilities.invokeAndWait(() -> {
+			AppController controller = sampleController();
+			var chart = controller.getData().getOrganizationalChart();
+			OrgChartEntry commander = new OrgChartEntry();
+			commander.setName("Fictional Commander");
+			chart.setIncidentCommanderEntries(List.of(commander));
+			OrgChartEntry custom = new OrgChartEntry();
+			custom.setTitle("Custom role");
+			custom.setName("Fictional Person");
+			chart.setAdditionalPositions(List.of(custom));
+			OrganizationalChartPanel panel = new OrganizationalChartPanel(controller);
+			panel.refreshFromModel();
+			assertTrue(panel.pushToModel());
+			var settled = UiRefreshStateTest.modelState(controller.getData()).get("organizationalChart");
+			assertTrue(panel.pushToModel());
+			assertEquals(settled, UiRefreshStateTest.modelState(controller.getData()).get("organizationalChart"));
+			assertEquals(commander.getId(), chart.getIncidentCommanderEntries().get(0).getId());
+			assertEquals(custom.getId(), chart.getAdditionalPositions().get(0).getId());
+		});
+	}
+
+	@Test
 	void allOrgChartTextFieldsSurviveEveryWorkspaceAndFileStoreReload() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		Path workspace = Files.createTempDirectory(Files.createDirectories(Path.of("target")), "org-chart-retention-");

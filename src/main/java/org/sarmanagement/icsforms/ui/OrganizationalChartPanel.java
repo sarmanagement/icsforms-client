@@ -633,6 +633,7 @@ public class OrganizationalChartPanel extends JPanel {
 			for (OrgChartEntry entry : source) {
 				if (entry != null) {
 					OrgChartEntry copy = new OrgChartEntry();
+					copy.setId(entry.getId());
 					copy.setSection(entry.getSection());
 					copy.setRadio(entry.getRadio());
 					copy.setPhone(entry.getPhone());
@@ -1023,6 +1024,20 @@ public class OrganizationalChartPanel extends JPanel {
 	}
 
 	/**
+	 * Reuses the identifier of the entry previously shown in the same row so an
+	 * unchanged push does not alter the model.
+	 *
+	 * @param entry rebuilt entry.
+	 * @param existing entries currently stored in the model.
+	 * @param index visible row position of the rebuilt entry.
+	 */
+	private static void retainIdentity(OrgChartEntry entry, List<OrgChartEntry> existing, int index) {
+		if (index < existing.size() && existing.get(index) != null) {
+			entry.setId(existing.get(index).getId());
+		}
+	}
+
+	/**
 	 * Applies the Org Chart controls after validating the editor binding.
 	 *
 	 * @throws IllegalStateException when a custom-position cell rejects its input.
@@ -1033,6 +1048,7 @@ public class OrganizationalChartPanel extends JPanel {
 		chart.getAssignmentList().setAgencyRepresentatives(agencyRepresentatives.getEntries());
 		List<String> icNames = new ArrayList<>();
 		List<OrgChartEntry> icEntries = new ArrayList<>();
+		List<OrgChartEntry> existingIcEntries = new ArrayList<>(chart.getIncidentCommanderEntries());
 		boolean propagate = false;
 		String propagatedRadio = "";
 		String propagatedPhone = "";
@@ -1047,6 +1063,7 @@ public class OrganizationalChartPanel extends JPanel {
 				icNames.add(name);
 			}
 			OrgChartEntry entry = new OrgChartEntry();
+			retainIdentity(entry, existingIcEntries, icEntries.size());
 			entry.setSection(OrgChartEntry.Section.COMMAND_STAFF);
 			entry.setTitle("Incident Commander");
 			entry.setName(name);
@@ -1159,8 +1176,10 @@ public class OrganizationalChartPanel extends JPanel {
 
 		// Custom positions
 		List<OrgChartEntry> additional = new ArrayList<>();
+		List<OrgChartEntry> existingAdditional = new ArrayList<>(chart.getAdditionalPositions());
 		for (int row = 0; row < customPositionsModel.getRowCount(); row++) {
 			OrgChartEntry entry = new OrgChartEntry();
+			retainIdentity(entry, existingAdditional, row);
 			entry.setSection(sectionFromLabel((String) customPositionsModel.getValueAt(row, 0)));
 			entry.setTitle(safe((String) customPositionsModel.getValueAt(row, 1)));
 			entry.setName(safe((String) customPositionsModel.getValueAt(row, 2)));

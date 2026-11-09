@@ -135,7 +135,7 @@ public class Ics206Panel extends JPanel {
 			preparedBy.setText(MedicalRoleSupport.medicalUnitLeaderName(controller.getData()));
 			preparedAt.setText(UiSupport.formatIsoDateTime(plan.getPreparedAt()));
 			reviewedBy.setText(MedicalRoleSupport.safetyOfficerName(controller.getData()));
-			reviewStatus.setSelectedItem(plan.getReviewStatus());
+			UiSupport.selectOrAddItem(reviewStatus, plan.getReviewStatus());
 			loadAidStations(plan);
 			loadTransport(plan);
 			loadHospitals(plan);

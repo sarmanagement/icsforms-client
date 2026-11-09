@@ -57,6 +57,20 @@ class Ics206PanelTest {
 	}
 
 	@Test
+	void pushRetainsCustomRecordedReviewStatus() throws Exception {
+		AppData data = new AppData();
+		data.getMedicalPlan().setReviewStatus("Reviewed - fictional exercise only");
+		Ics206Panel panel = new Ics206Panel(controller(data));
+
+		SwingUtilities.invokeAndWait(() -> {
+			panel.refreshFromModel();
+			panel.pushToModel();
+		});
+
+		assertEquals("Reviewed - fictional exercise only", data.getMedicalPlan().getReviewStatus());
+	}
+
+	@Test
 	void pushFlushesAnActiveHospitalCellEditor() throws Exception {
 		AppData data = new AppData();
 		Ics206Panel panel = new Ics206Panel(controller(data));

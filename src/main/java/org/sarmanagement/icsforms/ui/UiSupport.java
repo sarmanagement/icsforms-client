@@ -146,6 +146,26 @@ final class UiSupport {
 		return dateTimeDisplayZone;
 	}
 
+	/**
+	 * Selects a stored value in a fixed-choice combo box, adding it first when it
+	 * is not offered so loading never silently replaces a recorded value.
+	 *
+	 * @param combo target combo box.
+	 * @param value stored value to display; blank values are ignored.
+	 */
+	static void selectOrAddItem(javax.swing.JComboBox<String> combo, String value) {
+		if (value != null && !value.isBlank()) {
+			boolean present = false;
+			for (int i = 0; i < combo.getItemCount() && !present; i++) {
+				present = value.equals(combo.getItemAt(i));
+			}
+			if (!present) {
+				combo.addItem(value);
+			}
+		}
+		combo.setSelectedItem(value);
+	}
+
 	static void setDateTimeDisplayZone(ZoneId zoneId) {
 		dateTimeDisplayZone = zoneId == null ? ZoneId.systemDefault() : zoneId;
 	}
