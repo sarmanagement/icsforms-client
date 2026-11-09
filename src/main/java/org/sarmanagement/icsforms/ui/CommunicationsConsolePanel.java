@@ -99,7 +99,8 @@ public final class CommunicationsConsolePanel extends JPanel {
 		binding = controller.captureIncidentBinding();
 		javax.swing.DefaultListCellRenderer plainText = new javax.swing.DefaultListCellRenderer();
 		plainText.putClientProperty("html.disable", Boolean.TRUE);
-		tasks.setCellRenderer(plainText);
+		tasks.setCellRenderer(new SarTaskStageListRenderer(
+				value -> value instanceof TaskChoice choice ? choice.stage() : null));
 		contactChoices.setCellRenderer(plainText);
 		logs.setCellRenderer(plainText);
 		channels.setRenderer(plainText);
@@ -186,7 +187,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 			List<TaskChoice> taskRows = new ArrayList<>();
 			for (SarTaskAssignment task : data.getSarTaskAssignments()) {
 				taskRows.add(new TaskChoice(task.getAssignmentId(), task.getAssignmentTeamNumber() + " | "
-						+ task.getTaskLifecycleStatus() + " | " + task.getAssignment()));
+						+ task.getTaskLifecycleStatus() + " | " + task.getAssignment(), SarTaskStage.of(task)));
 			}
 			java.util.Set<String> represented = new java.util.HashSet<>();
 			for (TaskChoice row : taskRows) {
@@ -196,7 +197,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 				if (represented.add(assignment.getAssignmentId())) {
 					taskRows.add(new TaskChoice(assignment.getAssignmentId(),
 							assignment.getAssignmentTeamNumber() + " | ICS 204 | " + assignment.getResourceIdentifier()
-									+ " | " + assignment.getAssignment()));
+									+ " | " + assignment.getAssignment(), null));
 				}
 			}
 			UiSupport.reconcileList(taskModel, taskRows);
@@ -873,8 +874,9 @@ public final class CommunicationsConsolePanel extends JPanel {
 	 *
 	 * @param assignmentId stable task identity.
 	 * @param label recorded task summary.
+	 * @param stage SAR lifecycle stage, or null for an ICS 204 assignment without a SAR task.
 	 */
-	private record TaskChoice(String assignmentId, String label) {
+	private record TaskChoice(String assignmentId, String label, SarTaskStage stage) {
 		/** @return visible board summary. */
 		@Override
 		public String toString() {

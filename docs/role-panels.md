@@ -28,7 +28,10 @@ tasks (double-click a task to open it) and **Resource table** swaps back.
 The Operations task board offers the same assignment, status, logging, clue, and
 debrief actions in its task context menu. Its task list is colour-coded by
 lifecycle stage using the same colours as the SAR Tasks board and table
-(planned, assigned, returned not debriefed, completed). Debrief is enabled only for returned
+(planned, assigned, returned not debriefed, completed); the Communications
+Console task list uses the same colours. The selected row is marked with a
+border so its colour stays visible, and the "Selected task" heading names the
+selected task. Debrief is enabled only for returned
 tasks. Its available-resource list reflects T-cards recorded as available.
 SAR-task quick-log entries open the shared activity editor with the event type
 and task narrative prefilled. The application-wide event-type manager controls

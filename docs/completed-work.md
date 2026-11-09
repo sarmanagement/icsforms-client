@@ -336,7 +336,9 @@ waits (saves, loads, imports).
 - Incident Command: resource count columns sized to content; in SAR mode a
   `SarTaskMiniBoard` can replace the table and only rebuilds when its content
   changes.
-- Operations: task list colour-coded by stage.
+- Operations and Communications Console task lists colour-coded by stage with
+  a selection border (`SarTaskStageListRenderer`); the Operations "Selected
+  task" heading names the selected task.
 
 Evidence: `SarTaskStageViewsTest`, `CommunicationsRolePanelTest`,
 `CommunicationsConsolePanelTest`.

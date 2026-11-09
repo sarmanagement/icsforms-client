@@ -54,7 +54,9 @@ class SarTaskStageViewsTest {
 		data.getSarTaskAssignments().add(task("1", "assigned - on task", null));
 		AppController controller = IncidentStoreTestFixtures.controller(data);
 		controller.getData().getSarTaskAssignments().clear();
-		controller.getData().getSarTaskAssignments().add(task("1", "assigned - on task", null));
+		SarTaskAssignment assigned = task("1", "assigned - on task", null);
+		assigned.setAssignmentTeamNumber("S1:G1-A");
+		controller.getData().getSarTaskAssignments().add(assigned);
 		OperationsRolePanel[] panel = new OperationsRolePanel[1];
 		SwingUtilities.invokeAndWait(() -> panel[0] = new OperationsRolePanel(controller, () -> null, ignored -> {
 		}, ignored -> {
@@ -69,6 +71,17 @@ class SarTaskStageViewsTest {
 			JList<?> list = (JList<?>) field(panel[0], "taskBoard");
 			Component row = renderRow(list);
 			assertEquals(SarTaskStage.ASSIGNED.color(), row.getBackground());
+			list.setSelectedIndex(0);
+			@SuppressWarnings("unchecked")
+			JList<Object> typed = (JList<Object>) list;
+			Component selected = typed.getCellRenderer().getListCellRendererComponent(typed,
+					typed.getModel().getElementAt(0), 0, true, true);
+			assertEquals(SarTaskStage.ASSIGNED.color(), selected.getBackground());
+			assertEquals(2, ((javax.swing.border.CompoundBorder) ((javax.swing.JComponent) selected).getBorder())
+					.getOutsideBorder().getBorderInsets(selected).top);
+			javax.swing.border.TitledBorder title = (javax.swing.border.TitledBorder) field(panel[0],
+					"selectedTaskBorder");
+			assertEquals("Selected task (S1:G1-A) and direct actions", title.getTitle());
 		} finally {
 			SwingUtilities.invokeAndWait(panel[0]::dispose);
 		}
