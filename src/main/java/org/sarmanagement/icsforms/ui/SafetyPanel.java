@@ -109,6 +109,7 @@ public class SafetyPanel extends JPanel {
 	};
 	private final JTable reportTable = new JTable(reportTableModel);
 	private final List<HazardReportSource> reportSources = new ArrayList<>();
+	private List<String> displayedReportIds = List.of();
 	private Consumer<String> exportRequest = this::exportPdf;
 
 	/**
@@ -851,14 +852,22 @@ public class SafetyPanel extends JPanel {
 	}
 
 	/**
-	 * Refreshes the SAR report list from all nonblank debrief hazard reports.
+	 * Rebinds SAR hazard sources, replacing displayed rows only when their content changes.
 	 *
 	 * @param data active incident.
 	 */
 	private void refreshReportedHazards(AppData data) {
-		reportTableModel.setRowCount(0);
+		int selectedRow = reportTable.getSelectedRow();
+		int selectedModelRow = selectedRow < 0 ? -1 : reportTable.convertRowIndexToModel(selectedRow);
+		String selectedId = selectedModelRow >= 0 && selectedModelRow < displayedReportIds.size()
+				? displayedReportIds.get(selectedModelRow) : null;
+		List<List<Object>> rows = new ArrayList<>();
 		reportSources.clear();
 		if (data.getIncidentMode() != IncidentMode.SAR) {
+			if (reportTableModel.getRowCount() != 0) {
+				reportTableModel.setRowCount(0);
+			}
+			displayedReportIds = List.of();
 			refreshHazardReportCoverage();
 			return;
 		}
@@ -866,10 +875,10 @@ public class SafetyPanel extends JPanel {
 			if (report != null && !report.getHazards().isBlank()) {
 				HazardReportSource source = new HazardReportSource(null, report);
 				reportSources.add(source);
-				reportTableModel.addRow(new Object[] {periodLabel(report.getPeriodStart(), report.getPeriodEnd()),
+				rows.add(java.util.Arrays.asList(periodLabel(report.getPeriodStart(), report.getPeriodEnd()),
 						report.getTaskLabel(), report.getIncidentArea(),
 						report.isDebriefingCompleted() ? "Completed" : "Unfinished",
-						reportReviewStatus(source), report.getHazards()});
+						reportReviewStatus(source), report.getHazards()));
 			}
 		}
 		LocalDateTime periodStart = data.getIncidentContext().getOperationalPeriodStart();
@@ -878,9 +887,30 @@ public class SafetyPanel extends JPanel {
 			if (task != null && task.getHazardsObserved() != null && !task.getHazardsObserved().isBlank()) {
 				HazardReportSource source = new HazardReportSource(task, null);
 				reportSources.add(source);
-				reportTableModel.addRow(new Object[] {periodLabel(periodStart, periodEnd), taskLabel(task),
+				rows.add(java.util.Arrays.asList(periodLabel(periodStart, periodEnd), taskLabel(task),
 						reportArea(task), task.isDebriefingCompleted() ? "Completed" : "Unfinished",
-						reportReviewStatus(source), task.getHazardsObserved()});
+						reportReviewStatus(source), task.getHazardsObserved()));
+			}
+		}
+		List<String> nextIds = reportSources.stream().map(HazardReportSource::identity).toList();
+		boolean changed = reportTableModel.getRowCount() != rows.size() || !displayedReportIds.equals(nextIds);
+		for (int row = 0; !changed && row < rows.size(); row++) {
+			for (int column = 0; column < rows.get(row).size(); column++) {
+				changed |= !java.util.Objects.equals(reportTableModel.getValueAt(row, column), rows.get(row).get(column));
+			}
+		}
+		if (changed) {
+			displayedReportIds = nextIds;
+			reportTableModel.setRowCount(0);
+			for (List<Object> row : rows) {
+				reportTableModel.addRow(row.toArray());
+			}
+			if (selectedId != null && nextIds.indexOf(selectedId) == nextIds.lastIndexOf(selectedId)) {
+				int modelRow = nextIds.indexOf(selectedId);
+				int viewRow = modelRow < 0 ? -1 : reportTable.convertRowIndexToView(modelRow);
+				if (viewRow >= 0) {
+					reportTable.setRowSelectionInterval(viewRow, viewRow);
+				}
 			}
 		}
 		refreshHazardReportCoverage();
@@ -1086,6 +1116,15 @@ public class SafetyPanel extends JPanel {
 	 * @param archivedReport archived report, or null for a current-period task.
 	 */
 	private record HazardReportSource(SarTaskAssignment task, SafetyHazardReport archivedReport) {
+		/**
+		 * Identifies a current task report or archived report without using its displayed text.
+		 *
+		 * @return stable report identity with its source namespace.
+		 */
+		private String identity() {
+			return task == null ? "archived:" + archivedReport.getId() : "task:" + task.getTaskId();
+		}
+
 		/**
 		 * Returns the incident area associated with this report.
 		 *

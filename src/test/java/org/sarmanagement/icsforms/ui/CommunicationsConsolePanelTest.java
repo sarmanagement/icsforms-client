@@ -386,7 +386,7 @@ class CommunicationsConsolePanelTest {
 					.contains("Recorded generic phone"));
 			JList<?> logs = accessible(panel, JList.class, "Recent ICP log entries");
 			assertEquals(1, logs.getModel().getSize());
-			accessible(panel, JCheckBox.class, "All incident ICP entries").doClick();
+			accessible(panel, JCheckBox.class, "Show all log entries").doClick();
 			assertEquals(2, logs.getModel().getSize());
 			panel.refreshFromModel();
 			assertEquals(generic.getAssignmentId(), panel.selectedAssignmentId());

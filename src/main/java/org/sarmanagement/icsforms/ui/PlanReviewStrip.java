@@ -74,7 +74,7 @@ public class PlanReviewStrip extends JPanel {
 		status.getAccessibleContext().setAccessibleName(area.displayLabel() + " review status");
 		if (reviewer.getText().isBlank()) {
 			String currentUser = controller.getData().getIncidentContext().getCurrentUser();
-			reviewer.setText(currentUser == null ? "" : currentUser);
+			UiSupport.setTextIfChanged(reviewer, currentUser);
 		}
 	}
 

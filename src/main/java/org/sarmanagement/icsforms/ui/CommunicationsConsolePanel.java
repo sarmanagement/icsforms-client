@@ -58,6 +58,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 	private static final DateTimeFormatter CHECK_TIME = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
 			.withResolverStyle(java.time.format.ResolverStyle.STRICT);
 	private final AppController controller;
+	private final UiRefreshState logRefreshState = new UiRefreshState();
 	private final AppController.IncidentBinding binding;
 	private final AppController.IncidentChangeSubscription subscription;
 	private final DefaultListModel<TaskChoice> taskModel = new DefaultListModel<>();
@@ -75,7 +76,8 @@ public final class CommunicationsConsolePanel extends JPanel {
 	private final JTextField checkedAt = new JTextField(22);
 	private final JTextArea notes = area("Communications check notes", true);
 	private final JLabel feedback = new JLabel("Checks are explicit assertions, not inferred readiness.");
-	private final JCheckBox allIncident = new JCheckBox("All incident ICP entries");
+	private final JCheckBox allIncident = new JCheckBox("Show all log entries");
+	private final JLabel logScope = new JLabel(" ");
 	private final DefaultListModel<LogChoice> logModel = new DefaultListModel<>();
 	private final JList<LogChoice> logs = new JList<>(logModel);
 	private final JButton details = new JButton("View full entry details…");
@@ -97,7 +99,8 @@ public final class CommunicationsConsolePanel extends JPanel {
 		binding = controller.captureIncidentBinding();
 		javax.swing.DefaultListCellRenderer plainText = new javax.swing.DefaultListCellRenderer();
 		plainText.putClientProperty("html.disable", Boolean.TRUE);
-		tasks.setCellRenderer(plainText);
+		tasks.setCellRenderer(new SarTaskStageListRenderer(
+				value -> value instanceof TaskChoice choice ? choice.stage() : null));
 		contactChoices.setCellRenderer(plainText);
 		logs.setCellRenderer(plainText);
 		channels.setRenderer(plainText);
@@ -175,49 +178,63 @@ public final class CommunicationsConsolePanel extends JPanel {
 		if (disposed || !controller.isCurrent(binding)) {
 			return;
 		}
+		AppData data = controller.getData();
 		rememberCheckDraft();
 		String taskId = selectedAssignmentId();
 		String channelId = selectedChannelId();
 		refreshing = true;
-		taskModel.clear();
-		for (SarTaskAssignment task : controller.getData().getSarTaskAssignments()) {
-			taskModel.addElement(new TaskChoice(task.getAssignmentId(), task.getAssignmentTeamNumber() + " | "
-					+ task.getTaskLifecycleStatus() + " | " + task.getAssignment()));
-		}
-		java.util.Set<String> represented = new java.util.HashSet<>();
-		for (int index = 0; index < taskModel.size(); index++) {
-			represented.add(taskModel.get(index).assignmentId());
-		}
-		for (ResourceAssignment assignment : controller.getData().getAllAssignmentResources()) {
-			if (represented.add(assignment.getAssignmentId())) {
-				taskModel.addElement(new TaskChoice(assignment.getAssignmentId(),
-						assignment.getAssignmentTeamNumber() + " | ICS 204 | " + assignment.getResourceIdentifier()
-								+ " | " + assignment.getAssignment()));
+		try {
+			List<TaskChoice> taskRows = new ArrayList<>();
+			for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+				taskRows.add(new TaskChoice(task.getAssignmentId(), task.getAssignmentTeamNumber() + " | "
+						+ task.getTaskLifecycleStatus() + " | " + task.getAssignment(), SarTaskStage.of(task)));
 			}
-		}
-		for (int index = 0; index < taskModel.size(); index++) {
-			if (taskId.equals(taskModel.get(index).assignmentId())) {
-				tasks.setSelectedIndex(index);
+			java.util.Set<String> represented = new java.util.HashSet<>();
+			for (TaskChoice row : taskRows) {
+				represented.add(row.assignmentId());
 			}
-		}
-		if (initialSelection && taskId.isBlank() && !taskModel.isEmpty()) {
-			tasks.setSelectedIndex(0);
-		}
-		initialSelection = false;
-		channels.removeAllItems();
-		for (RadioChannel channel : controller.getData().getForm205().getChannels()) {
-			channels.addItem(new ChannelChoice(channel.getChannelId(), ChannelLinkSource.channelLabel(channel)));
-		}
-		for (int index = 0; index < channels.getItemCount(); index++) {
-			if (channelId.equals(channels.getItemAt(index).channelId())) {
-				channels.setSelectedIndex(index);
-				break;
+			for (ResourceAssignment assignment : data.getAllAssignmentResources()) {
+				if (represented.add(assignment.getAssignmentId())) {
+					taskRows.add(new TaskChoice(assignment.getAssignmentId(),
+							assignment.getAssignmentTeamNumber() + " | ICS 204 | " + assignment.getResourceIdentifier()
+									+ " | " + assignment.getAssignment(), null));
+				}
 			}
+			UiSupport.reconcileList(taskModel, taskRows);
+			int selectedTaskIndex = -1;
+			for (int index = 0; index < taskModel.size(); index++) {
+				if (taskId.equals(taskModel.get(index).assignmentId())) {
+					selectedTaskIndex = index;
+					break;
+				}
+			}
+			if (initialSelection && selectedTaskIndex < 0 && !taskModel.isEmpty()) {
+				selectedTaskIndex = 0;
+			}
+			if (tasks.getSelectedIndex() != selectedTaskIndex) {
+				tasks.setSelectedIndex(selectedTaskIndex);
+			}
+			initialSelection = false;
+			List<ChannelChoice> channelRows = data.getForm205().getChannels().stream()
+					.map(channel -> new ChannelChoice(channel.getChannelId(), ChannelLinkSource.channelLabel(channel))).toList();
+			List<ChannelChoice> displayed = java.util.stream.IntStream.range(0, channels.getItemCount())
+					.mapToObj(channels::getItemAt).toList();
+			if (!displayed.equals(channelRows)) {
+				channels.removeAllItems();
+				channelRows.forEach(channels::addItem);
+				for (int index = 0; index < channels.getItemCount(); index++) {
+					if (channelId.equals(channels.getItemAt(index).channelId())) {
+						channels.setSelectedIndex(index);
+						break;
+					}
+				}
+				if (!channelId.isBlank() && !channelId.equals(selectedChannelId())) {
+					channels.setSelectedIndex(-1);
+				}
+			}
+		} finally {
+			refreshing = false;
 		}
-		if (!channelId.isBlank() && !channelId.equals(selectedChannelId())) {
-			channels.setSelectedIndex(-1);
-		}
-		refreshing = false;
 		loadCheckDraft();
 		refreshTaskDetails();
 		refreshContacts();
@@ -318,7 +335,13 @@ public final class CommunicationsConsolePanel extends JPanel {
 	 */
 	private JPanel buildLogs() {
 		JPanel panel = new JPanel(new BorderLayout(4, 4));
-		panel.add(allIncident, BorderLayout.NORTH);
+		logScope.putClientProperty("html.disable", Boolean.TRUE);
+		logScope.getAccessibleContext().setAccessibleName("Recent ICP log scope");
+		logScope.setMinimumSize(new Dimension(0, logScope.getPreferredSize().height));
+		JPanel scopeBar = new JPanel(new BorderLayout(8, 0));
+		scopeBar.add(logScope, BorderLayout.CENTER);
+		scopeBar.add(allIncident, BorderLayout.EAST);
+		panel.add(scopeBar, BorderLayout.NORTH);
 		logs.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		logs.getAccessibleContext().setAccessibleName("Recent ICP log entries");
 		panel.add(new JScrollPane(logs), BorderLayout.CENTER);
@@ -381,7 +404,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 		if (task == null) {
 			ResourceAssignment assignment = selectedResourceAssignment();
 			String summary = assignment == null
-					? "No task filter. Showing all incident contacts; choose All incident ICP entries to browse activity."
+					? "No task filter. Showing all incident contacts; choose Show all log entries to browse activity."
 					: "ICS 204 assignment: " + assignment.getAssignment() + "\nTeam: "
 							+ assignment.getAssignmentTeamNumber() + "\nResource: " + assignment.getResourceIdentifier()
 							+ "\nLeader: " + assignment.getLeader() + "\nContact: " + assignment.getContact()
@@ -393,7 +416,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 					}
 				}
 			}
-			taskDetails.setText(summary);
+			UiSupport.setTextIfChanged(taskDetails, summary);
 			return;
 		}
 		StringBuilder text = new StringBuilder("Assignment: ").append(task.getAssignment())
@@ -410,8 +433,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 				text.append("\n").append(link.sourceLabel()).append(": ").append(linkText(link));
 			}
 		}
-		taskDetails.setText(text.toString());
-		taskDetails.setCaretPosition(0);
+		UiSupport.setTextIfChanged(taskDetails, text.toString());
 	}
 
 	/** Refreshes contact search without inferring identity from legacy channel text. */
@@ -472,16 +494,21 @@ public final class CommunicationsConsolePanel extends JPanel {
 		String query = lookup.getText().strip().toLowerCase(Locale.ROOT);
 		List<ContactChoice> found = rows.stream()
 				.filter(row -> row.label().toLowerCase(Locale.ROOT).contains(query)).toList();
-		contactModel.clear();
-		for (ContactChoice row : found) {
-			contactModel.addElement(row);
-			if (row.identity().equals(selectedContact)) {
-				contactChoices.setSelectedIndex(contactModel.size() - 1);
+		UiSupport.reconcileList(contactModel, found);
+		if (!selectedContact.isBlank()) {
+			int selectedIndex = -1;
+			for (int index = 0; index < found.size(); index++) {
+				if (found.get(index).identity().equals(selectedContact)) {
+					selectedIndex = index;
+					break;
+				}
+			}
+			if (contactChoices.getSelectedIndex() != selectedIndex) {
+				contactChoices.setSelectedIndex(selectedIndex);
 			}
 		}
-		contacts.setText(found.isEmpty() ? "No recorded resource or contact matches."
+		UiSupport.setTextIfChanged(contacts, found.isEmpty() ? "No recorded resource or contact matches."
 				: found.stream().map(ContactChoice::label).collect(java.util.stream.Collectors.joining("\n\n")));
-		contacts.setCaretPosition(0);
 	}
 
 	/**
@@ -557,16 +584,26 @@ public final class CommunicationsConsolePanel extends JPanel {
 		if (selectedAssignmentId().isBlank()) {
 			allIncident.setSelected(true);
 		}
+		TaskChoice scopeTask = tasks.getSelectedValue();
+		String scope = allIncident.isSelected() || scopeTask == null ? "All log entries from the ICP log"
+				: scopeTask.label();
+		if (!scope.equals(logScope.getText())) {
+			logScope.setText(scope);
+			logScope.setToolTipText(scope);
+		}
 		ActivityLogEntry selected = logs.getSelectedValue() == null ? null : logs.getSelectedValue().entry();
 		List<LogChoice> rows = recentEntries(controller.getData(), allIncident.isSelected() ? null
 				: selectedAssignmentId());
-		logModel.clear();
-		for (LogChoice row : rows) {
-			logModel.addElement(row);
-			if (row.entry() == selected) {
-				logs.setSelectedIndex(logModel.size() - 1);
+		logRefreshState.refresh(controller.getData(), () -> {
+			UiSupport.reconcileList(logModel, rows);
+			for (int index = 0; index < rows.size(); index++) {
+				LogChoice row = rows.get(index);
+				if (selected != null && row.entry().getEntryId().equals(selected.getEntryId())) {
+					logs.setSelectedIndex(index);
+				}
 			}
-		}
+		}, rows.stream().map(row -> List.of(row.entry().getEntryId(), row.toString(),
+				System.identityHashCode(row.entry()), System.identityHashCode(row.log()))).toList());
 		details.setEnabled(logs.getSelectedValue() != null);
 	}
 
@@ -658,15 +695,18 @@ public final class CommunicationsConsolePanel extends JPanel {
 		loadedChannelId = selectedChannelId();
 		RadioChannel channel = uniqueChannel(loadedChannelId);
 		if (channel == null) {
-			channelDetails.setText("Select a uniquely resolved current channel. Missing / ambiguous IDs cannot be checked.");
+			UiSupport.setTextIfChanged(channelDetails,
+					"Select a uniquely resolved current channel. Missing / ambiguous IDs cannot be checked.");
 			return;
 		}
 		CheckDraft draft = checkDrafts.computeIfAbsent(loadedChannelId, ignored -> new CheckDraft(channel.deepCopy()));
-		outcome.setSelectedItem(draft.outcome);
-		checkedBy.setText(draft.by);
-		checkedAt.setText(draft.time);
-		notes.setText(draft.notes);
-		channelDetails.setText(ChannelLinkSource.channelLabel(channel) + "\nAssignment: " + channel.getAssignment()
+		if (outcome.getSelectedItem() != draft.outcome) {
+			outcome.setSelectedItem(draft.outcome);
+		}
+		UiSupport.setTextIfChanged(checkedBy, draft.by);
+		UiSupport.setTextIfChanged(checkedAt, draft.time);
+		UiSupport.setTextIfChanged(notes, draft.notes);
+		UiSupport.setTextIfChanged(channelDetails, ChannelLinkSource.channelLabel(channel) + "\nAssignment: " + channel.getAssignment()
 				+ "\nRX: " + channel.getRxFrequency() + " | TX: " + channel.getTxFrequency()
 				+ "\nCoverage: " + channel.getCoverageGuidance() + "\nRelay: " + channel.getRelayGuidance()
 				+ "\nLast check: " + channel.getRadioCheckStatus().displayLabel() + " | "
@@ -834,8 +874,9 @@ public final class CommunicationsConsolePanel extends JPanel {
 	 *
 	 * @param assignmentId stable task identity.
 	 * @param label recorded task summary.
+	 * @param stage SAR lifecycle stage, or null for an ICS 204 assignment without a SAR task.
 	 */
-	private record TaskChoice(String assignmentId, String label) {
+	private record TaskChoice(String assignmentId, String label, SarTaskStage stage) {
 		/** @return visible board summary. */
 		@Override
 		public String toString() {
@@ -863,14 +904,26 @@ public final class CommunicationsConsolePanel extends JPanel {
 	 * @param log owning shared log.
 	 * @param entry shared entry.
 	 * @param eventLabel resolved shared event type label.
+	 * @param label detached display text.
 	 */
-	record LogChoice(Ics214Form log, ActivityLogEntry entry, String eventLabel) {
+	record LogChoice(Ics214Form log, ActivityLogEntry entry, String eventLabel, String label) {
+		/**
+		 * Captures a label while retaining the authoritative entry for actions.
+		 *
+		 * @param log owning log.
+		 * @param entry authoritative activity.
+		 * @param eventLabel resolved classification.
+		 */
+		LogChoice(Ics214Form log, ActivityLogEntry entry, String eventLabel) {
+			this(log, entry, eventLabel, (entry.isStruckOut() ? "[STRUCK OUT] " : "")
+					+ (entry.getTimestamp() == null ? "Undated" : UiSupport.formatDateTime(entry.getTimestamp(), CHECK_TIME))
+					+ " | " + eventLabel + " | " + entry.getResourceIdentifier() + " | " + entry.getNotableActivity());
+		}
+
 		/** @return timestamp, classification, resource and original narrative. */
 		@Override
 		public String toString() {
-			return (entry.isStruckOut() ? "[STRUCK OUT] " : "")
-					+ (entry.getTimestamp() == null ? "Undated" : UiSupport.formatDateTime(entry.getTimestamp(), CHECK_TIME))
-					+ " | " + eventLabel + " | " + entry.getResourceIdentifier() + " | " + entry.getNotableActivity();
+			return label;
 		}
 	}
 

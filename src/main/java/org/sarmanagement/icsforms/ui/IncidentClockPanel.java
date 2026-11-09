@@ -54,7 +54,7 @@ public final class IncidentClockPanel extends JPanel {
 	 */
 	public IncidentClockPanel(AppController controller) {
 		this.controller = Objects.requireNonNull(controller, "controller must not be null");
-		setLayout(new FlowLayout(FlowLayout.CENTER, 4, 0));
+		setLayout(new FlowLayout(FlowLayout.CENTER, 4, -2));
 		setBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder("Current time"),
 				BorderFactory.createEmptyBorder(0, 0, 7, 0)));
 		setPreferredSize(new Dimension(270, 72));

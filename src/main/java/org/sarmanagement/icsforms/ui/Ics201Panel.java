@@ -84,8 +84,7 @@ public class Ics201Panel extends JPanel {
 		IncidentContext context = controller.getData().getIncidentContext();
 		incidentNameField.setText(resolveIncidentName(form, context));
 		incidentNumberField.setText(safe(form.getIncidentNumber()));
-		dateTimeInitiatedSpinner
-				.setValue(AppController.toDate(toDateTime(form.getDateInitiated(), form.getTimeInitiated())));
+		UiSupport.loadDateTime(dateTimeInitiatedSpinner, toDateTime(form.getDateInitiated(), form.getTimeInitiated()));
 		mapSketchArea.setText(safe(form.getMapSketch()));
 		situationSummaryArea.setText(safe(form.getSituationSummary()));
 		objectivesArea.setText(String.join("\n", form.getCurrentObjectives()));
@@ -115,9 +114,11 @@ public class Ics201Panel extends JPanel {
 		IncidentContext context = controller.getData().getIncidentContext();
 		form.setIncidentName(resolveIncidentName(form, context));
 		form.setIncidentNumber(incidentNumberField.getText().trim());
-		LocalDateTime dt = AppController.toLocalDateTime((java.util.Date) dateTimeInitiatedSpinner.getValue());
-		form.setDateInitiated(dt == null ? null : dt.toLocalDate());
-		form.setTimeInitiated(dt == null ? null : dt.toLocalTime());
+		if (!UiSupport.dateTimeUnchanged(dateTimeInitiatedSpinner)) {
+			LocalDateTime dt = UiSupport.readDateTime(dateTimeInitiatedSpinner);
+			form.setDateInitiated(dt == null ? null : dt.toLocalDate());
+			form.setTimeInitiated(dt == null ? null : dt.toLocalTime());
+		}
 		form.setMapSketch(mapSketchArea.getText().trim());
 		form.setSituationSummary(situationSummaryArea.getText().trim());
 		form.setCurrentObjectives(lines(objectivesArea.getText()));
@@ -125,7 +126,7 @@ public class Ics201Panel extends JPanel {
 		form.setResources(resourceSummaryTableModel.getRows());
 		form.setPreparedByName(preparedByNameField.getText().trim());
 		form.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
-		form.setPreparedDateTime(AppController.toLocalDateTime((java.util.Date) preparedDateTimeSpinner.getValue()));
+		form.setPreparedDateTime(UiSupport.readDateTime(preparedDateTimeSpinner));
 		form.setPreparedBySignature(preparedSignatureField.getText().trim());
 	}
 
@@ -314,7 +315,7 @@ public class Ics201Panel extends JPanel {
 		}
 		preparedByNameField.setText(preparedByName);
 		preparedByPositionField.setText(preparedByPosition);
-		preparedDateTimeSpinner.setValue(AppController.toDate(form.getPreparedDateTime()));
+		UiSupport.loadDateTime(preparedDateTimeSpinner, form.getPreparedDateTime());
 		preparedSignatureField.setText(safe(form.getPreparedBySignature()));
 	}
 

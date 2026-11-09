@@ -58,7 +58,61 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** Verifies SAR editor commits, synchronization, and canonical table updates. */
 class SarTaskPanelTest {
+
+	@Test
+	void canonicalReturnToPreviousValueAfterInlineEditNotifiesAndResorts() throws Exception {
+		Class<?> type = Class.forName(SarTaskPanel.class.getName() + "$SarTaskTableModel");
+		var constructor = type.getDeclaredConstructor();
+		constructor.setAccessible(true);
+		AbstractTableModel model = (AbstractTableModel) constructor.newInstance();
+		Method setRows = type.getDeclaredMethod("setRows", List.class, List.class, List.class);
+		setRows.setAccessible(true);
+		SarTaskAssignment first = new SarTaskAssignment();
+		first.setAssignmentTeamNumber("A");
+		SarTaskAssignment second = new SarTaskAssignment();
+		second.setAssignmentTeamNumber("M");
+		SwingUtilities.invokeAndWait(() -> {
+			try {
+				List<SarTaskAssignment> rows = List.of(first, second);
+				setRows.invoke(model, rows, List.of(), List.of());
+				JTable table = new JTable(model);
+				table.setAutoCreateRowSorter(true);
+				table.getRowSorter().toggleSortOrder(1);
+				model.setValueAt("Z", 0, 1);
+				table.getRowSorter().toggleSortOrder(1);
+				table.getRowSorter().toggleSortOrder(1);
+				assertEquals("M", table.getValueAt(0, 1));
+				java.util.concurrent.atomic.AtomicInteger changes = new java.util.concurrent.atomic.AtomicInteger();
+				model.addTableModelListener(event -> changes.incrementAndGet());
+				first.setAssignmentTeamNumber("A");
+				setRows.invoke(model, rows, List.of(), List.of());
+				assertEquals(1, changes.get());
+				assertEquals("A", table.getValueAt(0, 1));
+				setRows.invoke(model, rows, List.of(), List.of());
+				assertEquals(1, changes.get());
+				ResourceAssignment teamA = new ResourceAssignment();
+				teamA.setAssignmentTeamNumber("A");
+				teamA.setNumberOfPersons(2);
+				ResourceAssignment teamM = new ResourceAssignment();
+				teamM.setAssignmentTeamNumber("M");
+				teamM.setNumberOfPersons(7);
+				List<ResourceAssignment> assignments = List.of(teamA, teamM);
+				setRows.invoke(model, rows, List.of(), assignments);
+				List<javax.swing.event.TableModelEvent> events = new ArrayList<>();
+				model.addTableModelListener(events::add);
+				model.setValueAt("M", 0, 1);
+				assertEquals(7, model.getValueAt(0, 6));
+				assertEquals(javax.swing.event.TableModelEvent.ALL_COLUMNS, events.get(0).getColumn());
+				int count = events.size();
+				setRows.invoke(model, rows, List.of(), assignments);
+				assertEquals(count, events.size());
+			} catch (ReflectiveOperationException exception) {
+				throw new AssertionError(exception);
+			}
+		});
+	}
 
 	@Test
 	void failedSavePreservesDetachedUpdatesMadeDuringNestedDispositionPrompt() throws Exception {

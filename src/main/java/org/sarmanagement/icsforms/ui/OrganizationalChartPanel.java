@@ -633,6 +633,7 @@ public class OrganizationalChartPanel extends JPanel {
 			for (OrgChartEntry entry : source) {
 				if (entry != null) {
 					OrgChartEntry copy = new OrgChartEntry();
+					copy.setId(entry.getId());
 					copy.setSection(entry.getSection());
 					copy.setRadio(entry.getRadio());
 					copy.setPhone(entry.getPhone());
@@ -1006,7 +1007,7 @@ public class OrganizationalChartPanel extends JPanel {
 		Ics207Form form207 = controller.getData().getForm207();
 		ics207PreparedByNameField.setText(safe(form207.getPreparedByName()));
 		ics207PreparedByPositionTitleField.setText(safe(form207.getPreparedByPositionTitle()));
-		ics207PreparedDateTimeSpinner.setValue(AppController.toDate(form207.getPreparedDateTime()));
+		UiSupport.loadDateTime(ics207PreparedDateTimeSpinner, form207.getPreparedDateTime());
 		} finally {
 			loading = false;
 		}
@@ -1023,13 +1024,31 @@ public class OrganizationalChartPanel extends JPanel {
 	}
 
 	/**
+	 * Reuses the identifier of the entry previously shown in the same row so an
+	 * unchanged push does not alter the model.
+	 *
+	 * @param entry rebuilt entry.
+	 * @param existing entries currently stored in the model.
+	 * @param index visible row position of the rebuilt entry.
+	 */
+	private static void retainIdentity(OrgChartEntry entry, List<OrgChartEntry> existing, int index) {
+		if (index < existing.size() && existing.get(index) != null) {
+			entry.setId(existing.get(index).getId());
+		}
+	}
+
+	/**
 	 * Applies the Org Chart controls after validating the editor binding.
+	 *
+	 * @throws IllegalStateException when a custom-position cell rejects its input.
 	 */
 	private void flushToModel() {
+		UiSupport.commitTableEdits(customPositionsTable);
 		OrganizationalChart chart = controller.getData().getOrganizationalChart();
 		chart.getAssignmentList().setAgencyRepresentatives(agencyRepresentatives.getEntries());
 		List<String> icNames = new ArrayList<>();
 		List<OrgChartEntry> icEntries = new ArrayList<>();
+		List<OrgChartEntry> existingIcEntries = new ArrayList<>(chart.getIncidentCommanderEntries());
 		boolean propagate = false;
 		String propagatedRadio = "";
 		String propagatedPhone = "";
@@ -1044,6 +1063,7 @@ public class OrganizationalChartPanel extends JPanel {
 				icNames.add(name);
 			}
 			OrgChartEntry entry = new OrgChartEntry();
+			retainIdentity(entry, existingIcEntries, icEntries.size());
 			entry.setSection(OrgChartEntry.Section.COMMAND_STAFF);
 			entry.setTitle("Incident Commander");
 			entry.setName(name);
@@ -1156,10 +1176,10 @@ public class OrganizationalChartPanel extends JPanel {
 
 		// Custom positions
 		List<OrgChartEntry> additional = new ArrayList<>();
-		if (customPositionsTable.isEditing())
-			customPositionsTable.getCellEditor().stopCellEditing();
+		List<OrgChartEntry> existingAdditional = new ArrayList<>(chart.getAdditionalPositions());
 		for (int row = 0; row < customPositionsModel.getRowCount(); row++) {
 			OrgChartEntry entry = new OrgChartEntry();
+			retainIdentity(entry, existingAdditional, row);
 			entry.setSection(sectionFromLabel((String) customPositionsModel.getValueAt(row, 0)));
 			entry.setTitle(safe((String) customPositionsModel.getValueAt(row, 1)));
 			entry.setName(safe((String) customPositionsModel.getValueAt(row, 2)));
@@ -1174,7 +1194,7 @@ public class OrganizationalChartPanel extends JPanel {
 		form207.setPreparedByName(ics207PreparedByNameField.getText().trim());
 		form207.setPreparedByPositionTitle(ics207PreparedByPositionTitleField.getText().trim());
 		form207.setPreparedDateTime(
-				AppController.toLocalDateTime((java.util.Date) ics207PreparedDateTimeSpinner.getValue()));
+				UiSupport.readDateTime(ics207PreparedDateTimeSpinner));
 	}
 
 	private void addIncidentCommanderRow(String name, String radio, String phone, boolean propagate) {

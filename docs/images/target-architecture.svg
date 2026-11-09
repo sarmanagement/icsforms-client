@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="300" viewBox="0 0 860 300" role="img" aria-labelledby="title desc">
+  <title id="title">Target architecture</title>
+  <desc id="desc">Swing desktop, mobile and future clients connect through an incident-scoped API to one authoritative incident host backed by a database. Controlled read mirrors and exports branch from the API.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <style>
+      text { font-family: Helvetica, Arial, sans-serif; font-size: 14px; fill: #1a1a1a; }
+      .box { fill: #eef3fa; stroke: #4a6a96; stroke-width: 1.5; }
+      .host { fill: #e6f2e6; stroke: #4a8a4a; stroke-width: 1.5; }
+      .mirror { fill: #f7f0e0; stroke: #a08030; stroke-width: 1.5; stroke-dasharray: 6 4; }
+      .line { stroke: #444; stroke-width: 1.5; fill: none; }
+      .small { font-size: 12px; fill: #444; }
+    </style>
+  </defs>
+  <rect x="0" y="0" width="860" height="300" fill="#ffffff"/>
+
+  <rect class="box" x="20" y="30" width="170" height="52" rx="6"/>
+  <text x="105" y="61" text-anchor="middle">Swing desktop</text>
+  <rect class="box" x="20" y="124" width="170" height="52" rx="6"/>
+  <text x="105" y="155" text-anchor="middle">Mobile client</text>
+  <rect class="box" x="20" y="218" width="170" height="52" rx="6"/>
+  <text x="105" y="249" text-anchor="middle">Future clients</text>
+
+  <rect class="box" x="290" y="112" width="170" height="76" rx="6"/>
+  <text x="375" y="145" text-anchor="middle">Incident-scoped API</text>
+  <text x="375" y="165" text-anchor="middle" class="small">authorizes incident and role</text>
+
+  <rect class="host" x="560" y="112" width="140" height="76" rx="6"/>
+  <text x="630" y="145" text-anchor="middle">Authoritative</text>
+  <text x="630" y="165" text-anchor="middle">incident host</text>
+
+  <rect class="host" x="760" y="124" width="80" height="52" rx="6"/>
+  <text x="800" y="155" text-anchor="middle">Database</text>
+
+  <rect class="mirror" x="290" y="228" width="170" height="52" rx="6"/>
+  <text x="375" y="251" text-anchor="middle">Read mirrors</text>
+  <text x="375" y="268" text-anchor="middle" class="small">and exports (read-only)</text>
+
+  <path class="line" d="M190,56 L240,56 L240,150 L288,150" marker-end="url(#arrow)"/>
+  <path class="line" d="M190,150 L288,150" marker-end="url(#arrow)"/>
+  <path class="line" d="M190,244 L240,244 L240,150 L288,150" marker-end="url(#arrow)"/>
+  <path class="line" d="M460,150 L558,150" marker-end="url(#arrow)"/>
+  <path class="line" d="M700,150 L758,150" marker-end="url(#arrow)"/>
+  <path class="line" d="M375,188 L375,226" marker-end="url(#arrow)"/>
+</svg>

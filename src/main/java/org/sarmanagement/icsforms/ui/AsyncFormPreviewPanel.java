@@ -3,9 +3,6 @@
  */
 package org.sarmanagement.icsforms.ui;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
@@ -37,8 +34,6 @@ import java.util.concurrent.ExecutionException;
  * Asynchronously renders detached incident snapshots with bounded image caching.
  */
 public class AsyncFormPreviewPanel extends JPanel {
-	private static final ObjectMapper COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
-			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 	private static final int MAX_CACHE_ENTRIES = 8;
 	private static final Map<String, List<BufferedImage>> CACHE = new LinkedHashMap<>(16, 0.75f, true) {
 		/** {@inheritDoc} */
@@ -88,18 +83,49 @@ public class AsyncFormPreviewPanel extends JPanel {
 		AppData snapshot;
 		String key;
 		try {
-			byte[] content = COPIER.writeValueAsBytes(source);
+			byte[] content = UiRefreshState.serialize(source);
 			key = renderer.getFormKey() + ":" + contentKey + ":"
 					+ java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
 			if (key.equals(currentKey)) {
 				return;
 			}
-			snapshot = COPIER.readValue(content, AppData.class);
+			snapshot = UiRefreshState.readIncident(content);
 		} catch (IOException | NoSuchAlgorithmException exception) {
 			cancel();
-			showImages(List.of(), "Unable to load PDF content: " + exception.getMessage());
+			state.setText("Unable to load PDF content: " + exception.getMessage());
 			return;
 		}
+		startPreview(snapshot, key);
+	}
+
+	/**
+	 * Reuses a preview by its complete renderer inputs without snapshotting an unrelated incident change.
+	 *
+	 * @param source live incident to snapshot only when the rendering inputs differ.
+	 * @param contentKey content-bound review key.
+	 * @param inputs complete form-specific rendering inputs supplied by the view.
+	 */
+	public void requestPreview(AppData source, String contentKey, Object... inputs) {
+		try {
+			String key = renderer.getFormKey() + ":inputs:" + contentKey + ":"
+					+ java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+							.digest(UiRefreshState.serialize(inputs)));
+			if (!key.equals(currentKey)) {
+				startPreview(UiRefreshState.readIncident(UiRefreshState.serialize(source)), key);
+			}
+		} catch (IOException | NoSuchAlgorithmException exception) {
+			cancel();
+			state.setText("Unable to load PDF content: " + exception.getMessage());
+		}
+	}
+
+	/**
+	 * Starts rendering a successfully detached snapshot and retains existing pages until replacement.
+	 *
+	 * @param snapshot detached rendering source.
+	 * @param key complete rendering cache key.
+	 */
+	private void startPreview(AppData snapshot, String key) {
 		cancel();
 		currentKey = key;
 		long generation = ++requestGeneration;
@@ -111,7 +137,7 @@ public class AsyncFormPreviewPanel extends JPanel {
 			showImages(cached, "Current PDF — " + cached.size() + " page(s)");
 			return;
 		}
-		showImages(List.of(), "Rendering current PDF…");
+		state.setText("Rendering current PDF…");
 		worker = new SwingWorker<>() {
 			/** {@inheritDoc} */
 			@Override

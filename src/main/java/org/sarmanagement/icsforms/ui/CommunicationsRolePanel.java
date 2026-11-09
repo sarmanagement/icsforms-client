@@ -42,6 +42,7 @@ import java.util.function.Consumer;
 public class CommunicationsRolePanel extends JPanel {
 	private static final DateTimeFormatter CHECK_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	private final AppController controller;
+	private final UiRefreshState refreshState = new UiRefreshState();
 	private final Consumer<WorkspaceDestination> navigator;
 	private final Runnable importCsv;
 	private final Runnable exportCsv;
@@ -65,6 +66,8 @@ public class CommunicationsRolePanel extends JPanel {
 	private final JLabel saveStatus = new JLabel(" ");
 	private final PlanReviewStrip review;
 	private final AppController.IncidentChangeSubscription subscription;
+	private static final String CONSOLE_VIEW = "Console View";
+	private static final String PLAN_VIEW = "Plan View";
 	private final CardLayout viewLayout = new CardLayout();
 	private final JPanel views = new JPanel(viewLayout);
 	private final CommunicationsConsolePanel console;
@@ -135,8 +138,15 @@ public class CommunicationsRolePanel extends JPanel {
 	 * identity and unsaved focused input.
 	 */
 	public void refreshFromModel() {
-		refreshing = true;
 		AppData data = controller.getData();
+		if (!refreshState.roleChanged(data, planBadges.displayInputs(data), data.getForm205(), data.getAllAssignmentResources(),
+				data.getSarTaskAssignments(), ChannelLinkSource.links(data),
+				data.getCommunicationsReview(), data.getPlanReviewStatus(PlanReviewArea.COMMUNICATIONS),
+				editorDirty)) {
+			return;
+		}
+		refreshing = true;
+		try {
 		String selectedId = selectedChannelId();
 		if (selectedId.isBlank()) {
 			selectedId = loadedChannelId;
@@ -152,6 +162,10 @@ public class CommunicationsRolePanel extends JPanel {
 			loadSelectedChannel();
 		} else {
 			rebuildLinks(loadedChannelId);
+		}
+		refreshState.complete();
+		} finally {
+			refreshing = false;
 		}
 	}
 
@@ -191,19 +205,15 @@ public class CommunicationsRolePanel extends JPanel {
 		header.add(status, BorderLayout.EAST);
 		JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING));
 		JLabel activeMode = new JLabel("Mode: Plan");
-		JButton planView = new JButton("Plan");
-		planView.addActionListener(event -> {
-			viewLayout.show(views, "Plan");
-			activeMode.setText("Mode: Plan");
-		});
-		JButton consoleView = new JButton("Console");
-		consoleView.addActionListener(event -> {
-			viewLayout.show(views, "Console");
-			activeMode.setText("Mode: Console");
+		JButton toggleView = new JButton(CONSOLE_VIEW);
+		toggleView.addActionListener(event -> {
+			boolean toConsole = CONSOLE_VIEW.equals(toggleView.getText());
+			viewLayout.show(views, toConsole ? "Console" : "Plan");
+			activeMode.setText(toConsole ? "Mode: Console" : "Mode: Plan");
+			toggleView.setText(toConsole ? PLAN_VIEW : CONSOLE_VIEW);
 		});
 		actions.add(activeMode);
-		actions.add(planView);
-		actions.add(consoleView);
+		actions.add(toggleView);
 		JButton fullPlan = new JButton("Open full ICS 205");
 		fullPlan.addActionListener(event -> navigator.accept(WorkspaceDestination.of(WorkspaceId.ICS_205)));
 		JButton importButton = new JButton("Import CSV…");
@@ -342,6 +352,9 @@ public class CommunicationsRolePanel extends JPanel {
 	 * @param channelId prior channel identity.
 	 */
 	private void restoreSelection(String channelId) {
+		if (!channelId.isBlank() && channelId.equals(selectedChannelId())) {
+			return;
+		}
 		channels.clearSelection();
 		for (int modelRow = 0; modelRow < channelModel.getRowCount(); modelRow++) {
 			if (channelId.equals(channelModel.row(modelRow).channelId())) {
@@ -367,13 +380,13 @@ public class CommunicationsRolePanel extends JPanel {
 			if (!editorDirty) {
 				loadedChannelId = "";
 				baseline = null;
-				assignment.setText("");
-				coverage.setText("");
-				relay.setText("");
+				UiSupport.setTextIfChanged(assignment, "");
+				UiSupport.setTextIfChanged(coverage, "");
+				UiSupport.setTextIfChanged(relay, "");
 				checkStatus.setSelectedItem(RadioCheckStatus.NOT_RECORDED);
-				checkedBy.setText("");
+				UiSupport.setTextIfChanged(checkedBy, "");
 				checkedAt.setText("Not recorded");
-				checkNotes.setText("");
+				UiSupport.setTextIfChanged(checkNotes, "");
 			}
 			rebuildLinks("");
 			saveStatus.setText(editorDirty ? "Selected channel changed; reload before saving" : " ");
@@ -382,14 +395,14 @@ public class CommunicationsRolePanel extends JPanel {
 		}
 		loadedChannelId = id;
 		baseline = channel.deepCopy();
-		assignment.setText(channel.getAssignment());
-		coverage.setText(channel.getCoverageGuidance());
-		relay.setText(channel.getRelayGuidance());
+		UiSupport.setTextIfChanged(assignment, channel.getAssignment());
+		UiSupport.setTextIfChanged(coverage, channel.getCoverageGuidance());
+		UiSupport.setTextIfChanged(relay, channel.getRelayGuidance());
 		checkStatus.setSelectedItem(channel.getRadioCheckStatus());
-		checkedBy.setText(channel.getRadioCheckedBy());
+		UiSupport.setTextIfChanged(checkedBy, channel.getRadioCheckedBy());
 		checkedAt.setText(channel.getRadioCheckedAt() == null ? "Not recorded"
 				: UiSupport.formatDateTime(channel.getRadioCheckedAt(), CHECK_TIME));
-		checkNotes.setText(channel.getRadioCheckNotes());
+		UiSupport.setTextIfChanged(checkNotes, channel.getRadioCheckNotes());
 		rebuildLinks(id);
 		editorDirty = false;
 		saveStatus.setText(" ");
@@ -402,17 +415,18 @@ public class CommunicationsRolePanel extends JPanel {
 	 * @param channelId selected channel identity.
 	 */
 	private void rebuildLinks(String channelId) {
-		linkModel.clear();
+		List<String> rows = new ArrayList<>();
 		for (ChannelLinkSource.ChannelLink link : ChannelLinkSource.links(controller.getData())) {
 			if (channelId.equals(link.channelId())
 					&& link.status() == ChannelLinkSource.LinkStatus.LINKED
 					&& link.sourceKind() != ChannelLinkSource.SourceKind.ICS205_ASSIGNMENT) {
-				linkModel.addElement(link.sourceKind() + " — " + link.sourceLabel());
+				rows.add(link.sourceKind() + " — " + link.sourceLabel());
 			}
 		}
-		if (linkModel.isEmpty() && !channelId.isBlank()) {
-			linkModel.addElement("No stable current-period references");
+		if (rows.isEmpty() && !channelId.isBlank()) {
+			rows.add("No stable current-period references");
 		}
+		UiSupport.reconcileList(linkModel, rows);
 	}
 
 	/** Saves focused edits and presents validation or stale-edit feedback. */
@@ -506,8 +520,10 @@ public class CommunicationsRolePanel extends JPanel {
 						channel.getFunction(), channel.getAssignment(), channel.getRxFrequency(),
 						channel.getTxFrequency(), channel.getRadioCheckStatus().displayLabel()));
 			}
-			rows = List.copyOf(updated);
-			fireTableDataChanged();
+			if (!rows.equals(updated)) {
+				rows = List.copyOf(updated);
+				fireTableDataChanged();
+			}
 		}
 
 		/**

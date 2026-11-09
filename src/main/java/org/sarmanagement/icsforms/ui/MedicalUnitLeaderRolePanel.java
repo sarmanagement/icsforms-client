@@ -31,9 +31,12 @@ import java.util.function.Consumer;
  * Live Medical Unit Leader preparation and review-handoff work panel.
  */
 public class MedicalUnitLeaderRolePanel extends JPanel {
+	private String displayedReviewSelection;
 	private static final String HUMAN_PLAN = "Human medical plan preparation";
 	private static final String CANINE_PLAN = "Canine medical plan preparation";
 	private final AppController controller;
+	private final UiRefreshState refreshState = new UiRefreshState();
+	private boolean refreshingWorklist;
 	private final Consumer<WorkspaceDestination> navigator;
 	private final AppController.IncidentBinding binding;
 	private final DefaultListModel<String> workModel = new DefaultListModel<>();
@@ -81,7 +84,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		installFocusedDraftListeners();
 		showAll.addActionListener(event -> refreshFromModel());
 		worklist.addListSelectionListener(event -> {
-			if (!event.getValueIsAdjusting()) {
+			if (!event.getValueIsAdjusting() && !refreshingWorklist) {
 				refreshSelectedItem();
 			}
 		});
@@ -110,18 +113,31 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 			cancelPreviews();
 			return;
 		}
-		String selected = worklist.getSelectedValue();
 		AppData data = controller.getData();
+		if (!refreshState.roleChanged(data, planBadges.displayInputs(data), data.getMedicalUnitLeaderAssignment(), data.getMedicalPlan(),
+				data.getCanineMedicalPlan(), data.getForm202(), data.getForm205(), data.getForm215a(),
+				data.getForm208(), data.getStagingLocation(), data.getIncidentLocations(),
+				data.getPdfLayoutSettings(), data.isCanineMedicalWorkspaceEligible(),
+				IncidentCommandSummary.requiresAnimalMedicalPlan(data),
+				data.getHumanMedicalReview(), data.getCanineMedicalReview(),
+				java.util.Arrays.stream(PlanReviewArea.values()).map(data::getPlanReviewStatus).toList(),
+				showAll.isSelected(), focusedEditsDirty)) {
+			previewSelected();
+			return;
+		}
+		try {
+		String selected = worklist.getSelectedValue();
 		if (!focusedEditsDirty) {
 			loadingFocusedEdits = true;
-			leaderName.setText(data.getMedicalUnitLeaderAssignment().getName());
-			leaderRadio.setText(data.getMedicalUnitLeaderAssignment().getRadioChannel());
-			leaderPhone.setText(data.getMedicalUnitLeaderAssignment().getPhoneNumber());
-			humanInstruction.setText(data.getMedicalPlan().getCall911Procedure());
-			canineInstruction.setText(data.getCanineMedicalPlan().getEmergencyProcedures());
+			UiSupport.setTextIfChanged(leaderName, data.getMedicalUnitLeaderAssignment().getName());
+			UiSupport.setTextIfChanged(leaderRadio, data.getMedicalUnitLeaderAssignment().getRadioChannel());
+			UiSupport.setTextIfChanged(leaderPhone, data.getMedicalUnitLeaderAssignment().getPhoneNumber());
+			UiSupport.setTextIfChanged(humanInstruction, data.getMedicalPlan().getCall911Procedure());
+			UiSupport.setTextIfChanged(canineInstruction, data.getCanineMedicalPlan().getEmergencyProcedures());
 			loadingFocusedEdits = false;
 		}
 		planBadges.refreshFromModel(data);
+		refreshingWorklist = true;
 		rebuildWorklist();
 		if (selected != null) {
 			worklist.setSelectedValue(selected, true);
@@ -129,9 +145,15 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		if (worklist.getSelectedIndex() < 0 && !workModel.isEmpty()) {
 			worklist.setSelectedIndex(0);
 		}
+		refreshingWorklist = false;
 		humanReview.refreshFromModel();
 		canineReview.refreshFromModel();
 		refreshSelectedItem();
+		refreshState.complete();
+		} finally {
+			loadingFocusedEdits = false;
+			refreshingWorklist = false;
+		}
 	}
 
 	/** Tracks unsaved focused edits so unrelated live updates cannot replace them. */
@@ -233,18 +255,19 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 
 	/** Rebuilds MUL-responsibility items and optional broader context. */
 	private void rebuildWorklist() {
-		workModel.clear();
-		workModel.addElement(HUMAN_PLAN);
+		java.util.List<String> rows = new java.util.ArrayList<>();
+		rows.add(HUMAN_PLAN);
 		if (controller.getData().isCanineMedicalWorkspaceEligible()) {
-			workModel.addElement(CANINE_PLAN);
+			rows.add(CANINE_PLAN);
 		}
-		workModel.addElement("Personnel and aid stations");
-		workModel.addElement("Transport and facilities");
-		workModel.addElement("Review handoff");
+		rows.add("Personnel and aid stations");
+		rows.add("Transport and facilities");
+		rows.add("Review handoff");
 		if (showAll.isSelected()) {
-			workModel.addElement("Safety plan status");
-			workModel.addElement("Communications plan status");
+			rows.add("Safety plan status");
+			rows.add("Communications plan status");
 		}
+		UiSupport.reconcileList(workModel, rows);
 	}
 
 	/** Refreshes selected details without judging medical sufficiency. */
@@ -259,14 +282,14 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		}
 		AppData data = controller.getData();
 		if (HUMAN_PLAN.equals(selected)) {
-			detail.setText("Human plan: " + data.getPlanReviewStatus(PlanReviewArea.HUMAN_MEDICAL).displayLabel()
+			UiSupport.setTextIfChanged(detail, "Human plan: " + data.getPlanReviewStatus(PlanReviewArea.HUMAN_MEDICAL).displayLabel()
 					+ "\nAid stations: " + data.getMedicalPlan().getAidStations().size() + "\nTransport services: "
 					+ data.getMedicalPlan().getTransportServices().size() + "\nHospitals: "
 					+ data.getMedicalPlan().getHospitals().size());
 			((CardLayout) previewCards.getLayout()).show(previewCards, HUMAN_PLAN);
 			((CardLayout) focusedCards.getLayout()).show(focusedCards, HUMAN_PLAN);
 		} else if (CANINE_PLAN.equals(selected)) {
-			detail.setText("Canine plan: " + data.getPlanReviewStatus(PlanReviewArea.CANINE_MEDICAL).displayLabel()
+			UiSupport.setTextIfChanged(detail, "Canine plan: " + data.getPlanReviewStatus(PlanReviewArea.CANINE_MEDICAL).displayLabel()
 					+ "\nLinked veterinary personnel: "
 					+ data.getCanineMedicalPlan().getVeterinaryPersonnelResourceIds().size()
 					+ "\nAccepted veterinary facilities: "
@@ -274,16 +297,16 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 			((CardLayout) previewCards.getLayout()).show(previewCards, CANINE_PLAN);
 			((CardLayout) focusedCards.getLayout()).show(focusedCards, CANINE_PLAN);
 		} else if ("Personnel and aid stations".equals(selected)) {
-			detail.setText(personnelAndAidStationDetails(data));
+			UiSupport.setTextIfChanged(detail, personnelAndAidStationDetails(data));
 			((CardLayout) focusedCards.getLayout()).show(focusedCards, "Personnel and aid stations");
 		} else if ("Transport and facilities".equals(selected)) {
-			detail.setText(transportAndFacilityDetails(data));
+			UiSupport.setTextIfChanged(detail, transportAndFacilityDetails(data));
 		} else if ("Review handoff".equals(selected)) {
-			detail.setText("Human medical: " + data.getPlanReviewStatus(PlanReviewArea.HUMAN_MEDICAL).displayLabel()
+			UiSupport.setTextIfChanged(detail, "Human medical: " + data.getPlanReviewStatus(PlanReviewArea.HUMAN_MEDICAL).displayLabel()
 					+ "\nCanine medical: " + data.getPlanReviewStatus(PlanReviewArea.CANINE_MEDICAL).displayLabel()
 					+ "\nEach review is a separate, content-bound operator assertion.");
 		} else {
-			detail.setText(selected.startsWith("Safety")
+			UiSupport.setTextIfChanged(detail, selected.startsWith("Safety")
 					? "Safety plan review: " + data.getPlanReviewStatus(PlanReviewArea.SAFETY).displayLabel()
 					: "Communications plan review: " + data.getPlanReviewStatus(PlanReviewArea.COMMUNICATIONS).displayLabel());
 		}
@@ -307,6 +330,9 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 	 * @param selected selected responsible-work item.
 	 */
 	private void showReviewCards(String selected) {
+		if (java.util.Objects.equals(displayedReviewSelection, selected)) {
+			return;
+		}
 		reviewCards.removeAll();
 		reviewCards.setLayout(HUMAN_PLAN.equals(selected) || CANINE_PLAN.equals(selected)
 				? new BorderLayout() : new java.awt.GridLayout(0, 1, 0, 4));
@@ -322,6 +348,7 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 		}
 		reviewCards.revalidate();
 		reviewCards.repaint();
+		displayedReviewSelection = selected;
 	}
 
 	/**
@@ -389,11 +416,15 @@ public class MedicalUnitLeaderRolePanel extends JPanel {
 			return;
 		}
 		if (CANINE_PLAN.equals(worklist.getSelectedValue())) {
-			caninePreview.requestPreview(controller.getData(),
-					PlanReviewSupport.contentDigest(controller.getData(), PlanReviewArea.CANINE_MEDICAL));
-		} else {
-			humanPreview.requestPreview(controller.getData(),
-					PlanReviewSupport.contentDigest(controller.getData(), PlanReviewArea.HUMAN_MEDICAL));
+			AppData data = controller.getData();
+			caninePreview.requestPreview(data, PlanReviewSupport.contentDigest(data, PlanReviewArea.CANINE_MEDICAL),
+					data.getIncidentContext(), data.getCanineMedicalPlan(), data.getMedicalUnitLeaderAssignment(),
+					data.getStagingLocation(), data.getPdfLayoutSettings(), MainFrame.configuredZoneId(data).getId());
+		} else if (HUMAN_PLAN.equals(worklist.getSelectedValue())) {
+			AppData data = controller.getData();
+			humanPreview.requestPreview(data, PlanReviewSupport.contentDigest(data, PlanReviewArea.HUMAN_MEDICAL),
+					data.getIncidentContext(), data.getMedicalPlan(), data.getMedicalUnitLeaderAssignment(),
+					data.getPdfLayoutSettings(), MainFrame.configuredZoneId(data).getId());
 		}
 	}
 

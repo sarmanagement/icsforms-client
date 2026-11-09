@@ -428,6 +428,31 @@ class IncidentManagerDialogTest {
 		return result;
 	}
 
+	@Test
+	void openingWithNewOperationalPeriodRequiresConfirmation() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (TestStore store = new TestStore(directory.resolve("period-store"))) {
+			IncidentId id = store.create(named());
+			SwingUtilities.invokeAndWait(() -> {
+				Prompts prompts = new Prompts();
+				IncidentManagerDialog dialog = new IncidentManagerDialog(null, store, null, prompts);
+				try {
+					assertFalse(button(dialog, "Open and add new operational period…").isEnabled());
+					component(dialog, JTable.class).setRowSelectionInterval(0, 0);
+					button(dialog, "Open and add new operational period…").doClick();
+					assertNotNull(prompts.newPeriodQuestion);
+					assertNull(dialog.getChosenAction());
+					prompts.approveNewPeriod = true;
+					button(dialog, "Open and add new operational period…").doClick();
+					assertEquals(StartupDialog.StartupAction.OPEN_NEW_PERIOD, dialog.getChosenAction());
+					assertEquals(id, dialog.getChosenIncidentId());
+				} finally {
+					dialog.dispose();
+				}
+			});
+		}
+	}
+
 	/** Scripted chooser, confirmations and feedback without native windows. */
 	private static final class Prompts implements IncidentManagerDialog.Dialogs {
 		private Path importSource;
@@ -440,6 +465,8 @@ class IncidentManagerDialogTest {
 
 		private Path target;
 		private boolean approve;
+		private boolean approveNewPeriod;
+		private String newPeriodQuestion;
 		private String question;
 		private boolean lastError;
 		private final List<String> messages = new ArrayList<>();
@@ -459,6 +486,13 @@ class IncidentManagerDialogTest {
 		public boolean confirmDelete(Window owner, String question) {
 			this.question = question;
 			return approve;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public boolean confirmNewPeriod(Window owner, String question, javax.swing.JCheckBox promoteOption) {
+			newPeriodQuestion = question;
+			return approveNewPeriod;
 		}
 
 		/** {@inheritDoc} */

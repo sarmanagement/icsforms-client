@@ -493,7 +493,7 @@ private final EditorCommitGuard editorCommitGuard;
 		preparedByNameField.setText(nullSafe(form.getPreparedByName()));
 		preparedByPositionField.setText(nullSafe(form.getPreparedByPositionTitle()));
 		approvedByNameField.setText(nullSafe(form.getApprovedByIncidentCommanderName()));
-		approvedDateTimeField.setValue(AppController.toDate(form.getApprovedDateTime()));
+		UiSupport.loadDateTime(approvedDateTimeField, form.getApprovedDateTime());
 		iapPageField.setText(nullSafe(form.getIapPage()));
 		editorCommitGuard.rebase();
 	}
@@ -529,7 +529,7 @@ private final EditorCommitGuard editorCommitGuard;
 		form.setApprovedByIncidentCommanderName(approvedByNameField.getText().trim());
 		form.setPreparedByName(preparedByNameField.getText().trim());
 		form.setPreparedByPositionTitle(preparedByPositionField.getText().trim());
-		form.setApprovedDateTime(AppController.toLocalDateTime((java.util.Date) approvedDateTimeField.getValue()));
+		form.setApprovedDateTime(UiSupport.readDateTime(approvedDateTimeField));
 		form.setIapPage(iapPageField.getText().trim());
 	}
 

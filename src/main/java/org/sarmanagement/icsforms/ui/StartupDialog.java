@@ -12,7 +12,6 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
-import javax.swing.JCheckBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -64,8 +63,7 @@ public class StartupDialog extends JDialog {
 	private IncidentMode chosenMode = IncidentMode.SAR;
 	private IncidentId chosenIncidentId;
 	private final boolean includeOpenActions;
-	private final JCheckBox promotePlannedIcs215 = new JCheckBox(
-			"Promote planned ICS 215 target period when advancing");
+	private boolean promotePlannedIcs215;
 
 	/**
 	 * Creates the startup dialog.
@@ -152,7 +150,7 @@ public class StartupDialog extends JDialog {
 	 * @return true when the target worksheet should be validated and promoted.
 	 */
 	public boolean isPromotePlannedIcs215() {
-		return promotePlannedIcs215.isSelected();
+		return promotePlannedIcs215;
 	}
 
 	// -------------------------------------------------------------------------
@@ -190,17 +188,9 @@ public class StartupDialog extends JDialog {
 			panel.add(new JSeparator());
 			panel.add(Box.createVerticalStrut(10));
 			panel.add(buildActionRow("Open existing incident…",
-					"<html>Continue working on a previously saved incident workspace.</html>",
+					"<html>Continue a previously saved incident, or choose one and add a new<br>"
+							+ "operational period (with confirmation) from the incident list.</html>",
 					StartupAction.OPEN_EXISTING, store));
-			panel.add(Box.createVerticalStrut(6));
-			panel.add(buildActionRow("Open existing incident and add a new operational period…",
-					"<html>Load an existing workspace and advance it to the next<br>"
-							+ "operational period, clearing operational forms while keeping<br>"
-							+ "the ICS 201 and org chart as historical context.</html>",
-					StartupAction.OPEN_NEW_PERIOD, store));
-			panel.add(Box.createVerticalStrut(4));
-			promotePlannedIcs215.setAlignmentX(LEFT_ALIGNMENT);
-			panel.add(promotePlannedIcs215);
 		}
 
 		return panel;
@@ -229,7 +219,8 @@ public class StartupDialog extends JDialog {
 					chosenMode = manager.getChosenMode();
 				} else {
 					chosenIncidentId = manager.getChosenIncidentId();
-					chosenAction = action;
+					chosenAction = manager.getChosenAction();
+					promotePlannedIcs215 = manager.isPromotePlannedIcs215();
 				}
 			} else {
 				chosenAction = action;

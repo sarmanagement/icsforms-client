@@ -332,33 +332,19 @@ public class SarTaskPanel extends JPanel {
 	private void rebuildBoardView() {
 		List<SarTaskAssignment> tasks = tableModel.getRows();
 
-		List<SarTaskAssignment> planning = new ArrayList<>();
-		List<SarTaskAssignment> onTask = new ArrayList<>();
-		List<SarTaskAssignment> returned = new ArrayList<>();
-		List<SarTaskAssignment> completed = new ArrayList<>();
-
+		java.util.Map<SarTaskStage, List<SarTaskAssignment>> byStage = new java.util.EnumMap<>(SarTaskStage.class);
+		for (SarTaskStage stage : SarTaskStage.values()) {
+			byStage.put(stage, new ArrayList<>());
+		}
 		for (SarTaskAssignment task : tasks) {
-			String lc = task.getTaskLifecycleStatus();
-			String normalized = lc == null ? "" : lc.trim().toLowerCase(java.util.Locale.ROOT);
-			if (normalized.startsWith("assigned -")) {
-				onTask.add(task);
-			} else if ("returned".equals(normalized)) {
-				if (task.getDebriefingSupervisor() != null && !task.getDebriefingSupervisor().isBlank()) {
-					completed.add(task);
-				} else {
-					returned.add(task);
-				}
-			} else {
-				planning.add(task); // "Planned" or unknown
-			}
+			byStage.get(SarTaskStage.of(task)).add(task);
 		}
 
 		JPanel board = new JPanel(new GridLayout(1, 4, 8, 0));
 		board.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-		board.add(buildBoardColumn("planned", new Color(173, 216, 230), planning));
-		board.add(buildBoardColumn("assigned", new Color(255, 200, 100), onTask));
-		board.add(buildBoardColumn("returned (not debriefed)", new Color(144, 238, 144), returned));
-		board.add(buildBoardColumn("Completed", new Color(200, 200, 200), completed));
+		for (SarTaskStage stage : SarTaskStage.values()) {
+			board.add(buildBoardColumn(stage.label(), stage.color(), byStage.get(stage)));
+		}
 
 		// Override getPreferredSize so the wrapper never exceeds the viewport width,
 		// allowing GridLayout to divide the available space into four equal columns.
@@ -602,6 +588,8 @@ public class SarTaskPanel extends JPanel {
 	 * Commits inline edits without replacing newer canonical tasks with stale rows.
 	 * Reconciles additions and deletions by assignment identity; separate modal
 	 * editor fields are not refreshed or discarded.
+	 *
+	 * @throws IllegalStateException when the active task cell rejects its input.
 	 */
 	public void pushToModel() {
 		if (table.isEditing() && table.getCellEditor() != null && !table.getCellEditor().stopCellEditing()) {
@@ -3164,13 +3152,43 @@ public class SarTaskPanel extends JPanel {
 		private List<SarTaskAssignment> rows = new ArrayList<>();
 		private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
 		private List<ResourceAssignment> resourceAssignments = new ArrayList<>();
+		private List<List<Object>> displayedRows = List.of();
 
+		/**
+		 * Rebinds canonical rows without notifying the view when displayed values are unchanged.
+		 *
+		 * @param rows canonical task rows.
+		 * @param clueLogEntries canonical clues.
+		 * @param resourceAssignments linked resource assignments.
+		 */
 		void setRows(List<SarTaskAssignment> rows, List<ClueLogEntry> clueLogEntries,
 				List<ResourceAssignment> resourceAssignments) {
 			this.rows = rows == null ? new ArrayList<>() : rows;
 			this.clueLogEntries = clueLogEntries == null ? new ArrayList<>() : clueLogEntries;
 			this.resourceAssignments = resourceAssignments == null ? new ArrayList<>() : resourceAssignments;
-			fireTableDataChanged();
+			List<List<Object>> next = displayedState();
+			if (!displayedRows.equals(next)) {
+				displayedRows = next;
+				fireTableDataChanged();
+			}
+		}
+
+		/**
+		 * Snapshots table values and task identities independently of mutable canonical rows.
+		 *
+		 * @return displayed cells with their stable row identities.
+		 */
+		private List<List<Object>> displayedState() {
+			List<List<Object>> next = new ArrayList<>();
+			for (int row = 0; row < getRowCount(); row++) {
+				List<Object> cells = new ArrayList<>();
+				cells.add(this.rows.get(row).getTaskId());
+				for (int column = 0; column < getColumnCount(); column++) {
+					cells.add(getValueAt(row, column));
+				}
+				next.add(cells);
+			}
+			return next;
 		}
 
 		List<SarTaskAssignment> getRows() {
@@ -3233,6 +3251,7 @@ public class SarTaskPanel extends JPanel {
 			};
 		}
 
+		/** {@inheritDoc} */
 		@Override
 		public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
 			SarTaskAssignment row = rows.get(rowIndex);
@@ -3247,7 +3266,12 @@ public class SarTaskPanel extends JPanel {
 					return;
 				}
 			}
-			fireTableCellUpdated(rowIndex, columnIndex);
+			if (rowIndex < displayedRows.size()) {
+				List<List<Object>> next = new ArrayList<>(displayedRows);
+				next.set(rowIndex, displayedState().get(rowIndex));
+				displayedRows = next;
+			}
+			fireTableRowsUpdated(rowIndex, rowIndex);
 		}
 
 		private static int linkedPeople(SarTaskAssignment row, List<ResourceAssignment> resourceAssignments) {
@@ -3387,10 +3411,10 @@ public class SarTaskPanel extends JPanel {
 	 * Completed=grey).
 	 */
 	private static class LifecycleStatusCellRenderer extends DefaultTableCellRenderer {
-		private static final Color COLOR_PLANNING = new Color(173, 216, 230);
-		private static final Color COLOR_ON_TASK = new Color(255, 200, 100);
-		private static final Color COLOR_RETURNED = new Color(144, 238, 144);
-		private static final Color COLOR_COMPLETED = new Color(200, 200, 200);
+		private static final Color COLOR_PLANNING = SarTaskStage.PLANNED.color();
+		private static final Color COLOR_ON_TASK = SarTaskStage.ASSIGNED.color();
+		private static final Color COLOR_RETURNED = SarTaskStage.RETURNED.color();
+		private static final Color COLOR_COMPLETED = SarTaskStage.COMPLETED.color();
 
 		@Override
 		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,

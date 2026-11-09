@@ -96,6 +96,8 @@ public class Ics215Panel extends JPanel {
 	private String selectedRowId = "";
 	private int editorPeriodIndex;
 	private boolean refreshing;
+	private String loadedTargetStart;
+	private String loadedTargetEnd;
 
 	/**
 	 * Creates the editor bound to the controller's current incident.
@@ -164,6 +166,8 @@ public class Ics215Panel extends JPanel {
 
 	/**
 	 * Flushes the active ICS 215 form after the editor revision has been accepted.
+	 *
+	 * @throws IllegalStateException when a changed target date or pending table edit is invalid.
 	 */
 	private void flushToModel() {
 		UiSupport.commitTableEdits(matrix);
@@ -171,8 +175,12 @@ public class Ics215Panel extends JPanel {
 			return;
 		}
 		Ics215Form form = selectedForm();
-		form.setTargetPeriodStart(parseDate(targetStart.getText(), "target start"));
-		form.setTargetPeriodEnd(parseDate(targetEnd.getText(), "target end"));
+		if (!java.util.Objects.equals(loadedTargetStart, targetStart.getText())) {
+			form.setTargetPeriodStart(parseDate(targetStart.getText(), "target start"));
+		}
+		if (!java.util.Objects.equals(loadedTargetEnd, targetEnd.getText())) {
+			form.setTargetPeriodEnd(parseDate(targetEnd.getText(), "target end"));
+		}
 		form.setPaperSize((Ics215Form.PaperSize) paperSize.getSelectedItem());
 		Ics215Form.WorkRow row = selectedRow(form);
 		if (row != null) {
@@ -196,6 +204,8 @@ public class Ics215Panel extends JPanel {
 					? data.getIncidentContext().getOperationalPeriodStart() : form.getTargetPeriodStart()));
 			targetEnd.setText(formatDate(form.getTargetPeriodEnd() == null
 					? data.getIncidentContext().getOperationalPeriodEnd() : form.getTargetPeriodEnd()));
+			loadedTargetStart = targetStart.getText();
+			loadedTargetEnd = targetEnd.getText();
 			paperSize.setSelectedItem(form.getPaperSize());
 			detail.setText("");
 			MatrixModel model = (MatrixModel) matrix.getModel();

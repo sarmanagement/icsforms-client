@@ -37,6 +37,8 @@ public class SafetyRolePanel extends JPanel {
 	private static final String HUMAN_REVIEW = "Human medical plan review";
 	private static final String CANINE_REVIEW = "Canine medical plan review";
 	private final AppController controller;
+	private final UiRefreshState refreshState = new UiRefreshState();
+	private boolean refreshingWorklist;
 	private final Consumer<WorkspaceDestination> navigator;
 	private final AppController.IncidentBinding binding;
 	private final DefaultListModel<String> workModel = new DefaultListModel<>();
@@ -87,7 +89,7 @@ public class SafetyRolePanel extends JPanel {
 		installFocusedDraftListeners();
 		showAll.addActionListener(event -> refreshFromModel());
 		worklist.addListSelectionListener(event -> {
-			if (!event.getValueIsAdjusting()) {
+			if (!event.getValueIsAdjusting() && !refreshingWorklist) {
 				refreshSelectedItem();
 			}
 		});
@@ -117,14 +119,28 @@ public class SafetyRolePanel extends JPanel {
 			cancelPreviews();
 			return;
 		}
+		AppData data = controller.getData();
+		if (!refreshState.roleChanged(data, planBadges.displayInputs(data), data.getForm202(), data.getForm205(), data.getForm215a(),
+				data.getForm208(), data.getMedicalPlan(), data.getCanineMedicalPlan(),
+				data.getSarTaskAssignments(), data.getStagingLocation(), data.getIncidentLocations(),
+				data.getMedicalUnitLeaderAssignment(), data.getOrganizationalChart(), data.getPdfLayoutSettings(),
+				data.isCanineMedicalWorkspaceEligible(), IncidentCommandSummary.requiresAnimalMedicalPlan(data),
+				data.getSafetyReview(), data.getHumanMedicalReview(), data.getCanineMedicalReview(),
+				java.util.Arrays.stream(PlanReviewArea.values()).map(data::getPlanReviewStatus).toList(),
+				showAll.isSelected(), focusedEditsDirty)) {
+			previewSelected();
+			return;
+		}
+		try {
 		String selected = worklist.getSelectedValue();
 		if (!focusedEditsDirty) {
 			loadingFocusedEdits = true;
-			safetyOfficer.setText(MedicalRoleSupport.safetyOfficerName(controller.getData()));
-			safetyMessage.setText(controller.getData().getForm208().getFreeText());
+			UiSupport.setTextIfChanged(safetyOfficer, MedicalRoleSupport.safetyOfficerName(controller.getData()));
+			UiSupport.setTextIfChanged(safetyMessage, controller.getData().getForm208().getFreeText());
 			loadingFocusedEdits = false;
 		}
 		planBadges.refreshFromModel(controller.getData());
+		refreshingWorklist = true;
 		rebuildWorklist();
 		if (selected != null) {
 			worklist.setSelectedValue(selected, true);
@@ -132,10 +148,16 @@ public class SafetyRolePanel extends JPanel {
 		if (worklist.getSelectedIndex() < 0 && !workModel.isEmpty()) {
 			worklist.setSelectedIndex(0);
 		}
+		refreshingWorklist = false;
 		safetyReview.refreshFromModel();
 		humanReview.refreshFromModel();
 		canineReview.refreshFromModel();
 		refreshSelectedItem();
+		refreshState.complete();
+		} finally {
+			loadingFocusedEdits = false;
+			refreshingWorklist = false;
+		}
 	}
 
 	/** Tracks unsaved focused edits so unrelated live updates cannot replace them. */
@@ -229,16 +251,17 @@ public class SafetyRolePanel extends JPanel {
 
 	/** Rebuilds default-responsibility items and optional observational context. */
 	private void rebuildWorklist() {
-		workModel.clear();
-		workModel.addElement(SAFETY_PLAN);
-		workModel.addElement(HUMAN_REVIEW);
+		java.util.List<String> rows = new java.util.ArrayList<>();
+		rows.add(SAFETY_PLAN);
+		rows.add(HUMAN_REVIEW);
 		if (controller.getData().isCanineMedicalWorkspaceEligible()) {
-			workModel.addElement(CANINE_REVIEW);
+			rows.add(CANINE_REVIEW);
 		}
 		if (showAll.isSelected()) {
-			workModel.addElement("Communications plan status");
-			workModel.addElement("Incident objectives context");
+			rows.add("Communications plan status");
+			rows.add("Incident objectives context");
 		}
+		UiSupport.reconcileList(workModel, rows);
 	}
 
 	/** Refreshes selected work detail and preview card. */
@@ -261,25 +284,25 @@ public class SafetyRolePanel extends JPanel {
 		if (SAFETY_PLAN.equals(selected)) {
 			long hazards = data.getSarTaskAssignments().stream().map(SarTaskAssignment::getHazardsObserved)
 					.filter(value -> value != null && !value.isBlank()).count();
-			detail.setText("Safety review: " + data.getPlanReviewStatus(PlanReviewArea.SAFETY).displayLabel()
+			UiSupport.setTextIfChanged(detail, "Safety review: " + data.getPlanReviewStatus(PlanReviewArea.SAFETY).displayLabel()
 					+ "\nReported task hazards: " + hazards
 					+ "\nMissing fields are shown as recorded and are not a sufficiency judgment.");
 			((CardLayout) previewCards.getLayout()).show(previewCards, SAFETY_PLAN);
 			reviewCard = SAFETY_PLAN;
 		} else if (HUMAN_REVIEW.equals(selected)) {
-			detail.setText("Human medical: " + data.getPlanReviewStatus(PlanReviewArea.HUMAN_MEDICAL).displayLabel()
+			UiSupport.setTextIfChanged(detail, "Human medical: " + data.getPlanReviewStatus(PlanReviewArea.HUMAN_MEDICAL).displayLabel()
 					+ "\nEmergency instruction: " + data.getMedicalPlan().getCall911Procedure());
 			((CardLayout) previewCards.getLayout()).show(previewCards, HUMAN_REVIEW);
 			reviewCard = HUMAN_REVIEW;
 		} else if (CANINE_REVIEW.equals(selected)) {
-			detail.setText("Canine medical: " + data.getPlanReviewStatus(PlanReviewArea.CANINE_MEDICAL).displayLabel()
+			UiSupport.setTextIfChanged(detail, "Canine medical: " + data.getPlanReviewStatus(PlanReviewArea.CANINE_MEDICAL).displayLabel()
 					+ "\nEmergency procedure: " + data.getCanineMedicalPlan().getEmergencyProcedures());
 			((CardLayout) previewCards.getLayout()).show(previewCards, CANINE_REVIEW);
 			reviewCard = CANINE_REVIEW;
 		} else if (selected.startsWith("Communications")) {
-			detail.setText("Communications: " + data.getPlanReviewStatus(PlanReviewArea.COMMUNICATIONS).displayLabel());
+			UiSupport.setTextIfChanged(detail, "Communications: " + data.getPlanReviewStatus(PlanReviewArea.COMMUNICATIONS).displayLabel());
 		} else {
-			detail.setText(data.getForm202().getStructuredObjectives().size() + " objective(s) recorded.");
+			UiSupport.setTextIfChanged(detail, data.getForm202().getStructuredObjectives().size() + " objective(s) recorded.");
 		}
 		boolean planSelected = SAFETY_PLAN.equals(selected) || HUMAN_REVIEW.equals(selected) || CANINE_REVIEW.equals(selected);
 		previewCards.setVisible(planSelected);
@@ -312,15 +335,19 @@ public class SafetyRolePanel extends JPanel {
 			return;
 		}
 		String selected = worklist.getSelectedValue();
+		AppData data = controller.getData();
 		if (HUMAN_REVIEW.equals(selected)) {
-			humanPreview.requestPreview(controller.getData(),
-					PlanReviewSupport.contentDigest(controller.getData(), PlanReviewArea.HUMAN_MEDICAL));
+			humanPreview.requestPreview(data, PlanReviewSupport.contentDigest(data, PlanReviewArea.HUMAN_MEDICAL),
+					data.getIncidentContext(), data.getMedicalPlan(), data.getMedicalUnitLeaderAssignment(),
+					data.getPdfLayoutSettings(), MainFrame.configuredZoneId(data).getId());
 		} else if (CANINE_REVIEW.equals(selected)) {
-			caninePreview.requestPreview(controller.getData(),
-					PlanReviewSupport.contentDigest(controller.getData(), PlanReviewArea.CANINE_MEDICAL));
-		} else {
-			safetyPreview.requestPreview(controller.getData(),
-					PlanReviewSupport.contentDigest(controller.getData(), PlanReviewArea.SAFETY));
+			caninePreview.requestPreview(data, PlanReviewSupport.contentDigest(data, PlanReviewArea.CANINE_MEDICAL),
+					data.getIncidentContext(), data.getCanineMedicalPlan(), data.getMedicalUnitLeaderAssignment(),
+					data.getStagingLocation(), data.getPdfLayoutSettings(), MainFrame.configuredZoneId(data).getId());
+		} else if (SAFETY_PLAN.equals(selected)) {
+			safetyPreview.requestPreview(data, PlanReviewSupport.contentDigest(data, PlanReviewArea.SAFETY),
+					data.getIncidentContext(), data.getForm208(), data.getPdfLayoutSettings(),
+					MainFrame.configuredZoneId(data).getId());
 		}
 	}
 

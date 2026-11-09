@@ -30,6 +30,40 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class SafetyPanelTest {
 	@Test
+	void identicalHazardRowsRetainSelectedIdentityAcrossReorderButNotReplacement() throws Exception {
+		AppData data = new AppData();
+		data.setIncidentMode(IncidentMode.SAR);
+		SafetyHazardReport first = new SafetyHazardReport();
+		first.setHazards("Same hazard");
+		SafetyHazardReport second = new SafetyHazardReport();
+		second.setHazards("Same hazard");
+		data.getArchivedSafetyHazardReports().add(first);
+		data.getArchivedSafetyHazardReports().add(second);
+		AppController controller = IncidentStoreTestFixtures.controller(data);
+		SwingUtilities.invokeAndWait(() -> {
+			SafetyPanel panel = new SafetyPanel(controller);
+			panel.refreshFromModel();
+			JTable table = (JTable) Ics205PanelTest.field(panel, "reportTable");
+			table.setRowSelectionInterval(0, 0);
+			java.util.concurrent.atomic.AtomicInteger changes = new java.util.concurrent.atomic.AtomicInteger();
+			table.getModel().addTableModelListener(event -> changes.incrementAndGet());
+			panel.refreshFromModel();
+			assertEquals(0, changes.get());
+			java.util.Collections.swap(data.getArchivedSafetyHazardReports(), 0, 1);
+			panel.refreshFromModel();
+			assertEquals(1, table.getSelectedRow());
+			assertTrue(changes.get() > 0);
+			int previous = changes.get();
+			SafetyHazardReport replacement = new SafetyHazardReport();
+			replacement.setHazards("Same hazard");
+			data.getArchivedSafetyHazardReports().set(1, replacement);
+			panel.refreshFromModel();
+			assertEquals(-1, table.getSelectedRow());
+			assertTrue(changes.get() > previous);
+		});
+	}
+
+	@Test
 	void commonHazardChoicesResolveByIdentityEvenWhenLabelsMatch() {
 		SafetyAnalysisEntry first = new SafetyAnalysisEntry();
 		first.setIncidentArea("North");

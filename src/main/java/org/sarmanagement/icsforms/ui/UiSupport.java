@@ -80,11 +80,90 @@ final class UiSupport {
 			if (table.isEditing() && table.getCellEditor() != null && !table.getCellEditor().stopCellEditing()) {
 				throw new IllegalStateException("Finish editing the table value before saving or leaving this form.");
 			}
+
+		}
+	}
+
+	/**
+	 * Updates displayed text only when its value differs, retaining unchanged caret and scroll state.
+	 *
+	 * @param component displayed text control.
+	 * @param value intended display value, with null displayed as empty.
+	 */
+	static void setTextIfChanged(JTextComponent component, String value) {
+		String text = value == null ? "" : value;
+		if (!text.equals(component.getText())) {
+			component.setText(text);
+		}
+	}
+
+	/**
+	 * Reconciles immutable list projections without removing unchanged rows or selections.
+	 *
+	 * @param model displayed list model.
+	 * @param rows desired detached row values.
+	 * @param <T> projected row type.
+	 */
+	static <T> void reconcileList(DefaultListModel<T> model, List<T> rows) {
+		for (int index = 0; index < rows.size(); index++) {
+			T row = rows.get(index);
+			if (index >= model.size()) {
+				model.addElement(row);
+			} else if (!java.util.Objects.equals(row, model.get(index))) {
+				model.set(index, row);
+			}
+
+		}
+		if (model.size() > rows.size()) {
+			model.removeRange(rows.size(), model.size() - 1);
+		}
+	}
+
+	/**
+	 * Updates only changed cells in a detached table projection, retaining unchanged view state.
+	 *
+	 * @param model displayed table model.
+	 * @param rows desired cell values in display order.
+	 */
+	static void reconcileTable(javax.swing.table.DefaultTableModel model, List<Object[]> rows) {
+		for (int row = 0; row < rows.size(); row++) {
+			if (row >= model.getRowCount()) {
+				model.addRow(rows.get(row));
+			} else {
+				for (int column = 0; column < rows.get(row).length; column++) {
+					if (!java.util.Objects.equals(model.getValueAt(row, column), rows.get(row)[column])) {
+						model.setValueAt(rows.get(row)[column], row, column);
+					}
+				}
+			}
+		}
+		if (model.getRowCount() > rows.size()) {
+			model.setRowCount(rows.size());
 		}
 	}
 
 	static ZoneId getDateTimeDisplayZone() {
 		return dateTimeDisplayZone;
+	}
+
+	/**
+	 * Selects a stored value in a fixed-choice combo box, adding it first when it
+	 * is not offered so loading never silently replaces a recorded value.
+	 *
+	 * @param combo target combo box.
+	 * @param value stored value to display; blank values are ignored.
+	 */
+	static void selectOrAddItem(javax.swing.JComboBox<String> combo, String value) {
+		if (value != null && !value.isBlank()) {
+			boolean present = false;
+			for (int i = 0; i < combo.getItemCount() && !present; i++) {
+				present = value.equals(combo.getItemAt(i));
+			}
+			if (!present) {
+				combo.addItem(value);
+			}
+		}
+		combo.setSelectedItem(value);
 	}
 
 	static void setDateTimeDisplayZone(ZoneId zoneId) {
@@ -372,6 +451,40 @@ final class UiSupport {
 		spinner.setValue(Date.from(UtcTimestamp.nowInstant()));
 		spinner.setPreferredSize(new Dimension(180, spinner.getPreferredSize().height));
 		return spinner;
+	}
+
+	/**
+	 * Loads a nullable timestamp while retaining the original value until edited.
+	 *
+	 * @param spinner timestamp editor.
+	 * @param value original UTC value, possibly null.
+	 */
+	static void loadDateTime(JSpinner spinner, java.time.LocalDateTime value) {
+		spinner.setValue(AppController.toDate(value));
+		spinner.putClientProperty("icsforms.dateTimeBaseline", spinner.getValue());
+		spinner.putClientProperty("icsforms.dateTimeOriginal", value);
+	}
+
+	/**
+	 * Returns whether a timestamp spinner still shows its loaded value.
+	 *
+	 * @param spinner timestamp editor.
+	 * @return true when unchanged since loading.
+	 */
+	static boolean dateTimeUnchanged(JSpinner spinner) {
+		return java.util.Objects.equals(spinner.getValue(), spinner.getClientProperty("icsforms.dateTimeBaseline"));
+	}
+
+	/**
+	 * Reads a timestamp without turning an untouched null into the spinner's default.
+	 *
+	 * @param spinner timestamp editor.
+	 * @return original or edited UTC timestamp.
+	 */
+	static java.time.LocalDateTime readDateTime(JSpinner spinner) {
+		return dateTimeUnchanged(spinner)
+				? (java.time.LocalDateTime) spinner.getClientProperty("icsforms.dateTimeOriginal")
+				: AppController.toLocalDateTime((Date) spinner.getValue());
 	}
 
 	/**

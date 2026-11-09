@@ -83,6 +83,7 @@ class MainFrameDataRetentionTest {
 					for (String prefix : List.of("Entered", "Replaced", "")) {
 						for (EditorCase editor : cases) {
 							frame.openWorkspace(destination(frame, editor.destination().workspaceId()));
+							flushPendingSwingEvents();
 							Object panel = editorPanel(frame, editor);
 							if (editor.panel().equals("ics214Panels")) {
 								assertSame(controller.getData().getActivityLogs().get(0),

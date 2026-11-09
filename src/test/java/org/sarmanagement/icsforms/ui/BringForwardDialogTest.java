@@ -196,9 +196,6 @@ class BringForwardDialogTest {
 					assertTrue(((JCheckBox) choices.get(PlanReviewArea.COMMUNICATIONS)).isEnabled());
 					assertFalse(((JCheckBox) choices.get(PlanReviewArea.HUMAN_MEDICAL)).isEnabled());
 					assertFalse(startup.isBringForwardCommunicationsPlan());
-					JCheckBox promote = (JCheckBox) field(startup, "promotePlannedIcs215");
-					assertEquals("Promote planned ICS 215 target period when advancing", promote.getText());
-					assertFalse(promote.isSelected());
 					assertFalse(startup.isPromotePlannedIcs215());
 				} finally {
 					dialog.dispose();

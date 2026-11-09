@@ -75,6 +75,31 @@ final class RolePlanStatusBadges extends JPanel {
 	}
 
 	/**
+	 * Captures the derived facts displayed by this role's configured badges.
+	 *
+	 * @param data current incident.
+	 * @return detached badge values, including content counts and content-bound review status.
+	 */
+	java.util.List<Object> displayInputs(AppData data) {
+		java.util.List<Object> inputs = new java.util.ArrayList<>();
+		for (String section : badges.keySet()) {
+			if (OBJECTIVES.equals(section)) {
+				inputs.add(data.getForm202().getStructuredObjectives().stream()
+						.filter(objective -> objective.getText() != null && !objective.getText().isBlank()).count());
+				inputs.add(data.getForm202().getObjectiveApprovalStatus());
+			} else {
+				PlanReviewArea area = REVIEW_AREAS.get(section);
+				inputs.add(IncidentCommandSummary.recordedContent(data, area));
+				inputs.add(data.getPlanReviewStatus(area));
+				if (area == PlanReviewArea.CANINE_MEDICAL) {
+					inputs.add(IncidentCommandSummary.requiresAnimalMedicalPlan(data));
+				}
+			}
+		}
+		return inputs;
+	}
+
+	/**
 	 * Updates the objective-writing and approval status.
 	 *
 	 * @param data current incident.
@@ -134,8 +159,11 @@ final class RolePlanStatusBadges extends JPanel {
 	private static void updateBadge(JLabel badge, String title, String content, String status, Color color,
 			String caveat) {
 		String text = title + ": " + content + "; " + status;
-		badge.setText("<html><b>" + RolePanelSupport.htmlText(title) + "</b><br>"
-				+ RolePanelSupport.htmlText(content) + "<br>" + RolePanelSupport.htmlText(status) + "</html>");
+		String display = "<html><b>" + RolePanelSupport.htmlText(title) + "</b><br>"
+				+ RolePanelSupport.htmlText(content) + "<br>" + RolePanelSupport.htmlText(status) + "</html>";
+		if (!display.equals(badge.getText())) {
+			badge.setText(display);
+		}
 		badge.setBackground(color);
 		badge.setToolTipText(text + ". " + caveat);
 		badge.getAccessibleContext().setAccessibleDescription(text + ". " + caveat);

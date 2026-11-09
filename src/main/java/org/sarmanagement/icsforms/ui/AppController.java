@@ -112,6 +112,8 @@ public class AppController implements AutoCloseable {
 	private volatile boolean closed;
 	private LinkSource activeLinkSource = LinkSource.NONE;
 	private PersonnelCardCreator personnelCardCreator;
+	private Boolean otherIncidentsCache;
+	private IncidentId otherIncidentsCacheActive;
 	private final List<IncidentChangeListener> incidentChangeListeners = new CopyOnWriteArrayList<>();
 	private long incidentGeneration = 1;
 	private long modelRevision;
@@ -559,6 +561,7 @@ public class AppController implements AutoCloseable {
 		if (!SwingUtilities.isEventDispatchThread()) {
 			return onOwner(() -> workerIo(operation));
 		}
+		otherIncidentsCache = null;
 		java.util.concurrent.atomic.AtomicReference<T> result = new java.util.concurrent.atomic.AtomicReference<>();
 		java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
 		awaitOwner(done -> persistenceWorker.execute(() -> {
@@ -643,9 +646,28 @@ public class AppController implements AutoCloseable {
 	 * @return true when previous plans exist or another saved incident can be browsed.
 	 */
 	public boolean canReusePlans() {
-		return hasPreviousPlans() || store != null && workerIo(store::list).stream()
-				.anyMatch(summary -> summary.incidentId() != null
-						&& !summary.incidentId().equals(activeIncidentId));
+		return hasPreviousPlans() || store != null && otherIncidentsAvailable();
+	}
+
+	/**
+	 * Reports whether another stored incident exists, listing the store only when a
+	 * controller store operation has invalidated the previous answer. The listing
+	 * waits on the persistence worker and disables incident windows, so repeating it
+	 * on every refresh made open role panels flicker.
+	 *
+	 * @return true when a different incident is stored.
+	 */
+	private boolean otherIncidentsAvailable() {
+		IncidentId active = activeIncidentId;
+		Boolean cached = otherIncidentsCache;
+		if (cached != null && Objects.equals(active, otherIncidentsCacheActive)) {
+			return cached;
+		}
+		boolean available = workerIo(store::list).stream()
+				.anyMatch(summary -> summary.incidentId() != null && !summary.incidentId().equals(active));
+		otherIncidentsCache = available;
+		otherIncidentsCacheActive = active;
+		return available;
 	}
 
 	/**
@@ -891,6 +913,7 @@ public class AppController implements AutoCloseable {
 		}
 		EditorModelSnapshot snapshot = new EditorModelSnapshot();
 		snapshot.capture(data);
+		byte[] beforeEdit = serializedEditorState();
 		boolean previousDirty = dirty;
 		long previousRevision = modelRevision;
 		LinkSource previousSource = activeLinkSource;
@@ -904,7 +927,20 @@ public class AppController implements AutoCloseable {
 		try {
 			suppressChangeNotifications = true;
 			edit.run();
-			markDirty(source);
+			if (previousRevision == modelRevision
+					&& java.util.Arrays.equals(beforeEdit, serializedEditorState())) {
+				snapshot.restore();
+				if (outermostCommit) {
+					transactionEditorCommitGuards.forEach(EditorCommitGuard::rebase);
+				}
+				suppressChangeNotifications = previousSuppression;
+				return true;
+			}
+			if (outermostCommit) {
+				recordModelCommit(source);
+			} else {
+				markDirty(source);
+			}
 			if (outermostCommit) {
 				transactionEditorCommitGuards.forEach(EditorCommitGuard::rebase);
 			}
@@ -928,6 +964,20 @@ public class AppController implements AutoCloseable {
 		}
 		publishIncidentChange(IncidentChangeKind.MODEL_COMMITTED);
 		return true;
+	}
+
+	/**
+	 * Serializes the persisted editor state for a structural no-op comparison.
+	 *
+	 * @return serialized incident state.
+	 * @throws IllegalStateException if the incident cannot be serialized.
+	 */
+	private byte[] serializedEditorState() {
+		try {
+			return UiRefreshState.serialize(data);
+		} catch (IOException exception) {
+			throw new IllegalStateException("Unable to compare editor state", exception);
+		}
 	}
 
 	/**
@@ -1255,8 +1305,28 @@ public class AppController implements AutoCloseable {
 	 *
 	 * @param source
 	 *            source tab for linked role values.
+	 * @throws IllegalStateException when an atomic save is in progress.
 	 */
 	public void markDirty(LinkSource source) {
+		if (closed) {
+			return;
+		}
+		if (atomicSave) {
+			throw new IllegalStateException("Wait for the atomic editor commit before editing.");
+		}
+		if (editorCommitDepth > 0) {
+			return;
+		}
+		recordModelCommit(source);
+	}
+
+	/**
+	 * Accounts for a committed model change after an editor transaction has changed content.
+	 *
+	 * @param source authoritative editor for linked fields.
+	 * @throws IllegalStateException when an atomic save is in progress.
+	 */
+	private void recordModelCommit(LinkSource source) {
 		if (closed) {
 			return;
 		}
