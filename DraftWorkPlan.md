@@ -43,7 +43,7 @@ T3  Hosted            cloud service, remote access, read-only mirrors,
                       planned authority transfer with the field         (Stage 5-7)
 ```
 
-Three ideas carry the whole design:
+Four ideas are central to the design:
 
 1. **One authority per incident.** A single host owns the record at any moment.
    Clients keep a working copy and an outbox; they never write to a database
@@ -58,6 +58,19 @@ Three ideas carry the whole design:
    UUID; every append-style entry records who entered it, from which station,
    and when (UTC), with room for when the host accepted it. This is what makes
    per-record concurrency, sync and audit possible later without a rewrite.
+
+4. **Current information, visibly current.**  Every open view of an incident 
+   reflects the latest accepted state available to that device, without manual 
+   reload. A committed change from any workspace, window or connected station 
+   updates every affected display promptly and consistently: forms, role 
+   panels, contact and channel lookups, summaries, status badges and previews. 
+   Views must not silently show superseded information. Unsaved edits are 
+   preserved and conflicts with newer data are made explicit rather than 
+   overwritten. Each view updates only the content affected by a change, 
+   without avoidable rebuilding. When a device is offline, disconnected, 
+   waiting for synchronization or cannot refresh a projection, it clearly 
+   labels the information as possibly stale and states when it was last 
+   confirmed as current.
 
 ### How we get there
 
