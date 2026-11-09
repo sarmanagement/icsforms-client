@@ -322,12 +322,7 @@ transfer). Enforced server-side; clients only hide what they cannot do.
 
 ### Target architecture
 
-```text
-Swing desktop ─┐
-Mobile client ─┼── incident-scoped API ── authoritative incident host ── database
-Future clients ┘           │
-                            └── controlled read mirrors / exports
-```
+![Target architecture: Swing desktop, mobile and future clients connect through an incident-scoped API to one authoritative incident host and its database; read-only mirrors and exports branch from the API.](docs/images/target-architecture.svg)
 
 - **No direct database access from any client.** Database credentials, migrations, authorization, and validation remain on the host. A client receives only the data and operations permitted for its incident and role.
 - **Incident-scoped API.** Each request is authorized against an incident and a responder's role. Incident boundaries are enforced in the service layer, not left to client-side filtering.
