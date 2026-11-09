@@ -1128,9 +1128,9 @@ public class CanineMedicalPanel extends JPanel {
 			}
 			facility.setSourceName(cell(directoryModel, row, 11));
 			facility.setFax(cell(directoryModel, row, 14));
-			directoryModel.setValueAt(facility.copy(), row, 15);
-			directoryModel.setValueAt(distanceMiles(facility), row, 16);
-			directoryModel.setValueAt(durationMinutes(facility), row, 17);
+			storeFacilityIfChanged(directoryModel, row, 15, facility);
+			storeValueIfChanged(directoryModel, row, 16, distanceMiles(facility));
+			storeValueIfChanged(directoryModel, row, 17, durationMinutes(facility));
 			facilities.add(facility);
 		}
 		directory.setFacilities(facilities);
@@ -1161,10 +1161,44 @@ public class CanineMedicalPanel extends JPanel {
 				selectionModel.setValueAt("", row, 10);
 			}
 			facility.setCapabilities(cell(selectionModel, row, 11));
-			selectionModel.setValueAt(facility.copy(), row, 13);
+			storeFacilityIfChanged(selectionModel, row, 13, facility);
 			facilities.add(facility);
 		}
 		plan.setSelectedFacilities(facilities);
+	}
+
+	/**
+	 * Retains the detached facility snapshot when a flush has not changed its fields.
+	 *
+	 * @param model facility table model.
+	 * @param row model row.
+	 * @param column hidden snapshot column.
+	 * @param facility committed facility values.
+	 * @throws IllegalStateException when facility values cannot be compared.
+	 */
+	private static void storeFacilityIfChanged(DefaultTableModel model, int row, int column, VetFacility facility) {
+		try {
+			if (!java.util.Arrays.equals(UiRefreshState.serialize(model.getValueAt(row, column)),
+					UiRefreshState.serialize(facility))) {
+				model.setValueAt(facility.copy(), row, column);
+			}
+		} catch (IOException exception) {
+			throw new IllegalStateException("Unable to compare facility values", exception);
+		}
+	}
+
+	/**
+	 * Updates derived table cells only when their displayed value differs.
+	 *
+	 * @param model facility table model.
+	 * @param row model row.
+	 * @param column derived value column.
+	 * @param value intended value.
+	 */
+	private static void storeValueIfChanged(DefaultTableModel model, int row, int column, Object value) {
+		if (!java.util.Objects.equals(model.getValueAt(row, column), value)) {
+			model.setValueAt(value, row, column);
+		}
 	}
 
 	/**

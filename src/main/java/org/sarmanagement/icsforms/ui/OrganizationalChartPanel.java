@@ -1024,8 +1024,11 @@ public class OrganizationalChartPanel extends JPanel {
 
 	/**
 	 * Applies the Org Chart controls after validating the editor binding.
+	 *
+	 * @throws IllegalStateException when a custom-position cell rejects its input.
 	 */
 	private void flushToModel() {
+		UiSupport.commitTableEdits(customPositionsTable);
 		OrganizationalChart chart = controller.getData().getOrganizationalChart();
 		chart.getAssignmentList().setAgencyRepresentatives(agencyRepresentatives.getEntries());
 		List<String> icNames = new ArrayList<>();
@@ -1156,8 +1159,6 @@ public class OrganizationalChartPanel extends JPanel {
 
 		// Custom positions
 		List<OrgChartEntry> additional = new ArrayList<>();
-		if (customPositionsTable.isEditing())
-			customPositionsTable.getCellEditor().stopCellEditing();
 		for (int row = 0; row < customPositionsModel.getRowCount(); row++) {
 			OrgChartEntry entry = new OrgChartEntry();
 			entry.setSection(sectionFromLabel((String) customPositionsModel.getValueAt(row, 0)));

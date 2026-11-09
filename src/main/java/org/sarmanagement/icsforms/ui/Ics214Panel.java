@@ -87,6 +87,7 @@ public class Ics214Panel extends JPanel {
 	private AppData currentData;
 	private Ics214Form currentForm;
 	private HeaderState loadedHeader;
+	private LocalDateTime loadedCanonicalPreparedDateTime;
 	private List<ResourceState> loadedResources = List.of();
 
 	/**
@@ -423,6 +424,7 @@ public class Ics214Panel extends JPanel {
 			syncResourcesBtn.setToolTipText("Add resources from T-cards at ICP and from 204 assignment forms");
 		}
 		loadedHeader = headerState();
+		loadedCanonicalPreparedDateTime = currentForm.getPreparedDateTime();
 		loadedResources = resourceStates(resourcesTableModel.getRows());
 		editorCommitGuard.rebase();
 	}
@@ -433,6 +435,7 @@ public class Ics214Panel extends JPanel {
 	 * edits win same-field conflicts. Authoritative activity entries are never replaced.
 	 *
 	 * @return true when the editor binding is current and the flush succeeds.
+	 * @throws IllegalStateException if a pending table editor rejects its value.
 	 */
 	public boolean saveToModel() {
 		return editorCommitGuard.applyIfCurrent(this::flushToModel);
@@ -440,11 +443,14 @@ public class Ics214Panel extends JPanel {
 
 	/**
 	 * Merges visible ICS 214 values into the bound form after validating the editor token.
+	 *
+	 * @throws IllegalStateException if a pending table editor rejects its value.
 	 */
 	private void flushToModel() {
 		if (currentForm == null || currentData != controller.getData() || loadedHeader == null) {
 			return;
 		}
+		UiSupport.commitTableEdits(resourcesTable, activityLogTable);
 		mergeTextField(nameField, loadedHeader.name(), currentForm.getName(), currentForm::setName);
 		mergeTextField(icsPositionField, loadedHeader.icsPosition(), currentForm.getIcsPosition(), currentForm::setIcsPosition);
 		mergeTextField(homeAgencyField, loadedHeader.homeAgency(), currentForm.getHomeAgency(), currentForm::setHomeAgency);
@@ -455,20 +461,24 @@ public class Ics214Panel extends JPanel {
 		LocalDateTime localDateTime = AppController.toLocalDateTime((Date) preparedDateTimeField.getValue());
 		if (!java.util.Objects.equals(localDateTime, loadedHeader.preparedDateTime())) {
 			currentForm.setPreparedDateTime(localDateTime);
-		} else {
+		} else if (!java.util.Objects.equals(loadedCanonicalPreparedDateTime, currentForm.getPreparedDateTime())
+				&& !java.util.Objects.equals(localDateTime, currentForm.getPreparedDateTime())) {
 			preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
 		}
-		if (!resourceStates(resourcesTableModel.getRows()).equals(loadedResources)) {
+		List<ResourceState> localResources = resourceStates(resourcesTableModel.getRows());
+		if (!localResources.equals(loadedResources)) {
 			currentForm.setResourcesAssigned(copyResources(resourcesTableModel.getRows()));
-		} else {
-			resourcesTableModel.setRows(copyResources(currentForm.getResourcesAssigned()));
+		} else if (!localResources.equals(resourceStates(currentForm.getResourcesAssigned()))) {
+			adoptCanonicalResources();
 		}
 		loadedHeader = headerState();
+		loadedCanonicalPreparedDateTime = currentForm.getPreparedDateTime();
 		loadedResources = resourceStates(resourcesTableModel.getRows());
 	}
 
 	/**
-	 * Applies a local text edit, or refreshes an untouched field from canonical state.
+	 * Applies a local text edit, or adopts changed canonical text without rewriting
+	 * an unchanged document and disturbing its caret or selection.
 	 *
 	 * @param field editable local field
 	 * @param baseline field value last loaded or saved
@@ -481,7 +491,36 @@ public class Ics214Panel extends JPanel {
 		if (!java.util.Objects.equals(local, baseline)) {
 			apply.accept(local);
 		} else {
-			field.setText(canonical == null ? "" : canonical);
+			String canonicalText = canonical == null ? "" : canonical;
+			if (!field.getText().equals(canonicalText)) {
+				field.setText(canonicalText);
+			}
+		}
+	}
+
+	/**
+	 * Adopts changed canonical resources and restores surviving selections by
+	 * stable identity, including when sorting changes their displayed positions.
+	 */
+	private void adoptCanonicalResources() {
+		Set<String> selectedIds = new LinkedHashSet<>();
+		for (int viewRow : resourcesTable.getSelectedRows()) {
+			SarTaskResource resource = resourcesTableModel.getRows()
+					.get(resourcesTable.convertRowIndexToModel(viewRow));
+			String id = resource.getResourceId();
+			if (id != null && !id.isBlank()) {
+				selectedIds.add(id);
+			}
+		}
+		resourcesTableModel.setRows(copyResources(currentForm.getResourcesAssigned()));
+		resourcesTable.clearSelection();
+		for (int modelRow = 0; modelRow < resourcesTableModel.getRows().size(); modelRow++) {
+			if (selectedIds.contains(resourcesTableModel.getRows().get(modelRow).getResourceId())) {
+				int viewRow = resourcesTable.convertRowIndexToView(modelRow);
+				if (viewRow >= 0) {
+					resourcesTable.addRowSelectionInterval(viewRow, viewRow);
+				}
+			}
 		}
 	}
 
@@ -1832,36 +1871,52 @@ public class Ics214Panel extends JPanel {
 	// Table models for resources and activity log
 	// -------------------------------------------------------------------------
 
+	/** Detached, read-only view of section 6 resource rows. */
 	private static class ResourcesTableModel extends AbstractTableModel {
 		private final String[] columns = {"Name", "ICS Position", "Home Agency"};
 		private List<SarTaskResource> rows = new ArrayList<>();
 
+		/**
+		 * Replaces displayed resource rows and notifies the table.
+		 *
+		 * @param rows detached replacement rows.
+		 */
 		void setRows(List<SarTaskResource> rows) {
 			this.rows = rows == null ? new ArrayList<>() : rows;
 			fireTableDataChanged();
 		}
 
+		/**
+		 * Returns displayed resources for local merge comparison.
+		 *
+		 * @return detached displayed resource rows.
+		 */
 		List<SarTaskResource> getRows() {
 			return rows;
 		}
 
+		/** {@inheritDoc} */
 		@Override
 		public int getRowCount() {
 			return rows.size();
 		}
+		/** {@inheritDoc} */
 		@Override
 		public int getColumnCount() {
 			return columns.length;
 		}
+		/** {@inheritDoc} */
 		@Override
 		public String getColumnName(int col) {
 			return columns[col];
 		}
+		/** {@inheritDoc} */
 		@Override
 		public boolean isCellEditable(int row, int col) {
 			return false;
 		}
 
+		/** {@inheritDoc} */
 		@Override
 		public Object getValueAt(int row, int col) {
 			SarTaskResource r = rows.get(row);

@@ -602,6 +602,8 @@ public class SarTaskPanel extends JPanel {
 	 * Commits inline edits without replacing newer canonical tasks with stale rows.
 	 * Reconciles additions and deletions by assignment identity; separate modal
 	 * editor fields are not refreshed or discarded.
+	 *
+	 * @throws IllegalStateException when the active task cell rejects its input.
 	 */
 	public void pushToModel() {
 		if (table.isEditing() && table.getCellEditor() != null && !table.getCellEditor().stopCellEditing()) {
@@ -3164,13 +3166,43 @@ public class SarTaskPanel extends JPanel {
 		private List<SarTaskAssignment> rows = new ArrayList<>();
 		private List<ClueLogEntry> clueLogEntries = new ArrayList<>();
 		private List<ResourceAssignment> resourceAssignments = new ArrayList<>();
+		private List<List<Object>> displayedRows = List.of();
 
+		/**
+		 * Rebinds canonical rows without notifying the view when displayed values are unchanged.
+		 *
+		 * @param rows canonical task rows.
+		 * @param clueLogEntries canonical clues.
+		 * @param resourceAssignments linked resource assignments.
+		 */
 		void setRows(List<SarTaskAssignment> rows, List<ClueLogEntry> clueLogEntries,
 				List<ResourceAssignment> resourceAssignments) {
 			this.rows = rows == null ? new ArrayList<>() : rows;
 			this.clueLogEntries = clueLogEntries == null ? new ArrayList<>() : clueLogEntries;
 			this.resourceAssignments = resourceAssignments == null ? new ArrayList<>() : resourceAssignments;
-			fireTableDataChanged();
+			List<List<Object>> next = displayedState();
+			if (!displayedRows.equals(next)) {
+				displayedRows = next;
+				fireTableDataChanged();
+			}
+		}
+
+		/**
+		 * Snapshots table values and task identities independently of mutable canonical rows.
+		 *
+		 * @return displayed cells with their stable row identities.
+		 */
+		private List<List<Object>> displayedState() {
+			List<List<Object>> next = new ArrayList<>();
+			for (int row = 0; row < getRowCount(); row++) {
+				List<Object> cells = new ArrayList<>();
+				cells.add(this.rows.get(row).getTaskId());
+				for (int column = 0; column < getColumnCount(); column++) {
+					cells.add(getValueAt(row, column));
+				}
+				next.add(cells);
+			}
+			return next;
 		}
 
 		List<SarTaskAssignment> getRows() {
@@ -3233,6 +3265,7 @@ public class SarTaskPanel extends JPanel {
 			};
 		}
 
+		/** {@inheritDoc} */
 		@Override
 		public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
 			SarTaskAssignment row = rows.get(rowIndex);
@@ -3247,7 +3280,12 @@ public class SarTaskPanel extends JPanel {
 					return;
 				}
 			}
-			fireTableCellUpdated(rowIndex, columnIndex);
+			if (rowIndex < displayedRows.size()) {
+				List<List<Object>> next = new ArrayList<>(displayedRows);
+				next.set(rowIndex, displayedState().get(rowIndex));
+				displayedRows = next;
+			}
+			fireTableRowsUpdated(rowIndex, rowIndex);
 		}
 
 		private static int linkedPeople(SarTaskAssignment row, List<ResourceAssignment> resourceAssignments) {

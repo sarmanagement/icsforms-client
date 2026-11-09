@@ -80,6 +80,7 @@ public class Ics204Panel extends JPanel {
 	private final JTable resourceTable = new JTable(resourceTableModel);
 	private String activeManagementContext = Ics204Form.MANAGEMENT_STAGING_AREA;
 	private boolean updatingContextSelection;
+	private List<ManagementContactRow> displayedManagementRows = List.of();
 
 	/**
 	 * Creates the ICS 204 editor panel.
@@ -323,6 +324,7 @@ public class Ics204Panel extends JPanel {
 	 * Applies field values to the model.
 	 *
 	 * @return true when the editor values are committed; false when the editor is stale
+	 * @throws IllegalStateException if a pending communications editor rejects its value.
 	 */
 	public boolean pushToModel() {
 		return editorCommitGuard.commit(AppController.LinkSource.ICS204, this::flushToModel);
@@ -330,6 +332,8 @@ public class Ics204Panel extends JPanel {
 
 	/**
 	 * Writes current ICS 204 controls after the editor revision has been accepted.
+	 *
+	 * @throws IllegalStateException if a pending communications editor rejects its value.
 	 */
 	private void flushToModel() {
 		UiSupport.commitTableEdits(communicationsTable);
@@ -367,10 +371,15 @@ public class Ics204Panel extends JPanel {
 		rebuildManagementContacts();
 	}
 
+	/** Rebuilds contact controls only when the displayed roles or labels change. */
 	private void rebuildManagementContacts() {
+		List<ManagementContactRow> rows = visibleManagementRows();
+		if (rows.equals(displayedManagementRows)) {
+			return;
+		}
 		managementContactsPanel.removeAll();
 		int rowIndex = 0;
-		for (ManagementContactRow row : visibleManagementRows()) {
+		for (ManagementContactRow row : rows) {
 			GridBagConstraints label = new GridBagConstraints();
 			label.gridx = 0;
 			label.gridy = rowIndex;
@@ -402,10 +411,16 @@ public class Ics204Panel extends JPanel {
 			managementContactsPanel.add(row.contactField(), contact);
 			rowIndex++;
 		}
+		displayedManagementRows = List.copyOf(rows);
 		managementContactsPanel.revalidate();
 		managementContactsPanel.repaint();
 	}
 
+	/**
+	 * Describes the contact row structure for the selected management level.
+	 *
+	 * @return displayed labels and their persistent input controls.
+	 */
 	private List<ManagementContactRow> visibleManagementRows() {
 		List<ManagementContactRow> rows = new ArrayList<>();
 		rows.add(new ManagementContactRow("Operations section chief", operationsChiefNameField,
@@ -1021,6 +1036,13 @@ public class Ics204Panel extends JPanel {
 		return value == null ? "" : value;
 	}
 
+	/**
+	 * Identifies one displayed management contact row.
+	 *
+	 * @param label role label.
+	 * @param nameField persistent name control.
+	 * @param contactField persistent contact control.
+	 */
 	private record ManagementContactRow(String label, JTextField nameField, JTextField contactField) {
 	}
 
