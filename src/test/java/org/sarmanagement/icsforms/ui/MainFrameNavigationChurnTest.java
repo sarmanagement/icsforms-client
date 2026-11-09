@@ -55,7 +55,7 @@ class MainFrameNavigationChurnTest {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		var directory = Files.createTempDirectory("icsforms-live-safety-refresh");
 		AppData data = populatedIncident();
-		data.getOrganizationalChart().setIncidentCommanderName("Shared officer");
+		data.getOrganizationalChart().setIncidentCommanders(List.of("Shared officer"));
 		data.getOrganizationalChart().setSafetyOfficerName("Shared officer");
 		data.getMedicalPlan().setReviewedBySafetyOfficer("");
 		data.getCanineMedicalPlan().setReviewedBySafetyOfficer("");
@@ -78,25 +78,53 @@ class MainFrameNavigationChurnTest {
 				assertEquals("Shared officer", ((JTextField) Ics205PanelTest.field(medical[0], "reviewedBy")).getText());
 				assertEquals("Shared officer", ((JTextField) Ics205PanelTest.field(canine[0], "safetyOfficer")).getText());
 				assertEquals(-1, safetySections[0].indexOfTab("Reported SAR Hazards"));
+				controller[0].markDirty();
+				controller[0].getData().getTCards().forEach(org.sarmanagement.icsforms.model.TCard::getResourceId);
+				((Timer) Ics205PanelTest.field(controller[0], "autosaveTimer")).stop();
 			});
 			new Robot().waitForIdle();
+			AsyncFormPreviewPanelTest.waitFor(() -> refreshComplete(frame[0], controller[0]));
 			var cards = java.util.Base64.getEncoder().encodeToString(UiRefreshState.serialize(data.getTCards()));
 			SwingUtilities.invokeAndWait(() -> {
 				assertTrue(controller[0].commitIfCurrent(controller[0].captureIncidentBinding(),
-						() -> data.getOrganizationalChart().setSafetyOfficerName("")));
+						() -> {
+							data.getOrganizationalChart().setSafetyOfficerName("");
+							data.getForm208().setPreparedByName("");
+						}));
 				((Timer) Ics205PanelTest.field(controller[0], "autosaveTimer")).stop();
+				assertEquals("", MedicalRoleSupport.safetyOfficerName(data), "canonical safety officer: chart="
+						+ data.getOrganizationalChart().getSafetyOfficerName() + ", human="
+						+ data.getMedicalPlan().getReviewedBySafetyOfficer() + ", canine="
+						+ data.getCanineMedicalPlan().getReviewedBySafetyOfficer());
 			});
+			AsyncFormPreviewPanelTest.waitFor(() ->
+					"".equals(((JTextField) Ics205PanelTest.field(medical[0], "reviewedBy")).getText())
+							&& refreshComplete(frame[0], controller[0]));
 			SwingUtilities.invokeAndWait(() -> {
 				assertEquals("", ((JTextField) Ics205PanelTest.field(medical[0], "reviewedBy")).getText());
 				assertEquals("", ((JTextField) Ics205PanelTest.field(canine[0], "safetyOfficer")).getText());
+			});
+			assertEquals(cards, java.util.Base64.getEncoder().encodeToString(UiRefreshState.serialize(data.getTCards())),
+					"no incidental T-card invalidation of medical contacts");
+			SwingUtilities.invokeAndWait(() -> {
 				assertTrue(controller[0].commitIfCurrent(controller[0].captureIncidentBinding(),
 						() -> data.setIncidentMode(org.sarmanagement.icsforms.model.IncidentMode.SAR)));
 				((Timer) Ics205PanelTest.field(controller[0], "autosaveTimer")).stop();
 			});
+			AsyncFormPreviewPanelTest.waitFor(() ->
+					safetySections[0].indexOfTab("Reported SAR Hazards") >= 0 && refreshComplete(frame[0], controller[0]));
 			SwingUtilities.invokeAndWait(() ->
 					assertTrue(safetySections[0].indexOfTab("Reported SAR Hazards") >= 0));
-			assertEquals(cards, java.util.Base64.getEncoder().encodeToString(UiRefreshState.serialize(data.getTCards())),
-					"shared command card remains unchanged; no incidental T-card invalidation");
+			var sarCards = java.util.Base64.getEncoder().encodeToString(UiRefreshState.serialize(data.getTCards()));
+			SwingUtilities.invokeAndWait(() -> {
+				assertTrue(controller[0].commitIfCurrent(controller[0].captureIncidentBinding(),
+						() -> data.setIncidentMode(org.sarmanagement.icsforms.model.IncidentMode.GENERIC)));
+				((Timer) Ics205PanelTest.field(controller[0], "autosaveTimer")).stop();
+			});
+			AsyncFormPreviewPanelTest.waitFor(() -> safetySections[0].indexOfTab("Reported SAR Hazards") < 0
+					&& refreshComplete(frame[0], controller[0]));
+			assertEquals(sarCards, java.util.Base64.getEncoder().encodeToString(UiRefreshState.serialize(data.getTCards())),
+					"mode-only hazard visibility update without incidental T-card invalidation");
 		} finally {
 			SwingUtilities.invokeAndWait(() -> {
 				if (frame[0] != null) {
@@ -417,6 +445,17 @@ class MainFrameNavigationChurnTest {
 				}
 			});
 		}
+	}
+
+	/**
+	 * Checks that the live refresh has returned from any store-backed secondary EDT loop.
+	 *
+	 * @param frame measured frame.
+	 * @param controller incident controller.
+	 * @return whether the frame has accepted the current model revision.
+	 */
+	private static boolean refreshComplete(MainFrame frame, AppController controller) {
+		return controller.captureEditorCommitBinding().equals(Ics205PanelTest.field(frame, "editorCommitBinding"));
 	}
 
 	/**

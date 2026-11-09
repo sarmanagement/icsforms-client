@@ -392,6 +392,7 @@ public class Ics214Panel extends JPanel {
 	 *            source document.
 	 */
 	public void loadFromModel(Ics214Form form, AppData data) {
+		boolean sameSource = currentForm == form && currentData == data;
 		currentForm = form;
 		currentData = data == null ? new AppData() : data;
 		if (currentForm == null) {
@@ -410,7 +411,7 @@ public class Ics214Panel extends JPanel {
 		UiSupport.setTextIfChanged(preparedByNameField, currentForm.getPreparedByName());
 		UiSupport.setTextIfChanged(preparedByPositionField, currentForm.getPreparedByPositionTitle());
 		if (!java.util.Objects.equals(loadedCanonicalPreparedDateTime, currentForm.getPreparedDateTime())
-				|| loadedHeader == null) {
+				|| loadedHeader == null || !sameSource) {
 			preparedDateTimeField.setValue(AppController.toDate(currentForm.getPreparedDateTime()));
 		}
 		if (!resourceStates(resourcesTableModel.getRows()).equals(resourceStates(currentForm.getResourcesAssigned()))) {
