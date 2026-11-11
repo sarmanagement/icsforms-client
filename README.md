@@ -13,6 +13,13 @@ demonstrates an active dementia-search operational period and linked ICS forms,
 resources, safety reminders and PDF exports. It is illustrative, not an operational plan.
 Open it with **File → Import → Import Incident JSON…**.
 
+  ![SAR Tasks tab in board view](docs/images/screenshot_sar_tasks_tab_boardview.png)
+
+  *The SAR Tasks tab in board view, using the fictional Maple Ridge example. Tasks appear in
+  planned, assigned, returned (not debriefed) and completed columns; the context menu offers
+  assignment editing, status changes, the task's ICS 214 log and quick log entries.*
+
+
 ### Managing saved incidents
 
 Open **File → Manage Incidents…**, or **Manage Incidents…** in the **Open Incident**
@@ -88,13 +95,6 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   - T-Cards
   - Activity Logs (ICS 214)
 - SAR Task Assignment forms with debriefing and POD factoring support.
-
-  ![SAR Tasks tab in board view](docs/images/screenshot_sar_tasks_tab_boardview.png)
-
-  *The SAR Tasks tab in board view, using the fictional Maple Ridge example. Tasks appear in
-  planned, assigned, returned (not debriefed) and completed columns; the context menu offers
-  assignment editing, status changes, the task's ICS 214 log and quick log entries.*
-
 - Assignment editors save and establish the linked SAR task before navigating to it. Save failures keep the entered values available for correction or retry.
 - ICS 202 objectives have stable identities, explicit order and assessment state, and may be linked
   to multiple ICS 204 assignments. Deleting a linked objective requires an explicit unlink or
