@@ -66,7 +66,7 @@ Issue #33 was closed when PR #32 merged. Issue #46 implementation is delivered:
 4. Shared canine directory/facility lookup and presentation, routing, and shortlist
    operations are used by the workspace and read-only reference, with independent
    Swing instances and automated concurrent-use/isolation coverage (Phase 10).
-5. Dashboard retirement, stable `WorkspaceId` navigation, scope decisions, and
+5. Dashboard retirement (the former **View > Dashboard** role-ordered tabs, replaced by one stable workspace order), stable `WorkspaceId` navigation, scope decisions, and
    [`docs/role-panels.md`](docs/role-panels.md) are delivered.
 6. Remaining acceptance evidence is limited to the specific items in the matrix
    below. No implementation gap is currently identified.
@@ -283,7 +283,7 @@ building an API, authentication or an outbox in Stage 1.
 
 ## Live refresh and flicker work (PR #56)
 
-Delivered on `fix/tab-switch-flicker`. Goal: open views reflect the current
+Delivered on `fix/tab-switch-flicker` and merged 2026-11-09. Goal: open views reflect the current
 model without visible flicker, and never rebuild or reset content that has not
 changed.
 

@@ -23,7 +23,7 @@ Unit Leader, Operations, Incident Command, Communications) and separate human an
 canine medical reference windows. The persistence foundation is merged: saves use
 detached snapshots on a background coordinator behind backend-neutral revision
 and failure seams. Work to make open views refresh without flicker or stale
-content is in review (PR #56). This is standalone operation, not yet a local-host
+content is merged (PR #56). This is standalone operation, not yet a local-host
 deployment. Details of delivered work are in
 [`docs/completed-work.md`](docs/completed-work.md).
 
@@ -95,7 +95,7 @@ the later stages may make the solo-laptop case harder.
 
 ### How to read this document
 
-**Status date:** 2026-11-08. Status entries are based on the committed source
+**Status date:** 2026-11-11. Status entries are based on the committed source
 tree, named regression tests and CI results, not on issue or PR closure alone.
 
 - **Part I — Delivered work:** summary only; the detailed record is in

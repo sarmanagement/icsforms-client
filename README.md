@@ -80,7 +80,6 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   - Optional ICS 205 Incident Radio Communications Plan (SAR and Generic modes)
   - Medical Plan (ICS 206)
   - Canine Medical Plan (ICS 206CANINE, adapted; eligible in SAR mode or when a canine T-card exists)
-  - Role-oriented dashboard ordering for IC/ICP, Safety Officer, Operations, and Communications
   - Live responsibility-focused windows for Incident Command, Safety Officer, Medical Unit Leader,
     Operations, and Communications Unit under **View → Role Panels**
   - SAR Tasks (SAR mode only)
@@ -119,7 +118,7 @@ File → New always creates a separate incident. File → Duplicate Incident cop
   accepted into the incident plan.
 - Canine veterinary directories are incident-owned copies, not live links to source files. JSON regional files use schema version 1 (`schemaVersion` and `facilities`). CSV imports accept the app's extended headers or a minimal hospital file with `Hospital Name,Address,City,State,Zip,Contact Number,Fax,Notes`; column names are case- and whitespace-insensitive. Imported street address, city, state, ZIP, contact number, and fax remain separate fields. `Notes` is retained as descriptive capabilities/notes and does not imply confirmed 24-hour availability. The app's UTF-8 CSV export uses `id,name,town,state,postalCode,address,contactNumbers,fax,available24Hours,availabilityNotes,capabilities,verifiedAt,latitude,longitude`; multiple contacts are semicolon-separated. Blank availability is unknown, not confirmation of 24-hour service. Directory edits require explicit export and do not overwrite sources implicitly.
 - Address geocoding and driving routes are separate services. HeiGIT-hosted openrouteservice is the default provider: geocoding uses `https://api.heigit.org/pelias/v1/search`, and driving matrices use `https://api.heigit.org/openrouteservice/v2/matrix/driving-car`. The veterinary routing tab guides the operator through loading a directory, confirming coordinates for the base and facilities, calculating road routes, then reviewing and adding the closest confirmed 24-hour facilities. Route calculation remains disabled until the base and at least one facility have valid coordinates; shortlist review remains disabled until a current road route exists for a confirmed 24-hour facility. Requests send entered addresses or coordinates to that third party. Configure the key in **Configuration > Medical Routing (OpenRouteService)…**, set `ORS_API_KEY`, or place the key in `~/.icsforms/ors-api-key`; the environment variable takes precedence, and credentials are not stored in incident JSON or regional files. Verify current [HeiGIT terms and restrictions](https://account.heigit.org/info/tos), quotas, and service limits before operational use. The tab displays **© openrouteservice by HeiGIT | Data from [OpenStreetMap](https://openstreetmap.org/copyright)**. Unresolved/unreachable locations remain visible for manual handling; any straight-line estimate is explicitly labeled and is not a driving time.
-- Role dashboards reorder the same editors; they do not duplicate incident data. Choose **View > Dashboard** (IC/ICP is the default). ICS 205 is the radio communications plan; ICS 205A remains a distinct communications/contact list.
+- Tabs appear in a fixed workspace order. ICS 205 is the radio communications plan; ICS 205A remains a distinct communications/contact list.
 - **Configuration > Descriptive tab labels** optionally names the tabs **ICS-202 Objectives**,
   **ICS-204 Assignments**, **ICS-205 Comms**, and **ICS-214 Log** followed by its existing owner/scope.
   The choice is saved locally and does not change workspace navigation or incident data.
@@ -239,8 +238,7 @@ distinct dates in older plans. Signature lines and IAP pagination belong to the
 PDF, not the tab; previously saved signature and page data are retained.
 
 The optional communications-plan workspace is available in both incident modes;
-show or hide it under **View → Communications Plan (ICS 205)**. The Communications
-dashboard places it first. Hiding it does not delete the plan or prevent
+show or hide it under **View → Communications Plan (ICS 205)**. Hiding it does not delete the plan or prevent
 explicitly selecting its PDF. CSV actions are also available from the main
 Import/Export menus. To import CHIRP's generic CSV, use **Import CHIRP CSV…** on
 the tab or **Import → Import communications plan CHIRP CSV…**. This preselects
@@ -265,7 +263,7 @@ the form's A/D/M mode; a generic D or M is not a programming specification.
 Trunked system information is not a conventional transmit frequency.
 
 Workspace navigation uses the existing typed `WorkspaceId.ICS_205` destination,
-not the tab's displayed title. Menus and role dashboards reuse the same editor
+not the tab's displayed title. Menus and role panels reuse the same editor
 and incident data, including the existing edit-flush lifecycle.
 
 Channel linkage has a central read-only projection for assignments, tasks,
