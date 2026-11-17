@@ -266,18 +266,19 @@ the merged tree. PR #55 CI at `c64edc1` passed the Java 17 headless suite
 and Spotless/Checkstyle. This is automated evidence, not a new field exercise.
 The merged test-only, lockless `RemoteIncidentStore` double passes the shared
 snapshot/token contract alongside the file store and is exercised through
-`AppController`; no separate unmerged spike branch was found. That provides
-substantial substitute-store evidence but does not literally satisfy the stated
-spike-branch criterion or demonstrate a network-backed store. Either complete
-the specified spike or explicitly accept the merged double as equivalent
-evidence before marking the stage exit complete.
+`AppController`; no separate unmerged spike branch was found.
+
+**Exit decision, 2026-11-17:** the user accepted the merged test double
+as equivalent evidence for the original unmerged-spike criterion. Stage 1 exit
+is complete. This is substitute-store evidence, not a demonstration of a
+network-backed store; the real remote store remains Stage 2 work.
 
 **Topology T0 / T1 readiness:** standalone T0 and the tracked foundation work
 are delivered; T1 local-host functionality has not been built. Planning and
 Stage 0 decisions can proceed now. Stage 2 implementation is not yet a cleared
-start under this plan: Stage 0 decisions must be recorded and the remaining
-Stage 1 exit-evidence decision above must be resolved. This does not require
-building an API, authentication or an outbox in Stage 1.
+start under this plan: the [Stage 0 decisions](stage-0-decisions.md) must be
+recorded and agreed. Stage 1 does not require building an API, authentication or
+an outbox.
 
 **Rough size:** 4–7 person-weeks.
 

@@ -74,10 +74,9 @@ Four ideas are central to the design:
    the live-refresh work that removed avoidable rebuilds and flicker (PR #56,
    the standalone part of idea 4), are complete.
 2. **Next: decide, then build T1 (Stages 0 and 2).** Record the Stage 0
-   decisions and resolve the remaining Stage 1 exit-evidence question. Stage 2
-   then adds the incident API, a `RemoteIncidentStore` and the first local host
-   with simple device admission, so two workstations can share an incident on
-   incident Wi-Fi.
+   decisions. Stage 2 then adds the incident API, a `RemoteIncidentStore` and
+   the first local host with simple device admission, so two workstations can
+   share an incident on incident Wi-Fi.
 3. **Then: shared and offline use (T2, Stages 3–4).** Stage 3 adds the full
    invitation lifecycle, operator claim, roles, per-record concurrency and
    audit. Stage 4 adds the durable outbox, offline sync, conflict workflows and
@@ -95,8 +94,9 @@ the later stages may make the solo-laptop case harder.
 
 ### How to read this document
 
-**Status date:** 2026-11-11. Status entries are based on the committed source
-tree, named regression tests and CI results, not on issue or PR closure alone.
+**Status date:** 2026-11-17. Status entries are based on the source
+tree, named regression tests, CI results and recorded decisions, not on issue or
+PR closure alone.
 
 - **Part I — Delivered work:** summary only; the detailed record is in
   [`docs/completed-work.md`](docs/completed-work.md).
@@ -113,7 +113,7 @@ tree, named regression tests and CI results, not on issue or PR closure alone.
 | Core SAR forms (ICS 203, 205, 206 and canine 206, 215/215A, 208, 233-CG clue log), ICS 215, SAR task ↔ ICS 214 integration, ICS 204 layout | #13–#20, #35 | Complete |
 | File-backed `IncidentStore` with UUID identity, revision checks, edit-lock capability and backups | PR #34, #39–#42 | Complete for standalone use |
 | Live local role panels (ten phases): live multi-view, objectives and linkage, review tracking, medical references, Safety/MUL, Operations, Incident Command, Communications and console | #33, #46, #49 | Implementation delivered; automated coverage recorded. Manual assistive-technology review is not recorded (optional). |
-| Stage 1 persistence foundation: deterministic Swing tests, store contract suite, backend-neutral semantics, strict imports and identity migration, UTC time, provenance seam, asynchronous snapshot persistence, and live refresh without flicker | #37, #39–#44, PR #56 | Complete; exit-evidence question open (Stage 1) |
+| Stage 1 persistence foundation: deterministic Swing tests, store contract suite, backend-neutral semantics, strict imports and identity migration, UTC time, provenance seam, asynchronous snapshot persistence, and live refresh without flicker | #37, #39–#44, PR #56 | Complete; substitute-store evidence accepted |
 
 Role-panel work is independent of the persistence roadmap and must not
 introduce network, authentication or remote persistence features.
@@ -339,7 +339,7 @@ transfer). Enforced server-side; clients only hide what they cannot do.
 - **One authority per incident.** A field computer or cloud service is the single authoritative host at a time. Remote mirrors can serve permitted reads and backups, but are not independent writable masters.
 - **Preserve standalone mode.** Existing local-only use remains supported and usable. Shared-host features should be opt-in; no account or server should be required to open and edit a local incident.
 - **Keep a clean contract boundary.** Use a versioned JSON API and explicit transfer objects rather than exposing database entities. HTTP request/response operations are sufficient initially; add a live-update channel only when polling or change feeds no longer meet operational needs.
-- **Avoid premature technology commitments.** Select the database, host packaging, and identity mechanism in Stage 0 based on offline operation, maintainability by a small team, recovery, and upgrade constraints. PostgreSQL is a reasonable hosted candidate, but a field host must be supportable without internet and without exposing database ports to the incident LAN.
+- **Avoid premature technology commitments.** Package the application as Java applications for devices able to run Java. Select the database, host deployment form, and identity mechanism in Stage 0 based on offline operation, maintainability by a small team, recovery, and upgrade constraints. PostgreSQL is a reasonable hosted candidate, but a field host must be supportable without internet and without exposing database ports to the incident LAN.
 
 ### Authority, ownership, and transfer
 
@@ -393,7 +393,7 @@ Cross-form values are shared facts, not separate copies. Define which form or en
 
 #### Offline synchronization
 
-Clients need a durable local cache and outbox. Queue idempotent, uniquely identified operations so retrying after a lost connection does not duplicate an assignment, clue, or log entry. Synchronize with an ordered host change cursor rather than trusting device wall clocks. Preserve local timestamps for display and audit, but do not use them as the sole ordering mechanism.
+Clients need a durable local cache and outbox. Queue idempotent, uniquely identified operations so retrying after a lost connection does not duplicate an assignment, clue, or log entry. Separately, provide a deduplication and conflict-resolution process for independently entered duplicates, such as the same event logged twice in one log; the process is still to be specified. Synchronize with an ordered host change cursor rather than trusting device wall clocks. Preserve local timestamps for display and audit, but do not use them as the sole ordering mechanism.
 
 Specify behavior for stale clients, deleted or struck-out records, schema changes, and edits made while an operational period is closed. Do not silently discard queued work. Show pending, accepted, rejected, and conflicting changes clearly, with a way to recover/export unsynced work.
 
@@ -422,7 +422,7 @@ token grant database access.
 
 Use incident Wi-Fi as the primary local transport. Bluetooth may be evaluated as a secondary option for pairing or deliberate transfer, but it must not become an unencrypted API channel. If no network is available, support deliberate exchange of encrypted, authenticated incident bundles on removable media where operationally appropriate. Do not send incident data in cleartext over radio.
 
-Protect transport and stored credentials, verify the host identity (especially on an ad hoc field network), and minimize sensitive data in logs and notifications. Establish encryption, key recovery, lost-device handling, retention, and secure deletion requirements before deployments contain real incident or personal information. Document what remains available if a device or host is lost.
+Encrypt data in transit against network monitoring; data-at-rest encryption is not required at this stage. Protect stored credentials, verify the host identity (especially on an ad hoc field network), and minimize sensitive data in logs and notifications. Establish key recovery, lost-device handling, retention, and secure deletion requirements before deployments contain real incident or personal information. Document what remains available if a device or host is lost.
 
 #### Schema and API change management
 
@@ -466,7 +466,7 @@ recoverable standalone application. Completed stages are recorded in
 | Stage | Delivers | State | Size |
 | --- | --- | --- | --- |
 | 0 | Written decisions and constraints | Not evidenced as complete | 1–2 weeks |
-| 1 | Local persistence foundation, including live refresh without flicker | Complete; exit-evidence question open | done (4–7 weeks) |
+| 1 | Local persistence foundation, including live refresh without flicker | Complete; substitute-store evidence accepted | done (4–7 weeks) |
 | 2 | Incident API and local host (T1) | Not started | 4–8 weeks |
 | 3 | Multi-user editing, operator claim, roles, audit (T2) | Not started | 4–7 weeks |
 | 4 | Offline sync and attachments | Not started | 5–9 weeks |
@@ -485,10 +485,9 @@ Stage 1; it must finish before Stage 2 begins.
 
 **Exit criteria:** written decisions, threat and recovery assumptions, first
 API/domain boundary, success measures, and a deliberately limited T1 pilot plan.
-**Status:** not yet evidenced as complete in the repository. The topology and
-design contracts below describe targets, not a record that all required decisions,
-threat/recovery assumptions, API boundaries, success measures and pilot scope have
-been agreed. Record those decisions before starting Stage 2 implementation.
+**Status:** not complete. The [Stage 0 decision inventory](docs/stage-0-decisions.md)
+maps existing targets and outstanding decisions to the exit criteria. Record and
+agree the outstanding decisions before starting Stage 2 implementation.
 **Rough size:** 1–2 person-weeks.
 
 ### Stage 1 — Local persistence foundation (complete)
@@ -508,16 +507,14 @@ by hand against the Maple Ridge example for tab switches and ICS 214 log-entry
 adds with role panels open. This is the standalone part of idea 4; the
 requirements that extend it to multiple stations are in Part III.
 
-**Open exit question:** the stage criteria asked for a `RemoteIncidentStore`
-stub passing the contract suite in an unmerged spike branch. The merged
-test-only, lockless `RemoteIncidentStore` double passes the shared contract and
-is exercised through `AppController`, which is substantial but not literal
-evidence, and no network-backed store has been demonstrated. Either complete the
-spike or explicitly accept the merged double as equivalent evidence.
+**Exit evidence:** on 2026-11-17 the merged test-only, lockless
+`RemoteIncidentStore` double was accepted as equivalent evidence for the
+original unmerged-spike criterion. It passes the shared contract and is
+exercised through `AppController`; it does not demonstrate a network-backed
+store. See the [exit assessment](docs/completed-work.md#stage-1--local-persistence-foundation-prerequisite-for-any-remote-store).
 
 **T0/T1 readiness:** Stage 2 is not yet a cleared start: record the Stage 0
-decisions and resolve the question above. Neither requires an API,
-authentication or outbox in Stage 1.
+decisions. Stage 1 requires no API, authentication or outbox.
 
 ### Stage 2 — Incident API and single local host (delivers T1)
 
