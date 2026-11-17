@@ -339,7 +339,7 @@ transfer). Enforced server-side; clients only hide what they cannot do.
 - **One authority per incident.** A field computer or cloud service is the single authoritative host at a time. Remote mirrors can serve permitted reads and backups, but are not independent writable masters.
 - **Preserve standalone mode.** Existing local-only use remains supported and usable. Shared-host features should be opt-in; no account or server should be required to open and edit a local incident.
 - **Keep a clean contract boundary.** Use a versioned JSON API and explicit transfer objects rather than exposing database entities. HTTP request/response operations are sufficient initially; add a live-update channel only when polling or change feeds no longer meet operational needs.
-- **Avoid premature technology commitments.** Package the application as Java applications for devices able to run Java. Select the database, host deployment form, and identity mechanism in Stage 0 based on offline operation, maintainability by a small team, recovery, and upgrade constraints. PostgreSQL is a reasonable hosted candidate, but a field host must be supportable without internet and without exposing database ports to the incident LAN.
+- **Avoid premature technology commitments.** Package the application as Java applications for devices able to run Java, initially embedding the host service in one application instance. Select the database and identity mechanism in Stage 0 based on offline operation, maintainability by a small team, recovery, and upgrade constraints. PostgreSQL is a reasonable hosted candidate, but a field host must be supportable without internet and without exposing database ports to the incident LAN.
 
 ### Authority, ownership, and transfer
 
@@ -519,9 +519,14 @@ decisions. Stage 1 requires no API, authentication or outbox.
 ### Stage 2 — Incident API and single local host (delivers T1)
 
 Implement the incident-scoped API, host-side validation and persistence, and a
-`RemoteIncidentStore` built on the Stage 1 contract. The first host is the
-desktop application itself (or a small co-installed process) serving other
-workstations on incident Wi-Fi with no internet. Add explicit host identity
+`RemoteIncidentStore` built on the Stage 1 contract. The first host embeds the
+incident service in the desktop Java application, serving other instances on
+incident Wi-Fi with no internet. Initially each host shares one selected incident
+at a time. Both the host UI and connected UIs use that service boundary, with no
+direct-write bypass. See the
+[host mode implementation plan](docs/host-mode-plan.md) for the proposed
+sequence, admission flow, concurrency and recovery evidence, and open scope
+decisions. Add explicit host identity
 (self-signed certificate with fingerprint shown for QR embedding) and health
 status. Device admission by invitation is included here in its simplest form so
 that the API is never reachable without a credential, even in a pilot.

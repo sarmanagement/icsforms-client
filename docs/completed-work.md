@@ -23,6 +23,15 @@ are unrelated to the deployment topologies of the same names.
 
 ## Delivered work
 
+**Planning update, 2026-11-17:** recorded the agreed embedded host-service
+direction in the [Stage 0 inventory](stage-0-decisions.md) and added a
+[host mode implementation plan](host-mode-plan.md). Subsequent decisions cover
+one shared incident per host, version-checked read/save/update operations, local
+PDF/export on both host and clients, explicit sharing, individual admission,
+stop warnings and connection-loss visibility on both sides. Remaining detailed
+implementation choices are proposals; Stage 0 remains open and no Stage 2 code
+is delivered.
+
 | Work | Tracking | Evidence | Status |
 | --- | --- | --- | --- |
 | Core SAR form set (ICS 203, 205, 215A/208, 206 + canine 206, ICS 233-CG clue log), training fixes | #13, #14, #15, #16, #17, #18 — all closed | Models, panels and PDF renderers for each form are in `src/main/java/org/sarmanagement/icsforms/{model,ui,pdf}`; IAP bundle numbering in `pdf/PdfExportService.java` | **Complete.** Former "Stage A" is no longer a prerequisite. |

@@ -13,6 +13,25 @@ The following decisions were provided on 2026-11-17:
 - **Devices and packaging:** support devices able to run Java; package the
   application as Java applications. Exact runtime and platform requirements
   remain to be specified.
+- **Host architecture:** one application can run in host mode and authorize
+  other instances to connect to its backing service. Embed the logically
+  separate service initially; both its own UI and connected UIs use the service
+  boundary without a direct-write bypass. The first implementation shares one
+  selected incident at a time. Standalone mode remains available.
+  The [host mode implementation plan](host-mode-plan.md) records the proposed
+  delivery sequence and distinguishes agreed decisions from remaining proposals.
+- **Service operations:** authorized instances can read, submit changes against
+  their observed version, and check for updates. The host validates submissions
+  and explicitly accepts or reports conflicts/failures, without silent overwrite.
+- **Workstation-local files:** both host and connected workstations can generate
+  PDFs and export files locally. File selection and reading for imports are
+  local too; permission and semantics for importing into shared data remain open.
+- **Sharing lifecycle:** the host operator explicitly starts sharing; connecting
+  instances are admitted individually. Warn before stopping with clients
+  connected and make a deliberate stop clear to reachable clients. Connection
+  loss is visible on both sides once detected; entered work is not silently
+  discarded. An unexplained disconnect cannot establish whether the host
+  stopped or the network failed.
 - **Encryption and threat:** encrypt data in transit against an attacker
   monitoring network traffic. Data-at-rest encryption is not required at this
   stage. Other threats and credential protection remain to be considered.
@@ -32,7 +51,7 @@ The following decisions were provided on 2026-11-17:
 | Devices and networks | Devices able to run Java; Java application packaging; incident Wi-Fi with no internet required; no direct client database access. | Minimum Java runtime, platform and hardware requirements, client count, network and connectivity assumptions, host discovery and address changes, and realistic incident/data sizes for the pilot. |
 | Admission, roles and recovery | Invitation-based device admission and host identity verification; no shared incident password. Stage 2 includes basic admission; Stage 3 expands lifecycle, operator claims and roles. | Stage 2 invitation and credential lifecycle, secure credential storage, expiry and revocation, administrator bootstrap and recovery, lost-device handling, and which permissions are actually enforced in the pilot. Resolve the Stage 2/Stage 3 boundary without weakening the device trust boundary. |
 | Host operations and recovery | Local host without internet; backups and restore are required for later field packaging. | Pilot installation and startup, health and diagnostics, backup frequency and location, restore procedure and drill, host/disk/power failure handling, acceptable data loss and recovery time, and responsible operators. |
-| Versions and technology | Java application packaging; versioned JSON API and explicit transfer objects; host owns authorization, validation and storage. Later topologies are opt-in. | Select host deployment form, persistence and identity technologies after constraints are agreed; define supported client/API versions, compatibility, upgrades, rollback and incompatible-client behavior. |
+| Versions and technology | Java application packaging with an embedded host service; host and connected UIs use the service boundary. Versioned JSON API and explicit transfer objects; host owns authorization, validation and storage. Later topologies are opt-in. | Select persistence and identity technologies after constraints are agreed; define supported client/API versions, compatibility, upgrades, rollback and incompatible-client behavior. |
 | Threat assumptions | Data in transit must be encrypted against network monitoring. Same-network outsiders must be refused; incident boundaries enforced on the host; host identity pinned and device credentials individually revocable in the target design. | Document other attacker capabilities and physical assumptions, sensitive assets, invitation interception, lost devices, host impersonation, credential compromise and residual risks; decide mitigations and recovery appropriate to the pilot. |
 | First API/domain boundary | Clients use an incident-scoped API, not the database; host validates and authorizes requests. | Specify the initial operations and DTO/domain ownership, incident isolation, version negotiation, revision and conflict semantics, errors and update/freshness mechanism. Do not assume file-store revisions or advisory locks are universally available. |
 | Success measures and pilot | Stage 2 exit criteria require two admitted workstations, isolation, unchanged standalone operation, remote-store contract coverage, visible staleness and draft-preserving refresh. | Agree measurable performance, join, reliability, recovery and usability thresholds and how they will be tested; choose participants, environment, duration, permitted data, scope, stop conditions and decision owner. |
