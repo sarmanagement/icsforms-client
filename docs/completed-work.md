@@ -52,8 +52,10 @@ events and singleton forms a common immutable identity contract. JSON writes
 canonical `id` properties and reads the old field-specific identity names as
 aliases. Schema 18 load migration assigns missing IDs and deterministically
 repairs duplicate stored IDs while preserving the first occurrence; migration is
-persisted before the load returns. External imports reject blank or duplicate
-IDs, while stored files remain tolerant of unknown properties and log warnings.
+persisted before the load returns. Local create and save also normalize missing
+or duplicate identities before committing. External imports reject blank or
+duplicate IDs, while stored files remain tolerant of unknown properties and log
+warnings.
 
 New-period, plan-reuse, channel-import, facility-snapshot and incident-duplicate
 paths mint IDs for copied records and remap internal references where the

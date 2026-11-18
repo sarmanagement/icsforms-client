@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 17,
+  "schemaVersion" : 18,
   "incidentId" : "1b3c720f-48d7-3658-a226-c16b7ef56dcb",
   "revision" : 0,
   "createdAt" : "2026-07-18T10:30:00Z",
@@ -12,6 +12,7 @@
   "iapPlanningStage" : "OPERATIONAL_PERIOD_ACTIVE",
   "operationalPeriodHistory" : [ ],
   "incidentContext" : {
+    "id" : "4c278bac-d694-34e8-810f-2c9a41339412",
     "incidentName" : "FICTIONAL EXERCISE - Maple Ridge missing adult with dementia",
     "operationalPeriodStart" : "2026-07-18T11:00:00",
     "operationalPeriodEnd" : "2026-07-18T23:00:00",
@@ -20,6 +21,7 @@
     "taskMap" : "MR-EX-01: fictional residence IPP, separate staging and ICP, spokes A/B/C, rim R1/R2, zones K1-K4"
   },
   "organizationalChart" : {
+    "id" : "a5678abf-febf-3069-a8cc-f1715bc845ff",
     "incidentCommanders" : [ "Avery Wren" ],
     "incidentCommanderRadio" : "MR SAR 1",
     "incidentCommanderPhone" : "",
@@ -114,6 +116,7 @@
     "preservedLegacyConflicts" : [ ]
   },
   "form201" : {
+    "id" : "61e87154-fa09-3042-96df-c35435d803e4",
     "incidentName" : "FICTIONAL EXERCISE - Maple Ridge missing adult with dementia",
     "incidentNumber" : "EXERCISE-MR-2026-01",
     "dateInitiated" : null,
@@ -130,52 +133,53 @@
     "iapPage" : ""
   },
   "form202" : {
+    "id" : "8057e472-6364-3ebf-8b2a-bd1ec0885608",
     "objectives" : [ "Mitigate all hazards to responders and the general public to an acceptable level, with particular attention to heat stress and tick exposure, throughout the entire duration of the incident.", "By 1000, complete hasty searches of the three most likely travel corridors from IPP to containment boundary at least once.", "By 0800, establish containment of both likely egress points and maintain it through 1900.", "By 1700, search the high-probability inner 25% zone to a coverage target of approximately 1.", "By 1200, search all three familiar attractors and associated hazard points within 1 km of IPP." ],
     "structuredObjectives" : [ {
-      "objectiveId" : "de81f570-d097-3cbf-a138-006010aab6c2",
       "text" : "Mitigate all hazards to responders and the general public to an acceptable level, with particular attention to heat stress and tick exposure, throughout the entire duration of the incident.",
       "displayOrder" : 0,
       "assessment" : "NOT_ASSESSED",
       "assessmentNote" : "",
       "assessedBy" : "",
       "assessedAt" : null,
-      "predecessorObjectiveId" : ""
+      "predecessorObjectiveId" : "",
+      "id" : "de81f570-d097-3cbf-a138-006010aab6c2"
     }, {
-      "objectiveId" : "87676fc3-e4d5-30f6-86eb-a876c3222e9b",
       "text" : "By 1000, complete hasty searches of the three most likely travel corridors from IPP to containment boundary at least once.",
       "displayOrder" : 1,
       "assessment" : "NOT_ASSESSED",
       "assessmentNote" : "",
       "assessedBy" : "",
       "assessedAt" : null,
-      "predecessorObjectiveId" : ""
+      "predecessorObjectiveId" : "",
+      "id" : "87676fc3-e4d5-30f6-86eb-a876c3222e9b"
     }, {
-      "objectiveId" : "481a1f2a-bc26-341e-8fc7-60b4ebf0f153",
       "text" : "By 0800, establish containment of both likely egress points and maintain it through 1900.",
       "displayOrder" : 2,
       "assessment" : "NOT_ASSESSED",
       "assessmentNote" : "",
       "assessedBy" : "",
       "assessedAt" : null,
-      "predecessorObjectiveId" : ""
+      "predecessorObjectiveId" : "",
+      "id" : "481a1f2a-bc26-341e-8fc7-60b4ebf0f153"
     }, {
-      "objectiveId" : "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6",
       "text" : "By 1700, search the high-probability inner 25% zone to a coverage target of approximately 1.",
       "displayOrder" : 3,
       "assessment" : "NOT_ASSESSED",
       "assessmentNote" : "",
       "assessedBy" : "",
       "assessedAt" : null,
-      "predecessorObjectiveId" : ""
+      "predecessorObjectiveId" : "",
+      "id" : "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6"
     }, {
-      "objectiveId" : "764b78e2-6a38-36c7-9151-d124af31d7a8",
       "text" : "By 1200, search all three familiar attractors and associated hazard points within 1 km of IPP.",
       "displayOrder" : 4,
       "assessment" : "NOT_ASSESSED",
       "assessmentNote" : "",
       "assessedBy" : "",
       "assessedAt" : null,
-      "predecessorObjectiveId" : ""
+      "predecessorObjectiveId" : "",
+      "id" : "764b78e2-6a38-36c7-9151-d124af31d7a8"
     } ],
     "commandEmphasis" : "FICTIONAL EXERCISE ONLY. Prioritize responder/public safety and protect IPP scent. Hasty-search likely travel corridors and familiar attractors; maintain containment. Search the high-probability inner 25% zone to coverage approximately 1; reassess heat and tick hazards.",
     "situationalAwareness" : "0815 July 18, 2026 exercise snapshot. Fictional Ellis Linden, 74-year-old adult with dementia, last seen 0500 EDT July 18 at Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA. Wearing a blue shirt and tan trousers; may hide or not answer. T1's three visual trackers returned at 0800 after 0700-0800 work around IPP, debriefed at 0810: a definitely human sign line led north, with no clear prints or sole pattern. This potential clue was flagged on Ops instruction; subject association remains unverified and follow-up has not yet been undertaken. Forecast 27-31 C, humid, light wind; shaded woodland, uneven trails and creek edges. Staging: Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP). Separate command post: ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP). Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) provides water resupply, an unstaffed human aid-supply cache and heat rehab coordination. All teams report directly to Ops; no branches, divisions or groups. 36 human field searchers INCLUDE four handlers. Six IMT at ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); IC Avery Wren is Sheriff of Fictional Pine County Sheriff's Office. No aircraft. Seven teams active at 0815; returned trackers are available at staging for K3 at 1030. Ops must reassess span before later launches and stagger/pause work if direct supervision becomes unsafe; eight teams is not assumed manageable. Koster hub/spokes/rim guides prioritization, not a guarantee of containment. No negative search guarantees absence. Summer heat and ticks require continuous reassessment.",
@@ -192,6 +196,7 @@
     "iapPage" : ""
   },
   "form215a" : {
+    "id" : "3c397e0f-f2e0-3fa5-bc93-454f60f40ea3",
     "incidentNumber" : "EXERCISE-MR-2026-01",
     "preparedDateTime" : "2026-07-18T10:40:00",
     "safetyOfficerName" : "Jordan Reed",
@@ -200,29 +205,28 @@
     "operationsSectionChiefSignature" : "",
     "reviewedDateTime" : "2026-07-18T10:50:00",
     "entries" : [ {
-      "entryId" : "b92e5c56-38cd-347c-a55d-2c00e9663f32",
       "incidentArea" : "All Maple Ridge field assignments",
       "hazardsRisks" : "Ticks / tick-borne illness",
       "mitigations" : "Use repellent per label, long trousers and buddy tick checks at 1000 and ; promptly remove attached ticks with proper tool and report exposures to MEDL.",
-      "equipmentPpe" : "Repellent, tick-removal kit"
+      "equipmentPpe" : "Repellent, tick-removal kit",
+      "id" : "b92e5c56-38cd-347c-a55d-2c00e9663f32"
     }, {
-      "entryId" : "2d4f6ece-3a16-3ed2-b47d-751df1dbd8dc",
       "incidentArea" : "All Maple Ridge field assignments",
       "hazardsRisks" : "Falls / uneven terrain / creek edges",
       "mitigations" : "Maintain buddy contact, deliberate footing and suitable boots; avoid unstable banks and water entry. Stop and report unsafe crossings; use an alternate route authorized by Ops.",
-      "equipmentPpe" : "Boots, map, radio"
+      "equipmentPpe" : "Boots, map, radio",
+      "id" : "2d4f6ece-3a16-3ed2-b47d-751df1dbd8dc"
     }, {
-      "entryId" : "80546642-d7b4-3256-b0d4-f6e2c334a503",
       "incidentArea" : "All Maple Ridge field assignments",
       "hazardsRisks" : "Summer heat / dehydration / canine heat stress",
       "mitigations" : "Water resupply at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) by 0900; hourly hydration/electrolyte checks for all field teams. Mandatory heat rehab with shaded rest and heat-illness checks from 1300 at Base, plus rest as needed; Ops staggers search-team returns to Base. Containment posts remain staffed: observation buddies alternate 1300-1320/1320-1340 in adjacent shade, retaining buddy contact and uninterrupted observation; repeat at least hourly. Ops must arrange qualified relief before either post pair travels to Base; never send both observers away without relief. Canine 20-minute work/cooling cycles; handlers monitor dogs continuously. Stop work for heat illness signs; notify MEDL, cool safely and request assistance.",
-      "equipmentPpe" : "Water, shade, canine cooling supplies"
+      "equipmentPpe" : "Water, shade, canine cooling supplies",
+      "id" : "80546642-d7b4-3256-b0d4-f6e2c334a503"
     } ],
     "includeInIap" : true,
     "iapPage" : ""
   },
   "form215" : {
-    "worksheetId" : "f948e2c9-af9b-32a0-adc7-0c854bebcf6f",
     "targetPeriodStart" : null,
     "targetPeriodEnd" : null,
     "branch" : "",
@@ -239,10 +243,10 @@
     "iapPage" : "",
     "paperSize" : "LETTER",
     "resourceHeadings" : [ ],
-    "workRows" : [ ]
+    "workRows" : [ ],
+    "id" : "f948e2c9-af9b-32a0-adc7-0c854bebcf6f"
   },
   "nextPeriodForm215" : {
-    "worksheetId" : "f0bc813f-3726-32b8-9949-ee805922e5d7",
     "targetPeriodStart" : null,
     "targetPeriodEnd" : null,
     "branch" : "",
@@ -259,10 +263,12 @@
     "iapPage" : "",
     "paperSize" : "LETTER",
     "resourceHeadings" : [ ],
-    "workRows" : [ ]
+    "workRows" : [ ],
+    "id" : "f0bc813f-3726-32b8-9949-ee805922e5d7"
   },
   "ics215Enabled" : false,
   "form208" : {
+    "id" : "326ec1e9-4568-3f48-818c-84e08c193478",
     "messageType" : "SAFETY_MESSAGE_PLAN",
     "authorRole" : "SAFETY_OFFICER",
     "messageMode" : "HAZARD_PRECAUTIONS",
@@ -310,13 +316,13 @@
   },
   "form205aIapPage" : "",
   "form207" : {
+    "id" : "35bb1f37-92e5-3e6e-a8ad-5973ea014473",
     "preparedByName" : "",
     "preparedByPositionTitle" : "",
     "preparedDateTime" : null,
     "iapPage" : ""
   },
   "form204" : {
-    "formId" : "49fee19d-d066-30c8-959b-0cc646778e4f",
     "managementContext" : "stagingArea",
     "branch" : "",
     "division" : "",
@@ -329,7 +335,6 @@
     "divisionGroupSupervisorName" : "",
     "divisionGroupSupervisorContact" : "",
     "resourcesAssigned" : [ {
-      "assignmentId" : "66f31202-4151-3cb9-9f78-32960ef8c534",
       "assignmentTeamNumber" : "S1",
       "resourceType" : "Ground",
       "taskType" : "Route",
@@ -344,9 +349,9 @@
       "remarks" : "on task",
       "notes" : "",
       "assignment" : "Rapid hasty route search of spoke A north footpath 1.2 km to north gate R1; inspect adjacent hazards from safe ground. Report GPS track, clues and unsearched gaps to Ops at task end; debrief by radio, take water/rest before next task; do not contaminate the residence IPP.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "87676fc3-e4d5-30f6-86eb-a876c3222e9b" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "87676fc3-e4d5-30f6-86eb-a876c3222e9b" ],
+      "id" : "66f31202-4151-3cb9-9f78-32960ef8c534"
     }, {
-      "assignmentId" : "6db03356-9c41-3d65-980d-bf901ff49f86",
       "assignmentTeamNumber" : "S2",
       "resourceType" : "Ground",
       "taskType" : "Route",
@@ -361,9 +366,9 @@
       "remarks" : "on task",
       "notes" : "",
       "assignment" : "Rapid hasty route search of spoke B east lane 1.0 km to footbridge R2; inspect adjacent hazards from safe ground. Report GPS track, clues and unsearched gaps to Ops at task end; debrief by radio, take water/rest before next task; do not contaminate the residence IPP.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "87676fc3-e4d5-30f6-86eb-a876c3222e9b" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "87676fc3-e4d5-30f6-86eb-a876c3222e9b" ],
+      "id" : "6db03356-9c41-3d65-980d-bf901ff49f86"
     }, {
-      "assignmentId" : "eed3e57a-36b3-3c4c-b829-6d07c54a5f6a",
       "assignmentTeamNumber" : "S3",
       "resourceType" : "Ground",
       "taskType" : "Route",
@@ -378,9 +383,9 @@
       "remarks" : "on task",
       "notes" : "",
       "assignment" : "Rapid hasty route search of spoke C south creek trail 0.8 km to rim marker C; inspect adjacent hazards from safe ground. Report GPS track, clues and unsearched gaps to Ops at task end; debrief by radio, take water/rest before next task; do not contaminate the residence IPP.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "87676fc3-e4d5-30f6-86eb-a876c3222e9b" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "87676fc3-e4d5-30f6-86eb-a876c3222e9b" ],
+      "id" : "eed3e57a-36b3-3c4c-b829-6d07c54a5f6a"
     }, {
-      "assignmentId" : "0742c0fb-deae-388a-8da4-f7dbacf4e5dc",
       "assignmentTeamNumber" : "R1",
       "resourceType" : "Ground",
       "taskType" : "Point",
@@ -395,9 +400,9 @@
       "remarks" : "on task",
       "notes" : "",
       "assignment" : "Establish observation at R1 north gate by 0800, maintain through 1900; report sightings. Not an impermeable perimeter. Parker Elm observes while Remy Shore rests in adjacent shaded shelter 1300-1320; reverse roles 1320-1340. Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact and uninterrupted observation. Both stay on this task; no borrowed search-team relief. If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. 1830  preparations do not authorize leaving before 1900.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "481a1f2a-bc26-341e-8fc7-60b4ebf0f153" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "481a1f2a-bc26-341e-8fc7-60b4ebf0f153" ],
+      "id" : "0742c0fb-deae-388a-8da4-f7dbacf4e5dc"
     }, {
-      "assignmentId" : "a9f45271-df3c-358c-86e1-d7571f439cd5",
       "assignmentTeamNumber" : "R2",
       "resourceType" : "Ground",
       "taskType" : "Point",
@@ -412,9 +417,9 @@
       "remarks" : "on task",
       "notes" : "",
       "assignment" : "Establish observation at R2 east footbridge by 0800, maintain through 1900; report sightings. Not an impermeable perimeter. Sage Linden observes while Toby Flint rests in adjacent shaded shelter 1300-1320; reverse roles 1320-1340. Repeat staggered water/rest at least hourly and as needed, retaining buddy voice/visual contact and uninterrupted observation. Both stay on this task; no borrowed search-team relief. If safe rest cannot be maintained, notify Ops for reassessment; do not silently abandon post. 1830  preparations do not authorize leaving before 1900.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "481a1f2a-bc26-341e-8fc7-60b4ebf0f153" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "481a1f2a-bc26-341e-8fc7-60b4ebf0f153" ],
+      "id" : "a9f45271-df3c-358c-86e1-d7571f439cd5"
     }, {
-      "assignmentId" : "ae28f7f2-ea1e-3605-afa5-854db77e537a",
       "assignmentTeamNumber" : "K1",
       "resourceType" : "Canine",
       "taskType" : "Area",
@@ -429,9 +434,9 @@
       "remarks" : "on task",
       "notes" : "",
       "assignment" : "Search bounded high-probability inner-ring (25% zone) K1 (15-hectare coverage target) beside spoke A; coordinate nonoverlapping ground subsegments with G1/G2 toward coverage approximately 1 over the 60-hectare zone, not repeated sweeps of the same tracks. Prioritize downwind segments after checking wind; target completion by 1700. Handler and three support searchers work live-find area search in 20-minute bouts with at least 20-minute shaded cooling/water breaks. Reassess at each break; stop for heat distress, unsafe footing or loss of radio contact. Report actual GPS coverage and gaps; no assumed POD. Rest rotation at 1300.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ],
+      "id" : "ae28f7f2-ea1e-3605-afa5-854db77e537a"
     }, {
-      "assignmentId" : "ac274954-b5aa-3b4d-9851-5bbc7141beb4",
       "assignmentTeamNumber" : "K2",
       "resourceType" : "Canine",
       "taskType" : "Area",
@@ -446,9 +451,9 @@
       "remarks" : "on task",
       "notes" : "",
       "assignment" : "Search bounded high-probability inner-ring (25% zone) K2 (15-hectare coverage target) beside spoke B; coordinate nonoverlapping ground subsegments with G1/G2 toward coverage approximately 1 over the 60-hectare zone, not repeated sweeps of the same tracks. Prioritize downwind segments after checking wind; target completion by 1700. Handler and three support searchers work live-find area search in 20-minute bouts with at least 20-minute shaded cooling/water breaks. Reassess at each break; stop for heat distress, unsafe footing or loss of radio contact. Report actual GPS coverage and gaps; no assumed POD. Rest rotation at 1300.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ],
+      "id" : "ac274954-b5aa-3b4d-9851-5bbc7141beb4"
     }, {
-      "assignmentId" : "47ebf0c0-cd26-3432-bcb1-937a1c8fc630",
       "assignmentTeamNumber" : "K3",
       "resourceType" : "Canine",
       "taskType" : "Area",
@@ -463,9 +468,9 @@
       "remarks" : "planned",
       "notes" : "",
       "assignment" : "Search bounded high-probability inner-ring (25% zone) K3 (15-hectare coverage target) beside spoke C; coordinate nonoverlapping ground subsegments with G1/G2 toward coverage approximately 1 over the 60-hectare zone, not repeated sweeps of the same tracks. Prioritize downwind segments after checking wind; target completion by 1700. Handler and three support searchers work live-find area search in 20-minute bouts with at least 20-minute shaded cooling/water breaks. Reassess at each break; stop for heat distress, unsafe footing or loss of radio contact. Report actual GPS coverage and gaps; no assumed POD. Rest rotation at 1300. At 1030 handler MR-P29 takes available G2 support MR-P13/MR-P14/MR-P15; original K3 support MR-P30/MR-P31/MR-P32 are released to staging reserve until G2 grid.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ],
+      "id" : "47ebf0c0-cd26-3432-bcb1-937a1c8fc630"
     }, {
-      "assignmentId" : "d0efad2c-9292-3d70-b671-8515a3eaaf28",
       "assignmentTeamNumber" : "K4",
       "resourceType" : "Canine",
       "taskType" : "Area",
@@ -480,9 +485,9 @@
       "remarks" : "planned",
       "notes" : "",
       "assignment" : "Search bounded high-probability inner-ring (25% zone) K4 (15-hectare coverage target) beside spoke A; coordinate nonoverlapping ground subsegments with G1/G2 toward coverage approximately 1 over the 60-hectare zone, not repeated sweeps of the same tracks. Prioritize downwind segments after checking wind; target completion by 1700. Handler and three support searchers work live-find area search in 20-minute bouts with at least 20-minute shaded cooling/water breaks. Reassess at each break; stop for heat distress, unsafe footing or loss of radio contact. Report actual GPS coverage and gaps; no assumed POD. Rest rotation at 1300.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ],
+      "id" : "d0efad2c-9292-3d70-b671-8515a3eaaf28"
     }, {
-      "assignmentId" : "6d92a88c-89c0-3183-8f90-dbebf71751a3",
       "assignmentTeamNumber" : "P1",
       "resourceType" : "Ground",
       "taskType" : "Point",
@@ -497,9 +502,9 @@
       "remarks" : "planned",
       "notes" : "",
       "assignment" : "After both S1/S2 debriefs and water/rest, reassemble all eight G1 members and search all three attractors within 1 km of residence/IPP by 1200: former bus stop, garden pond/shelter and creek crossing beside old meeting hall. Inspect hazard/water points from safe ground, no water entry. Ask permission before entry, use calm introductions, document each check and negative result; report gaps to Ops. Do not depart while either S1 or S2 remains active.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "764b78e2-6a38-36c7-9151-d124af31d7a8" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "764b78e2-6a38-36c7-9151-d124af31d7a8" ],
+      "id" : "6d92a88c-89c0-3183-8f90-dbebf71751a3"
     }, {
-      "assignmentId" : "65978672-3964-322d-9f7d-94d17b7f996e",
       "assignmentTeamNumber" : "G1-AREA",
       "resourceType" : "Ground",
       "taskType" : "Area",
@@ -514,9 +519,9 @@
       "remarks" : "planned",
       "notes" : "",
       "assignment" : "After prior tasks and water/rest, grid assigned subsegments of the high-probability inner 25% zone with all eight original G1 members. (K1/K2 for G1; K3/K4 for G2). Ops coordinates boundaries with canine teams. Target zone coverage approximately 1 by 1700; record actual GPS tracks, spacing and gaps, reassess detection estimates rather than assuming success. Take shaded rest/heat checks at 1300 and as needed; hourly hydration checks. No water entry.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ],
+      "id" : "65978672-3964-322d-9f7d-94d17b7f996e"
     }, {
-      "assignmentId" : "5986a474-8c51-3969-894a-19e69417f70e",
       "assignmentTeamNumber" : "G2-AREA",
       "resourceType" : "Ground",
       "taskType" : "Area",
@@ -531,9 +536,9 @@
       "remarks" : "planned",
       "notes" : "",
       "assignment" : "After prior tasks and water/rest, grid assigned subsegments of the high-probability inner 25% zone with MR-P09 through MR-P12, reserve MR-P16 and released K3 support MR-P30/MR-P31/MR-P32; MR-P13/MR-P14/MR-P15 remain with K3, not G2 grid. (K1/K2 for G1; K3/K4 for G2). Ops coordinates boundaries with canine teams. Target zone coverage approximately 1 by 1700; record actual GPS tracks, spacing and gaps, reassess detection estimates rather than assuming success. Take shaded rest/heat checks at 1300 and as needed; hourly hydration checks. No water entry.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "e0577874-a2bd-3ab9-8a13-3bd16dfa3bb6" ],
+      "id" : "5986a474-8c51-3969-894a-19e69417f70e"
     }, {
-      "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
       "assignmentTeamNumber" : "T1",
       "resourceType" : "Ground",
       "taskType" : "Area",
@@ -548,7 +553,8 @@
       "remarks" : "returned",
       "notes" : "",
       "assignment" : "Three-person visual tracker examination around residence/IPP to establish direction of travel. Protect sign and scent, avoid trampling, report potential clues to Ops; return to staging for debrief before further tasking. Completed task retained in this IAP.",
-      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "87676fc3-e4d5-30f6-86eb-a876c3222e9b" ]
+      "objectiveIds" : [ "de81f570-d097-3cbf-a138-006010aab6c2", "87676fc3-e4d5-30f6-86eb-a876c3222e9b" ],
+      "id" : "32beef48-9239-3481-8dcf-22f924c8022f"
     } ],
     "sharedWorkAssignment" : "Koster hub/spokes/rim. All teams report directly to Ops; protect the hub. No aircraft. Human field strength 36 including four canine handlers; dogs do not add personnel. G1-A/G1-B search routes A/B concurrently; G2-A searches C, four people each, 0715-1000. MR-P13/MR-P14/MR-P15 completed visual tracker task T1 around IPP 0700-0800, debriefed at 0810, and are available at staging for K3 at 1030 with handler MR-P29. Released K3 support MR-P30/MR-P31/MR-P32 and G2 member MR-P16 remain staging reserve until joining MR-P09 through MR-P12 for eight-person G2 grid at 1030. G1 reassembles eight for attractors at 1030 and grid at 1230. IPP: Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA. ICP: ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP). Staging is separate from both.",
     "specialInstructions" : "FICTIONAL EXERCISE ONLY. Calm approach to vulnerable adult; do not chase. Preserve clues, report location immediately, avoid contaminating scent articles. T1 reported a definitely human sign line north of IPP, with no clear prints or sole pattern; Ops instructed trackers to flag the potential clue and return. Subject association unverified; follow-up not yet undertaken at 0815. Preserve the flagged location pending Ops direction. Check in every 30 minutes. Buddy contact, tick checks, water and shaded rest per ICS 208. Seven teams initially active; Ops reassesses span before later launches and staggers/pauses work rather than assuming eight active teams manageable. No simultaneous tasks for any member.",
@@ -572,12 +578,11 @@
     "preparedBySignature" : "",
     "preparedDateTime" : "2026-07-18T10:50:00",
     "formNumber" : "ICS 204",
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "49fee19d-d066-30c8-959b-0cc646778e4f"
   },
   "form205" : {
-    "formId" : "25522b39-36b5-3ce9-9464-f90e4afe661f",
     "channels" : [ {
-      "channelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
       "zoneGroup" : "EXERCISE",
       "channelNumber" : "1",
       "function" : "Command / tactical / medical",
@@ -601,19 +606,20 @@
       "radioCheckedBy" : "Taylor Brook",
       "radioCheckedAt" : "2026-07-18T10:50:00",
       "radioCheckNotes" : "Simulated exercise check at ICP, staging, IPP and rim; not a real coverage survey.",
-      "programmingMetadata" : { }
+      "programmingMetadata" : { },
+      "id" : "af140be6-b4cd-364b-93f5-a67c42603f4e"
     } ],
     "specialInstructions" : "Plain language. Position/status checks every 30 minutes. Emergency traffic has priority; report location, injury, access and assistance needed.",
     "preparedByName" : "Taylor Brook",
     "preparedBySignature" : "",
     "datePrepared" : "2026-07-18T10:45:00",
     "preparedDateTime" : "2026-07-18T10:45:00",
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "25522b39-36b5-3ce9-9464-f90e4afe661f"
   },
   "ics205Enabled" : true,
   "additionalForms204" : [ ],
   "activityLogs" : [ {
-    "logId" : "d9292380-3fed-3d2f-bc5a-bfce5c438ee5",
     "linkedIcs204FormId" : "",
     "linkedSarTaskAssignmentId" : "",
     "linkedResourceId" : "",
@@ -902,211 +908,212 @@
       "resourceId" : "fc761268-10f8-34db-b17e-9fc96a6f6769"
     } ],
     "activityLog" : [ {
-      "entryId" : "7f6e6349-c47b-3293-a9a3-7680408cf158",
       "timestamp" : "2026-07-18T10:30:00",
       "eventTypeId" : "FREE_TEXT",
       "resourceIdentifier" : "Ops",
       "assignmentId" : "",
       "notableActivity" : "0630 command established at ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); all 42 people checked in: 36 field including four handlers and six IMT (IC, Ops, Planning, Safety, COML, MEDL); four dogs checked in as equipment.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "7f6e6349-c47b-3293-a9a3-7680408cf158"
     }, {
-      "entryId" : "9e3e06de-fcac-3e95-bc69-fe52118fd0b0",
       "timestamp" : "2026-07-18T10:50:00",
       "eventTypeId" : "COMMUNICATIONS_CHECK",
       "resourceIdentifier" : "Ops",
       "assignmentId" : "",
       "notableActivity" : "0650 Communications Check: MR SAR 1; successful; checked by Taylor Brook. Simulated exercise check at ICP, staging, IPP and rim; not a real coverage survey.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "9e3e06de-fcac-3e95-bc69-fe52118fd0b0"
     }, {
-      "entryId" : "bb374e96-8780-3f11-b5b2-9c2210fe3211",
       "timestamp" : "2026-07-18T11:00:00",
       "eventTypeId" : "FREE_TEXT",
       "resourceIdentifier" : "Ops",
       "assignmentId" : "",
       "notableActivity" : "0700 exercise briefing: objectives, dementia-aware approach, tick/fall/heat controls; human aid cache and heat rehab at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP). All field teams report directly to Ops.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "bb374e96-8780-3f11-b5b2-9c2210fe3211"
     }, {
-      "entryId" : "a7653f19-31cc-3a65-aa30-310166a23430",
       "timestamp" : "2026-07-18T11:00:00",
       "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
       "resourceIdentifier" : "Visual trackers",
       "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
       "notableActivity" : "0700 T1 visual trackers MR-P13/MR-P14/MR-P15 departed staging for the residence/IPP.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "a7653f19-31cc-3a65-aa30-310166a23430"
     }, {
-      "entryId" : "29017e13-14f5-33a4-abff-2b37d3cf753b",
       "timestamp" : "2026-07-18T11:05:00",
       "eventTypeId" : "RESOURCE_ON_TASK",
       "resourceIdentifier" : "Visual trackers",
       "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
       "notableActivity" : "0705 T1 on task around residence/IPP; all three trackers accounted for.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "29017e13-14f5-33a4-abff-2b37d3cf753b"
     }, {
-      "entryId" : "199ca71d-cb6c-3e09-af14-ffa1c01a8cdb",
       "timestamp" : "2026-07-18T11:10:00",
       "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
       "resourceIdentifier" : "G1-A",
       "assignmentId" : "66f31202-4151-3cb9-9f78-32960ef8c534",
       "notableActivity" : "0710 S1 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "199ca71d-cb6c-3e09-af14-ffa1c01a8cdb"
     }, {
-      "entryId" : "d6ea2879-f7d0-325a-8bb3-2a745dad1627",
       "timestamp" : "2026-07-18T11:10:00",
       "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
       "resourceIdentifier" : "G1-B",
       "assignmentId" : "6db03356-9c41-3d65-980d-bf901ff49f86",
       "notableActivity" : "0710 S2 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "d6ea2879-f7d0-325a-8bb3-2a745dad1627"
     }, {
-      "entryId" : "be0b5f78-86ba-30a8-b702-9a4d6a7129b3",
       "timestamp" : "2026-07-18T11:10:00",
       "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
       "resourceIdentifier" : "G2-A",
       "assignmentId" : "eed3e57a-36b3-3c4c-b829-6d07c54a5f6a",
       "notableActivity" : "0710 S3 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "be0b5f78-86ba-30a8-b702-9a4d6a7129b3"
     }, {
-      "entryId" : "eacf9569-cdba-3bc9-869f-ab9dc1d39117",
       "timestamp" : "2026-07-18T11:10:00",
       "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
       "resourceIdentifier" : "Observation 1",
       "assignmentId" : "0742c0fb-deae-388a-8da4-f7dbacf4e5dc",
       "notableActivity" : "0710 R1 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "eacf9569-cdba-3bc9-869f-ab9dc1d39117"
     }, {
-      "entryId" : "4eb58ff8-45b7-33b0-bdab-2d6a669dda17",
       "timestamp" : "2026-07-18T11:10:00",
       "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
       "resourceIdentifier" : "Observation 2",
       "assignmentId" : "a9f45271-df3c-358c-86e1-d7571f439cd5",
       "notableActivity" : "0710 R2 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "4eb58ff8-45b7-33b0-bdab-2d6a669dda17"
     }, {
-      "entryId" : "8bdca13c-46d4-3591-8164-31582b517bfa",
       "timestamp" : "2026-07-18T11:15:00",
       "eventTypeId" : "RESOURCE_ON_TASK",
       "resourceIdentifier" : "G1-A",
       "assignmentId" : "66f31202-4151-3cb9-9f78-32960ef8c534",
       "notableActivity" : "0715 S1 on task; all assigned resources accounted for. Search commenced; report actual coverage and gaps to Ops.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "8bdca13c-46d4-3591-8164-31582b517bfa"
     }, {
-      "entryId" : "f8db4c9e-38bc-3f5a-a2f3-796f3acae5f8",
       "timestamp" : "2026-07-18T11:15:00",
       "eventTypeId" : "RESOURCE_ON_TASK",
       "resourceIdentifier" : "G1-B",
       "assignmentId" : "6db03356-9c41-3d65-980d-bf901ff49f86",
       "notableActivity" : "0715 S2 on task; all assigned resources accounted for. Search commenced; report actual coverage and gaps to Ops.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "f8db4c9e-38bc-3f5a-a2f3-796f3acae5f8"
     }, {
-      "entryId" : "ce429870-fb36-35b9-b223-3130236057bb",
       "timestamp" : "2026-07-18T11:15:00",
       "eventTypeId" : "RESOURCE_ON_TASK",
       "resourceIdentifier" : "G2-A",
       "assignmentId" : "eed3e57a-36b3-3c4c-b829-6d07c54a5f6a",
       "notableActivity" : "0715 S3 on task; all assigned resources accounted for. Search commenced; report actual coverage and gaps to Ops.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "ce429870-fb36-35b9-b223-3130236057bb"
     }, {
-      "entryId" : "6a53d96a-3fb7-3579-bde6-5f3e5b00d75f",
       "timestamp" : "2026-07-18T11:15:00",
       "eventTypeId" : "RESOURCE_ON_TASK",
       "resourceIdentifier" : "Observation 1",
       "assignmentId" : "0742c0fb-deae-388a-8da4-f7dbacf4e5dc",
       "notableActivity" : "0715 R1 on task; all assigned resources accounted for. Containment observation established; maintain through 1900.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "6a53d96a-3fb7-3579-bde6-5f3e5b00d75f"
     }, {
-      "entryId" : "c4f39644-d867-37ad-aa4b-2be5c956c5e4",
       "timestamp" : "2026-07-18T11:15:00",
       "eventTypeId" : "RESOURCE_ON_TASK",
       "resourceIdentifier" : "Observation 2",
       "assignmentId" : "a9f45271-df3c-358c-86e1-d7571f439cd5",
       "notableActivity" : "0715 R2 on task; all assigned resources accounted for. Containment observation established; maintain through 1900.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "c4f39644-d867-37ad-aa4b-2be5c956c5e4"
     }, {
-      "entryId" : "24774cee-4578-346d-8762-553ee34cfab6",
       "timestamp" : "2026-07-18T11:25:00",
       "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
       "resourceIdentifier" : "Canine 1",
       "assignmentId" : "ae28f7f2-ea1e-3605-afa5-854db77e537a",
       "notableActivity" : "0725 K1 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel and dog.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "24774cee-4578-346d-8762-553ee34cfab6"
     }, {
-      "entryId" : "60202487-f193-3e72-8be1-70c533f50c54",
       "timestamp" : "2026-07-18T11:25:00",
       "eventTypeId" : "RESOURCE_DEPARTED_STAGING",
       "resourceIdentifier" : "Canine 2",
       "assignmentId" : "ac274954-b5aa-3b4d-9851-5bbc7141beb4",
       "notableActivity" : "0725 K2 departed Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) with all assigned personnel and dog.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "60202487-f193-3e72-8be1-70c533f50c54"
     }, {
-      "entryId" : "75d16e89-a2ae-3939-b6b0-bbeaecb67290",
       "timestamp" : "2026-07-18T11:30:00",
       "eventTypeId" : "RESOURCE_ON_TASK",
       "resourceIdentifier" : "Canine 1",
       "assignmentId" : "ae28f7f2-ea1e-3605-afa5-854db77e537a",
       "notableActivity" : "0730 K1 on task; all assigned resources accounted for. Search commenced; report actual coverage and gaps to Ops.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "75d16e89-a2ae-3939-b6b0-bbeaecb67290"
     }, {
-      "entryId" : "44ae0946-9bff-3743-9edb-01856e90796f",
       "timestamp" : "2026-07-18T11:30:00",
       "eventTypeId" : "RESOURCE_ON_TASK",
       "resourceIdentifier" : "Canine 2",
       "assignmentId" : "ac274954-b5aa-3b4d-9851-5bbc7141beb4",
       "notableActivity" : "0730 K2 on task; all assigned resources accounted for. Search commenced; report actual coverage and gaps to Ops.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "44ae0946-9bff-3743-9edb-01856e90796f"
     }, {
-      "entryId" : "98f3391f-3ab9-3b80-b17d-73074b8acd84",
       "timestamp" : "2026-07-18T11:30:00",
       "eventTypeId" : "CLUE_DETECTED",
       "resourceIdentifier" : "Visual trackers",
       "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
       "notableActivity" : "0730 T1 reported a definitely human sign line north, with no clear prints or sole pattern. Potential clue flagged on Ops instruction; subject association unverified, follow-up pending.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "98f3391f-3ab9-3b80-b17d-73074b8acd84"
     }, {
-      "entryId" : "89d8ecaa-ae13-3238-8671-33a5aae4af1b",
       "timestamp" : "2026-07-18T11:50:00",
       "eventTypeId" : "TASK_COMPLETED",
       "resourceIdentifier" : "Visual trackers",
       "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
       "notableActivity" : "0750 T1 task completed; all three trackers returning to staging for debrief.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "89d8ecaa-ae13-3238-8671-33a5aae4af1b"
     }, {
-      "entryId" : "71ba9d85-bba1-306b-aff3-3066877f50d1",
       "timestamp" : "2026-07-18T12:00:00",
       "eventTypeId" : "RESOURCE_RETURNED_STAGING",
       "resourceIdentifier" : "Visual trackers",
       "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
       "notableActivity" : "0800 T1 MR-P13/MR-P14/MR-P15 returned to staging; all three accounted for, awaiting debrief.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "71ba9d85-bba1-306b-aff3-3066877f50d1"
     }, {
-      "entryId" : "f6a06f1d-0251-3495-8017-09e1d51c0b18",
       "timestamp" : "2026-07-18T12:00:00",
       "eventTypeId" : "FREE_TEXT",
       "resourceIdentifier" : "Ops",
       "assignmentId" : "",
       "notableActivity" : "0800 R1/R2 confirm continuing observation at north gate and east footbridge; both established at 0715. Seven teams remain on task; T1 returned. Planned tasks have not departed staging.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "f6a06f1d-0251-3495-8017-09e1d51c0b18"
     }, {
-      "entryId" : "8d09695d-8d04-37c2-927e-00550be107e5",
       "timestamp" : "2026-07-18T12:10:00",
       "eventTypeId" : "FREE_TEXT",
       "resourceIdentifier" : "Visual trackers",
       "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
       "notableActivity" : "0810 T1 debrief completed with Ops Morgan Vale. Actual assignment 07:00-08:00: departed staging at 07:00, on task at IPP at 07:05. At 07:30, a definitely human sign line led north from the residence/IPP; no clear prints or sole pattern and no subject identification. Potential clue flagged on Ops instruction; no follow-up yet. Task completed at 07:50, returning to staging; all three returned at 08:00. Debrief completed 08:10 and available for later K3 at 1030.",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "8d09695d-8d04-37c2-927e-00550be107e5"
     }, {
-      "entryId" : "add8376b-d71b-30ae-82d0-d0b49798d566",
       "timestamp" : "2026-07-18T12:15:00",
       "eventTypeId" : "FREE_TEXT",
       "resourceIdentifier" : "Ops",
       "assignmentId" : "",
       "notableActivity" : "0815 snapshot: T1 debriefed and available at staging for K3 at 1030; clue follow-up not yet undertaken. K3/K4 remain planned pending Ops span/heat reassessment. MR-P16 and released K3 support MR-P30/MR-P31/MR-P32 remain reserve for G2 grid at 1030. G1 attractors 1030-1200 and grid 1230-1700 remain planned. Planning acknowledges 0900 water resupply at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP).",
-      "struckOut" : false
+      "struckOut" : false,
+      "id" : "add8376b-d71b-30ae-82d0-d0b49798d566"
     } ],
     "preparedByName" : "Morgan Vale",
     "preparedByPositionTitle" : "Operations Section Chief",
     "preparedBySignature" : "",
     "preparedDateTime" : "2026-07-18T12:15:00",
     "iapPage" : "",
+    "id" : "d9292380-3fed-3d2f-bc5a-bfce5c438ee5",
     "logScope" : "ICP"
   } ],
   "activityEventTypes" : [ {
@@ -1159,7 +1166,6 @@
     "builtIn" : true
   } ],
   "sarTaskAssignments" : [ {
-    "taskId" : "b8f63755-5e44-38b4-ac44-98adbc42cb70",
     "assignmentId" : "66f31202-4151-3cb9-9f78-32960ef8c534",
     "assignmentTeamNumber" : "S1",
     "resourceType" : "Ground",
@@ -1257,9 +1263,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "b8f63755-5e44-38b4-ac44-98adbc42cb70"
   }, {
-    "taskId" : "5a303a6d-17ee-3e0d-a1cb-6513edfc38ac",
     "assignmentId" : "6db03356-9c41-3d65-980d-bf901ff49f86",
     "assignmentTeamNumber" : "S2",
     "resourceType" : "Ground",
@@ -1357,9 +1363,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "5a303a6d-17ee-3e0d-a1cb-6513edfc38ac"
   }, {
-    "taskId" : "93c31bb9-f862-3191-850b-26809cf36699",
     "assignmentId" : "eed3e57a-36b3-3c4c-b829-6d07c54a5f6a",
     "assignmentTeamNumber" : "S3",
     "resourceType" : "Ground",
@@ -1457,9 +1463,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "93c31bb9-f862-3191-850b-26809cf36699"
   }, {
-    "taskId" : "8c3e3e91-3018-327e-b909-c6477012186d",
     "assignmentId" : "0742c0fb-deae-388a-8da4-f7dbacf4e5dc",
     "assignmentTeamNumber" : "R1",
     "resourceType" : "Ground",
@@ -1541,9 +1547,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "8c3e3e91-3018-327e-b909-c6477012186d"
   }, {
-    "taskId" : "009f5f6d-174b-382d-b4ec-59026eef020f",
     "assignmentId" : "a9f45271-df3c-358c-86e1-d7571f439cd5",
     "assignmentTeamNumber" : "R2",
     "resourceType" : "Ground",
@@ -1625,9 +1631,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "009f5f6d-174b-382d-b4ec-59026eef020f"
   }, {
-    "taskId" : "74c3d608-020e-3b00-b129-277d86f351bb",
     "assignmentId" : "ae28f7f2-ea1e-3605-afa5-854db77e537a",
     "assignmentTeamNumber" : "K1",
     "resourceType" : "Canine",
@@ -1733,9 +1739,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "74c3d608-020e-3b00-b129-277d86f351bb"
   }, {
-    "taskId" : "b27f41fd-c552-39ab-9131-205fdb4c6b86",
     "assignmentId" : "ac274954-b5aa-3b4d-9851-5bbc7141beb4",
     "assignmentTeamNumber" : "K2",
     "resourceType" : "Canine",
@@ -1841,9 +1847,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "b27f41fd-c552-39ab-9131-205fdb4c6b86"
   }, {
-    "taskId" : "200f3d46-b1c4-3c25-bc16-00335e332cec",
     "assignmentId" : "47ebf0c0-cd26-3432-bcb1-937a1c8fc630",
     "assignmentTeamNumber" : "K3",
     "resourceType" : "Canine",
@@ -1949,9 +1955,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "planned",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "200f3d46-b1c4-3c25-bc16-00335e332cec"
   }, {
-    "taskId" : "641de392-6659-3a8d-84fd-48b37b283e43",
     "assignmentId" : "d0efad2c-9292-3d70-b671-8515a3eaaf28",
     "assignmentTeamNumber" : "K4",
     "resourceType" : "Canine",
@@ -2057,9 +2063,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "planned",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "641de392-6659-3a8d-84fd-48b37b283e43"
   }, {
-    "taskId" : "15e65f7b-7899-304e-a72d-376df5fbad90",
     "assignmentId" : "6d92a88c-89c0-3183-8f90-dbebf71751a3",
     "assignmentTeamNumber" : "P1",
     "resourceType" : "Ground",
@@ -2189,9 +2195,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "planned",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "15e65f7b-7899-304e-a72d-376df5fbad90"
   }, {
-    "taskId" : "d0d441d6-0fea-39bd-826c-c38b705dd3bc",
     "assignmentId" : "65978672-3964-322d-9f7d-94d17b7f996e",
     "assignmentTeamNumber" : "G1-AREA",
     "resourceType" : "Ground",
@@ -2321,9 +2327,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "planned",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "d0d441d6-0fea-39bd-826c-c38b705dd3bc"
   }, {
-    "taskId" : "30459180-75e7-35a3-a14a-f14b4d314be9",
     "assignmentId" : "5986a474-8c51-3969-894a-19e69417f70e",
     "assignmentTeamNumber" : "G2-AREA",
     "resourceType" : "Ground",
@@ -2453,9 +2459,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "planned",
     "debriefingCompleted" : false,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "30459180-75e7-35a3-a14a-f14b4d314be9"
   }, {
-    "taskId" : "8b906cce-16ec-390a-8560-7156e3d783ac",
     "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
     "assignmentTeamNumber" : "T1",
     "resourceType" : "Ground",
@@ -2545,12 +2551,12 @@
     "debriefPreparedDateTime" : "2026-07-18T12:10:00",
     "taskLifecycleStatus" : "returned",
     "debriefingCompleted" : true,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "8b906cce-16ec-390a-8560-7156e3d783ac"
   } ],
   "archivedSafetyHazardReports" : [ ],
   "commonSafetyHazards" : [ ],
   "clueLogEntries" : [ {
-    "entryId" : "8707d3a9-bb81-3941-adeb-54d9435274a3",
     "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
     "detectingTask" : "T1",
     "detectedBy" : "Lane Cedar",
@@ -2564,7 +2570,8 @@
     "followUpBriefed" : false,
     "followUpTargetDate" : null,
     "followUpCompletedDate" : null,
-    "followUpStatus" : "Pending"
+    "followUpStatus" : "Pending",
+    "id" : "8707d3a9-bb81-3941-adeb-54d9435274a3"
   } ],
   "openActionItems" : [ {
     "id" : "cff5fb45-5b54-3cd5-a699-7e838444bb4b",
@@ -2611,10 +2618,12 @@
   "ics233Portrait" : false,
   "clueLogIcs233Enabled" : false,
   "pdfLayoutSettings" : {
+    "id" : "026a98a4-46f1-3241-a0de-222098b5e24a",
     "paperSize" : "LETTER",
     "pageMarginPoints" : 18.0
   },
   "medicalPlan" : {
+    "id" : "34c53136-d99a-35eb-95b8-97f9df3a41ca",
     "active" : true,
     "simpleMode" : false,
     "call911Procedure" : "Call 911",
@@ -2687,6 +2696,7 @@
     "iapPage" : ""
   },
   "canineMedicalPlan" : {
+    "id" : "493b68ed-81e8-37c9-aa32-6de26d4ef773",
     "active" : true,
     "aidStationInformation" : "",
     "transportServices" : "",
@@ -2721,7 +2731,8 @@
       "distanceProvenance" : "Invented 25-mile assumption from staging; not a real route measurement.",
       "calculatedAt" : null,
       "stagingGeneration" : 1,
-      "sourceName" : "Maple Ridge fictional exercise"
+      "sourceName" : "Maple Ridge fictional exercise",
+      "sourceFacilityId" : ""
     }, {
       "id" : "d41667b7-ca6d-3591-aa0f-72cbb75a8998",
       "name" : "Fictional Oak Hollow Veterinary Emergency Center",
@@ -2745,7 +2756,8 @@
       "distanceProvenance" : "Invented 45-mile assumption from staging; not a real route measurement.",
       "calculatedAt" : null,
       "stagingGeneration" : 1,
-      "sourceName" : "Maple Ridge fictional exercise"
+      "sourceName" : "Maple Ridge fictional exercise",
+      "sourceFacilityId" : ""
     } ],
     "preparedByMedicalUnitLeader" : "Quinn Alder",
     "preparerSignature" : "",
@@ -2756,10 +2768,12 @@
     "iapPage" : ""
   },
   "vetDirectory" : {
+    "id" : "fe2c639d-2582-39b9-9357-34d808e01b57",
     "facilities" : [ ],
     "sources" : [ ]
   },
   "stagingLocation" : {
+    "id" : "899cf130-b7ee-35bc-8b09-36f618546763",
     "label" : "Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP)",
     "address" : "20 Park Road, fictional Maple Ridge, MA",
     "resolvedAddress" : "",
@@ -2815,7 +2829,6 @@
   "tcards" : [ {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6",
     "cardType" : "PERSONNEL",
     "personName" : "Casey Finch",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2829,13 +2842,13 @@
     "sourceRef" : "sar:66f31202-4151-3cb9-9f78-32960ef8c534:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6",
     "canineResourceCard" : false,
     "displayLabel" : "Casey Finch",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb",
     "cardType" : "PERSONNEL",
     "personName" : "Alex Fern",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2849,13 +2862,13 @@
     "sourceRef" : "sar:66f31202-4151-3cb9-9f78-32960ef8c534:resource:a82dcae7-1a4e-320b-84c0-e09c81d4badb",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb",
     "canineResourceCard" : false,
     "displayLabel" : "Alex Fern",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153",
     "cardType" : "PERSONNEL",
     "personName" : "Blair Moss",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2869,13 +2882,13 @@
     "sourceRef" : "sar:66f31202-4151-3cb9-9f78-32960ef8c534:resource:264407d6-e0fb-3b9f-9fa0-60ba5f962153",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153",
     "canineResourceCard" : false,
     "displayLabel" : "Blair Moss",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697",
     "cardType" : "PERSONNEL",
     "personName" : "Cameron Lark",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2889,13 +2902,13 @@
     "sourceRef" : "sar:66f31202-4151-3cb9-9f78-32960ef8c534:resource:73440a1c-ddbf-3010-8bf9-266b7e475697",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "73440a1c-ddbf-3010-8bf9-266b7e475697",
     "canineResourceCard" : false,
     "displayLabel" : "Cameron Lark",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717",
     "cardType" : "PERSONNEL",
     "personName" : "Dana Birch",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2909,13 +2922,13 @@
     "sourceRef" : "sar:6db03356-9c41-3d65-980d-bf901ff49f86:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717",
     "canineResourceCard" : false,
     "displayLabel" : "Dana Birch",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527",
     "cardType" : "PERSONNEL",
     "personName" : "Elliot Pine",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2929,13 +2942,13 @@
     "sourceRef" : "sar:6db03356-9c41-3d65-980d-bf901ff49f86:resource:4bba7dd3-29b5-36f1-a960-42b40912c527",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "4bba7dd3-29b5-36f1-a960-42b40912c527",
     "canineResourceCard" : false,
     "displayLabel" : "Elliot Pine",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3",
     "cardType" : "PERSONNEL",
     "personName" : "Frankie Cove",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2949,13 +2962,13 @@
     "sourceRef" : "sar:6db03356-9c41-3d65-980d-bf901ff49f86:resource:cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3",
     "canineResourceCard" : false,
     "displayLabel" : "Frankie Cove",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e",
     "cardType" : "PERSONNEL",
     "personName" : "Gray Rowan",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2969,13 +2982,13 @@
     "sourceRef" : "sar:6db03356-9c41-3d65-980d-bf901ff49f86:resource:0716e022-f2d5-354b-8591-4b39ed0a7a1e",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e",
     "canineResourceCard" : false,
     "displayLabel" : "Gray Rowan",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "bdedd84f-dd65-3b83-937b-10617106c57a",
     "cardType" : "PERSONNEL",
     "personName" : "Harper Glen",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -2989,13 +3002,13 @@
     "sourceRef" : "sar:eed3e57a-36b3-3c4c-b829-6d07c54a5f6a:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "bdedd84f-dd65-3b83-937b-10617106c57a",
     "canineResourceCard" : false,
     "displayLabel" : "Harper Glen",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "d2da7418-90c7-3427-b463-f884113e2279",
     "cardType" : "PERSONNEL",
     "personName" : "Indigo Lake",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3009,13 +3022,13 @@
     "sourceRef" : "sar:eed3e57a-36b3-3c4c-b829-6d07c54a5f6a:resource:d2da7418-90c7-3427-b463-f884113e2279",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "d2da7418-90c7-3427-b463-f884113e2279",
     "canineResourceCard" : false,
     "displayLabel" : "Indigo Lake",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "ac05e257-0729-3cde-81bf-88f82cc760e5",
     "cardType" : "PERSONNEL",
     "personName" : "Jules Meadow",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3029,13 +3042,13 @@
     "sourceRef" : "sar:eed3e57a-36b3-3c4c-b829-6d07c54a5f6a:resource:ac05e257-0729-3cde-81bf-88f82cc760e5",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "ac05e257-0729-3cde-81bf-88f82cc760e5",
     "canineResourceCard" : false,
     "displayLabel" : "Jules Meadow",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "7c0a05fe-39f8-3691-91e7-97d259b854b8",
     "cardType" : "PERSONNEL",
     "personName" : "Kai Willow",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3049,13 +3062,13 @@
     "sourceRef" : "sar:eed3e57a-36b3-3c4c-b829-6d07c54a5f6a:resource:7c0a05fe-39f8-3691-91e7-97d259b854b8",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "7c0a05fe-39f8-3691-91e7-97d259b854b8",
     "canineResourceCard" : false,
     "displayLabel" : "Kai Willow",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "152379a5-1884-3538-822c-9254139d9dad",
     "cardType" : "PERSONNEL",
     "personName" : "Lane Cedar",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3069,13 +3082,13 @@
     "sourceRef" : "sar:47ebf0c0-cd26-3432-bcb1-937a1c8fc630:resource:152379a5-1884-3538-822c-9254139d9dad",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "152379a5-1884-3538-822c-9254139d9dad",
     "canineResourceCard" : false,
     "displayLabel" : "Lane Cedar",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "39c9e0e7-5877-35fa-b1e1-ab1458037071",
     "cardType" : "PERSONNEL",
     "personName" : "Micah Ash",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3089,13 +3102,13 @@
     "sourceRef" : "sar:47ebf0c0-cd26-3432-bcb1-937a1c8fc630:resource:39c9e0e7-5877-35fa-b1e1-ab1458037071",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "39c9e0e7-5877-35fa-b1e1-ab1458037071",
     "canineResourceCard" : false,
     "displayLabel" : "Micah Ash",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "fc761268-10f8-34db-b17e-9fc96a6f6769",
     "cardType" : "PERSONNEL",
     "personName" : "Noel Spruce",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3109,13 +3122,13 @@
     "sourceRef" : "sar:47ebf0c0-cd26-3432-bcb1-937a1c8fc630:resource:fc761268-10f8-34db-b17e-9fc96a6f6769",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "fc761268-10f8-34db-b17e-9fc96a6f6769",
     "canineResourceCard" : false,
     "displayLabel" : "Noel Spruce",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "53228caf-ae83-3650-8b4b-d171dd44aea5",
     "cardType" : "PERSONNEL",
     "personName" : "Oakley Rain",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3129,13 +3142,13 @@
     "sourceRef" : "sar:5986a474-8c51-3969-894a-19e69417f70e:resource:53228caf-ae83-3650-8b4b-d171dd44aea5",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "53228caf-ae83-3650-8b4b-d171dd44aea5",
     "canineResourceCard" : false,
     "displayLabel" : "Oakley Rain",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "d450225e-9ba5-3fda-bdee-64dfcd332418",
     "cardType" : "PERSONNEL",
     "personName" : "Parker Elm",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3149,13 +3162,13 @@
     "sourceRef" : "sar:0742c0fb-deae-388a-8da4-f7dbacf4e5dc:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "d450225e-9ba5-3fda-bdee-64dfcd332418",
     "canineResourceCard" : false,
     "displayLabel" : "Parker Elm",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "60b0d207-257e-32c3-aee7-f1b54a5d1194",
     "cardType" : "PERSONNEL",
     "personName" : "Remy Shore",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3169,13 +3182,13 @@
     "sourceRef" : "sar:0742c0fb-deae-388a-8da4-f7dbacf4e5dc:resource:60b0d207-257e-32c3-aee7-f1b54a5d1194",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "60b0d207-257e-32c3-aee7-f1b54a5d1194",
     "canineResourceCard" : false,
     "displayLabel" : "Remy Shore",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "3f18ee65-4e2c-3baf-8b3a-8d743ade9cc6",
     "cardType" : "PERSONNEL",
     "personName" : "Sage Linden",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3189,13 +3202,13 @@
     "sourceRef" : "sar:a9f45271-df3c-358c-86e1-d7571f439cd5:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "3f18ee65-4e2c-3baf-8b3a-8d743ade9cc6",
     "canineResourceCard" : false,
     "displayLabel" : "Sage Linden",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "45cf31f7-b054-351b-9443-ee072f9bb4ff",
     "cardType" : "PERSONNEL",
     "personName" : "Toby Flint",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3209,13 +3222,13 @@
     "sourceRef" : "sar:a9f45271-df3c-358c-86e1-d7571f439cd5:resource:45cf31f7-b054-351b-9443-ee072f9bb4ff",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "45cf31f7-b054-351b-9443-ee072f9bb4ff",
     "canineResourceCard" : false,
     "displayLabel" : "Toby Flint",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "53912e25-ff2a-3bcc-8534-867d769eb113",
     "cardType" : "PERSONNEL",
     "personName" : "Val Aspen",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3229,13 +3242,13 @@
     "sourceRef" : "sar:ae28f7f2-ea1e-3605-afa5-854db77e537a:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "53912e25-ff2a-3bcc-8534-867d769eb113",
     "canineResourceCard" : false,
     "displayLabel" : "Val Aspen",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "5e479160-5830-3a9e-95f0-42a8939dcdbe",
     "cardType" : "PERSONNEL",
     "personName" : "Winter Dell",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3249,13 +3262,13 @@
     "sourceRef" : "sar:ae28f7f2-ea1e-3605-afa5-854db77e537a:resource:5e479160-5830-3a9e-95f0-42a8939dcdbe",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "5e479160-5830-3a9e-95f0-42a8939dcdbe",
     "canineResourceCard" : false,
     "displayLabel" : "Winter Dell",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "b2d669bd-8189-3993-bc42-8efcdd1f905d",
     "cardType" : "PERSONNEL",
     "personName" : "Wynn Hazel",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3269,13 +3282,13 @@
     "sourceRef" : "sar:ae28f7f2-ea1e-3605-afa5-854db77e537a:resource:b2d669bd-8189-3993-bc42-8efcdd1f905d",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "b2d669bd-8189-3993-bc42-8efcdd1f905d",
     "canineResourceCard" : false,
     "displayLabel" : "Wynn Hazel",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "6d073402-f21d-36f8-93a5-bc3fa00ebaa3",
     "cardType" : "PERSONNEL",
     "personName" : "Yael Frost",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3289,13 +3302,13 @@
     "sourceRef" : "sar:ae28f7f2-ea1e-3605-afa5-854db77e537a:resource:6d073402-f21d-36f8-93a5-bc3fa00ebaa3",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "6d073402-f21d-36f8-93a5-bc3fa00ebaa3",
     "canineResourceCard" : false,
     "displayLabel" : "Yael Frost",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "f9378e49-56da-3217-bdbd-d904bbb683cc",
     "cardType" : "PERSONNEL",
     "personName" : "Zion Clover",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3309,13 +3322,13 @@
     "sourceRef" : "sar:ac274954-b5aa-3b4d-9851-5bbc7141beb4:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "f9378e49-56da-3217-bdbd-d904bbb683cc",
     "canineResourceCard" : false,
     "displayLabel" : "Zion Clover",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "01f6a5aa-3edc-3131-b0c0-d3886bb1dc39",
     "cardType" : "PERSONNEL",
     "personName" : "Robin Field",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3329,13 +3342,13 @@
     "sourceRef" : "sar:ac274954-b5aa-3b4d-9851-5bbc7141beb4:resource:01f6a5aa-3edc-3131-b0c0-d3886bb1dc39",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "01f6a5aa-3edc-3131-b0c0-d3886bb1dc39",
     "canineResourceCard" : false,
     "displayLabel" : "Robin Field",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "56634ec9-5293-3129-8b90-628cfa2089fb",
     "cardType" : "PERSONNEL",
     "personName" : "Arden Fox",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3349,13 +3362,13 @@
     "sourceRef" : "sar:ac274954-b5aa-3b4d-9851-5bbc7141beb4:resource:56634ec9-5293-3129-8b90-628cfa2089fb",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "56634ec9-5293-3129-8b90-628cfa2089fb",
     "canineResourceCard" : false,
     "displayLabel" : "Arden Fox",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "45826bda-f44a-3194-9808-f1b0f407e067",
     "cardType" : "PERSONNEL",
     "personName" : "Briar Snow",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3369,13 +3382,13 @@
     "sourceRef" : "sar:ac274954-b5aa-3b4d-9851-5bbc7141beb4:resource:45826bda-f44a-3194-9808-f1b0f407e067",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "45826bda-f44a-3194-9808-f1b0f407e067",
     "canineResourceCard" : false,
     "displayLabel" : "Briar Snow",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "fbdae1f9-eed0-37fc-b88d-8779f9b2110e",
     "cardType" : "PERSONNEL",
     "personName" : "Devon Heath",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3389,13 +3402,13 @@
     "sourceRef" : "sar:47ebf0c0-cd26-3432-bcb1-937a1c8fc630:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "fbdae1f9-eed0-37fc-b88d-8779f9b2110e",
     "canineResourceCard" : false,
     "displayLabel" : "Devon Heath",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "d4e8580a-6603-3608-bf9a-043b56ca6654",
     "cardType" : "PERSONNEL",
     "personName" : "Emery Reed",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3409,13 +3422,13 @@
     "sourceRef" : "sar:5986a474-8c51-3969-894a-19e69417f70e:resource:d4e8580a-6603-3608-bf9a-043b56ca6654",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "d4e8580a-6603-3608-bf9a-043b56ca6654",
     "canineResourceCard" : false,
     "displayLabel" : "Emery Reed",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "a10b3686-aecf-303d-8665-a49e45d2af3e",
     "cardType" : "PERSONNEL",
     "personName" : "Finley Stone",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3429,13 +3442,13 @@
     "sourceRef" : "sar:5986a474-8c51-3969-894a-19e69417f70e:resource:a10b3686-aecf-303d-8665-a49e45d2af3e",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "a10b3686-aecf-303d-8665-a49e45d2af3e",
     "canineResourceCard" : false,
     "displayLabel" : "Finley Stone",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "483aec20-c914-3706-aab8-cf1f9ef68e49",
     "cardType" : "PERSONNEL",
     "personName" : "Hayden Marsh",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3449,13 +3462,13 @@
     "sourceRef" : "sar:5986a474-8c51-3969-894a-19e69417f70e:resource:483aec20-c914-3706-aab8-cf1f9ef68e49",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "483aec20-c914-3706-aab8-cf1f9ef68e49",
     "canineResourceCard" : false,
     "displayLabel" : "Hayden Marsh",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "dbf4b6f9-c060-3b93-8def-01164c39aaaa",
     "cardType" : "PERSONNEL",
     "personName" : "Kit Laurel",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3469,13 +3482,13 @@
     "sourceRef" : "sar:d0efad2c-9292-3d70-b671-8515a3eaaf28:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "dbf4b6f9-c060-3b93-8def-01164c39aaaa",
     "canineResourceCard" : false,
     "displayLabel" : "Kit Laurel",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "f8e8ec98-e32a-3dac-abdb-26d203cdfbe0",
     "cardType" : "PERSONNEL",
     "personName" : "Linden Gale",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3489,13 +3502,13 @@
     "sourceRef" : "sar:d0efad2c-9292-3d70-b671-8515a3eaaf28:resource:f8e8ec98-e32a-3dac-abdb-26d203cdfbe0",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "f8e8ec98-e32a-3dac-abdb-26d203cdfbe0",
     "canineResourceCard" : false,
     "displayLabel" : "Linden Gale",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "e4180476-0446-3bcf-b92a-7873b3734af0",
     "cardType" : "PERSONNEL",
     "personName" : "Marin Coast",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3509,13 +3522,13 @@
     "sourceRef" : "sar:d0efad2c-9292-3d70-b671-8515a3eaaf28:resource:e4180476-0446-3bcf-b92a-7873b3734af0",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "e4180476-0446-3bcf-b92a-7873b3734af0",
     "canineResourceCard" : false,
     "displayLabel" : "Marin Coast",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "039c97fc-1cef-3ffd-860a-b549a0b66164",
     "cardType" : "PERSONNEL",
     "personName" : "Nico Dawn",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3529,13 +3542,13 @@
     "sourceRef" : "sar:d0efad2c-9292-3d70-b671-8515a3eaaf28:resource:039c97fc-1cef-3ffd-860a-b549a0b66164",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "039c97fc-1cef-3ffd-860a-b549a0b66164",
     "canineResourceCard" : false,
     "displayLabel" : "Nico Dawn",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "a7d7fc5f-9fd4-36be-b474-0d3b377720b9",
     "cardType" : "PERSONNEL",
     "personName" : "Avery Wren",
     "homeAgency" : "Fictional Pine County Sheriff's Office",
@@ -3549,13 +3562,13 @@
     "sourceRef" : "org:ic:0",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "a7d7fc5f-9fd4-36be-b474-0d3b377720b9",
     "canineResourceCard" : false,
     "displayLabel" : "Avery Wren",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "f52f18dc-2c17-3a7e-9662-21f3259cec85",
     "cardType" : "PERSONNEL",
     "personName" : "Morgan Vale",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3569,13 +3582,13 @@
     "sourceRef" : "org:operationsChief",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "f52f18dc-2c17-3a7e-9662-21f3259cec85",
     "canineResourceCard" : false,
     "displayLabel" : "Morgan Vale",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "d8eeb297-9d98-37fd-8541-3f8135bc8d65",
     "cardType" : "PERSONNEL",
     "personName" : "Rowan Ellis",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3589,13 +3602,13 @@
     "sourceRef" : "org:planningChief",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "d8eeb297-9d98-37fd-8541-3f8135bc8d65",
     "canineResourceCard" : false,
     "displayLabel" : "Rowan Ellis",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "64302216-a2b8-341f-9a17-96d17f27fe36",
     "cardType" : "PERSONNEL",
     "personName" : "Jordan Reed",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3609,13 +3622,13 @@
     "sourceRef" : "org:safetyOfficer",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "64302216-a2b8-341f-9a17-96d17f27fe36",
     "canineResourceCard" : false,
     "displayLabel" : "Jordan Reed",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "d577d03d-7a7d-356a-930e-98f83b157b3c",
     "cardType" : "PERSONNEL",
     "personName" : "Taylor Brook",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3629,13 +3642,13 @@
     "sourceRef" : "org:commUnitLeader",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "d577d03d-7a7d-356a-930e-98f83b157b3c",
     "canineResourceCard" : false,
     "displayLabel" : "Taylor Brook",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "1c9e6db6-da51-3b02-9003-1af9b9066e66",
     "cardType" : "PERSONNEL",
     "personName" : "Quinn Alder",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3649,13 +3662,13 @@
     "sourceRef" : "",
     "handlerName" : "",
     "numberOfPersons" : 1,
+    "id" : "1c9e6db6-da51-3b02-9003-1af9b9066e66",
     "canineResourceCard" : false,
     "displayLabel" : "Quinn Alder",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "3f3a976b-91f1-3903-a0c3-7bd7e567c001",
     "cardType" : "EQUIPMENT",
     "personName" : "",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3669,13 +3682,13 @@
     "sourceRef" : "",
     "handlerName" : "Val Aspen",
     "numberOfPersons" : 0,
+    "id" : "3f3a976b-91f1-3903-a0c3-7bd7e567c001",
     "canineResourceCard" : true,
     "displayLabel" : "MR-K9-1",
     "canineResource" : true
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "eb1de76e-f8eb-3bb2-a409-e87d98cdc934",
     "cardType" : "EQUIPMENT",
     "personName" : "",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3689,13 +3702,13 @@
     "sourceRef" : "",
     "handlerName" : "Zion Clover",
     "numberOfPersons" : 0,
+    "id" : "eb1de76e-f8eb-3bb2-a409-e87d98cdc934",
     "canineResourceCard" : true,
     "displayLabel" : "MR-K9-2",
     "canineResource" : true
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "e627fa02-c306-3a4f-8682-752b6ece7432",
     "cardType" : "EQUIPMENT",
     "personName" : "",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3709,13 +3722,13 @@
     "sourceRef" : "",
     "handlerName" : "Devon Heath",
     "numberOfPersons" : 0,
+    "id" : "e627fa02-c306-3a4f-8682-752b6ece7432",
     "canineResourceCard" : true,
     "displayLabel" : "MR-K9-3",
     "canineResource" : true
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-    "resourceId" : "e0dfac9d-810f-3a0d-abb8-fb1c173dec9a",
     "cardType" : "EQUIPMENT",
     "personName" : "",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3729,6 +3742,7 @@
     "sourceRef" : "",
     "handlerName" : "Kit Laurel",
     "numberOfPersons" : 0,
+    "id" : "e0dfac9d-810f-3a0d-abb8-fb1c173dec9a",
     "canineResourceCard" : true,
     "displayLabel" : "MR-K9-4",
     "canineResource" : true
