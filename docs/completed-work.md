@@ -75,6 +75,12 @@ explicitly requested. The native radio-channel CSV retains its
 `formId`/`channelId` field names while JSON uses canonical `id` properties, and
 the checked-in Maple Ridge fixture is the current schema-18 store export.
 
+**Displayed-test CI follow-up, 2026-11-18:** new-period ICS 205 channels and
+copied facility/communications records receive independent identities, while
+legacy T-card history entries without IDs remain eligible for content-based
+overlap reconciliation. The rollover, copy, persistence-retention and duplicate
+history regressions cover these identity boundaries.
+
 The identity inventory and the value objects intentionally without IDs are
 listed in [`record-identity.md`](record-identity.md).
 

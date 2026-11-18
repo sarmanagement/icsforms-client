@@ -51,6 +51,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
@@ -331,7 +332,10 @@ class MainFrameDataRetentionTest {
 		vet.setName("Retain directory hospital");
 		vet.setAddress("100 Fictional Way");
 		data.getVetDirectory().getFacilities().add(vet);
-		data.getCanineMedicalPlan().getSelectedFacilities().add(vet.copy());
+		VetFacility selectedVet = vet.copy();
+		selectedVet.setId(UUID.randomUUID().toString());
+		selectedVet.setSourceFacilityId(vet.getId());
+		data.getCanineMedicalPlan().getSelectedFacilities().add(selectedVet);
 		OpenActionItem action = new OpenActionItem();
 		action.setItem("Retain action description");
 		action.setPoc("Fixture responder");

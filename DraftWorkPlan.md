@@ -23,7 +23,8 @@ Unit Leader, Operations, Incident Command, Communications) and separate human an
 canine medical reference windows. The persistence foundation is merged: saves use
 detached snapshots on a background coordinator behind backend-neutral revision
 and failure seams. Host-mode Part 1's stable record identity, migration, index,
-and diff primitives are delivered locally; no host service is implemented.
+and diff primitives are delivered locally; a displayed-test CI follow-up verifies
+rollover and copied-record identity boundaries. No host service is implemented.
 Work to make open views refresh without flicker or stale content is merged
 (PR #56). This is standalone operation, not yet a local-host deployment.
 Details of delivered work are in
@@ -117,7 +118,7 @@ PR closure alone.
 | File-backed `IncidentStore` with UUID identity, revision checks, edit-lock capability and backups | PR #34, #39–#42 | Complete for standalone use |
 | Live local role panels (ten phases): live multi-view, objectives and linkage, review tracking, medical references, Safety/MUL, Operations, Incident Command, Communications and console | #33, #46, #49 | Implementation delivered; automated coverage recorded. Manual assistive-technology review is not recorded (optional). |
 | Stage 1 persistence foundation: deterministic Swing tests, store contract suite, backend-neutral semantics, legacy import migration, UTC time, provenance seam, asynchronous snapshot persistence, and live refresh without flicker | #37, #39–#44, PR #56 | Complete; substitute-store evidence accepted |
-| Host-mode Part 1: stable record identity, schema 18 migration, index and diff | #57 | Delivered as local model/persistence groundwork; no host service |
+| Host-mode Part 1: stable record identity, schema 18 migration, index and diff | #57 | Delivered as local model/persistence groundwork; displayed-test regressions recorded in [`docs/completed-work.md`](docs/completed-work.md); no host service |
 
 Role-panel work is independent of the persistence roadmap and must not
 introduce network, authentication or remote persistence features.
@@ -516,7 +517,10 @@ requirements that extend it to multiple stations are in Part III.
 `RemoteIncidentStore` double was accepted as equivalent evidence for the
 original unmerged-spike criterion. It passes the shared contract and is
 exercised through `AppController`; it does not demonstrate a network-backed
-store. See the [exit assessment](docs/completed-work.md#stage-1--local-persistence-foundation-prerequisite-for-any-remote-store).
+store. The displayed-test CI follow-up also covers new-period channel identity,
+fresh identities for copied records, persistence retention and legacy T-card
+history overlap. See the [exit assessment](docs/completed-work.md#stage-1--local-persistence-foundation-prerequisite-for-any-remote-store)
+and [identity record](docs/completed-work.md#host-mode-series--issue-57-stable-record-identity-and-record-diff).
 
 **T0/T1 readiness:** Stage 2 is not yet a cleared start: record the Stage 0
 decisions. Stage 1 requires no API, authentication or outbox.

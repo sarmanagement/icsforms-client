@@ -36,6 +36,7 @@ public final class IdentityMigration {
 
 	/**
 	 * Runs legacy normalization and repairs absent or duplicate record identities.
+	 * Legacy T-card history events without occurrence IDs remain unidentified.
 	 *
 	 * @param data incident document to migrate
 	 */
@@ -48,6 +49,7 @@ public final class IdentityMigration {
 
 	/**
 	 * Assigns missing identities before a write without repairing duplicate stored identities.
+	 * Legacy T-card history events without occurrence IDs remain unidentified.
 	 *
 	 * @param data incident document to normalize
 	 */
@@ -442,19 +444,21 @@ public final class IdentityMigration {
 		}
 		if (value instanceof Identified identified) {
 			String id = identified.getId();
-			if (id == null || id.isBlank()) {
+			if ((id == null || id.isBlank()) && !(value instanceof TCard.CheckInOutEvent)) {
 				id = UUID.randomUUID().toString();
 				value = withIdentity(value, id);
 				identified = (Identified) value;
 			}
-			Set<String> identities = seen.computeIfAbsent(value.getClass(), ignored -> new HashSet<>());
-			if (!identities.add(id) && repairDuplicates) {
-				String replacement = duplicateId(value.getClass(), id, path, identities);
-				LOGGER.warning("Duplicate record identity repaired at " + path + " for "
-						+ value.getClass().getSimpleName());
-				value = withIdentity(value, replacement);
-				identified = (Identified) value;
-				identities.add(identified.getId());
+			if (id != null && !id.isBlank()) {
+				Set<String> identities = seen.computeIfAbsent(value.getClass(), ignored -> new HashSet<>());
+				if (!identities.add(id) && repairDuplicates) {
+					String replacement = duplicateId(value.getClass(), id, path, identities);
+					LOGGER.warning("Duplicate record identity repaired at " + path + " for "
+							+ value.getClass().getSimpleName());
+					value = withIdentity(value, replacement);
+					identified = (Identified) value;
+					identities.add(identified.getId());
+				}
 			}
 		}
 		normalizeFields(value, path, seen, visited, repairDuplicates);

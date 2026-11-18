@@ -11,13 +11,16 @@ and creation actions assign IDs to new records; `IdentityMigration` assigns
 missing IDs and repairs duplicate stored IDs during load and before local create
 or save commits. A stored duplicate is replaced deterministically after keeping
 its first occurrence, with a warning. External imports reject blank or duplicate
-identities. Legacy IDs are persisted before the migrated document is returned.
+identities. Legacy T-card history events without occurrence IDs remain
+unidentified so overlapping legacy histories can be reconciled by event content.
+Other migrated IDs are persisted before the document is returned.
 
 Copies that become new records receive new IDs. References within a copied graph
 are remapped when the reference target is also copied. Archival snapshots keep
 the identity of the completed record while the continuing/new-period copy gets
-fresh identities. ICS 205 channel identities are retained across operational
-periods so existing external channel references continue to resolve.
+fresh identities. ICS 205 channels carried into a new period also receive new
+identities; external references to the completed period remain attached to its
+archived snapshot.
 
 ## Persisted identity inventory
 

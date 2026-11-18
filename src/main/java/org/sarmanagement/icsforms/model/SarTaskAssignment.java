@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -187,6 +188,7 @@ public class SarTaskAssignment implements Identified {
 	/**
 	 * Creates a SAR scaffold from a linked ICS 204 resource assignment, preserving
 	 * communications fallback labels and their optional stable channel references.
+	 * Copied communication records receive stable identities scoped to this assignment.
 	 *
 	 * @param resourceAssignment
 	 *            ICS 204 resource assignment.
@@ -236,9 +238,16 @@ public class SarTaskAssignment implements Identified {
 			task.setSecondaryManagementName(form204.getSecondaryManagementName());
 			task.setSecondaryManagementContact(form204.getSecondaryManagementContact());
 			List<CommunicationEntry> copied = new ArrayList<>();
-			for (CommunicationEntry entry : form204.getCommunications()) {
+			for (int index = 0; index < form204.getCommunications().size(); index++) {
+				CommunicationEntry entry = form204.getCommunications().get(index);
 				CommunicationEntry clone = new CommunicationEntry();
-				clone.setId(entry.getId());
+				String assignmentId = resourceAssignment == null ? "" : resourceAssignment.getAssignmentId();
+				String sourceId = entry.getId();
+				String identitySource = sourceId == null || sourceId.isBlank()
+						? Integer.toString(index) : sourceId;
+				String identitySeed = "sar-task-communication:" + assignmentId
+						+ ":" + identitySource;
+				clone.setId(UUID.nameUUIDFromBytes(identitySeed.getBytes(StandardCharsets.UTF_8)).toString());
 				clone.setName(entry.getName());
 				clone.setFunction(entry.getFunction());
 				clone.setPrimaryContact(entry.getPrimaryContact());
