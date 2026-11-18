@@ -144,9 +144,7 @@ class Ics215ResourceReviewTest {
 	private TCard card(String id, TCardType type, int persons) {
 		TCard card = new TCard();
 		card.setCardType(type);
-		if (id != null) {
-			card.setResourceId(id);
-		}
+		card.setId(id);
 		card.setResourceIdentifier(id == null ? "Legacy card" : id);
 		card.setNumberOfPersons(persons);
 		return card;

@@ -181,7 +181,7 @@ public class TCard implements Identified {
 		public CheckInOutEvent {
 			Objects.requireNonNull(action, "action");
 			Objects.requireNonNull(eventAt, "eventAt");
-			id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+			id = id == null || id.isBlank() ? null : id;
 		}
 
 		/**

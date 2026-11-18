@@ -75,6 +75,7 @@ class UiRefreshStateTest {
 	void comparisonDoesNotGenerateMissingResourceIdentity() {
 		AppData data = new AppData();
 		TCard card = new TCard();
+		card.setId(null);
 		data.getTCards().add(card);
 		assertNull(card.peekResourceId());
 		UiRefreshState state = new UiRefreshState();

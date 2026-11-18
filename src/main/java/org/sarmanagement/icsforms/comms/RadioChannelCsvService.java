@@ -108,7 +108,10 @@ public class RadioChannelCsvService {
 				throw new IllegalArgumentException("Channels require unique explicit IDs.");
 			}
 			UUID.fromString(channel.getChannelId());
-			JsonNode node = MAPPER.valueToTree(channel);
+			ObjectNode node = MAPPER.valueToTree(channel);
+			if (node.has("id")) {
+				node.set("channelId", node.remove("id"));
+			}
 			List<String> row = new ArrayList<>(List.of("2", "channel", ""));
 			for (String field : FIELDS) {
 				row.add(node.path(field).toString());
@@ -162,7 +165,8 @@ public class RadioChannelCsvService {
 					if (metadata == null || !metadata.isObject() || metadata.has("channels")) {
 						throw new IllegalArgumentException("Invalid form metadata.");
 					}
-					Set<String> formFields = Set.of("formId", "specialInstructions", "preparedByName",
+					String identityField = metadata.has("id") ? "id" : "formId";
+					Set<String> formFields = Set.of(identityField, "specialInstructions", "preparedByName",
 							"preparedBySignature", "datePrepared", "preparedDateTime", "iapPage");
 					if (metadata.size() != formFields.size()) {
 						throw new IllegalArgumentException("Native CSV requires complete form metadata.");
@@ -176,7 +180,7 @@ public class RadioChannelCsvService {
 							throw new IllegalArgumentException("Form text values must be strings: " + field);
 						}
 					});
-					UUID.fromString(metadata.path("formId").asText());
+					UUID.fromString(metadata.path(identityField).asText());
 					for (String field : fields) {
 						column = field;
 						if (!row.get(field).isEmpty()) {

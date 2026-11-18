@@ -1005,7 +1005,7 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 	 */
 	private void normalize(AppData data) {
 		try {
-			data.normalizeIdentity();
+			IdentityMigration.migrate(data);
 		} catch (RuntimeException e) {
 			throw new StoreValidationException("Cannot normalize incident document", e);
 		}
