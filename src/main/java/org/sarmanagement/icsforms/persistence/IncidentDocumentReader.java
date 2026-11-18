@@ -18,9 +18,11 @@ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.ActivityEventType;
+import org.sarmanagement.icsforms.model.Identified;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AircraftResource;
-import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.CanineResource;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
@@ -41,9 +43,9 @@ import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.OpenActionItem;
 import org.sarmanagement.icsforms.model.PersonnelResource;
-import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.PocAssignment;
 import org.sarmanagement.icsforms.model.PodFactorRating;
+import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.RadioChannel;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SafetyAnalysisEntry;
@@ -91,12 +93,12 @@ final class IncidentDocumentReader {
 			"commonSafetyHazards", "clueLogEntries", "openActionItems", "tcards", "medicalPlan", "canineMedicalPlan",
 			"vetDirectory", "stagingLocation", "incidentLocations", "operationalPeriodHistory", "safetyReview",
 			"humanMedicalReview", "canineMedicalReview", "communicationsReview");
-	private static final Set<String> CHILD_IDENTITIES = Set.of("formId", "resourceId", "objectiveId", "assignmentId",
-			"taskId", "channelId", "entryId", "changeId", "resultId", "recordId", "logId", "worksheetId", "id");
+	private static final Set<String> CHILD_IDENTITIES = Set.of("id", "incidentId", "formId", "resourceId", "objectiveId",
+			"assignmentId", "taskId", "channelId", "entryId", "resultId", "recordId", "logId", "worksheetId");
 	static final Map<Class<?>, Set<String>> RECORD_IDENTITIES = Map.ofEntries(
 			Map.entry(AppData.class, Set.of("incidentId")),
 			Map.entry(ActivityLogEntry.class, Set.of("entryId")),
-			Map.entry(ActivityLogEntry.EventTypeChange.class, Set.of("changeId")),
+			Map.entry(ActivityLogEntry.EventTypeChange.class, Set.of("id")),
 			Map.entry(ClueLogEntry.class, Set.of("entryId")),
 			Map.entry(CommunicationEntry.class, Set.of("id")),
 			Map.entry(Ics201Form.ActionEntry.class, Set.of("id")),
@@ -138,6 +140,7 @@ final class IncidentDocumentReader {
 			Map.entry(VetFacility.class, Set.of("id")));
 	private final List<Problem> problems = new ArrayList<>();
 	private final Map<JavaType, JsonNode> defaultValues = new HashMap<>();
+	private final Map<Class<?>, Set<String>> importIdentities = new HashMap<>();
 	private Throwable cause;
 
 	/** Creates an isolated diagnostic collector for one document. */
@@ -153,6 +156,7 @@ final class IncidentDocumentReader {
 	 */
 	AppData readImport(Path path) {
 		String schema = "unknown";
+		importIdentities.clear();
 		log(path, schema, "attempt");
 		try {
 			JsonNode tree = STRICT.readTree(path.toFile());
@@ -326,10 +330,20 @@ final class IncidentDocumentReader {
 						properties.put(alias, property.getPrimaryType());
 					}
 				}
-				if (RECORD_IDENTITIES.getOrDefault(type.getRawClass(), Set.of()).contains(property.getName())) {
+				Set<String> legacyIdentityNames = RECORD_IDENTITIES.getOrDefault(type.getRawClass(), Set.of());
+				if (Identified.class.isAssignableFrom(type.getRawClass()) && "id".equals(property.getName())
+						|| legacyIdentityNames.contains(property.getName())) {
 					identityProperties.add(property.getName());
 					if (aliases != null) {
 						identityProperties.addAll(List.of(aliases.value()));
+					}
+					if ("id".equals(property.getName())) {
+						for (String legacyName : legacyIdentityNames) {
+							if (!"id".equals(legacyName)) {
+								properties.put(legacyName, property.getPrimaryType());
+								identityProperties.add(legacyName);
+							}
+						}
 					}
 				}
 			}
@@ -344,7 +358,7 @@ final class IncidentDocumentReader {
 					add(strict ? Severity.ERROR : Severity.WARNING, childPath, "Unknown property.",
 							strict ? "Remove or correct the property name." : "This client ignores this property.");
 				} else if (strict && identityProperties.contains(entry.getKey())) {
-					validateRecordIdentity(entry.getValue(), childPath, siblingIdentities);
+					validateRecordIdentity(entry.getValue(), childPath, type.getRawClass());
 				} else if (childType != null) {
 					inspect(entry.getValue(), childType, childPath, strict);
 				}
@@ -376,26 +390,29 @@ final class IncidentDocumentReader {
 	 * @param path JSON property path
 	 * @param siblingIdentities IDs already found in the containing collection
 	 */
-	private void validateRecordIdentity(JsonNode value, String path, Set<String> siblingIdentities) {
+	private void validateRecordIdentity(JsonNode value, String path, Class<?> recordType) {
 		if (!value.isTextual() || value.asText().isBlank()) {
 			add(Severity.ERROR, path, "Record identity must be a UUID string.",
 					"Omit a legacy identity or provide a valid UUID.");
 			return;
 		}
 		String identity = value.asText();
-		try {
-			if (!UUID.fromString(identity).toString().equalsIgnoreCase(identity)) {
-				throw new IllegalArgumentException("UUID is not in canonical form");
+		if (!recordType.equals(ActivityEventType.class)) {
+			try {
+				if (!UUID.fromString(identity).toString().equalsIgnoreCase(identity)) {
+					throw new IllegalArgumentException("UUID is not in canonical form");
+				}
+			} catch (IllegalArgumentException exception) {
+				cause = cause == null ? exception : cause;
+				add(Severity.ERROR, path, "Record identity must be a UUID string.",
+						"Use a valid UUID or omit the legacy identity.");
+				return;
 			}
-		} catch (IllegalArgumentException exception) {
-			cause = cause == null ? exception : cause;
-			add(Severity.ERROR, path, "Record identity must be a UUID string.",
-					"Use a valid UUID or omit the legacy identity.");
-			return;
 		}
-		if (siblingIdentities != null && !siblingIdentities.add(identity.toLowerCase(Locale.ROOT))) {
-			add(Severity.ERROR, path, "Record identity duplicates another record in this collection.",
-					"Assign each record in the collection a distinct UUID.");
+		Set<String> identities = importIdentities.computeIfAbsent(recordType, ignored -> new HashSet<>());
+		if (!identities.add(identity.toLowerCase(Locale.ROOT))) {
+			add(Severity.ERROR, path, "Record identity duplicates another record of this type.",
+					"Assign each record of this type a distinct UUID.");
 		}
 	}
 

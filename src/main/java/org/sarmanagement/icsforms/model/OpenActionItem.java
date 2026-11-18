@@ -31,9 +31,6 @@ public class OpenActionItem implements Identified {
 	 * @return action item UUID, never null or blank
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -43,7 +40,7 @@ public class OpenActionItem implements Identified {
 	 * @param id action item UUID; null or blank generates a new UUID
 	 */
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		this.id = id;
 	}
 
 	/**

@@ -128,6 +128,8 @@ public final class PlanReuseService {
 				case SAFETY -> {
 					Ics215aForm analysis = detached.getForm215a() == null
 							? new Ics215aForm() : detached.getForm215a();
+					Ics208Form message = detached.getForm208() == null ? new Ics208Form() : detached.getForm208();
+					IdentityMigration.remint(analysis, message);
 					analysis.setIncidentNumber(target.getForm215a().getIncidentNumber());
 					analysis.setSafetyOfficerName("");
 					analysis.setOperationsSectionChiefName("");
@@ -136,7 +138,6 @@ public final class PlanReuseService {
 					analysis.setPreparedDateTime(null);
 					analysis.setReviewedDateTime(null);
 					analysis.setIapPage("");
-					Ics208Form message = detached.getForm208() == null ? new Ics208Form() : detached.getForm208();
 					message.setPreparedByName("");
 					message.setPreparedBySignature("");
 					message.setPreparedDateTime(null);
@@ -150,6 +151,7 @@ public final class PlanReuseService {
 				}
 				case HUMAN_MEDICAL -> {
 					MedicalPlan plan = detached.getMedicalPlan();
+					IdentityMigration.remint(plan);
 					plan.resetReviewState();
 					plan.setPreparedByMedicalUnitLeader("");
 					plan.setPreparerSignature("");
@@ -167,6 +169,7 @@ public final class PlanReuseService {
 				}
 				case CANINE_MEDICAL -> {
 					CanineMedicalPlan plan = detached.getCanineMedicalPlan();
+					IdentityMigration.remint(plan);
 					plan.resetReviewState();
 					plan.setPreparedByMedicalUnitLeader("");
 					plan.setPreparerSignature("");

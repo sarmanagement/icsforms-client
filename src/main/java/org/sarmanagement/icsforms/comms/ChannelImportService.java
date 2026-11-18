@@ -48,11 +48,11 @@ public class ChannelImportService {
 			chosen.add(source.getChannels().get(row));
 		}
 		if (mode == Mode.REPLACE) {
+			chosen.forEach(channel -> channel.setId(UUID.randomUUID().toString()));
 			result.setChannels(chosen);
 			return result;
 		}
 		List<RadioChannel> channels = new ArrayList<>(result.getChannels());
-		Set<String> used = new HashSet<>(existing.keySet());
 		for (RadioChannel channel : chosen) {
 			if (mode == Mode.UPDATE_BY_ID) {
 				Integer position = existing.get(channel.getChannelId());
@@ -62,9 +62,7 @@ public class ChannelImportService {
 				}
 				channels.set(position, channel);
 			} else {
-				while (!used.add(channel.getChannelId())) {
-					channel.setChannelId(UUID.randomUUID().toString());
-				}
+				channel.setId(UUID.randomUUID().toString());
 				channels.add(channel);
 			}
 		}

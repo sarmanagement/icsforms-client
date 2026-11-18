@@ -4,6 +4,9 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -15,11 +18,13 @@ import java.time.LocalDateTime;
  * so precision, unsupported settings, and imported programming data are not lost.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class RadioChannel {
+public class RadioChannel implements Identified {
 	public static final String TX_POLICY_UNKNOWN = "UNKNOWN";
 	public static final String TX_POLICY_TRANSMIT = "TRANSMIT";
 	public static final String TX_POLICY_RECEIVE_ONLY = "RECEIVE_ONLY";
 
+	@JsonProperty("id")
+	@JsonAlias("channelId")
 	private String channelId = UUID.randomUUID().toString();
 	private String zoneGroup = "";
 	private String channelNumber = "";
@@ -50,16 +55,30 @@ public class RadioChannel {
 	 * Returns the stable channel identity.
 	 * @return channel UUID string
 	 */
+	@JsonIgnore
 	public String getChannelId() {
 		return channelId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return channelId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		setChannelId(id);
 	}
 
 	/**
 	 * Sets the stable channel identity.
 	 * @param channelId identity; null or blank generates a UUID
 	 */
+	@JsonIgnore
 	public void setChannelId(String channelId) {
-		this.channelId = channelId == null || channelId.isBlank() ? UUID.randomUUID().toString() : channelId;
+		this.channelId = channelId;
 	}
 
 	/**

@@ -4,12 +4,13 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -17,7 +18,9 @@ import java.util.UUID;
  * Incident and operational-period context are supplied by the owning document.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Ics205Form {
+public class Ics205Form implements Identified {
+	@JsonProperty("id")
+	@JsonAlias("formId")
 	private String formId = UUID.randomUUID().toString();
 	private List<RadioChannel> channels = new ArrayList<>();
 	private String specialInstructions = "";
@@ -31,16 +34,30 @@ public class Ics205Form {
 	 * Returns the form identity.
 	 * @return stable form UUID string
 	 */
+	@JsonIgnore
 	public String getFormId() {
 		return formId;
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return formId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		formId = id;
+	}
+
 	/**
-	 * Sets the form identity.
-	 * @param formId identity; null or blank generates a UUID
+	 * Sets the form identity for deserialization or persistence migration.
+	 * @param formId identity, or null until legacy migration assigns one
 	 */
+	@JsonIgnore
 	public void setFormId(String formId) {
-		this.formId = formId == null || formId.isBlank() ? UUID.randomUUID().toString() : formId;
+		this.formId = formId;
 	}
 
 	/**
@@ -52,7 +69,7 @@ public class Ics205Form {
 	}
 
 	/**
-	 * Replaces the channel list, omitting null rows and repairing duplicate IDs.
+	 * Replaces the channel list, omitting null rows.
 	 * @param channels channel inventory; null becomes empty
 	 */
 	public void setChannels(List<RadioChannel> channels) {
@@ -164,23 +181,14 @@ public class Ics205Form {
 	}
 
 	/**
-	 * Repairs missing or duplicate channel identities within this plan. Identical
-	 * channel IDs in different period snapshots deliberately remain unchanged.
+	 * Removes null channel rows. Identity migration repairs missing or duplicate IDs at document load.
 	 */
 	public void normalizeIdentity() {
-		setFormId(formId);
-		Set<String> ids = new HashSet<>();
 		List<RadioChannel> normalized = new ArrayList<>();
 		for (RadioChannel channel : channels) {
 			if (channel == null) {
 				continue;
 			}
-			if (channel.getChannelId() == null || channel.getChannelId().isBlank()
-					|| ids.contains(channel.getChannelId())) {
-				channel = channel.deepCopy();
-				channel.setChannelId(null);
-			}
-			ids.add(channel.getChannelId());
 			normalized.add(channel);
 		}
 		channels = normalized;
@@ -209,16 +217,17 @@ public class Ics205Form {
 
 	/**
 	 * Carries inventory and instructions to a new form without carrying approval or
-	 * period-specific radio-check assertions. Stable channel identities survive so
-	 * external links continue to resolve.
+	 * period-specific radio-check assertions. The copied form and channels receive
+	 * new identities.
 	 *
 	 * @return independent new-period form with blank dates, signature, page, and
 	 *         radio checks.
 	 */
 	public Ics205Form copyForNewPeriod() {
 		Ics205Form copy = deepCopy();
-		copy.setFormId(null);
+		copy.setId(UUID.randomUUID().toString());
 		for (RadioChannel channel : copy.getChannels()) {
+			channel.setId(UUID.randomUUID().toString());
 			channel.setRadioCheckStatus(RadioCheckStatus.NOT_RECORDED);
 			channel.setRadioCheckedBy("");
 			channel.setRadioCheckedAt(null);

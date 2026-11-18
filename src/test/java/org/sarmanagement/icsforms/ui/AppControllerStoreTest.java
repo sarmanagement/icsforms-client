@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.model.IapPhase;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.RadioChannel;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.persistence.ControllableIncidentStore;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
@@ -161,6 +162,10 @@ class AppControllerStoreTest {
 	void createsAndDuplicatesIndependentIncidents() {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			AppData original = new AppData();
+			RadioChannel channel = new RadioChannel();
+			original.getForm205().getChannels().add(channel);
+			String originalFormId = original.getForm205().getId();
+			String originalChannelId = channel.getId();
 			IncidentId first = store.create(original);
 			AppController controller = controller(store, first, original);
 			controller.getData().getIncidentContext().setIncidentName("Search Alpha");
@@ -170,6 +175,10 @@ class AppControllerStoreTest {
 
 			assertNotEquals(first, duplicate);
 			assertEquals(duplicate, controller.getActiveIncidentId());
+			assertNotEquals(originalFormId, controller.getData().getForm205().getId());
+			assertNotEquals(originalChannelId, controller.getData().getForm205().getChannels().get(0).getId());
+			assertEquals(originalFormId, store.load(first).getForm205().getId());
+			assertEquals(originalChannelId, store.load(first).getForm205().getChannels().get(0).getId());
 			assertNotEquals("Search Alpha", store.load(first).getIncidentContext().getIncidentName());
 			assertEquals("Search Alpha", store.load(duplicate).getIncidentContext().getIncidentName());
 

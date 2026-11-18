@@ -38,7 +38,7 @@ public class IncidentLocation implements Identified {
 	 * @param id location identifier; blank values are replaced with a generated identifier.
 	 */
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		this.id = id;
 	}
 
 	/**

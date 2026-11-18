@@ -4,6 +4,7 @@ package org.sarmanagement.icsforms.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Configurable event type used to categorise ICS 214 activity log entries.
@@ -49,7 +50,7 @@ public class ActivityEventType implements Identified {
 	/** Stable identifier for an explicitly confirmed response-canine medical event. */
 	public static final String ID_CANINE_MEDICAL_EVENT = "RESPONSE_CANINE_MEDICAL_EVENT";
 
-	private String id = "";
+	private String id = UUID.randomUUID().toString();
 	private String label = "";
 	private boolean builtIn = false;
 	private transient boolean showInQuickMenu = false;

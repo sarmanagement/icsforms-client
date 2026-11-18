@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.UtcTimestamp;
 
@@ -1118,6 +1119,7 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 	 */
 	private JsonNode mergeKnownProperties(JsonNode original, JsonNode updated) {
 		JsonNode localOriginal = original.deepCopy();
+		StoredJsonMerger.removeIdentityAliases(MAPPER, localOriginal, AppData.class);
 		StoredJsonMerger.removeAcceptedAt(localOriginal);
 		return StoredJsonMerger.merge(MAPPER, localOriginal, updated);
 	}
@@ -1186,7 +1188,7 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 		if (data.getOriginNodeId() == null || data.getOriginNodeId().isBlank()) {
 			data.setOriginNodeId(nodeId);
 		}
-		normalize(data);
+		IdentityMigration.migrate(data);
 	}
 
 	/**

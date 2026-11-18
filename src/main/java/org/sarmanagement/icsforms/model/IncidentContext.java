@@ -1,11 +1,13 @@
 package org.sarmanagement.icsforms.model;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Shared incident metadata reused across ICS forms in the local workspace.
  */
-public class IncidentContext {
+public class IncidentContext implements Identified {
+	private String id = UUID.randomUUID().toString();
 	private String incidentName = "";
 	private LocalDateTime operationalPeriodStart;
 	private LocalDateTime operationalPeriodEnd;
@@ -17,6 +19,18 @@ public class IncidentContext {
 	 * Creates an empty incident context.
 	 */
 	public IncidentContext() {
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		this.id = id;
 	}
 
 	/**

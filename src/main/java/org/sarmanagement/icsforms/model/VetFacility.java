@@ -38,6 +38,7 @@ public class VetFacility implements Identified {
 	private Instant calculatedAt;
 	private long stagingGeneration = -1;
 	private String sourceName = "";
+	private String sourceFacilityId = "";
 
 	/** Creates an empty veterinary facility with a stable identifier. */
 	public VetFacility() {
@@ -45,15 +46,12 @@ public class VetFacility implements Identified {
 
 	/** @return stable directory identifier. */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
 	/** @param id stable directory identifier. */
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		this.id = id;
 	}
 
 	/** @return facility name. */
@@ -272,6 +270,24 @@ public class VetFacility implements Identified {
 	}
 
 	/**
+	 * Returns the source directory identity for a copied plan snapshot.
+	 *
+	 * @return source facility ID, or empty when this is not a copied snapshot
+	 */
+	public String getSourceFacilityId() {
+		return sourceFacilityId;
+	}
+
+	/**
+	 * Sets the source directory identity for a copied plan snapshot.
+	 *
+	 * @param sourceFacilityId source facility ID, or empty when unavailable
+	 */
+	public void setSourceFacilityId(String sourceFacilityId) {
+		this.sourceFacilityId = safe(sourceFacilityId);
+	}
+
+	/**
 	 * Stores a route result with explicit method and provenance.
 	 *
 	 * @param distanceMeters distance in meters.
@@ -338,6 +354,7 @@ public class VetFacility implements Identified {
 		copy.setDistance(distanceMeters, durationSeconds, distanceMethod, distanceProvenance, calculatedAt,
 				stagingGeneration);
 		copy.setSourceName(sourceName);
+		copy.setSourceFacilityId(sourceFacilityId);
 		return copy;
 	}
 

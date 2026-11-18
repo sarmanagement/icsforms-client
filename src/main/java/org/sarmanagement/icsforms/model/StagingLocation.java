@@ -6,12 +6,14 @@ package org.sarmanagement.icsforms.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * Address-first incident staging/base location shared by medical plans.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class StagingLocation {
+public class StagingLocation implements Identified {
+	private String id = UUID.randomUUID().toString();
 	private String label = "";
 	private String address = "";
 	private String resolvedAddress = "";
@@ -24,6 +26,18 @@ public class StagingLocation {
 
 	/** Creates an empty staging/base location. */
 	public StagingLocation() {
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		this.id = id;
 	}
 
 	/**

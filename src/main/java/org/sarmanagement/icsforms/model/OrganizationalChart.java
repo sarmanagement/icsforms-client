@@ -14,6 +14,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Shared organizational chart data reused across the first-cut form editors.
@@ -28,13 +29,26 @@ import java.util.List;
  * </p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class OrganizationalChart {
+public class OrganizationalChart implements Identified {
+	private String id = UUID.randomUUID().toString();
 	// Incident command
 	private List<String> incidentCommanders = new ArrayList<>();
 	private String incidentCommanderRadio = "";
 	private String incidentCommanderPhone = "";
 	private List<OrgChartEntry> incidentCommanderEntries = new ArrayList<>();
 	private boolean propagateIncidentCommanderContacts = false;
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		this.id = id;
+	}
 
 	// Command Staff (optional positions)
 	private String safetyOfficerName = "";

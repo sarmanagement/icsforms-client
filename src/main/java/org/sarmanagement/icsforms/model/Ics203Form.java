@@ -241,7 +241,7 @@ public class Ics203Form {
 
 	/** An operations branch with divisions/groups kept under its director and deputy. */
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static class Branch {
+	public static class Branch implements Identified {
 		private String id = UUID.randomUUID().toString();
 		private String name = "";
 		private String director = "";
@@ -254,9 +254,6 @@ public class Ics203Form {
 		 * @return branch UUID, never null or blank.
 		 */
 		public String getId() {
-			if (id == null || id.isBlank()) {
-				id = UUID.randomUUID().toString();
-			}
 			return id;
 		}
 
@@ -266,7 +263,7 @@ public class Ics203Form {
 		 * @param id branch UUID; null or blank generates a UUID.
 		 */
 		public void setId(String id) {
-			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+			this.id = id;
 		}
 
 		/**

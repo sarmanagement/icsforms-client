@@ -5,6 +5,8 @@ package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.Instant;
@@ -16,8 +18,10 @@ import java.util.UUID;
 /**
  * Search and rescue task scaffold linked from an ICS 204 assignment entry.
  */
-public class SarTaskAssignment {
-	private String taskId;
+public class SarTaskAssignment implements Identified {
+	@JsonProperty("id")
+	@JsonAlias("taskId")
+	private String taskId = UUID.randomUUID().toString();
 	private String assignmentId = "";
 	private String assignmentTeamNumber = "";
 	private String resourceType = "";
@@ -137,6 +141,7 @@ public class SarTaskAssignment {
 	 * @param newStatus status after the change.
 	 * @param changedAt UTC instant when the change took effect.
 	 * @param provenance optional attribution for the change.
+	 * @param id stable identity for this history entry.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record LifecycleStatusChange(String previousStatus, String newStatus, Instant changedAt,
@@ -280,8 +285,21 @@ public class SarTaskAssignment {
 	 *
 	 * @return task UUID, never {@code null} or blank.
 	 */
+	@JsonIgnore
 	public String getTaskId() {
 		return taskId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return taskId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		taskId = id;
 	}
 
 	/**
@@ -299,6 +317,7 @@ public class SarTaskAssignment {
 	 * @param taskId
 	 *            task UUID; missing values are generated on first access.
 	 */
+	@JsonIgnore
 	public void setTaskId(String taskId) {
 		this.taskId = taskId;
 	}

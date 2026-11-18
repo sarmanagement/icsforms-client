@@ -28,9 +28,6 @@ public class SafetyHazardReport implements Identified {
 	 * @return report UUID, never null or blank.
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -40,7 +37,7 @@ public class SafetyHazardReport implements Identified {
 	 * @param id report UUID; null or blank generates a new UUID.
 	 */
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		this.id = id;
 	}
 
 	/**

@@ -32,9 +32,6 @@ public class SarTaskResource implements Identified {
 	 * @return row UUID, never null or blank
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -44,7 +41,7 @@ public class SarTaskResource implements Identified {
 	 * @param id row UUID; null or blank generates a UUID
 	 */
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		this.id = id;
 	}
 
 	/** @return resource function or role. */

@@ -1439,13 +1439,17 @@ public class CanineMedicalPanel extends JPanel {
 	 * @return true if a new plan snapshot was added.
 	 */
 	private boolean addSnapshot(VetFacility source) {
+		String sourceId = source.getSourceFacilityId().isBlank() ? source.getId() : source.getSourceFacilityId();
 		for (int row = 0; row < selectionModel.getRowCount(); row++) {
 			VetFacility existing = record(selectionModel.getValueAt(row, 13));
-			if (source.getId().equals(existing.getId())) {
+			if (sourceId.equals(existing.getId()) || sourceId.equals(existing.getSourceFacilityId())) {
 				return false;
 			}
 		}
-		selectionModel.addRow(selectionRow(source.copy()));
+		VetFacility snapshot = source.copy();
+		snapshot.setSourceFacilityId(sourceId);
+		snapshot.setId(UUID.randomUUID().toString());
+		selectionModel.addRow(selectionRow(snapshot));
 		return true;
 	}
 

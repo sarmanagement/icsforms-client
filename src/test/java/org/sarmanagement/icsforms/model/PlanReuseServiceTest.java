@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -65,6 +66,7 @@ class PlanReuseServiceTest {
 	@Test
 	void selectedCopyPreservesCurrentContextOtherPlansAndSourceApprovals() {
 		AppData source = populatedSource();
+		String sourceHospitalId = source.getMedicalPlan().getHospitals().get(0).getId();
 		source.recordPlanReview(PlanReviewArea.HUMAN_MEDICAL, "Source reviewer", LocalDateTime.now());
 		AppData target = new AppData();
 		target.setIncidentId("current-incident");
@@ -83,6 +85,7 @@ class PlanReuseServiceTest {
 		assertEquals("Keep current communications", target.getForm205().getSpecialInstructions());
 		assertSame(canine, target.getCanineMedicalPlan());
 		assertEquals("Source procedures", target.getMedicalPlan().getEmergencyProcedures());
+		assertNotEquals(sourceHospitalId, target.getMedicalPlan().getHospitals().get(0).getId());
 		assertEquals("Not reviewed", target.getMedicalPlan().getReviewStatus());
 		assertEquals("", target.getMedicalPlan().getSafetyOfficerSignature());
 		assertEquals("", target.getMedicalPlan().getPreparerSignature());
@@ -96,13 +99,18 @@ class PlanReuseServiceTest {
 	@Test
 	void allPlansClearApprovalsRadioChecksAndForeignResourceLinks() {
 		AppData source = populatedSource();
+		SafetyAnalysisEntry analysisEntry = new SafetyAnalysisEntry();
+		source.getForm215a().getEntries().add(analysisEntry);
+		SafetyMessageBlock block = new SafetyMessageBlock();
+		block.setHazard("Cold");
+		source.getForm208().getHazardBlocks().add(block);
+		String sourceChannelId = source.getForm205().getChannels().get(0).getId();
+		String sourceAnalysisId = analysisEntry.getId();
+		String sourceHazardBlockId = source.getForm208().getHazardBlocks().get(0).getId();
 		source.getForm215a().setSafetyOfficerSignature("Approved");
 		source.getForm215a().setReviewedDateTime(LocalDateTime.now());
 		source.getForm208().setPreparedBySignature("Signed");
 		source.getForm208().getSiteSafetyPlan().setPreparedBySignature("Site signed");
-		SafetyMessageBlock block = new SafetyMessageBlock();
-		block.setHazard("Cold");
-		source.getForm208().getHazardBlocks().add(block);
 		source.getCanineMedicalPlan().setVeterinaryPersonnelResourceIds(List.of("source-resource"));
 		VetFacility vet = new VetFacility();
 		vet.setName("Source vet");
@@ -122,6 +130,7 @@ class PlanReuseServiceTest {
 		assertEquals("", target.getForm208().getSiteSafetyPlan().getPreparedBySignature());
 		assertTrue(target.getForm208().getHazardBlocks().get(0).isNeedsReview());
 		assertEquals("", target.getForm205().getPreparedBySignature());
+		assertNotEquals(sourceChannelId, target.getForm205().getChannels().get(0).getId());
 		assertNull(target.getForm205().getPreparedDateTime());
 		assertEquals(RadioCheckStatus.NOT_RECORDED,
 				target.getForm205().getChannels().get(0).getRadioCheckStatus());
@@ -131,6 +140,8 @@ class PlanReuseServiceTest {
 		assertEquals(1200, source.getCanineMedicalPlan().getSelectedFacilities().get(0).getDistanceMeters());
 		target.getForm208().getHazardBlocks().get(0).setHazard("Edited");
 		assertEquals("Cold", source.getForm208().getHazardBlocks().get(0).getHazard());
+		assertNotEquals(sourceAnalysisId, target.getForm215a().getEntries().get(0).getId());
+		assertNotEquals(sourceHazardBlockId, target.getForm208().getHazardBlocks().get(0).getId());
 		target.getForm205().getChannels().get(0).setChannelName("Edited");
 		assertEquals("Source channel", source.getForm205().getChannels().get(0).getChannelName());
 	}
@@ -146,6 +157,32 @@ class PlanReuseServiceTest {
 		assertSame(original, target.getMedicalPlan());
 		assertThrows(IllegalArgumentException.class, () -> PlanReuseService.apply(target,
 				PlanReuseService.snapshot(source), Set.of(), false));
+	}
+
+	@Test
+	void reusedWorksheetGetsFreshRecordIdsAndRemapsHeadingReferences() {
+		AppData source = new AppData();
+		Ics215Form.ResourceHeading heading = new Ics215Form.ResourceHeading();
+		heading.category = "Medical";
+		Ics215Form.WorkRow row = new Ics215Form.WorkRow();
+		row.resourceAllocations.put(heading.id, new Ics215Form.ResourceAllocation());
+		row.ics204DraftFormId = UUID.randomUUID().toString();
+		source.getNextPeriodForm215().getResourceHeadings().add(heading);
+		source.getNextPeriodForm215().getWorkRows().add(row);
+		String headingId = heading.id;
+		String rowId = row.id;
+		AppData target = new AppData();
+
+		PlanReuseService.apply(target, PlanReuseService.snapshot(source), Set.of(), false, true, false);
+
+		Ics215Form reused = target.getNextPeriodForm215();
+		String copiedHeadingId = reused.getResourceHeadings().get(0).id;
+		assertNotEquals(headingId, copiedHeadingId);
+		assertNotEquals(rowId, reused.getWorkRows().get(0).id);
+		assertTrue(reused.getWorkRows().get(0).resourceAllocations.containsKey(copiedHeadingId));
+		assertFalse(reused.getWorkRows().get(0).resourceAllocations.containsKey(headingId));
+		assertEquals("", reused.getWorkRows().get(0).ics204DraftFormId);
+		assertEquals(headingId, source.getNextPeriodForm215().getResourceHeadings().get(0).id);
 	}
 
 	@Test

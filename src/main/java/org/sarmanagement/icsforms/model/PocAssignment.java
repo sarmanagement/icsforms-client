@@ -36,9 +36,6 @@ public class PocAssignment implements Identified {
 	 * @return assignment UUID, never null or blank
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -48,7 +45,7 @@ public class PocAssignment implements Identified {
 	 * @param id assignment UUID; null or blank generates a new UUID
 	 */
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		this.id = id;
 	}
 
 	/**

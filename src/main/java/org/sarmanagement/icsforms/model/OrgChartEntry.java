@@ -35,9 +35,6 @@ public class OrgChartEntry implements Identified {
 	 * @return position UUID, never null or blank.
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -47,7 +44,7 @@ public class OrgChartEntry implements Identified {
 	 * @param id position UUID; null or blank generates a UUID.
 	 */
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		this.id = id;
 	}
 
 	/**

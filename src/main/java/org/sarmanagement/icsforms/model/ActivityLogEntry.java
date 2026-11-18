@@ -25,7 +25,7 @@ import java.util.UUID;
 public class ActivityLogEntry implements Identified {
 	@JsonProperty("id")
 	@JsonAlias("entryId")
-	private String entryId;
+	private String entryId = UUID.randomUUID().toString();
 	private LocalDateTime timestamp;
 	private String eventTypeId = ActivityEventType.ID_FREE_TEXT;
 	private String resourceIdentifier = "";
@@ -194,10 +194,10 @@ public class ActivityLogEntry implements Identified {
 	 * @param previousEventTypeId event type before the change.
 	 * @param newEventTypeId event type after the change.
 	 * @param changedAt time the change was made.
-	 * @param changeId stable UUID for this audit record.
+	 * @param id stable UUID for this audit record.
 	 */
 	public record EventTypeChange(String previousEventTypeId, String newEventTypeId, LocalDateTime changedAt,
-			@JsonAlias("changeId") String id) implements Identified {
+			String id) implements Identified {
 		/**
 		 * Assigns an identity when deserializing a legacy audit record without one.
 		 */

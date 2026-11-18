@@ -8,6 +8,7 @@ package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -32,7 +33,7 @@ import java.util.UUID;
  * </p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class TCard {
+public class TCard implements Identified {
 
 	/**
 	 * Stable UUID assigned once at creation and never changed. Used by
@@ -42,7 +43,9 @@ public class TCard {
 	 * records deserialized without a {@code resourceId} field receive a stable
 	 * value rather than a new random one each time.
 	 */
-	private String resourceId = null;
+	@JsonProperty("id")
+	@JsonAlias("resourceId")
+	private String resourceId = UUID.randomUUID().toString();
 
 	private TCardType cardType = TCardType.PERSONNEL;
 
@@ -166,17 +169,19 @@ public class TCard {
 	 * @param action check-in or check-out action.
 	 * @param eventAt UTC instant when the event occurred.
 	 * @param provenance optional attribution for the event.
-	 * @param eventId stable identity for this occurrence, absent on legacy events.
+	 * @param id stable identity for this occurrence, absent on legacy events.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
-	public record CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance, String eventId) {
+	public record CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance,
+			@JsonAlias("eventId") String id)
+			implements Identified {
 		/**
 		 * Requires an event type and timestamp and normalizes an optional event identity.
 		 */
 		public CheckInOutEvent {
 			Objects.requireNonNull(action, "action");
 			Objects.requireNonNull(eventAt, "eventAt");
-			eventId = eventId == null || eventId.isBlank() ? null : eventId;
+			id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
 		}
 
 		/**
@@ -188,6 +193,27 @@ public class TCard {
 		 */
 		public CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance) {
 			this(action, eventAt, provenance, UUID.randomUUID().toString());
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public String getId() {
+			return id;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void setId(String id) {
+			throw new UnsupportedOperationException("History record identities are immutable.");
+		}
+
+		/**
+		 * Returns the event identity under its legacy accessor name.
+		 *
+		 * @return event identity
+		 */
+		public String eventId() {
+			return id;
 		}
 	}
 
@@ -235,8 +261,21 @@ public class TCard {
 	 *
 	 * @return resource UUID, never {@code null}.
 	 */
+	@JsonIgnore
 	public String getResourceId() {
 		return resourceId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return resourceId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		resourceId = id;
 	}
 
 	/**
@@ -255,8 +294,9 @@ public class TCard {
 	 * @param resourceId
 	 *            resource UUID string; blank/null generates a new UUID.
 	 */
+	@JsonIgnore
 	public void setResourceId(String resourceId) {
-		this.resourceId = (resourceId == null || resourceId.isBlank()) ? UUID.randomUUID().toString() : resourceId;
+		this.resourceId = resourceId;
 	}
 
 	/**

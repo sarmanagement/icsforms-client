@@ -13,12 +13,14 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * First-cut Incident Objectives (ICS 202) content captured by the desktop
  * editor.
  */
-public class Ics202Form {
+public class Ics202Form implements Identified {
+	private String id = UUID.randomUUID().toString();
 	private List<String> objectives = new ArrayList<>();
 	private List<IncidentObjective> structuredObjectives = new ArrayList<>();
 	private List<Ics202ReportedResult> reportedResults = new ArrayList<>();
@@ -35,6 +37,18 @@ public class Ics202Form {
 	private String approvedObjectivesDigest = "";
 	private String formNumber = "ICS 202";
 	private String iapPage = "";
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		this.id = id;
+	}
 
 	/**
 	 * Returns the incident objectives.

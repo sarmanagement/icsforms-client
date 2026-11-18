@@ -21,6 +21,7 @@ import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.OperatorContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
@@ -1780,6 +1781,7 @@ public class AppController implements AutoCloseable {
 		} catch (IOException exception) {
 			throw new IllegalStateException("Cannot duplicate incident data", exception);
 		}
+		IdentityMigration.remint(copy);
 		copy.setIncidentId(IncidentId.newId().value());
 		copy.setCreatedAt(null);
 		copy.setUpdatedAt(null);

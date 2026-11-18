@@ -6,11 +6,16 @@ package org.sarmanagement.icsforms.model;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Resource row on ICS 204 with linkage to a SAR task scaffold record.
  */
-public class ResourceAssignment {
+public class ResourceAssignment implements Identified {
+	@JsonProperty("id")
+	@JsonAlias("assignmentId")
 	private String assignmentId = UUID.randomUUID().toString();
 	private String assignmentTeamNumber = "";
 	private String resourceType = "";
@@ -33,8 +38,21 @@ public class ResourceAssignment {
 	 *
 	 * @return assignment linkage identifier.
 	 */
+	@JsonIgnore
 	public String getAssignmentId() {
 		return assignmentId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return assignmentId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		assignmentId = id;
 	}
 
 	/**
@@ -43,6 +61,7 @@ public class ResourceAssignment {
 	 * @param assignmentId
 	 *            assignment linkage identifier.
 	 */
+	@JsonIgnore
 	public void setAssignmentId(String assignmentId) {
 		this.assignmentId = assignmentId;
 	}

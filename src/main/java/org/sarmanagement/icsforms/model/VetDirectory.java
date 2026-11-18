@@ -14,9 +14,22 @@ import java.util.UUID;
  * Incident-owned reusable regional veterinary records and import provenance.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class VetDirectory {
+public class VetDirectory implements Identified {
+	private String id = UUID.randomUUID().toString();
 	private List<VetFacility> facilities = new ArrayList<>();
 	private List<Source> sources = new ArrayList<>();
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		this.id = id;
+	}
 
 	/** Creates an empty directory that does not depend on source files. */
 	public VetDirectory() {
@@ -62,7 +75,7 @@ public class VetDirectory {
 	 * Non-dependent display metadata for a local regional file.
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static class Source {
+	public static class Source implements Identified {
 		private String id = UUID.randomUUID().toString();
 		private String name = "";
 		private String format = "";
@@ -74,9 +87,6 @@ public class VetDirectory {
 		 * @return source UUID, never null or blank
 		 */
 		public String getId() {
-			if (id == null || id.isBlank()) {
-				id = UUID.randomUUID().toString();
-			}
 			return id;
 		}
 
@@ -86,7 +96,7 @@ public class VetDirectory {
 		 * @param id source UUID; null or blank generates a UUID
 		 */
 		public void setId(String id) {
-			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+			this.id = id;
 		}
 
 		/** Creates empty source metadata. */

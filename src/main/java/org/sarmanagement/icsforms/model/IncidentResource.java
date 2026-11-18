@@ -1,8 +1,11 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -49,9 +52,11 @@ import java.util.UUID;
 		@JsonSubTypes.Type(value = EquipmentResource.class, name = "EQUIPMENT"),
 		@JsonSubTypes.Type(value = AircraftResource.class, name = "AIRCRAFT"),
 		@JsonSubTypes.Type(value = GenericResource.class, name = "GENERIC"),})
-public abstract class IncidentResource {
+public abstract class IncidentResource implements Identified {
 
 	/** Stable UUID assigned once at creation and never changed. */
+	@JsonProperty("id")
+	@JsonAlias("resourceId")
 	private String resourceId = UUID.randomUUID().toString();
 
 	/**
@@ -110,8 +115,21 @@ public abstract class IncidentResource {
 	 *
 	 * @return resource UUID, never {@code null}.
 	 */
+	@JsonIgnore
 	public String getResourceId() {
 		return resourceId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return resourceId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		setResourceId(id);
 	}
 
 	/**
@@ -122,8 +140,9 @@ public abstract class IncidentResource {
 	 * @param resourceId
 	 *            stable UUID string.
 	 */
+	@JsonIgnore
 	public void setResourceId(String resourceId) {
-		this.resourceId = resourceId == null || resourceId.isBlank() ? UUID.randomUUID().toString() : resourceId;
+		this.resourceId = resourceId;
 	}
 
 	// -----------------------------------------------------------------------

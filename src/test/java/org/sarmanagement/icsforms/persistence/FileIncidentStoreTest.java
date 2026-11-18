@@ -24,6 +24,37 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** File-specific behavior of the multi-incident store. */
 class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 	@Test
+	void legacyRecordIdentitiesPersistAcrossSaveAndReload() throws Exception {
+		Path root = tempDir.resolve("identity-migration");
+		IncidentId id = IncidentId.newId();
+		Path document = root.resolve("incidents").resolve(id.value() + ".json");
+		Files.createDirectories(document.getParent());
+		Files.writeString(document, """
+				{"schemaVersion":17,"incidentId":"%s",
+				"form205":{"formId":null,"channels":[{"channelId":null}]}}
+				""".formatted(id.value()));
+
+		try (FileIncidentStore store = new FileIncidentStore(root)) {
+			AppData first = store.load(id);
+			String formId = first.getForm205().getId();
+			String channelId = first.getForm205().getChannels().get(0).getId();
+			assertFalse(formId.isBlank());
+			assertFalse(channelId.isBlank());
+
+			store.save(id, first);
+			AppData reloaded = store.load(id);
+
+			assertEquals(formId, reloaded.getForm205().getId());
+			assertEquals(channelId, reloaded.getForm205().getChannels().get(0).getId());
+			JsonNode saved = new ObjectMapper().readTree(document.toFile());
+			assertTrue(saved.path("form205").has("id"));
+			assertFalse(saved.path("form205").has("formId"));
+			assertTrue(saved.path("form205").path("channels").get(0).has("id"));
+			assertFalse(saved.path("form205").path("channels").get(0).has("channelId"));
+		}
+	}
+
+	@Test
 	void recoveryTargetsCannotOverwriteManagedDocumentsOrNodeThroughAliases() throws Exception {
 		Path root = tempDir.resolve("store");
 		try (FileIncidentStore store = new FileIncidentStore(root)) {

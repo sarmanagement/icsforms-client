@@ -24,9 +24,11 @@ class ChannelImportServiceTest {
 		Ics205Form imported = target.deepCopy();
 		imported.getChannels().get(0).setProgrammingMetadata(Map.of("raw", "023"));
 		imported.getChannels().add(new RadioChannel());
+		String importedId = imported.getChannels().get(0).getId();
 		Ics205Form result = service.merge(target, imported, List.of(0), ChannelImportService.Mode.APPEND);
 		assertEquals(2, result.getChannels().size());
 		assertNotEquals(result.getChannels().get(0).getChannelId(), result.getChannels().get(1).getChannelId());
+		assertNotEquals(importedId, result.getChannels().get(1).getId());
 		assertEquals(target.getChannels().get(0).getChannelId(), imported.getChannels().get(0).getChannelId());
 		result.getChannels().get(1).getProgrammingMetadata().put("raw", "changed");
 		assertEquals("023", imported.getChannels().get(0).getProgrammingMetadata().get("raw"));
@@ -37,10 +39,12 @@ class ChannelImportServiceTest {
 	void replacesOnlyChannelInventoryAndKeepsPlanMetadata() {
 		Ics205Form target = plan("Existing");
 		target.setSpecialInstructions("Local instructions");
-		Ics205Form result = service.merge(target, plan("Incoming"), List.of(0), ChannelImportService.Mode.REPLACE);
+		Ics205Form imported = plan("Incoming");
+		Ics205Form result = service.merge(target, imported, List.of(0), ChannelImportService.Mode.REPLACE);
 		assertEquals("Incoming", result.getChannels().get(0).getChannelName());
 		assertEquals("Local instructions", result.getSpecialInstructions());
 		assertEquals(target.getFormId(), result.getFormId());
+		assertNotEquals(imported.getChannels().get(0).getId(), result.getChannels().get(0).getId());
 		assertEquals(0, service.merge(target, plan("Unused"), List.of(), ChannelImportService.Mode.REPLACE).getChannels().size());
 	}
 

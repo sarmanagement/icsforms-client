@@ -23,9 +23,6 @@ public class PodFactorRating implements Identified {
 	 * @return factor UUID, never null or blank
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -35,7 +32,7 @@ public class PodFactorRating implements Identified {
 	 * @param id factor UUID; null or blank generates a UUID
 	 */
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		this.id = id;
 	}
 
 	/**
