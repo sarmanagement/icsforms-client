@@ -10,7 +10,7 @@ import java.util.UUID;
 /**
  * Editable hazard and precaution block linked to one or more 215A rows.
  */
-public class SafetyMessageBlock {
+public class SafetyMessageBlock implements Identified {
 	private String id = UUID.randomUUID().toString();
 	private String hazard = "";
 	private String incidentArea = "All";

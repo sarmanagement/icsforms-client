@@ -9,7 +9,7 @@ import java.util.UUID;
 /**
  * Archived SAR debrief hazard report retained across operational periods.
  */
-public class SafetyHazardReport {
+public class SafetyHazardReport implements Identified {
 	private String id = UUID.randomUUID().toString();
 	private String taskId = "";
 	private String taskLabel = "";

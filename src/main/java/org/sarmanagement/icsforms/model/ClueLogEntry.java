@@ -31,7 +31,7 @@ import java.util.UUID;
  * </p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class ClueLogEntry {
+public class ClueLogEntry implements Identified {
 	private String entryId;
 	private String assignmentId = "";
 	private String detectingTask = "";
@@ -77,9 +77,12 @@ public class ClueLogEntry {
 	 * @return clue entry UUID, never {@code null} or blank.
 	 */
 	public String getEntryId() {
-		if (entryId == null || entryId.isBlank()) {
-			entryId = UUID.randomUUID().toString();
-		}
+		return entryId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
 		return entryId;
 	}
 
@@ -91,6 +94,12 @@ public class ClueLogEntry {
 	 */
 	public void setEntryId(String entryId) {
 		this.entryId = entryId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		entryId = id;
 	}
 
 	/**

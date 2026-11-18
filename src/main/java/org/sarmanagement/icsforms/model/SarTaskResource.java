@@ -8,7 +8,7 @@ import java.util.UUID;
 /**
  * Resource entry printed on the SAR task assignment form.
  */
-public class SarTaskResource {
+public class SarTaskResource implements Identified {
 	private String id = UUID.randomUUID().toString();
 	private String function = "";
 	private String icsPosition = "";

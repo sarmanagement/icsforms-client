@@ -12,7 +12,7 @@ import java.util.List;
  * shared through {@link ActivityEventTypeCatalog}. Incident documents retain
  * the event type metadata needed to display their existing entries.
  */
-public class ActivityEventType {
+public class ActivityEventType implements Identified {
 
 	/** Stable identifier for the built-in "Clue Detected" type. */
 	public static final String ID_CLUE_DETECTED = "CLUE_DETECTED";

@@ -11,7 +11,7 @@ import java.util.UUID;
  * A point-of-contact assignment recorded in chronological history, using UTC.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class PocAssignment {
+public class PocAssignment implements Identified {
 	private String id = UUID.randomUUID().toString();
 	private String assignee = "";
 	private LocalDateTime assignedAt;

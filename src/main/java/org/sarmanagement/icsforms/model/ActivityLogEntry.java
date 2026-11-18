@@ -2,6 +2,9 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +22,9 @@ import java.util.UUID;
  * resource, so follow-up entries retain the same task after reloading.
  * </p>
  */
-public class ActivityLogEntry {
+public class ActivityLogEntry implements Identified {
+	@JsonProperty("id")
+	@JsonAlias("entryId")
 	private String entryId;
 	private LocalDateTime timestamp;
 	private String eventTypeId = ActivityEventType.ID_FREE_TEXT;
@@ -55,10 +60,8 @@ public class ActivityLogEntry {
 	 *
 	 * @return activity entry UUID, never {@code null} or blank.
 	 */
+	@JsonIgnore
 	public String getEntryId() {
-		if (entryId == null || entryId.isBlank()) {
-			entryId = UUID.randomUUID().toString();
-		}
 		return entryId;
 	}
 
@@ -68,8 +71,21 @@ public class ActivityLogEntry {
 	 * @param entryId
 	 *            stable entry UUID; missing values are generated on first access.
 	 */
+	@JsonIgnore
 	public void setEntryId(String entryId) {
 		this.entryId = entryId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return entryId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void setId(String id) {
+		entryId = id;
 	}
 
 	/**
@@ -181,14 +197,35 @@ public class ActivityLogEntry {
 	 * @param changeId stable UUID for this audit record.
 	 */
 	public record EventTypeChange(String previousEventTypeId, String newEventTypeId, LocalDateTime changedAt,
-			String changeId) {
+			@JsonAlias("changeId") String id) implements Identified {
 		/**
 		 * Assigns an identity when deserializing a legacy audit record without one.
 		 */
 		public EventTypeChange {
-			if (changeId == null || changeId.isBlank()) {
-				changeId = UUID.randomUUID().toString();
+			if (id == null || id.isBlank()) {
+				id = UUID.randomUUID().toString();
 			}
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public String getId() {
+			return id;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void setId(String id) {
+			throw new UnsupportedOperationException("History record identities are immutable.");
+		}
+
+		/**
+		 * Returns the legacy accessor for this history record identity.
+		 *
+		 * @return history record identity
+		 */
+		public String changeId() {
+			return id;
 		}
 
 		/**

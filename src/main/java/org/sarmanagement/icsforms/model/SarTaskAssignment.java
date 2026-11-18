@@ -140,7 +140,7 @@ public class SarTaskAssignment {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record LifecycleStatusChange(String previousStatus, String newStatus, Instant changedAt,
-			Provenance provenance) {
+			Provenance provenance, String id) implements Identified {
 		/**
 		 * Requires the lifecycle transition to have both statuses and a timestamp.
 		 */
@@ -148,6 +148,34 @@ public class SarTaskAssignment {
 			Objects.requireNonNull(previousStatus, "previousStatus");
 			Objects.requireNonNull(newStatus, "newStatus");
 			Objects.requireNonNull(changedAt, "changedAt");
+			if (id == null || id.isBlank()) {
+				id = UUID.randomUUID().toString();
+			}
+		}
+
+		/**
+		 * Creates a history record using the legacy constructor signature.
+		 *
+		 * @param previousStatus status before the change
+		 * @param newStatus status after the change
+		 * @param changedAt UTC instant when the change took effect
+		 * @param provenance optional attribution
+		 */
+		public LifecycleStatusChange(String previousStatus, String newStatus, Instant changedAt,
+				Provenance provenance) {
+			this(previousStatus, newStatus, changedAt, provenance, UUID.randomUUID().toString());
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public String getId() {
+			return id;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void setId(String id) {
+			throw new UnsupportedOperationException("History record identities are immutable.");
 		}
 	}
 
@@ -253,9 +281,6 @@ public class SarTaskAssignment {
 	 * @return task UUID, never {@code null} or blank.
 	 */
 	public String getTaskId() {
-		if (taskId == null || taskId.isBlank()) {
-			taskId = UUID.randomUUID().toString();
-		}
 		return taskId;
 	}
 

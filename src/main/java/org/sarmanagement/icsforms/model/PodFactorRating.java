@@ -8,7 +8,7 @@ import java.util.UUID;
 /**
  * Qualitative POD factor rating collected during SAR task debriefing.
  */
-public class PodFactorRating {
+public class PodFactorRating implements Identified {
 	private static final int DEFAULT_MAX_SCORE = 10;
 
 	private String id = UUID.randomUUID().toString();

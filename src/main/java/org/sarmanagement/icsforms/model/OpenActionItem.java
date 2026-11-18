@@ -10,7 +10,7 @@ import java.util.UUID;
 
 /** An ICS 233 action item with its current point of contact and UTC dates. */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class OpenActionItem {
+public class OpenActionItem implements Identified {
 	private String id = UUID.randomUUID().toString();
 	private int number;
 	private String item = "";

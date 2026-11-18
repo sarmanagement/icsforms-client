@@ -16,7 +16,7 @@ import java.util.UUID;
  * </p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class OrgChartEntry {
+public class OrgChartEntry implements Identified {
 	/** Chart section this position belongs to. */
 	public enum Section {
 		COMMAND_STAFF, OPERATIONS, PLANNING, LOGISTICS, FINANCE_ADMIN

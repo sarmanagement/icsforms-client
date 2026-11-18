@@ -11,7 +11,7 @@ import java.util.UUID;
  * Incident-owned location shared by operational workspaces.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class IncidentLocation {
+public class IncidentLocation implements Identified {
 	private String id = UUID.randomUUID().toString();
 	private String type = "Other";
 	private String name = "";

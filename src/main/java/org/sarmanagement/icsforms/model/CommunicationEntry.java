@@ -10,7 +10,7 @@ import java.util.UUID;
 /**
  * Communication row for ICS 204 or linked SAR task context.
  */
-public class CommunicationEntry {
+public class CommunicationEntry implements Identified {
 	private String id = UUID.randomUUID().toString();
 	private String name = "";
 	private String function = "";

@@ -236,9 +236,6 @@ public class TCard {
 	 * @return resource UUID, never {@code null}.
 	 */
 	public String getResourceId() {
-		if (resourceId == null || resourceId.isBlank()) {
-			resourceId = UUID.randomUUID().toString();
-		}
 		return resourceId;
 	}
 

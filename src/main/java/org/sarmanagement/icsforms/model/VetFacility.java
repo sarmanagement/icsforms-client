@@ -14,7 +14,7 @@ import java.util.UUID;
  * Regional veterinary facility record or immutable-in-practice plan snapshot.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class VetFacility {
+public class VetFacility implements Identified {
 	private String id = UUID.randomUUID().toString();
 	private String name = "";
 	private String town = "";
