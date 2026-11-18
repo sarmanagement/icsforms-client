@@ -69,7 +69,7 @@ public class RadioChannel implements Identified {
 	/** {@inheritDoc} */
 	@Override
 	public void setId(String id) {
-		setChannelId(id);
+		channelId = id;
 	}
 
 	/**

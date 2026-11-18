@@ -323,7 +323,10 @@ public class VetDirectoryFileService {
 			}
 		}
 		VetFacility facility = new VetFacility();
-		facility.setId(values.get(CsvField.ID));
+		String id = values.get(CsvField.ID);
+		if (id != null && !id.isBlank()) {
+			facility.setId(id);
+		}
 		facility.setName(values.get(CsvField.NAME));
 		facility.setTown(values.get(CsvField.TOWN));
 		facility.setState(values.get(CsvField.STATE));

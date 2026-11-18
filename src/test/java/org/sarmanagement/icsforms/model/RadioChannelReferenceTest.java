@@ -154,6 +154,8 @@ class RadioChannelReferenceTest {
 		AppData data = new AppData();
 		TCard card = new TCard();
 		SarTaskAssignment task = new SarTaskAssignment();
+		card.setId(null);
+		task.setId(null);
 		data.getOrganizationalChart().setMedicalUnitLeaderName("Legacy medical leader");
 		for (int i = 0; i < 2; i++) {
 			assertNull(data.peekMedicalUnitLeaderAssignment());

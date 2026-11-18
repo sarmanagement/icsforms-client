@@ -256,6 +256,7 @@ class ChannelLinkSourceTest {
 	void readsDoNotInitializeLegacyIdsReconcileLeaderOrRepairMissingPlans() throws Exception {
 		AppData data = data(channel("stable", "Channel"));
 		TCard card = new TCard();
+		card.setId(null);
 		card.setRadioChannel("legacy");
 		data.getTCards().add(card);
 		SarTaskAssignment task = new SarTaskAssignment();

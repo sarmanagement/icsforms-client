@@ -346,6 +346,7 @@ class CommunicationsConsolePanelTest {
 		AppData data = incident();
 		AppController controller = controller(data);
 		TCard legacy = new TCard();
+		legacy.setId(null);
 		legacy.setPersonName("Legacy responder");
 		data.getTCards().add(legacy);
 		assertEquals(null, legacy.peekResourceId());

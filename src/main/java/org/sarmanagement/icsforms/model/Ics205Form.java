@@ -217,8 +217,8 @@ public class Ics205Form implements Identified {
 
 	/**
 	 * Carries inventory and instructions to a new form without carrying approval or
-	 * period-specific radio-check assertions. The copied form and channels receive
-	 * new identities.
+	 * period-specific radio-check assertions. The copied form receives a new
+	 * identity while channel identities are retained for existing references.
 	 *
 	 * @return independent new-period form with blank dates, signature, page, and
 	 *         radio checks.
@@ -227,7 +227,6 @@ public class Ics205Form implements Identified {
 		Ics205Form copy = deepCopy();
 		copy.setId(UUID.randomUUID().toString());
 		for (RadioChannel channel : copy.getChannels()) {
-			channel.setId(UUID.randomUUID().toString());
 			channel.setRadioCheckStatus(RadioCheckStatus.NOT_RECORDED);
 			channel.setRadioCheckedBy("");
 			channel.setRadioCheckedAt(null);
