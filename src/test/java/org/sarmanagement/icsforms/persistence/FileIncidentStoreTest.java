@@ -7,12 +7,17 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -51,6 +56,40 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 			assertFalse(saved.path("form205").has("formId"));
 			assertTrue(saved.path("form205").path("channels").get(0).has("id"));
 			assertFalse(saved.path("form205").path("channels").get(0).has("channelId"));
+		}
+	}
+
+	@Test
+	void schema18StoredDuplicateIdentitiesAreRepairedAndPersisted() throws Exception {
+		IncidentId id = IncidentId.newId();
+		String sharedFormId = UUID.randomUUID().toString();
+		Path document = tempDir.resolve("incidents").resolve(id.value() + ".json");
+		Files.createDirectories(document.getParent());
+		Files.writeString(document, """
+				{"schemaVersion":18,"incidentId":"%s","revision":0,
+				"additionalForms204":[
+					{"formId":"%s","sharedWorkAssignment":"First"},
+					{"formId":"%s","sharedWorkAssignment":"Second"}]}
+				""".formatted(id.value(), sharedFormId, sharedFormId));
+		Logger migrationLogger = Logger.getLogger(IdentityMigration.class.getName());
+		CaptureHandler capture = new CaptureHandler();
+		migrationLogger.addHandler(capture);
+		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+			AppData loaded = store.load(id);
+			String firstId = loaded.getAdditionalForms204().get(0).getId();
+			String repairedId = loaded.getAdditionalForms204().get(1).getId();
+
+			assertEquals(sharedFormId, firstId);
+			assertNotEquals(firstId, repairedId);
+			assertTrue(capture.messages.stream().anyMatch(message ->
+					message.contains("Duplicate record identity repaired")));
+
+			store.save(id, loaded);
+			AppData reloaded = store.load(id);
+			assertEquals(firstId, reloaded.getAdditionalForms204().get(0).getId());
+			assertEquals(repairedId, reloaded.getAdditionalForms204().get(1).getId());
+		} finally {
+			migrationLogger.removeHandler(capture);
 		}
 	}
 
@@ -114,6 +153,31 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 	protected void failNextDelete(IncidentStore store) {
 		((ControllableIncidentStore) store).failNext(ControllableIncidentStore.Operation.DELETE,
 				new IllegalStateException("Scheduled delete failure"));
+	}
+
+	/** Collects migration warnings emitted during the test. */
+	private static class CaptureHandler extends Handler {
+		private final List<String> messages = new ArrayList<>();
+
+		/**
+		 * Captures a log message.
+		 *
+		 * @param record emitted log record
+		 */
+		@Override
+		public void publish(LogRecord record) {
+			messages.add(record.getMessage());
+		}
+
+		/** Flushes the in-memory collector; no operation is required. */
+		@Override
+		public void flush() {
+		}
+
+		/** Closes the in-memory collector; no operation is required. */
+		@Override
+		public void close() {
+		}
 	}
 
 	/** Backups and temporary writes are isolated per incident. */

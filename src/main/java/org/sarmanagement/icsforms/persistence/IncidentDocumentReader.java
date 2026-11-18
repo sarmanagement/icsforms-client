@@ -21,6 +21,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.Identified;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.AircraftResource;
 import org.sarmanagement.icsforms.model.CanineResource;
@@ -141,6 +142,7 @@ final class IncidentDocumentReader {
 	private final List<Problem> problems = new ArrayList<>();
 	private final Map<JavaType, JsonNode> defaultValues = new HashMap<>();
 	private final Map<Class<?>, Set<String>> importIdentities = new HashMap<>();
+	private boolean legacySchema;
 	private Throwable cause;
 
 	/** Creates an isolated diagnostic collector for one document. */
@@ -157,6 +159,7 @@ final class IncidentDocumentReader {
 	AppData readImport(Path path) {
 		String schema = "unknown";
 		importIdentities.clear();
+		legacySchema = true;
 		log(path, schema, "attempt");
 		try {
 			JsonNode tree = STRICT.readTree(path.toFile());
@@ -173,6 +176,7 @@ final class IncidentDocumentReader {
 							"Use a supported integer schema version.");
 				} else {
 					schema = Integer.toString(version.intValue());
+					legacySchema = version.intValue() < 18;
 					if (version.intValue() > AppData.CURRENT_SCHEMA_VERSION) {
 						add(Severity.ERROR, "$.schemaVersion", "File schema " + version.intValue()
 								+ " is newer than supported schema " + AppData.CURRENT_SCHEMA_VERSION
@@ -196,6 +200,9 @@ final class IncidentDocumentReader {
 			}
 			if (!hasErrors()) {
 				AppData data = STRICT.treeToValue(tree, AppData.class);
+				if (legacySchema) {
+					IdentityMigration.migrate(data);
+				}
 				log(path, schema, "validated");
 				return data;
 			}
@@ -285,7 +292,7 @@ final class IncidentDocumentReader {
 	}
 
 	/**
-	 * Walks a document and validates IDs within a single array identity scope.
+	 * Walks a document and validates IDs using the active schema's uniqueness scope.
 	 *
 	 * @param node JSON value
 	 * @param type declared property type
@@ -358,7 +365,7 @@ final class IncidentDocumentReader {
 					add(strict ? Severity.ERROR : Severity.WARNING, childPath, "Unknown property.",
 							strict ? "Remove or correct the property name." : "This client ignores this property.");
 				} else if (strict && identityProperties.contains(entry.getKey())) {
-					validateRecordIdentity(entry.getValue(), childPath, type.getRawClass());
+					validateRecordIdentity(entry.getValue(), childPath, type.getRawClass(), siblingIdentities);
 				} else if (childType != null) {
 					inspect(entry.getValue(), childType, childPath, strict);
 				}
@@ -384,13 +391,14 @@ final class IncidentDocumentReader {
 	}
 
 	/**
-	 * Validates a persistent record UUID and detects duplicate IDs in its collection.
+	 * Validates a persistent record UUID and detects duplicate IDs within the applicable scope.
 	 *
 	 * @param value JSON identity value
 	 * @param path JSON property path
 	 * @param siblingIdentities IDs already found in the containing collection
 	 */
-	private void validateRecordIdentity(JsonNode value, String path, Class<?> recordType) {
+	private void validateRecordIdentity(JsonNode value, String path, Class<?> recordType,
+			Set<String> siblingIdentities) {
 		if (!value.isTextual() || value.asText().isBlank()) {
 			add(Severity.ERROR, path, "Record identity must be a UUID string.",
 					"Omit a legacy identity or provide a valid UUID.");
@@ -409,7 +417,11 @@ final class IncidentDocumentReader {
 				return;
 			}
 		}
-		Set<String> identities = importIdentities.computeIfAbsent(recordType, ignored -> new HashSet<>());
+		Set<String> identities = legacySchema
+				? siblingIdentities : importIdentities.computeIfAbsent(recordType, ignored -> new HashSet<>());
+		if (identities == null) {
+			return;
+		}
 		if (!identities.add(identity.toLowerCase(Locale.ROOT))) {
 			add(Severity.ERROR, path, "Record identity duplicates another record of this type.",
 					"Assign each record of this type a distinct UUID.");

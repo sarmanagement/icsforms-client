@@ -5,15 +5,24 @@ nested record, and singleton form. The canonical JSON property is `id`.
 Existing Java getters and setters remain available; old JSON identity names are
 accepted as aliases and are written back as `id`.
 
+Version 0.1.3 is the first release that reads and writes schema 18. Do not open
+schema-18 files with older releases: they do not recognize canonical `id`
+properties and may discard identities when saving.
+
 `Identified.setId` is reserved for Jackson deserialization and persistence
 migration. Application code treats an assigned ID as immutable. Constructors
 and creation actions assign IDs to new records; `IdentityMigration` assigns
 missing IDs and repairs duplicate stored IDs during load and before local create
 or save commits. A stored duplicate is replaced deterministically after keeping
-its first occurrence, with a warning. External imports reject blank or duplicate
-identities. Legacy T-card history events without occurrence IDs remain
-unidentified so overlapping legacy histories can be reconciled by event content.
-Other migrated IDs are persisted before the document is returned.
+its first occurrence, with a warning. IDs must be unique per concrete record
+type across the incident, including its operational-period history, so a host
+can address each record unambiguously. Schema-18 external imports reject blank
+or duplicate identities. Schema-17 imports retain their prior per-collection
+duplicate check; repeated IDs across collections are repaired during import
+with a warning, matching stored-load migration. Legacy T-card history events
+without occurrence IDs remain unidentified so overlapping legacy histories can
+be reconciled by event content. Other migrated IDs are persisted before the
+document is returned.
 
 Copies that become new records receive new IDs. References within a copied graph
 are remapped when the reference target is also copied. Archival snapshots keep

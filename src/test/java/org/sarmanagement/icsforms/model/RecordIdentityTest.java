@@ -6,6 +6,7 @@ package org.sarmanagement.icsforms.model;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -56,6 +57,46 @@ class RecordIdentityTest {
 		assertEquals(null, entry.getId());
 		entry.setId(UUID.randomUUID().toString());
 		assertNotNull(entry.getId());
+	}
+
+	/**
+	 * Keeps task and T-card identity getters pure until migration assigns identities.
+	 */
+	@Test
+	void taskAndTCardIdentityGettersArePureAndStable() throws Exception {
+		TCard card = new TCard();
+		card.setId(null);
+		SarTaskAssignment task = new SarTaskAssignment();
+		task.setId(null);
+
+		assertNull(card.getResourceId());
+		assertNull(card.getResourceId());
+		assertNull(card.getId());
+		assertNull(task.getTaskId());
+		assertNull(task.getTaskId());
+		assertNull(task.getId());
+
+		AppData legacy = mapper.readValue("""
+				{"schemaVersion":17,"tcards":[{}],"sarTaskAssignments":[{}]}
+				""", AppData.class);
+		assertNull(legacy.getTCards().get(0).getResourceId());
+		assertNull(legacy.getTCards().get(0).getResourceId());
+		assertNull(legacy.getSarTaskAssignments().get(0).getTaskId());
+		assertNull(legacy.getSarTaskAssignments().get(0).getTaskId());
+		IdentityMigration.migrate(legacy);
+		TCard migratedCard = legacy.getTCards().get(0);
+		SarTaskAssignment migratedTask = legacy.getSarTaskAssignments().get(0);
+		String cardId = migratedCard.getId();
+		String taskId = migratedTask.getId();
+
+		assertNotNull(cardId);
+		assertNotNull(taskId);
+		assertEquals(cardId, migratedCard.getResourceId());
+		assertEquals(cardId, migratedCard.getResourceId());
+		assertEquals(taskId, migratedTask.getTaskId());
+		assertEquals(taskId, migratedTask.getTaskId());
+		assertNotNull(new TCard().getId());
+		assertNotNull(new SarTaskAssignment().getId());
 	}
 
 	/**

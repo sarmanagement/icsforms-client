@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -22,7 +23,7 @@ import java.util.UUID;
 public class SarTaskAssignment implements Identified {
 	@JsonProperty("id")
 	@JsonAlias("taskId")
-	private String taskId;
+	private String taskId = UUID.randomUUID().toString();
 	private String assignmentId = "";
 	private String assignmentTeamNumber = "";
 	private String resourceType = "";
@@ -97,6 +98,23 @@ public class SarTaskAssignment implements Identified {
 	 */
 	private boolean debriefingCompleted = false;
 	private String iapPage = "";
+
+	/**
+	 * Creates a new task assignment with a fresh identity.
+	 */
+	public SarTaskAssignment() {
+	}
+
+	/**
+	 * Restores a task assignment identity during JSON deserialization.
+	 *
+	 * @param taskId
+	 *            persisted task identity, or null when the document predates identities
+	 */
+	@JsonCreator
+	public SarTaskAssignment(@JsonProperty("id") @JsonAlias("taskId") String taskId) {
+		this.taskId = taskId;
+	}
 
 	/**
 	 * Returns the append-only lifecycle status history.
@@ -289,16 +307,12 @@ public class SarTaskAssignment implements Identified {
 	}
 
 	/**
-	 * Returns the stable identity of this task, assigning a UUID to legacy tasks
-	 * without one.
+	 * Returns the stored identity of this task.
 	 *
-	 * @return task UUID, never {@code null} or blank.
+	 * @return task UUID, or null until migration assigns one
 	 */
 	@JsonIgnore
 	public String getTaskId() {
-		if (taskId == null || taskId.isBlank()) {
-			taskId = UUID.randomUUID().toString();
-		}
 		return taskId;
 	}
 
@@ -327,7 +341,7 @@ public class SarTaskAssignment implements Identified {
 	 * Sets this task's identity during deserialization or migration.
 	 *
 	 * @param taskId
-	 *            task UUID; blank/null clears the identity until first access.
+	 *            task UUID; blank/null clears the identity until migration.
 	 */
 	@JsonIgnore
 	public void setTaskId(String taskId) {

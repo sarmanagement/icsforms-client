@@ -81,6 +81,14 @@ legacy T-card history entries without IDs remain eligible for content-based
 overlap reconciliation. The rollover, copy, persistence-retention and duplicate
 history regressions cover these identity boundaries.
 
+**Identity review follow-up, 2026-11-18:** task and T-card identity accessors
+are now pure; constructors assign IDs to new records, while deserialization
+leaves missing IDs for migration. Schema-17 imports repair duplicate IDs shared
+across collections with a warning; schema-18 imports still reject document-wide
+per-type duplicates. Regression coverage verifies duplicate repair on stored
+schema-18 loads and import save/reload stability. The canonical `id` property
+and its compatibility warning for older releases are documented.
+
 The identity inventory and the value objects intentionally without IDs are
 listed in [`record-identity.md`](record-identity.md).
 

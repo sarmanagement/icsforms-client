@@ -24,7 +24,9 @@ canine medical reference windows. The persistence foundation is merged: saves us
 detached snapshots on a background coordinator behind backend-neutral revision
 and failure seams. Host-mode Part 1's stable record identity, migration, index,
 and diff primitives are delivered locally; a displayed-test CI follow-up verifies
-rollover and copied-record identity boundaries. No host service is implemented.
+rollover and copied-record identity boundaries, with identity-review follow-up
+covering getter purity and duplicate-repair import/load behavior. No host service
+is implemented.
 Work to make open views refresh without flicker or stale content is merged
 (PR #56). This is standalone operation, not yet a local-host deployment.
 Details of delivered work are in

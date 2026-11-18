@@ -38,14 +38,11 @@ public class TCard implements Identified {
 	/**
 	 * Stable UUID assigned once at creation and never changed. Used by
 	 * {@link SarTaskResource#getResourceId()} to reference this card without
-	 * relying on mutable display-name strings. Initialized to {@code null}; a UUID
-	 * is generated on first access via {@link #getResourceId()} to ensure legacy
-	 * records deserialized without a {@code resourceId} field receive a stable
-	 * value rather than a new random one each time.
+	 * relying on mutable display-name strings.
 	 */
 	@JsonProperty("id")
 	@JsonAlias("resourceId")
-	private String resourceId;
+	private String resourceId = UUID.randomUUID().toString();
 
 	private TCardType cardType = TCardType.PERSONNEL;
 
@@ -228,12 +225,15 @@ public class TCard implements Identified {
 	 * property ordering cannot accidentally discard a persisted reference.
 	 * @param radioChannel persisted fallback label; null becomes empty
 	 * @param radioChannelId persisted channel identity; null becomes empty
+	 * @param resourceId persisted resource identity; null when missing from legacy JSON
 	 */
 	@JsonCreator
 	public TCard(@JsonProperty("radioChannel") String radioChannel,
-			@JsonProperty("radioChannelId") String radioChannelId) {
+			@JsonProperty("radioChannelId") String radioChannelId,
+			@JsonProperty("id") @JsonAlias("resourceId") String resourceId) {
 		this.radioChannel = radioChannel == null ? "" : radioChannel;
 		setRadioChannelId(radioChannelId);
+		this.resourceId = resourceId;
 	}
 
 	/**
@@ -256,17 +256,12 @@ public class TCard implements Identified {
 	}
 
 	/**
-	 * Returns the stable resource identifier (UUID) for this card, assigning one
-	 * when the card does not yet have an identity. Used by {@link SarTaskResource}
-	 * to reference this card without relying on names.
+	 * Returns the stored resource identifier for this card.
 	 *
-	 * @return resource UUID, never {@code null}.
+	 * @return resource UUID, or null until migration assigns one
 	 */
 	@JsonIgnore
 	public String getResourceId() {
-		if (resourceId == null || resourceId.isBlank()) {
-			resourceId = UUID.randomUUID().toString();
-		}
 		return resourceId;
 	}
 
@@ -296,7 +291,7 @@ public class TCard implements Identified {
 	 * deserialization.
 	 *
 	 * @param resourceId
-	 *            resource UUID string; blank/null clears the identity until first access.
+	 *            resource UUID string; blank/null clears the identity until migration.
 	 */
 	@JsonIgnore
 	public void setResourceId(String resourceId) {
