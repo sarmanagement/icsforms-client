@@ -78,7 +78,7 @@ public class RadioChannel implements Identified {
 	 */
 	@JsonIgnore
 	public void setChannelId(String channelId) {
-		this.channelId = channelId;
+		this.channelId = channelId == null || channelId.isBlank() ? UUID.randomUUID().toString() : channelId;
 	}
 
 	/**

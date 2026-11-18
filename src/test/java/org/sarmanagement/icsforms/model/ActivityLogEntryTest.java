@@ -24,7 +24,7 @@ class ActivityLogEntryTest {
 		entry.setNotableActivity("Task observation");
 		String json = mapper.writeValueAsString(entry);
 		assertEquals("assignment-stable-id", mapper.readTree(json).get("assignmentId").asText());
-		assertEquals("activity-existing-id", mapper.readTree(json).get("entryId").asText());
+		assertEquals("activity-existing-id", mapper.readTree(json).get("id").asText());
 		ActivityLogEntry restored = mapper.readValue(json, ActivityLogEntry.class);
 		assertEquals(entry.getEntryId(), restored.getEntryId());
 		assertEquals(entry.getAssignmentId(), restored.getAssignmentId());

@@ -41,8 +41,40 @@ public final class IdentityMigration {
 	 */
 	public static void migrate(AppData data) {
 		data.normalizeLegacyIdentity();
+		normalizeUnambiguousBlankAssignmentLink(data);
 		IdentityMigration migration = new IdentityMigration();
-		migration.normalizeValue(data, "$", new HashMap<>(), new IdentityHashMap<>());
+		migration.normalizeValue(data, "$", new HashMap<>(), new IdentityHashMap<>(), true);
+	}
+
+	/**
+	 * Assigns missing identities before a write without repairing duplicate stored identities.
+	 *
+	 * @param data incident document to normalize
+	 */
+	public static void assignMissing(AppData data) {
+		normalizeUnambiguousBlankAssignmentLink(data);
+		IdentityMigration migration = new IdentityMigration();
+		migration.normalizeValue(data, "$", new HashMap<>(), new IdentityHashMap<>(), false);
+	}
+
+	/**
+	 * Gives one uniquely unlinked ICS 204 row and SAR task a shared assignment identity.
+	 *
+	 * @param data incident document containing the rows and tasks
+	 */
+	private static void normalizeUnambiguousBlankAssignmentLink(AppData data) {
+		List<ResourceAssignment> assignments = data.getAllAssignmentResources().stream()
+				.filter(assignment -> assignment != null
+						&& (assignment.getAssignmentId() == null || assignment.getAssignmentId().isBlank()))
+				.toList();
+		List<SarTaskAssignment> tasks = data.getSarTaskAssignments().stream()
+				.filter(task -> task != null && (task.getAssignmentId() == null || task.getAssignmentId().isBlank()))
+				.toList();
+		if (assignments.size() == 1 && tasks.size() == 1) {
+			String assignmentId = UUID.randomUUID().toString();
+			assignments.get(0).setId(assignmentId);
+			tasks.get(0).setAssignmentId(assignmentId);
+		}
 	}
 
 	/**
@@ -389,20 +421,20 @@ public final class IdentityMigration {
 	 * @return possibly replaced value
 	 */
 	private Object normalizeValue(Object value, String path, Map<Class<?>, Set<String>> seen,
-			IdentityHashMap<Object, Boolean> visited) {
+			IdentityHashMap<Object, Boolean> visited, boolean repairDuplicates) {
 		if (value == null || visited.put(value, Boolean.TRUE) != null) {
 			return value;
 		}
 		if (value instanceof Collection<?> collection) {
-			normalizeCollection(collection, path, seen, visited);
+			normalizeCollection(collection, path, seen, visited, repairDuplicates);
 			return value;
 		}
 		if (value instanceof Map<?, ?> map) {
-			normalizeMap(map, path, seen, visited);
+			normalizeMap(map, path, seen, visited, repairDuplicates);
 			return value;
 		}
 		if (value.getClass().isArray()) {
-			normalizeArray(value, path, seen, visited);
+			normalizeArray(value, path, seen, visited, repairDuplicates);
 			return value;
 		}
 		if (!value.getClass().getPackageName().equals(MODEL_PACKAGE)) {
@@ -416,7 +448,7 @@ public final class IdentityMigration {
 				identified = (Identified) value;
 			}
 			Set<String> identities = seen.computeIfAbsent(value.getClass(), ignored -> new HashSet<>());
-			if (!identities.add(id)) {
+			if (!identities.add(id) && repairDuplicates) {
 				String replacement = duplicateId(value.getClass(), id, path, identities);
 				LOGGER.warning("Duplicate record identity repaired at " + path + " for "
 						+ value.getClass().getSimpleName());
@@ -425,7 +457,7 @@ public final class IdentityMigration {
 				identities.add(identified.getId());
 			}
 		}
-		normalizeFields(value, path, seen, visited);
+		normalizeFields(value, path, seen, visited, repairDuplicates);
 		return value;
 	}
 
@@ -439,11 +471,11 @@ public final class IdentityMigration {
 	 */
 	@SuppressWarnings("unchecked")
 	private void normalizeCollection(Collection<?> collection, String path, Map<Class<?>, Set<String>> seen,
-			IdentityHashMap<Object, Boolean> visited) {
+			IdentityHashMap<Object, Boolean> visited, boolean repairDuplicates) {
 		if (collection instanceof List<?> list) {
 			for (int index = 0; index < list.size(); index++) {
 				Object value = list.get(index);
-				Object normalized = normalizeValue(value, path + "[" + index + "]", seen, visited);
+				Object normalized = normalizeValue(value, path + "[" + index + "]", seen, visited, repairDuplicates);
 				if (normalized != value) {
 					((List<Object>) list).set(index, normalized);
 				}
@@ -453,7 +485,7 @@ public final class IdentityMigration {
 			collection.clear();
 			for (int index = 0; index < values.size(); index++) {
 				((Collection<Object>) collection).add(normalizeValue(values.get(index), path + "[" + index + "]",
-						seen, visited));
+						seen, visited, repairDuplicates));
 			}
 		}
 	}
@@ -468,12 +500,12 @@ public final class IdentityMigration {
 	 */
 	@SuppressWarnings("unchecked")
 	private void normalizeMap(Map<?, ?> map, String path, Map<Class<?>, Set<String>> seen,
-			IdentityHashMap<Object, Boolean> visited) {
+			IdentityHashMap<Object, Boolean> visited, boolean repairDuplicates) {
 		List<Map.Entry<?, ?>> entries = new ArrayList<>(map.entrySet());
 		entries.sort(Comparator.comparing(entry -> String.valueOf(entry.getKey())));
 		for (Map.Entry<?, ?> entry : entries) {
 			Object value = entry.getValue();
-			Object normalized = normalizeValue(value, path + "." + entry.getKey(), seen, visited);
+			Object normalized = normalizeValue(value, path + "." + entry.getKey(), seen, visited, repairDuplicates);
 			if (normalized != value) {
 				((Map<Object, Object>) map).put(entry.getKey(), normalized);
 			}
@@ -489,10 +521,10 @@ public final class IdentityMigration {
 	 * @param visited object references already traversed
 	 */
 	private void normalizeArray(Object array, String path, Map<Class<?>, Set<String>> seen,
-			IdentityHashMap<Object, Boolean> visited) {
+			IdentityHashMap<Object, Boolean> visited, boolean repairDuplicates) {
 		for (int index = 0; index < Array.getLength(array); index++) {
 			Object value = Array.get(array, index);
-			Object normalized = normalizeValue(value, path + "[" + index + "]", seen, visited);
+			Object normalized = normalizeValue(value, path + "[" + index + "]", seen, visited, repairDuplicates);
 			if (normalized != value) {
 				Array.set(array, index, normalized);
 			}
@@ -508,7 +540,7 @@ public final class IdentityMigration {
 	 * @param visited object references already traversed
 	 */
 	private void normalizeFields(Object value, String path, Map<Class<?>, Set<String>> seen,
-			IdentityHashMap<Object, Boolean> visited) {
+			IdentityHashMap<Object, Boolean> visited, boolean repairDuplicates) {
 		List<Field> fields = new ArrayList<>();
 		for (Class<?> type = value.getClass(); type != null && type.getPackageName().equals(MODEL_PACKAGE);
 				type = type.getSuperclass()) {
@@ -523,7 +555,8 @@ public final class IdentityMigration {
 			try {
 				field.setAccessible(true);
 				Object child = field.get(value);
-				Object normalized = normalizeValue(child, path + "." + field.getName(), seen, visited);
+				Object normalized = normalizeValue(child, path + "." + field.getName(), seen, visited,
+						repairDuplicates);
 				if (normalized != child && !java.lang.reflect.Modifier.isFinal(field.getModifiers())) {
 					field.set(value, normalized);
 				}

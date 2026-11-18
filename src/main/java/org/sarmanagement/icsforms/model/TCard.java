@@ -45,7 +45,7 @@ public class TCard implements Identified {
 	 */
 	@JsonProperty("id")
 	@JsonAlias("resourceId")
-	private String resourceId = UUID.randomUUID().toString();
+	private String resourceId;
 
 	private TCardType cardType = TCardType.PERSONNEL;
 
@@ -181,7 +181,6 @@ public class TCard implements Identified {
 		public CheckInOutEvent {
 			Objects.requireNonNull(action, "action");
 			Objects.requireNonNull(eventAt, "eventAt");
-			id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
 		}
 
 		/**
@@ -256,13 +255,17 @@ public class TCard implements Identified {
 	}
 
 	/**
-	 * Returns the stable resource identifier (UUID) for this card. Used by
-	 * {@link SarTaskResource} to reference this card without relying on names.
+	 * Returns the stable resource identifier (UUID) for this card, assigning one
+	 * when the card does not yet have an identity. Used by {@link SarTaskResource}
+	 * to reference this card without relying on names.
 	 *
 	 * @return resource UUID, never {@code null}.
 	 */
 	@JsonIgnore
 	public String getResourceId() {
+		if (resourceId == null || resourceId.isBlank()) {
+			resourceId = UUID.randomUUID().toString();
+		}
 		return resourceId;
 	}
 
@@ -292,7 +295,7 @@ public class TCard implements Identified {
 	 * deserialization.
 	 *
 	 * @param resourceId
-	 *            resource UUID string; blank/null generates a new UUID.
+	 *            resource UUID string; blank/null clears the identity until first access.
 	 */
 	@JsonIgnore
 	public void setResourceId(String resourceId) {

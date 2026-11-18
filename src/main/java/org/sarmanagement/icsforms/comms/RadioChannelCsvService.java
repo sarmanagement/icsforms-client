@@ -97,6 +97,8 @@ public class RadioChannelCsvService {
 		UUID.fromString(form.getFormId());
 		ObjectNode metadata = MAPPER.valueToTree(form);
 		metadata.remove("channels");
+		metadata.put("formId", form.getFormId());
+		metadata.remove("id");
 		StringBuilder csv = new StringBuilder();
 		CsvTable.append(csv, HEADERS);
 		List<String> formRow = new ArrayList<>(List.of("2", "form", metadata.toString()));
@@ -108,7 +110,8 @@ public class RadioChannelCsvService {
 				throw new IllegalArgumentException("Channels require unique explicit IDs.");
 			}
 			UUID.fromString(channel.getChannelId());
-			JsonNode node = MAPPER.valueToTree(channel);
+			ObjectNode node = MAPPER.valueToTree(channel);
+			node.put("channelId", channel.getChannelId());
 			List<String> row = new ArrayList<>(List.of("2", "channel", ""));
 			for (String field : FIELDS) {
 				row.add(node.path(field).toString());

@@ -466,6 +466,9 @@ public class VetDirectoryFileService {
 	 * @return merge classification.
 	 */
 	private MergeDecision merge(VetDirectory directory, VetFacility incoming) {
+		if (incoming.getId() == null || incoming.getId().isBlank()) {
+			incoming.setId(UUID.randomUUID().toString());
+		}
 		for (VetFacility existing : directory.getFacilities()) {
 			if (existing.getId().equals(incoming.getId())) {
 				if (sameFacility(existing, incoming)) {

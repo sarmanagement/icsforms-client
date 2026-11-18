@@ -763,6 +763,17 @@ class MapleRidgeExampleTest {
 		AppData data = new AppData();
 		data.setIncidentId(id("incident"));
 		data.setOriginNodeId(id("origin"));
+		data.getOrganizationalChart().setId(id("organizational-chart"));
+		data.getForm201().setId(id("ics201"));
+		data.getForm202().setId(id("ics202"));
+		data.getMedicalPlan().setId(id("medical-plan"));
+		data.getCanineMedicalPlan().setId(id("canine-medical-plan"));
+		data.getForm207().setId(id("ics207"));
+		data.getForm208().setId(id("ics208"));
+		data.getForm215a().setId(id("ics215a"));
+		data.getPdfLayoutSettings().setId(id("pdf-layout-settings"));
+		data.getStagingLocation().setId(id("staging-location"));
+		data.getVetDirectory().setId(id("vet-directory"));
 		data.getForm215().setWorksheetId(id("ics215-current"));
 		data.getNextPeriodForm215().setWorksheetId(id("ics215-next"));
 		data.setCreatedAt(Instant.parse("2026-07-18T10:30:00Z"));
@@ -773,6 +784,7 @@ class MapleRidgeExampleTest {
 		data.setIapPlanningStage(IapPlanningStage.OPERATIONAL_PERIOD_ACTIVE);
 		data.setIncidentContext(new IncidentContext(INCIDENT, time(7, 0), time(19, 0), PLANNING,
 				"Planning Section Chief - fictional exercise"));
+		data.getIncidentContext().setId(id("incident-context"));
 		data.getIncidentContext().setTaskMap("MR-EX-01: fictional residence IPP, separate staging and ICP, spokes A/B/C, rim R1/R2, zones K1-K4");
 		data.getStagingLocation().setLabel(STAGING);
 		data.getStagingLocation().setAddress("20 Park Road, fictional Maple Ridge, MA");

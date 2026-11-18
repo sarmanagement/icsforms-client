@@ -1713,6 +1713,7 @@ public class AppController implements AutoCloseable {
 	public void exportUnsavedIncident(Path path, LinkSource source) {
 		onOwner(() -> {
 			AppData snapshot = captureSave(source).snapshot();
+			IdentityMigration.migrate(snapshot);
 			workerIo(() -> {
 				new LocalRepository(path).save(snapshot);
 				return null;

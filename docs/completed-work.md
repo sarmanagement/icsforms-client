@@ -55,14 +55,23 @@ repairs duplicate stored IDs while preserving the first occurrence; migration is
 persisted before the load returns. External imports reject blank or duplicate
 IDs, while stored files remain tolerant of unknown properties and log warnings.
 
-New-period, plan-reuse, channel-import, facility-snapshot and incident-duplicate
-paths mint IDs for copied records and remap internal references where the
-referenced record is copied. History remains append-only; this work does not
-change strike-out behavior. `RecordIndex` provides deterministic snapshots and
-parent links, and `RecordDiff` compares net field values and groups atomic
-created, changed, removed and struck-out operations. These are local model
-primitives only: host transport, service admission, record-version processing
-and outbox behavior remain later series issues.
+New-period rollover gives the copied ICS 205 form and channels new identities.
+Plan reuse, channel import, facility snapshots, incident duplication, and
+period-local record copies mint fresh IDs and remap internal references where
+the referenced record is copied.
+History remains append-only; this work does not change strike-out behavior.
+`RecordIndex` provides deterministic snapshots and parent links, and
+`RecordDiff` compares net field values and groups atomic created, changed,
+removed and struck-out operations. These are local model primitives only: host
+transport, service admission, record-version processing and outbox behavior
+remain later series issues.
+
+**CI follow-up, 2026-11-18:** writes assign missing identities without applying
+the duplicate-repair rules used for stored-document migration; read-only
+projections leave legacy T-card and SAR-task identities unassigned until
+explicitly requested. The native radio-channel CSV retains its
+`formId`/`channelId` field names while JSON uses canonical `id` properties, and
+the checked-in Maple Ridge fixture is the current schema-18 store export.
 
 The identity inventory and the value objects intentionally without IDs are
 listed in [`record-identity.md`](record-identity.md).

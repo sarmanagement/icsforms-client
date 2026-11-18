@@ -22,9 +22,11 @@ The core SAR form set is complete, as are focused role panels (Safety, Medical
 Unit Leader, Operations, Incident Command, Communications) and separate human and
 canine medical reference windows. The persistence foundation is merged: saves use
 detached snapshots on a background coordinator behind backend-neutral revision
-and failure seams. Work to make open views refresh without flicker or stale
-content is merged (PR #56). This is standalone operation, not yet a local-host
-deployment. Details of delivered work are in
+and failure seams. Host-mode Part 1's stable record identity, migration, index,
+and diff primitives are delivered locally; no host service is implemented.
+Work to make open views refresh without flicker or stale content is merged
+(PR #56). This is standalone operation, not yet a local-host deployment.
+Details of delivered work are in
 [`docs/completed-work.md`](docs/completed-work.md).
 
 ### Where it is going
@@ -95,7 +97,7 @@ the later stages may make the solo-laptop case harder.
 
 ### How to read this document
 
-**Status date:** 2026-11-17. Status entries are based on the source
+**Status date:** 2026-11-18. Status entries are based on the source
 tree, named regression tests, CI results and recorded decisions, not on issue or
 PR closure alone.
 

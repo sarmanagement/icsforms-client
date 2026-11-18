@@ -326,7 +326,12 @@ class ChannelLinkSourceTest {
 		assertEquals("Search teams", assignment.sourceLabel());
 		assertEquals(LinkStatus.LINKED, assignment.status());
 		data.advanceToNewOperationalPeriod(true);
-		assertEquals("stable", ChannelLinkSource.resolve(data, card.getRadioChannelId(), card.getRadioChannel()).channel().id());
+		String carriedChannelId = data.getForm205().getChannels().get(0).getChannelId();
+		assertFalse(card.getRadioChannelId().equals(carriedChannelId));
+		assertEquals(LinkStatus.MISSING,
+				ChannelLinkSource.resolve(data, card.getRadioChannelId(), card.getRadioChannel()).status());
+		assertEquals(carriedChannelId,
+				ChannelLinkSource.resolve(data, carriedChannelId, "Command").channel().id());
 		assertEquals("Command", first(ChannelLinkSource.links(data), SourceKind.ICS205_ASSIGNMENT).displayLabel());
 		data.getForm205().getChannels().clear();
 		assertEquals(LinkStatus.MISSING, ChannelLinkSource.resolve(data, "stable", "Old command").status());

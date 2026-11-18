@@ -21,7 +21,7 @@ import java.util.UUID;
 public class SarTaskAssignment implements Identified {
 	@JsonProperty("id")
 	@JsonAlias("taskId")
-	private String taskId = UUID.randomUUID().toString();
+	private String taskId;
 	private String assignmentId = "";
 	private String assignmentTeamNumber = "";
 	private String resourceType = "";
@@ -287,6 +287,9 @@ public class SarTaskAssignment implements Identified {
 	 */
 	@JsonIgnore
 	public String getTaskId() {
+		if (taskId == null || taskId.isBlank()) {
+			taskId = UUID.randomUUID().toString();
+		}
 		return taskId;
 	}
 
@@ -315,7 +318,7 @@ public class SarTaskAssignment implements Identified {
 	 * Sets this task's identity during deserialization or migration.
 	 *
 	 * @param taskId
-	 *            task UUID; missing values are generated on first access.
+	 *            task UUID; blank/null clears the identity until first access.
 	 */
 	@JsonIgnore
 	public void setTaskId(String taskId) {
