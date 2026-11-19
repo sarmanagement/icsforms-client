@@ -332,8 +332,9 @@ class MainFrameDataRetentionTest {
 		vet.setName("Retain directory hospital");
 		vet.setAddress("100 Fictional Way");
 		data.getVetDirectory().getFacilities().add(vet);
-		VetFacility selectedVet = vet.copy();
-		selectedVet.setId(UUID.randomUUID().toString());
+		VetFacility selectedVet = new VetFacility(UUID.randomUUID().toString());
+		selectedVet.setName(vet.getName());
+		selectedVet.setAddress(vet.getAddress());
 		selectedVet.setSourceFacilityId(vet.getId());
 		data.getCanineMedicalPlan().getSelectedFacilities().add(selectedVet);
 		OpenActionItem action = new OpenActionItem();
