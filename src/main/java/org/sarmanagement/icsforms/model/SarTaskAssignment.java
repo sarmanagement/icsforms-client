@@ -324,7 +324,9 @@ public class SarTaskAssignment implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(taskId, id);
 		taskId = id;
 	}
 
@@ -345,7 +347,7 @@ public class SarTaskAssignment implements Identified {
 	 */
 	@JsonIgnore
 	public void setTaskId(String taskId) {
-		this.taskId = taskId;
+		setId(taskId);
 	}
 
 	/**

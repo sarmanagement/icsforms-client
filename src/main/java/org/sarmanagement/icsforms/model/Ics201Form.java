@@ -14,6 +14,7 @@ import java.util.UUID;
  * Incident Briefing (ICS 201) content captured by the desktop editor.
  */
 public class Ics201Form implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String incidentName = "";
 	private String incidentNumber = "";
@@ -38,7 +39,9 @@ public class Ics201Form implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 
@@ -312,6 +315,7 @@ public class Ics201Form implements Identified {
 	 * Current and planned actions row.
 	 */
 	public static class ActionEntry implements Identified {
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		private String id = UUID.randomUUID().toString();
 		private String time = "";
 		private String actions = "";
@@ -330,7 +334,9 @@ public class Ics201Form implements Identified {
 		 *
 		 * @param id row UUID; null or blank generates a UUID
 		 */
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
+			IdentityGuard.check(this.id, id);
 			this.id = id;
 		}
 
@@ -377,6 +383,7 @@ public class Ics201Form implements Identified {
 	 * Resource summary row.
 	 */
 	public static class ResourceSummaryEntry implements Identified {
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		private String id = UUID.randomUUID().toString();
 		private String resource = "";
 		private String resourceIdentifier = "";
@@ -399,7 +406,9 @@ public class Ics201Form implements Identified {
 		 *
 		 * @param id row UUID; null or blank generates a UUID
 		 */
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
+			IdentityGuard.check(this.id, id);
 			this.id = id;
 		}
 

@@ -273,7 +273,9 @@ public class TCard implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(resourceId, id);
 		resourceId = id;
 	}
 
@@ -295,7 +297,7 @@ public class TCard implements Identified {
 	 */
 	@JsonIgnore
 	public void setResourceId(String resourceId) {
-		this.resourceId = resourceId;
+		setId(resourceId);
 	}
 
 	/**

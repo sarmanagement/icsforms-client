@@ -20,6 +20,7 @@ import java.util.UUID;
  * editor.
  */
 public class Ics202Form implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private List<String> objectives = new ArrayList<>();
 	private List<IncidentObjective> structuredObjectives = new ArrayList<>();
@@ -46,7 +47,9 @@ public class Ics202Form implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

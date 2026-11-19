@@ -12,6 +12,7 @@ import java.util.UUID;
  * Editable ICS 208 Safety Message/Plan, including groundwork for ICS 208 HM.
  */
 public class Ics208Form implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	/** ICS 208 message formats supported by safety workflows. */
 	public enum MessageType {
@@ -54,7 +55,9 @@ public class Ics208Form implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

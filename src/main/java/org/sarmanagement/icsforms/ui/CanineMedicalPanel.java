@@ -1210,8 +1210,7 @@ public class CanineMedicalPanel extends JPanel {
 	private void saveTransport(CanineMedicalPlan plan) {
 		List<MedicalPlan.TransportService> services = new ArrayList<>();
 		for (int row = 0; row < transportModel.getRowCount(); row++) {
-			MedicalPlan.TransportService service = new MedicalPlan.TransportService();
-			service.setId(transportRecordId(row));
+			MedicalPlan.TransportService service = new MedicalPlan.TransportService(transportRecordId(row));
 			service.setService(cell(transportModel, row, 0));
 			service.setLocation(cell(transportModel, row, 1));
 			service.setContactNumbers(cell(transportModel, row, 2));

@@ -12,6 +12,7 @@ import java.util.UUID;
  * Incident Action Plan Safety Analysis (ICS 215A) content and review metadata.
  */
 public class Ics215aForm implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String incidentNumber = "";
 	private LocalDateTime preparedDateTime;
@@ -32,7 +33,9 @@ public class Ics215aForm implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

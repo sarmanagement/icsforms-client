@@ -10,6 +10,7 @@ public class PdfLayoutSettings implements Identified {
 		LETTER, A4
 	}
 
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private PaperSize paperSize = PaperSize.LETTER;
 	private float pageMarginPoints = 18f;
@@ -22,7 +23,9 @@ public class PdfLayoutSettings implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

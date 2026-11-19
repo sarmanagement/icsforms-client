@@ -47,7 +47,9 @@ public class Ics205Form implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(formId, id);
 		formId = id;
 	}
 
@@ -57,7 +59,7 @@ public class Ics205Form implements Identified {
 	 */
 	@JsonIgnore
 	public void setFormId(String formId) {
-		this.formId = formId;
+		setId(formId);
 	}
 
 	/**
@@ -225,9 +227,9 @@ public class Ics205Form implements Identified {
 	 */
 	public Ics205Form copyForNewPeriod() {
 		Ics205Form copy = deepCopy();
-		copy.setId(UUID.randomUUID().toString());
+		IdentityMigration.replaceId(copy, UUID.randomUUID().toString());
 		for (RadioChannel channel : copy.getChannels()) {
-			channel.setId(UUID.randomUUID().toString());
+			IdentityMigration.replaceId(channel, UUID.randomUUID().toString());
 			channel.setRadioCheckStatus(RadioCheckStatus.NOT_RECORDED);
 			channel.setRadioCheckedBy("");
 			channel.setRadioCheckedAt(null);

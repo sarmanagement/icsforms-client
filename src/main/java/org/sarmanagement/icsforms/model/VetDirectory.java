@@ -15,6 +15,7 @@ import java.util.UUID;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class VetDirectory implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private List<VetFacility> facilities = new ArrayList<>();
 	private List<Source> sources = new ArrayList<>();
@@ -27,7 +28,9 @@ public class VetDirectory implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 
@@ -76,6 +79,7 @@ public class VetDirectory implements Identified {
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class Source implements Identified {
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		private String id = UUID.randomUUID().toString();
 		private String name = "";
 		private String format = "";
@@ -95,7 +99,9 @@ public class VetDirectory implements Identified {
 		 *
 		 * @param id source UUID; null or blank generates a UUID
 		 */
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
+			IdentityGuard.check(this.id, id);
 			this.id = id;
 		}
 

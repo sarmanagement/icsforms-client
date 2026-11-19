@@ -53,14 +53,16 @@ public class IncidentObjective implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(objectiveId, id);
 		objectiveId = id;
 	}
 
 	/** @param objectiveId stable objective identifier. */
 	@JsonIgnore
 	public void setObjectiveId(String objectiveId) {
-		this.objectiveId = objectiveId;
+		setId(objectiveId);
 	}
 
 	/** @return objective wording. */

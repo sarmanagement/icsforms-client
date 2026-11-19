@@ -187,6 +187,7 @@ public class Ics215Form implements Identified {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class ResourceHeading implements Identified {
 		/** Stable heading identity. */
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		public String id = UUID.randomUUID().toString();
 		/** Operator-entered category. */
 		public String category = "";
@@ -217,7 +218,9 @@ public class Ics215Form implements Identified {
 
 		/** {@inheritDoc} */
 		@Override
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
+			IdentityGuard.check(this.id, id);
 			this.id = id;
 		}
 	}
@@ -226,6 +229,7 @@ public class Ics215Form implements Identified {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class WorkRow implements Identified {
 		/** Stable row identity used by selections and ICS 204 draft links. */
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		public String id = UUID.randomUUID().toString();
 		/** Branch for this assignment. */
 		public String branch = "";
@@ -266,7 +270,9 @@ public class Ics215Form implements Identified {
 
 		/** {@inheritDoc} */
 		@Override
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
+			IdentityGuard.check(this.id, id);
 			this.id = id;
 		}
 	}
@@ -335,7 +341,9 @@ public class Ics215Form implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(worksheetId, id);
 		worksheetId = id;
 	}
 
@@ -346,7 +354,7 @@ public class Ics215Form implements Identified {
 	 */
 	@JsonIgnore
 	public void setWorksheetId(String worksheetId) {
-		this.worksheetId = worksheetId;
+		setId(worksheetId);
 	}
 
 	/** @return target operational-period start, independent of Shared dates. */
@@ -662,7 +670,7 @@ public class Ics215Form implements Identified {
 	 */
 	public Ics215Form copyForReuse(boolean retainRequired) {
 		Ics215Form copy = copy();
-		copy.setId(UUID.randomUUID().toString());
+		IdentityMigration.replaceId(copy, UUID.randomUUID().toString());
 		copy.setTargetPeriodStart(null);
 		copy.setTargetPeriodEnd(null);
 		copy.setPreparerName("");

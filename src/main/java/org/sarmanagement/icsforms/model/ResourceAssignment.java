@@ -51,7 +51,9 @@ public class ResourceAssignment implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(assignmentId, id);
 		assignmentId = id;
 	}
 
@@ -63,7 +65,7 @@ public class ResourceAssignment implements Identified {
 	 */
 	@JsonIgnore
 	public void setAssignmentId(String assignmentId) {
-		this.assignmentId = assignmentId;
+		setId(assignmentId);
 	}
 
 	/**

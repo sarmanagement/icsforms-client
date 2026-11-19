@@ -68,7 +68,9 @@ public class RadioChannel implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(channelId, id);
 		channelId = id;
 	}
 
@@ -78,7 +80,7 @@ public class RadioChannel implements Identified {
 	 */
 	@JsonIgnore
 	public void setChannelId(String channelId) {
-		this.channelId = channelId == null || channelId.isBlank() ? UUID.randomUUID().toString() : channelId;
+		setId(channelId == null || channelId.isBlank() ? UUID.randomUUID().toString() : channelId);
 	}
 
 	/**

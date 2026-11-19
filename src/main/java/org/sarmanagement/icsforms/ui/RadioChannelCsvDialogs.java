@@ -94,9 +94,6 @@ final class RadioChannelCsvDialogs {
 				result.setPreparedDateTime(imported.getPreparedDateTime());
 				result.setDatePrepared(imported.getDatePrepared());
 				result.setIapPage(imported.getIapPage());
-				if (selection.mode() == ChannelImportService.Mode.REPLACE) {
-					result.setFormId(imported.getFormId());
-				}
 			}
 			controller.getData().setForm205(result);
 			controller.markDirty();

@@ -242,6 +242,7 @@ public class Ics203Form {
 	/** An operations branch with divisions/groups kept under its director and deputy. */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class Branch implements Identified {
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		private String id = UUID.randomUUID().toString();
 		private String name = "";
 		private String director = "";
@@ -262,7 +263,9 @@ public class Ics203Form {
 		 *
 		 * @param id branch UUID; null or blank generates a UUID.
 		 */
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
+			IdentityGuard.check(this.id, id);
 			this.id = id;
 		}
 

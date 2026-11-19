@@ -15,6 +15,7 @@ import java.util.UUID;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class VetFacility implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String name = "";
 	private String town = "";
@@ -44,13 +45,24 @@ public class VetFacility implements Identified {
 	public VetFacility() {
 	}
 
+	/**
+	 * Creates a facility with an identity supplied by an import or source record.
+	 *
+	 * @param id existing facility identity; null or blank creates a fresh identity
+	 */
+	public VetFacility(String id) {
+		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+	}
+
 	/** @return stable directory identifier. */
 	public String getId() {
 		return id;
 	}
 
 	/** @param id stable directory identifier. */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 
@@ -337,7 +349,7 @@ public class VetFacility implements Identified {
 	 */
 	public VetFacility copy() {
 		VetFacility copy = new VetFacility();
-		copy.setId(getId());
+		IdentityMigration.replaceId(copy, getId());
 		copy.setName(name);
 		copy.setTown(town);
 		copy.setState(state);

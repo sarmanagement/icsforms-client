@@ -68,7 +68,9 @@ public class Ics214Form implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(logId, id);
 		logId = id;
 	}
 
@@ -79,7 +81,7 @@ public class Ics214Form implements Identified {
 	 */
 	@JsonIgnore
 	public void setLogId(String logId) {
-		this.logId = logId;
+		setId(logId);
 	}
 
 	/**

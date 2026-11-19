@@ -620,8 +620,7 @@ public class Ics206Panel extends JPanel {
 	private void saveAidStations(MedicalPlan plan) {
 		List<MedicalPlan.AidStation> stations = new ArrayList<>();
 		for (int row = 0; row < aidModel.getRowCount(); row++) {
-			MedicalPlan.AidStation station = new MedicalPlan.AidStation();
-			station.setId(recordId(aidModel, row));
+			MedicalPlan.AidStation station = new MedicalPlan.AidStation(recordId(aidModel, row));
 			station.setName(cell(aidModel, row, 0));
 			station.setLocation(cell(aidModel, row, 1));
 			station.setContactNumbers(cell(aidModel, row, 2));
@@ -640,8 +639,7 @@ public class Ics206Panel extends JPanel {
 	private void saveTransport(MedicalPlan plan) {
 		List<MedicalPlan.TransportService> services = new ArrayList<>();
 		for (int row = 0; row < transportModel.getRowCount(); row++) {
-			MedicalPlan.TransportService service = new MedicalPlan.TransportService();
-			service.setId(recordId(transportModel, row));
+			MedicalPlan.TransportService service = new MedicalPlan.TransportService(recordId(transportModel, row));
 			service.setService(cell(transportModel, row, 0));
 			service.setLocation(cell(transportModel, row, 1));
 			service.setContactNumbers(cell(transportModel, row, 2));
@@ -662,8 +660,7 @@ public class Ics206Panel extends JPanel {
 		List<MedicalPlan.Hospital> hospitals = new ArrayList<>();
 		boolean invalidCoordinates = false;
 		for (int row = 0; row < hospitalModel.getRowCount(); row++) {
-			MedicalPlan.Hospital hospital = new MedicalPlan.Hospital();
-			hospital.setId(recordId(hospitalModel, row));
+			MedicalPlan.Hospital hospital = new MedicalPlan.Hospital(recordId(hospitalModel, row));
 			hospital.setName(cell(hospitalModel, row, 0));
 			hospital.setAddress(cell(hospitalModel, row, 1));
 			hospital.setContactNumbers(cell(hospitalModel, row, 2));

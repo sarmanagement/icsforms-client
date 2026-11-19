@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -112,12 +113,13 @@ class RecordIdentityTest {
 	 * Keeps identity absent on reads until load-time migration assigns it.
 	 */
 	@Test
-	void identityGetterDoesNotGenerateId() {
-		ActivityLogEntry entry = new ActivityLogEntry();
-		entry.setId(null);
+	void identityGetterDoesNotGenerateId() throws Exception {
+		ActivityLogEntry entry = mapper.readValue("{\"id\":null}", ActivityLogEntry.class);
 
 		assertEquals(null, entry.getId());
-		entry.setId(UUID.randomUUID().toString());
+		String assigned = UUID.randomUUID().toString();
+		entry.setId(assigned);
+		assertEquals(assigned, entry.getId());
 		assertNotNull(entry.getId());
 	}
 
@@ -126,10 +128,8 @@ class RecordIdentityTest {
 	 */
 	@Test
 	void taskAndTCardIdentityGettersArePureAndStable() throws Exception {
-		TCard card = new TCard();
-		card.setId(null);
-		SarTaskAssignment task = new SarTaskAssignment();
-		task.setId(null);
+		TCard card = mapper.readValue("{\"id\":null}", TCard.class);
+		SarTaskAssignment task = mapper.readValue("{\"id\":null}", SarTaskAssignment.class);
 
 		assertNull(card.getResourceId());
 		assertNull(card.getResourceId());
@@ -159,6 +159,27 @@ class RecordIdentityTest {
 		assertEquals(taskId, migratedTask.getTaskId());
 		assertNotNull(new TCard().getId());
 		assertNotNull(new SarTaskAssignment().getId());
+	}
+
+	/**
+	 * Permits initial assignment and same-value assignment but rejects later replacement.
+	 *
+	 * @throws Exception when Jackson conversion fails
+	 */
+	@Test
+	void identitySetterAllowsInitialAndSameValueButRejectsReplacement() throws Exception {
+		SafetyMessageBlock block = mapper.readValue("{\"id\":null}", SafetyMessageBlock.class);
+		String assigned = UUID.randomUUID().toString();
+		block.setId(assigned);
+		block.setId(assigned);
+
+		assertEquals(assigned, block.getId());
+		assertThrows(IllegalStateException.class, () -> block.setId(UUID.randomUUID().toString()));
+		assertThrows(IllegalStateException.class, () -> block.setId(null));
+
+		IdentityMigration.remint(block);
+		assertNotNull(block.getId());
+		assertFalse(assigned.equals(block.getId()));
 	}
 
 	/**

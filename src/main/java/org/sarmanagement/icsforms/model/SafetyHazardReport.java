@@ -10,6 +10,7 @@ import java.util.UUID;
  * Archived SAR debrief hazard report retained across operational periods.
  */
 public class SafetyHazardReport implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String taskId = "";
 	private String taskLabel = "";
@@ -36,7 +37,9 @@ public class SafetyHazardReport implements Identified {
 	 *
 	 * @param id report UUID; null or blank generates a new UUID.
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

@@ -23,6 +23,7 @@ public class OrgChartEntry implements Identified {
 	}
 
 	private Section section = Section.OPERATIONS;
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String title = "";
 	private String name = "";
@@ -43,7 +44,9 @@ public class OrgChartEntry implements Identified {
 	 *
 	 * @param id position UUID; null or blank generates a UUID.
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

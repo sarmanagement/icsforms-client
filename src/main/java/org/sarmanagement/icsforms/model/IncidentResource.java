@@ -128,8 +128,10 @@ public abstract class IncidentResource implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
-		setResourceId(id);
+		IdentityGuard.check(resourceId, id);
+		resourceId = id;
 	}
 
 	/**
@@ -142,6 +144,7 @@ public abstract class IncidentResource implements Identified {
 	 */
 	@JsonIgnore
 	public void setResourceId(String resourceId) {
+		IdentityGuard.check(this.resourceId, resourceId);
 		this.resourceId = resourceId;
 	}
 

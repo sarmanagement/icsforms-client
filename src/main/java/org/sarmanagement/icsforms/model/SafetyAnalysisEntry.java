@@ -39,7 +39,9 @@ public class SafetyAnalysisEntry implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(entryId, id);
 		entryId = id;
 	}
 
@@ -50,7 +52,7 @@ public class SafetyAnalysisEntry implements Identified {
 	 */
 	@JsonIgnore
 	public void setEntryId(String entryId) {
-		this.entryId = entryId;
+		setId(entryId);
 	}
 
 	/**

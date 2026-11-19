@@ -169,6 +169,7 @@ class BringForwardDialogTest {
 			source.getNextPeriodForm215().getResourceHeadings().add(sourceHeading);
 			Ics215Form.WorkRow sourceRow = new Ics215Form.WorkRow();
 			sourceRow.resourceAllocations.put(sourceHeading.id, new Ics215Form.ResourceAllocation());
+			sourceRow.ics204DraftFormId = "source-draft-form";
 			source.getNextPeriodForm215().getWorkRows().add(sourceRow);
 			Map<Class<?>, Set<String>> sourceIds = RecordIdentityAssertions.collect(source);
 			var sourceId = store.create(source);
@@ -228,7 +229,11 @@ class BringForwardDialogTest {
 					assertNotEquals(sourceRowId, target.getNextPeriodForm215().getWorkRows().get(0).id);
 					assertTrue(target.getNextPeriodForm215().getWorkRows().get(0).resourceAllocations
 							.containsKey(target.getNextPeriodForm215().getResourceHeadings().get(0).id));
+					assertFalse(target.getNextPeriodForm215().getWorkRows().get(0).resourceAllocations
+							.containsKey(sourceHeadingId));
+					assertEquals("", target.getNextPeriodForm215().getWorkRows().get(0).ics204DraftFormId);
 					assertEquals(sourceHospitalId, imported.getMedicalPlan().getHospitals().get(0).getId());
+					assertEquals(importedIds, assertDoesNotThrow(() -> RecordIdentityAssertions.collect(imported)));
 					assertDoesNotThrow(() -> RecordIdentityAssertions.collect(target));
 					assertEquals(sourceIds, assertDoesNotThrow(() -> RecordIdentityAssertions.collect(source)));
 					assertEquals("Other incident hazard", source.getForm208().getHazardBlocks().get(0).getHazard());

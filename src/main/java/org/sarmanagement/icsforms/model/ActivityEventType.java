@@ -50,6 +50,7 @@ public class ActivityEventType implements Identified {
 	/** Stable identifier for an explicitly confirmed response-canine medical event. */
 	public static final String ID_CANINE_MEDICAL_EVENT = "RESPONSE_CANINE_MEDICAL_EVENT";
 
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String label = "";
 	private boolean builtIn = false;
@@ -126,8 +127,11 @@ public class ActivityEventType implements Identified {
 	 * @param id
 	 *            stable identifier.
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
-		this.id = id == null ? "" : id;
+		String value = id == null ? "" : id;
+		IdentityGuard.check(this.id, value);
+		this.id = value;
 	}
 
 	/**

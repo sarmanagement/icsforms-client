@@ -73,7 +73,7 @@ public class ActivityLogEntry implements Identified {
 	 */
 	@JsonIgnore
 	public void setEntryId(String entryId) {
-		this.entryId = entryId;
+		setId(entryId);
 	}
 
 	/** {@inheritDoc} */
@@ -84,7 +84,9 @@ public class ActivityLogEntry implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(entryId, id);
 		entryId = id;
 	}
 

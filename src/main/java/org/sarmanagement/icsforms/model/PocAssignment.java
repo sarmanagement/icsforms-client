@@ -12,6 +12,7 @@ import java.util.UUID;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PocAssignment implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String assignee = "";
 	private LocalDateTime assignedAt;
@@ -44,7 +45,9 @@ public class PocAssignment implements Identified {
 	 *
 	 * @param id assignment UUID; null or blank generates a new UUID
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

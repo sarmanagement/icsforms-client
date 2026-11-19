@@ -40,14 +40,16 @@ public class Ics202ReportedResult implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(resultId, id);
 		resultId = id;
 	}
 
 	/** @param resultId stable result identifier. */
 	@JsonIgnore
 	public void setResultId(String resultId) {
-		this.resultId = resultId;
+		setId(resultId);
 	}
 
 	/** @return associated objective identifier, or blank for an incident-level result. */

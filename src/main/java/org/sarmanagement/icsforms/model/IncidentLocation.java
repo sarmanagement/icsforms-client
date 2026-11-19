@@ -12,6 +12,7 @@ import java.util.UUID;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class IncidentLocation implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String type = "Other";
 	private String name = "";
@@ -37,7 +38,9 @@ public class IncidentLocation implements Identified {
 	 *
 	 * @param id location identifier; blank values are replaced with a generated identifier.
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

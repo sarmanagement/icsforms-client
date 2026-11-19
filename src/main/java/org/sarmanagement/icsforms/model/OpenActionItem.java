@@ -11,6 +11,7 @@ import java.util.UUID;
 /** An ICS 233 action item with its current point of contact and UTC dates. */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class OpenActionItem implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private int number;
 	private String item = "";
@@ -39,7 +40,9 @@ public class OpenActionItem implements Identified {
 	 *
 	 * @param id action item UUID; null or blank generates a new UUID
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

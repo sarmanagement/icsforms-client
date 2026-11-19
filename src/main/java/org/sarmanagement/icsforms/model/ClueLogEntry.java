@@ -100,12 +100,14 @@ public class ClueLogEntry implements Identified {
 	 */
 	@JsonIgnore
 	public void setEntryId(String entryId) {
-		this.entryId = entryId;
+		setId(entryId);
 	}
 
 	/** {@inheritDoc} */
 	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(entryId, id);
 		entryId = id;
 	}
 

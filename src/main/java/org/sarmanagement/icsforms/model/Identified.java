@@ -6,11 +6,11 @@ package org.sarmanagement.icsforms.model;
 /**
  * Contract for persisted records with a stable identity.
  *
- * <p>Identity setters remain public for Jackson deserialization and persistence
- * migration, but application code must treat an assigned identity as immutable.
- * The architecture test allow-lists existing UI/import assignment sites outside
- * the model and persistence packages. Copies that become new records must use
- * {@link IdentityMigration#remint(Object...)} instead of directly replacing IDs.</p>
+ * <p>Identity setters reject replacement after a nonblank identity is assigned.
+ * Jackson reads the canonical identity field directly, while persistence
+ * migration and copied records use the package-private replacement path in
+ * {@link IdentityMigration}. Application code must treat assigned identities
+ * as immutable, and new record graphs must use {@link IdentityMigration#remint(Object...)}.</p>
  */
 public interface Identified {
 	/**

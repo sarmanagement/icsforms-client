@@ -3,6 +3,8 @@
  */
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -11,6 +13,7 @@ import java.util.UUID;
  * Editable hazard and precaution block linked to one or more 215A rows.
  */
 public class SafetyMessageBlock implements Identified {
+	@JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String hazard = "";
 	private String incidentArea = "All";
@@ -32,7 +35,9 @@ public class SafetyMessageBlock implements Identified {
 	 *
 	 * @param id message block UUID; null or blank generates a UUID
 	 */
+	@JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

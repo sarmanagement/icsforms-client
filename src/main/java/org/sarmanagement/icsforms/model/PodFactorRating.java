@@ -11,6 +11,7 @@ import java.util.UUID;
 public class PodFactorRating implements Identified {
 	private static final int DEFAULT_MAX_SCORE = 10;
 
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String name = "";
 	private int maxScore = DEFAULT_MAX_SCORE;
@@ -31,7 +32,9 @@ public class PodFactorRating implements Identified {
 	 *
 	 * @param id factor UUID; null or blank generates a UUID
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

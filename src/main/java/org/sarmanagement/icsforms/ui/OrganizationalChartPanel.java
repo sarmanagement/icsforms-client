@@ -11,6 +11,7 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.Ics203Form;
 import org.sarmanagement.icsforms.model.Ics207Form;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.TCard;
@@ -633,7 +634,7 @@ public class OrganizationalChartPanel extends JPanel {
 			for (OrgChartEntry entry : source) {
 				if (entry != null) {
 					OrgChartEntry copy = new OrgChartEntry();
-					copy.setId(entry.getId());
+					IdentityMigration.preserveIdentity(copy, entry);
 					copy.setSection(entry.getSection());
 					copy.setRadio(entry.getRadio());
 					copy.setPhone(entry.getPhone());
@@ -1033,7 +1034,7 @@ public class OrganizationalChartPanel extends JPanel {
 	 */
 	private static void retainIdentity(OrgChartEntry entry, List<OrgChartEntry> existing, int index) {
 		if (index < existing.size() && existing.get(index) != null) {
-			entry.setId(existing.get(index).getId());
+			IdentityMigration.preserveIdentity(entry, existing.get(index));
 		}
 	}
 

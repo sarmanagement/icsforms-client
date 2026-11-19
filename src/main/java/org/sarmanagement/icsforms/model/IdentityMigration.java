@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Assigns missing identities and repairs duplicate stored identities once per document load.
@@ -74,9 +75,50 @@ public final class IdentityMigration {
 				.toList();
 		if (assignments.size() == 1 && tasks.size() == 1) {
 			String assignmentId = UUID.randomUUID().toString();
-			assignments.get(0).setId(assignmentId);
+			replaceId(assignments.get(0), assignmentId);
 			tasks.get(0).setAssignmentId(assignmentId);
 		}
+	}
+
+	/**
+	 * Preserves a source identity while constructing a detached editor or import copy.
+	 *
+	 * @param target detached record receiving the identity
+	 * @param source existing record whose identity is preserved
+	 * @throws IllegalArgumentException when either record or its identity is absent
+	 */
+	public static void preserveIdentity(Identified target, Identified source) {
+		if (target == null || source == null || source.getId() == null || source.getId().isBlank()) {
+			throw new IllegalArgumentException("A target and an identified source record are required.");
+		}
+		replaceId(target, source.getId());
+	}
+
+	/**
+	 * Replaces an identity from migration, deserialization-independent copy, or remint code.
+	 *
+	 * @param target identified mutable model record
+	 * @param id replacement identity
+	 */
+	static void replaceId(Identified target, String id) {
+		for (Class<?> type = target.getClass(); type != null && type.getPackageName().equals(MODEL_PACKAGE);
+				type = type.getSuperclass()) {
+			for (Field field : type.getDeclaredFields()) {
+				JsonProperty property = field.getAnnotation(JsonProperty.class);
+				if (property != null && "id".equals(property.value()) && field.getType() == String.class) {
+					try {
+						field.setAccessible(true);
+						field.set(target, id);
+						return;
+					} catch (IllegalAccessException | RuntimeException exception) {
+						throw new IllegalStateException("Cannot replace record identity in "
+								+ target.getClass().getSimpleName(), exception);
+					}
+				}
+			}
+		}
+		throw new IllegalStateException("No canonical identity property found for "
+				+ target.getClass().getSimpleName());
 	}
 
 	/**
@@ -600,7 +642,7 @@ public final class IdentityMigration {
 	 */
 	private Object withIdentity(Object value, String id) {
 		if (!value.getClass().isRecord()) {
-			((Identified) value).setId(id);
+			replaceId((Identified) value, id);
 			return value;
 		}
 		try {

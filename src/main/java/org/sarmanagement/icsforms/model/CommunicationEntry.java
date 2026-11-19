@@ -11,6 +11,7 @@ import java.util.UUID;
  * Communication row for ICS 204 or linked SAR task context.
  */
 public class CommunicationEntry implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String name = "";
 	private String function = "";
@@ -48,7 +49,9 @@ public class CommunicationEntry implements Identified {
 	 *
 	 * @param id communication UUID; null or blank generates a UUID
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

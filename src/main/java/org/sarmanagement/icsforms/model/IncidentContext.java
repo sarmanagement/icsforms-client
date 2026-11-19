@@ -7,6 +7,7 @@ import java.util.UUID;
  * Shared incident metadata reused across ICS forms in the local workspace.
  */
 public class IncidentContext implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String incidentName = "";
 	private LocalDateTime operationalPeriodStart;
@@ -29,7 +30,9 @@ public class IncidentContext implements Identified {
 
 	/** {@inheritDoc} */
 	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
 		this.id = id;
 	}
 

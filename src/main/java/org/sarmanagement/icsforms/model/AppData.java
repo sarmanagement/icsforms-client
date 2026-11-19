@@ -81,7 +81,9 @@ public class AppData {
 
 		/** {@inheritDoc} */
 		@Override
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
+			IdentityGuard.check(recordId, id);
 			recordId = id;
 		}
 
@@ -92,7 +94,7 @@ public class AppData {
 		 */
 		@JsonIgnore
 		public void setRecordId(String recordId) {
-			this.recordId = recordId;
+			setId(recordId);
 		}
 
 		/**
