@@ -39,7 +39,7 @@ public class ChannelImportService {
 		Map<String, Integer> existing = index(target.getChannels());
 		index(imported.getChannels());
 		Ics205Form result = target.deepCopy();
-		IdentityMigration.preserveIdentity(result, mode == Mode.REPLACE ? imported : target);
+		IdentityMigration.preserveIdentity(result, target);
 		Ics205Form source = imported.deepCopy();
 		Set<Integer> selection = new HashSet<>();
 		List<RadioChannel> chosen = new ArrayList<>();
