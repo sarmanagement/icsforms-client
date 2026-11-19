@@ -29,6 +29,7 @@ class ChannelImportServiceTest {
 		assertEquals(2, result.getChannels().size());
 		assertNotEquals(result.getChannels().get(0).getChannelId(), result.getChannels().get(1).getChannelId());
 		assertNotEquals(importedId, result.getChannels().get(1).getId());
+		assertEquals(2L, result.getChannels().stream().map(RadioChannel::getId).distinct().count());
 		assertEquals(target.getChannels().get(0).getChannelId(), imported.getChannels().get(0).getChannelId());
 		result.getChannels().get(1).getProgrammingMetadata().put("raw", "changed");
 		assertEquals("023", imported.getChannels().get(0).getProgrammingMetadata().get("raw"));
@@ -40,11 +41,16 @@ class ChannelImportServiceTest {
 		Ics205Form target = plan("Existing");
 		target.setSpecialInstructions("Local instructions");
 		Ics205Form imported = plan("Incoming");
-		Ics205Form result = service.merge(target, imported, List.of(0), ChannelImportService.Mode.REPLACE);
+		imported.getChannels().add(new RadioChannel());
+		Ics205Form result = service.merge(target, imported, List.of(0, 1), ChannelImportService.Mode.REPLACE);
 		assertEquals("Incoming", result.getChannels().get(0).getChannelName());
+		assertEquals(2, result.getChannels().size());
+		assertEquals(2L, result.getChannels().stream().map(RadioChannel::getId).distinct().count());
 		assertEquals("Local instructions", result.getSpecialInstructions());
 		assertEquals(target.getFormId(), result.getFormId());
 		assertNotEquals(imported.getChannels().get(0).getId(), result.getChannels().get(0).getId());
+		assertEquals(1, target.getChannels().size());
+		assertEquals(2L, result.getChannels().stream().map(RadioChannel::getId).distinct().count());
 		assertEquals(0, service.merge(target, plan("Unused"), List.of(), ChannelImportService.Mode.REPLACE).getChannels().size());
 	}
 
@@ -55,6 +61,7 @@ class ChannelImportServiceTest {
 		imported.getChannels().get(0).setRxFrequency("155.123456");
 		Ics205Form result = service.merge(target, imported, List.of(0), ChannelImportService.Mode.UPDATE_BY_ID);
 		assertEquals("155.123456", result.getChannels().get(0).getRxFrequency());
+		assertEquals(target.getChannels().get(0).getId(), result.getChannels().get(0).getId());
 		assertEquals("", target.getChannels().get(0).getRxFrequency());
 		imported.getChannels().add(plan("Same").getChannels().get(0));
 		assertThrows(IllegalArgumentException.class,

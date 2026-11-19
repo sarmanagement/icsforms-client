@@ -330,7 +330,8 @@ public class VetFacility implements Identified {
 	}
 
 	/**
-	 * Creates an independent copy for an accepted plan snapshot.
+	 * Creates an independent copy retaining the source identity. Callers must remint
+	 * the copy before adding it as a distinct plan snapshot.
 	 *
 	 * @return copied facility and provenance.
 	 */

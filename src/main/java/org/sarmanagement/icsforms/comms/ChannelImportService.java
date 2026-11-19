@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.comms;
 
 import org.sarmanagement.icsforms.model.Ics205Form;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.RadioChannel;
 
 import java.util.ArrayList;
@@ -48,7 +49,7 @@ public class ChannelImportService {
 			chosen.add(source.getChannels().get(row));
 		}
 		if (mode == Mode.REPLACE) {
-			chosen.forEach(channel -> channel.setId(UUID.randomUUID().toString()));
+			IdentityMigration.remint(chosen.toArray());
 			result.setChannels(chosen);
 			return result;
 		}
@@ -62,7 +63,7 @@ public class ChannelImportService {
 				}
 				channels.set(position, channel);
 			} else {
-				channel.setId(UUID.randomUUID().toString());
+				IdentityMigration.remint(channel);
 				channels.add(channel);
 			}
 		}

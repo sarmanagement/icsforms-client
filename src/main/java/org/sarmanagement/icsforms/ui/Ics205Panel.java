@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.Ics205Form;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.RadioChannel;
 
 import javax.swing.JButton;
@@ -324,7 +325,7 @@ public final class Ics205Panel extends JPanel {
 			return;
 		}
 		RadioChannel copy = controller.getData().getForm205().getChannels().get(index).deepCopy();
-		copy.setChannelId(UUID.randomUUID().toString());
+		IdentityMigration.remint(copy);
 		applyChannel(-1, copy);
 	}
 

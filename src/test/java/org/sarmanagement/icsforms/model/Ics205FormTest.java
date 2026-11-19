@@ -318,6 +318,49 @@ class Ics205FormTest {
 	}
 
 	@Test
+	void rolloverKeepsEveryRecordTypeUniqueAcrossLiveAndArchivedPeriods() throws Exception {
+		for (boolean bringForwardCommunications : List.of(false, true)) {
+			for (boolean promotePlannedWorksheet : List.of(false, true)) {
+				AppData data = new AppData();
+				data.getForm215().getResourceHeadings().add(new Ics215Form.ResourceHeading());
+				Ics215Form planned = data.getNextPeriodForm215();
+				planned.getResourceHeadings().add(new Ics215Form.ResourceHeading());
+				planned.setTargetPeriodStart(LocalDateTime.of(2026, 11, 19, 8, 0));
+				planned.setTargetPeriodEnd(LocalDateTime.of(2026, 11, 19, 20, 0));
+				data.getForm205().getChannels().add(new RadioChannel());
+				data.getMedicalPlan().getAidStations().add(new MedicalPlan.AidStation());
+				data.getCanineMedicalPlan().getSelectedFacilities().add(new VetFacility());
+				Ics204Form assignmentForm = new Ics204Form();
+				assignmentForm.getResourcesAssigned().add(new ResourceAssignment());
+				data.getAdditionalForms204().add(assignmentForm);
+				SarTaskAssignment task = new SarTaskAssignment();
+				task.getResourcesAssigned().add(new SarTaskResource());
+				data.getSarTaskAssignments().add(task);
+				IdentityMigration.migrate(data);
+
+				String plannedId = planned.getId();
+				String plannedHeadingId = planned.getResourceHeadings().get(0).id;
+				String sourceTaskId = task.getId();
+				data.advanceToNewOperationalPeriod(bringForwardCommunications, promotePlannedWorksheet);
+
+				AppData.OperationalPeriodRecord archived = data.getOperationalPeriodHistory().get(0);
+				assertNotEquals(archived.getNextPeriodForm215().getId(), data.getNextPeriodForm215().getId());
+				if (promotePlannedWorksheet) {
+					assertNotEquals(plannedId, data.getForm215().getId());
+					assertNotEquals(plannedHeadingId, data.getForm215().getResourceHeadings().get(0).id);
+					assertTrue(data.getNextPeriodForm215().getResourceHeadings().isEmpty());
+				} else {
+					assertEquals(plannedId, data.getNextPeriodForm215().getId());
+					assertEquals(plannedHeadingId, data.getNextPeriodForm215().getResourceHeadings().get(0).id);
+				}
+				assertEquals(sourceTaskId, archived.getSarTaskAssignments().get(0).getId());
+				assertTrue(data.getSarTaskAssignments().isEmpty());
+				RecordIdentityAssertions.collect(data);
+			}
+		}
+	}
+
+	@Test
 	void fileStoreMigratesSchemaElevenAndPersistsInventoryAndHistory() throws Exception {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			IncidentId legacyId = IncidentId.newId();

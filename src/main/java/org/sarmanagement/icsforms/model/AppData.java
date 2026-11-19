@@ -558,6 +558,7 @@ public class AppData {
 		record.setForm215a(MEDICAL_PLAN_COPIER.convertValue(getForm215a(), Ics215aForm.class));
 		record.setForm215(getForm215().copy());
 		record.setNextPeriodForm215(getNextPeriodForm215().copy());
+		IdentityMigration.remint(record.getNextPeriodForm215());
 		record.setForm208(MEDICAL_PLAN_COPIER.convertValue(getForm208(), Ics208Form.class));
 		record.setIapPlanningStage(getIapPlanningStage());
 		record.setForm202(MEDICAL_PLAN_COPIER.convertValue(getForm202(), Ics202Form.class));

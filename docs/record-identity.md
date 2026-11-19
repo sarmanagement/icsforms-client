@@ -27,9 +27,10 @@ document is returned.
 Copies that become new records receive new IDs. References within a copied graph
 are remapped when the reference target is also copied. Archival snapshots keep
 the identity of the completed record while the continuing/new-period copy gets
-fresh identities. ICS 205 channels carried into a new period also receive new
-identities; external references to the completed period remain attached to its
-archived snapshot.
+fresh identities. A planned ICS 215 worksheet archived during rollover receives
+distinct identities from the retained live planned worksheet. ICS 205 channels
+carried into a new period also receive new identities; external references to
+the completed period remain attached to its archived snapshot.
 
 ## Persisted identity inventory
 
