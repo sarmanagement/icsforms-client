@@ -17,7 +17,7 @@ class ActivityLogEntryTest {
 	@Test
 	void assignmentContextAndExistingEntryIdSurviveJsonRoundTrip() throws Exception {
 		ActivityLogEntry entry = new ActivityLogEntry();
-		entry.setEntryId("activity-existing-id");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(entry, "activity-existing-id");
 		entry.setAssignmentId("assignment-stable-id");
 		entry.setResourceIdentifier("Robin");
 		entry.setTimestamp(LocalDateTime.of(2026, 1, 1, 8, 30));

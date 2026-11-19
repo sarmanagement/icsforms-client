@@ -25,6 +25,15 @@ public class IncidentLocation implements Identified {
 	}
 
 	/**
+	 * Creates an incident location with an identity from an existing table row.
+	 *
+	 * @param id table-row identity; null or blank creates a fresh identity
+	 */
+	public IncidentLocation(String id) {
+		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+	}
+
+	/**
 	 * Returns the stable location identifier.
 	 *
 	 * @return location identifier.

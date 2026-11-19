@@ -265,7 +265,8 @@ public class SarTaskAssignment implements Identified {
 						? Integer.toString(index) : sourceId;
 				String identitySeed = "sar-task-communication:" + assignmentId
 						+ ":" + identitySource;
-				clone.setId(UUID.nameUUIDFromBytes(identitySeed.getBytes(StandardCharsets.UTF_8)).toString());
+				IdentityMigration.replaceId(clone,
+						UUID.nameUUIDFromBytes(identitySeed.getBytes(StandardCharsets.UTF_8)).toString());
 				clone.setName(entry.getName());
 				clone.setFunction(entry.getFunction());
 				clone.setPrimaryContact(entry.getPrimaryContact());

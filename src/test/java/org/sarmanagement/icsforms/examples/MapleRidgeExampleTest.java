@@ -763,19 +763,19 @@ class MapleRidgeExampleTest {
 		AppData data = new AppData();
 		data.setIncidentId(id("incident"));
 		data.setOriginNodeId(id("origin"));
-		data.getOrganizationalChart().setId(id("organizational-chart"));
-		data.getForm201().setId(id("ics201"));
-		data.getForm202().setId(id("ics202"));
-		data.getMedicalPlan().setId(id("medical-plan"));
-		data.getCanineMedicalPlan().setId(id("canine-medical-plan"));
-		data.getForm207().setId(id("ics207"));
-		data.getForm208().setId(id("ics208"));
-		data.getForm215a().setId(id("ics215a"));
-		data.getPdfLayoutSettings().setId(id("pdf-layout-settings"));
-		data.getStagingLocation().setId(id("staging-location"));
-		data.getVetDirectory().setId(id("vet-directory"));
-		data.getForm215().setWorksheetId(id("ics215-current"));
-		data.getNextPeriodForm215().setWorksheetId(id("ics215-next"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getOrganizationalChart(), id("organizational-chart"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getForm201(), id("ics201"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getForm202(), id("ics202"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getMedicalPlan(), id("medical-plan"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getCanineMedicalPlan(), id("canine-medical-plan"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getForm207(), id("ics207"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getForm208(), id("ics208"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getForm215a(), id("ics215a"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getPdfLayoutSettings(), id("pdf-layout-settings"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getStagingLocation(), id("staging-location"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getVetDirectory(), id("vet-directory"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getForm215(), id("ics215-current"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getNextPeriodForm215(), id("ics215-next"));
 		data.setCreatedAt(Instant.parse("2026-07-18T10:30:00Z"));
 		data.setUseSystemTimeZone(false);
 		data.setConfiguredTimeZoneId("America/New_York");
@@ -784,7 +784,7 @@ class MapleRidgeExampleTest {
 		data.setIapPlanningStage(IapPlanningStage.OPERATIONAL_PERIOD_ACTIVE);
 		data.setIncidentContext(new IncidentContext(INCIDENT, time(7, 0), time(19, 0), PLANNING,
 				"Planning Section Chief - fictional exercise"));
-		data.getIncidentContext().setId(id("incident-context"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getIncidentContext(), id("incident-context"));
 		data.getIncidentContext().setTaskMap("MR-EX-01: fictional residence IPP, separate staging and ICP, spokes A/B/C, rim R1/R2, zones K1-K4");
 		data.getStagingLocation().setLabel(STAGING);
 		data.getStagingLocation().setAddress("20 Park Road, fictional Maple Ridge, MA");
@@ -833,7 +833,7 @@ class MapleRidgeExampleTest {
 	 */
 	private static void addLocation(AppData data, String key, String type, String name, String address) {
 		IncidentLocation location = new IncidentLocation();
-		location.setId(id("location-" + key));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(location, id("location-" + key));
 		location.setType(type);
 		location.setName(name);
 		location.setAddress(address);
@@ -872,7 +872,7 @@ class MapleRidgeExampleTest {
 	 */
 	private static void addCommunications(AppData data) {
 		RadioChannel channel = new RadioChannel();
-		channel.setChannelId(id("channel"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(channel, id("channel"));
 		channel.setZoneGroup("EXERCISE");
 		channel.setChannelNumber("1");
 		channel.setChannelName(CHANNEL);
@@ -895,7 +895,7 @@ class MapleRidgeExampleTest {
 		channel.setRadioCheckedAt(time(6, 50));
 		channel.setRadioCheckNotes("Simulated exercise check at ICP, staging, IPP and rim; not a real coverage survey.");
 		channel.setRemarks("Fictional example, not permission to transmit. Verify license, bandwidth and local plan.");
-		data.getForm205().setFormId(id("205"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getForm205(), id("205"));
 		data.getForm205().setChannels(List.of(channel));
 		data.getForm205().setPreparedByName(COML);
 		data.getForm205().setPreparedDateTime(time(6, 45));
@@ -921,7 +921,7 @@ class MapleRidgeExampleTest {
 		List<IncidentObjective> structured = new ArrayList<>();
 		for (int i = 0; i < objectives.size(); i++) {
 			IncidentObjective objective = new IncidentObjective(objectives.get(i), i + 1);
-			objective.setObjectiveId(id("objective-" + i));
+			org.sarmanagement.icsforms.TestIdentitySupport.assign(objective, id("objective-" + i));
 			structured.add(objective);
 		}
 		data.getForm202().setStructuredObjectives(structured);
@@ -1021,7 +1021,7 @@ class MapleRidgeExampleTest {
 	 */
 	private static TCard card(String identifier, String person, TCardType type) {
 		TCard card = new TCard();
-		card.setResourceId(id(identifier));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(card, id(identifier));
 		card.setResourceIdentifier(identifier);
 		card.setPersonName(person);
 		card.setCardType(type);
@@ -1041,7 +1041,7 @@ class MapleRidgeExampleTest {
 	 */
 	private static void addAssignments(AppData data) {
 		var form = data.getForm204();
-		form.setFormId(id("204"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(form, id("204"));
 		form.setStagingArea(STAGING);
 		form.setOperationsSectionChiefName(OPS);
 		form.setOperationsSectionChiefContact(CHANNEL);
@@ -1158,7 +1158,7 @@ class MapleRidgeExampleTest {
 		task.setDebriefPreparedDateTime(time(8, 10));
 		task.setDebriefingCompleted(true);
 		ClueLogEntry clue = new ClueLogEntry();
-		clue.setEntryId(id("clue-T1-north-sign"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(clue, id("clue-T1-north-sign"));
 		clue.setAssignmentId(task.getAssignmentId());
 		clue.setDetectingTask("T1");
 		clue.setDetectedBy(task.getLeader());
@@ -1218,7 +1218,7 @@ class MapleRidgeExampleTest {
 			String status, int dogIndex) {
 		int first = members.get(0);
 		ResourceAssignment row = new ResourceAssignment();
-		row.setAssignmentId(id("assignment-" + number));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(row, id("assignment-" + number));
 		row.setAssignmentTeamNumber(number);
 		row.setResourceIdentifier(team);
 		row.setResourceType(resourceType);
@@ -1235,7 +1235,7 @@ class MapleRidgeExampleTest {
 		row.setRemarks(status.replace("assigned - ", ""));
 		data.getForm204().getResourcesAssigned().add(row);
 		SarTaskAssignment task = new SarTaskAssignment();
-		task.setTaskId(id("task-" + number));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(task, id("task-" + number));
 		task.setAssignmentId(row.getAssignmentId());
 		task.setAssignmentTeamNumber(number);
 		task.setResourceIdentifier(team);
@@ -1293,7 +1293,8 @@ class MapleRidgeExampleTest {
 	 */
 	private static SarTaskResource taskResource(TCard card, String function, String ownerId) {
 		SarTaskResource resource = new SarTaskResource();
-		resource.setId(id(ownerId + "-resource-" + card.getResourceId()));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(resource,
+				id(ownerId + "-resource-" + card.getResourceId()));
 		resource.setResourceId(card.getResourceId());
 		resource.setCardType(card.getCardType());
 		resource.setName(card.getCardType() == TCardType.PERSONNEL ? card.getPersonName() : card.getResourceIdentifier());
@@ -1311,13 +1312,13 @@ class MapleRidgeExampleTest {
 	 */
 	private static List<CommunicationEntry> contacts(AppData data, String ownerId) {
 		CommunicationEntry ic = new CommunicationEntry();
-		ic.setId(id(ownerId + "-contact-ic"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(ic, id(ownerId + "-contact-ic"));
 		ic.setName(IC);
 		ic.setFunction("IC");
 		ic.setPrimaryContact(data.getTCards().stream().filter(c -> IC.equals(c.getPersonName()))
 				.findFirst().orElseThrow().getPhoneNumber());
 		CommunicationEntry ops = new CommunicationEntry();
-		ops.setId(id(ownerId + "-contact-ops"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(ops, id(ownerId + "-contact-ops"));
 		ops.setName(OPS);
 		ops.setFunction("Ops");
 		ops.setPrimaryContact(CHANNEL + " / 155.160 MHz");
@@ -1348,14 +1349,14 @@ class MapleRidgeExampleTest {
 						+ "Stop work for heat illness signs; notify MEDL, cool safely and request assistance.");
 		for (int i = 0; i < hazards.size(); i++) {
 			SafetyAnalysisEntry entry = new SafetyAnalysisEntry();
-			entry.setEntryId(id("hazard-" + i));
+			org.sarmanagement.icsforms.TestIdentitySupport.assign(entry, id("hazard-" + i));
 			entry.setIncidentArea("All Maple Ridge field assignments");
 			entry.setHazardsRisks(hazards.get(i));
 			entry.setMitigations(mitigations.get(i));
 			entry.setEquipmentPpe(i == 0 ? "Repellent, tick-removal kit" : i == 1 ? "Boots, map, radio" : "Water, shade, canine cooling supplies");
 			data.getForm215a().getEntries().add(entry);
 			SafetyMessageBlock block = new SafetyMessageBlock();
-			block.setId(id("safety-message-" + i));
+			org.sarmanagement.icsforms.TestIdentitySupport.assign(block, id("safety-message-" + i));
 			block.setHazard(hazards.get(i));
 			block.setIncidentArea(entry.getIncidentArea());
 			block.setPrecautions(mitigations.get(i));
@@ -1392,7 +1393,7 @@ class MapleRidgeExampleTest {
 		plan.setDesignatedMedicalUnitName(MEDL);
 		plan.setDesignatedMedicalUnitContact(CHANNEL + "; 202-555-0107 (fictional)");
 		MedicalPlan.AidStation aid = new MedicalPlan.AidStation();
-		aid.setId(id("aid-station-base"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(aid, id("aid-station-base"));
 		aid.setName("Exercise Base human first-aid supplies/cache (fictional, unstaffed)");
 		aid.setLocation(BASE);
 		aid.setContactNumbers("202-555-0107 (fictional)");
@@ -1400,7 +1401,7 @@ class MapleRidgeExampleTest {
 		aid.setParamedicsOnSite(false);
 		plan.getAidStations().add(aid);
 		MedicalPlan.TransportService ambulance = new MedicalPlan.TransportService();
-		ambulance.setId(id("transport-ambulance"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(ambulance, id("transport-ambulance"));
 		ambulance.setService("Fictional Maple Ridge Ambulance");
 		ambulance.setLocation("Exercise station, 2 Illustration Lane (fictional)");
 		ambulance.setContactNumbers("202-555-0110 (fictional, non-operational)");
@@ -1409,7 +1410,7 @@ class MapleRidgeExampleTest {
 		ambulance.setLevelOfService("BLS - simulated requested service; not a confirmed operational resource");
 		plan.getTransportServices().add(ambulance);
 		MedicalPlan.Hospital hospital = new MedicalPlan.Hospital();
-		hospital.setId(id("hospital-community"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(hospital, id("hospital-community"));
 		hospital.setName("Fictional Maple Ridge Community Hospital");
 		hospital.setAddress("100 Illustration Avenue, fictional Maple Ridge, MA");
 		hospital.setContactNumbers("202-555-0111 (fictional, non-operational)");
@@ -1419,7 +1420,7 @@ class MapleRidgeExampleTest {
 		hospital.setHelipad(false);
 		plan.getHospitals().add(hospital);
 		MedicalPlan.Hospital trauma = new MedicalPlan.Hospital();
-		trauma.setId(id("hospital-trauma"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(trauma, id("hospital-trauma"));
 		trauma.setName("Fictional Pine County Regional Trauma Center");
 		trauma.setAddress("200 Example Boulevard, fictional Pine County, MA");
 		trauma.setContactNumbers("202-555-0112 (fictional, non-operational)");
@@ -1468,7 +1469,7 @@ class MapleRidgeExampleTest {
 		for (int i = 0; i < 2; i++) {
 			int miles = i == 0 ? 25 : 45;
 			VetFacility facility = new VetFacility();
-			facility.setId(id("vet-facility-" + (i + 1)));
+			org.sarmanagement.icsforms.TestIdentitySupport.assign(facility, id("vet-facility-" + (i + 1)));
 			facility.setName(i == 0 ? "Fictional Cedar Vale Emergency Veterinary Hospital"
 					: "Fictional Oak Hollow Veterinary Emergency Center");
 			facility.setTown(i == 0 ? "Fictional Cedar Vale" : "Fictional Oak Hollow");
@@ -1518,7 +1519,7 @@ class MapleRidgeExampleTest {
 		List<LocalDateTime> due = List.of(time(10, 0), time(9, 0), time(13, 0), time(18, 30));
 		for (int i = 0; i < items.size(); i++) {
 			OpenActionItem action = new OpenActionItem();
-			action.setId(id("open-action-" + (i + 1)));
+			org.sarmanagement.icsforms.TestIdentitySupport.assign(action, id("open-action-" + (i + 1)));
 			action.setNumber(i + 1);
 			action.setItem(items.get(i));
 			action.setPoc(pocs.get(i));
@@ -1529,7 +1530,7 @@ class MapleRidgeExampleTest {
 			data.getOpenActionItems().add(action);
 		}
 		Ics214Form log = new Ics214Form();
-		log.setLogId(id("ics214-log-ops"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(log, id("ics214-log-ops"));
 		log.setName(OPS);
 		log.setIcsPosition("Operations Section Chief");
 		log.setHomeAgency(AGENCY);
@@ -1543,7 +1544,8 @@ class MapleRidgeExampleTest {
 			if (!"planned".equals(task.getTaskLifecycleStatus())) {
 				for (SarTaskResource assigned : task.getResourcesAssigned()) {
 					SarTaskResource resource = new SarTaskResource();
-					resource.setId(id("ics214-resource-" + task.getTaskId() + "-" + assigned.getId()));
+					org.sarmanagement.icsforms.TestIdentitySupport.assign(resource,
+							id("ics214-resource-" + task.getTaskId() + "-" + assigned.getId()));
 					resource.setResourceId(assigned.getResourceId());
 					resource.setCardType(assigned.getCardType());
 					resource.setName(assigned.getName());
@@ -1621,7 +1623,7 @@ class MapleRidgeExampleTest {
 	private static void addActivity(Ics214Form log, String key, String eventType, LocalDateTime timestamp,
 			SarTaskAssignment task, String note) {
 		ActivityLogEntry entry = new ActivityLogEntry();
-		entry.setEntryId(id("activity-" + key));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(entry, id("activity-" + key));
 		entry.setTimestamp(timestamp);
 		entry.setEventTypeId(eventType);
 		entry.setResourceIdentifier(task == null ? "Ops" : task.getResourceIdentifier());

@@ -122,7 +122,7 @@ class ChannelLinkSourceTest {
 		assertThrows(UnsupportedOperationException.class, () -> links.clear());
 		assertThrows(UnsupportedOperationException.class, () -> names.clear());
 		channel.setChannelName("Changed");
-		channel.setChannelId("new-id");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(channel, "new-id");
 		entry.setPrimaryContact("changed fallback");
 		channel.getProgrammingMetadata().put("raw", "changed");
 		data.getForm205().getChannels().clear();
@@ -136,7 +136,7 @@ class ChannelLinkSourceTest {
 	@Test
 	void nonIcs205ConsumerReadsLinked204AndTcardWithoutMappingStrings() {
 		AppData data = data(channel("stable", "Renamed command"));
-		data.getForm204().setFormId("form-id");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getForm204(), "form-id");
 		data.getForm204().getCommunications().add(communication("stable", "Old command"));
 		TCard card = card("resource-id", "stable", "Old card channel");
 		data.getTCards().add(card);
@@ -154,10 +154,10 @@ class ChannelLinkSourceTest {
 	void projectsAdditional204ResourcesTaskContactsAndTaskResourcesByExplicitIdentity() {
 		AppData data = data(channel("stable", "Current"));
 		Ics204Form additional = new Ics204Form();
-		additional.setFormId("additional-form");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(additional, "additional-form");
 		additional.getCommunications().add(communication("", "legacy 204"));
 		ResourceAssignment assignment = new ResourceAssignment();
-		assignment.setAssignmentId("assignment-id");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(assignment, "assignment-id");
 		assignment.setContact("legacy assignment");
 		additional.getResourcesAssigned().add(assignment);
 		additional.setOperationsSectionChiefContact("ops 204");
@@ -165,7 +165,7 @@ class ChannelLinkSourceTest {
 		TCard card = card("resource-id", "stable", "legacy card");
 		data.getTCards().add(card);
 		SarTaskAssignment task = new SarTaskAssignment();
-		task.setTaskId("task-id");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(task, "task-id");
 		task.setContact("legacy task");
 		task.setOperationsSectionChiefContact("ops task");
 		task.setSecondaryManagementContact("secondary task");
@@ -256,11 +256,11 @@ class ChannelLinkSourceTest {
 	void readsDoNotInitializeLegacyIdsReconcileLeaderOrRepairMissingPlans() throws Exception {
 		AppData data = data(channel("stable", "Channel"));
 		TCard card = new TCard();
-		card.setId(null);
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(card, null);
 		card.setRadioChannel("legacy");
 		data.getTCards().add(card);
 		SarTaskAssignment task = new SarTaskAssignment();
-		task.setTaskId(null);
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(task, null);
 		task.setContact("legacy task");
 		data.getSarTaskAssignments().add(task);
 		data.getOrganizationalChart().setMedicalUnitLeaderName("legacy leader");
@@ -387,7 +387,7 @@ class ChannelLinkSourceTest {
 	 */
 	private static RadioChannel channel(String id, String name) {
 		RadioChannel channel = new RadioChannel();
-		channel.setChannelId(id);
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(channel, id);
 		channel.setChannelName(name);
 		return channel;
 	}
@@ -414,7 +414,7 @@ class ChannelLinkSourceTest {
 	 */
 	private static TCard card(String resourceId, String channelId, String fallback) {
 		TCard card = new TCard();
-		card.setResourceId(resourceId);
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(card, resourceId);
 		card.setRadioChannel(fallback);
 		card.setRadioChannelId(channelId);
 		return card;

@@ -353,7 +353,7 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 
 			AppData retryData = store.load(id);
 			actions = retryData.getForm201().getCurrentActions();
-			actions.get(1).setId(actions.get(0).getId());
+			org.sarmanagement.icsforms.TestIdentitySupport.assign(actions.get(1), actions.get(0).getId());
 			long originalRevision = retryData.getRevision();
 			Instant originalUpdatedAt = retryData.getUpdatedAt();
 			Path document = tempDir.resolve("incidents").resolve(id.value() + ".json");
@@ -370,7 +370,7 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 			assertEquals(originalBackup, Files.readString(backup));
 			assertFalse(Files.exists(document.resolveSibling(document.getFileName() + ".tmp")));
 
-			actions.get(1).setId(UUID.randomUUID().toString());
+			org.sarmanagement.icsforms.TestIdentitySupport.assign(actions.get(1), UUID.randomUUID().toString());
 			store.save(id, retryData);
 			assertEquals(originalRevision + 1, retryData.getRevision());
 			assertEquals(originalRevision + 1, store.load(id).getRevision());
@@ -469,7 +469,8 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 				actions.removeIf(action -> actionA.equals(action.getId()));
 				org.sarmanagement.icsforms.model.Ics201Form.ActionEntry newAction =
 						new org.sarmanagement.icsforms.model.Ics201Form.ActionEntry();
-				newAction.setId("00000000-0000-4000-8000-000000000007");
+				org.sarmanagement.icsforms.TestIdentitySupport.assign(newAction,
+						"00000000-0000-4000-8000-000000000007");
 				newAction.setActions("Action C");
 				actions.add(newAction);
 				java.util.Collections.reverse(actions);
@@ -480,7 +481,8 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 				java.util.Collections.reverse(divisions);
 				org.sarmanagement.icsforms.model.OrgChartEntry newDivision =
 						new org.sarmanagement.icsforms.model.OrgChartEntry();
-				newDivision.setId("00000000-0000-4000-8000-000000000008");
+				org.sarmanagement.icsforms.TestIdentitySupport.assign(newDivision,
+						"00000000-0000-4000-8000-000000000008");
 				newDivision.setTitle("Division C");
 				divisions.add(newDivision);
 				store.save(id, data);

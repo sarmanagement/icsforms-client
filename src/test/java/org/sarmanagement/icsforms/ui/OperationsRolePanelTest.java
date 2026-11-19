@@ -38,8 +38,7 @@ class OperationsRolePanelTest {
 		AppData data = new AppData();
 		IncidentObjective objective = new IncidentObjective("Search the north sector", 0);
 		data.getForm202().setStructuredObjectives(List.of(objective));
-		ResourceAssignment assignment = new ResourceAssignment();
-		assignment.setAssignmentId("assignment-1");
+		ResourceAssignment assignment = new ResourceAssignment("assignment-1");
 		assignment.setObjectiveIds(List.of(objective.getObjectiveId()));
 		data.getForm204().getResourcesAssigned().add(assignment);
 		SarTaskAssignment task = new SarTaskAssignment();
@@ -73,8 +72,7 @@ class OperationsRolePanelTest {
 		SarTaskAssignment task = new SarTaskAssignment();
 		task.setAssignmentId("assignment-1");
 		data.getSarTaskAssignments().add(task);
-		ResourceAssignment assignment = new ResourceAssignment();
-		assignment.setAssignmentId("assignment-1");
+		ResourceAssignment assignment = new ResourceAssignment("assignment-1");
 		data.getForm204().getResourcesAssigned().add(assignment);
 		TCard card = new TCard();
 		card.setPersonName("Responder One");
@@ -119,8 +117,7 @@ class OperationsRolePanelTest {
 		task.setAssignmentId("assignment-1");
 		task.setTaskLifecycleStatus("on task");
 		data.getSarTaskAssignments().add(task);
-		ResourceAssignment assignment = new ResourceAssignment();
-		assignment.setAssignmentId("assignment-1");
+		ResourceAssignment assignment = new ResourceAssignment("assignment-1");
 		data.getForm204().getResourcesAssigned().add(assignment);
 		TCard card = new TCard();
 		card.setPersonName("Responder One");

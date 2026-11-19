@@ -144,7 +144,7 @@ class Ics215ResourceReviewTest {
 	private TCard card(String id, TCardType type, int persons) {
 		TCard card = new TCard();
 		card.setCardType(type);
-		card.setId(id);
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(card, id);
 		card.setResourceIdentifier(id == null ? "Legacy card" : id);
 		card.setNumberOfPersons(persons);
 		return card;

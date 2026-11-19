@@ -6,6 +6,7 @@ package org.sarmanagement.icsforms.ui;
 import org.sarmanagement.icsforms.model.ActivityEventType;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.CommunicationEntry;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.PodFactorRating;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
@@ -2138,7 +2139,7 @@ public class SarTaskPanel extends JPanel {
 	 * @param target destination clue
 	 */
 	private static void copyFollowUp(ClueLogEntry source, ClueLogEntry target) {
-		target.setEntryId(source.getEntryId());
+		IdentityMigration.preserveIdentity(target, source);
 		target.setProvenance(source.getProvenance());
 		target.setDetectedBy(source.getDetectedBy());
 		target.setFollowUpAssignments(source.getFollowUpAssignments());

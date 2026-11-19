@@ -169,7 +169,7 @@ class RecordDiffTest {
 	void repeatedAndInsertionOrderVariantsProduceDeterministicResults() {
 		AppData first = withActivityEntry();
 		Ics214Form second = new Ics214Form();
-		second.setId("00000000-0000-4000-8000-000000000099");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(second, "00000000-0000-4000-8000-000000000099");
 		first.getActivityLogs().add(second);
 		AppData base = copy(first);
 		AppData edited = copy(first);

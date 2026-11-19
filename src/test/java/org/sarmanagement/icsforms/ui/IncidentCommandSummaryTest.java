@@ -128,8 +128,7 @@ class IncidentCommandSummaryTest {
 			task(data, assignment.getAssignmentId(), state);
 		}
 		ResourceAssignment missing = assignment(data, "missing");
-		ResourceAssignment unrelated = new ResourceAssignment();
-		unrelated.setAssignmentId("unrelated");
+		ResourceAssignment unrelated = new ResourceAssignment("unrelated");
 		data.getForm204().getResourcesAssigned().add(unrelated);
 		task(data, "unrelated", "unrelated-state");
 		task(data, "orphan-task", "orphan-state");
@@ -190,8 +189,7 @@ class IncidentCommandSummaryTest {
 	 * @return added assignment.
 	 */
 	private ResourceAssignment assignment(AppData data, String id) {
-		ResourceAssignment assignment = new ResourceAssignment();
-		assignment.setAssignmentId(id);
+		ResourceAssignment assignment = new ResourceAssignment(id);
 		assignment.setObjectiveIds(List.of("objective"));
 		data.getForm204().getResourcesAssigned().add(assignment);
 		return assignment;

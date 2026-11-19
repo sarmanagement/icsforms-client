@@ -995,16 +995,13 @@ class SarTaskPanelTest {
 				TCard.class, Set.class, Set.class);
 		isCardOnTaskMethod.setAccessible(true);
 
-		TCard cardById = new TCard();
-		cardById.setResourceId("id-123");
+		TCard cardById = new TCard("id-123");
 		cardById.setPersonName("Someone");
 
-		TCard cardByName = new TCard();
-		cardByName.setResourceId("id-999");
+		TCard cardByName = new TCard("id-999");
 		cardByName.setPersonName("Leader Alice");
 
-		TCard cardOther = new TCard();
-		cardOther.setResourceId("id-456");
+		TCard cardOther = new TCard("id-456");
 		cardOther.setPersonName("Bob");
 
 		Set<String> taskIds = Set.of("id-123");
@@ -1098,18 +1095,15 @@ class SarTaskPanelTest {
 				List.class, Set.class, List.class);
 		pickerMethod.setAccessible(true);
 
-		TCard cardOnThisTask = new TCard();
-		cardOnThisTask.setResourceId("card-this-task");
+		TCard cardOnThisTask = new TCard("card-this-task");
 		cardOnThisTask.setCardType(TCardType.PERSONNEL);
 		cardOnThisTask.setPersonName("Member On Task");
 
-		TCard cardOnOtherTask = new TCard();
-		cardOnOtherTask.setResourceId("card-other-task");
+		TCard cardOnOtherTask = new TCard("card-other-task");
 		cardOnOtherTask.setCardType(TCardType.PERSONNEL);
 		cardOnOtherTask.setPersonName("Member Other Task");
 
-		TCard cardAvailable = new TCard();
-		cardAvailable.setResourceId("card-available");
+		TCard cardAvailable = new TCard("card-available");
 		cardAvailable.setCardType(TCardType.PERSONNEL);
 		cardAvailable.setPersonName("Available Member");
 
@@ -1237,8 +1231,7 @@ class SarTaskPanelTest {
 	}
 
 	private static SarTaskAssignment sampleTask() {
-		ResourceAssignment resource = new ResourceAssignment();
-		resource.setAssignmentId("assign-1");
+		ResourceAssignment resource = new ResourceAssignment("assign-1");
 		resource.setAssignmentTeamNumber("A-1");
 		resource.setResourceType(SarTaskSupport.RESOURCE_TYPE_CANINE);
 		resource.setTaskType(SarTaskSupport.TASK_TYPE_AREA);
@@ -1294,8 +1287,7 @@ class SarTaskPanelTest {
 
 	private static AppController sampleControllerWithCards(TCard... cards) throws Exception {
 		SarTaskAssignment task = sampleTask();
-		ResourceAssignment resource = new ResourceAssignment();
-		resource.setAssignmentId(task.getAssignmentId());
+		ResourceAssignment resource = new ResourceAssignment(task.getAssignmentId());
 		resource.setAssignmentTeamNumber(task.getAssignmentTeamNumber());
 		resource.setResourceType(task.getResourceType());
 		resource.setTaskType(task.getTaskType());

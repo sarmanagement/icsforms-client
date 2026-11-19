@@ -14,10 +14,7 @@ import com.sun.source.util.Trees;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
@@ -27,12 +24,12 @@ import javax.tools.ToolProvider;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.Identified;
 
-/** Prevents unreviewed production code from mutating record identities through setters. */
+/** Prevents production code outside model and persistence from reassigning record identities. */
 class IdentitySetterArchitectureTest {
 	private static final Path SOURCE_ROOT = Path.of("src/main/java");
 
 	@Test
-	void identitySetterCallSitesOutsideModelAndPersistenceRemainExplicitlyAllowlisted() throws IOException {
+	void identitySetterCallSitesOutsideModelAndPersistenceAreAvoided() throws IOException {
 		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
 		try (StandardJavaFileManager files = compiler.getStandardFileManager(null, null, null)) {
 			List<Path> sources;
@@ -49,7 +46,7 @@ class IdentitySetterArchitectureTest {
 			task.analyze();
 			Trees trees = Trees.instance(task);
 			Path absoluteSourceRoot = SOURCE_ROOT.toAbsolutePath().normalize();
-			Map<String, Integer> actual = new HashMap<>();
+			List<String> actual = new java.util.ArrayList<>();
 			for (CompilationUnitTree unit : units) {
 				Path source = Path.of(unit.getSourceFile().toUri());
 				String relative = absoluteSourceRoot.relativize(source).toString()
@@ -59,14 +56,13 @@ class IdentitySetterArchitectureTest {
 					public Void visitMethodInvocation(MethodInvocationTree invocation, Void unused) {
 						Element element = trees.getElement(new TreePath(getCurrentPath(), invocation.getMethodSelect()));
 						if (element instanceof ExecutableElement method && isIdentitySetter(method)) {
-							String site = relative + ":" + invocation;
-							actual.merge(site, 1, Integer::sum);
+							actual.add(relative + ":" + invocation);
 						}
 						return super.visitMethodInvocation(invocation, unused);
 					}
 				}.scan(unit, null);
 			}
-			assertEquals(allowedIdentitySetterSites(), actual);
+			assertEquals(List.of(), actual);
 		}
 	}
 
@@ -96,34 +92,4 @@ class IdentitySetterArchitectureTest {
 				|| IncidentDocumentReader.RECORD_IDENTITIES.get(recordType).contains(property);
 	}
 
-	/**
-	 * Lists existing, reviewed UI/import identity assignments and copy-preserving editor setters.
-	 *
-	 * @return approved production call sites and their occurrence counts
-	 */
-	private static Map<String, Integer> allowedIdentitySetterSites() {
-		List<String> sites = List.of(
-				"medical/VetDirectoryFileService.java:imported.setId(conflict.existingId())",
-				"medical/VetDirectoryFileService.java:facility.setId(id)",
-				"medical/VetDirectoryFileService.java:incoming.setId(UUID.randomUUID().toString())",
-				"medical/VetDirectoryFileService.java:incoming.setId(UUID.randomUUID().toString())",
-				"medical/VetDirectoryFileService.java:copy.setId(source.getId())",
-				"ui/IncidentContextPanel.java:location.setId(String.valueOf(locationsModel.getValueAt(row, 3)))",
-				"ui/Ics201Panel.java:copy.setId(entry.getId())",
-				"ui/Ics201Panel.java:copy.setId(entry.getId())",
-				"ui/Ics201Panel.java:row.setId(entry.getId())",
-				"ui/Ics201Panel.java:row.setId(entry.getId())",
-				"ui/RadioChannelCsvDialogs.java:result.setFormId(imported.getFormId())",
-				"ui/Ics206Panel.java:station.setId(recordId(aidModel, row))",
-				"ui/Ics206Panel.java:service.setId(recordId(transportModel, row))",
-				"ui/Ics206Panel.java:hospital.setId(recordId(hospitalModel, row))",
-				"ui/OrganizationalChartPanel.java:copy.setId(entry.getId())",
-				"ui/OrganizationalChartPanel.java:entry.setId(existing.get(index).getId())",
-				"ui/SarTaskPanel.java:target.setEntryId(source.getEntryId())",
-				"ui/TCardPanel.java:copy.setResourceId(src.getResourceId())",
-				"ui/TCardPanel.java:stub.setResourceId(cardResourceId)",
-				"ui/TCardPanel.java:stub.setResourceId(cardResourceId)",
-				"ui/CanineMedicalPanel.java:service.setId(transportRecordId(row))");
-		return sites.stream().collect(Collectors.toMap(site -> site, ignored -> 1, Integer::sum));
-	}
 }

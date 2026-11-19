@@ -221,6 +221,16 @@ public class TCard implements Identified {
 	}
 
 	/**
+	 * Creates a T-card with its resource identity assigned at construction.
+	 *
+	 * @param resourceId resource identity; null or blank creates a fresh identity
+	 */
+	public TCard(String resourceId) {
+		this.resourceId = resourceId == null || resourceId.isBlank()
+				? UUID.randomUUID().toString() : resourceId;
+	}
+
+	/**
 	 * Restores a radio assignment and its optional identity together so JSON
 	 * property ordering cannot accidentally discard a persisted reference.
 	 * @param radioChannel persisted fallback label; null becomes empty

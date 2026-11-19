@@ -149,7 +149,8 @@ class RadioChannelCsvDialogsTest {
 		assertSame(before, data.getForm205());
 		assertNotNull(dialogs.error);
 		assertFalse(controller.isDirty());
-		imported.getChannels().get(0).setChannelId(before.getChannels().get(0).getChannelId());
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(imported.getChannels().get(0),
+				before.getChannels().get(0).getChannelId());
 		writeImport(imported);
 		dialogs.error = null;
 		runImport();

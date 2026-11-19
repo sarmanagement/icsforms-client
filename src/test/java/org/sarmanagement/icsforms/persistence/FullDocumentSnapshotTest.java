@@ -24,7 +24,7 @@ class FullDocumentSnapshotTest {
 	void copyPreservesLegacyContentWithoutInvokingLazySourceGetters() throws Exception {
 		AppData live = new AppData();
 		TCard card = new TCard();
-		card.setId(null);
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(card, null);
 		card.setPersonName("Legacy resource");
 		live.getTCards().add(card);
 		var resourceId = TCard.class.getDeclaredField("resourceId");

@@ -9,34 +9,33 @@ Version 0.1.3 is the first release that reads and writes schema 18. Do not open
 schema-18 files with older releases: they do not recognize canonical `id`
 properties and may discard identities when saving.
 
-`Identified.setId` is reserved for Jackson deserialization and persistence
-migration. Application code treats an assigned ID as immutable. Constructors
-and creation actions assign IDs to new records; `IdentityMigration` assigns
-missing IDs and repairs duplicate stored IDs during load and before local create
-or save commits. A stored duplicate is replaced deterministically after keeping
-its first occurrence, with a warning. IDs must be unique per concrete record
-type across the incident, including its operational-period history, so a host
-can address each record unambiguously. Schema-18 external imports reject blank
-or duplicate identities. Schema-17 imports retain their prior per-collection
-duplicate check; repeated IDs across collections are repaired during import
-with a warning, matching stored-load migration. Unknown schema-17 properties are
-ignored with a warning during import and retained by stored-load reconciliation.
-Legacy T-card history events
+`Identified.setId` rejects replacing an assigned nonblank ID; setting the same
+value or filling an absent legacy ID is allowed. Jackson binds canonical `id`
+fields directly. Persistence migration and intentional reminting use explicit
+`IdentityMigration` replacement operations, while detached editor copies that
+represent the same record use `IdentityMigration.preserveIdentity`. Constructors
+and creation actions assign IDs to new records. `IdentitySetterArchitectureTest`
+prevents production code outside `model` and `persistence` from reassigning an
+identity through a setter.
+
+`Ics215Form.ResourceHeading.id` and `Ics215Form.WorkRow.id` are public fields
+used by the editable worksheet model, so writes to those fields cannot be
+intercepted by `setId`. Treat them as immutable after record creation, and
+remint copied worksheets through `IdentityMigration`.
+
+`IdentityMigration` assigns missing IDs and repairs duplicate stored IDs during
+load and before local create or save commits. A stored duplicate is replaced
+deterministically after keeping its first occurrence, with a warning. IDs must
+be unique per concrete record type across the incident, including its
+operational-period history, so a host can address each record unambiguously.
+Schema-18 external imports reject blank or duplicate identities. Schema-17
+imports retain their prior per-collection duplicate check; repeated IDs across
+collections are repaired during import with a warning, matching stored-load
+migration. Unknown schema-17 properties are ignored with a warning during
+import and retained by stored-load reconciliation. Legacy T-card history events
 without occurrence IDs remain unidentified so overlapping legacy histories can
 be reconciled by event content. Other migrated IDs are persisted before the
 document is returned.
-
-`Identified.setId` remains public for Jackson and persistence migration and does
-not itself reject replacement. `IdentitySetterArchitectureTest` resolves
-production setter calls and requires every identity setter outside `model` and
-`persistence` to match an explicit allowlist. Those allowlisted sites are
-limited to table-model hydration, detached edit copies that preserve an
-existing record, import conflict reconciliation, and creation of a lightweight
-T-card reference stub. New copy graphs must use `IdentityMigration.remint`.
-`Ics215Form.ResourceHeading.id` and `Ics215Form.WorkRow.id` are public fields
-used by the editable worksheet model; field writes cannot be intercepted by
-the setter architecture test. Treat those fields as immutable after record
-creation, and remint copied worksheets through `IdentityMigration`.
 
 Copies that become new records receive new IDs. References within a copied graph
 are remapped when the reference target is also copied. Archival snapshots keep

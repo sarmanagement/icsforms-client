@@ -269,8 +269,7 @@ class MedicalReferencePanelTest {
 	void eventSupportsTaskAndLocationContextWithoutChangingTask() throws Exception {
 		AppData data = new AppData();
 		for (int index = 0; index < 2; index++) {
-			ResourceAssignment assignment = new ResourceAssignment();
-			assignment.setAssignmentId("medical-context-task-" + index);
+			ResourceAssignment assignment = new ResourceAssignment("medical-context-task-" + index);
 			assignment.setAssignmentTeamNumber("Team 7");
 			assignment.setAssignment(index == 0 ? "Search north sector" : "Search south sector");
 			assignment.setResourceIdentifier("Resource Alpha");

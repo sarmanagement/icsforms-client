@@ -198,8 +198,7 @@ class PdfFormLayoutRegressionTest {
 		form202.setApprovedDateTime(LocalDateTime.parse("2026-01-01T01:00:00"));
 		form202.setIapPage("2");
 
-		ResourceAssignment resource = new ResourceAssignment();
-		resource.setAssignmentId("assign-1");
+		ResourceAssignment resource = new ResourceAssignment("assign-1");
 		resource.setAssignmentTeamNumber("A-1");
 		resource.setResourceType(SarTaskSupport.RESOURCE_TYPE_CANINE);
 		resource.setTaskType(SarTaskSupport.TASK_TYPE_AREA);

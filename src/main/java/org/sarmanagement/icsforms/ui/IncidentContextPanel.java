@@ -289,11 +289,11 @@ public class IncidentContextPanel extends JPanel {
 			UiSupport.commitTableEdits(locationsTable);
 			List<IncidentLocation> locations = new ArrayList<>();
 			for (int row = 0; row < locationsModel.getRowCount(); row++) {
-				IncidentLocation location = new IncidentLocation();
+				IncidentLocation location = new IncidentLocation(
+						String.valueOf(locationsModel.getValueAt(row, 3)));
 				location.setType(String.valueOf(locationsModel.getValueAt(row, 0)));
 				location.setName(String.valueOf(locationsModel.getValueAt(row, 1)));
 				location.setAddress(String.valueOf(locationsModel.getValueAt(row, 2)));
-				location.setId(String.valueOf(locationsModel.getValueAt(row, 3)));
 				locations.add(location);
 			}
 			String selectedBaseId = controller.getData().getCanineRoutingBaseLocationId();

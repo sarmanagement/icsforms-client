@@ -33,6 +33,19 @@ public class ResourceAssignment implements Identified {
 	private String assignment = "";
 	private List<String> objectiveIds = new ArrayList<>();
 
+	/** Creates an empty resource assignment with a generated identity. */
+	public ResourceAssignment() {
+	}
+
+	/**
+	 * Creates a resource assignment with its identity assigned at construction.
+	 *
+	 * @param id assignment identity; null or blank creates a fresh identity
+	 */
+	public ResourceAssignment(String id) {
+		assignmentId = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+	}
+
 	/**
 	 * Returns the stable assignment linkage identifier.
 	 *

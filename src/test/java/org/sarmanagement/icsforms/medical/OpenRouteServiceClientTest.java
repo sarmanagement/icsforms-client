@@ -267,7 +267,7 @@ class OpenRouteServiceClientTest {
 	private VetFacility routedFacility(String id, String name, Boolean available, double distance, String method,
 			long generation) {
 		VetFacility facility = new VetFacility();
-		facility.setId(id);
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(facility, id);
 		facility.setName(name);
 		facility.setAvailable24Hours(available);
 		facility.setCoordinates(42, -72, "manual", "test");

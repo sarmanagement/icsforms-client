@@ -98,8 +98,10 @@ facility snapshots, all plan-reuse areas and imported ICS 215. Dedicated
 tests cover the record foundation and compatibility behavior. Legacy schema-17
 unknown properties are ignored with warnings; the fixture's known content is
 compared after the established identity and local-only provenance normalization.
-`IdentitySetterArchitectureTest` resolves setter owners and keeps external
-identity mutation sites explicitly allow-listed; public worksheet row/heading
+`IdentitySetterArchitectureTest` ensures production code outside model and
+persistence does not reassign record identities through setters. Mutable
+identity setters reject replacement after assignment; migration and intentional
+copy operations use explicit identity helpers. Public worksheet row/heading
 identity fields remain documented exceptions. The Maple Ridge JSON example was
 intentionally added in commit `dcd4fe9` as a fictional schema-18 example and is
 used by the stable-identity reflection regression; it contains no operational

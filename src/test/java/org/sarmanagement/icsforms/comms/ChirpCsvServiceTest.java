@@ -153,7 +153,7 @@ class ChirpCsvServiceTest {
 		List<RadioChannel> channels = new ArrayList<>();
 		for (String mode : List.of("D", "M", "DV", "DN", "DMR", "P25", "NXDN", "AM", "UNKNOWN", "vendor-mode")) {
 			RadioChannel channel = form.getChannels().get(0).deepCopy();
-			channel.setChannelId(null);
+			org.sarmanagement.icsforms.model.IdentityMigration.remint(channel);
 			channel.setMode(mode);
 			channel.setChannelName(mode);
 			channels.add(channel);
