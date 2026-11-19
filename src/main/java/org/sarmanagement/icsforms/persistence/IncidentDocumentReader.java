@@ -145,6 +145,7 @@ final class IncidentDocumentReader {
 	private final Map<JavaType, JsonNode> defaultValues = new HashMap<>();
 	private final Map<Class<?>, Set<String>> importIdentities = new HashMap<>();
 	private boolean legacySchema;
+	private boolean allowLegacyUnknownProperties;
 	private Throwable cause;
 
 	/** Creates an isolated diagnostic collector for one document. */
@@ -162,6 +163,7 @@ final class IncidentDocumentReader {
 		String schema = "unknown";
 		importIdentities.clear();
 		legacySchema = true;
+		allowLegacyUnknownProperties = false;
 		log(path, schema, "attempt");
 		try {
 			JsonNode tree = STRICT.readTree(path.toFile());
@@ -179,6 +181,7 @@ final class IncidentDocumentReader {
 				} else {
 					schema = Integer.toString(version.intValue());
 					legacySchema = version.intValue() < 18;
+					allowLegacyUnknownProperties = legacySchema;
 					if (version.intValue() > AppData.CURRENT_SCHEMA_VERSION) {
 						add(Severity.ERROR, "$.schemaVersion", "File schema " + version.intValue()
 								+ " is newer than supported schema " + AppData.CURRENT_SCHEMA_VERSION
@@ -201,7 +204,8 @@ final class IncidentDocumentReader {
 				}
 			}
 			if (!hasErrors()) {
-				AppData data = (legacySchema ? LEGACY_IMPORT : STRICT).treeToValue(tree, AppData.class);
+				AppData data = (allowLegacyUnknownProperties ? LEGACY_IMPORT : STRICT)
+						.treeToValue(tree, AppData.class);
 				if (legacySchema) {
 					IdentityMigration.migrate(data);
 					data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
@@ -365,7 +369,7 @@ final class IncidentDocumentReader {
 						cause = UnrecognizedPropertyException.from(node.traverse(STRICT), type.getRawClass(),
 								entry.getKey(), new ArrayList<>(properties.keySet()));
 					}
-					boolean rejected = strict && !legacySchema;
+					boolean rejected = strict && !allowLegacyUnknownProperties;
 					add(rejected ? Severity.ERROR : Severity.WARNING, childPath, "Unknown property.",
 							rejected ? "Remove or correct the property name." : "This client ignores this property.");
 				} else if (strict && identityProperties.contains(entry.getKey())) {
@@ -565,7 +569,8 @@ final class IncidentDocumentReader {
 	 * @param fix corrective action
 	 */
 	private void add(Severity severity, String path, String message, String fix) {
-		if (problems.size() < MAX_PROBLEMS) {
+		if (problems.size() < MAX_PROBLEMS
+				&& (severity == Severity.ERROR || problems.size() < MAX_PROBLEMS - 1)) {
 			problems.add(new Problem(severity, path, message, fix));
 		}
 	}
