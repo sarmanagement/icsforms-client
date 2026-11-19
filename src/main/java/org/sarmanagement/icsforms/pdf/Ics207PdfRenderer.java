@@ -9,6 +9,7 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Ics203Form;
 import org.sarmanagement.icsforms.model.Ics207Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
@@ -45,6 +46,10 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	private static final float BODY_FONT_SIZE = 9f;
 	private static final float HEADING_FONT_SIZE = 9f;
 	private static final float CELL_PADDING = 4f;
+	private static final float TREE_STEM_OFFSET = 6f;
+	private static final float TREE_BOX_OFFSET = 12f;
+	private static final float TREE_INDENT = 12f;
+	private static final int TREE_MAX_DEPTH = 3;
 
 	/** {@inheritDoc} */
 	@Override
@@ -82,11 +87,13 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		float bottom = layout.y() + 50f + 4f;
 		float width = (layout.width() - 2f * CELL_PADDING) / 4f - 8f;
 		int result = 1;
-		for (List<String[]> section : sectionNodes(data)) {
+		for (List<OrgNode> section : sectionNodes(data)) {
 			int pages = 1;
 			float top = nodeTop;
-			for (String[] unit : section) {
-				Node node = measureNode(unit, bold, regular, width, 18f);
+			List<Placed> placed = arrange(section);
+			boolean tree = placed.stream().anyMatch(p -> p.parent() >= 0);
+			for (Placed item : placed) {
+				Node node = measureNode(item.node().fields(), bold, regular, nodeWidth(width, item.depth(), tree), 18f);
 				if (node.height() > nodeTop - bottom) {
 					throw new IllegalArgumentException("PDF margins or organization content leave insufficient space "
 							+ "for an ICS 207 assignment node");
@@ -122,7 +129,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @throws IOException when drawing fails.
 	 */
 	private void renderPages(PDDocument document, AppData data) throws IOException {
-		List<List<String[]>> remaining = sectionNodes(data);
+		List<List<OrgNode>> remaining = sectionNodes(data);
 		int pageNumber = 1;
 		do {
 			int before = remaining.stream().mapToInt(List::size).sum();
@@ -141,7 +148,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @param data incident organization and assignments.
 	 * @return operations, planning, logistics and finance node lists.
 	 */
-	private List<List<String[]>> sectionNodes(AppData data) {
+	private List<List<OrgNode>> sectionNodes(AppData data) {
 		OrganizationalChart chart = data.getOrganizationalChart();
 		return List.of(buildOpsSubUnits(chart, data.getSarTaskAssignments()), buildPlanningSubUnits(chart),
 				buildLogisticsSubUnits(chart, data.getMedicalUnitLeaderAssignment().getName()),
@@ -158,7 +165,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @return section nodes that require another chart page.
 	 * @throws IOException when drawing fails.
 	 */
-	private List<List<String[]>> renderPage(PDDocument document, AppData data, List<List<String[]>> subUnits,
+	private List<List<OrgNode>> renderPage(PDDocument document, AppData data, List<List<OrgNode>> subUnits,
 			int pageNumber) throws IOException {
 		IncidentContext context = data.getIncidentContext();
 		OrganizationalChart chart = data.getOrganizationalChart();
@@ -196,7 +203,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 
 			// Row 2 (middle): org chart
 			float chartH = y - footerY - footerH;
-			List<List<String[]>> remaining = drawOrgChart(stream, bold, regular, x, footerY + footerH, fullW,
+			List<List<OrgNode>> remaining = drawOrgChart(stream, bold, regular, x, footerY + footerH, fullW,
 					chartH, chart, subUnits);
 
 			// Footer: Prepared by
@@ -267,8 +274,8 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @return nodes that did not fit below their section chief on this page.
 	 * @throws IOException when PDF drawing fails.
 	 */
-	private List<List<String[]>> drawOrgChart(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
-			float sX, float sY, float width, float height, OrganizationalChart chart, List<List<String[]>> subUnits)
+	private List<List<OrgNode>> drawOrgChart(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+			float sX, float sY, float width, float height, OrganizationalChart chart, List<List<OrgNode>> subUnits)
 			throws IOException {
 		drawCell(stream, sX, sY, width, height);
 		drawHeading(stream, bold, sX, sY + height, "3. Organization Chart");
@@ -370,7 +377,7 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		float subGap = 2f;
 		float subTopStart = secBoxBot - 6f;
 
-		List<List<String[]>> remaining = new ArrayList<>();
+		List<List<OrgNode>> remaining = new ArrayList<>();
 		for (int section = 0; section < subUnits.size(); section++) {
 			remaining.add(drawSubUnits(stream, bold, regular, LEFT + section * secW, secCX[section],
 					secBoxBot, secW, subTopStart, subH, subGap, subUnits.get(section), sY));
@@ -424,8 +431,106 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	}
 
 	/**
-	 * Draws measured, wrapped nodes connected to their section chief. Assignment
-	 * leaders and personnel counts remain inside the assignment's own node.
+	 * One chart node: its title followed by value fields, and the title of the
+	 * position it reports to.
+	 *
+	 * @param fields node title followed by its value fields.
+	 * @param reportsTo parent position title, or blank for a direct report of the section chief.
+	 */
+	private record OrgNode(String[] fields, String reportsTo) {
+	}
+
+	/**
+	 * A node positioned in the section tree.
+	 *
+	 * @param node source node.
+	 * @param depth nesting depth below the section chief, zero for direct reports.
+	 * @param parent index of the parent in the arranged list, or -1 for the section chief.
+	 */
+	private record Placed(OrgNode node, int depth, int parent) {
+	}
+
+	/**
+	 * Orders nodes depth-first beneath their parents. A parent is the first other
+	 * node whose title matches {@code reportsTo}, ignoring case. Unknown parents and
+	 * reporting cycles leave a node reporting directly to the section chief.
+	 *
+	 * @param nodes nodes in source order.
+	 * @return the same nodes in drawing order with depth and parent indexes.
+	 */
+	private static List<Placed> arrange(List<OrgNode> nodes) {
+		int count = nodes.size();
+		int[] parent = new int[count];
+		for (int i = 0; i < count; i++) {
+			parent[i] = -1;
+			String wanted = safe(nodes.get(i).reportsTo()).toLowerCase(java.util.Locale.ROOT);
+			if (wanted.isBlank()) {
+				continue;
+			}
+			for (int j = 0; j < count; j++) {
+				if (j != i && safe(nodes.get(j).fields()[0]).toLowerCase(java.util.Locale.ROOT).equals(wanted)) {
+					parent[i] = j;
+					break;
+				}
+			}
+		}
+		for (int i = 0; i < count; i++) {
+			int cursor = parent[i];
+			for (int steps = 0; cursor >= 0 && steps <= count; steps++) {
+				cursor = cursor == i ? -2 : parent[cursor];
+			}
+			if (cursor != -1) {
+				parent[i] = -1;
+			}
+		}
+		List<Placed> result = new ArrayList<>();
+		int[] placedIndex = new int[count];
+		for (int i = 0; i < count; i++) {
+			if (parent[i] < 0) {
+				place(i, 0, -1, nodes, parent, result, placedIndex);
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Adds a node and then its descendants to the arranged list.
+	 *
+	 * @param index source index of the node.
+	 * @param depth nesting depth.
+	 * @param parentPlaced arranged index of the parent, or -1.
+	 * @param nodes source nodes.
+	 * @param parent source parent index per node.
+	 * @param result arranged output.
+	 * @param placedIndex scratch map from source index to arranged index.
+	 */
+	private static void place(int index, int depth, int parentPlaced, List<OrgNode> nodes, int[] parent,
+			List<Placed> result, int[] placedIndex) {
+		placedIndex[index] = result.size();
+		result.add(new Placed(nodes.get(index), depth, parentPlaced));
+		for (int child = 0; child < nodes.size(); child++) {
+			if (parent[child] == index) {
+				place(child, depth + 1, placedIndex[index], nodes, parent, result, placedIndex);
+			}
+		}
+	}
+
+	/**
+	 * Returns the box width for a node, narrowing nested boxes beside their stem.
+	 *
+	 * @param columnWidth full section column box width.
+	 * @param depth nesting depth.
+	 * @param tree whether the column draws a tree rather than a centered stack.
+	 * @return box width.
+	 */
+	private static float nodeWidth(float columnWidth, int depth, boolean tree) {
+		return tree ? columnWidth - TREE_BOX_OFFSET - TREE_INDENT * Math.min(depth, TREE_MAX_DEPTH) : columnWidth;
+	}
+
+	/**
+	 * Draws measured, wrapped nodes connected to their section chief. A column with
+	 * no nested nodes is a centered stack; otherwise it is a tree with boxes beside
+	 * a vertical stem, nested boxes indented beneath their parent.
 	 *
 	 * @param stream page stream.
 	 * @param bold node title font.
@@ -437,48 +542,111 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @param subTopStart first node top.
 	 * @param subH minimum node height.
 	 * @param subGap gap between nodes.
-	 * @param subUnits remaining nodes with title followed by value fields.
+	 * @param subUnits remaining nodes.
 	 * @param minY section bottom.
-	 * @return all nodes not fitting this page, in their original order.
+	 * @return all nodes not fitting this page, in their drawing order.
 	 * @throws IOException when measuring or drawing fails.
 	 */
-	private List<String[]> drawSubUnits(PDPageContentStream stream, PDType1Font bold, PDType1Font regular, float sectionLeft,
-			float sectionCX, float sectionBoxBot, float secW, float subTopStart, float subH, float subGap,
-			List<String[]> subUnits, float minY) throws IOException {
+	private List<OrgNode> drawSubUnits(PDPageContentStream stream, PDType1Font bold, PDType1Font regular,
+			float sectionLeft, float sectionCX, float sectionBoxBot, float secW, float subTopStart, float subH,
+			float subGap, List<OrgNode> subUnits, float minY) throws IOException {
 		if (subUnits.isEmpty())
 			return List.of();
+		List<Placed> placed = arrange(subUnits);
+		boolean tree = placed.stream().anyMatch(p -> p.parent() >= 0);
 		float bL = sectionLeft + 4f, bW = secW - 8f;
-		float connectorTop = subTopStart;
-		stream.moveTo(sectionCX, sectionBoxBot);
-		stream.lineTo(sectionCX, connectorTop);
-		stream.stroke();
+		if (!tree) {
+			stream.moveTo(sectionCX, sectionBoxBot);
+			stream.lineTo(sectionCX, subTopStart);
+			stream.stroke();
+		}
 
-		float curTop = connectorTop;
-		for (int i = 0; i < subUnits.size(); i++) {
-			Node node = measureNode(subUnits.get(i), bold, regular, bW, subH);
+		int drawn = 0;
+		float[] tops = new float[placed.size()];
+		float[] bottoms = new float[placed.size()];
+		float curTop = subTopStart;
+		for (int i = 0; i < placed.size(); i++) {
+			int depth = Math.min(placed.get(i).depth(), TREE_MAX_DEPTH);
+			float boxW = nodeWidth(bW, depth, tree);
+			float boxL = tree ? bL + TREE_BOX_OFFSET + TREE_INDENT * depth : bL;
+			Node node = measureNode(placed.get(i).node().fields(), bold, regular, boxW, subH);
 			float botY = curTop - node.height();
 			if (botY < minY + 4f) {
-				return subUnits.subList(i, subUnits.size());
+				break;
 			}
-			stream.addRect(bL, botY, bW, node.height());
+			tops[i] = curTop;
+			bottoms[i] = botY;
+			drawn++;
+			stream.addRect(boxL, botY, boxW, node.height());
 			stream.stroke();
 			float baseline = curTop - 8f;
 			for (String line : node.labels()) {
-				drawCentered(stream, bold, 6.5f, line, bL, baseline, bW);
+				drawCentered(stream, bold, 6.5f, line, boxL, baseline, boxW);
 				baseline -= 8f;
 			}
 			for (String line : node.values()) {
-				drawCentered(stream, regular, 6.5f, line, bL, baseline, bW);
+				drawCentered(stream, regular, 6.5f, line, boxL, baseline, boxW);
 				baseline -= 8f;
 			}
-			if (i < subUnits.size() - 1) {
+			if (!tree && i < placed.size() - 1) {
 				stream.moveTo(sectionCX, botY);
 				stream.lineTo(sectionCX, botY - subGap);
 				stream.stroke();
 			}
 			curTop = botY - subGap;
 		}
-		return List.of();
+		if (tree) {
+			drawTreeConnectors(stream, placed, drawn, tops, bottoms, bL, sectionBoxBot);
+		}
+		return drawn >= placed.size() ? List.of()
+				: placed.subList(drawn, placed.size()).stream().map(Placed::node).toList();
+	}
+
+	/**
+	 * Draws each parent's vertical stem and the horizontal ticks to its children.
+	 *
+	 * @param stream page stream.
+	 * @param placed arranged nodes.
+	 * @param drawn number of arranged nodes drawn on this page.
+	 * @param tops box tops of the drawn nodes.
+	 * @param bottoms box bottoms of the drawn nodes.
+	 * @param columnLeft section column box left edge.
+	 * @param chiefBottom section chief box bottom.
+	 * @throws IOException when drawing fails.
+	 */
+	private void drawTreeConnectors(PDPageContentStream stream, List<Placed> placed, int drawn, float[] tops,
+			float[] bottoms, float columnLeft, float chiefBottom) throws IOException {
+		float[] stemEnd = new float[drawn];
+		float chiefStemEnd = chiefBottom;
+		for (int i = 0; i < drawn; i++) {
+			Placed item = placed.get(i);
+			int depth = Math.min(item.depth(), TREE_MAX_DEPTH);
+			float boxL = columnLeft + TREE_BOX_OFFSET + TREE_INDENT * depth;
+			float stemX = item.parent() < 0 ? columnLeft + TREE_STEM_OFFSET
+					: columnLeft + TREE_BOX_OFFSET + TREE_INDENT * Math.min(placed.get(item.parent()).depth(), TREE_MAX_DEPTH)
+							+ TREE_STEM_OFFSET;
+			float tickY = tops[i] - Math.min((tops[i] - bottoms[i]) / 2f, 9f);
+			stream.moveTo(stemX, tickY);
+			stream.lineTo(boxL, tickY);
+			stream.stroke();
+			if (item.parent() < 0) {
+				chiefStemEnd = tickY;
+			} else {
+				stemEnd[item.parent()] = tickY;
+			}
+		}
+		stream.moveTo(columnLeft + TREE_STEM_OFFSET, chiefBottom);
+		stream.lineTo(columnLeft + TREE_STEM_OFFSET, chiefStemEnd);
+		stream.stroke();
+		for (int i = 0; i < drawn; i++) {
+			if (stemEnd[i] != 0f) {
+				float stemX = columnLeft + TREE_BOX_OFFSET + TREE_INDENT * Math.min(placed.get(i).depth(), TREE_MAX_DEPTH)
+						+ TREE_STEM_OFFSET;
+				stream.moveTo(stemX, bottoms[i]);
+				stream.lineTo(stemX, stemEnd[i]);
+				stream.stroke();
+			}
+		}
 	}
 
 	// -----------------------------------------------------------------------
@@ -505,8 +673,8 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 	 * @param tasks task assignments, or null for none.
 	 * @return staging, assignment and additional operations nodes in source order.
 	 */
-	private List<String[]> buildOpsSubUnits(OrganizationalChart chart, List<SarTaskAssignment> tasks) {
-		List<String[]> list = new ArrayList<>();
+	private List<OrgNode> buildOpsSubUnits(OrganizationalChart chart, List<SarTaskAssignment> tasks) {
+		List<OrgNode> list = new ArrayList<>();
 		addIfNamed(list, "Staging Area Mgr", chart.getStagingAreaManagerName());
 		for (SarTaskAssignment t : tasks == null ? List.<SarTaskAssignment>of() : tasks) {
 			if (t == null) {
@@ -517,33 +685,34 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 					: safe(t.getResourceIdentifier());
 			int people = countPeople(t);
 			String count = people == 1 ? "1 person" : people + " people";
-			list.add(safe(t.getLeader()).isBlank() ? new String[]{label, count}
-					: new String[]{label, "Leader: " + safe(t.getLeader()), count});
+			list.add(new OrgNode(safe(t.getLeader()).isBlank() ? new String[]{label, count}
+					: new String[]{label, "Leader: " + safe(t.getLeader()), count}, ""));
 		}
+		addBranchNodes(list, chart.getAssignmentList());
 		for (OrgChartEntry e : chart.getAdditionalPositions()) {
 			if (e.getSection() == OrgChartEntry.Section.OPERATIONS) {
-				list.add(new String[]{safe(e.getTitle()), safe(e.getName())});
+				list.add(entryNode(e));
 			}
 		}
 		return list;
 	}
 
-	private List<String[]> buildPlanningSubUnits(OrganizationalChart chart) {
-		List<String[]> list = new ArrayList<>();
+	private List<OrgNode> buildPlanningSubUnits(OrganizationalChart chart) {
+		List<OrgNode> list = new ArrayList<>();
 		addIfNamed(list, "Doc Unit Leader", chart.getDocumentationUnitLeaderName());
 		addIfNamed(list, "Resources Unit Ldr", chart.getResourcesUnitLeaderName());
 		addIfNamed(list, "Situation Unit Ldr", chart.getSituationUnitLeaderName());
 		addIfNamed(list, "Demob Unit Ldr", chart.getDemobilizationUnitLeaderName());
 		for (OrgChartEntry e : chart.getAdditionalPositions()) {
 			if (e.getSection() == OrgChartEntry.Section.PLANNING) {
-				list.add(new String[]{safe(e.getTitle()), safe(e.getName())});
+				list.add(entryNode(e));
 			}
 		}
 		return list;
 	}
 
-	private List<String[]> buildLogisticsSubUnits(OrganizationalChart chart, String medicalUnitLeaderName) {
-		List<String[]> list = new ArrayList<>();
+	private List<OrgNode> buildLogisticsSubUnits(OrganizationalChart chart, String medicalUnitLeaderName) {
+		List<OrgNode> list = new ArrayList<>();
 		addIfNamed(list, "Comms Unit Leader", chart.getCommunicationsUnitLeaderName());
 		addIfNamed(list, "Comms Technician", chart.getCommunicationsTechnicianName());
 		addIfNamed(list, "Supply Unit Ldr", chart.getSupplyUnitLeaderName());
@@ -553,33 +722,74 @@ public class Ics207PdfRenderer extends AbstractPdfRenderer implements PdfFormRen
 		addIfNamed(list, "Medical Unit Ldr", medicalUnitLeaderName);
 		for (OrgChartEntry e : chart.getAdditionalPositions()) {
 			if (e.getSection() == OrgChartEntry.Section.LOGISTICS) {
-				list.add(new String[]{safe(e.getTitle()), safe(e.getName())});
+				list.add(entryNode(e));
 			}
 		}
 		return list;
 	}
 
-	private List<String[]> buildFinanceSubUnits(OrganizationalChart chart) {
-		List<String[]> list = new ArrayList<>();
+	private List<OrgNode> buildFinanceSubUnits(OrganizationalChart chart) {
+		List<OrgNode> list = new ArrayList<>();
 		addIfNamed(list, "Time Unit Ldr", chart.getTimeUnitLeaderName());
 		addIfNamed(list, "Procurement Unit Ldr", chart.getProcurementUnitLeaderName());
 		addIfNamed(list, "Comp/Claims Unit Ldr", chart.getCompClaimsUnitLeaderName());
 		addIfNamed(list, "Cost Unit Ldr", chart.getCostUnitLeaderName());
 		for (OrgChartEntry e : chart.getAdditionalPositions()) {
 			if (e.getSection() == OrgChartEntry.Section.FINANCE_ADMIN) {
-				list.add(new String[]{safe(e.getTitle()), safe(e.getName())});
+				list.add(entryNode(e));
 			}
 		}
 		return list;
 	}
 
 	/**
+	 * Adds each named operations branch with its divisions or groups beneath it.
+	 *
+	 * @param list operations nodes receiving the branches.
+	 * @param assignments ICS 203 assignment list, or null for none.
+	 */
+	private static void addBranchNodes(List<OrgNode> list, Ics203Form assignments) {
+		if (assignments == null) {
+			return;
+		}
+		for (Ics203Form.Branch branch : assignments.getBranches()) {
+			if (branch == null || (safe(branch.getName()).isBlank() && safe(branch.getDirector()).isBlank())) {
+				continue;
+			}
+			String title = safe(branch.getName()).isBlank() ? "Branch" : safe(branch.getName());
+			List<String> fields = new ArrayList<>(List.of(title));
+			if (!safe(branch.getDirector()).isBlank()) {
+				fields.add("Director: " + safe(branch.getDirector()));
+			}
+			if (!safe(branch.getDeputy()).isBlank()) {
+				fields.add("Deputy: " + safe(branch.getDeputy()));
+			}
+			list.add(new OrgNode(fields.toArray(new String[0]), ""));
+			for (OrgChartEntry division : branch.getDivisions()) {
+				if (division != null && !(safe(division.getTitle()).isBlank() && safe(division.getName()).isBlank())) {
+					list.add(new OrgNode(new String[]{safe(division.getTitle()), safe(division.getName())}, title));
+				}
+			}
+		}
+	}
+
+	/**
 	 * Adds a two-element array {title, name} only when {@code name} is non-blank.
 	 */
-	private static void addIfNamed(List<String[]> list, String title, String name) {
+	private static void addIfNamed(List<OrgNode> list, String title, String name) {
 		if (name != null && !name.isBlank()) {
-			list.add(new String[]{title, name});
+			list.add(new OrgNode(new String[]{title, name}, ""));
 		}
+	}
+
+	/**
+	 * Converts an additional position to a chart node under its declared parent.
+	 *
+	 * @param entry additional position.
+	 * @return node titled and named after the entry.
+	 */
+	private static OrgNode entryNode(OrgChartEntry entry) {
+		return new OrgNode(new String[]{safe(entry.getTitle()), safe(entry.getName())}, safe(entry.getReportsTo()));
 	}
 
 	// -----------------------------------------------------------------------

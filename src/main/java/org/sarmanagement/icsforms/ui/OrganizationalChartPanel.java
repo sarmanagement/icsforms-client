@@ -174,7 +174,7 @@ public class OrganizationalChartPanel extends JPanel {
 	private final JSpinner ics207PreparedDateTimeSpinner = UiSupport.dateTimeSpinner();
 
 	// Custom / additional positions table
-	private static final String[] CUSTOM_COLS = {"Section", "Title", "Name", "Radio", "Phone"};
+	private static final String[] CUSTOM_COLS = {"Section", "Title", "Name", "Radio", "Phone", "Reports To"};
 	private final DefaultTableModel customPositionsModel = new DefaultTableModel(CUSTOM_COLS, 0) {
 		@Override
 		public boolean isCellEditable(int row, int col) {
@@ -735,6 +735,7 @@ public class OrganizationalChartPanel extends JPanel {
 		JTextField nameField = UiSupport.textField();
 		JTextField radioField = UiSupport.textField();
 		JTextField phoneField = UiSupport.textField();
+		JTextField reportsToField = UiSupport.textField();
 		JComboBox<String> sectionBox = new JComboBox<>(
 				new String[]{"Command Staff", "Operations", "Planning", "Logistics", "Finance/Admin"});
 		installPersonAutocomplete(nameField, radioField, phoneField);
@@ -752,12 +753,14 @@ public class OrganizationalChartPanel extends JPanel {
 		UiSupport.addRow(form, 2, "Name", nameRow);
 		UiSupport.addRow(form, 3, "Radio", radioField);
 		UiSupport.addRow(form, 4, "Phone", phoneField);
+		UiSupport.addRow(form, 5, "Reports To (title, optional)", reportsToField);
 
 		int result = JOptionPane.showConfirmDialog(this, form, "Add Custom Position", JOptionPane.OK_CANCEL_OPTION,
 				JOptionPane.PLAIN_MESSAGE);
 		if (result == JOptionPane.OK_OPTION) {
 			customPositionsModel.addRow(new Object[]{sectionBox.getSelectedItem(), titleField.getText().trim(),
-					nameField.getText().trim(), radioField.getText().trim(), phoneField.getText().trim()});
+					nameField.getText().trim(), radioField.getText().trim(), phoneField.getText().trim(),
+					reportsToField.getText().trim()});
 		}
 	}
 
@@ -1000,7 +1003,7 @@ public class OrganizationalChartPanel extends JPanel {
 			customPositionsModel.removeRow(0);
 		for (OrgChartEntry entry : chart.getAdditionalPositions()) {
 			customPositionsModel.addRow(new Object[]{sectionLabel(entry.getSection()), safe(entry.getTitle()),
-					safe(entry.getName()), safe(entry.getRadio()), safe(entry.getPhone())});
+					safe(entry.getName()), safe(entry.getRadio()), safe(entry.getPhone()), safe(entry.getReportsTo())});
 		}
 
 		// ICS 207 preparer
@@ -1185,6 +1188,7 @@ public class OrganizationalChartPanel extends JPanel {
 			entry.setName(safe((String) customPositionsModel.getValueAt(row, 2)));
 			entry.setRadio(safe((String) customPositionsModel.getValueAt(row, 3)));
 			entry.setPhone(safe((String) customPositionsModel.getValueAt(row, 4)));
+			entry.setReportsTo(safe((String) customPositionsModel.getValueAt(row, 5)));
 			additional.add(entry);
 		}
 		chart.setAdditionalPositions(additional);

@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.UUID;
 
 /**
@@ -28,6 +29,7 @@ public class OrgChartEntry {
 	private String name = "";
 	private String radio = "";
 	private String phone = "";
+	private String reportsTo = "";
 
 	/**
 	 * Returns this organizational position's stable identity.
@@ -138,5 +140,27 @@ public class OrgChartEntry {
 	 */
 	public void setPhone(String v) {
 		phone = v == null ? "" : v;
+	}
+
+	/**
+	 * Returns the title of the chart position this entry reports to.
+	 *
+	 * @return parent position title, or blank when the entry reports directly to
+	 *         its section chief.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_EMPTY)
+	public String getReportsTo() {
+		return reportsTo;
+	}
+
+	/**
+	 * Sets the title of the chart position this entry reports to. The ICS 207 chart
+	 * matches it, ignoring case, against position titles in the same section and
+	 * draws this entry beneath the first match.
+	 *
+	 * @param v parent position title; null becomes blank.
+	 */
+	public void setReportsTo(String v) {
+		reportsTo = v == null ? "" : v.trim();
 	}
 }
