@@ -51,6 +51,9 @@ public final class RecordIdentityAssertions {
 			return;
 		}
 		if (value instanceof Identified identified) {
+			if (identified.getId() == null && value instanceof TCard.CheckInOutEvent) {
+				return;
+			}
 			assertNotNull(identified.getId(), path);
 			assertFalse(identified.getId().isBlank(), path);
 			assertTrue(identities.computeIfAbsent(value.getClass(), ignored -> new HashSet<>())

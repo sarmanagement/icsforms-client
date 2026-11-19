@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.medical.VetShortlistSelector;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.CanineMedicalPlan;
 import org.sarmanagement.icsforms.model.IncidentLocation;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.StagingLocation;
 import org.sarmanagement.icsforms.model.VetDirectory;
@@ -1447,8 +1448,8 @@ public class CanineMedicalPanel extends JPanel {
 			}
 		}
 		VetFacility snapshot = source.copy();
+		IdentityMigration.remint(snapshot);
 		snapshot.setSourceFacilityId(sourceId);
-		snapshot.setId(UUID.randomUUID().toString());
 		selectionModel.addRow(selectionRow(snapshot));
 		return true;
 	}

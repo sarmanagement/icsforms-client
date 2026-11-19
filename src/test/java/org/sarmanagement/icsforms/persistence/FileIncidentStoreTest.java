@@ -5,10 +5,15 @@ package org.sarmanagement.icsforms.persistence;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IdentityMigration;
+import org.sarmanagement.icsforms.model.RecordIdentityAssertions;
 
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -91,6 +96,99 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 		} finally {
 			migrationLogger.removeHandler(capture);
 		}
+	}
+
+	@Test
+	void schema17FixtureLoadsAndImportsWithUnknownPropertiesAndPreservesContent() throws Exception {
+			JsonNode fixture;
+			try (InputStream input = getClass().getResourceAsStream("/incidents/historical/schema-17-provenance.json")) {
+				fixture = new ObjectMapper().readTree(input);
+			}
+			((ObjectNode) fixture).put("futureLegacyExtension", "ignored by the model");
+			((ObjectNode) fixture.path("activityLogs").get(0)).put("futureEntryExtension", true);
+			StoredJsonMerger.removeAcceptedAt(fixture);
+			Path source = tempDir.resolve("schema-17-import.json");
+			Files.writeString(source, fixture.toPrettyString());
+			IncidentId id = IncidentId.of(fixture.path("incidentId").asText());
+			Path storedFile = tempDir.resolve("incidents").resolve(id.value() + ".json");
+			Files.createDirectories(storedFile.getParent());
+			Files.copy(source, storedFile);
+			ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+			AppData expected = mapper.treeToValue(fixture, AppData.class);
+			IdentityMigration.migrate(expected);
+			expected.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
+
+			Logger readerLogger = Logger.getLogger(IncidentDocumentReader.class.getName());
+			CaptureHandler capture = new CaptureHandler();
+			readerLogger.addHandler(capture);
+			try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+				AppData stored = store.load(id);
+				RecordIdentityAssertions.collect(stored);
+				assertEquals(AppData.CURRENT_SCHEMA_VERSION, stored.getSchemaVersion());
+				assertSameNonIdentityContent(expected, stored, mapper);
+				assertTrue(mapper.readTree(storedFile.toFile()).has("futureLegacyExtension"));
+				assertTrue(capture.messages.stream().anyMatch(message ->
+						message.contains("$.futureLegacyExtension") && message.contains("Unknown property")));
+
+				IncidentDocumentReader reader = new IncidentDocumentReader();
+				AppData imported = reader.readImport(source);
+				RecordIdentityAssertions.collect(imported);
+				assertEquals(AppData.CURRENT_SCHEMA_VERSION, imported.getSchemaVersion());
+				assertSameNonIdentityContent(expected, imported, mapper);
+				assertTrue(reader.problems().stream().anyMatch(problem ->
+						problem.path().equals("$.futureLegacyExtension")
+								&& problem.severity() == ImportValidationException.Severity.WARNING));
+				assertTrue(capture.messages.stream().anyMatch(message ->
+						message.contains("$.futureLegacyExtension") && message.contains("Unknown property")));
+			} finally {
+				readerLogger.removeHandler(capture);
+			}
+		}
+
+	/**
+	 * Removes canonical identity properties before comparing migrated document content.
+	 *
+	 * @param node serialized incident or child value
+	 * @return copy without identity properties
+	 */
+	private static JsonNode withoutIdentityFields(JsonNode node) {
+			JsonNode copy = node.deepCopy();
+			if (copy instanceof ObjectNode object) {
+				object.remove("id");
+				object.elements().forEachRemaining(FileIncidentStoreTest::stripIdentityFields);
+			} else if (copy instanceof ArrayNode array) {
+				array.elements().forEachRemaining(FileIncidentStoreTest::stripIdentityFields);
+			}
+			return copy;
+		}
+
+		/**
+		 * Compares migrated content while aligning metadata generated during model construction.
+		 *
+		 * @param expected normalized fixture content
+		 * @param actual content returned by a load or import path
+		 * @param mapper JSON serializer used for the comparison
+		 */
+		private static void assertSameNonIdentityContent(AppData expected, AppData actual, ObjectMapper mapper) {
+			expected.setCreatedAt(actual.getCreatedAt());
+			expected.setUpdatedAt(actual.getUpdatedAt());
+			expected.setOriginNodeId(actual.getOriginNodeId());
+			assertEquals(withoutIdentityFields(mapper.valueToTree(expected)),
+					withoutIdentityFields(mapper.valueToTree(actual)));
+		}
+
+		/**
+		 * Removes identity properties recursively from a JSON subtree.
+		 *
+		 * @param node subtree being normalized
+		 */
+		private static void stripIdentityFields(JsonNode node) {
+			if (node instanceof ObjectNode object) {
+				object.remove("id");
+				object.elements().forEachRemaining(FileIncidentStoreTest::stripIdentityFields);
+			} else if (node instanceof ArrayNode array) {
+				array.elements().forEachRemaining(FileIncidentStoreTest::stripIdentityFields);
+	}
 	}
 
 	@Test

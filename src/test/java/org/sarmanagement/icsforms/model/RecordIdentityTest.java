@@ -14,6 +14,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.nio.file.Path;
 import java.util.UUID;
+import java.util.stream.Stream;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -27,15 +31,81 @@ class RecordIdentityTest {
 	 *
 	 * @throws Exception when Jackson conversion fails
 	 */
-	@Test
-	void legacyIdentityAliasReadsAndCanonicalIdWrites() throws Exception {
+	@ParameterizedTest
+	@MethodSource("legacyIdentityCases")
+	void legacyIdentityAliasReadsAndCanonicalIdWrites(Class<? extends Identified> type, String legacyName,
+			String additionalProperties)
+			throws Exception {
 		String id = UUID.randomUUID().toString();
-		Ics204Form loaded = mapper.readValue("{\"formId\":\"" + id + "\"}", Ics204Form.class);
+		Identified loaded = mapper.readValue(
+				"{\"" + legacyName + "\":\"" + id + "\"" + additionalProperties + "}", type);
 		JsonNode written = mapper.valueToTree(loaded);
 
 		assertEquals(id, loaded.getId());
 		assertEquals(id, written.path("id").asText());
-		assertFalse(written.has("formId"));
+		assertFalse(written.has(legacyName));
+	}
+
+	/**
+	 * Provides every legacy serialized identity property still supported by the model.
+	 *
+	 * @return legacy identity aliases and their record types
+	 */
+	static Stream<Arguments> legacyIdentityCases() {
+		return Stream.of(
+				Arguments.of(ActivityLogEntry.class, "entryId", ""),
+				Arguments.of(Ics204Form.class, "formId", ""),
+				Arguments.of(Ics214Form.class, "logId", ""),
+				Arguments.of(SarTaskAssignment.class, "taskId", ""),
+				Arguments.of(RadioChannel.class, "channelId", ""),
+				Arguments.of(IncidentObjective.class, "objectiveId", ""),
+				Arguments.of(Ics215Form.class, "worksheetId", ""),
+				Arguments.of(AppData.OperationalPeriodRecord.class, "recordId", ""),
+				Arguments.of(Ics202ReportedResult.class, "resultId", ""),
+				Arguments.of(ResourceAssignment.class, "assignmentId", ""),
+				Arguments.of(TCard.class, "resourceId", ""),
+				Arguments.of(IncidentResource.class, "resourceId", ",\"resourceType\":\"GENERIC\""));
+	}
+
+	/**
+	 * Reads reference properties without confusing them for the owning record identity.
+	 *
+	 * @throws Exception when Jackson conversion fails
+	 */
+	@Test
+	void referencePropertiesAreNotTreatedAsIdentityAliases() throws Exception {
+		String referenceId = UUID.randomUUID().toString();
+		SarTaskAssignment task = mapper.readValue(
+				"{\"taskId\":\"task-identity\",\"assignmentId\":\"" + referenceId + "\"}",
+				SarTaskAssignment.class);
+		Ics202ReportedResult result = mapper.readValue(
+				"{\"resultId\":\"result-identity\",\"objectiveId\":\"" + referenceId + "\"}",
+				Ics202ReportedResult.class);
+		SafetyHazardReport hazard = mapper.readValue(
+				"{\"id\":\"hazard-identity\",\"taskId\":\"" + referenceId + "\"}", SafetyHazardReport.class);
+		SarTaskResource resource = mapper.readValue(
+				"{\"id\":\"resource-row\",\"resourceId\":\"" + referenceId + "\"}", SarTaskResource.class);
+		Ics214Form linkedFormLog = mapper.readValue(
+				"{\"logId\":\"log-identity\",\"linkedIcs204FormId\":\"linked-form\"}", Ics214Form.class);
+		Ics214Form linkedTaskLog = mapper.readValue(
+				"{\"logId\":\"log-identity\",\"linkedSarTaskAssignmentId\":\"linked-task\"}", Ics214Form.class);
+		Ics214Form linkedResourceLog = mapper.readValue(
+				"{\"logId\":\"log-identity\",\"linkedResourceId\":\"linked-resource\"}", Ics214Form.class);
+
+		assertEquals(referenceId, task.getAssignmentId());
+		assertEquals("task-identity", task.getId());
+		assertEquals(referenceId, result.getObjectiveId());
+		assertEquals("result-identity", result.getId());
+		assertEquals(referenceId, hazard.getTaskId());
+		assertEquals("hazard-identity", hazard.getId());
+		assertEquals(referenceId, resource.getResourceId());
+		assertEquals("resource-row", resource.getId());
+		assertEquals("linked-form", linkedFormLog.getLinkedIcs204FormId());
+		assertEquals("log-identity", linkedFormLog.getId());
+		assertEquals("linked-task", linkedTaskLog.getLinkedSarTaskAssignmentId());
+		assertEquals("log-identity", linkedTaskLog.getId());
+		assertEquals("linked-resource", linkedResourceLog.getLinkedResourceId());
+		assertEquals("log-identity", linkedResourceLog.getId());
 	}
 
 	/**

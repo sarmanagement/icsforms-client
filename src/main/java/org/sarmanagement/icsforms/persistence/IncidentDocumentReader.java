@@ -88,6 +88,8 @@ final class IncidentDocumentReader {
 			.enable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
 			.enable(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS)
 			.enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
+	private static final ObjectMapper LEGACY_IMPORT = STRICT.copy()
+			.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 	private static final Set<String> CONTENT_PROPERTIES = Set.of("incidentContext", "organizationalChart",
 			"medicalUnitLeaderAssignment", "form201", "form202", "form215a", "form208", "form207", "form204",
 			"form205", "additionalForms204", "activityLogs", "sarTaskAssignments", "archivedSafetyHazardReports",
@@ -199,9 +201,10 @@ final class IncidentDocumentReader {
 				}
 			}
 			if (!hasErrors()) {
-				AppData data = STRICT.treeToValue(tree, AppData.class);
+				AppData data = (legacySchema ? LEGACY_IMPORT : STRICT).treeToValue(tree, AppData.class);
 				if (legacySchema) {
 					IdentityMigration.migrate(data);
+					data.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
 				}
 				log(path, schema, "validated");
 				return data;
@@ -362,8 +365,9 @@ final class IncidentDocumentReader {
 						cause = UnrecognizedPropertyException.from(node.traverse(STRICT), type.getRawClass(),
 								entry.getKey(), new ArrayList<>(properties.keySet()));
 					}
-					add(strict ? Severity.ERROR : Severity.WARNING, childPath, "Unknown property.",
-							strict ? "Remove or correct the property name." : "This client ignores this property.");
+					boolean rejected = strict && !legacySchema;
+					add(rejected ? Severity.ERROR : Severity.WARNING, childPath, "Unknown property.",
+							rejected ? "Remove or correct the property name." : "This client ignores this property.");
 				} else if (strict && identityProperties.contains(entry.getKey())) {
 					validateRecordIdentity(entry.getValue(), childPath, type.getRawClass(), siblingIdentities);
 				} else if (childType != null) {
@@ -588,7 +592,8 @@ final class IncidentDocumentReader {
 				.toList().toString();
 		String message = "Incident read path=" + safe(path.toString()) + " schema=" + schema + " outcome=" + outcome
 				+ " count=" + problems.size() + " first=" + first;
-		if ("rejected".equals(outcome) || "stored-warning".equals(outcome) || "import-failed".equals(outcome)) {
+		if ("rejected".equals(outcome) || "stored-warning".equals(outcome) || "import-failed".equals(outcome)
+				|| problems.stream().anyMatch(problem -> problem.severity() == Severity.WARNING)) {
 			LOGGER.warning(message);
 		} else {
 			LOGGER.info(message);

@@ -53,9 +53,10 @@ canonical `id` properties and reads the old field-specific identity names as
 aliases. Schema 18 load migration assigns missing IDs and deterministically
 repairs duplicate stored IDs while preserving the first occurrence; migration is
 persisted before the load returns. Local create and save also normalize missing
-or duplicate identities before committing. External imports reject blank or
-duplicate IDs, while stored files remain tolerant of unknown properties and log
-warnings.
+or duplicate identities before committing. Schema-18 external imports reject
+blank or duplicate IDs; schema-17 imports preserve the former within-collection
+duplicate check and repair cross-collection duplicates with a warning. Stored
+files remain tolerant of unknown properties and log warnings.
 
 New-period rollover gives the copied ICS 205 form and channels new identities.
 Plan reuse, channel import, facility snapshots, incident duplication, and
@@ -88,6 +89,21 @@ across collections with a warning; schema-18 imports still reject document-wide
 per-type duplicates. Regression coverage verifies duplicate repair on stored
 schema-18 loads and import save/reload stability. The canonical `id` property
 and its compatibility warning for older releases are documented.
+
+**Identity review follow-up, 2026-11-19:** rollover archives planned ICS 215
+with IDs distinct from a retained live worksheet. Copy-path coverage now checks
+incident duplication and internal worksheet links, channel import modes,
+facility snapshots, all plan-reuse areas and imported ICS 215. Dedicated
+`RecordIndex`/`RecordDiff`, legacy-alias/reference, and schema-17 load/import
+tests cover the record foundation and compatibility behavior. Legacy schema-17
+unknown properties are ignored with warnings; the fixture's known content is
+compared after the established identity and local-only provenance normalization.
+`IdentitySetterArchitectureTest` resolves setter owners and keeps external
+identity mutation sites explicitly allow-listed; public worksheet row/heading
+identity fields remain documented exceptions. The Maple Ridge JSON example was
+intentionally added in commit `dcd4fe9` as a fictional schema-18 example and is
+used by the stable-identity reflection regression; it contains no operational
+incident data.
 
 The identity inventory and the value objects intentionally without IDs are
 listed in [`record-identity.md`](record-identity.md).

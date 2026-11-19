@@ -24,9 +24,10 @@ canine medical reference windows. The persistence foundation is merged: saves us
 detached snapshots on a background coordinator behind backend-neutral revision
 and failure seams. Host-mode Part 1's stable record identity, migration, index,
 and diff primitives are delivered locally; a displayed-test CI follow-up verifies
-rollover and copied-record identity boundaries, with identity-review follow-up
-covering getter purity and duplicate-repair import/load behavior. No host service
-is implemented.
+rollover and copied-record identity boundaries. The current #57 review follow-up
+adds copy/reuse coverage, schema-17 compatibility, and an allowlisted setter
+architecture check; delivery evidence is in
+[`docs/completed-work.md`](docs/completed-work.md). No host service is implemented.
 Work to make open views refresh without flicker or stale content is merged
 (PR #56). This is standalone operation, not yet a local-host deployment.
 Details of delivered work are in
@@ -120,7 +121,7 @@ PR closure alone.
 | File-backed `IncidentStore` with UUID identity, revision checks, edit-lock capability and backups | PR #34, #39–#42 | Complete for standalone use |
 | Live local role panels (ten phases): live multi-view, objectives and linkage, review tracking, medical references, Safety/MUL, Operations, Incident Command, Communications and console | #33, #46, #49 | Implementation delivered; automated coverage recorded. Manual assistive-technology review is not recorded (optional). |
 | Stage 1 persistence foundation: deterministic Swing tests, store contract suite, backend-neutral semantics, legacy import migration, UTC time, provenance seam, asynchronous snapshot persistence, and live refresh without flicker | #37, #39–#44, PR #56 | Complete; substitute-store evidence accepted |
-| Host-mode Part 1: stable record identity, schema 18 migration, index and diff | #57 | Delivered as local model/persistence groundwork; displayed-test regressions recorded in [`docs/completed-work.md`](docs/completed-work.md); no host service |
+| Host-mode Part 1: stable record identity, schema 18 migration, index and diff | #57 | Delivered as local model/persistence groundwork; rollover/copy regressions, schema-17 compatibility, and setter architecture evidence recorded in [`docs/completed-work.md`](docs/completed-work.md); no host service |
 
 Role-panel work is independent of the persistence roadmap and must not
 introduce network, authentication or remote persistence features.
