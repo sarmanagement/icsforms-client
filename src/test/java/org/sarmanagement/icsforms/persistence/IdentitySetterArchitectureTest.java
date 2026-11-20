@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.MethodInvocationTree;
@@ -30,13 +31,53 @@ class IdentitySetterArchitectureTest {
 
 	@Test
 	void identitySetterCallSitesOutsideModelAndPersistenceAreAvoided() throws IOException {
+		assertEquals(List.of(), identitySetterCallSites(SOURCE_ROOT));
+	}
+
+	@Test
+	void identitySetterRuleDetectsAnOutsideCallSite() throws IOException {
+		Path sourceRoot = Files.createTempDirectory("identity-setter-architecture");
+		Path source = sourceRoot.resolve("org/sarmanagement/icsforms/ui/ForbiddenIdentitySetter.java");
+		Files.createDirectories(source.getParent());
+		Files.writeString(source, """
+				package org.sarmanagement.icsforms.ui;
+
+				import org.sarmanagement.icsforms.model.Identified;
+
+				final class ForbiddenIdentitySetter {
+					void reassign(Identified record) {
+						record.setId("replacement");
+					}
+				}
+				""");
+		try {
+			List<String> calls = identitySetterCallSites(sourceRoot);
+			assertEquals(1, calls.size());
+			assertTrue(calls.get(0).contains("record.setId(\"replacement\")"));
+		} finally {
+			try (var paths = Files.walk(sourceRoot)) {
+				for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
+					Files.delete(path);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Finds production source calls to record identity setters outside the allowed packages.
+	 *
+	 * @param sourceRoot root containing Java source files.
+	 * @return detected identity setter call sites.
+	 * @throws IOException when source files cannot be read.
+	 */
+	private static List<String> identitySetterCallSites(Path sourceRoot) throws IOException {
 		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
 		try (StandardJavaFileManager files = compiler.getStandardFileManager(null, null, null)) {
 			List<Path> sources;
-			try (var paths = Files.walk(SOURCE_ROOT)) {
+			try (var paths = Files.walk(sourceRoot)) {
 				sources = paths.filter(path -> path.toString().endsWith(".java"))
-						.filter(path -> !path.startsWith(SOURCE_ROOT.resolve("org/sarmanagement/icsforms/model")))
-						.filter(path -> !path.startsWith(SOURCE_ROOT.resolve("org/sarmanagement/icsforms/persistence")))
+						.filter(path -> !path.startsWith(sourceRoot.resolve("org/sarmanagement/icsforms/model")))
+						.filter(path -> !path.startsWith(sourceRoot.resolve("org/sarmanagement/icsforms/persistence")))
 						.toList();
 			}
 			var sourceObjects = files.getJavaFileObjectsFromPaths(sources);
@@ -45,7 +86,7 @@ class IdentitySetterArchitectureTest {
 			Iterable<? extends CompilationUnitTree> units = task.parse();
 			task.analyze();
 			Trees trees = Trees.instance(task);
-			Path absoluteSourceRoot = SOURCE_ROOT.toAbsolutePath().normalize();
+			Path absoluteSourceRoot = sourceRoot.toAbsolutePath().normalize();
 			List<String> actual = new java.util.ArrayList<>();
 			for (CompilationUnitTree unit : units) {
 				Path source = Path.of(unit.getSourceFile().toUri());
@@ -62,7 +103,7 @@ class IdentitySetterArchitectureTest {
 					}
 				}.scan(unit, null);
 			}
-			assertEquals(List.of(), actual);
+			return actual;
 		}
 	}
 

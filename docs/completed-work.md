@@ -110,6 +110,29 @@ incident data.
 The identity inventory and the value objects intentionally without IDs are
 listed in [`record-identity.md`](record-identity.md).
 
+**Identity and close review follow-up, 2026-11-20:** Public ID-taking
+constructors are documented as the supported way to create records with a
+known identity. No production identity-setter call sites remain outside
+`model` and `persistence`; `IdentitySetterArchitectureTest` now also checks a
+synthetic violating `Identified.setId` call to prove the rule detects it.
+Existing test-fixture edits replace setter-based identity setup with
+`TestIdentitySupport.assign` or ID constructors; no assertions were weakened.
+Intentional assertion changes are limited to identity behavior: `Ics205FormTest`
+expects archived ICS 205 records to retain their IDs while new-period copies
+receive fresh IDs; `ImportValidationTest` checks schema-specific duplicate
+handling and every expected duplicate path; `ChannelLinkSourceTest` and
+`RadioChannelReferenceTest` verify old channel references do not resolve to
+freshly identified carried channels; and `ActivityLogEntryTest` checks the
+canonical serialized `id` property. Other listed test edits only update
+fixtures, accessors, or schema expectations.
+
+The controller shutdown correction is adjacent lifecycle hardening outside
+issue #57. `AppController.close()` restores its open state and prior autosave
+timer state when draining issued saves fails, allowing the caller to retry;
+listeners, locks, and pending saves remain intact. A regression test covers a
+failed drain with an issued write and verifies that the write can settle before
+a later successful close.
+
 ## Live local role panels — delivery status by phase
 
 The ten-phase plan from issue #33 is retained below as the authority on *what*

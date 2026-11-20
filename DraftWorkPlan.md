@@ -23,10 +23,11 @@ Unit Leader, Operations, Incident Command, Communications) and separate human an
 canine medical reference windows. The persistence foundation is merged: saves use
 detached snapshots on a background coordinator behind backend-neutral revision
 and failure seams. Host-mode Part 1's stable record identity, migration, index,
-and diff primitives are delivered locally; a displayed-test CI follow-up verifies
-rollover and copied-record identity boundaries. The current #57 review follow-up
-adds copy/reuse coverage, schema-17 compatibility, and write-once identity
-setters; delivery evidence is in
+and diff primitives are delivered locally; displayed-test CI verifies rollover
+and copied-record identity boundaries. The current #57 review follow-up adds
+copy/reuse coverage, schema-17 compatibility, and write-once identity setters;
+adjacent controller shutdown hardening restores retryability after a failed
+save drain. Delivery evidence is in
 [`docs/completed-work.md`](docs/completed-work.md). No host service is implemented.
 Work to make open views refresh without flicker or stale content is merged
 (PR #56). This is standalone operation, not yet a local-host deployment.

@@ -14,9 +14,14 @@ value or filling an absent legacy ID is allowed. Jackson binds canonical `id`
 fields directly. Persistence migration and intentional reminting use explicit
 `IdentityMigration` replacement operations, while detached editor copies that
 represent the same record use `IdentityMigration.preserveIdentity`. Constructors
-and creation actions assign IDs to new records. `IdentitySetterArchitectureTest`
-prevents production code outside `model` and `persistence` from reassigning an
-identity through a setter.
+and creation actions assign IDs to new records. Use the public known-ID
+constructors when a caller must supply an identity at creation:
+`TCard(String)`, `ResourceAssignment(String)`, `VetFacility(String)`,
+`IncidentLocation(String)`, `ActivityEventType(String, String, boolean)` (or its
+four-argument overload), and `MedicalPlan.AidStation(String)`,
+`MedicalPlan.TransportService(String)`, and `MedicalPlan.Hospital(String)`.
+`IdentitySetterArchitectureTest` prevents production code outside `model` and
+`persistence` from reassigning an identity through a setter.
 
 `Ics215Form.ResourceHeading.id` and `Ics215Form.WorkRow.id` are public fields
 used by the editable worksheet model, so writes to those fields cannot be
