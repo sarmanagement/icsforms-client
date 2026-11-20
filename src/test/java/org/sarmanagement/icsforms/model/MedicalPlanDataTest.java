@@ -103,7 +103,7 @@ class MedicalPlanDataTest {
 		facility.setName("Fictional Regional Vet");
 		data.getVetDirectory().getFacilities().add(facility);
 		VetFacility snapshot = new VetFacility();
-		snapshot.setId(facility.getId());
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(snapshot, facility.getId());
 		snapshot.setName(facility.getName());
 		data.getCanineMedicalPlan().getSelectedFacilities().add(snapshot);
 

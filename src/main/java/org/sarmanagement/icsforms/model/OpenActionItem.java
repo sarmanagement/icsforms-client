@@ -10,7 +10,8 @@ import java.util.UUID;
 
 /** An ICS 233 action item with its current point of contact and UTC dates. */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class OpenActionItem {
+public class OpenActionItem implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private int number;
 	private String item = "";
@@ -31,9 +32,6 @@ public class OpenActionItem {
 	 * @return action item UUID, never null or blank
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -42,8 +40,10 @@ public class OpenActionItem {
 	 *
 	 * @param id action item UUID; null or blank generates a new UUID
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		IdentityGuard.check(this.id, id);
+		this.id = id;
 	}
 
 	/**

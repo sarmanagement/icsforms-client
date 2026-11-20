@@ -4,6 +4,9 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -23,7 +26,9 @@ import java.util.UUID;
  * </p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Ics214Form {
+public class Ics214Form implements Identified {
+	@JsonProperty("id")
+	@JsonAlias("logId")
 	private String logId = UUID.randomUUID().toString();
 	private String linkedIcs204FormId = "";
 	private String linkedSarTaskAssignmentId = "";
@@ -50,11 +55,23 @@ public class Ics214Form {
 	 *
 	 * @return activity log UUID, never null or blank
 	 */
+	@JsonIgnore
 	public String getLogId() {
-		if (logId == null || logId.isBlank()) {
-			logId = UUID.randomUUID().toString();
-		}
 		return logId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return logId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(logId, id);
+		logId = id;
 	}
 
 	/**
@@ -62,8 +79,9 @@ public class Ics214Form {
 	 *
 	 * @param logId activity log UUID; null or blank generates a UUID
 	 */
+	@JsonIgnore
 	public void setLogId(String logId) {
-		this.logId = logId == null || logId.isBlank() ? UUID.randomUUID().toString() : logId;
+		setId(logId);
 	}
 
 	/**

@@ -117,6 +117,7 @@ class RadioChannelCsvDialogsTest {
 		imported.setIapPage("9");
 		writeImport(imported);
 		dialogs.selection = new RadioChannelCsvDialogs.ImportSelection(List.of(0), ChannelImportService.Mode.REPLACE, true);
+		String originalFormId = data.getForm205().getFormId();
 		runImport();
 		assertEquals(List.of("Replacement"), names());
 		assertEquals("Imported instructions", data.getForm205().getSpecialInstructions());
@@ -125,7 +126,7 @@ class RadioChannelCsvDialogsTest {
 		assertEquals(imported.getPreparedDateTime(), data.getForm205().getPreparedDateTime());
 		assertEquals(imported.getDatePrepared(), data.getForm205().getDatePrepared());
 		assertEquals("9", data.getForm205().getIapPage());
-		assertEquals(imported.getFormId(), data.getForm205().getFormId());
+		assertEquals(originalFormId, data.getForm205().getFormId());
 	}
 
 	@Test
@@ -149,7 +150,8 @@ class RadioChannelCsvDialogsTest {
 		assertSame(before, data.getForm205());
 		assertNotNull(dialogs.error);
 		assertFalse(controller.isDirty());
-		imported.getChannels().get(0).setChannelId(before.getChannels().get(0).getChannelId());
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(imported.getChannels().get(0),
+				before.getChannels().get(0).getChannelId());
 		writeImport(imported);
 		dialogs.error = null;
 		runImport();

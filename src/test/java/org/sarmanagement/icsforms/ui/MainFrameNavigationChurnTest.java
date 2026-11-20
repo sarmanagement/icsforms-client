@@ -485,8 +485,7 @@ class MainFrameNavigationChurnTest {
 		contact.setName("Team contact");
 		contact.setPrimaryContact("Original radio contact");
 		data.getForm204().getCommunications().add(contact);
-		ResourceAssignment assignment = new ResourceAssignment();
-		assignment.setAssignmentId("assignment-1");
+		ResourceAssignment assignment = new ResourceAssignment("assignment-1");
 		assignment.setAssignmentTeamNumber("Team 1");
 		assignment.setResourceIdentifier("Team 1");
 		data.getForm204().getResourcesAssigned().add(assignment);

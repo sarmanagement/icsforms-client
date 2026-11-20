@@ -14,7 +14,9 @@ import java.util.UUID;
  * Incident-period human medical plan content for the standard ICS 206.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class MedicalPlan {
+public class MedicalPlan implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
+	private String id = UUID.randomUUID().toString();
 	private boolean active;
 	private boolean simpleMode = true;
 	private String call911Procedure = "Call 911";
@@ -34,6 +36,20 @@ public class MedicalPlan {
 	private String safetyOfficerSignature = "";
 	private String reviewStatus = "Not reviewed";
 	private String iapPage = "";
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
+		this.id = id;
+	}
 
 	/**
 	 * Creates an empty, inactive medical plan.
@@ -407,7 +423,8 @@ public class MedicalPlan {
 	 * One medical aid station entry.
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static class AidStation {
+	public static class AidStation implements Identified {
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		private String id = UUID.randomUUID().toString();
 		private String name = "";
 		private String location = "";
@@ -421,9 +438,6 @@ public class MedicalPlan {
 		 * @return aid station UUID, never null or blank
 		 */
 		public String getId() {
-			if (id == null || id.isBlank()) {
-				id = UUID.randomUUID().toString();
-			}
 			return id;
 		}
 
@@ -432,12 +446,24 @@ public class MedicalPlan {
 		 *
 		 * @param id aid station UUID; null or blank generates a UUID
 		 */
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
-			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+			String value = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+			IdentityGuard.check(this.id, value);
+			this.id = value;
 		}
 
 		/** Creates an empty aid station. */
 		public AidStation() {
+		}
+
+		/**
+		 * Creates an aid station with the identity already attached to a table row.
+		 *
+		 * @param id table-row identity; null or blank creates a fresh identity
+		 */
+		public AidStation(String id) {
+			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
 		}
 
 		/** @return station name. */
@@ -495,7 +521,8 @@ public class MedicalPlan {
 	 * One ambulance or other medical transport service.
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static class TransportService {
+	public static class TransportService implements Identified {
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		private String id = UUID.randomUUID().toString();
 		private String service = "";
 		private String location = "";
@@ -510,9 +537,6 @@ public class MedicalPlan {
 		 * @return transport service UUID, never null or blank
 		 */
 		public String getId() {
-			if (id == null || id.isBlank()) {
-				id = UUID.randomUUID().toString();
-			}
 			return id;
 		}
 
@@ -521,12 +545,23 @@ public class MedicalPlan {
 		 *
 		 * @param id transport service UUID; null or blank generates a UUID
 		 */
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
-			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+			IdentityGuard.check(this.id, id);
+			this.id = id;
 		}
 
 		/** Creates an empty transport service. */
 		public TransportService() {
+		}
+
+		/**
+		 * Creates a transport service with the identity already attached to a table row.
+		 *
+		 * @param id table-row identity; null or blank creates a fresh identity
+		 */
+		public TransportService(String id) {
+			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
 		}
 
 		/** @return service name. */
@@ -594,7 +629,8 @@ public class MedicalPlan {
 	 * One human hospital entry with nullable medical capability answers.
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static class Hospital {
+	public static class Hospital implements Identified {
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		private String id = UUID.randomUUID().toString();
 		private String name = "";
 		private String address = "";
@@ -619,9 +655,6 @@ public class MedicalPlan {
 		 * @return hospital UUID, never null or blank
 		 */
 		public String getId() {
-			if (id == null || id.isBlank()) {
-				id = UUID.randomUUID().toString();
-			}
 			return id;
 		}
 
@@ -630,12 +663,23 @@ public class MedicalPlan {
 		 *
 		 * @param id hospital UUID; null or blank generates a UUID
 		 */
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
-			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+			IdentityGuard.check(this.id, id);
+			this.id = id;
 		}
 
 		/** Creates an empty hospital. */
 		public Hospital() {
+		}
+
+		/**
+		 * Creates a hospital with the identity already attached to a table row.
+		 *
+		 * @param id table-row identity; null or blank creates a fresh identity
+		 */
+		public Hospital(String id) {
+			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
 		}
 
 		/** @return hospital name. */

@@ -30,6 +30,7 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Verifies canine editor role pickers and the simplified veterinary controls. */
@@ -333,6 +334,11 @@ class CanineMedicalPanelTest {
 		assertEquals(2, data.getCanineMedicalPlan().getSelectedFacilities().size());
 		assertEquals("First", data.getCanineMedicalPlan().getSelectedFacilities().get(0).getName());
 		assertEquals("Second", data.getCanineMedicalPlan().getSelectedFacilities().get(1).getName());
+		VetFacility firstSnapshot = data.getCanineMedicalPlan().getSelectedFacilities().get(0);
+		assertNotEquals(first.getId(), firstSnapshot.getId());
+		assertEquals(first.getId(), firstSnapshot.getSourceFacilityId());
+		assertEquals(first.getId(), first.copy().getId());
+		assertEquals("", first.getSourceFacilityId());
 	}
 
 	@Test

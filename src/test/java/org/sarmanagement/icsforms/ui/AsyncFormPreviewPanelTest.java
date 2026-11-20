@@ -106,6 +106,7 @@ class AsyncFormPreviewPanelTest {
 	void snapshotPreservesTCardsWithoutGeneratingLiveIdentities() throws Exception {
 		AppData source = new AppData();
 		var card = new org.sarmanagement.icsforms.model.TCard();
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(card, null);
 		card.setPersonName("Recorded responder");
 		source.getTCards().add(card);
 		AtomicReference<AppData> rendered = new AtomicReference<>();

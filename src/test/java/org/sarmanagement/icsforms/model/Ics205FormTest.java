@@ -41,6 +41,7 @@ class Ics205FormTest {
 		for (String json : List.of("{}", "{\"schemaVersion\":11}",
 				"{\"schemaVersion\":11,\"form205\":null}")) {
 			AppData data = mapper.readValue(json, AppData.class);
+			IdentityMigration.migrate(data);
 			assertTrue(data.isIcs205Enabled());
 			assertTrue(data.getForm205().getChannels().isEmpty());
 			assertEquals("", data.getForm205().getPreparedBySignature());
@@ -48,7 +49,7 @@ class Ics205FormTest {
 			assertNull(data.getForm205().getPreparedDateTime());
 			assertNotNull(UUID.fromString(data.getForm205().getFormId()));
 		}
-		assertEquals(17, AppData.CURRENT_SCHEMA_VERSION);
+		assertEquals(18, AppData.CURRENT_SCHEMA_VERSION);
 		assertEquals(AppData.CURRENT_SCHEMA_VERSION, new AppData().getSchemaVersion());
 		AppData disabled = mapper.readValue("{\"ics205Enabled\":false}", AppData.class);
 		assertFalse(disabled.isIcs205Enabled());
@@ -120,10 +121,12 @@ class Ics205FormTest {
 		channel.setTxPolicy(RadioChannel.TX_POLICY_TRANSMIT);
 		assertEquals("TRANSMIT", channel.getTxPolicy());
 
-		Ics205Form form = mapper.readValue("""
-				{"specialInstructions":null,"preparedByName":null,"preparedBySignature":null,
-				"iapPage":null,"channels":null,"formId":null}
-				""", Ics205Form.class);
+		AppData legacy = mapper.readValue("""
+				{"form205":{"specialInstructions":null,"preparedByName":null,"preparedBySignature":null,
+				"iapPage":null,"channels":null,"formId":null}}
+				""", AppData.class);
+		IdentityMigration.migrate(legacy);
+		Ics205Form form = legacy.getForm205();
 		assertEquals("", form.getSpecialInstructions());
 		assertEquals("", form.getPreparedByName());
 		assertEquals("", form.getPreparedBySignature());
@@ -168,7 +171,7 @@ class Ics205FormTest {
 		AppData data = populatedDocument();
 		RadioChannel original = data.getForm205().getChannels().get(0);
 		String stableId = original.getChannelId();
-		data.getForm205().getChannels().add(original);
+		data.getForm205().getChannels().add(original.deepCopy());
 		data.getForm205().getChannels().add(original.deepCopy());
 		data.getForm205().getChannels().add(null);
 		AppData.OperationalPeriodRecord history = new AppData.OperationalPeriodRecord();
@@ -176,22 +179,24 @@ class Ics205FormTest {
 		data.getOperationalPeriodHistory().add(history);
 		data.getOperationalPeriodHistory().add(null);
 
-		data.normalizeIdentity();
+		IdentityMigration.migrate(data);
 		assertEquals(3, data.getForm205().getChannels().size());
 		assertEquals(stableId, original.getChannelId());
 		assertEquals(3L, data.getForm205().getChannels().stream().map(RadioChannel::getChannelId).distinct().count());
-		assertEquals(stableId, history.getForm205().getChannels().get(0).getChannelId());
+		assertNotEquals(stableId, history.getForm205().getChannels().get(0).getChannelId());
 		var before = mapper.valueToTree(data);
-		data.normalizeIdentity();
+		IdentityMigration.migrate(data);
 		assertEquals(before, mapper.valueToTree(data));
 	}
 
 	@Test
 	void jsonDuplicateIdentitiesAreRepairedWithoutChangingFirstOccurrence() throws Exception {
-		Ics205Form form = mapper.readValue("""
-				{"channels":[{"channelId":"stable","rxFrequency":"155.000000"},
-				{"channelId":"stable","rxFrequency":"156.000000"},{"channelId":""},null]}
-				""", Ics205Form.class);
+		AppData data = mapper.readValue("""
+				{"form205":{"channels":[{"channelId":"stable","rxFrequency":"155.000000"},
+				{"channelId":"stable","rxFrequency":"156.000000"},{"channelId":""},null]}}
+				""", AppData.class);
+		IdentityMigration.migrate(data);
+		Ics205Form form = data.getForm205();
 		assertEquals(3, form.getChannels().size());
 		assertEquals("stable", form.getChannels().get(0).getChannelId());
 		assertNotEquals("stable", form.getChannels().get(1).getChannelId());
@@ -237,7 +242,7 @@ class Ics205FormTest {
 			assertNull(current.getDatePrepared());
 			assertNull(current.getPreparedDateTime());
 			if (carry) {
-				assertEquals(channelId, current.getChannels().get(0).getChannelId());
+				assertNotEquals(channelId, current.getChannels().get(0).getChannelId());
 				assertEquals(RadioCheckStatus.NOT_RECORDED,
 						current.getChannels().get(0).getRadioCheckStatus());
 				assertEquals("Dispatch instructions", current.getSpecialInstructions());
@@ -273,8 +278,86 @@ class Ics205FormTest {
 				.getChannels().get(0).getChannelName());
 		assertEquals("Second period", data.getOperationalPeriodHistory().get(1).getForm205()
 				.getChannels().get(0).getChannelName());
-		assertEquals(data.getOperationalPeriodHistory().get(0).getForm205().getChannels().get(0).getChannelId(),
+		assertNotEquals(data.getOperationalPeriodHistory().get(0).getForm205().getChannels().get(0).getChannelId(),
 				data.getOperationalPeriodHistory().get(1).getForm205().getChannels().get(0).getChannelId());
+	}
+
+	@Test
+	void rolloverMintsFreshMedicalPlanIdentitiesForTheNewPeriod() {
+		AppData data = new AppData();
+		MedicalPlan.AidStation station = new MedicalPlan.AidStation();
+		data.getMedicalPlan().getAidStations().add(station);
+		VetFacility facility = new VetFacility();
+		data.getCanineMedicalPlan().getSelectedFacilities().add(facility);
+		SafetyAnalysisEntry analysis = new SafetyAnalysisEntry();
+		data.getForm215a().getEntries().add(analysis);
+		SafetyMessageBlock safetyBlock = new SafetyMessageBlock();
+		data.getForm208().getHazardBlocks().add(safetyBlock);
+		String medicalPlanId = data.getMedicalPlan().getId();
+		String stationId = station.getId();
+		String caninePlanId = data.getCanineMedicalPlan().getId();
+		String facilityId = facility.getId();
+		String analysisId = analysis.getId();
+		String safetyBlockId = safetyBlock.getId();
+
+		data.advanceToNewOperationalPeriod();
+
+		AppData.OperationalPeriodRecord archived = data.getOperationalPeriodHistory().get(0);
+		assertEquals(medicalPlanId, archived.getMedicalPlan().getId());
+		assertEquals(stationId, archived.getMedicalPlan().getAidStations().get(0).getId());
+		assertNotEquals(medicalPlanId, data.getMedicalPlan().getId());
+		assertNotEquals(stationId, data.getMedicalPlan().getAidStations().get(0).getId());
+		assertEquals(caninePlanId, archived.getCanineMedicalPlan().getId());
+		assertEquals(facilityId, archived.getCanineMedicalPlan().getSelectedFacilities().get(0).getId());
+		assertNotEquals(caninePlanId, data.getCanineMedicalPlan().getId());
+		assertNotEquals(facilityId, data.getCanineMedicalPlan().getSelectedFacilities().get(0).getId());
+		assertEquals(analysisId, archived.getForm215a().getEntries().get(0).getId());
+		assertEquals(safetyBlockId, archived.getForm208().getHazardBlocks().get(0).getId());
+		assertNotEquals(analysisId, data.getForm215a().getEntries().get(0).getId());
+		assertNotEquals(safetyBlockId, data.getForm208().getHazardBlocks().get(0).getId());
+	}
+
+	@Test
+	void rolloverKeepsEveryRecordTypeUniqueAcrossLiveAndArchivedPeriods() throws Exception {
+		for (boolean bringForwardCommunications : List.of(false, true)) {
+			for (boolean promotePlannedWorksheet : List.of(false, true)) {
+				AppData data = new AppData();
+				data.getForm215().getResourceHeadings().add(new Ics215Form.ResourceHeading());
+				Ics215Form planned = data.getNextPeriodForm215();
+				planned.getResourceHeadings().add(new Ics215Form.ResourceHeading());
+				planned.setTargetPeriodStart(LocalDateTime.of(2026, 11, 19, 8, 0));
+				planned.setTargetPeriodEnd(LocalDateTime.of(2026, 11, 19, 20, 0));
+				data.getForm205().getChannels().add(new RadioChannel());
+				data.getMedicalPlan().getAidStations().add(new MedicalPlan.AidStation());
+				data.getCanineMedicalPlan().getSelectedFacilities().add(new VetFacility());
+				Ics204Form assignmentForm = new Ics204Form();
+				assignmentForm.getResourcesAssigned().add(new ResourceAssignment());
+				data.getAdditionalForms204().add(assignmentForm);
+				SarTaskAssignment task = new SarTaskAssignment();
+				task.getResourcesAssigned().add(new SarTaskResource());
+				data.getSarTaskAssignments().add(task);
+				IdentityMigration.migrate(data);
+
+				String plannedId = planned.getId();
+				String plannedHeadingId = planned.getResourceHeadings().get(0).id;
+				String sourceTaskId = task.getId();
+				data.advanceToNewOperationalPeriod(bringForwardCommunications, promotePlannedWorksheet);
+
+				AppData.OperationalPeriodRecord archived = data.getOperationalPeriodHistory().get(0);
+				assertNotEquals(archived.getNextPeriodForm215().getId(), data.getNextPeriodForm215().getId());
+				if (promotePlannedWorksheet) {
+					assertNotEquals(plannedId, data.getForm215().getId());
+					assertNotEquals(plannedHeadingId, data.getForm215().getResourceHeadings().get(0).id);
+					assertTrue(data.getNextPeriodForm215().getResourceHeadings().isEmpty());
+				} else {
+					assertEquals(plannedId, data.getNextPeriodForm215().getId());
+					assertEquals(plannedHeadingId, data.getNextPeriodForm215().getResourceHeadings().get(0).id);
+				}
+				assertEquals(sourceTaskId, archived.getSarTaskAssignments().get(0).getId());
+				assertTrue(data.getSarTaskAssignments().isEmpty());
+				RecordIdentityAssertions.collect(data);
+			}
+		}
 	}
 
 	@Test
@@ -291,6 +374,7 @@ class Ics205FormTest {
 			legacy.advanceToNewOperationalPeriod(true);
 			RadioChannel duplicate = legacy.getForm205().getChannels().get(0).deepCopy();
 			legacy.getForm205().getChannels().add(duplicate);
+			IdentityMigration.migrate(legacy);
 			store.save(legacyId, legacy);
 
 			AppData restored = store.load(legacyId);

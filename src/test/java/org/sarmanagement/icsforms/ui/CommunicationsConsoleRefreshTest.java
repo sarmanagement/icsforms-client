@@ -37,7 +37,7 @@ class CommunicationsConsoleRefreshTest {
 		log.getActivityLog().add(entry);
 		data.getActivityLogs().add(log);
 		var type = new org.sarmanagement.icsforms.model.ActivityEventType();
-		type.setId("custom-event");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(type, "custom-event");
 		type.setLabel("EVENT-OLD");
 		data.getActivityEventTypes().add(type);
 		AppController controller = IncidentStoreTestFixtures.controller(data);
@@ -227,8 +227,7 @@ class CommunicationsConsoleRefreshTest {
 		RadioChannel channel = new RadioChannel();
 		channel.setChannelName("Command");
 		data.getForm205().getChannels().add(channel);
-		ResourceAssignment assignment = new ResourceAssignment();
-		assignment.setAssignmentId("assignment");
+		ResourceAssignment assignment = new ResourceAssignment("assignment");
 		assignment.setResourceIdentifier("Team");
 		data.getForm204().getResourcesAssigned().add(assignment);
 		SarTaskAssignment task = new SarTaskAssignment();

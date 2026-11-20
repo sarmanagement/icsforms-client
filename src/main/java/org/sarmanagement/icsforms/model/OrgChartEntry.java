@@ -17,13 +17,14 @@ import java.util.UUID;
  * </p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class OrgChartEntry {
+public class OrgChartEntry implements Identified {
 	/** Chart section this position belongs to. */
 	public enum Section {
 		COMMAND_STAFF, OPERATIONS, PLANNING, LOGISTICS, FINANCE_ADMIN
 	}
 
 	private Section section = Section.OPERATIONS;
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String title = "";
 	private String name = "";
@@ -37,9 +38,6 @@ public class OrgChartEntry {
 	 * @return position UUID, never null or blank.
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -48,8 +46,10 @@ public class OrgChartEntry {
 	 *
 	 * @param id position UUID; null or blank generates a UUID.
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		IdentityGuard.check(this.id, id);
+		this.id = id;
 	}
 
 	/**

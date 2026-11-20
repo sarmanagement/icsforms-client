@@ -249,6 +249,7 @@ class Ics205PanelTest {
 			panel.duplicateChannel(0);
 			RadioChannel duplicate = data.getForm205().getChannels().get(2);
 			assertNotEquals(first.getChannelId(), duplicate.getChannelId());
+			assertEquals(3L, data.getForm205().getChannels().stream().map(RadioChannel::getId).distinct().count());
 			assertEquals(first.getProgrammingMetadata(), duplicate.getProgrammingMetadata());
 			duplicate.getProgrammingMetadata().put("new", "separate");
 			assertFalse(first.getProgrammingMetadata().containsKey("new"));

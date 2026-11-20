@@ -8,7 +8,8 @@ import java.util.UUID;
 /**
  * Resource entry printed on the SAR task assignment form.
  */
-public class SarTaskResource {
+public class SarTaskResource implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String function = "";
 	private String icsPosition = "";
@@ -32,9 +33,6 @@ public class SarTaskResource {
 	 * @return row UUID, never null or blank
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -43,8 +41,10 @@ public class SarTaskResource {
 	 *
 	 * @param id row UUID; null or blank generates a UUID
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		IdentityGuard.check(this.id, id);
+		this.id = id;
 	}
 
 	/** @return resource function or role. */

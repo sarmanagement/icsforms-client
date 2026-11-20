@@ -2,6 +2,7 @@ package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.model.IapPhase;
 import org.sarmanagement.icsforms.model.Ics201Form;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 
@@ -422,7 +423,7 @@ public class Ics201Panel extends JPanel {
 				for (Ics201Form.ActionEntry entry : entries) {
 					Ics201Form.ActionEntry copy = new Ics201Form.ActionEntry();
 					if (entry != null) {
-						copy.setId(entry.getId());
+						IdentityMigration.preserveIdentity(copy, entry);
 					}
 					copy.setTime(entry == null ? "" : entry.getTime());
 					copy.setActions(entry == null ? "" : entry.getActions());
@@ -441,7 +442,7 @@ public class Ics201Panel extends JPanel {
 			List<Ics201Form.ActionEntry> copy = new ArrayList<>();
 			for (Ics201Form.ActionEntry entry : rows) {
 				Ics201Form.ActionEntry row = new Ics201Form.ActionEntry();
-				row.setId(entry.getId());
+				IdentityMigration.preserveIdentity(row, entry);
 				row.setTime(entry.getTime());
 				row.setActions(entry.getActions());
 				copy.add(row);
@@ -531,7 +532,7 @@ public class Ics201Panel extends JPanel {
 				for (Ics201Form.ResourceSummaryEntry entry : entries) {
 					Ics201Form.ResourceSummaryEntry copy = new Ics201Form.ResourceSummaryEntry();
 					if (entry != null) {
-						copy.setId(entry.getId());
+						IdentityMigration.preserveIdentity(copy, entry);
 						copy.setResource(entry.getResource());
 						copy.setResourceIdentifier(entry.getResourceIdentifier());
 						copy.setDateTimeOrdered(entry.getDateTimeOrdered());
@@ -554,7 +555,7 @@ public class Ics201Panel extends JPanel {
 			List<Ics201Form.ResourceSummaryEntry> copy = new ArrayList<>();
 			for (Ics201Form.ResourceSummaryEntry entry : rows) {
 				Ics201Form.ResourceSummaryEntry row = new Ics201Form.ResourceSummaryEntry();
-				row.setId(entry.getId());
+				IdentityMigration.preserveIdentity(row, entry);
 				row.setResource(entry.getResource());
 				row.setResourceIdentifier(entry.getResourceIdentifier());
 				row.setDateTimeOrdered(entry.getDateTimeOrdered());

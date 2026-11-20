@@ -59,7 +59,7 @@ class IcpActivityTimelineDialogTest {
 		AppData data = new AppData();
 		SarTaskAssignment task = new SarTaskAssignment();
 		task.setAssignmentId("assignment-1");
-		task.setTaskId("task-1");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(task, "task-1");
 		task.setAssignmentTeamNumber("T1");
 		task.setResourceIdentifier("Trackers");
 		data.getSarTaskAssignments().add(task);
@@ -113,7 +113,7 @@ class IcpActivityTimelineDialogTest {
 		selectedTask.setResourceIdentifier("Selected team");
 		data.getSarTaskAssignments().add(selectedTask);
 		ResourceAssignment selectedAssignment = new ResourceAssignment();
-		selectedAssignment.setAssignmentId(selectedTask.getAssignmentId());
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(selectedAssignment, selectedTask.getAssignmentId());
 		selectedAssignment.setResourceIdentifier("Selected team");
 		data.getForm204().getResourcesAssigned().add(selectedAssignment);
 		RadioChannel channel = new RadioChannel();
@@ -130,8 +130,7 @@ class IcpActivityTimelineDialogTest {
 				SarTaskAssignment inserted = new SarTaskAssignment();
 				inserted.setAssignmentId("inserted-assignment");
 				data.getSarTaskAssignments().add(0, inserted);
-				ResourceAssignment insertedAssignment = new ResourceAssignment();
-				insertedAssignment.setAssignmentId(inserted.getAssignmentId());
+				ResourceAssignment insertedAssignment = new ResourceAssignment(inserted.getAssignmentId());
 				data.getForm204().getResourcesAssigned().add(0, insertedAssignment);
 				ActivityLogEntry committed = entry(selectedTask.getAssignmentId(),
 						ActivityEventType.ID_COMMUNICATIONS_CHECK);
@@ -241,7 +240,7 @@ class IcpActivityTimelineDialogTest {
 			AppData data = new AppData();
 			SarTaskAssignment task = new SarTaskAssignment();
 			task.setAssignmentId("assignment-1");
-			task.setTaskId("task-1");
+			org.sarmanagement.icsforms.TestIdentitySupport.assign(task, "task-1");
 			task.setAssignmentTeamNumber("T1");
 			task.setResourceIdentifier("Trackers");
 			task.setTaskLifecycleStatus("assigned - on task");

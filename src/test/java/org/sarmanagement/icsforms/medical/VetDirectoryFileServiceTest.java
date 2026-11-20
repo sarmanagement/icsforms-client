@@ -33,8 +33,7 @@ class VetDirectoryFileServiceTest {
 	@Test
 	void csvRoundTripPreservesQuotedUnicodeContactsAndUnknownAvailability() throws Exception {
 		VetDirectory directory = new VetDirectory();
-		VetFacility facility = new VetFacility();
-		facility.setId("regional-vet-1");
+		VetFacility facility = new VetFacility("regional-vet-1");
 		facility.setName("Clinique \"Étoile\"");
 		facility.setTown("Rivière, Québec");
 		facility.setState("QC");
@@ -233,8 +232,7 @@ class VetDirectoryFileServiceTest {
 	 * @return one-entry directory.
 	 */
 	private VetDirectory directoryEntry(String id, String name, String address, String phone) {
-		VetFacility facility = new VetFacility();
-		facility.setId(id);
+		VetFacility facility = new VetFacility(id);
 		facility.setName(name);
 		facility.setAddress(address);
 		facility.setContactNumbers(List.of(phone));

@@ -22,9 +22,16 @@ The core SAR form set is complete, as are focused role panels (Safety, Medical
 Unit Leader, Operations, Incident Command, Communications) and separate human and
 canine medical reference windows. The persistence foundation is merged: saves use
 detached snapshots on a background coordinator behind backend-neutral revision
-and failure seams. Work to make open views refresh without flicker or stale
-content is merged (PR #56). This is standalone operation, not yet a local-host
-deployment. Details of delivered work are in
+and failure seams. Host-mode Part 1's stable record identity, migration, index,
+and diff primitives are delivered locally; displayed-test CI verifies rollover
+and copied-record identity boundaries. The current #57 review follow-up adds
+copy/reuse coverage, schema-17 compatibility, and write-once identity setters;
+adjacent controller shutdown hardening restores retryability after a failed
+save drain. Delivery evidence is in
+[`docs/completed-work.md`](docs/completed-work.md). No host service is implemented.
+Work to make open views refresh without flicker or stale content is merged
+(PR #56). This is standalone operation, not yet a local-host deployment.
+Details of delivered work are in
 [`docs/completed-work.md`](docs/completed-work.md).
 
 ### Where it is going
@@ -73,14 +80,15 @@ Four ideas are central to the design:
    and Stage 1, the persistence foundation (issues #37, #39–#44) together with
    the live-refresh work that removed avoidable rebuilds and flicker (PR #56,
    the standalone part of idea 4), are complete.
-2. **Next: decide, then build T1 (Stages 0 and 2).** Record the Stage 0
-   decisions. Stage 2 then adds the incident API, a `RemoteIncidentStore` and
-   the first local host with simple device admission, so two workstations can
-   share an incident on incident Wi-Fi.
-3. **Then: shared and offline use (T2, Stages 3–4).** Stage 3 adds the full
-   invitation lifecycle, operator claim, roles, per-record concurrency and
-   audit. Stage 4 adds the durable outbox, offline sync, conflict workflows and
-   attachments, so devices keep working when disconnected.
+2. **Next: decide, then build T1 (Stages 0 and 2).** Record the remaining
+   operational Stage 0 decisions. Stage 2 adds the incident API,
+   `RemoteIncidentStore`, stable record versions, atomic multi-record batches,
+   a durable client outbox, and the first local host with basic device
+   admission.
+3. **Then: shared operations and offline recovery (T2, Stages 3–4).** Stage 3
+   adds the full invitation lifecycle, operator claim, roles and attributable
+   audit. Stage 4 expands the Stage 2 outbox into robust offline replay and
+   conflict recovery, and adds attachment transfer.
 4. **Finally: field packaging and hosting (T3, Stages 5–7).** Stage 5
    packages a field host that runs without internet, with backup, restore and
    planned authority transfer. Stage 6 adds a hosted deployment with read-only
@@ -94,7 +102,7 @@ the later stages may make the solo-laptop case harder.
 
 ### How to read this document
 
-**Status date:** 2026-11-17. Status entries are based on the source
+**Status date:** 2026-11-18. Status entries are based on the source
 tree, named regression tests, CI results and recorded decisions, not on issue or
 PR closure alone.
 
@@ -113,7 +121,8 @@ PR closure alone.
 | Core SAR forms (ICS 203, 205, 206 and canine 206, 215/215A, 208, 233-CG clue log), ICS 215, SAR task ↔ ICS 214 integration, ICS 204 layout | #13–#20, #35 | Complete |
 | File-backed `IncidentStore` with UUID identity, revision checks, edit-lock capability and backups | PR #34, #39–#42 | Complete for standalone use |
 | Live local role panels (ten phases): live multi-view, objectives and linkage, review tracking, medical references, Safety/MUL, Operations, Incident Command, Communications and console | #33, #46, #49 | Implementation delivered; automated coverage recorded. Manual assistive-technology review is not recorded (optional). |
-| Stage 1 persistence foundation: deterministic Swing tests, store contract suite, backend-neutral semantics, strict imports and identity migration, UTC time, provenance seam, asynchronous snapshot persistence, and live refresh without flicker | #37, #39–#44, PR #56 | Complete; substitute-store evidence accepted |
+| Stage 1 persistence foundation: deterministic Swing tests, store contract suite, backend-neutral semantics, legacy import migration, UTC time, provenance seam, asynchronous snapshot persistence, and live refresh without flicker | #37, #39–#44, PR #56 | Complete; substitute-store evidence accepted |
+| Host-mode Part 1: stable record identity, schema 18 migration, index and diff | #57 | Delivered as local model/persistence groundwork; rollover/copy regressions, schema-17 compatibility, and write-once setter evidence recorded in [`docs/completed-work.md`](docs/completed-work.md); no host service |
 
 Role-panel work is independent of the persistence roadmap and must not
 introduce network, authentication or remote persistence features.
@@ -288,9 +297,10 @@ edit a local incident.
 
 The table describes the eventual topologies, not features already delivered.
 Stage 1 (Part IV) prepares T0 for T1 without implementing any network code.
-Stage 2 delivers the initial T1 host and basic device admission. Stage 3 expands
-the trust boundary and adds operator claim; Stage 4 adds the durable outbox and
-offline sync. Later stages add field-host packaging, T3 and the mobile client.
+Stage 2 delivers record-level versions, atomic batches, a durable outbox, the
+initial T1 host and basic device admission. Stage 3 expands the trust boundary
+and adds operator claim; Stage 4 adds robust offline replay, conflict recovery
+and attachments. Later stages add field-host packaging, T3 and the mobile client.
 
 ### Device trust boundary and low-friction joining
 
@@ -467,9 +477,9 @@ recoverable standalone application. Completed stages are recorded in
 | --- | --- | --- | --- |
 | 0 | Written decisions and constraints | Not evidenced as complete | 1–2 weeks |
 | 1 | Local persistence foundation, including live refresh without flicker | Complete; substitute-store evidence accepted | done (4–7 weeks) |
-| 2 | Incident API and local host (T1) | Not started | 4–8 weeks |
-| 3 | Multi-user editing, operator claim, roles, audit (T2) | Not started | 4–7 weeks |
-| 4 | Offline sync and attachments | Not started | 5–9 weeks |
+| 2 | Record-level incident API and local host, including record versions and durable outbox (T1) | Identity/index/diff foundation delivered by #57; host service not started | 7–12 weeks |
+| 3 | Device lifecycle, operator claim, roles and attributable audit (T2) | Not started | 4–6 weeks |
+| 4 | Offline replay/conflict recovery and attachments | Not started | 4–8 weeks |
 | 5 | Field-host packaging and authority transfer | Not started | 4–8 weeks |
 | 6 | Hosted deployment and remote mirrors (T3) | Not started | 4–8 weeks |
 | 7 | Mobile client and hardening | Not started | 6–12 weeks |
@@ -511,7 +521,10 @@ requirements that extend it to multiple stations are in Part III.
 `RemoteIncidentStore` double was accepted as equivalent evidence for the
 original unmerged-spike criterion. It passes the shared contract and is
 exercised through `AppController`; it does not demonstrate a network-backed
-store. See the [exit assessment](docs/completed-work.md#stage-1--local-persistence-foundation-prerequisite-for-any-remote-store).
+store. The displayed-test CI follow-up also covers new-period channel identity,
+fresh identities for copied records, persistence retention and legacy T-card
+history overlap. See the [exit assessment](docs/completed-work.md#stage-1--local-persistence-foundation-prerequisite-for-any-remote-store)
+and [identity record](docs/completed-work.md#host-mode-series--issue-57-stable-record-identity-and-record-diff).
 
 **T0/T1 readiness:** Stage 2 is not yet a cleared start: record the Stage 0
 decisions. Stage 1 requires no API, authentication or outbox.
@@ -519,34 +532,44 @@ decisions. Stage 1 requires no API, authentication or outbox.
 ### Stage 2 — Incident API and single local host (delivers T1)
 
 Implement the incident-scoped API, host-side validation and persistence, and a
-`RemoteIncidentStore` built on the Stage 1 contract. The first host embeds the
-incident service in the desktop Java application, serving other instances on
-incident Wi-Fi with no internet. Initially each host shares one selected incident
-at a time. Both the host UI and connected UIs use that service boundary, with no
-direct-write bypass. See the
-[host mode implementation plan](docs/host-mode-plan.md) for the proposed
-sequence, admission flow, concurrency and recovery evidence, and open scope
-decisions. Add explicit host identity
-(self-signed certificate with fingerprint shown for QR embedding) and health
-status. Device admission by invitation is included here in its simplest form so
-that the API is never reachable without a credential, even in a pilot.
+`RemoteIncidentStore` built on the Stage 1 contract. A persisted record is the
+unit of submission and versioning: the client supplies the record version it
+edited, and the host compares base, current and proposed values field by field.
+A field changed only by the client is accepted; a field changed only by the host
+is retained; a field changed to different values by both sides is an explicit
+conflict. Equal net values are unchanged. Keep record-version history and
+durable operation receipts indefinitely. Apply multi-record edits as atomic
+batches. Clients persist pending operations in a durable outbox.
+
+The first host embeds the incident service in the desktop Java application,
+serving other instances on incident Wi-Fi with no internet. Initially each host
+shares one selected incident at a time. Both the host UI and connected UIs use
+that service boundary, with no direct-write bypass. See the
+[host mode implementation plan](docs/host-mode-plan.md) for the record contract,
+admission flow, concurrency and recovery evidence, and open scope decisions.
+Add explicit host identity (self-signed certificate with fingerprint shown for
+QR embedding) and health status. Device admission by invitation is included
+here in its simplest form so that the API is never reachable without a
+credential, even in a pilot.
 
 **Exit criteria:** two admitted workstations read and update one incident through
 the API; a non-admitted device on the same network is refused; one incident cannot
-access another; the standalone path is unchanged; the Stage 1 contract suite passes
-against the remote store.
+access another; per-record versions and atomic batches preserve independent edits
+and report same-field conflicts; outbox operations survive restart and receive
+durable receipts; the standalone path is unchanged; the Stage 1 contract suite
+passes against the remote store.
 A client shows when it cannot reach the host and labels what it shows as
 possibly stale, with the time it was last confirmed; remote changes refresh
 open views without flicker or loss of drafts.
-**Rough size:** 4–8 person-weeks.
+**Rough size:** 7–12 person-weeks.
 
-### Stage 3 — Multi-user editing, operator claim, roles and audit (delivers T2)
+### Stage 3 — Device lifecycle, operator claim, roles and audit (delivers T2)
 
 Add full invitation lifecycle (issue, expiry, use limit, revocation), device roster,
 operator claim from the ICS 211 roster with optional PIN, role-based permissions,
-per-record optimistic concurrency, host-populated `acceptedAt`, and audit history
-keyed by device and operator. Build clear conflict and stale-update UX. Keep the
-first role set to the five roles in Part III.
+host-populated `acceptedAt`, and attributable audit history keyed by device and
+operator. Build clear conflict and stale-update UX on the Stage 2 record-version
+contract. Keep the first role set to the five roles in Part III.
 
 Stage 1 establishes the provenance fields and controller seam only. The production
 standalone startup currently uses the empty default `OperatorContext`; it does not
@@ -560,20 +583,21 @@ shared-workstation operator switch is one action; administrators see and revoke
 devices; simultaneous edits do not silently overwrite; every change is attributable.
 A newer remote change to a record being edited is surfaced explicitly, with
 the operator's draft preserved.
-**Rough size:** 4–7 person-weeks.
+**Rough size:** 4–6 person-weeks.
 
-### Stage 4 — Offline sync and attachment handling
+### Stage 4 — Offline recovery and attachment handling
 
-Durable local outbox of idempotent operations, ordered host change cursor,
-reconnect and conflict workflows, attachment transfer, and closed-operational-
-period behaviour. Unsynced work survives client restarts and can be exported.
+Extend the Stage 2 durable outbox with ordered host change cursors, robust replay,
+reconnect and conflict-resolution workflows, attachment transfer, and
+closed-operational-period behavior. Unsynced work survives client restarts and
+can be exported.
 
 **Exit criteria:** airplane-mode edits sync correctly after reconnect; replay does
 not duplicate work; conflicts and rejected edits are visible and recoverable;
 attachments transfer reliably on constrained links.
 Pending, accepted and rejected changes are labelled per view, and the last
 successful sync time is always visible.
-**Rough size:** 5–9 person-weeks.
+**Rough size:** 4–8 person-weeks.
 
 ### Stage 5 — Field-host packaging and authority transfer
 

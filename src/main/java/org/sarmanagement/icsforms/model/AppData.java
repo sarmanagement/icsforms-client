@@ -5,6 +5,8 @@ package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -25,7 +27,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AppData {
 	/** Current persistence schema version for JSON storage. */
-	public static final int CURRENT_SCHEMA_VERSION = 17;
+	public static final int CURRENT_SCHEMA_VERSION = 18;
 	private static final ObjectMapper MEDICAL_PLAN_COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -34,9 +36,11 @@ public class AppData {
 	 * period, captured when the incident advances to the next period.
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static class OperationalPeriodRecord {
+	public static class OperationalPeriodRecord implements Identified {
 		private LocalDateTime periodStart;
 		private LocalDateTime periodEnd;
+		@JsonProperty("id")
+		@JsonAlias("recordId")
 		private String recordId = UUID.randomUUID().toString();
 		private IapPlanningStage iapPlanningStage = IapPlanningStage.NOT_RECORDED;
 		private List<String> incidentCommanders = new ArrayList<>();
@@ -64,11 +68,23 @@ public class AppData {
 		 *
 		 * @return record UUID, never null or blank
 		 */
+		@JsonIgnore
 		public String getRecordId() {
-			if (recordId == null || recordId.isBlank()) {
-				recordId = UUID.randomUUID().toString();
-			}
 			return recordId;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public String getId() {
+			return recordId;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		@com.fasterxml.jackson.annotation.JsonIgnore
+		public void setId(String id) {
+			IdentityGuard.check(recordId, id);
+			recordId = id;
 		}
 
 		/**
@@ -76,9 +92,9 @@ public class AppData {
 		 *
 		 * @param recordId record UUID; null or blank generates a UUID
 		 */
+		@JsonIgnore
 		public void setRecordId(String recordId) {
-			this.recordId = recordId == null || recordId.isBlank()
-					? UUID.randomUUID().toString() : recordId;
+			setId(recordId);
 		}
 
 		/**
@@ -526,6 +542,7 @@ public class AppData {
 		if (promotePlannedIcs215) {
 			validateIcs215Promotion();
 			promotedWorksheet = getNextPeriodForm215().copy();
+			IdentityMigration.remint(promotedWorksheet);
 			promotedWorksheet.markLinkedResourcesForReview();
 		}
 		// Capture the current operational period context before clearing.
@@ -543,6 +560,7 @@ public class AppData {
 		record.setForm215a(MEDICAL_PLAN_COPIER.convertValue(getForm215a(), Ics215aForm.class));
 		record.setForm215(getForm215().copy());
 		record.setNextPeriodForm215(getNextPeriodForm215().copy());
+		IdentityMigration.remint(record.getNextPeriodForm215());
 		record.setForm208(MEDICAL_PLAN_COPIER.convertValue(getForm208(), Ics208Form.class));
 		record.setIapPlanningStage(getIapPlanningStage());
 		record.setForm202(MEDICAL_PLAN_COPIER.convertValue(getForm202(), Ics202Form.class));
@@ -565,6 +583,7 @@ public class AppData {
 		this.iapPhase = IapPhase.DURING_OP;
 		this.iapPlanningStage = IapPlanningStage.NOT_RECORDED;
 		this.form202 = new Ics202Form();
+		IdentityMigration.remint(form215a, form208);
 		this.form205aIapPage = "";
 		this.form205 = bringForwardCommunicationsPlan ? record.getForm205().copyForNewPeriod() : new Ics205Form();
 		this.form215 = promotedWorksheet == null ? new Ics215Form() : promotedWorksheet;
@@ -580,8 +599,10 @@ public class AppData {
 		this.tCards = new ArrayList<>();
 		this.activityLogs = new ArrayList<>();
 		this.medicalPlan = copyMedicalPlan(record.getMedicalPlan());
+		IdentityMigration.remint(this.medicalPlan);
 		this.medicalPlan.resetReviewState();
 		this.canineMedicalPlan = copyCanineMedicalPlan(record.getCanineMedicalPlan());
+		IdentityMigration.remint(this.canineMedicalPlan);
 		this.canineMedicalPlan.resetReviewState();
 		this.safetyReview = new PlanReviewAssertion();
 		this.humanMedicalReview = new PlanReviewAssertion();
@@ -751,15 +772,20 @@ public class AppData {
 	}
 
 	/**
-	 * Assigns missing incident, child, history-entry identities, and document timestamps.
+	 * Normalizes legacy incident links and document timestamps.
 	 * Existing identifiers, timestamps, revisions, and origin node identifiers are
-	 * preserved, except duplicate channel IDs within a single communications plan
-	 * are replaced after their first occurrence. Channel IDs may recur across
-	 * period snapshots to retain external links.
+	 * preserved. Missing record identities are assigned by {@link IdentityMigration}.
 	 * Call only after the persistence layer has had an opportunity to
 	 * supply an incident ID and timestamps for legacy documents.
 	 */
 	public void normalizeIdentity() {
+		normalizeLegacyIdentity();
+	}
+
+	/**
+	 * Applies legacy field-specific identity and link normalization before the uniform migration pass.
+	 */
+	void normalizeLegacyIdentity() {
 		if (incidentId == null || incidentId.isBlank()) {
 			incidentId = UUID.randomUUID().toString();
 		}
@@ -772,76 +798,11 @@ public class AppData {
 		getForm205().normalizeIdentity();
 		for (OperationalPeriodRecord record : operationalPeriodHistory) {
 			if (record != null) {
-				record.getRecordId();
 				if (record.getForm205() != null) {
 					record.getForm205().normalizeIdentity();
 				}
 			}
 		}
-		if (tCards != null) {
-			for (TCard card : tCards) {
-				if (card != null) {
-					card.getResourceId();
-				}
-			}
-		}
-		if (clueLogEntries != null) {
-			for (ClueLogEntry entry : clueLogEntries) {
-				if (entry != null) {
-					entry.getEntryId();
-					if (entry.getFollowUpAssignments() != null) {
-						for (PocAssignment assignment : entry.getFollowUpAssignments()) {
-							if (assignment != null) {
-								assignment.getId();
-							}
-						}
-					}
-				}
-			}
-		}
-		if (openActionItems != null) {
-			for (OpenActionItem item : openActionItems) {
-				if (item != null) {
-					item.getId();
-				}
-			}
-		}
-		if (archivedSafetyHazardReports != null) {
-			for (SafetyHazardReport report : archivedSafetyHazardReports) {
-				if (report != null) {
-					report.getId();
-				}
-			}
-		}
-		if (sarTaskAssignments != null) {
-			for (SarTaskAssignment task : sarTaskAssignments) {
-				if (task != null) {
-					task.getTaskId();
-				}
-			}
-		}
-		if (activityLogs != null) {
-			for (Ics214Form log : activityLogs) {
-				if (log != null) {
-					log.getLogId();
-					List<ActivityLogEntry> entries = log.getActivityLog();
-					if (entries == null) {
-						continue;
-					}
-					for (ActivityLogEntry entry : entries) {
-						if (entry != null) {
-							entry.getEntryId();
-							for (ActivityLogEntry.EventTypeChange change : entry.getEventTypeChangeHistory()) {
-								if (change != null) {
-									change.changeId();
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		normalizeRecordIdentities();
 		normalizeLegacyActivityLinks();
 	}
 
@@ -881,42 +842,6 @@ public class AppData {
 		}
 	}
 
-	/**
-	 * Repairs absent identities on ICS 215 worksheet rows and headings.
-	 */
-	private void normalizeRecordIdentities() {
-		normalizeIcs215Identity(getForm215());
-		normalizeIcs215Identity(getNextPeriodForm215());
-		for (OperationalPeriodRecord record : getOperationalPeriodHistory()) {
-			if (record != null) {
-				if (record.getForm215() != null) {
-					normalizeIcs215Identity(record.getForm215());
-				}
-				if (record.getNextPeriodForm215() != null) {
-					normalizeIcs215Identity(record.getNextPeriodForm215());
-				}
-			}
-		}
-	}
-
-	/**
-	 * Repairs missing ICS 215 worksheet identities.
-	 *
-	 * @param form ICS 215 worksheet
-	 */
-	private void normalizeIcs215Identity(Ics215Form form) {
-		form.getWorksheetId();
-		for (Ics215Form.ResourceHeading heading : form.getResourceHeadings()) {
-			if (heading != null && (heading.id == null || heading.id.isBlank())) {
-				heading.id = UUID.randomUUID().toString();
-			}
-		}
-		for (Ics215Form.WorkRow row : form.getWorkRows()) {
-			if (row != null && (row.id == null || row.id.isBlank())) {
-				row.id = UUID.randomUUID().toString();
-			}
-		}
-	}
 	/**
 	 * Returns the current communications plan, including channels hidden on output.
 	 * @return current plan, never null

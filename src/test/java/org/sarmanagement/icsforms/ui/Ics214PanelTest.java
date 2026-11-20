@@ -478,8 +478,7 @@ class Ics214PanelTest {
 		}
 		data.setActivityLogs(new ArrayList<>(List.of(form)));
 
-		ResourceAssignment resource = new ResourceAssignment();
-		resource.setAssignmentId(task.getAssignmentId());
+		ResourceAssignment resource = new ResourceAssignment(task.getAssignmentId());
 		resource.setAssignmentTeamNumber(task.getAssignmentTeamNumber());
 		resource.setResourceIdentifier(task.getResourceIdentifier());
 		data.getForm204().setResourcesAssigned(List.of(resource));

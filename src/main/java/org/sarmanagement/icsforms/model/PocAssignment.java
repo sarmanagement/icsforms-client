@@ -11,7 +11,8 @@ import java.util.UUID;
  * A point-of-contact assignment recorded in chronological history, using UTC.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class PocAssignment {
+public class PocAssignment implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String assignee = "";
 	private LocalDateTime assignedAt;
@@ -36,9 +37,6 @@ public class PocAssignment {
 	 * @return assignment UUID, never null or blank
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -47,8 +45,10 @@ public class PocAssignment {
 	 *
 	 * @param id assignment UUID; null or blank generates a new UUID
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		IdentityGuard.check(this.id, id);
+		this.id = id;
 	}
 
 	/**

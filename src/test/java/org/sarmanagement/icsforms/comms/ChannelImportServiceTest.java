@@ -6,6 +6,7 @@ package org.sarmanagement.icsforms.comms;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.Ics205Form;
 import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.model.RecordIdentityAssertions;
 
 import java.util.List;
 import java.util.Map;
@@ -24,9 +25,12 @@ class ChannelImportServiceTest {
 		Ics205Form imported = target.deepCopy();
 		imported.getChannels().get(0).setProgrammingMetadata(Map.of("raw", "023"));
 		imported.getChannels().add(new RadioChannel());
+		String importedId = imported.getChannels().get(0).getId();
 		Ics205Form result = service.merge(target, imported, List.of(0), ChannelImportService.Mode.APPEND);
 		assertEquals(2, result.getChannels().size());
 		assertNotEquals(result.getChannels().get(0).getChannelId(), result.getChannels().get(1).getChannelId());
+		assertNotEquals(importedId, result.getChannels().get(1).getId());
+		assertEquals(2L, result.getChannels().stream().map(RadioChannel::getId).distinct().count());
 		assertEquals(target.getChannels().get(0).getChannelId(), imported.getChannels().get(0).getChannelId());
 		result.getChannels().get(1).getProgrammingMetadata().put("raw", "changed");
 		assertEquals("023", imported.getChannels().get(0).getProgrammingMetadata().get("raw"));
@@ -37,10 +41,17 @@ class ChannelImportServiceTest {
 	void replacesOnlyChannelInventoryAndKeepsPlanMetadata() {
 		Ics205Form target = plan("Existing");
 		target.setSpecialInstructions("Local instructions");
-		Ics205Form result = service.merge(target, plan("Incoming"), List.of(0), ChannelImportService.Mode.REPLACE);
+		Ics205Form imported = plan("Incoming");
+		imported.getChannels().add(new RadioChannel());
+		Ics205Form result = service.merge(target, imported, List.of(0, 1), ChannelImportService.Mode.REPLACE);
 		assertEquals("Incoming", result.getChannels().get(0).getChannelName());
+		assertEquals(2, result.getChannels().size());
+		assertEquals(2L, result.getChannels().stream().map(RadioChannel::getId).distinct().count());
 		assertEquals("Local instructions", result.getSpecialInstructions());
 		assertEquals(target.getFormId(), result.getFormId());
+		assertNotEquals(imported.getChannels().get(0).getId(), result.getChannels().get(0).getId());
+		assertEquals(1, target.getChannels().size());
+		assertEquals(2L, result.getChannels().stream().map(RadioChannel::getId).distinct().count());
 		assertEquals(0, service.merge(target, plan("Unused"), List.of(), ChannelImportService.Mode.REPLACE).getChannels().size());
 	}
 
@@ -51,6 +62,7 @@ class ChannelImportServiceTest {
 		imported.getChannels().get(0).setRxFrequency("155.123456");
 		Ics205Form result = service.merge(target, imported, List.of(0), ChannelImportService.Mode.UPDATE_BY_ID);
 		assertEquals("155.123456", result.getChannels().get(0).getRxFrequency());
+		assertEquals(target.getChannels().get(0).getId(), result.getChannels().get(0).getId());
 		assertEquals("", target.getChannels().get(0).getRxFrequency());
 		imported.getChannels().add(plan("Same").getChannels().get(0));
 		assertThrows(IllegalArgumentException.class,
@@ -69,6 +81,41 @@ class ChannelImportServiceTest {
 		imported.getChannels().add(imported.getChannels().get(0).deepCopy());
 		assertThrows(IllegalArgumentException.class,
 				() -> service.merge(target, imported, List.of(0), ChannelImportService.Mode.APPEND));
+	}
+
+	@Test
+	void allMergeModesKeepChannelIdentitiesUniqueAndUpdatesKeepMatchedIdentity() throws Exception {
+		Ics205Form target = plan("Existing");
+		Ics205Form imported = plan("Incoming");
+		imported.getChannels().get(0).setProgrammingMetadata(Map.of("source", "csv"));
+		imported.getChannels().add(new RadioChannel());
+		String existingId = target.getChannels().get(0).getId();
+		String incomingId = imported.getChannels().get(0).getId();
+
+		Ics205Form replaced = service.merge(target, imported, List.of(0, 1), ChannelImportService.Mode.REPLACE);
+		assertEquals(2, replaced.getChannels().size());
+		assertEquals(2, replaced.getChannels().stream().map(RadioChannel::getId).distinct().count());
+		assertNotEquals(incomingId, replaced.getChannels().get(0).getId());
+		assertEquals(Map.of("source", "csv"), replaced.getChannels().get(0).getProgrammingMetadata());
+		RecordIdentityAssertions.collect(replaced);
+
+		Ics205Form appended = service.merge(target, imported, List.of(0), ChannelImportService.Mode.APPEND);
+		assertEquals(2, appended.getChannels().size());
+		assertEquals(2, appended.getChannels().stream().map(RadioChannel::getId).distinct().count());
+		assertEquals(existingId, appended.getChannels().get(0).getId());
+		assertNotEquals(existingId, appended.getChannels().get(1).getId());
+		RecordIdentityAssertions.collect(appended);
+
+		Ics205Form updateTarget = plan("Matched");
+		String matchedId = updateTarget.getChannels().get(0).getId();
+		Ics205Form updateSource = updateTarget.deepCopy();
+		updateSource.getChannels().get(0).setChannelName("Updated");
+		Ics205Form updated = service.merge(updateTarget, updateSource, List.of(0),
+				ChannelImportService.Mode.UPDATE_BY_ID);
+		assertEquals(matchedId, updated.getChannels().get(0).getId());
+		assertEquals("Updated", updated.getChannels().get(0).getChannelName());
+		assertEquals(1, updated.getChannels().stream().map(RadioChannel::getId).distinct().count());
+		RecordIdentityAssertions.collect(updated);
 	}
 
 	/**

@@ -30,10 +30,20 @@ incident data at rest is not required at this stage.
 ### Service contract and lifecycle decisions
 
 Authorized instances can read the shared incident, submit changes against the
-version they read, and check for updates. The host validates every submitted
-change and either accepts it or reports a clear conflict or failure; newer work
-must never be silently overwritten. This agrees the behavior, not a particular
-whole-document or per-record protocol.
+record versions they read, and check for updates. A record is the unit of
+submission and versioning. The host validates each atomic batch and either
+accepts it or reports a clear conflict or failure; newer work must never be
+silently overwritten.
+
+For each submitted record, compare the client's base values, current host
+values, and proposed values field by field. Accept a client-only change, retain
+a host-only change, and report a conflict when both sides changed the same field
+to different net values. Equal net values are unchanged, including an
+A-to-B-to-A edit cycle. A record's base is identified by its version number.
+Keep record-version history and successful operation receipts indefinitely.
+Multi-record operations are atomic: the host applies every record in a batch or
+none of them. A durable client outbox stores pending operations and their
+identities so retry cannot duplicate an accepted batch.
 
 Both host and connected workstations can generate PDFs and export files.
 Output is generated and saved locally on the workstation requesting it, not to
@@ -66,14 +76,14 @@ These are implementation proposals, not additional agreed Stage 0 decisions:
   exercising identical authorization, validation and conflict behavior.
 - Keep application packages in this repository; do not introduce separate
   repositories or Maven modules merely to create the service boundary.
-- Begin with whole-document conditional saves through the existing
-  `IncidentStore` seam. Detect stale writes atomically with opaque tokens,
-  preserve both versions and require explicit recovery; never silently use
-  last-write-wins. Per-record concurrency follows in Stage 3.
-- Deliver connected sharing first without claiming full offline synchronization.
-  Disconnected information entry is required by the agreed direction, but its
-  delivery stage must be settled before implementation scope is finalized.
-  Stage 4 currently owns durable outbox and synchronization work.
+- Begin with record-level submissions through the existing `IncidentStore` seam.
+  Use per-record version numbers and three-way net-field comparison; never
+  silently use last-write-wins. Retain record-version history and operation
+  receipts indefinitely, and commit multi-record batches atomically.
+- Include the durable local outbox in Stage 2 so pending operations survive
+  client restart and can be retried idempotently. Stage 4 expands this foundation
+  into robust offline replay, ordered change cursors, conflict recovery and
+  attachment synchronization.
 
 ## Implementation sequence
 
@@ -94,11 +104,11 @@ do not expose the entire local store-management API by default. Local import,
 export and PDF generation on either workstation must not become arbitrary
 host-filesystem operations.
 
-Specify successful and ambiguous save outcomes. A save request needs an
-operation identifier and a host-side durable receipt or equivalent recovery
-mechanism, committed atomically with its effect, so retry after a lost response
-cannot duplicate a successful operation. This is distinct from identifying two
-independently entered reports of the same event.
+Specify successful and ambiguous batch outcomes. A request needs an operation
+identifier and a host-side durable receipt, committed atomically with its effect,
+so retry after a lost response cannot duplicate an accepted batch. Keep receipts
+indefinitely. This is distinct from identifying two independently entered
+reports of the same event.
 
 Exit evidence: reviewed protocol examples for read, save, conflict, unavailable,
 invalid, unauthorized, revoked and incompatible-client responses; restart and
@@ -211,11 +221,10 @@ not silently chosen defaults.
 ## Disconnected entry and duplicate events
 
 The final workflow must let users add information while disconnected and recover
-it after restart. Each pending operation must have stable identity and be visibly
-pending until accepted by the host; reconnection must not erase or blindly
-overwrite it. Finalize this either as an explicit addition to Stage 2 scope or as
-the later Stage 4 delivery; until then Stage 2 alone must not be described as the
-complete disconnected workflow.
+it after restart. Stage 2 owns the durable outbox and stable operation identity;
+Stage 4 owns robust offline replay, ordered synchronization, and conflict
+recovery. Each pending operation is visibly pending until accepted by the host;
+reconnection must not erase or blindly overwrite it.
 
 Treat three cases separately:
 

@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.medical.VetShortlistSelector;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.CanineMedicalPlan;
 import org.sarmanagement.icsforms.model.IncidentLocation;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.StagingLocation;
 import org.sarmanagement.icsforms.model.VetDirectory;
@@ -1209,8 +1210,7 @@ public class CanineMedicalPanel extends JPanel {
 	private void saveTransport(CanineMedicalPlan plan) {
 		List<MedicalPlan.TransportService> services = new ArrayList<>();
 		for (int row = 0; row < transportModel.getRowCount(); row++) {
-			MedicalPlan.TransportService service = new MedicalPlan.TransportService();
-			service.setId(transportRecordId(row));
+			MedicalPlan.TransportService service = new MedicalPlan.TransportService(transportRecordId(row));
 			service.setService(cell(transportModel, row, 0));
 			service.setLocation(cell(transportModel, row, 1));
 			service.setContactNumbers(cell(transportModel, row, 2));
@@ -1439,13 +1439,17 @@ public class CanineMedicalPanel extends JPanel {
 	 * @return true if a new plan snapshot was added.
 	 */
 	private boolean addSnapshot(VetFacility source) {
+		String sourceId = source.getSourceFacilityId().isBlank() ? source.getId() : source.getSourceFacilityId();
 		for (int row = 0; row < selectionModel.getRowCount(); row++) {
 			VetFacility existing = record(selectionModel.getValueAt(row, 13));
-			if (source.getId().equals(existing.getId())) {
+			if (sourceId.equals(existing.getId()) || sourceId.equals(existing.getSourceFacilityId())) {
 				return false;
 			}
 		}
-		selectionModel.addRow(selectionRow(source.copy()));
+		VetFacility snapshot = source.copy();
+		IdentityMigration.remint(snapshot);
+		snapshot.setSourceFacilityId(sourceId);
+		selectionModel.addRow(selectionRow(snapshot));
 		return true;
 	}
 

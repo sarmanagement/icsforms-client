@@ -8,9 +8,10 @@ import java.util.UUID;
 /**
  * Qualitative POD factor rating collected during SAR task debriefing.
  */
-public class PodFactorRating {
+public class PodFactorRating implements Identified {
 	private static final int DEFAULT_MAX_SCORE = 10;
 
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String name = "";
 	private int maxScore = DEFAULT_MAX_SCORE;
@@ -23,9 +24,6 @@ public class PodFactorRating {
 	 * @return factor UUID, never null or blank
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -34,8 +32,10 @@ public class PodFactorRating {
 	 *
 	 * @param id factor UUID; null or blank generates a UUID
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		IdentityGuard.check(this.id, id);
+		this.id = id;
 	}
 
 	/**

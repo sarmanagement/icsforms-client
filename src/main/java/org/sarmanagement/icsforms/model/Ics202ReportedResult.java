@@ -5,11 +5,16 @@ package org.sarmanagement.icsforms.model;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Operator-recorded result associated with an ICS 202 objective and its stated source.
  */
-public class Ics202ReportedResult {
+public class Ics202ReportedResult implements Identified {
+	@JsonProperty("id")
+	@JsonAlias("resultId")
 	private String resultId = UUID.randomUUID().toString();
 	private String objectiveId = "";
 	private String result = "";
@@ -22,13 +27,29 @@ public class Ics202ReportedResult {
 	}
 
 	/** @return stable result identifier. */
+	@JsonIgnore
 	public String getResultId() {
 		return resultId;
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return resultId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(resultId, id);
+		resultId = id;
+	}
+
 	/** @param resultId stable result identifier. */
+	@JsonIgnore
 	public void setResultId(String resultId) {
-		this.resultId = resultId == null || resultId.isBlank() ? UUID.randomUUID().toString() : resultId;
+		setId(resultId);
 	}
 
 	/** @return associated objective identifier, or blank for an incident-level result. */

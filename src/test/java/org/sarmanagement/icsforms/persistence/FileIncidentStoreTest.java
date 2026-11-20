@@ -5,14 +5,24 @@ package org.sarmanagement.icsforms.persistence;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.IdentityMigration;
+import org.sarmanagement.icsforms.model.RecordIdentityAssertions;
 
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,6 +33,164 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** File-specific behavior of the multi-incident store. */
 class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
+	@Test
+	void legacyRecordIdentitiesPersistAcrossSaveAndReload() throws Exception {
+		Path root = tempDir.resolve("identity-migration");
+		IncidentId id = IncidentId.newId();
+		Path document = root.resolve("incidents").resolve(id.value() + ".json");
+		Files.createDirectories(document.getParent());
+		Files.writeString(document, """
+				{"schemaVersion":17,"incidentId":"%s",
+				"form205":{"formId":null,"channels":[{"channelId":null}]}}
+				""".formatted(id.value()));
+
+		try (FileIncidentStore store = new FileIncidentStore(root)) {
+			AppData first = store.load(id);
+			String formId = first.getForm205().getId();
+			String channelId = first.getForm205().getChannels().get(0).getId();
+			assertFalse(formId.isBlank());
+			assertFalse(channelId.isBlank());
+
+			store.save(id, first);
+			AppData reloaded = store.load(id);
+
+			assertEquals(formId, reloaded.getForm205().getId());
+			assertEquals(channelId, reloaded.getForm205().getChannels().get(0).getId());
+			JsonNode saved = new ObjectMapper().readTree(document.toFile());
+			assertTrue(saved.path("form205").has("id"));
+			assertFalse(saved.path("form205").has("formId"));
+			assertTrue(saved.path("form205").path("channels").get(0).has("id"));
+			assertFalse(saved.path("form205").path("channels").get(0).has("channelId"));
+		}
+	}
+
+	@Test
+	void schema18StoredDuplicateIdentitiesAreRepairedAndPersisted() throws Exception {
+		IncidentId id = IncidentId.newId();
+		String sharedFormId = UUID.randomUUID().toString();
+		Path document = tempDir.resolve("incidents").resolve(id.value() + ".json");
+		Files.createDirectories(document.getParent());
+		Files.writeString(document, """
+				{"schemaVersion":18,"incidentId":"%s","revision":0,
+				"additionalForms204":[
+					{"formId":"%s","sharedWorkAssignment":"First"},
+					{"formId":"%s","sharedWorkAssignment":"Second"}]}
+				""".formatted(id.value(), sharedFormId, sharedFormId));
+		Logger migrationLogger = Logger.getLogger(IdentityMigration.class.getName());
+		CaptureHandler capture = new CaptureHandler();
+		migrationLogger.addHandler(capture);
+		try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+			AppData loaded = store.load(id);
+			String firstId = loaded.getAdditionalForms204().get(0).getId();
+			String repairedId = loaded.getAdditionalForms204().get(1).getId();
+
+			assertEquals(sharedFormId, firstId);
+			assertNotEquals(firstId, repairedId);
+			assertTrue(capture.messages.stream().anyMatch(message ->
+					message.contains("Duplicate record identity repaired")));
+
+			store.save(id, loaded);
+			AppData reloaded = store.load(id);
+			assertEquals(firstId, reloaded.getAdditionalForms204().get(0).getId());
+			assertEquals(repairedId, reloaded.getAdditionalForms204().get(1).getId());
+		} finally {
+			migrationLogger.removeHandler(capture);
+		}
+	}
+
+	@Test
+	void schema17FixtureLoadsAndImportsWithUnknownPropertiesAndPreservesContent() throws Exception {
+			JsonNode fixture;
+			try (InputStream input = getClass().getResourceAsStream("/incidents/historical/schema-17-provenance.json")) {
+				fixture = new ObjectMapper().readTree(input);
+			}
+			((ObjectNode) fixture).put("futureLegacyExtension", "ignored by the model");
+			((ObjectNode) fixture.path("activityLogs").get(0)).put("futureEntryExtension", true);
+			StoredJsonMerger.removeAcceptedAt(fixture);
+			Path source = tempDir.resolve("schema-17-import.json");
+			Files.writeString(source, fixture.toPrettyString());
+			IncidentId id = IncidentId.of(fixture.path("incidentId").asText());
+			Path storedFile = tempDir.resolve("incidents").resolve(id.value() + ".json");
+			Files.createDirectories(storedFile.getParent());
+			Files.copy(source, storedFile);
+			ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+			AppData expected = mapper.treeToValue(fixture, AppData.class);
+			IdentityMigration.migrate(expected);
+			expected.setSchemaVersion(AppData.CURRENT_SCHEMA_VERSION);
+
+			Logger readerLogger = Logger.getLogger(IncidentDocumentReader.class.getName());
+			CaptureHandler capture = new CaptureHandler();
+			readerLogger.addHandler(capture);
+			try (FileIncidentStore store = new FileIncidentStore(tempDir)) {
+				AppData stored = store.load(id);
+				RecordIdentityAssertions.collect(stored);
+				assertEquals(AppData.CURRENT_SCHEMA_VERSION, stored.getSchemaVersion());
+				assertSameNonIdentityContent(expected, stored, mapper);
+				assertTrue(mapper.readTree(storedFile.toFile()).has("futureLegacyExtension"));
+				assertTrue(capture.messages.stream().anyMatch(message ->
+						message.contains("$.futureLegacyExtension") && message.contains("Unknown property")));
+
+				IncidentDocumentReader reader = new IncidentDocumentReader();
+				AppData imported = reader.readImport(source);
+				RecordIdentityAssertions.collect(imported);
+				assertEquals(AppData.CURRENT_SCHEMA_VERSION, imported.getSchemaVersion());
+				assertSameNonIdentityContent(expected, imported, mapper);
+				assertTrue(reader.problems().stream().anyMatch(problem ->
+						problem.path().equals("$.futureLegacyExtension")
+								&& problem.severity() == ImportValidationException.Severity.WARNING));
+				assertTrue(capture.messages.stream().anyMatch(message ->
+						message.contains("$.futureLegacyExtension") && message.contains("Unknown property")));
+			} finally {
+				readerLogger.removeHandler(capture);
+			}
+		}
+
+	/**
+	 * Removes canonical identity properties before comparing migrated document content.
+	 *
+	 * @param node serialized incident or child value
+	 * @return copy without identity properties
+	 */
+	private static JsonNode withoutIdentityFields(JsonNode node) {
+			JsonNode copy = node.deepCopy();
+			if (copy instanceof ObjectNode object) {
+				object.remove("id");
+				object.elements().forEachRemaining(FileIncidentStoreTest::stripIdentityFields);
+			} else if (copy instanceof ArrayNode array) {
+				array.elements().forEachRemaining(FileIncidentStoreTest::stripIdentityFields);
+			}
+			return copy;
+		}
+
+		/**
+		 * Compares migrated content while aligning metadata generated during model construction.
+		 *
+		 * @param expected normalized fixture content
+		 * @param actual content returned by a load or import path
+		 * @param mapper JSON serializer used for the comparison
+		 */
+		private static void assertSameNonIdentityContent(AppData expected, AppData actual, ObjectMapper mapper) {
+			expected.setCreatedAt(actual.getCreatedAt());
+			expected.setUpdatedAt(actual.getUpdatedAt());
+			expected.setOriginNodeId(actual.getOriginNodeId());
+			assertEquals(withoutIdentityFields(mapper.valueToTree(expected)),
+					withoutIdentityFields(mapper.valueToTree(actual)));
+		}
+
+		/**
+		 * Removes identity properties recursively from a JSON subtree.
+		 *
+		 * @param node subtree being normalized
+		 */
+		private static void stripIdentityFields(JsonNode node) {
+			if (node instanceof ObjectNode object) {
+				object.remove("id");
+				object.elements().forEachRemaining(FileIncidentStoreTest::stripIdentityFields);
+			} else if (node instanceof ArrayNode array) {
+				array.elements().forEachRemaining(FileIncidentStoreTest::stripIdentityFields);
+	}
+	}
+
 	@Test
 	void recoveryTargetsCannotOverwriteManagedDocumentsOrNodeThroughAliases() throws Exception {
 		Path root = tempDir.resolve("store");
@@ -83,6 +251,31 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 	protected void failNextDelete(IncidentStore store) {
 		((ControllableIncidentStore) store).failNext(ControllableIncidentStore.Operation.DELETE,
 				new IllegalStateException("Scheduled delete failure"));
+	}
+
+	/** Collects migration warnings emitted during the test. */
+	private static class CaptureHandler extends Handler {
+		private final List<String> messages = new ArrayList<>();
+
+		/**
+		 * Captures a log message.
+		 *
+		 * @param record emitted log record
+		 */
+		@Override
+		public void publish(LogRecord record) {
+			messages.add(record.getMessage());
+		}
+
+		/** Flushes the in-memory collector; no operation is required. */
+		@Override
+		public void flush() {
+		}
+
+		/** Closes the in-memory collector; no operation is required. */
+		@Override
+		public void close() {
+		}
 	}
 
 	/** Backups and temporary writes are isolated per incident. */
@@ -160,7 +353,7 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 
 			AppData retryData = store.load(id);
 			actions = retryData.getForm201().getCurrentActions();
-			actions.get(1).setId(actions.get(0).getId());
+			org.sarmanagement.icsforms.TestIdentitySupport.assign(actions.get(1), actions.get(0).getId());
 			long originalRevision = retryData.getRevision();
 			Instant originalUpdatedAt = retryData.getUpdatedAt();
 			Path document = tempDir.resolve("incidents").resolve(id.value() + ".json");
@@ -177,7 +370,7 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 			assertEquals(originalBackup, Files.readString(backup));
 			assertFalse(Files.exists(document.resolveSibling(document.getFileName() + ".tmp")));
 
-			actions.get(1).setId(UUID.randomUUID().toString());
+			org.sarmanagement.icsforms.TestIdentitySupport.assign(actions.get(1), UUID.randomUUID().toString());
 			store.save(id, retryData);
 			assertEquals(originalRevision + 1, retryData.getRevision());
 			assertEquals(originalRevision + 1, store.load(id).getRevision());
@@ -276,7 +469,8 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 				actions.removeIf(action -> actionA.equals(action.getId()));
 				org.sarmanagement.icsforms.model.Ics201Form.ActionEntry newAction =
 						new org.sarmanagement.icsforms.model.Ics201Form.ActionEntry();
-				newAction.setId("00000000-0000-4000-8000-000000000007");
+				org.sarmanagement.icsforms.TestIdentitySupport.assign(newAction,
+						"00000000-0000-4000-8000-000000000007");
 				newAction.setActions("Action C");
 				actions.add(newAction);
 				java.util.Collections.reverse(actions);
@@ -287,7 +481,8 @@ class FileIncidentStoreTest extends AbstractIncidentStoreContractTest {
 				java.util.Collections.reverse(divisions);
 				org.sarmanagement.icsforms.model.OrgChartEntry newDivision =
 						new org.sarmanagement.icsforms.model.OrgChartEntry();
-				newDivision.setId("00000000-0000-4000-8000-000000000008");
+				org.sarmanagement.icsforms.TestIdentitySupport.assign(newDivision,
+						"00000000-0000-4000-8000-000000000008");
 				newDivision.setTitle("Division C");
 				divisions.add(newDivision);
 				store.save(id, data);

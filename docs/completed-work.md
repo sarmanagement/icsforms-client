@@ -2,9 +2,8 @@
 
 This document holds the detailed record of work that has been delivered, moved
 out of [`DraftWorkPlan.md`](../DraftWorkPlan.md) so the plan can focus on what
-remains. Content here is historical: statuses, test counts and commit
-references were accurate when recorded (most at 2026-11-08, before PR #56) and
-are not updated as the code evolves. The binding design contracts that govern
+remains. Entries are dated and describe the evidence available when recorded;
+later additions are noted separately. The binding design contracts that govern
 this work remain in the work plan, Part II.
 
 Contents:
@@ -15,6 +14,7 @@ Contents:
 - Stage 1 local persistence foundation (issues #37 and #39-#44): gates, entity
   ID audit, T-card history rules and exit assessment
 - Live refresh and flicker work (PR #56)
+- Host-mode series Part 1 — stable record identity and record diff (issue #57)
 
 Note: the Stage 1 "T1" and "T2" gates are time gates (UTC and provenance) and
 are unrelated to the deployment topologies of the same names.
@@ -29,8 +29,12 @@ direction in the [Stage 0 inventory](stage-0-decisions.md) and added a
 one shared incident per host, version-checked read/save/update operations, local
 PDF/export on both host and clients, explicit sharing, individual admission,
 stop warnings and connection-loss visibility on both sides. Remaining detailed
-implementation choices are proposals; Stage 0 remains open and no Stage 2 code
-is delivered.
+implementation choices are proposals; Stage 0 remains open and no host or
+network service code is delivered.
+
+**Host-mode foundation update, 2026-11-18:** issue #57 delivers the stable
+identity, migration, index and diff foundation described below. It does not
+implement the host service or issues #58–#62.
 
 | Work | Tracking | Evidence | Status |
 | --- | --- | --- | --- |
@@ -38,7 +42,96 @@ is delivered.
 | ICS 215 planning worksheet and next-period tactics | #35 — closed | `model/Ics215Form.java`, `ui/Ics215Panel.java` | **Complete.** |
 | SAR task status ↔ ICS 214 integration, ICS 204 PDF layout | #19, #20 — closed | `ui/SarTaskPanel.java`, `pdf/Ics204PdfRenderer.java` | **Complete.** |
 | File-backed `IncidentStore` with UUID identity, revision checks, per-incident edit locks and backups | PR #34 and predecessors; hardening in #39–#42 | `persistence/IncidentStore.java`, `persistence/FileIncidentStore.java`, `persistence/IncidentDocumentReader.java` | **Complete for standalone use;** backend-neutral contract and asynchronous saving are delivered. |
+| Host-mode Part 1: stable record IDs, load migration, record index/diff | #57 | `model/Identified.java`, `model/IdentityMigration.java`, `model/RecordIndex.java`, `model/RecordDiff.java`, `docs/record-identity.md` | **Delivered in this PR.** Local persistence only; no host/network behavior. |
 | Live local role panels (ten-phase plan) | #33 and #46 — closed; PRs #32 and #48 merged | See phase table and acceptance record below | **Implementation delivered.** Automated coverage and user-confirmed desktop checks are recorded separately below. |
+
+## Host-mode series — issue #57: stable record identity and record diff
+
+This first series issue gives persisted records, nested collection rows, history
+events and singleton forms a common immutable identity contract. JSON writes
+canonical `id` properties and reads the old field-specific identity names as
+aliases. Schema 18 load migration assigns missing IDs and deterministically
+repairs duplicate stored IDs while preserving the first occurrence; migration is
+persisted before the load returns. Local create and save also normalize missing
+or duplicate identities before committing. Schema-18 external imports reject
+blank or duplicate IDs; schema-17 imports preserve the former within-collection
+duplicate check and repair cross-collection duplicates with a warning. Stored
+files remain tolerant of unknown properties and log warnings.
+
+New-period rollover gives the copied ICS 205 form and channels new identities.
+Plan reuse, channel import, facility snapshots, incident duplication, and
+period-local record copies mint fresh IDs and remap internal references where
+the referenced record is copied.
+History remains append-only; this work does not change strike-out behavior.
+`RecordIndex` provides deterministic snapshots and parent links, and
+`RecordDiff` compares net field values and groups atomic created, changed,
+removed and struck-out operations. These are local model primitives only: host
+transport, service admission, record-version processing and outbox behavior
+remain later series issues.
+
+**CI follow-up, 2026-11-18:** writes assign missing identities without applying
+the duplicate-repair rules used for stored-document migration; read-only
+projections leave legacy T-card and SAR-task identities unassigned until
+explicitly requested. The native radio-channel CSV retains its
+`formId`/`channelId` field names while JSON uses canonical `id` properties, and
+the checked-in Maple Ridge fixture is the current schema-18 store export.
+
+**Displayed-test CI follow-up, 2026-11-18:** new-period ICS 205 channels and
+copied facility/communications records receive independent identities, while
+legacy T-card history entries without IDs remain eligible for content-based
+overlap reconciliation. The rollover, copy, persistence-retention and duplicate
+history regressions cover these identity boundaries.
+
+**Identity review follow-up, 2026-11-18:** task and T-card identity accessors
+are now pure; constructors assign IDs to new records, while deserialization
+leaves missing IDs for migration. Schema-17 imports repair duplicate IDs shared
+across collections with a warning; schema-18 imports still reject document-wide
+per-type duplicates. Regression coverage verifies duplicate repair on stored
+schema-18 loads and import save/reload stability. The canonical `id` property
+and its compatibility warning for older releases are documented.
+
+**Identity review follow-up, 2026-11-19:** rollover archives planned ICS 215
+with IDs distinct from a retained live worksheet. Copy-path coverage now checks
+incident duplication and internal worksheet links, channel import modes,
+facility snapshots, all plan-reuse areas and imported ICS 215. Dedicated
+`RecordIndex`/`RecordDiff`, legacy-alias/reference, and schema-17 load/import
+tests cover the record foundation and compatibility behavior. Legacy schema-17
+unknown properties are ignored with warnings; the fixture's known content is
+compared after the established identity and local-only provenance normalization.
+`IdentitySetterArchitectureTest` ensures production code outside model and
+persistence does not reassign record identities through setters. Mutable
+identity setters reject replacement after assignment; migration and intentional
+copy operations use explicit identity helpers. Public worksheet row/heading
+identity fields remain documented exceptions. The Maple Ridge JSON example was
+intentionally added in commit `dcd4fe9` as a fictional schema-18 example and is
+used by the stable-identity reflection regression; it contains no operational
+incident data.
+
+The identity inventory and the value objects intentionally without IDs are
+listed in [`record-identity.md`](record-identity.md).
+
+**Identity and close review follow-up, 2026-11-20:** Public ID-taking
+constructors are documented as the supported way to create records with a
+known identity. No production identity-setter call sites remain outside
+`model` and `persistence`; `IdentitySetterArchitectureTest` now also checks a
+synthetic violating `Identified.setId` call to prove the rule detects it.
+Existing test-fixture edits replace setter-based identity setup with
+`TestIdentitySupport.assign` or ID constructors; no assertions were weakened.
+Intentional assertion changes are limited to identity behavior: `Ics205FormTest`
+expects archived ICS 205 records to retain their IDs while new-period copies
+receive fresh IDs; `ImportValidationTest` checks schema-specific duplicate
+handling and every expected duplicate path; `ChannelLinkSourceTest` and
+`RadioChannelReferenceTest` verify old channel references do not resolve to
+freshly identified carried channels; and `ActivityLogEntryTest` checks the
+canonical serialized `id` property. Other listed test edits only update
+fixtures, accessors, or schema expectations.
+
+The controller shutdown correction is adjacent lifecycle hardening outside
+issue #57. `AppController.close()` restores its open state and prior autosave
+timer state when draining issued saves fails, allowing the caller to retry;
+listeners, locks, and pending saves remain intact. A regression test covers a
+failed drain with an issued write and verifies that the write can settle before
+a later successful close.
 
 ## Live local role panels — delivery status by phase
 

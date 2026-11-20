@@ -32,6 +32,7 @@ import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics205Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.Ics215Form;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.IncidentLocation;
 import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.IncidentResource;
@@ -56,11 +57,13 @@ import org.sarmanagement.icsforms.persistence.ImportValidationException.Severity
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -74,7 +77,7 @@ class ImportValidationTest {
 	private static final Map<Class<?>, Set<String>> AUDITED_RECORD_IDENTITIES = Map.ofEntries(
 			Map.entry(AppData.class, Set.of("incidentId")),
 			Map.entry(ActivityLogEntry.class, Set.of("entryId")),
-			Map.entry(ActivityLogEntry.EventTypeChange.class, Set.of("changeId")),
+			Map.entry(ActivityLogEntry.EventTypeChange.class, Set.of("id")),
 			Map.entry(ClueLogEntry.class, Set.of("entryId")),
 			Map.entry(CommunicationEntry.class, Set.of("id")),
 			Map.entry(Ics201Form.ActionEntry.class, Set.of("id")),
@@ -318,16 +321,20 @@ class ImportValidationTest {
 					Set<String> duplicatePaths = new HashSet<>();
 					addIdentityFixtures(document, mapper.constructType(AppData.class), "$", duplicate, !duplicate,
 							coveredTypes, identityPaths, duplicatePaths, mapper);
+					addActivityHistoryIdentityFixtures(document, duplicate, !duplicate, coveredTypes, identityPaths,
+							duplicatePaths);
 
 					assertEquals(expectedRecordTypes, coveredTypes);
 					Path source = write(document.toString());
 					ImportValidationException failure = assertThrows(ImportValidationException.class,
 							() -> store.importFile(source));
 					if (duplicate) {
-						assertTrue(failure.getProblems().stream().filter(problem ->
-								problem.message().contains("duplicates another record"))
-								.map(Problem::path).collect(java.util.stream.Collectors.toSet())
-								.containsAll(duplicatePaths), duplicatePaths.toString());
+						assertFalse(duplicatePaths.isEmpty());
+						Set<String> errorPaths = failure.getProblems().stream()
+								.filter(problem -> problem.message().contains("duplicates another record"))
+								.map(Problem::path).collect(java.util.stream.Collectors.toSet());
+						assertTrue(errorPaths.containsAll(duplicatePaths),
+								"Expected duplicate identity paths " + duplicatePaths + " but found " + errorPaths);
 					} else {
 						Set<String> errorPaths = failure.getProblems().stream()
 								.filter(problem -> problem.severity() == Severity.ERROR).map(Problem::path)
@@ -341,10 +348,10 @@ class ImportValidationTest {
 	}
 
 	@Test
-	void recordIdentityUniquenessIsLimitedToEachContainingCollection() throws Exception {
+	void recordIdentityUniquenessIsScopedToRecordTypeAcrossTheDocument() throws Exception {
 		String sharedFormId = "00000000-0000-4000-8000-000000000101";
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
-			String document = """
+			String duplicateAcrossCollections = """
 					{"schemaVersion":%d,"incidentContext":{"incidentName":"Historical reuse"},
 					"form201":{"situationSummary":"Search underway"},
 					"form204":{"formId":"%s"},
@@ -352,25 +359,52 @@ class ImportValidationTest {
 					"operationalPeriodHistory":[{"recordId":"00000000-0000-4000-8000-000000000102",
 						"forms204":[{"formId":"%s"}]}]}
 					""".formatted(AppData.CURRENT_SCHEMA_VERSION, sharedFormId, sharedFormId, sharedFormId);
-			IncidentId id = store.importFile(write(document)).orElseThrow();
-			AppData imported = store.load(id);
-			assertEquals(sharedFormId, imported.getForm204().getFormId());
-			assertEquals(sharedFormId, imported.getAdditionalForms204().get(0).getFormId());
-			assertEquals(sharedFormId,
-					imported.getOperationalPeriodHistory().get(0).getForms204().get(0).getFormId());
+			ImportValidationException repeatedType = assertThrows(ImportValidationException.class,
+					() -> store.importFile(write(duplicateAcrossCollections)));
+			assertTrue(repeatedType.getProblems().stream().anyMatch(problem ->
+					problem.message().contains("duplicates another record of this type")));
 
-			String duplicate = """
-					{"schemaVersion":%d,"incidentContext":{"incidentName":"Duplicate forms"},
+			String sameIdAcrossTypes = """
+					{"schemaVersion":%d,"incidentContext":{"incidentName":"Different record types"},
 					"form201":{"situationSummary":"Search underway"},
-					"additionalForms204":[{"formId":"%s"},{"formId":"%s"}]}
+					"form204":{"formId":"%s"},"form205":{"formId":"%s"}}
 					""".formatted(AppData.CURRENT_SCHEMA_VERSION, sharedFormId, sharedFormId);
-			Path source = write(duplicate);
-			ImportValidationException failure = assertThrows(ImportValidationException.class,
-					() -> store.importFile(source));
-			assertTrue(failure.getProblems().stream().anyMatch(problem ->
-					problem.path().equals("$.additionalForms204[1].formId")
-							&& problem.message().contains("duplicates another record")));
-			assertEquals(1, store.list().size());
+			IncidentId imported = store.importFile(write(sameIdAcrossTypes)).orElseThrow();
+			assertEquals(sharedFormId, store.load(imported).getForm204().getFormId());
+		}
+	}
+
+	@Test
+	void schema17ImportRepairsIdsSharedAcrossCollectionsWithWarning() throws Exception {
+		String sharedFormId = "00000000-0000-4000-8000-000000000101";
+		Path source = write("""
+				{"schemaVersion":17,"incidentContext":{"incidentName":"Historical reuse"},
+				"form204":{"formId":"%s"},
+				"additionalForms204":[{"formId":"%s"}],
+				"operationalPeriodHistory":[{"recordId":"00000000-0000-4000-8000-000000000102",
+					"forms204":[{"formId":"%s"}]}]}
+				""".formatted(sharedFormId, sharedFormId, sharedFormId));
+		Logger migrationLogger = Logger.getLogger(IdentityMigration.class.getName());
+		CaptureHandler capture = new CaptureHandler();
+		migrationLogger.addHandler(capture);
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			IncidentId id = store.importFile(source).orElseThrow();
+			AppData imported = store.load(id);
+			List<String> importedIds = List.of(imported.getForm204().getId(),
+					imported.getAdditionalForms204().get(0).getId(),
+					imported.getOperationalPeriodHistory().get(0).getForms204().get(0).getId());
+
+			assertEquals(3L, importedIds.stream().distinct().count());
+			assertEquals(1L, importedIds.stream().filter(sharedFormId::equals).count());
+			assertTrue(capture.messages.stream().anyMatch(message -> message.contains("Duplicate record identity repaired")));
+
+			store.save(id, imported);
+			AppData reloaded = store.load(id);
+			assertEquals(importedIds, List.of(reloaded.getForm204().getId(),
+					reloaded.getAdditionalForms204().get(0).getId(),
+					reloaded.getOperationalPeriodHistory().get(0).getForms204().get(0).getId()));
+		} finally {
+			migrationLogger.removeHandler(capture);
 		}
 	}
 
@@ -425,7 +459,8 @@ class ImportValidationTest {
 			coveredTypes.add(type.getRawClass());
 			for (String field : identityFields) {
 				String identityPath = path + "." + field;
-				object.put(field, malformed ? "not-a-uuid" : "00000000-0000-4000-8000-000000000001");
+				String identity = malformed ? "not-a-uuid" : fixtureIdentity(path, duplicate);
+				object.put(field, identity);
 				if (malformed) {
 					identityPaths.add(identityPath);
 				}
@@ -448,6 +483,49 @@ class ImportValidationTest {
 						malformed, coveredTypes, identityPaths, duplicatePaths, mapper);
 			}
 		}
+	}
+
+	/**
+	 * Adds history-event fixtures to the first generated activity entry.
+	 *
+	 * @param document import fixture
+	 * @param duplicate whether both history events share an ID
+	 * @param malformed whether the history ID is malformed
+	 * @param coveredTypes model record types represented in the fixture
+	 * @param identityPaths paths expected to reject malformed IDs
+	 * @param duplicatePaths paths expected to reject duplicate IDs
+	 */
+	private void addActivityHistoryIdentityFixtures(ObjectNode document, boolean duplicate, boolean malformed,
+			Set<Class<?>> coveredTypes, Set<String> identityPaths, Set<String> duplicatePaths) {
+		ObjectNode activity = (ObjectNode) ((ObjectNode) document.withArray("activityLogs").get(0))
+				.withArray("activityLog").get(0);
+		ArrayNode history = activity.putArray("eventTypeChangeHistory");
+		int size = duplicate ? 2 : 1;
+		for (int index = 0; index < size; index++) {
+			String path = "$.activityLogs[0].activityLog[0].eventTypeChangeHistory[" + index + "].id";
+			String eventPath = "$.activityLogs[0].activityLog[0].eventTypeChangeHistory[" + index + "]";
+			history.addObject().put("id", malformed ? "not-a-uuid" : fixtureIdentity(eventPath, duplicate));
+			if (malformed) {
+				identityPaths.add(path);
+			}
+			if (duplicate && index == 1) {
+				duplicatePaths.add(path);
+			}
+		}
+		coveredTypes.add(ActivityLogEntry.EventTypeChange.class);
+	}
+
+	/**
+	 * Produces deterministic test identities, repeating only within the tested collection.
+	 *
+	 * @param path record JSON path
+	 * @param duplicate whether the second collection item should reuse the first item's ID
+	 * @return canonical UUID test identity
+	 */
+	private String fixtureIdentity(String path, boolean duplicate) {
+		String identityPath = duplicate && path.endsWith("[1]")
+				? path.substring(0, path.length() - 3) + "[0]" : path;
+		return UUID.nameUUIDFromBytes(identityPath.getBytes(StandardCharsets.UTF_8)).toString();
 	}
 
 		@Test

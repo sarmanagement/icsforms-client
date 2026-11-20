@@ -5,11 +5,16 @@ package org.sarmanagement.icsforms.model;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Stable, ordered incident objective with an explicit human assessment.
  */
-public class IncidentObjective {
+public class IncidentObjective implements Identified {
+	@JsonProperty("id")
+	@JsonAlias("objectiveId")
 	private String objectiveId = UUID.randomUUID().toString();
 	private String text = "";
 	private int displayOrder;
@@ -35,16 +40,29 @@ public class IncidentObjective {
 	}
 
 	/** @return stable objective identifier. */
+	@JsonIgnore
 	public String getObjectiveId() {
-		if (objectiveId == null || objectiveId.isBlank()) {
-			objectiveId = UUID.randomUUID().toString();
-		}
 		return objectiveId;
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return objectiveId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(objectiveId, id);
+		objectiveId = id;
+	}
+
 	/** @param objectiveId stable objective identifier. */
+	@JsonIgnore
 	public void setObjectiveId(String objectiveId) {
-		this.objectiveId = objectiveId == null || objectiveId.isBlank() ? UUID.randomUUID().toString() : objectiveId;
+		setId(objectiveId);
 	}
 
 	/** @return objective wording. */

@@ -3,12 +3,18 @@
  */
 package org.sarmanagement.icsforms.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.UUID;
 
 /**
  * One incident-area hazard and mitigation row on an ICS 215A analysis.
  */
-public class SafetyAnalysisEntry {
+public class SafetyAnalysisEntry implements Identified {
+	@JsonProperty("id")
+	@JsonAlias("entryId")
 	private String entryId = UUID.randomUUID().toString();
 	private String incidentArea = "All";
 	private String hazardsRisks = "";
@@ -20,11 +26,23 @@ public class SafetyAnalysisEntry {
 	 *
 	 * @return row identifier.
 	 */
+	@JsonIgnore
 	public String getEntryId() {
-		if (entryId == null || entryId.isBlank()) {
-			entryId = UUID.randomUUID().toString();
-		}
 		return entryId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return entryId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(entryId, id);
+		entryId = id;
 	}
 
 	/**
@@ -32,8 +50,9 @@ public class SafetyAnalysisEntry {
 	 *
 	 * @param entryId row identifier; blank values are replaced on access.
 	 */
+	@JsonIgnore
 	public void setEntryId(String entryId) {
-		this.entryId = entryId;
+		setId(entryId);
 	}
 
 	/**

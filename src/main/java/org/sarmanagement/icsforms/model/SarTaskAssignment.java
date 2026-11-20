@@ -4,9 +4,13 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,8 +20,10 @@ import java.util.UUID;
 /**
  * Search and rescue task scaffold linked from an ICS 204 assignment entry.
  */
-public class SarTaskAssignment {
-	private String taskId;
+public class SarTaskAssignment implements Identified {
+	@JsonProperty("id")
+	@JsonAlias("taskId")
+	private String taskId = UUID.randomUUID().toString();
 	private String assignmentId = "";
 	private String assignmentTeamNumber = "";
 	private String resourceType = "";
@@ -94,6 +100,23 @@ public class SarTaskAssignment {
 	private String iapPage = "";
 
 	/**
+	 * Creates a new task assignment with a fresh identity.
+	 */
+	public SarTaskAssignment() {
+	}
+
+	/**
+	 * Restores a task assignment identity during JSON deserialization.
+	 *
+	 * @param taskId
+	 *            persisted task identity, or null when the document predates identities
+	 */
+	@JsonCreator
+	public SarTaskAssignment(@JsonProperty("id") @JsonAlias("taskId") String taskId) {
+		this.taskId = taskId;
+	}
+
+	/**
 	 * Returns the append-only lifecycle status history.
 	 *
 	 * @return lifecycle changes in recorded order, never {@code null}.
@@ -137,10 +160,11 @@ public class SarTaskAssignment {
 	 * @param newStatus status after the change.
 	 * @param changedAt UTC instant when the change took effect.
 	 * @param provenance optional attribution for the change.
+	 * @param id stable identity for this history entry.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record LifecycleStatusChange(String previousStatus, String newStatus, Instant changedAt,
-			Provenance provenance) {
+			Provenance provenance, String id) implements Identified {
 		/**
 		 * Requires the lifecycle transition to have both statuses and a timestamp.
 		 */
@@ -148,12 +172,41 @@ public class SarTaskAssignment {
 			Objects.requireNonNull(previousStatus, "previousStatus");
 			Objects.requireNonNull(newStatus, "newStatus");
 			Objects.requireNonNull(changedAt, "changedAt");
+			if (id == null || id.isBlank()) {
+				id = UUID.randomUUID().toString();
+			}
+		}
+
+		/**
+		 * Creates a history record using the legacy constructor signature.
+		 *
+		 * @param previousStatus status before the change
+		 * @param newStatus status after the change
+		 * @param changedAt UTC instant when the change took effect
+		 * @param provenance optional attribution
+		 */
+		public LifecycleStatusChange(String previousStatus, String newStatus, Instant changedAt,
+				Provenance provenance) {
+			this(previousStatus, newStatus, changedAt, provenance, UUID.randomUUID().toString());
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public String getId() {
+			return id;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void setId(String id) {
+			throw new UnsupportedOperationException("History record identities are immutable.");
 		}
 	}
 
 	/**
 	 * Creates a SAR scaffold from a linked ICS 204 resource assignment, preserving
 	 * communications fallback labels and their optional stable channel references.
+	 * Copied communication records receive stable identities scoped to this assignment.
 	 *
 	 * @param resourceAssignment
 	 *            ICS 204 resource assignment.
@@ -203,9 +256,17 @@ public class SarTaskAssignment {
 			task.setSecondaryManagementName(form204.getSecondaryManagementName());
 			task.setSecondaryManagementContact(form204.getSecondaryManagementContact());
 			List<CommunicationEntry> copied = new ArrayList<>();
-			for (CommunicationEntry entry : form204.getCommunications()) {
+			for (int index = 0; index < form204.getCommunications().size(); index++) {
+				CommunicationEntry entry = form204.getCommunications().get(index);
 				CommunicationEntry clone = new CommunicationEntry();
-				clone.setId(entry.getId());
+				String assignmentId = resourceAssignment == null ? "" : resourceAssignment.getAssignmentId();
+				String sourceId = entry.getId();
+				String identitySource = sourceId == null || sourceId.isBlank()
+						? Integer.toString(index) : sourceId;
+				String identitySeed = "sar-task-communication:" + assignmentId
+						+ ":" + identitySource;
+				IdentityMigration.replaceId(clone,
+						UUID.nameUUIDFromBytes(identitySeed.getBytes(StandardCharsets.UTF_8)).toString());
 				clone.setName(entry.getName());
 				clone.setFunction(entry.getFunction());
 				clone.setPrimaryContact(entry.getPrimaryContact());
@@ -247,16 +308,27 @@ public class SarTaskAssignment {
 	}
 
 	/**
-	 * Returns the stable identity of this task, assigning a UUID to legacy tasks
-	 * without one.
+	 * Returns the stored identity of this task.
 	 *
-	 * @return task UUID, never {@code null} or blank.
+	 * @return task UUID, or null until migration assigns one
 	 */
+	@JsonIgnore
 	public String getTaskId() {
-		if (taskId == null || taskId.isBlank()) {
-			taskId = UUID.randomUUID().toString();
-		}
 		return taskId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return taskId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(taskId, id);
+		taskId = id;
 	}
 
 	/**
@@ -272,10 +344,11 @@ public class SarTaskAssignment {
 	 * Sets this task's identity during deserialization or migration.
 	 *
 	 * @param taskId
-	 *            task UUID; missing values are generated on first access.
+	 *            task UUID; blank/null clears the identity until migration.
 	 */
+	@JsonIgnore
 	public void setTaskId(String taskId) {
-		this.taskId = taskId;
+		setId(taskId);
 	}
 
 	/**

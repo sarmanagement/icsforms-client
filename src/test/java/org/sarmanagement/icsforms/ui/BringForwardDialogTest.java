@@ -6,7 +6,13 @@ package org.sarmanagement.icsforms.ui;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Ics215Form;
+import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
+import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.model.RecordIdentityAssertions;
+import org.sarmanagement.icsforms.model.SafetyMessageBlock;
+import org.sarmanagement.icsforms.model.VetFacility;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -23,6 +29,7 @@ import java.awt.GraphicsEnvironment;
 import java.awt.Window;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -145,7 +152,27 @@ class BringForwardDialogTest {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			AppData source = new AppData();
 			source.getMedicalPlan().setEmergencyProcedures("Other incident procedure");
-			store.create(source);
+			RadioChannel sourceChannel = new RadioChannel();
+			sourceChannel.setChannelName("Other incident channel");
+			source.getForm205().getChannels().add(sourceChannel);
+			SafetyMessageBlock safetyBlock = new SafetyMessageBlock();
+			safetyBlock.setHazard("Other incident hazard");
+			source.getForm208().getHazardBlocks().add(safetyBlock);
+			MedicalPlan.Hospital sourceHospital = new MedicalPlan.Hospital();
+			sourceHospital.setName("Other incident hospital");
+			source.getMedicalPlan().getHospitals().add(sourceHospital);
+			VetFacility sourceFacility = new VetFacility();
+			sourceFacility.setName("Other incident veterinary hospital");
+			source.getCanineMedicalPlan().getSelectedFacilities().add(sourceFacility);
+			Ics215Form.ResourceHeading sourceHeading = new Ics215Form.ResourceHeading();
+			sourceHeading.category = "Medical";
+			source.getNextPeriodForm215().getResourceHeadings().add(sourceHeading);
+			Ics215Form.WorkRow sourceRow = new Ics215Form.WorkRow();
+			sourceRow.resourceAllocations.put(sourceHeading.id, new Ics215Form.ResourceAllocation());
+			sourceRow.ics204DraftFormId = "source-draft-form";
+			source.getNextPeriodForm215().getWorkRows().add(sourceRow);
+			Map<Class<?>, Set<String>> sourceIds = RecordIdentityAssertions.collect(source);
+			var sourceId = store.create(source);
 			AppData target = new AppData();
 			var id = store.create(target);
 			AppController controller = new AppController(target, store, id,
@@ -161,16 +188,59 @@ class BringForwardDialogTest {
 					JCheckBox human = (JCheckBox) choices.get(PlanReviewArea.HUMAN_MEDICAL);
 					assertTrue(human.isEnabled());
 					assertFalse(human.isSelected());
-					assertFalse(((JCheckBox) choices.get(PlanReviewArea.COMMUNICATIONS)).isEnabled());
+					for (PlanReviewArea area : PlanReviewArea.values()) {
+						JCheckBox choice = (JCheckBox) choices.get(area);
+						assertTrue(choice.isEnabled(), area.name());
+						choice.doClick();
+					}
 					JButton apply = (JButton) field(dialog, "apply");
-					assertFalse(apply.isEnabled());
-					human.doClick();
+					assertTrue(apply.isEnabled());
+					JCheckBox ics215 = (JCheckBox) field(dialog, "ics215Choice");
+					assertTrue(ics215.isEnabled());
+					ics215.doClick();
 					assertTrue(apply.isEnabled());
 					assertSame(target, controller.getData());
 					assertEquals(id, controller.getActiveIncidentId());
 					assertEquals("", target.getMedicalPlan().getEmergencyProcedures());
+					var imported = controller.getImportPlanSources(sourceId).get(0);
+					Map<Class<?>, Set<String>> importedIds =
+							assertDoesNotThrow(() -> RecordIdentityAssertions.collect(imported));
+					String sourceChannelId = imported.getForm205().getChannels().get(0).getId();
+					String sourceSafetyId = imported.getForm208().getHazardBlocks().get(0).getId();
+					String sourcePlanId = imported.getMedicalPlan().getId();
+					String sourceHospitalId = imported.getMedicalPlan().getHospitals().get(0).getId();
+					String sourceFacilityId = imported.getCanineMedicalPlan().getSelectedFacilities().get(0).getId();
+					String sourceHeadingId = imported.getNextPeriodForm215().getResourceHeadings().get(0).id;
+					String sourceRowId = imported.getNextPeriodForm215().getWorkRows().get(0).id;
+					controller.bringForwardPlans(imported, Set.of(PlanReviewArea.values()), true, true, false);
+					Map<Class<?>, Set<String>> targetIds =
+							assertDoesNotThrow(() -> RecordIdentityAssertions.collect(target));
+					for (Map.Entry<Class<?>, Set<String>> entry : importedIds.entrySet()) {
+						assertTrue(java.util.Collections.disjoint(entry.getValue(),
+								targetIds.getOrDefault(entry.getKey(), Set.of())));
+					}
+					assertNotEquals(sourceChannelId, target.getForm205().getChannels().get(0).getId());
+					assertNotEquals(sourceSafetyId, target.getForm208().getHazardBlocks().get(0).getId());
+					assertNotEquals(sourcePlanId, target.getMedicalPlan().getId());
+					assertNotEquals(sourceHospitalId, target.getMedicalPlan().getHospitals().get(0).getId());
+					assertNotEquals(sourceFacilityId,
+							target.getCanineMedicalPlan().getSelectedFacilities().get(0).getId());
+					assertNotEquals(sourceHeadingId, target.getNextPeriodForm215().getResourceHeadings().get(0).id);
+					assertNotEquals(sourceRowId, target.getNextPeriodForm215().getWorkRows().get(0).id);
+					assertTrue(target.getNextPeriodForm215().getWorkRows().get(0).resourceAllocations
+							.containsKey(target.getNextPeriodForm215().getResourceHeadings().get(0).id));
+					assertFalse(target.getNextPeriodForm215().getWorkRows().get(0).resourceAllocations
+							.containsKey(sourceHeadingId));
+					assertEquals("", target.getNextPeriodForm215().getWorkRows().get(0).ics204DraftFormId);
+					assertEquals(sourceHospitalId, imported.getMedicalPlan().getHospitals().get(0).getId());
+					assertEquals(importedIds, assertDoesNotThrow(() -> RecordIdentityAssertions.collect(imported)));
+					assertDoesNotThrow(() -> RecordIdentityAssertions.collect(target));
+					assertEquals(sourceIds, assertDoesNotThrow(() -> RecordIdentityAssertions.collect(source)));
+					assertEquals("Other incident hazard", source.getForm208().getHazardBlocks().get(0).getHazard());
+					assertEquals("Other incident hospital", source.getMedicalPlan().getHospitals().get(0).getName());
 				} finally {
 					dialog.dispose();
+					controller.close();
 				}
 			});
 		}

@@ -6,11 +6,14 @@ package org.sarmanagement.icsforms.model;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Incident Action Plan Safety Analysis (ICS 215A) content and review metadata.
  */
-public class Ics215aForm {
+public class Ics215aForm implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
+	private String id = UUID.randomUUID().toString();
 	private String incidentNumber = "";
 	private LocalDateTime preparedDateTime;
 	private String safetyOfficerName = "";
@@ -21,6 +24,20 @@ public class Ics215aForm {
 	private List<SafetyAnalysisEntry> entries = new ArrayList<>();
 	private boolean includeInIap;
 	private String iapPage = "";
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
+		this.id = id;
+	}
 
 	/**
 	 * Returns the incident number.

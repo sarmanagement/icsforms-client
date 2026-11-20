@@ -6,6 +6,9 @@ package org.sarmanagement.icsforms.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -31,8 +34,10 @@ import java.util.UUID;
  * </p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class ClueLogEntry {
-	private String entryId;
+public class ClueLogEntry implements Identified {
+	@JsonProperty("id")
+	@JsonAlias("entryId")
+	private String entryId = UUID.randomUUID().toString();
 	private String assignmentId = "";
 	private String detectingTask = "";
 	/**
@@ -76,10 +81,14 @@ public class ClueLogEntry {
 	 *
 	 * @return clue entry UUID, never {@code null} or blank.
 	 */
+	@JsonIgnore
 	public String getEntryId() {
-		if (entryId == null || entryId.isBlank()) {
-			entryId = UUID.randomUUID().toString();
-		}
+		return entryId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
 		return entryId;
 	}
 
@@ -89,8 +98,17 @@ public class ClueLogEntry {
 	 * @param entryId
 	 *            stable entry UUID; missing values are generated on first access.
 	 */
+	@JsonIgnore
 	public void setEntryId(String entryId) {
-		this.entryId = entryId;
+		setId(entryId);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(entryId, id);
+		entryId = id;
 	}
 
 	/**

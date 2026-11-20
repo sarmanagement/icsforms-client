@@ -6,11 +6,14 @@ package org.sarmanagement.icsforms.model;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Editable ICS 208 Safety Message/Plan, including groundwork for ICS 208 HM.
  */
-public class Ics208Form {
+public class Ics208Form implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
+	private String id = UUID.randomUUID().toString();
 	/** ICS 208 message formats supported by safety workflows. */
 	public enum MessageType {
 		SAFETY_MESSAGE_PLAN,
@@ -43,6 +46,20 @@ public class Ics208Form {
 	private LocalDateTime preparedDateTime;
 	private boolean includeInIap;
 	private String iapPage = "";
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
+		this.id = id;
+	}
 
 	/**
 	 * Returns the ICS 208 document type.

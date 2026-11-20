@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.Provenance;
 
 import java.io.IOException;
@@ -147,7 +148,7 @@ public class LocalRepository {
 		JsonNode localOriginal = original.deepCopy();
 		StoredJsonMerger.removeAcceptedAt(localOriginal);
 		AppData data = new IncidentDocumentReader().readStored(source);
-		data.normalizeIdentity();
+		IdentityMigration.migrate(data);
 		data.reconcileMedicalUnitLeaderAssignment();
 		JsonNode migrated = mergeKnownProperties(localOriginal, SHARED_MAPPER.valueToTree(data));
 		if (!original.equals(migrated)) {
@@ -164,7 +165,9 @@ public class LocalRepository {
 	 * @return merged JSON value
 	 */
 	private JsonNode mergeKnownProperties(JsonNode original, JsonNode updated) {
-		return StoredJsonMerger.merge(SHARED_MAPPER, original, updated);
+		JsonNode canonicalOriginal = original.deepCopy();
+		StoredJsonMerger.removeIdentityAliases(SHARED_MAPPER, canonicalOriginal, AppData.class);
+		return StoredJsonMerger.merge(SHARED_MAPPER, canonicalOriginal, updated);
 	}
 
 	/**

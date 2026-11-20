@@ -39,6 +39,17 @@ The following decisions were provided on 2026-11-17:
   deduplication and conflict-resolution process is needed; a likely case is the
   same event being logged twice in the same log. The process and the stage in
   which disconnected entry becomes available remain to be specified.
+- **Record identity and changes (issue #57):** persisted records, nested rows,
+  history events and singleton forms have immutable stable IDs serialized as
+  `id`; legacy names are read as aliases. Stored legacy data receives missing
+  IDs once during load migration, which is persisted before returning the
+  document. Copies that become new records receive new IDs, and copied internal
+  references are remapped. History is retained rather than physically deleting
+  or striking-out records. Record-level submissions use per-record versions,
+  three-way comparison of net field values, atomic multi-record batches,
+  indefinitely retained version history and operation receipts, and a durable
+  client outbox. This records the issue #57 design boundary; it does not
+  implement the later host/service, version admission or offline-sync work.
 
 ## Existing targets and remaining decisions
 
@@ -46,7 +57,7 @@ The following decisions were provided on 2026-11-17:
 | --- | --- | --- |
 | Incident authority and transfer | One authoritative host per incident; planned freeze, export, validated import and retirement or read-only conversion of the old host. Standalone use remains available. | Who authorizes a transfer; how authority is verified, clients redirected and outstanding edits handled; recovery when the outgoing host is lost. |
 | Data classification and retention | Protect incident and personal information; minimize sensitive logs; data-at-rest encryption is not required at this stage. | Classifications and permitted pilot data; record owner, retention and deletion rules; credential protection, key custody and recovery; archive and export policy. |
-| Offline edits and conflicts | Users can add information while disconnected; no silent overwrites or discarded drafts. The current plan places the durable outbox and offline synchronization in Stage 4. | When disconnected entry becomes available; durability, synchronization and recovery; how duplicate events are identified and resolved, distinct from retry deduplication; conflict detection and resolution, including concurrent edits and closed periods. |
+| Offline edits and conflicts | Users can add information while disconnected; no silent overwrites or discarded drafts. Stage 2 owns the durable outbox; Stage 4 expands it into robust replay and conflict recovery. | How duplicate events are identified and resolved, distinct from retry deduplication; conflict recovery for concurrent edits and closed periods; synchronization and attachment behavior. |
 | Current information | Views update affected content without flicker or lost drafts; disconnected or stale information is labelled with its last confirmed time. | Define confirmation and staleness semantics, polling or notification expectations and measurable responsiveness; specify behavior when a refresh or host connection fails. |
 | Devices and networks | Devices able to run Java; Java application packaging; incident Wi-Fi with no internet required; no direct client database access. | Minimum Java runtime, platform and hardware requirements, client count, network and connectivity assumptions, host discovery and address changes, and realistic incident/data sizes for the pilot. |
 | Admission, roles and recovery | Invitation-based device admission and host identity verification; no shared incident password. Stage 2 includes basic admission; Stage 3 expands lifecycle, operator claims and roles. | Stage 2 invitation and credential lifecycle, secure credential storage, expiry and revocation, administrator bootstrap and recovery, lost-device handling, and which permissions are actually enforced in the pilot. Resolve the Stage 2/Stage 3 boundary without weakening the device trust boundary. |

@@ -1,6 +1,8 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -10,12 +12,14 @@ import java.util.UUID;
 /**
  * First-cut Assignment List (ICS 204) content and resource records.
  */
-public class Ics204Form {
+public class Ics204Form implements Identified {
 	public static final String MANAGEMENT_STAGING_AREA = "stagingArea";
 	public static final String MANAGEMENT_BRANCH = "branch";
 	public static final String MANAGEMENT_DIVISION = "division";
 	public static final String MANAGEMENT_GROUP = "group";
 
+	@JsonProperty("id")
+	@JsonAlias("formId")
 	private String formId = UUID.randomUUID().toString();
 	private String managementContext = MANAGEMENT_STAGING_AREA;
 	private String branch = "";
@@ -45,8 +49,23 @@ public class Ics204Form {
 	 *
 	 * @return stable form identifier (UUID string).
 	 */
+	@JsonIgnore
 	public String getFormId() {
 		return formId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return formId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(formId, id);
+		formId = id;
 	}
 
 	/**
@@ -55,8 +74,9 @@ public class Ics204Form {
 	 * @param formId
 	 *            stable form identifier.
 	 */
+	@JsonIgnore
 	public void setFormId(String formId) {
-		this.formId = (formId == null || formId.isBlank()) ? UUID.randomUUID().toString() : formId;
+		setId(formId);
 	}
 
 	/**

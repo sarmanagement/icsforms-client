@@ -13,7 +13,9 @@ import java.util.UUID;
 /**
  * Incident Briefing (ICS 201) content captured by the desktop editor.
  */
-public class Ics201Form {
+public class Ics201Form implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
+	private String id = UUID.randomUUID().toString();
 	private String incidentName = "";
 	private String incidentNumber = "";
 	private LocalDate dateInitiated;
@@ -28,6 +30,20 @@ public class Ics201Form {
 	private LocalDateTime preparedDateTime;
 	private String preparedBySignature = "";
 	private String iapPage = "";
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
+		this.id = id;
+	}
 
 	/**
 	 * Returns the incident name.
@@ -298,7 +314,8 @@ public class Ics201Form {
 	/**
 	 * Current and planned actions row.
 	 */
-	public static class ActionEntry {
+	public static class ActionEntry implements Identified {
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		private String id = UUID.randomUUID().toString();
 		private String time = "";
 		private String actions = "";
@@ -309,9 +326,6 @@ public class Ics201Form {
 		 * @return row UUID, never null or blank
 		 */
 		public String getId() {
-			if (id == null || id.isBlank()) {
-				id = UUID.randomUUID().toString();
-			}
 			return id;
 		}
 
@@ -320,8 +334,10 @@ public class Ics201Form {
 		 *
 		 * @param id row UUID; null or blank generates a UUID
 		 */
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
-			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+			IdentityGuard.check(this.id, id);
+			this.id = id;
 		}
 
 		/**
@@ -366,7 +382,8 @@ public class Ics201Form {
 	/**
 	 * Resource summary row.
 	 */
-	public static class ResourceSummaryEntry {
+	public static class ResourceSummaryEntry implements Identified {
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		private String id = UUID.randomUUID().toString();
 		private String resource = "";
 		private String resourceIdentifier = "";
@@ -381,9 +398,6 @@ public class Ics201Form {
 		 * @return row UUID, never null or blank
 		 */
 		public String getId() {
-			if (id == null || id.isBlank()) {
-				id = UUID.randomUUID().toString();
-			}
 			return id;
 		}
 
@@ -392,8 +406,10 @@ public class Ics201Form {
 		 *
 		 * @param id row UUID; null or blank generates a UUID
 		 */
+		@com.fasterxml.jackson.annotation.JsonIgnore
 		public void setId(String id) {
-			this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+			IdentityGuard.check(this.id, id);
+			this.id = id;
 		}
 
 		/**

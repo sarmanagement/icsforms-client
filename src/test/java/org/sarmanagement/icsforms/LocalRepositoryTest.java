@@ -168,14 +168,15 @@ class LocalRepositoryTest {
 		actions.removeIf(action -> actionA.equals(action.getId()));
 		org.sarmanagement.icsforms.model.Ics201Form.ActionEntry added =
 				new org.sarmanagement.icsforms.model.Ics201Form.ActionEntry();
-		added.setId("00000000-0000-4000-8000-000000000016");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(added, "00000000-0000-4000-8000-000000000016");
 		added.setActions("Action C");
 		actions.add(0, added);
 		var divisions = data.getOrganizationalChart().getAssignmentList().getBranches().get(0).getDivisions();
 		java.util.Collections.reverse(divisions);
 		org.sarmanagement.icsforms.model.OrgChartEntry newDivision =
 				new org.sarmanagement.icsforms.model.OrgChartEntry();
-		newDivision.setId("00000000-0000-4000-8000-000000000017");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(newDivision,
+				"00000000-0000-4000-8000-000000000017");
 		newDivision.setTitle("Division C");
 		divisions.add(newDivision);
 		repository.save(data);
@@ -667,8 +668,7 @@ class LocalRepositoryTest {
 		form202.setApprovedDateTime(LocalDateTime.parse("2026-01-01T01:00:00"));
 		form202.setIapPage("2");
 
-		ResourceAssignment resource = new ResourceAssignment();
-		resource.setAssignmentId("assign-1");
+		ResourceAssignment resource = new ResourceAssignment("assign-1");
 		resource.setAssignmentTeamNumber("A-1");
 		resource.setResourceType(SarTaskSupport.RESOURCE_TYPE_CANINE);
 		resource.setTaskType(SarTaskSupport.TASK_TYPE_AREA);

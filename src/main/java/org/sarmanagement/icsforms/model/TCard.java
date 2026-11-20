@@ -8,6 +8,7 @@ package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -32,17 +33,16 @@ import java.util.UUID;
  * </p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class TCard {
+public class TCard implements Identified {
 
 	/**
 	 * Stable UUID assigned once at creation and never changed. Used by
 	 * {@link SarTaskResource#getResourceId()} to reference this card without
-	 * relying on mutable display-name strings. Initialized to {@code null}; a UUID
-	 * is generated on first access via {@link #getResourceId()} to ensure legacy
-	 * records deserialized without a {@code resourceId} field receive a stable
-	 * value rather than a new random one each time.
+	 * relying on mutable display-name strings.
 	 */
-	private String resourceId = null;
+	@JsonProperty("id")
+	@JsonAlias("resourceId")
+	private String resourceId = UUID.randomUUID().toString();
 
 	private TCardType cardType = TCardType.PERSONNEL;
 
@@ -166,17 +166,19 @@ public class TCard {
 	 * @param action check-in or check-out action.
 	 * @param eventAt UTC instant when the event occurred.
 	 * @param provenance optional attribution for the event.
-	 * @param eventId stable identity for this occurrence, absent on legacy events.
+	 * @param id stable identity for this occurrence, absent on legacy events.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
-	public record CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance, String eventId) {
+	public record CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance,
+			@JsonAlias("eventId") String id)
+			implements Identified {
 		/**
 		 * Requires an event type and timestamp and normalizes an optional event identity.
 		 */
 		public CheckInOutEvent {
 			Objects.requireNonNull(action, "action");
 			Objects.requireNonNull(eventAt, "eventAt");
-			eventId = eventId == null || eventId.isBlank() ? null : eventId;
+			id = id == null || id.isBlank() ? null : id;
 		}
 
 		/**
@@ -189,6 +191,27 @@ public class TCard {
 		public CheckInOutEvent(CheckInOutAction action, Instant eventAt, Provenance provenance) {
 			this(action, eventAt, provenance, UUID.randomUUID().toString());
 		}
+
+		/** {@inheritDoc} */
+		@Override
+		public String getId() {
+			return id;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void setId(String id) {
+			throw new UnsupportedOperationException("History record identities are immutable.");
+		}
+
+		/**
+		 * Returns the event identity under its legacy accessor name.
+		 *
+		 * @return event identity
+		 */
+		public String eventId() {
+			return id;
+		}
 	}
 
 	/**
@@ -198,16 +221,29 @@ public class TCard {
 	}
 
 	/**
+	 * Creates a T-card with its resource identity assigned at construction.
+	 *
+	 * @param resourceId resource identity; null or blank creates a fresh identity
+	 */
+	public TCard(String resourceId) {
+		this.resourceId = resourceId == null || resourceId.isBlank()
+				? UUID.randomUUID().toString() : resourceId;
+	}
+
+	/**
 	 * Restores a radio assignment and its optional identity together so JSON
 	 * property ordering cannot accidentally discard a persisted reference.
 	 * @param radioChannel persisted fallback label; null becomes empty
 	 * @param radioChannelId persisted channel identity; null becomes empty
+	 * @param resourceId persisted resource identity; null when missing from legacy JSON
 	 */
 	@JsonCreator
 	public TCard(@JsonProperty("radioChannel") String radioChannel,
-			@JsonProperty("radioChannelId") String radioChannelId) {
+			@JsonProperty("radioChannelId") String radioChannelId,
+			@JsonProperty("id") @JsonAlias("resourceId") String resourceId) {
 		this.radioChannel = radioChannel == null ? "" : radioChannel;
 		setRadioChannelId(radioChannelId);
+		this.resourceId = resourceId;
 	}
 
 	/**
@@ -230,16 +266,27 @@ public class TCard {
 	}
 
 	/**
-	 * Returns the stable resource identifier (UUID) for this card. Used by
-	 * {@link SarTaskResource} to reference this card without relying on names.
+	 * Returns the stored resource identifier for this card.
 	 *
-	 * @return resource UUID, never {@code null}.
+	 * @return resource UUID, or null until migration assigns one
 	 */
+	@JsonIgnore
 	public String getResourceId() {
-		if (resourceId == null || resourceId.isBlank()) {
-			resourceId = UUID.randomUUID().toString();
-		}
 		return resourceId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return resourceId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(resourceId, id);
+		resourceId = id;
 	}
 
 	/**
@@ -256,10 +303,11 @@ public class TCard {
 	 * deserialization.
 	 *
 	 * @param resourceId
-	 *            resource UUID string; blank/null generates a new UUID.
+	 *            resource UUID string; blank/null clears the identity until migration.
 	 */
+	@JsonIgnore
 	public void setResourceId(String resourceId) {
-		this.resourceId = (resourceId == null || resourceId.isBlank()) ? UUID.randomUUID().toString() : resourceId;
+		setId(resourceId);
 	}
 
 	/**

@@ -376,7 +376,7 @@ class ActivityEntryDialogTest {
 		Ics214Form log = new Ics214Form();
 		log.setLinkedSarTaskAssignmentId("legacy-linked-task");
 		ActivityLogEntry entry = new ActivityLogEntry();
-		entry.setEntryId("legacy-entry-id");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(entry, "legacy-entry-id");
 		entry.setResourceIdentifier("Robin");
 		LogEntryContext context = ActivityEntryDialog.followUpContext(new JPanel(), log, entry);
 		assertEquals("legacy-linked-task", context.assignmentId());
@@ -418,12 +418,10 @@ class ActivityEntryDialogTest {
 	void genericSelectorIncludesPrimaryAndAdditionalAssignmentsWithoutSarTasks() throws Exception {
 		AppData data = new AppData();
 		data.setIncidentMode(IncidentMode.GENERIC);
-		ResourceAssignment primary = new ResourceAssignment();
-		primary.setAssignmentId("generic-primary");
+		ResourceAssignment primary = new ResourceAssignment("generic-primary");
 		primary.setResourceIdentifier("Crew One");
 		data.getForm204().getResourcesAssigned().add(primary);
-		ResourceAssignment additional = new ResourceAssignment();
-		additional.setAssignmentId("generic-additional");
+		ResourceAssignment additional = new ResourceAssignment("generic-additional");
 		additional.setResourceIdentifier("Crew Two");
 		org.sarmanagement.icsforms.model.Ics204Form additionalForm = new org.sarmanagement.icsforms.model.Ics204Form();
 		additionalForm.getResourcesAssigned().add(additional);
@@ -466,8 +464,7 @@ class ActivityEntryDialogTest {
 	@Test
 	void assignmentsWithCorrespondingSarTasksAreNotDuplicated() throws Exception {
 		AppData data = new AppData();
-		ResourceAssignment assignment = new ResourceAssignment();
-		assignment.setAssignmentId("deduplicated");
+		ResourceAssignment assignment = new ResourceAssignment("deduplicated");
 		data.getForm204().getResourcesAssigned().add(assignment);
 		AppController controller = controller(data);
 		ActivityEntryDialog dialog = new ActivityEntryDialog(controller,
@@ -776,6 +773,7 @@ class ActivityEntryDialogTest {
 		Ics214Form second = new Ics214Form();
 		data.getActivityLogs().addAll(List.of(first, second));
 		SarTaskAssignment assignment = new SarTaskAssignment();
+		assignment.setAssignmentId("task-two");
 		assignment.setResourceIdentifier("Team Two");
 		data.getSarTaskAssignments().add(assignment);
 		ActivityEntryDialog dialog = new ActivityEntryDialog(controller(data),
@@ -942,8 +940,10 @@ class ActivityEntryDialogTest {
 	 */
 	private AppController controller(AppData data) {
 		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
-			ResourceAssignment assignment = new ResourceAssignment();
-			assignment.setAssignmentId(task.getAssignmentId());
+			if (task.getAssignmentId() == null || task.getAssignmentId().isBlank()) {
+				continue;
+			}
+			ResourceAssignment assignment = new ResourceAssignment(task.getAssignmentId());
 			assignment.setResourceIdentifier(task.getResourceIdentifier());
 			data.getForm204().getResourcesAssigned().add(assignment);
 		}

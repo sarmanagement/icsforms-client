@@ -283,7 +283,7 @@ class AppControllerCommunicationsActivityTest {
 		assertThrows(IllegalArgumentException.class, () -> commit(controller,
 				controller.captureIncidentBinding(), channel, channel.deepCopy(), log, blank));
 		RadioChannel wrongIdentity = channel.deepCopy();
-		wrongIdentity.setChannelId("another-channel");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(wrongIdentity, "another-channel");
 		assertThrows(IllegalArgumentException.class, () -> commit(controller,
 				controller.captureIncidentBinding(), channel, wrongIdentity, log, entry()));
 		Ics214Form taskLog = new Ics214Form();

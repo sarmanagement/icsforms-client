@@ -32,7 +32,6 @@ import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
 import java.util.List;
 import java.util.Locale;
-import java.util.UUID;
 
 /**
  * Shared searchable channel picker that deliberately preserves legacy free-text fields.
@@ -289,7 +288,6 @@ final class RadioChannelPicker {
 		create.addActionListener(event -> {
 			RadioChannel channel = new RadioChannel();
 			channel.setChannelName(filter.getText());
-			channel.setChannelId(UUID.randomUUID().toString());
 			RadioChannelEditorPanel editor = new RadioChannelEditorPanel(channel, legacyLabels(controller));
 			if (UiSupport.showResizableConfirmDialog(dialog, "Create radio channel", editor, new Dimension(780, 680))) {
 				try {

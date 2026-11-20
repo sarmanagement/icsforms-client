@@ -11,7 +11,8 @@ import java.util.UUID;
  * Incident-owned location shared by operational workspaces.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class IncidentLocation {
+public class IncidentLocation implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String type = "Other";
 	private String name = "";
@@ -21,6 +22,15 @@ public class IncidentLocation {
 	 * Creates an empty incident location.
 	 */
 	public IncidentLocation() {
+	}
+
+	/**
+	 * Creates an incident location with an identity from an existing table row.
+	 *
+	 * @param id table-row identity; null or blank creates a fresh identity
+	 */
+	public IncidentLocation(String id) {
+		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
 	}
 
 	/**
@@ -37,8 +47,10 @@ public class IncidentLocation {
 	 *
 	 * @param id location identifier; blank values are replaced with a generated identifier.
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		IdentityGuard.check(this.id, id);
+		this.id = id;
 	}
 
 	/**

@@ -4,9 +4,13 @@
 package org.sarmanagement.icsforms.persistence;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import org.sarmanagement.icsforms.model.Identified;
 
 import java.util.HashMap;
 import java.util.List;
@@ -17,7 +21,7 @@ import java.util.Set;
  * Preserves unknown stored JSON properties without associating them with the wrong record.
  */
 final class StoredJsonMerger {
-	private static final List<String> ID_FIELDS = List.of("id", "entryId", "changeId", "resultId", "formId",
+	private static final List<String> ID_FIELDS = List.of("id", "entryId", "resultId", "formId",
 			"channelId", "logId", "worksheetId", "objectiveId", "resourceId", "assignmentId", "taskId", "recordId",
 			"incidentId");
 
@@ -38,6 +42,17 @@ final class StoredJsonMerger {
 	 */
 	static JsonNode merge(ObjectMapper mapper, JsonNode original, JsonNode updated) {
 		return merge(mapper, original, updated, "$");
+	}
+
+	/**
+	 * Removes legacy identity aliases from a stored tree before canonical serialization is merged.
+	 *
+	 * @param mapper mapper used to inspect model properties
+	 * @param document stored JSON tree
+	 * @param rootType root model type
+	 */
+	static void removeIdentityAliases(ObjectMapper mapper, JsonNode document, Class<?> rootType) {
+		removeIdentityAliases(mapper, document, mapper.constructType(rootType));
 	}
 
 	/**
@@ -81,6 +96,7 @@ final class StoredJsonMerger {
 			});
 			return merged;
 		}
+
 		if (original != null && original.isArray() && updated.isArray()) {
 			return mergeArray(mapper, (ArrayNode) original, (ArrayNode) updated, path);
 		}
@@ -89,6 +105,60 @@ final class StoredJsonMerger {
 			return original.deepCopy();
 		}
 		return updated.deepCopy();
+	}
+
+	/**
+	 * Traverses a typed JSON value and removes aliases for canonical record identities.
+	 *
+	 * @param mapper mapper used to inspect model properties
+	 * @param node JSON node
+	 * @param type declared model type
+	 */
+	private static void removeIdentityAliases(ObjectMapper mapper, JsonNode node, JavaType type) {
+		if (node == null || node.isNull()) {
+			return;
+		}
+		if (type.isCollectionLikeType() && node.isArray()) {
+			for (JsonNode child : node) {
+				removeIdentityAliases(mapper, child, type.getContentType());
+			}
+			return;
+		}
+		if (type.isMapLikeType() && node.isObject()) {
+			node.elements().forEachRemaining(child ->
+					removeIdentityAliases(mapper, child, type.getContentType()));
+			return;
+		}
+		if (type.isArrayType() && node.isArray()) {
+			for (JsonNode child : node) {
+				removeIdentityAliases(mapper, child, type.getContentType());
+			}
+			return;
+		}
+		if (!node.isObject() || !type.getRawClass().getPackageName().equals("org.sarmanagement.icsforms.model")) {
+			return;
+		}
+		ObjectNode object = (ObjectNode) node;
+		for (BeanPropertyDefinition property : mapper.getDeserializationConfig().introspect(type).findProperties()) {
+			JavaType childType = property.getPrimaryType();
+			if (childType == null) {
+				continue;
+			}
+			JsonAlias alias = property.getPrimaryMember() == null ? null
+					: property.getPrimaryMember().getAnnotation(JsonAlias.class);
+			if (Identified.class.isAssignableFrom(type.getRawClass()) && "id".equals(property.getName())
+					&& alias != null) {
+				for (String legacyName : alias.value()) {
+					object.remove(legacyName);
+				}
+			}
+			removeIdentityAliases(mapper, object.get(property.getName()), childType);
+			if (alias != null) {
+				for (String aliasName : alias.value()) {
+					removeIdentityAliases(mapper, object.get(aliasName), childType);
+				}
+			}
+		}
 	}
 
 	/**
@@ -205,6 +275,9 @@ final class StoredJsonMerger {
 			var fields = original.fields();
 			while (fields.hasNext()) {
 				var field = fields.next();
+				if (ID_FIELDS.contains(field.getKey())) {
+					continue;
+				}
 				if (!updated.has(field.getKey())) {
 					return false;
 				}

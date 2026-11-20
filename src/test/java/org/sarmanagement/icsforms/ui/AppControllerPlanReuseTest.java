@@ -6,8 +6,15 @@ package org.sarmanagement.icsforms.ui;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.Ics215Form;
+import org.sarmanagement.icsforms.model.MedicalPlan;
 import org.sarmanagement.icsforms.model.PlanReviewArea;
 import org.sarmanagement.icsforms.model.PlanReviewStatus;
+import org.sarmanagement.icsforms.model.PlanReuseService;
+import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.model.RecordIdentityAssertions;
+import org.sarmanagement.icsforms.model.SafetyMessageBlock;
+import org.sarmanagement.icsforms.model.VetFacility;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
@@ -17,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -137,5 +145,96 @@ class AppControllerPlanReuseTest {
 					store.load(sourceId).getPlanReviewStatus(PlanReviewArea.HUMAN_MEDICAL));
 			assertThrows(IllegalArgumentException.class, () -> controller.getImportPlanSources(targetId));
 		}
+	}
+
+	@Test
+	void reusesEveryPlanAreaWithFreshIdentitiesAndConsistentWorksheetReferences() throws Exception {
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			AppData source = reusablePlans();
+			Map<Class<?>, Set<String>> originalSourceIds = RecordIdentityAssertions.collect(source);
+			AppData.OperationalPeriodRecord snapshot = PlanReuseService.snapshot(source);
+			Map<Class<?>, Set<String>> sourceIds = RecordIdentityAssertions.collect(snapshot);
+			AppData target = new AppData();
+			var targetId = store.create(target);
+			AppController controller = new AppController(target, store, targetId,
+					new PdfExportService(), new IncidentValidator());
+			controller.bringForwardPlans(snapshot, Set.of(PlanReviewArea.values()), true, true, false);
+
+			Map<Class<?>, Set<String>> targetIds = RecordIdentityAssertions.collect(target);
+			for (Map.Entry<Class<?>, Set<String>> entry : sourceIds.entrySet()) {
+				Set<String> targetTypeIds = targetIds.getOrDefault(entry.getKey(), Set.of());
+				assertTrue(java.util.Collections.disjoint(entry.getValue(), targetTypeIds),
+						entry.getKey().getSimpleName() + " retained source identities");
+			}
+			Ics215Form.ResourceHeading sourceHeading = snapshot.getNextPeriodForm215().getResourceHeadings().get(0);
+			Ics215Form.ResourceHeading copiedHeading = target.getNextPeriodForm215().getResourceHeadings().get(0);
+			Ics215Form.WorkRow copiedRow = target.getNextPeriodForm215().getWorkRows().get(0);
+			assertNotEquals(sourceHeading.id, copiedHeading.id);
+			assertNotEquals(snapshot.getNextPeriodForm215().getWorkRows().get(0).id, copiedRow.id);
+			assertTrue(copiedRow.resourceAllocations.containsKey(copiedHeading.id));
+			assertFalse(copiedRow.resourceAllocations.containsKey(sourceHeading.id));
+			assertEquals("", copiedRow.ics204DraftFormId);
+			assertEquals(source.getForm205().getChannels().get(0).getId(),
+					snapshot.getForm205().getChannels().get(0).getId());
+			RecordIdentityAssertions.collect(target);
+			assertEquals(originalSourceIds, RecordIdentityAssertions.collect(source));
+			assertEquals(sourceIds, RecordIdentityAssertions.collect(snapshot));
+		}
+	}
+
+	@Test
+	void previousPeriodReuseKeepsArchiveIdsAndRemintsTheLiveCopy() throws Exception {
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			AppData data = reusablePlans();
+			data.advanceToNewOperationalPeriod(true);
+			AppData.OperationalPeriodRecord archived = data.getOperationalPeriodHistory().get(0);
+			Map<Class<?>, Set<String>> archivedIds = RecordIdentityAssertions.collect(archived);
+			var id = store.create(data);
+			AppController controller = new AppController(data, store, id,
+					new PdfExportService(), new IncidentValidator());
+
+			controller.bringForwardPlans(archived, Set.of(PlanReviewArea.values()), false, true, false);
+
+			Map<Class<?>, Set<String>> allIds = RecordIdentityAssertions.collect(data);
+			for (Map.Entry<Class<?>, Set<String>> entry : archivedIds.entrySet()) {
+				Set<String> liveTypeIds = new java.util.HashSet<>(allIds.getOrDefault(entry.getKey(), Set.of()));
+				liveTypeIds.removeAll(entry.getValue());
+				assertTrue(java.util.Collections.disjoint(entry.getValue(), liveTypeIds));
+			}
+			RecordIdentityAssertions.collect(data);
+			assertEquals(archivedIds, RecordIdentityAssertions.collect(archived));
+		}
+	}
+
+	/**
+	 * Creates representative content for all reusable plan areas and ICS 215 links.
+	 *
+	 * @return incident containing each reusable plan type
+	 */
+	private static AppData reusablePlans() {
+		AppData source = new AppData();
+		source.getForm205().setSpecialInstructions("Shared channel plan");
+		source.getForm205().getChannels().add(new RadioChannel());
+		org.sarmanagement.icsforms.model.SafetyAnalysisEntry analysis =
+				new org.sarmanagement.icsforms.model.SafetyAnalysisEntry();
+		analysis.setHazardsRisks("Uneven terrain");
+		source.getForm215a().getEntries().add(analysis);
+		SafetyMessageBlock safetyBlock = new SafetyMessageBlock();
+		safetyBlock.setHazard("Cold weather");
+		source.getForm208().getHazardBlocks().add(safetyBlock);
+		MedicalPlan.Hospital hospital = new MedicalPlan.Hospital();
+		hospital.setName("Regional hospital");
+		source.getMedicalPlan().getHospitals().add(hospital);
+		source.getCanineMedicalPlan().getSelectedFacilities().add(new VetFacility());
+		source.getCanineMedicalPlan().getSelectedFacilities().get(0).setName("Snapshot clinic");
+		Ics215Form planned = source.getNextPeriodForm215();
+		Ics215Form.ResourceHeading heading = new Ics215Form.ResourceHeading();
+		heading.category = "Medical";
+		planned.getResourceHeadings().add(heading);
+		Ics215Form.WorkRow row = new Ics215Form.WorkRow();
+		row.resourceAllocations.put(heading.id, new Ics215Form.ResourceAllocation());
+		row.ics204DraftFormId = "source-form";
+		planned.getWorkRows().add(row);
+		return source;
 	}
 }

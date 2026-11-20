@@ -6,11 +6,16 @@ package org.sarmanagement.icsforms.model;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Resource row on ICS 204 with linkage to a SAR task scaffold record.
  */
-public class ResourceAssignment {
+public class ResourceAssignment implements Identified {
+	@JsonProperty("id")
+	@JsonAlias("assignmentId")
 	private String assignmentId = UUID.randomUUID().toString();
 	private String assignmentTeamNumber = "";
 	private String resourceType = "";
@@ -28,13 +33,41 @@ public class ResourceAssignment {
 	private String assignment = "";
 	private List<String> objectiveIds = new ArrayList<>();
 
+	/** Creates an empty resource assignment with a generated identity. */
+	public ResourceAssignment() {
+	}
+
+	/**
+	 * Creates a resource assignment with its identity assigned at construction.
+	 *
+	 * @param id assignment identity; null or blank creates a fresh identity
+	 */
+	public ResourceAssignment(String id) {
+		assignmentId = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+	}
+
 	/**
 	 * Returns the stable assignment linkage identifier.
 	 *
 	 * @return assignment linkage identifier.
 	 */
+	@JsonIgnore
 	public String getAssignmentId() {
 		return assignmentId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return assignmentId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(assignmentId, id);
+		assignmentId = id;
 	}
 
 	/**
@@ -43,8 +76,9 @@ public class ResourceAssignment {
 	 * @param assignmentId
 	 *            assignment linkage identifier.
 	 */
+	@JsonIgnore
 	public void setAssignmentId(String assignmentId) {
-		this.assignmentId = assignmentId;
+		setId(assignmentId);
 	}
 
 	/**

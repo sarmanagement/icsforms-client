@@ -8,12 +8,15 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Independently stored canine medical plan, adapted from the ICS 206 structure.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class CanineMedicalPlan {
+public class CanineMedicalPlan implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
+	private String id = UUID.randomUUID().toString();
 	private boolean active;
 	private String aidStationInformation = "";
 	private String transportServices = "";
@@ -36,6 +39,20 @@ public class CanineMedicalPlan {
 
 	/** Creates an empty, inactive canine medical plan. */
 	public CanineMedicalPlan() {
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
+		this.id = id;
 	}
 
 	/** @return true when active for export and readiness reporting. */

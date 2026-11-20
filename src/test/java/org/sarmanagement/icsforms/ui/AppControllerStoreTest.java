@@ -8,10 +8,15 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.CommunicationEntry;
 import org.sarmanagement.icsforms.model.IapPhase;
 import org.sarmanagement.icsforms.model.IncidentMode;
 import org.sarmanagement.icsforms.model.Ics202Form;
+import org.sarmanagement.icsforms.model.Ics204Form;
+import org.sarmanagement.icsforms.model.Ics215Form;
 import org.sarmanagement.icsforms.model.ResourceAssignment;
+import org.sarmanagement.icsforms.model.RadioChannel;
+import org.sarmanagement.icsforms.model.RecordIdentityAssertions;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.persistence.ControllableIncidentStore;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
@@ -118,13 +123,12 @@ class AppControllerStoreTest {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			AppData initial = new AppData();
 			initial.getForm202().setObjectives(List.of("Protect responders"));
-			ResourceAssignment assignment = new ResourceAssignment();
-			assignment.setAssignmentId(assignmentId);
+			ResourceAssignment assignment = new ObjectMapper().readValue("{\"id\":\"assignment-1\"}",
+					ResourceAssignment.class);
 			assignment.setAssignmentTeamNumber("Team 1");
 			assignment.setAssignment("Search Sector A");
 			initial.getForm204().getResourcesAssigned().add(assignment);
-			SarTaskAssignment task = new SarTaskAssignment();
-			task.setTaskId("task-1");
+			SarTaskAssignment task = new SarTaskAssignment("task-1");
 			task.setAssignmentId(assignmentId);
 			task.setHazardsObserved("Steep terrain");
 			initial.setSarTaskAssignments(List.of(task));
@@ -158,9 +162,28 @@ class AppControllerStoreTest {
 	}
 
 	@Test
-	void createsAndDuplicatesIndependentIncidents() {
+	void createsAndDuplicatesIndependentIncidents() throws Exception {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			AppData original = new AppData();
+			RadioChannel channel = new RadioChannel();
+			original.getForm205().getChannels().add(channel);
+			CommunicationEntry contact = new CommunicationEntry();
+			contact.setRadioChannelId(channel.getId());
+			Ics215Form.ResourceHeading heading = new Ics215Form.ResourceHeading();
+			original.getForm215().getResourceHeadings().add(heading);
+			Ics215Form.WorkRow workRow = new Ics215Form.WorkRow();
+			workRow.resourceAllocations.put(heading.getId(), new Ics215Form.ResourceAllocation());
+			Ics204Form draft = new Ics204Form();
+			draft.getCommunications().add(contact);
+			workRow.ics204DraftFormId = draft.getId();
+			original.setForm204(draft);
+			original.getForm215().getWorkRows().add(workRow);
+			String originalFormId = original.getForm205().getId();
+			String originalChannelId = channel.getId();
+			String originalHeadingId = heading.getId();
+			String originalWorkRowId = workRow.getId();
+			String originalDraftId = draft.getId();
+			String originalContactId = contact.getId();
 			IncidentId first = store.create(original);
 			AppController controller = controller(store, first, original);
 			controller.getData().getIncidentContext().setIncidentName("Search Alpha");
@@ -170,6 +193,31 @@ class AppControllerStoreTest {
 
 			assertNotEquals(first, duplicate);
 			assertEquals(duplicate, controller.getActiveIncidentId());
+			assertNotEquals(originalFormId, controller.getData().getForm205().getId());
+			assertNotEquals(originalChannelId, controller.getData().getForm205().getChannels().get(0).getId());
+			Ics215Form duplicatedWorksheet = controller.getData().getForm215();
+			Ics215Form.ResourceHeading duplicatedHeading = duplicatedWorksheet.getResourceHeadings().get(0);
+			Ics215Form.WorkRow duplicatedRow = duplicatedWorksheet.getWorkRows().get(0);
+			assertNotEquals(originalHeadingId, duplicatedHeading.getId());
+			assertNotEquals(originalWorkRowId, duplicatedRow.getId());
+			assertNotEquals(originalDraftId, controller.getData().getForm204().getId());
+			assertTrue(duplicatedRow.resourceAllocations.containsKey(duplicatedHeading.getId()));
+			assertEquals(controller.getData().getForm204().getId(), duplicatedRow.ics204DraftFormId);
+			CommunicationEntry duplicatedContact = controller.getData().getForm204().getCommunications().get(0);
+			assertNotEquals(originalContactId, duplicatedContact.getId());
+			assertEquals(controller.getData().getForm205().getChannels().get(0).getId(),
+					duplicatedContact.getRadioChannelId());
+			RecordIdentityAssertions.collect(controller.getData());
+			assertEquals(originalFormId, store.load(first).getForm205().getId());
+			assertEquals(originalChannelId, store.load(first).getForm205().getChannels().get(0).getId());
+			assertEquals(originalHeadingId, store.load(first).getForm215().getResourceHeadings().get(0).getId());
+			assertEquals(originalWorkRowId, store.load(first).getForm215().getWorkRows().get(0).getId());
+			assertEquals(originalDraftId, store.load(first).getForm204().getId());
+			assertEquals(originalContactId, store.load(first).getForm204().getCommunications().get(0).getId());
+			assertEquals(originalChannelId,
+					store.load(first).getForm204().getCommunications().get(0).getRadioChannelId());
+			assertTrue(store.load(first).getForm215().getWorkRows().get(0).resourceAllocations
+					.containsKey(originalHeadingId));
 			assertNotEquals("Search Alpha", store.load(first).getIncidentContext().getIncidentName());
 			assertEquals("Search Alpha", store.load(duplicate).getIncidentContext().getIncidentName());
 

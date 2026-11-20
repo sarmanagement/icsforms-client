@@ -75,6 +75,7 @@ class UiRefreshStateTest {
 	void comparisonDoesNotGenerateMissingResourceIdentity() {
 		AppData data = new AppData();
 		TCard card = new TCard();
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(card, null);
 		data.getTCards().add(card);
 		assertNull(card.peekResourceId());
 		UiRefreshState state = new UiRefreshState();
@@ -86,8 +87,7 @@ class UiRefreshStateTest {
 	@Test
 	void unchangedRoleContentRetainsBoardsAndPreviewRequests() throws Exception {
 		AppData data = new AppData();
-		ResourceAssignment assignment = new ResourceAssignment();
-		assignment.setAssignmentId("assignment-1");
+		ResourceAssignment assignment = new ResourceAssignment("assignment-1");
 		data.getForm204().getResourcesAssigned().add(assignment);
 		SarTaskAssignment task = new SarTaskAssignment();
 		task.setAssignmentId("assignment-1");

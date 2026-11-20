@@ -10,7 +10,8 @@ import java.util.UUID;
 /**
  * Communication row for ICS 204 or linked SAR task context.
  */
-public class CommunicationEntry {
+public class CommunicationEntry implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String name = "";
 	private String function = "";
@@ -40,9 +41,6 @@ public class CommunicationEntry {
 	 * @return communication UUID, never null or blank
 	 */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
@@ -51,8 +49,10 @@ public class CommunicationEntry {
 	 *
 	 * @param id communication UUID; null or blank generates a UUID
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		IdentityGuard.check(this.id, id);
+		this.id = id;
 	}
 
 	/**

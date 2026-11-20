@@ -14,7 +14,8 @@ import java.util.UUID;
  * Regional veterinary facility record or immutable-in-practice plan snapshot.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class VetFacility {
+public class VetFacility implements Identified {
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
 	private String id = UUID.randomUUID().toString();
 	private String name = "";
 	private String town = "";
@@ -38,22 +39,31 @@ public class VetFacility {
 	private Instant calculatedAt;
 	private long stagingGeneration = -1;
 	private String sourceName = "";
+	private String sourceFacilityId = "";
 
 	/** Creates an empty veterinary facility with a stable identifier. */
 	public VetFacility() {
 	}
 
+	/**
+	 * Creates a facility with an identity supplied by an import or source record.
+	 *
+	 * @param id existing facility identity; null or blank creates a fresh identity
+	 */
+	public VetFacility(String id) {
+		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+	}
+
 	/** @return stable directory identifier. */
 	public String getId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
 		return id;
 	}
 
 	/** @param id stable directory identifier. */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
-		this.id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
+		IdentityGuard.check(this.id, id);
+		this.id = id;
 	}
 
 	/** @return facility name. */
@@ -272,6 +282,24 @@ public class VetFacility {
 	}
 
 	/**
+	 * Returns the source directory identity for a copied plan snapshot.
+	 *
+	 * @return source facility ID, or empty when this is not a copied snapshot
+	 */
+	public String getSourceFacilityId() {
+		return sourceFacilityId;
+	}
+
+	/**
+	 * Sets the source directory identity for a copied plan snapshot.
+	 *
+	 * @param sourceFacilityId source facility ID, or empty when unavailable
+	 */
+	public void setSourceFacilityId(String sourceFacilityId) {
+		this.sourceFacilityId = safe(sourceFacilityId);
+	}
+
+	/**
 	 * Stores a route result with explicit method and provenance.
 	 *
 	 * @param distanceMeters distance in meters.
@@ -314,13 +342,14 @@ public class VetFacility {
 	}
 
 	/**
-	 * Creates an independent copy for an accepted plan snapshot.
+	 * Creates an independent copy retaining the source identity. Callers must remint
+	 * the copy before adding it as a distinct plan snapshot.
 	 *
 	 * @return copied facility and provenance.
 	 */
 	public VetFacility copy() {
 		VetFacility copy = new VetFacility();
-		copy.setId(getId());
+		IdentityMigration.replaceId(copy, getId());
 		copy.setName(name);
 		copy.setTown(town);
 		copy.setState(state);
@@ -338,6 +367,7 @@ public class VetFacility {
 		copy.setDistance(distanceMeters, durationSeconds, distanceMethod, distanceProvenance, calculatedAt,
 				stagingGeneration);
 		copy.setSourceName(sourceName);
+		copy.setSourceFacilityId(sourceFacilityId);
 		return copy;
 	}
 

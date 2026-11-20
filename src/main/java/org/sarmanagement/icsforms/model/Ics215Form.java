@@ -4,6 +4,9 @@
 package org.sarmanagement.icsforms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
@@ -25,7 +28,7 @@ import java.util.UUID;
  * operator-confirmed; this model never infers resource kind or team composition.</p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Ics215Form {
+public class Ics215Form implements Identified {
 	private static final ObjectMapper COPIER = new ObjectMapper().registerModule(new JavaTimeModule());
 
 	/** ICS-215 paper choices that do not alter the shared PDF settings. */
@@ -182,8 +185,9 @@ public class Ics215Form {
 	 * incident-wide on-hand snapshot.
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static class ResourceHeading {
+	public static class ResourceHeading implements Identified {
 		/** Stable heading identity. */
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		public String id = UUID.randomUUID().toString();
 		/** Operator-entered category. */
 		public String category = "";
@@ -205,12 +209,27 @@ public class Ics215Form {
 		public LocalDateTime acceptedAt;
 		/** True when retained live identities require explicit revalidation. */
 		public boolean linksRequireReview;
+
+		/** {@inheritDoc} */
+		@Override
+		public String getId() {
+			return id;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		@com.fasterxml.jackson.annotation.JsonIgnore
+		public void setId(String id) {
+			IdentityGuard.check(this.id, id);
+			this.id = id;
+		}
 	}
 
 	/** Work assignment row in the worksheet matrix. */
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static class WorkRow {
+	public static class WorkRow implements Identified {
 		/** Stable row identity used by selections and ICS 204 draft links. */
+		@com.fasterxml.jackson.annotation.JsonProperty("id")
 		public String id = UUID.randomUUID().toString();
 		/** Branch for this assignment. */
 		public String branch = "";
@@ -242,6 +261,20 @@ public class Ics215Form {
 		public Map<String, ResourceAllocation> resourceAllocations = new LinkedHashMap<>();
 		/** Stable ICS 204 form identity created from this row, if any. */
 		public String ics204DraftFormId = "";
+
+		/** {@inheritDoc} */
+		@Override
+		public String getId() {
+			return id;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		@com.fasterxml.jackson.annotation.JsonIgnore
+		public void setId(String id) {
+			IdentityGuard.check(this.id, id);
+			this.id = id;
+		}
 	}
 
 	/** Required and accepted Have evidence for one row and resource heading. */
@@ -265,6 +298,8 @@ public class Ics215Form {
 		public boolean manualOverride;
 	}
 
+	@JsonProperty("id")
+	@JsonAlias("worksheetId")
 	private String worksheetId = UUID.randomUUID().toString();
 	private LocalDateTime targetPeriodStart;
 	private LocalDateTime targetPeriodEnd;
@@ -293,8 +328,23 @@ public class Ics215Form {
 	 *
 	 * @return worksheet UUID.
 	 */
+	@JsonIgnore
 	public String getWorksheetId() {
 		return worksheetId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return worksheetId;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(worksheetId, id);
+		worksheetId = id;
 	}
 
 	/**
@@ -302,9 +352,9 @@ public class Ics215Form {
 	 *
 	 * @param worksheetId worksheet UUID; blank values are replaced.
 	 */
+	@JsonIgnore
 	public void setWorksheetId(String worksheetId) {
-		this.worksheetId = worksheetId == null || worksheetId.isBlank()
-				? UUID.randomUUID().toString() : worksheetId;
+		setId(worksheetId);
 	}
 
 	/** @return target operational-period start, independent of Shared dates. */
@@ -620,7 +670,7 @@ public class Ics215Form {
 	 */
 	public Ics215Form copyForReuse(boolean retainRequired) {
 		Ics215Form copy = copy();
-		copy.setWorksheetId("");
+		IdentityMigration.replaceId(copy, UUID.randomUUID().toString());
 		copy.setTargetPeriodStart(null);
 		copy.setTargetPeriodEnd(null);
 		copy.setPreparerName("");

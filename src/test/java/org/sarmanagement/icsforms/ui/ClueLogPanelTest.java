@@ -40,7 +40,7 @@ class ClueLogPanelTest {
 		ClueLogPanel panel = new ClueLogPanel(controller);
 		panel.refreshFromModel();
 		ClueLogEntry debrief = new ClueLogEntry();
-		debrief.setEntryId(old.getEntryId());
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(debrief, old.getEntryId());
 		debrief.setDescription("Updated in debrief");
 		debrief.setFollowUp("Retain follow-up history");
 		debrief.setFollowUpCompletedDate(LocalDateTime.parse("2026-01-01T03:00:00"));
@@ -68,7 +68,7 @@ class ClueLogPanelTest {
 		assertTrue(table.editCellAt(0, 3));
 		((JTextField) table.getEditorComponent()).setText("Pending location");
 		ClueLogEntry debrief = new ClueLogEntry();
-		debrief.setEntryId(old.getEntryId());
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(debrief, old.getEntryId());
 		debrief.setDescription("Updated in debrief");
 		debrief.setFollowUp("New follow-up history");
 		ClueLogEntry external = new ClueLogEntry();

@@ -17,14 +17,14 @@ class ActivityLogEntryTest {
 	@Test
 	void assignmentContextAndExistingEntryIdSurviveJsonRoundTrip() throws Exception {
 		ActivityLogEntry entry = new ActivityLogEntry();
-		entry.setEntryId("activity-existing-id");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(entry, "activity-existing-id");
 		entry.setAssignmentId("assignment-stable-id");
 		entry.setResourceIdentifier("Robin");
 		entry.setTimestamp(LocalDateTime.of(2026, 1, 1, 8, 30));
 		entry.setNotableActivity("Task observation");
 		String json = mapper.writeValueAsString(entry);
 		assertEquals("assignment-stable-id", mapper.readTree(json).get("assignmentId").asText());
-		assertEquals("activity-existing-id", mapper.readTree(json).get("entryId").asText());
+		assertEquals("activity-existing-id", mapper.readTree(json).get("id").asText());
 		ActivityLogEntry restored = mapper.readValue(json, ActivityLogEntry.class);
 		assertEquals(entry.getEntryId(), restored.getEntryId());
 		assertEquals(entry.getAssignmentId(), restored.getAssignmentId());

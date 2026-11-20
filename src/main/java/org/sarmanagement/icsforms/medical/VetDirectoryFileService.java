@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.sarmanagement.icsforms.model.StagingLocation;
 import org.sarmanagement.icsforms.model.MedicalPlan;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.VetDirectory;
 import org.sarmanagement.icsforms.model.VetFacility;
 import org.sarmanagement.icsforms.model.UtcTimestamp;
@@ -24,7 +25,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.UUID;
 
 /**
  * Reads and explicitly exports reusable regional veterinary data as JSON or CSV.
@@ -116,7 +116,8 @@ public class VetDirectoryFileService {
 				int existingIndex = indexById(resolved, conflict.existingId());
 				int importedIndex = indexById(resolved, conflict.importedId());
 				if (imported != null && existingIndex >= 0 && importedIndex >= 0) {
-					imported.setId(conflict.existingId());
+					IdentityMigration.preserveIdentity(imported,
+							findById(resolved, conflict.existingId()));
 					resolved.getFacilities().set(existingIndex, imported);
 					if (importedIndex != existingIndex) {
 						resolved.getFacilities().remove(importedIndex);
@@ -322,8 +323,8 @@ public class VetDirectoryFileService {
 				}
 			}
 		}
-		VetFacility facility = new VetFacility();
-		facility.setId(values.get(CsvField.ID));
+		String id = values.get(CsvField.ID);
+		VetFacility facility = new VetFacility(id);
 		facility.setName(values.get(CsvField.NAME));
 		facility.setTown(values.get(CsvField.TOWN));
 		facility.setState(values.get(CsvField.STATE));
@@ -466,12 +467,15 @@ public class VetDirectoryFileService {
 	 * @return merge classification.
 	 */
 	private MergeDecision merge(VetDirectory directory, VetFacility incoming) {
+		if (incoming.getId() == null || incoming.getId().isBlank()) {
+			IdentityMigration.remint(incoming);
+		}
 		for (VetFacility existing : directory.getFacilities()) {
 			if (existing.getId().equals(incoming.getId())) {
 				if (sameFacility(existing, incoming)) {
 					return MergeDecision.DUPLICATE;
 				}
-				incoming.setId(UUID.randomUUID().toString());
+				IdentityMigration.remint(incoming);
 				directory.getFacilities().add(incoming);
 				return MergeDecision.CONFLICT;
 			}
@@ -575,8 +579,7 @@ public class VetDirectoryFileService {
 	 * @return independent facility copy.
 	 */
 	private VetFacility copyFacility(VetFacility source) {
-		VetFacility copy = new VetFacility();
-		copy.setId(source.getId());
+		VetFacility copy = new VetFacility(source.getId());
 		copy.setName(source.getName());
 		copy.setTown(source.getTown());
 		copy.setState(source.getState());

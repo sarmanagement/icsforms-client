@@ -8,6 +8,7 @@ import org.sarmanagement.icsforms.model.SarTaskResource;
 import org.sarmanagement.icsforms.model.ResourceDirectoryEntry;
 import org.sarmanagement.icsforms.model.ResourceDirectorySource;
 import org.sarmanagement.icsforms.model.ResourceStatus;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.model.TCardType;
 import org.sarmanagement.icsforms.model.UtcTimestamp;
@@ -2504,9 +2505,8 @@ public class TCardPanel extends JPanel {
 				return;
 			}
 			// Build a temporary TCard carrying the name/type from the edit form.
-			TCard stub = new TCard();
+			TCard stub = new TCard(null, null, cardResourceId);
 			stub.setCardType(cardType);
-			stub.setResourceId(cardResourceId);
 			if (cardType == TCardType.PERSONNEL) {
 				stub.setPersonName(resourceName);
 			} else {
@@ -2525,9 +2525,8 @@ public class TCardPanel extends JPanel {
 						JOptionPane.WARNING_MESSAGE);
 				return;
 			}
-			TCard stub = new TCard();
+			TCard stub = new TCard(null, null, cardResourceId);
 			stub.setCardType(cardType);
-			stub.setResourceId(cardResourceId);
 			if (cardType == TCardType.PERSONNEL) {
 				stub.setPersonName(resourceName);
 			} else {
@@ -2610,7 +2609,7 @@ public class TCardPanel extends JPanel {
 	 */
 	private static TCard copyCard(TCard src) {
 		TCard copy = new TCard();
-		copy.setResourceId(src.getResourceId());
+		IdentityMigration.preserveIdentity(copy, src);
 		copy.setCardType(src.getCardType());
 		copy.setPersonName(src.getPersonName());
 		copy.setHomeAgency(src.getHomeAgency());

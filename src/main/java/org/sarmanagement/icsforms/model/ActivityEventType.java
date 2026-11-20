@@ -4,6 +4,7 @@ package org.sarmanagement.icsforms.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Configurable event type used to categorise ICS 214 activity log entries.
@@ -12,7 +13,7 @@ import java.util.List;
  * shared through {@link ActivityEventTypeCatalog}. Incident documents retain
  * the event type metadata needed to display their existing entries.
  */
-public class ActivityEventType {
+public class ActivityEventType implements Identified {
 
 	/** Stable identifier for the built-in "Clue Detected" type. */
 	public static final String ID_CLUE_DETECTED = "CLUE_DETECTED";
@@ -49,7 +50,8 @@ public class ActivityEventType {
 	/** Stable identifier for an explicitly confirmed response-canine medical event. */
 	public static final String ID_CANINE_MEDICAL_EVENT = "RESPONSE_CANINE_MEDICAL_EVENT";
 
-	private String id = "";
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
+	private String id = UUID.randomUUID().toString();
 	private String label = "";
 	private boolean builtIn = false;
 	private transient boolean showInQuickMenu = false;
@@ -125,8 +127,11 @@ public class ActivityEventType {
 	 * @param id
 	 *            stable identifier.
 	 */
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	public void setId(String id) {
-		this.id = id == null ? "" : id;
+		String value = id == null ? "" : id;
+		IdentityGuard.check(this.id, value);
+		this.id = value;
 	}
 
 	/**

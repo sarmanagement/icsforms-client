@@ -307,7 +307,7 @@ class CommunicationsConsolePanelTest {
 		TCard ambiguous = card("Ambiguous resource", "", "Unknown");
 		ambiguous.setPhoneNumber("555-ambiguous");
 		TCard duplicate = card("Duplicate identity", "", "Unknown");
-		duplicate.setResourceId(ambiguous.getResourceId());
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(duplicate, ambiguous.getResourceId());
 		TCard duplicateSource = card("Duplicate source one", "", "Unknown");
 		duplicateSource.setSourceRef("sar:" + task.getAssignmentId() + ":r:99");
 		duplicateSource.setPhoneNumber("555-duplicate-source");
@@ -346,6 +346,7 @@ class CommunicationsConsolePanelTest {
 		AppData data = incident();
 		AppController controller = controller(data);
 		TCard legacy = new TCard();
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(legacy, null);
 		legacy.setPersonName("Legacy responder");
 		data.getTCards().add(legacy);
 		assertEquals(null, legacy.peekResourceId());
@@ -422,8 +423,8 @@ class CommunicationsConsolePanelTest {
 	void scopedLinksUseTypedTaskIdsAndOwningFormIdsRatherThanAssignmentOrDisplayLabels() throws Exception {
 		AppData data = incident();
 		AppController controller = controller(data);
-		data.getSarTaskAssignments().get(0).setTaskId("first-task-origin");
-		data.getSarTaskAssignments().get(1).setTaskId("second-task-origin");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getSarTaskAssignments().get(0), "first-task-origin");
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getSarTaskAssignments().get(1), "second-task-origin");
 		data.getSarTaskAssignments().get(0).getCommunications().add(communication("Task radio", "First task contact"));
 		data.getSarTaskAssignments().get(1).getCommunications().add(communication("Task radio", "Other task contact"));
 		data.getForm204().getCommunications().add(communication("Shared form radio", "Owning form contact"));
@@ -915,8 +916,7 @@ class CommunicationsConsolePanelTest {
 			task.setAssignment("Search " + name);
 			task.setContact(name + " contact");
 			data.getSarTaskAssignments().add(task);
-			ResourceAssignment assignment = new ResourceAssignment();
-			assignment.setAssignmentId(task.getAssignmentId());
+			ResourceAssignment assignment = new ResourceAssignment(task.getAssignmentId());
 			assignment.setResourceIdentifier(task.getResourceIdentifier());
 			data.getForm204().getResourcesAssigned().add(assignment);
 		}

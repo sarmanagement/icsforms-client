@@ -140,9 +140,11 @@ class RadioChannelReferenceTest {
 		assertEquals(stableId, restored.getForm204().getCommunications().get(0).getRadioChannelId());
 		assertEquals(stableId, restored.getTCards().get(0).getRadioChannelId());
 		restored.advanceToNewOperationalPeriod(true);
-		assertEquals(stableId, restored.getForm205().getChannels().get(0).getChannelId());
+		String nextPeriodId = restored.getForm205().getChannels().get(0).getChannelId();
+		assertFalse(stableId.equals(nextPeriodId));
 		assertEquals(stableId, restored.getOperationalPeriodHistory().get(0).getForm205()
 				.getChannels().get(0).getChannelId());
+		assertEquals(nextPeriodId, restored.getForm205().getChannels().get(0).getChannelId());
 		assertEquals(stableId, entry.getRadioChannelId());
 		assertEquals(stableId, card.getRadioChannelId());
 	}
@@ -152,6 +154,8 @@ class RadioChannelReferenceTest {
 		AppData data = new AppData();
 		TCard card = new TCard();
 		SarTaskAssignment task = new SarTaskAssignment();
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(card, null);
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(task, null);
 		data.getOrganizationalChart().setMedicalUnitLeaderName("Legacy medical leader");
 		for (int i = 0; i < 2; i++) {
 			assertNull(data.peekMedicalUnitLeaderAssignment());

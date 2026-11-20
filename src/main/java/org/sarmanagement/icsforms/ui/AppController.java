@@ -21,6 +21,7 @@ import org.sarmanagement.icsforms.model.Ics201Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.IdentityMigration;
 import org.sarmanagement.icsforms.model.OperatorContext;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.OrgChartEntry;
@@ -1374,6 +1375,10 @@ public class AppController implements AutoCloseable {
 	 * relinquishes an advisory edit lock only while it is still owned. Closing does not save or discard dirty
 	 * data; callers should inspect {@link #hasUnsavedChanges()} before closing.
 	 *
+	 * <p>If draining issued saves fails, the controller remains open and its prior
+	 * autosave-timer state is restored so the caller can retry closing. No listeners,
+	 * locks, or pending save work are released on that failure.</p>
+	 *
 	 * <p>This method is safe to call from any thread and is idempotent.</p>
 	 */
 	@Override
@@ -1399,9 +1404,18 @@ public class AppController implements AutoCloseable {
 		if (closed) {
 			return;
 		}
-		drainSaves();
+		boolean autosaveWasRunning = autosaveTimer.isRunning();
 		closed = true;
 		autosaveTimer.stop();
+		try {
+			drainSaves();
+		} catch (RuntimeException | Error failure) {
+			closed = false;
+			if (autosaveWasRunning) {
+				autosaveTimer.restart();
+			}
+			throw failure;
+		}
 		incidentGeneration++;
 		synchronized (incidentChangeDeliveryLock) {
 			pendingIncidentChange = null;
@@ -1712,6 +1726,7 @@ public class AppController implements AutoCloseable {
 	public void exportUnsavedIncident(Path path, LinkSource source) {
 		onOwner(() -> {
 			AppData snapshot = captureSave(source).snapshot();
+			IdentityMigration.migrate(snapshot);
 			workerIo(() -> {
 				new LocalRepository(path).save(snapshot);
 				return null;
@@ -1780,6 +1795,7 @@ public class AppController implements AutoCloseable {
 		} catch (IOException exception) {
 			throw new IllegalStateException("Cannot duplicate incident data", exception);
 		}
+		IdentityMigration.remint(copy);
 		copy.setIncidentId(IncidentId.newId().value());
 		copy.setCreatedAt(null);
 		copy.setUpdatedAt(null);

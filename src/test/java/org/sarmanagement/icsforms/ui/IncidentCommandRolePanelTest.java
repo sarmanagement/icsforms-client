@@ -1028,8 +1028,7 @@ class IncidentCommandRolePanelTest {
 	 * @return resource fixture.
 	 */
 	private TCard card(String id, TCardType type, String status) {
-		TCard card = new TCard();
-		card.setResourceId(id);
+		TCard card = new TCard(id);
 		card.setCardType(type);
 		card.setStatus(status);
 		return card;
