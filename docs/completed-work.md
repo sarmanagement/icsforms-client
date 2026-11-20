@@ -29,12 +29,18 @@ direction in the [Stage 0 inventory](stage-0-decisions.md) and added a
 one shared incident per host, version-checked read/save/update operations, local
 PDF/export on both host and clients, explicit sharing, individual admission,
 stop warnings and connection-loss visibility on both sides. Remaining detailed
-implementation choices are proposals; Stage 0 remains open and no host or
-network service code is delivered.
+implementation choices are proposals; Stage 0 remains open.
 
 **Host-mode foundation update, 2026-11-18:** issue #57 delivers the stable
 identity, migration, index and diff foundation described below. It does not
 implement the host service or issues #58–#62.
+
+**Host-mode service update, 2026-11-20:** issue #58 delivers the
+[version 1 service contract](host-api-contract.md), an in-process
+`IncidentService`, and a per-incident file-backed record history with atomic
+receipts, deterministic change cursors, three-way field merge, and standalone
+save synchronization. The service does not add transport, authentication,
+remote-store wiring, UI, or outbox behavior; Stage 2/T1 is not complete.
 
 | Work | Tracking | Evidence | Status |
 | --- | --- | --- | --- |
@@ -43,6 +49,7 @@ implement the host service or issues #58–#62.
 | SAR task status ↔ ICS 214 integration, ICS 204 PDF layout | #19, #20 — closed | `ui/SarTaskPanel.java`, `pdf/Ics204PdfRenderer.java` | **Complete.** |
 | File-backed `IncidentStore` with UUID identity, revision checks, per-incident edit locks and backups | PR #34 and predecessors; hardening in #39–#42 | `persistence/IncidentStore.java`, `persistence/FileIncidentStore.java`, `persistence/IncidentDocumentReader.java` | **Complete for standalone use;** backend-neutral contract and asynchronous saving are delivered. |
 | Host-mode Part 1: stable record IDs, load migration, record index/diff | #57 | `model/Identified.java`, `model/IdentityMigration.java`, `model/RecordIndex.java`, `model/RecordDiff.java`, `docs/record-identity.md` | **Delivered in this PR.** Local persistence only; no host/network behavior. |
+| Host-mode Part 2: service contract and in-process versioned records | #58 | `docs/host-api-contract.md`, `persistence/IncidentService.java`, `persistence/RecordVersionStore.java`, `persistence/FileRecordVersionStore.java` | **Delivered in this PR.** No network transport, authentication, UI, remote store, or outbox. |
 | Live local role panels (ten-phase plan) | #33 and #46 — closed; PRs #32 and #48 merged | See phase table and acceptance record below | **Implementation delivered.** Automated coverage and user-confirmed desktop checks are recorded separately below. |
 
 ## Host-mode series — issue #57: stable record identity and record diff

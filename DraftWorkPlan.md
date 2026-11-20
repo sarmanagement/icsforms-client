@@ -477,7 +477,7 @@ recoverable standalone application. Completed stages are recorded in
 | --- | --- | --- | --- |
 | 0 | Written decisions and constraints | Not evidenced as complete | 1–2 weeks |
 | 1 | Local persistence foundation, including live refresh without flicker | Complete; substitute-store evidence accepted | done (4–7 weeks) |
-| 2 | Record-level incident API and local host, including record versions and durable outbox (T1) | Identity/index/diff foundation delivered by #57; host service not started | 7–12 weeks |
+| 2 | Record-level incident API and local host (T1) | Identity/index/diff foundation (#57) and in-process contract/service (#58) delivered; transport/admission, remote store, and outbox remain | 7–12 weeks |
 | 3 | Device lifecycle, operator claim, roles and attributable audit (T2) | Not started | 4–6 weeks |
 | 4 | Offline replay/conflict recovery and attachments | Not started | 4–8 weeks |
 | 5 | Field-host packaging and authority transfer | Not started | 4–8 weeks |
@@ -526,13 +526,18 @@ fresh identities for copied records, persistence retention and legacy T-card
 history overlap. See the [exit assessment](docs/completed-work.md#stage-1--local-persistence-foundation-prerequisite-for-any-remote-store)
 and [identity record](docs/completed-work.md#host-mode-series--issue-57-stable-record-identity-and-record-diff).
 
-**T0/T1 readiness:** Stage 2 is not yet a cleared start: record the Stage 0
-decisions. Stage 1 requires no API, authentication or outbox.
+**T0/T1 readiness:** Stage 0 remains open, so transport, admission, and pilot
+deployment are not cleared to start. Issue #58's contract and in-process service
+slice is delivered against the decisions recorded in that issue. Stage 1
+requires no API, authentication or outbox.
 
 ### Stage 2 — Incident API and single local host (delivers T1)
 
 Implement the incident-scoped API, host-side validation and persistence, and a
-`RemoteIncidentStore` built on the Stage 1 contract. A persisted record is the
+`RemoteIncidentStore` built on the Stage 1 contract. Issue #58 delivered the
+written contract and an in-process service over the file backend. It does not
+include network transport, admission, a remote store, UI changes, or an outbox;
+those remain in issues #59–#62. A persisted record is the
 unit of submission and versioning: the client supplies the record version it
 edited, and the host compares base, current and proposed values field by field.
 A field changed only by the client is accepted; a field changed only by the host
@@ -541,7 +546,7 @@ conflict. Equal net values are unchanged. Keep record-version history and
 durable operation receipts indefinitely. Apply multi-record edits as atomic
 batches. Clients persist pending operations in a durable outbox.
 
-The first host embeds the incident service in the desktop Java application,
+The eventual first host embeds the incident service in the desktop Java application,
 serving other instances on incident Wi-Fi with no internet. Initially each host
 shares one selected incident at a time. Both the host UI and connected UIs use
 that service boundary, with no direct-write bypass. See the
