@@ -1400,9 +1400,9 @@ public class AppController implements AutoCloseable {
 		if (closed) {
 			return;
 		}
-		drainSaves();
 		closed = true;
 		autosaveTimer.stop();
+		drainSaves();
 		incidentGeneration++;
 		synchronized (incidentChangeDeliveryLock) {
 			pendingIncidentChange = null;

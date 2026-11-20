@@ -429,6 +429,57 @@ class AppControllerAsyncPersistenceTest {
 	}
 
 	@Test
+	void closingWhileDrainingAnIssuedSaveIgnoresReentrantClose() throws Exception {
+		try (BlockingStore store = new BlockingStore(directory())) {
+			AppData live = new AppData();
+			IncidentId id = store.create(live);
+			try (AppController controller = controller(store, id, live)) {
+				store.blockNextSave();
+				SwingUtilities.invokeAndWait(() -> {
+					live.getIncidentContext().setIncidentName("Pending close save");
+					controller.markDirty();
+					controller.saveAsync(AppController.LinkSource.NONE, failure -> assertNull(failure));
+				});
+				await(store.entered);
+
+				CountDownLatch draining = new CountDownLatch(1);
+				CountDownLatch closesCompleted = new CountDownLatch(2);
+				AtomicReference<Throwable> closeFailure = new AtomicReference<>();
+				controller.setPersistenceWaitHandler(waiting -> {
+					if (waiting) {
+						draining.countDown();
+					}
+				});
+				SwingUtilities.invokeLater(() -> {
+					try {
+						controller.close();
+					} catch (Throwable failure) {
+						closeFailure.compareAndSet(null, failure);
+					} finally {
+						closesCompleted.countDown();
+					}
+				});
+				await(draining);
+				SwingUtilities.invokeLater(() -> {
+					try {
+						controller.close();
+					} catch (Throwable failure) {
+						closeFailure.compareAndSet(null, failure);
+					} finally {
+						closesCompleted.countDown();
+					}
+				});
+				store.release.countDown();
+				await(closesCompleted);
+
+				assertNull(closeFailure.get());
+				assertEquals("Pending close save",
+						store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
+			}
+		}
+	}
+
+	@Test
 	void atomicSaveNeverExposesTransientEditsDuringWorkerWaitAndRollsBackFailure() throws Exception {
 		try (BlockingStore store = new BlockingStore(directory())) {
 			AppData live = new AppData();
