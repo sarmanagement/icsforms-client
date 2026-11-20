@@ -103,6 +103,9 @@ public final class IncidentService {
 		IncidentState current = versions.load(batch.incident());
 		OperationReceipt prior = findReceipt(current, batch.operationId());
 		if (prior != null) {
+			if (prior.result().applied()) {
+				project(batch.incident(), current);
+			}
 			return prior.result();
 		}
 		if (current == null) {

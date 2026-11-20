@@ -86,6 +86,26 @@ class IncidentServiceTest {
 	}
 
 	@Test
+	void replayedReceiptRetriesFailedDocumentProjection() {
+		ProjectionFailingStore store = new ProjectionFailingStore(directory);
+		try (store) {
+			IncidentId incident = store.create(new AppData());
+			IncidentService service = service(store);
+			IncidentService.ReadResult initial = service.read(incident);
+			IncidentService.RecordSubmission update = update(initial, "incidentName", "Projected on retry");
+			IncidentService.RecordBatch batch = batch(incident, "projection-retry", update);
+
+			store.failNextSave = true;
+			assertThrows(StorePersistenceException.class, () -> service.submit(batch));
+			assertEquals("", store.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+
+			assertTrue(service.submit(batch).applied());
+			assertEquals("Projected on retry",
+					store.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+		}
+	}
+
+	@Test
 	void reportsFieldConflictAndReplaysOriginalConflict() {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			IncidentId incident = store.create(new AppData());
@@ -225,5 +245,36 @@ class IncidentServiceTest {
 
 	private IncidentService.VersionedRecord record(IncidentService.ReadResult read, RecordIndex.RecordKey key) {
 		return read.records().stream().filter(record -> record.key().equals(key)).findFirst().orElseThrow();
+	}
+
+	/** File store that can fail one document projection write. */
+	private static final class ProjectionFailingStore extends FileIncidentStore {
+		private boolean failNextSave;
+
+		/**
+		 * Creates a projection test store at the supplied directory.
+		 *
+		 * @param directory store root
+		 */
+		private ProjectionFailingStore(Path directory) {
+			super(directory);
+		}
+
+		/**
+		 * Fails the next save when failure injection is enabled.
+		 *
+		 * @param id incident identity
+		 * @param data updated document
+		 * @param expected expected revision
+		 * @return the new revision
+		 */
+		@Override
+		public RevisionToken save(IncidentId id, AppData data, RevisionToken expected) {
+			if (failNextSave) {
+				failNextSave = false;
+				throw new StorePersistenceException("Injected projection failure", null);
+			}
+			return super.save(id, data, expected);
+		}
 	}
 }
