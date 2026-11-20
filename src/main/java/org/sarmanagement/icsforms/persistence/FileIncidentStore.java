@@ -233,7 +233,7 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 
 	/** {@inheritDoc} */
 	@Override
-	public synchronized IncidentId create(AppData data) {
+	public IncidentId create(AppData data) {
 		ensureOpen();
 		AppData candidate = copy(data);
 		IncidentId id;
@@ -242,6 +242,19 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 		} catch (IllegalArgumentException e) {
 			throw new StoreValidationException("Invalid incident identity", e);
 		}
+		return withIncidentLock(id, () -> createLocked(data, candidate, id));
+	}
+
+	/**
+	 * Creates a document while holding the store monitor and incident operation lock.
+	 *
+	 * @param data caller-owned document to create
+	 * @param candidate detached document to persist
+	 * @param id assigned incident identity
+	 * @return assigned identifier
+	 */
+	private synchronized IncidentId createLocked(AppData data, AppData candidate, IncidentId id) {
+		ensureOpen();
 		Path path = path(id);
 		boolean created = false;
 		try {
@@ -336,13 +349,25 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 	/** {@inheritDoc} */
 	@Deprecated
 	@Override
-	public synchronized void save(IncidentId id, AppData data) {
+	public void save(IncidentId id, AppData data) {
 		save(id, data, revision(data));
 	}
 
 	/** {@inheritDoc} */
 	@Override
-	public synchronized RevisionToken save(IncidentId id, AppData data, RevisionToken expected) {
+	public RevisionToken save(IncidentId id, AppData data, RevisionToken expected) {
+		return withIncidentLock(id, () -> saveLocked(id, data, expected));
+	}
+
+	/**
+	 * Saves a document while holding the store monitor and incident operation lock.
+	 *
+	 * @param id incident identity
+	 * @param data updated document
+	 * @param expected expected revision
+	 * @return the new revision
+	 */
+	private synchronized RevisionToken saveLocked(IncidentId id, AppData data, RevisionToken expected) {
 		ensureOpen();
 		AppData candidate = copy(data);
 		if (!id.value().equals(candidate.getIncidentId()) || expected == null) {

@@ -27,9 +27,10 @@ and diff primitives are delivered locally; displayed-test CI verifies rollover
 and copied-record identity boundaries. The current #57 review follow-up adds
 copy/reuse coverage, schema-17 compatibility, and write-once identity setters;
 adjacent controller shutdown hardening restores retryability after a failed
-save drain. Delivery evidence is in
-[`docs/completed-work.md`](docs/completed-work.md). No host service is implemented.
-Work to make open views refresh without flicker or stale content is merged
+save drain. Issue #58 adds the in-process versioned service and file-backed
+record history, but no deployed host or network transport exists. Delivery
+evidence is in [`docs/completed-work.md`](docs/completed-work.md). Work to make
+open views refresh without flicker or stale content is merged
 (PR #56). This is standalone operation, not yet a local-host deployment.
 Details of delivered work are in
 [`docs/completed-work.md`](docs/completed-work.md).

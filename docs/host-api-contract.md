@@ -25,11 +25,16 @@ assigns `receivedAt`.
 
 The file backend stores history, changes, and operation receipts together in
 `incidents/{incidentId}.records.json`, with a sibling `.bak` recovery file and
-atomic replacement via a temporary file. The ordinary `{incidentId}.json`
-document remains the standalone import/export and whole-document store. A
-successful standalone create or save synchronizes changed `RecordIndex`
-snapshots into record history. Advisory file locks are not a correctness
-requirement for this service.
+atomic replacement via a temporary file. This versioned state file is
+authoritative. The ordinary `{incidentId}.json` document remains the
+standalone import/export and whole-document store, but is a projection of the
+authoritative record state. Reads and receipt replays repair a stale projection
+from version history. A successful standalone create or save synchronizes
+changed `RecordIndex` snapshots into record history. Advisory file locks are
+not a correctness requirement for this service. The service and whole-document
+save path share an `IncidentStore.withIncidentLock` scope per incident across
+store and service instances in the process; a backend may override it with
+stronger coordination.
 
 ## Operations and DTOs
 
@@ -144,9 +149,10 @@ are accepted; different changes to the same field conflict. If the base content
 equals the current host content, the submitted content is accepted directly.
 Comparison is by net JSON value, so a host A-to-B-to-A cycle is unchanged.
 Record IDs cannot change. Unknown records, invalid record types, nonexistent
-parents, and malformed content are rejected. The host checks parent references
-for submitted records, without changing application-specific cross-reference
-validation.
+parents, malformed content, and unknown base versions are rejected as invalid
+requests and map to `StoreValidationException`. The host checks parent
+references for submitted records, without changing application-specific
+cross-reference validation.
 
 ### Merge success
 

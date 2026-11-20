@@ -70,9 +70,8 @@ public final class IncidentService {
 	 * @param incident incident identity
 	 * @return detached snapshot with current ordered cursor
 	 */
-	public synchronized ReadResult read(IncidentId incident) {
-		IncidentState state = state(incident);
-		return readResult(incident, state);
+	public ReadResult read(IncidentId incident) {
+		return incidents.withIncidentLock(incident, () -> readResult(incident, state(incident)));
 	}
 
 	/**
@@ -83,13 +82,15 @@ public final class IncidentService {
 	 * @return ordered changes and the current cursor
 	 * @throws StoreValidationException when the cursor is negative or ahead of the service
 	 */
-	public synchronized ChangeResult changesSince(IncidentId incident, long cursor) {
-		IncidentState state = state(incident);
-		if (cursor < 0 || cursor > state.cursor()) {
-			throw new StoreValidationException("Change cursor is outside the incident history");
-		}
-		List<RecordChange> changes = state.changes().stream().filter(change -> change.cursor() > cursor).toList();
-		return new ChangeResult(state.cursor(), changes);
+	public ChangeResult changesSince(IncidentId incident, long cursor) {
+		return incidents.withIncidentLock(incident, () -> {
+			IncidentState state = state(incident);
+			if (cursor < 0 || cursor > state.cursor()) {
+				throw new StoreValidationException("Change cursor is outside the incident history");
+			}
+			List<RecordChange> changes = state.changes().stream().filter(change -> change.cursor() > cursor).toList();
+			return new ChangeResult(state.cursor(), changes);
+		});
 	}
 
 	/**
@@ -98,13 +99,27 @@ public final class IncidentService {
 	 * @param batch client-generated operation and record changes
 	 * @return original result for a new or previously receipted operation
 	 */
-	public synchronized SubmissionResult submit(RecordBatch batch) {
+	public SubmissionResult submit(RecordBatch batch) {
 		validateBatch(batch);
+		return incidents.withIncidentLock(batch.incident(), () -> submitLocked(batch));
+	}
+
+	/**
+	 * Submits a batch while the incident operation lock is held.
+	 *
+	 * @param batch client-generated operation and record changes
+	 * @return original result for a new or previously receipted operation
+	 */
+	private SubmissionResult submitLocked(RecordBatch batch) {
 		IncidentState current = versions.load(batch.incident());
 		OperationReceipt prior = findReceipt(current, batch.operationId());
 		if (prior != null) {
 			if (prior.result().applied()) {
-				project(batch.incident(), current);
+				try {
+					project(batch.incident(), current);
+				} catch (RuntimeException projectionFailure) {
+					// The receipt is authoritative; a later read can retry projection repair.
+				}
 			}
 			return prior.result();
 		}
@@ -170,7 +185,7 @@ public final class IncidentService {
 	 * @param incident incident identity
 	 * @param data newly saved document
 	 */
-	public synchronized void synchronize(IncidentId incident, AppData data) {
+	public void synchronize(IncidentId incident, AppData data) {
 		synchronize(incident, null, data);
 	}
 
@@ -181,7 +196,21 @@ public final class IncidentService {
 	 * @param previous prior saved document, or null when creating
 	 * @param data newly saved document
 	 */
-	public synchronized void synchronize(IncidentId incident, AppData previous, AppData data) {
+	public void synchronize(IncidentId incident, AppData previous, AppData data) {
+		incidents.withIncidentLock(incident, () -> {
+			synchronizeLocked(incident, previous, data);
+			return null;
+		});
+	}
+
+	/**
+	 * Synchronizes a standalone save while the incident operation lock is held.
+	 *
+	 * @param incident incident identity
+	 * @param previous prior saved document, or null when creating
+	 * @param data newly saved document
+	 */
+	private void synchronizeLocked(IncidentId incident, AppData previous, AppData data) {
 		Objects.requireNonNull(data, "data");
 		if (!incident.value().equals(data.getIncidentId())) {
 			throw new StoreValidationException("Document identity does not match incident");
@@ -232,7 +261,8 @@ public final class IncidentService {
 	}
 
 	/**
-	 * Loads or initializes history from the stored document.
+	 * Loads or initializes history from the stored document and repairs its projection.
+	 * Callers must hold the incident operation lock.
 	 *
 	 * @param incident incident identity
 	 * @return durable incident record state

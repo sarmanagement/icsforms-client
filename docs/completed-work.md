@@ -42,6 +42,14 @@ receipts, deterministic change cursors, three-way field merge, and standalone
 save synchronization. The service does not add transport, authentication,
 remote-store wiring, UI, or outbox behavior; Stage 2/T1 is not complete.
 
+**Service review follow-up, 2026-11-20:** per-incident operations serialize
+across service and file-store instances without relying on advisory edit locks.
+The versioned state file is authoritative and a service read repairs a failed
+document projection. Regression coverage includes the merge matrix, unknown
+bases, commit failure atomicity, backup recovery, lost-response replay,
+concurrent clients, standalone create/update/strike-out history, and rollback
+when history synchronization fails.
+
 | Work | Tracking | Evidence | Status |
 | --- | --- | --- | --- |
 | Core SAR form set (ICS 203, 205, 215A/208, 206 + canine 206, ICS 233-CG clue log), training fixes | #13, #14, #15, #16, #17, #18 — all closed | Models, panels and PDF renderers for each form are in `src/main/java/org/sarmanagement/icsforms/{model,ui,pdf}`; IAP bundle numbering in `pdf/PdfExportService.java` | **Complete.** Former "Stage A" is no longer a prerequisite. |
