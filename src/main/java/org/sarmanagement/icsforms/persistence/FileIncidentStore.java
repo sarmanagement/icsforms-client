@@ -233,7 +233,7 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 
 	/** {@inheritDoc} */
 	@Override
-	public synchronized IncidentId create(AppData data) {
+	public IncidentId create(AppData data) {
 		ensureOpen();
 		AppData candidate = copy(data);
 		IncidentId id;
@@ -242,6 +242,19 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 		} catch (IllegalArgumentException e) {
 			throw new StoreValidationException("Invalid incident identity", e);
 		}
+		return withIncidentLock(id, () -> createLocked(data, candidate, id));
+	}
+
+	/**
+	 * Creates a document while holding the store monitor and incident operation lock.
+	 *
+	 * @param data caller-owned document to create
+	 * @param candidate detached document to persist
+	 * @param id assigned incident identity
+	 * @return assigned identifier
+	 */
+	private synchronized IncidentId createLocked(AppData data, AppData candidate, IncidentId id) {
+		ensureOpen();
 		Path path = path(id);
 		boolean created = false;
 		try {
@@ -265,6 +278,7 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 				created = true;
 				MAPPER.writerWithDefaultPrettyPrinter().writeValue(output, prepared);
 			}
+			synchronizeRecordVersions(id, candidate, true, null, null);
 			applyMetadata(data, candidate);
 			observed.put(id, revision(candidate));
 			return id;
@@ -335,13 +349,25 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 	/** {@inheritDoc} */
 	@Deprecated
 	@Override
-	public synchronized void save(IncidentId id, AppData data) {
+	public void save(IncidentId id, AppData data) {
 		save(id, data, revision(data));
 	}
 
 	/** {@inheritDoc} */
 	@Override
-	public synchronized RevisionToken save(IncidentId id, AppData data, RevisionToken expected) {
+	public RevisionToken save(IncidentId id, AppData data, RevisionToken expected) {
+		return withIncidentLock(id, () -> saveLocked(id, data, expected));
+	}
+
+	/**
+	 * Saves a document while holding the store monitor and incident operation lock.
+	 *
+	 * @param id incident identity
+	 * @param data updated document
+	 * @param expected expected revision
+	 * @return the new revision
+	 */
+	private synchronized RevisionToken saveLocked(IncidentId id, AppData data, RevisionToken expected) {
 		ensureOpen();
 		AppData candidate = copy(data);
 		if (!id.value().equals(candidate.getIncidentId()) || expected == null) {
@@ -385,6 +411,8 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 				Files.copy(path, backup(path), StandardCopyOption.REPLACE_EXISTING);
 			}
 			move(temp, path);
+			Path rollbackSource = source.source().equals(path) ? backup(path) : source.source();
+			synchronizeRecordVersions(id, candidate, false, rollbackSource, source.data());
 			applyMetadata(data, candidate);
 			RevisionToken committed = revision(candidate);
 			observed.put(id, committed);
@@ -400,6 +428,7 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 					|| e instanceof StoreUnavailableException || e instanceof DuplicateIncidentException)) {
 				typed = new StorePersistenceException("Cannot save incident: " + id + ": " + e.getMessage(), e);
 			}
+
 			failure = typed;
 			throw typed;
 		} catch (Error e) {
@@ -430,13 +459,39 @@ public class FileIncidentStore implements IncidentStore, EditLockSupport {
 		}
 	}
 
+	/**
+	 * Adds successful whole-document writes to the retained record history.
+	 *
+	 * @param id incident identity
+	 * @param data committed document
+	 */
+	private void synchronizeRecordVersions(IncidentId id, AppData data, boolean creating, Path rollbackSource,
+			AppData previous) {
+		try {
+			new IncidentService(this, new FileRecordVersionStore(incidents)).synchronize(id, previous, data);
+		} catch (RuntimeException exception) {
+			Path primary = path(id);
+			try {
+				if (creating) {
+					Files.deleteIfExists(primary);
+				} else if (rollbackSource != null && Files.exists(rollbackSource)) {
+					Files.copy(rollbackSource, primary, StandardCopyOption.REPLACE_EXISTING);
+				}
+			} catch (IOException rollbackFailure) {
+				exception.addSuppressed(rollbackFailure);
+			}
+			throw new StorePersistenceException("Cannot synchronize record history for " + id, exception);
+		}
+	}
+
 	/** {@inheritDoc} */
 	@Override
 	public synchronized List<IncidentSummary> list() {
 		ensureOpen();
 		List<IncidentSummary> results = new ArrayList<>();
 		try (var files = Files.list(incidents)) {
-			files.filter(p -> p.getFileName().toString().endsWith(".json")).forEach(p -> {
+			files.filter(p -> p.getFileName().toString().endsWith(".json"))
+					.filter(p -> !p.getFileName().toString().endsWith(".records.json")).forEach(p -> {
 				try {
 					IncidentId id = IncidentId.of(p.getFileName().toString().replaceFirst("\\.json$", ""));
 					AppData data = load(id);

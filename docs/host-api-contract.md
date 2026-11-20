@@ -1,0 +1,336 @@
+# Host-mode record service contract
+
+Status: **version 1 contract for issue #58**, 2026-11-20. The in-process
+`IncidentService` implements record reads, ordered changes, merge, durable
+receipts, and file-backed history. This document also defines the transport
+envelope for a later issue; no listener, authentication mechanism, remote store,
+UI, or outbox is delivered here.
+
+## Resource and version model
+
+An incident is addressed by its stable incident UUID. Its records are keyed by
+the pair `{type, id}`, where `type` is the fully qualified model class name and
+`id` is the immutable stable record ID serialized as `id`. Nested rows are
+independent records. Singleton forms and context objects are records too.
+Record versions start at 1 and increase monotonically for each record. Version
+content is retained indefinitely in the managed history file.
+
+The host assigns a single monotonically increasing incident cursor. It advances
+once for each record version committed and orders changes within an atomic
+batch. Cursors are opaque to clients except for ordering and resume. A changes
+response includes all retained changes strictly after the requested cursor;
+there is no expiry in this version. Device timestamps are never used for
+ordering. An optional client timestamp is audit/display data only; the host
+assigns `receivedAt`.
+
+The file backend stores history, changes, and operation receipts together in
+`incidents/{incidentId}.records.json`, with a sibling `.bak` recovery file and
+atomic replacement via a temporary file. This versioned state file is
+authoritative. The ordinary `{incidentId}.json` document remains the
+standalone import/export and whole-document store, but is a projection of the
+authoritative record state. Reads and receipt replays repair a stale projection
+from version history. A successful standalone create or save synchronizes
+changed `RecordIndex` snapshots into record history. Advisory file locks are
+not a correctness requirement for this service. The service and whole-document
+save path share an `IncidentStore.withIncidentLock` scope per incident across
+store and service instances in the process; a backend may override it with
+stronger coordination.
+
+## Operations and DTOs
+
+The following JSON shapes define the transport-neutral DTOs. The in-process
+service uses the same identities, values, and results.
+
+### Read
+
+`GET /v1/incidents/{incidentId}` returns current records and versions.
+
+```json
+{
+  "incidentId": "4b5a3f16-d723-48cb-b247-81b3595b06fc",
+  "cursor": 42,
+  "records": [
+    {
+      "key": {
+        "type": "org.sarmanagement.icsforms.model.IncidentContext",
+        "id": "c07be7b4-9e3e-4ab2-9cab-1b9b1a0b2a1d"
+      },
+      "version": 3,
+      "cursor": 39,
+      "receivedAt": "2026-11-20T15:40:00Z",
+      "content": {
+        "id": "c07be7b4-9e3e-4ab2-9cab-1b9b1a0b2a1d",
+        "incidentName": "North Ridge"
+      }
+    }
+  ]
+}
+```
+
+### Changes since a cursor
+
+`GET /v1/incidents/{incidentId}/changes?after=39` returns ordered changes
+strictly after cursor 39 and the current cursor. A client with the current
+cursor receives an empty list.
+
+```json
+{
+  "cursor": 42,
+  "changes": [
+    {
+      "cursor": 40,
+      "key": {
+        "type": "org.sarmanagement.icsforms.model.OpenActionItem",
+        "id": "62582556-8e53-4bfc-8dc6-419db70309cb"
+      },
+      "version": 1,
+      "receivedAt": "2026-11-20T15:40:01Z",
+      "content": {
+        "id": "62582556-8e53-4bfc-8dc6-419db70309cb",
+        "description": "Check access"
+      }
+    }
+  ]
+}
+```
+
+### Create, update, and strike-out
+
+`POST /v1/incidents/{incidentId}/records:submit` accepts an atomic batch.
+`CREATE` uses `baseVersion: 0`; `UPDATE` and `STRIKE_OUT` use a version
+previously returned by read. `STRIKE_OUT` submits the retained record with its
+application strike-out field set, not a physical delete. `parent` is null for
+a top-level record and otherwise identifies the containing record.
+
+```json
+{
+  "operationId": "e27957fc-0b92-4fdc-b076-71590501c4b8",
+  "clientTimestamp": "2026-11-20T15:39:58Z",
+  "records": [
+    {
+      "operation": "UPDATE",
+      "key": {
+        "type": "org.sarmanagement.icsforms.model.IncidentContext",
+        "id": "c07be7b4-9e3e-4ab2-9cab-1b9b1a0b2a1d"
+      },
+      "parent": null,
+      "parentField": null,
+      "baseVersion": 2,
+      "content": {
+        "id": "c07be7b4-9e3e-4ab2-9cab-1b9b1a0b2a1d",
+        "incidentName": "North Ridge"
+      }
+    }
+  ]
+}
+```
+
+`parentField` is the containing Java model field name and is required for a
+create. Create payloads contain the complete record snapshot, including
+default-valued fields. Updates and strike-outs can omit both parent properties.
+For example, creating a top-level action item uses
+`"operation": "CREATE"`, `"parent": null`, `"parentField": "openActionItems"`,
+and `"baseVersion": 0`. A strike-out uses `"operation": "STRIKE_OUT"` and a
+full record `content` with `"struckOut": true` (or the model's
+`"isStruckOut": true` field).
+
+All records are validated and merged before persistence. The service commits
+the resulting versions, ordered changes, and operation receipt by atomically
+replacing one incident state file. A rejected batch changes no records. Each
+operation ID identifies exactly one attempt; it must not be reused for a
+different logical operation.
+
+## Three-way merge
+
+The base is the retained content at the submitted record version; clients do
+not send a base copy. For each field, an unchanged client value keeps the host
+value; a host value unchanged from base accepts the client value; equal values
+are accepted; different changes to the same field conflict. If the base content
+equals the current host content, the submitted content is accepted directly.
+Comparison is by net JSON value, so a host A-to-B-to-A cycle is unchanged.
+Record IDs cannot change. Unknown records, invalid record types, nonexistent
+parents, malformed content, and unknown base versions are rejected as invalid
+requests and map to `StoreValidationException`. The host checks parent
+references for submitted records, without changing application-specific
+cross-reference validation.
+
+### Merge success
+
+```json
+{
+  "operationId": "e27957fc-0b92-4fdc-b076-71590501c4b8",
+  "applied": true,
+  "cursor": 43,
+  "receivedAt": "2026-11-20T15:40:02Z",
+  "versions": [
+    {
+      "key": {
+        "type": "org.sarmanagement.icsforms.model.IncidentContext",
+        "id": "c07be7b4-9e3e-4ab2-9cab-1b9b1a0b2a1d"
+      },
+      "version": 4
+    }
+  ],
+  "conflicts": []
+}
+```
+
+### Field conflict
+
+HTTP status: `409 Conflict`.
+
+```json
+{
+  "operationId": "e27957fc-0b92-4fdc-b076-71590501c4b8",
+  "applied": false,
+  "cursor": 42,
+  "receivedAt": "2026-11-20T15:40:02Z",
+  "versions": [],
+  "conflicts": [
+    {
+      "key": {
+        "type": "org.sarmanagement.icsforms.model.IncidentContext",
+        "id": "c07be7b4-9e3e-4ab2-9cab-1b9b1a0b2a1d"
+      },
+      "field": "incidentName",
+      "base": "North Ridge",
+      "mine": "North Ridge West",
+      "theirs": "North Ridge East"
+    }
+  ]
+}
+```
+
+## Idempotency and ambiguous outcomes
+
+The host stores receipts indefinitely, including rejected field-conflict
+results. A receipt is committed in the same atomic state-file replacement as
+the accepted record effect. Retrying an operation ID returns the original
+result and does not apply the batch again. Therefore, after a timeout or lost
+response the client retries with the same operation ID; it must not infer
+failure from a missing response or create a replacement ID. A crash before
+replacement leaves neither the proposed effect nor its receipt; a crash after
+replacement leaves both. This retry rule does not deduplicate independently
+created reports describing the same real-world event.
+
+## Version negotiation, limits, and errors
+
+Requests identify `apiVersion: 1` and the client application version in the
+transport envelope. A server advertises its supported API range and minimum
+client version. It rejects a missing/unsupported API version or client version
+outside its declared range rather than silently downgrading. Authentication
+and exact header names are transport work for issue #59.
+
+Version 1 limits a request body to 1 MiB, at most 100 records in a batch, and
+1 MiB for an individual serialized record. The transport must enforce these
+limits before deserializing a request. The in-process API has no network body
+to limit.
+
+Errors use this shape:
+
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "A record ID cannot be changed.",
+    "retryable": false,
+    "details": {}
+  }
+}
+```
+
+| Service outcome | HTTP status | Existing client exception |
+| --- | --- | --- |
+| Revision or field conflict | `409` | `StoreConflictException` |
+| Advisory edit-lock conflict | `423` | `StoreLockConflictException` |
+| Invalid arguments, content, cursor, or record identity | `400` | `StoreValidationException` |
+| Incident absent or retired | `404` | `IncidentNotFoundException` |
+| Host unavailable | `503` | `StoreUnavailableException` |
+| Host persistence failure | `500` | `StorePersistenceException` |
+| Missing/invalid credential | `401` | Transport authorization error; no matching store exception |
+| Expired credential | `401` | Transport authorization error; no matching store exception |
+| Revoked credential | `403` | Transport authorization error; no matching store exception |
+| Incompatible client or API version | `426` | Client compatibility error; no matching store exception |
+
+### Unavailable
+
+```json
+{
+  "error": {
+    "code": "service_unavailable",
+    "message": "The incident service is temporarily unavailable.",
+    "retryable": true,
+    "details": {}
+  }
+}
+```
+
+### Invalid request
+
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "Record content ID does not match its key.",
+    "retryable": false,
+    "details": {
+      "recordId": "c07be7b4-9e3e-4ab2-9cab-1b9b1a0b2a1d"
+    }
+  }
+}
+```
+
+### Unauthorized
+
+```json
+{
+  "error": {
+    "code": "unauthorized",
+    "message": "A valid device credential is required.",
+    "retryable": false,
+    "details": {}
+  }
+}
+```
+
+### Expired credential
+
+```json
+{
+  "error": {
+    "code": "credential_expired",
+    "message": "The device credential has expired.",
+    "retryable": false,
+    "details": {}
+  }
+}
+```
+
+### Revoked credential
+
+```json
+{
+  "error": {
+    "code": "credential_revoked",
+    "message": "The device credential was revoked.",
+    "retryable": false,
+    "details": {}
+  }
+}
+```
+
+### Incompatible client
+
+```json
+{
+  "error": {
+    "code": "incompatible_client",
+    "message": "Client version 0.9 is not supported.",
+    "retryable": false,
+    "details": {
+      "minimumClientVersion": "1.0",
+      "supportedApiVersions": [1]
+    }
+  }
+}
+```

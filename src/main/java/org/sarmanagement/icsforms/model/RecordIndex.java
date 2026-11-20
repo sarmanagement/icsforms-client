@@ -29,16 +29,23 @@ public final class RecordIndex {
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule());
 	private final Map<RecordKey, JsonNode> records;
 	private final Map<RecordKey, RecordKey> parents;
+	private final Map<RecordKey, String> parentFields;
+	private final Map<RecordKey, Object> values;
 
 	/**
-	 * Creates an index from already ordered record snapshots and parent links.
+	 * Creates an index from ordered snapshots, parent links, and model objects.
 	 *
 	 * @param records record snapshots
 	 * @param parents immediate parent keys
+	 * @param parentFields containing fields
+	 * @param values identified model objects
 	 */
-	private RecordIndex(Map<RecordKey, JsonNode> records, Map<RecordKey, RecordKey> parents) {
+	private RecordIndex(Map<RecordKey, JsonNode> records, Map<RecordKey, RecordKey> parents,
+			Map<RecordKey, String> parentFields, Map<RecordKey, Object> values) {
 		this.records = records;
 		this.parents = parents;
+		this.parentFields = parentFields;
+		this.values = values;
 	}
 
 	/**
@@ -50,8 +57,9 @@ public final class RecordIndex {
 	public static RecordIndex of(AppData data) {
 		Objects.requireNonNull(data, "data");
 		Builder builder = new Builder();
-		builder.visit(data, null, "$", new IdentityHashMap<>());
-		return new RecordIndex(builder.sortedRecords(), builder.sortedParents());
+		builder.visit(data, null, null, "$", new IdentityHashMap<>());
+		return new RecordIndex(builder.sortedRecords(), builder.sortedParents(),
+				builder.sortedParentFields(), builder.sortedValues());
 	}
 
 	/**
@@ -71,6 +79,26 @@ public final class RecordIndex {
 	 */
 	public RecordKey parentOf(RecordKey key) {
 		return parents.get(key);
+	}
+
+	/**
+	 * Returns the containing field for a record, or null for a top-level record.
+	 *
+	 * @param key record key
+	 * @return Java field name in the parent object, or null
+	 */
+	public String parentFieldOf(RecordKey key) {
+		return parentFields.get(key);
+	}
+
+	/**
+	 * Returns the model object referenced by this index.
+	 *
+	 * @param key record key
+	 * @return mutable model object, or null when absent
+	 */
+	public Object value(RecordKey key) {
+		return values.get(key);
 	}
 
 	/**
@@ -110,6 +138,8 @@ public final class RecordIndex {
 	private static final class Builder {
 		private final Map<RecordKey, JsonNode> records = new LinkedHashMap<>();
 		private final Map<RecordKey, RecordKey> parents = new LinkedHashMap<>();
+		private final Map<RecordKey, String> parentFields = new LinkedHashMap<>();
+		private final Map<RecordKey, Object> values = new LinkedHashMap<>();
 
 		/**
 		 * Visits an object graph node and indexes identified records.
@@ -119,7 +149,8 @@ public final class RecordIndex {
 		 * @param path path used for deterministic traversal
 		 * @param visited visited object references
 		 */
-		private void visit(Object value, RecordKey parent, String path, IdentityHashMap<Object, Boolean> visited) {
+		private void visit(Object value, RecordKey parent, String parentField, String path,
+				IdentityHashMap<Object, Boolean> visited) {
 			if (value == null || visited.put(value, Boolean.TRUE) != null) {
 				return;
 			}
@@ -129,22 +160,24 @@ public final class RecordIndex {
 				RecordKey key = new RecordKey(value.getClass().getName(), identified.getId());
 				records.put(key, snapshot(value));
 				parents.put(key, parent);
+				parentFields.put(key, parentField);
+				values.put(key, value);
 				childParent = key;
 			}
 			if (value instanceof Collection<?> collection) {
 				int index = 0;
 				for (Object item : collection) {
-					visit(item, childParent, path + "[" + index++ + "]", visited);
+					visit(item, childParent, parentField, path + "[" + index++ + "]", visited);
 				}
 			} else if (value instanceof Map<?, ?> map) {
 				List<? extends Map.Entry<?, ?>> entries = new ArrayList<>(map.entrySet());
 				entries.sort(Comparator.comparing(entry -> String.valueOf(entry.getKey())));
 				for (Map.Entry<?, ?> entry : entries) {
-					visit(entry.getValue(), childParent, path + "." + entry.getKey(), visited);
+					visit(entry.getValue(), childParent, parentField, path + "." + entry.getKey(), visited);
 				}
 			} else if (value.getClass().isArray()) {
 				for (int index = 0; index < Array.getLength(value); index++) {
-					visit(Array.get(value, index), childParent, path + "[" + index + "]", visited);
+					visit(Array.get(value, index), childParent, parentField, path + "[" + index + "]", visited);
 				}
 			} else if (value.getClass().getPackageName().equals(AppData.class.getPackageName())) {
 				visitFields(value, childParent, path, visited);
@@ -174,7 +207,7 @@ public final class RecordIndex {
 			for (Field field : fields) {
 				try {
 					field.setAccessible(true);
-					visit(field.get(value), parent, path + "." + field.getName(), visited);
+					visit(field.get(value), parent, field.getName(), path + "." + field.getName(), visited);
 				} catch (IllegalAccessException | RuntimeException exception) {
 					throw new IllegalStateException("Cannot index " + path + "." + field.getName(), exception);
 				}
@@ -262,6 +295,28 @@ public final class RecordIndex {
 		private Map<RecordKey, RecordKey> sortedParents() {
 			Map<RecordKey, RecordKey> sorted = new LinkedHashMap<>();
 			parents.keySet().stream().sorted().forEach(key -> sorted.put(key, parents.get(key)));
+			return java.util.Collections.unmodifiableMap(sorted);
+		}
+
+		/**
+		 * Orders containing-field metadata.
+		 *
+		 * @return immutable ordered parent-field map
+		 */
+		private Map<RecordKey, String> sortedParentFields() {
+			Map<RecordKey, String> sorted = new LinkedHashMap<>();
+			parentFields.keySet().stream().sorted().forEach(key -> sorted.put(key, parentFields.get(key)));
+			return java.util.Collections.unmodifiableMap(sorted);
+		}
+
+		/**
+		 * Orders identified model values.
+		 *
+		 * @return immutable ordered value map
+		 */
+		private Map<RecordKey, Object> sortedValues() {
+			Map<RecordKey, Object> sorted = new LinkedHashMap<>();
+			values.keySet().stream().sorted().forEach(key -> sorted.put(key, values.get(key)));
 			return java.util.Collections.unmodifiableMap(sorted);
 		}
 	}

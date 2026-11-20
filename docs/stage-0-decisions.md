@@ -4,7 +4,9 @@ Status: **open**, 2026-11-17. This inventory maps the Stage 0 exit criteria to
 existing material and the decisions still needed. The targets in
 [`DraftWorkPlan.md`, Part III](../DraftWorkPlan.md#part-iii--target-architecture-and-deployment-topologies)
 are not evidence that these operational choices have been agreed. Stage 2
-implementation remains blocked until Stage 0 exits.
+production host deployment remains blocked until Stage 0 exits. The explicit
+contract and local service slice in issue #58 may proceed against its recorded
+design decisions.
 
 ## Recorded decisions
 
@@ -39,7 +41,7 @@ The following decisions were provided on 2026-11-17:
   deduplication and conflict-resolution process is needed; a likely case is the
   same event being logged twice in the same log. The process and the stage in
   which disconnected entry becomes available remain to be specified.
-- **Record identity and changes (issue #57):** persisted records, nested rows,
+- **Record identity and changes (issues #57 and #58):** persisted records, nested rows,
   history events and singleton forms have immutable stable IDs serialized as
   `id`; legacy names are read as aliases. Stored legacy data receives missing
   IDs once during load migration, which is persisted before returning the
@@ -48,8 +50,13 @@ The following decisions were provided on 2026-11-17:
   or striking-out records. Record-level submissions use per-record versions,
   three-way comparison of net field values, atomic multi-record batches,
   indefinitely retained version history and operation receipts, and a durable
-  client outbox. This records the issue #57 design boundary; it does not
-  implement the later host/service, version admission or offline-sync work.
+  client outbox.   Issue #58 now adds an in-process service contract, retained per-record
+  versions, ordered cursors, field-level merge results, atomic batches, and
+  durable receipts over managed incident files. Its
+  [API contract](host-api-contract.md) defines DTOs and error mappings. This
+  does not implement transport, credentials, the remote store, UI, or outbox;
+  Stage 0's deployment, threat, recovery, and success-measure decisions remain
+  open.
 
 ## Existing targets and remaining decisions
 
@@ -64,7 +71,7 @@ The following decisions were provided on 2026-11-17:
 | Host operations and recovery | Local host without internet; backups and restore are required for later field packaging. | Pilot installation and startup, health and diagnostics, backup frequency and location, restore procedure and drill, host/disk/power failure handling, acceptable data loss and recovery time, and responsible operators. |
 | Versions and technology | Java application packaging with an embedded host service; host and connected UIs use the service boundary. Versioned JSON API and explicit transfer objects; host owns authorization, validation and storage. Later topologies are opt-in. | Select persistence and identity technologies after constraints are agreed; define supported client/API versions, compatibility, upgrades, rollback and incompatible-client behavior. |
 | Threat assumptions | Data in transit must be encrypted against network monitoring. Same-network outsiders must be refused; incident boundaries enforced on the host; host identity pinned and device credentials individually revocable in the target design. | Document other attacker capabilities and physical assumptions, sensitive assets, invitation interception, lost devices, host impersonation, credential compromise and residual risks; decide mitigations and recovery appropriate to the pilot. |
-| First API/domain boundary | Clients use an incident-scoped API, not the database; host validates and authorizes requests. | Specify the initial operations and DTO/domain ownership, incident isolation, version negotiation, revision and conflict semantics, errors and update/freshness mechanism. Do not assume file-store revisions or advisory locks are universally available. |
+| First API/domain boundary | Issue #58 specifies record operations and DTOs, incident isolation, per-record versions, merge/conflict semantics, cursors, errors, compatibility, and request limits in the [host API contract](host-api-contract.md). | Implement and verify the transport and authorization boundary; decide refresh/freshness behavior and operational compatibility policy. Do not assume file-store revisions or advisory locks are universally available. |
 | Success measures and pilot | Stage 2 exit criteria require two admitted workstations, isolation, unchanged standalone operation, remote-store contract coverage, visible staleness and draft-preserving refresh. | Agree measurable performance, join, reliability, recovery and usability thresholds and how they will be tested; choose participants, environment, duration, permitted data, scope, stop conditions and decision owner. |
 
 ## Exit checklist

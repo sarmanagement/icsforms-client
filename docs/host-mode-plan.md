@@ -1,9 +1,13 @@
 # Host mode implementation plan
 
-Status: **proposed implementation plan**, 2026-11-17. No host or network
-implementation is delivered by this document. This expands
+Status: **issue #58 in-process service delivered**, 2026-11-20. The service
+contract and versioned record service are implemented without a listener,
+authentication, remote store, outbox, or UI change. This does not deliver host
+mode or complete Stage 2/T1. The remaining work expands
 [Stage 2](../DraftWorkPlan.md#stage-2--incident-api-and-single-local-host-delivers-t1);
 the remaining [Stage 0 decisions](stage-0-decisions.md) still apply.
+See the [host API contract](host-api-contract.md) for version 1 DTOs and
+semantics.
 
 ## Agreed direction
 

@@ -8,6 +8,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Store-neutral whole-document persistence. An incident's full identity is the store
@@ -42,6 +43,19 @@ import java.util.Optional;
  * unless the backend overrides it.
  */
 public interface IncidentStore extends AutoCloseable {
+	/**
+	 * Runs an operation while serializing it with other operations on the incident.
+	 * Backends with stronger transactional coordination may override this method.
+	 *
+	 * @param id incident identity
+	 * @param operation incident operation
+	 * @param <T> operation result type
+	 * @return operation result
+	 */
+	default <T> T withIncidentLock(IncidentId id, Supplier<T> operation) {
+		return IncidentOperationLock.withLock(id, operation);
+	}
+
 	/**
 	 * Selects the save retry policy at the persistence boundary. The default
 	 * requires an explicit retry; backends may supply bounded retries or backoff.
