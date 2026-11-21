@@ -15,6 +15,7 @@ import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.RecordDiff;
 import org.sarmanagement.icsforms.model.RecordIndex;
 import org.sarmanagement.icsforms.model.RecordIndex.RecordKey;
+import org.sarmanagement.icsforms.model.RootSettings;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -520,8 +521,48 @@ public final class RemoteIncidentStore implements IncidentStore {
 			result.add(new IncidentService.RecordSubmission(key, held.parent(), held.parentField(), held.version(),
 					operation, content));
 		}
+		rootSubmission(base, edited).ifPresent(result::add);
 		result.sort(Comparator.comparing(IncidentService.RecordSubmission::key));
 		return result;
+	}
+
+	/**
+	 * Derives the submission for incident-wide settings, such as the IAP phase, incident mode and time zone, which
+	 * no identified record contains and which therefore travel as the virtual root-settings record.
+	 *
+	 * @param base snapshot the edit started from
+	 * @param edited edited document
+	 * @return the root-settings update, or empty when none of those values changed
+	 * @throws StoreValidationException when the host does not hold the root-settings record
+	 */
+	private java.util.Optional<IncidentService.RecordSubmission> rootSubmission(Base base, AppData edited) {
+		JsonNode before = RootSettings.snapshot(base.document());
+		ObjectNode after = RootSettings.snapshot(edited);
+		List<String> changed = new ArrayList<>();
+		for (String name : RootSettings.propertyNames()) {
+			if (!RecordJson.same(before.get(name), after.get(name))) {
+				changed.add(name);
+			}
+		}
+		if (changed.isEmpty()) {
+			return java.util.Optional.empty();
+		}
+		IncidentService.VersionedRecord held = base.records().get(RootSettings.key());
+		if (held == null) {
+			throw new StoreValidationException("The host does not hold the incident-wide settings; reload the "
+					+ "incident before saving");
+		}
+		ObjectNode content = (ObjectNode) held.content().deepCopy();
+		for (String name : changed) {
+			JsonNode value = after.get(name);
+			if (value == null) {
+				content.remove(name);
+			} else {
+				content.set(name, value.deepCopy());
+			}
+		}
+		return java.util.Optional.of(new IncidentService.RecordSubmission(RootSettings.key(), null, null,
+				held.version(), IncidentService.Operation.UPDATE, content));
 	}
 
 	/**

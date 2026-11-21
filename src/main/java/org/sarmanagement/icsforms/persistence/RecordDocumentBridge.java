@@ -14,6 +14,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Identified;
 import org.sarmanagement.icsforms.model.RecordIndex;
 import org.sarmanagement.icsforms.model.RecordIndex.RecordKey;
+import org.sarmanagement.icsforms.model.RootSettings;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -92,7 +93,8 @@ final class RecordDocumentBridge {
 		List<RecordHistory> ordered = histories.stream()
 				.sorted(Comparator.comparing(history -> history.key().type() + ":" + history.key().id())).toList();
 		List<RecordHistory> missing = new ArrayList<>(ordered.stream()
-				.filter(history -> !values.containsKey(history.key())).toList());
+				.filter(history -> !values.containsKey(history.key()) && !RootSettings.isRoot(history.key()))
+				.toList());
 		while (!missing.isEmpty()) {
 			boolean attached = false;
 			for (int indexPosition = 0; indexPosition < missing.size();) {
@@ -113,6 +115,14 @@ final class RecordDocumentBridge {
 			}
 		}
 		for (RecordHistory history : ordered) {
+			if (RootSettings.isRoot(history.key())) {
+				try {
+					RootSettings.apply(data, latest(history).content());
+				} catch (IllegalArgumentException exception) {
+					throw new StoreValidationException("Cannot apply incident-wide settings", exception);
+				}
+				continue;
+			}
 			Object target = values.get(history.key());
 			if (target != null) {
 				update(target, latest(history).content());

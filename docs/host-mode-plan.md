@@ -221,13 +221,19 @@ and unsaved state stays visible (the durable outbox is part 5). Credentials are
 session-only; reconnecting after a restart needs a new invitation (persistence
 is part 6).
 
-*Known limits.* Root-level document scalars that are not records (IAP phase,
-incident mode, time zone) are not synchronised; records cannot be removed
+*Incident-wide settings.* Root-level scalars that are not records (IAP phase,
+incident mode, time zone and similar) are synchronised as a virtual singleton
+`RootSettings` record (`incident-root-settings`) with per-field versions, merge
+and conflicts, and are included in `loadSnapshot`, refresh and the file
+projection.
+
+*Known limits.* Records cannot be removed
 remotely (strike-out is used); the legacy numeric-revision/edit-lock suite
 `AbstractIncidentStoreContractTest` does not apply to an opaque, lockless store,
 while `AbstractSnapshotIncidentStoreContractTest` runs against the real host in
 `RealHostIncidentStoreContractTest`. If the host's file projection fails after
-the durable commit the client sees a persistence failure, and retrying the same
+the durable commit the client sees the distinct `StoreCommittedException` (`committed_not_projected`,
+"committed; retry is safe"), and retrying the same
 save succeeds without double application.
 
 ### 5. Add cross-instance refresh and explicit conflict recovery

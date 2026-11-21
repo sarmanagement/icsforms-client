@@ -15,6 +15,7 @@ import org.sarmanagement.icsforms.persistence.RemoteIncidentGateway;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
 import org.sarmanagement.icsforms.persistence.StoreLockConflictException;
+import org.sarmanagement.icsforms.persistence.StoreCommittedException;
 import org.sarmanagement.icsforms.persistence.StorePersistenceException;
 import org.sarmanagement.icsforms.persistence.StoreUnavailableException;
 import org.sarmanagement.icsforms.persistence.StoreValidationException;
@@ -212,6 +213,9 @@ public final class HostGateway implements RemoteIncidentGateway {
 		}
 		if (status == 400 || status == 413) {
 			return new StoreValidationException("The host rejected the request: " + failure.getMessage());
+		}
+		if (status == 500 && "committed_not_projected".equals(failure.code())) {
+			return new StoreCommittedException(failure);
 		}
 		return new StorePersistenceException("The host could not complete the request (HTTP " + status + ")",
 				failure);

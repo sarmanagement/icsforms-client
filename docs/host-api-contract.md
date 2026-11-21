@@ -94,6 +94,21 @@ cursor receives an empty list.
 }
 ```
 
+### Incident-wide settings record
+
+Incident-wide values that belong to no identified record (IAP phase,
+planning stage, incident mode, time-zone settings, the ICS 205/215/233 and
+tracker switches, the plan-review assertions, the medical unit leader, and the
+canine routing base) travel as one virtual singleton record of type
+`org.sarmanagement.icsforms.model.RootSettings` with the fixed id
+`incident-root-settings`, no parent and no parent field. It is read, versioned,
+three-way merged and conflicted per field like any other record and is
+projected back onto the incident file. It is never stored as a field of the
+document. The host adds it from the stored document the first time it reads a
+state that predates it, so older hosts' data keep working; clients only ever
+`UPDATE` it. The change is additive: clients that ignore it simply do not see
+those values.
+
 ### Create, update, and strike-out
 
 `POST /v1/incidents/{incidentId}/records:submit` accepts an atomic batch.
@@ -247,6 +262,7 @@ Errors use this shape:
 | Incident absent or retired | `404` | `IncidentNotFoundException` |
 | Host unavailable | `503` | `StoreUnavailableException` |
 | Host persistence failure | `500` | `StorePersistenceException` |
+| Submission committed, host file projection failed | `500`, code `committed_not_projected` | `StoreCommittedException` (a `StorePersistenceException`); the change is durable and retrying the identical save returns the original receipt |
 | Missing/invalid credential | `401` | Transport authorization error; no matching store exception |
 | Expired credential | `401` | Transport authorization error; no matching store exception |
 | Revoked credential | `403` | Transport authorization error; no matching store exception |

@@ -14,6 +14,7 @@ import org.sarmanagement.icsforms.persistence.IncidentNotFoundException;
 import org.sarmanagement.icsforms.persistence.IncidentService;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
 import org.sarmanagement.icsforms.persistence.StoreLockConflictException;
+import org.sarmanagement.icsforms.persistence.StoreCommittedException;
 import org.sarmanagement.icsforms.persistence.StorePersistenceException;
 import org.sarmanagement.icsforms.persistence.StoreUnavailableException;
 import org.sarmanagement.icsforms.persistence.StoreValidationException;
@@ -427,6 +428,10 @@ final class HostApiHandler implements HttpHandler {
 			HostHttp.error(exchange, 404, "not_found", "The incident was not found.", false);
 		} else if (failure instanceof StoreValidationException || failure instanceof IllegalArgumentException) {
 			HostHttp.error(exchange, 400, "invalid_request", String.valueOf(failure.getMessage()), false);
+		} else if (failure instanceof StoreCommittedException) {
+			context.noteFailure("Incident file projection failed after a durable commit");
+			LOGGER.log(Level.WARNING, "Projection failed after commit", failure);
+			HostHttp.error(exchange, 500, "committed_not_projected", StoreCommittedException.MESSAGE, true);
 		} else if (failure instanceof StoreUnavailableException) {
 			context.noteFailure("Incident storage is unavailable");
 			HostHttp.error(exchange, 503, "service_unavailable", "The incident service is temporarily unavailable.",
