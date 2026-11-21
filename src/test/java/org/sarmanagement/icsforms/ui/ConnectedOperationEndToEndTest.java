@@ -19,6 +19,8 @@ import org.sarmanagement.icsforms.persistence.StoredIncident;
 import org.sarmanagement.icsforms.persistence.StoreUnavailableException;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
+import javax.swing.SwingUtilities;
+
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
@@ -51,29 +53,38 @@ class ConnectedOperationEndToEndTest {
 			RemoteIncidentStore storeA = host.pair();
 			RemoteIncidentStore storeB = host.pairThrough(real -> failingSubmit(real, submitsFail));
 			AppController hostController = open(hostStore, host);
+			hostController.save();
+			assertFalse(host.backing().load(host.incident()).getActivityEventTypes().isEmpty());
+			assertEquals("Shared", host.backing().load(host.incident()).getForm201().getIncidentName());
 			AppController clientA = open(storeA, host);
 			AppController clientB = open(storeB, host);
 			try (ConnectionMonitor monitorHost = monitor(hostStore, hostController, host);
 					ConnectionMonitor monitorA = monitor(storeA, clientA, host);
 					ConnectionMonitor monitorB = monitor(storeB, clientB, host)) {
+				SwingUtilities.invokeAndWait(() -> {
+					clientA.getData().getIncidentContext().setIncidentName("Edited by A");
+					clientA.markDirty();
+				});
+				clientA.save();
+				assertEquals("Shared", clientB.getData().getIncidentContext().getIncidentName());
+				SwingUtilities.invokeAndWait(() -> {
+					clientB.getData().setIapPhase(IapPhase.DURING_OP);
+					clientB.markDirty();
+				});
+				clientB.save();
 				monitorHost.start();
 				monitorA.start();
 				monitorB.start();
-
-				clientA.getData().getIncidentContext().setIncidentName("Edited by A");
-				clientA.markDirty();
-				clientA.save();
-				clientB.getData().setIapPhase(IapPhase.DURING_OP);
-				clientB.markDirty();
-				clientB.save();
 				for (AppController controller : List.of(hostController, clientA, clientB)) {
 					waitFor(() -> "Edited by A".equals(controller.getData().getIncidentContext().getIncidentName())
 							&& controller.getData().getIapPhase() == IapPhase.DURING_OP);
 				}
 
 				submitsFail.set(true);
-				clientB.getData().setIncidentMode(IncidentMode.GENERIC);
-				clientB.markDirty();
+				SwingUtilities.invokeAndWait(() -> {
+					clientB.getData().setIncidentMode(IncidentMode.GENERIC);
+					clientB.markDirty();
+				});
 				assertThrows(RuntimeException.class, clientB::save);
 				assertTrue(clientB.isDirty(), "A failed save must leave the edit unsaved");
 				assertEquals(IncidentMode.GENERIC, clientB.getData().getIncidentMode());
@@ -194,8 +205,7 @@ class ConnectedOperationEndToEndTest {
 	private static ConnectionMonitor monitor(RemoteIncidentStore store, AppController controller,
 			HostedIncidentFixture host) {
 		return ConnectionMonitor.withDefaults(store.gateway(), host.incident(), 0, cursor -> {
-			controller.refreshFromRemote();
-			return true;
+			return controller.refreshFromRemote() != AppController.RemoteRefreshOutcome.DRAFT_PRESERVED;
 		}, status -> { });
 	}
 
@@ -224,13 +234,18 @@ class ConnectedOperationEndToEndTest {
 	 * Waits for a condition.
 	 *
 	 * @param condition condition to await
-	 * @throws InterruptedException when interrupted
+	 * @throws Exception when interrupted or the event-thread check fails
 	 */
-	private static void waitFor(BooleanSupplier condition) throws InterruptedException {
+	private static void waitFor(BooleanSupplier condition) throws Exception {
 		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
-		while (!condition.getAsBoolean()) {
+		AtomicBoolean reached = new AtomicBoolean();
+		do {
+			SwingUtilities.invokeAndWait(() -> reached.set(condition.getAsBoolean()));
+			if (reached.get()) {
+				return;
+			}
 			assertTrue(System.nanoTime() < deadline, "condition not reached");
 			Thread.sleep(25);
-		}
+		} while (true);
 	}
 }

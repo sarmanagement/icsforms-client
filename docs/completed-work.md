@@ -531,3 +531,7 @@ the real service), `RemoteIncidentStoreHostTest`, `ConnectionMonitorTest`,
 - Not covered: focus and scroll retention on a remote refresh is exercised by the
   existing live-change tests but not by a new remote-specific test.
 
+**Displayed-test CI follow-up:** the connected-operation test establishes the
+saved controller-default baseline used by host sharing before opening clients.
+It exercises stale, independent client edits before polling and applies test
+edits and polling assertions on the Swing event thread.
