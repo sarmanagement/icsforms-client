@@ -529,7 +529,9 @@ the real service), `RemoteIncidentStoreHostTest`, `ConnectionMonitorTest`,
   contact, draft-kept message, host/standalone switching, clean refresh keeps the
   tab), `DeviceConnectionTextTest` (lost-contact marker).
 - Not covered: remote-specific focus, selection, caret and scroll retention,
-  including uncommitted editor controls, remains open.
+  including uncommitted editor controls, remains open. Remote refresh currently
+  checks controller persistence state, not every unflushed editor control;
+  such a draft may be replaced even when the controller appears clean.
 
 **Displayed-test CI follow-up:** the connected-operation test establishes the
 saved controller-default baseline used by host sharing before opening clients.

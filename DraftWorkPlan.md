@@ -566,6 +566,8 @@ for local-store restoration before reporting standalone. Remote-refresh
 follow-up coverage checks failed/in-flight model drafts, and the displayed
 end-to-end scenario exercises three windows. Remote-specific retention of
 selection, focus, caret, scroll and uncommitted editor controls remains open.
+In particular, protect editor-only drafts before accepting a remote snapshot;
+controller dirty state alone does not cover every unflushed control.
 Add explicit host identity (self-signed certificate with fingerprint shown for
 QR embedding) and health status. Device admission by invitation is included
 here in its simplest form so that the API is never reachable without a
