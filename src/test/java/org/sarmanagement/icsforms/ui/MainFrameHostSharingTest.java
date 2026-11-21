@@ -102,6 +102,12 @@ class MainFrameHostSharingTest {
 		});
 		MainFrame frame = holder.get();
 		HostSharingDialog dialog = dialogHolder.get();
+		long startDeadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30);
+		boolean[] starting = {true};
+		while (starting[0] && System.nanoTime() < startDeadline) {
+			SwingUtilities.invokeAndWait(() -> starting[0] = dialog.isStarting());
+			Thread.sleep(25);
+		}
 		try {
 			assertTrue(dialog.isSharing());
 

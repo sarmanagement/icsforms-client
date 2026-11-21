@@ -184,6 +184,96 @@ Exit evidence: host and multiple connected instances can open and save the same
 incident, produce local PDFs, and recover from failed saves without losing edits;
 standalone workflows remain unchanged.
 
+**Delivered (issue #60).** `persistence/RemoteIncidentStore` (production; the
+former test-only class is now `InMemoryServerIncidentStore`) talks to the host
+through `RemoteIncidentGateway`; `host/HostGateway` is the HTTPS/mTLS adapter
+and `HostSession.loopbackStore()` gives the host window its own loopback store
+with the administrator credential, so the host UI has no direct-write bypass
+while sharing. Snapshots are rebuilt from records (`RecordDocumentBridge`);
+saves diff against the base snapshot with `RecordDiff` and submit records with
+base versions and a deterministic operation id, so retrying an identical save
+after a failure after commit is idempotent. Tokens are opaque
+(`remote/<cursor>/<digest>`). Field conflicts raise `StoreConflictException`
+with expected and current tokens and are never retried automatically.
+Create, delete and import are host-administrative and throw
+`UnsupportedOperationException` remotely; edit locks are absent and `localFile`
+is empty.
+
+*Polling and staleness.* `ConnectionMonitor` polls the committed cursor on a
+daemon thread (never the EDT). Interval: system property
+`icsforms.remote.pollIntervalMillis` (default 5000). The view becomes **stale**
+when no poll has succeeded for `icsforms.remote.staleAfterMillis` (default
+3 × interval). "Last confirmed" is the local time of the last successful poll;
+it is display-only and never compared with host time. A loss of contact is
+detected within one interval plus the request timeout (10 s); staleness within
+`staleAfter` plus one check period (`maximumStaleDetectionDelay()`). A reply
+for a host that announced its stop is shown as **host stopped**; any other
+failure is **lost contact**, because a network failure and a host crash cannot
+be told apart. A changed cursor calls `AppController.refreshFromRemote()`:
+clean views refresh in place; dirty views keep the draft and its *old* token,
+so the draft can only conflict, never overwrite newer data. The host dialog's
+device table marks active devices that lost contact.
+
+*Connected operation.* *Sharing → Connect to a host…* redeems an invitation,
+pins the host, and opens the shared incident in a new window. PDFs and exports
+are produced locally. If the host is unreachable, edits stay in the open editors
+and unsaved state stays visible (the durable outbox is part 5). Credentials are
+session-only; reconnecting after a restart needs a new invitation (persistence
+is part 6).
+
+*Incident-wide settings.* Root-level scalars that are not records (IAP phase,
+incident mode, time zone and similar) are synchronised as a virtual singleton
+`RootSettings` record (`incident-root-settings`) with per-field versions, merge
+and conflicts, and are included in `loadSnapshot`, refresh and the file
+projection.
+
+*Known limits.* Records cannot be removed remotely (strike-out is used). If the
+host's file projection fails after the durable commit the client sees the
+distinct `StoreCommittedException` (`committed_not_projected`, "committed; retry
+is safe"), and retrying the same save succeeds without double application.
+
+*Store capabilities.* `IncidentStore` exposes `supportsCreate()`,
+`supportsDelete()` and `supportsImport()` (all true by default; the remote store
+returns false for each). New, Duplicate and Import in the File menu, and the
+incident manager's New, Load JSON and Delete buttons, are enabled from these
+capabilities, not from a mode flag, and show a tooltip explaining why an action
+is unavailable. Starting to share runs `HostSession.start()` on a background
+worker with a visible "Starting" state, so binding ports and the first loopback
+read never block the event thread.
+
+*Contract suites against the real service.*
+`AbstractSnapshotIncidentStoreContractTest` runs against the real host in
+`RealHostIncidentStoreContractTest`. `AbstractIncidentStoreContractTest` is split
+by capability hooks (`supportsCreate`, `supportsMultipleIncidents`,
+`supportsDelete`, `supportsEditLocks`, `supportsNumericRevisions`,
+`supportsImport`, plus `seed`/`persist` hooks), `FileIncidentStoreTest` runs the
+full set unchanged, and `RemoteIncidentStoreLegacyContractTest` runs it against
+a real host. The incident is seeded in the host's backing store. Skipped for the
+remote store, with the reason shown in the test report:
+
+- `multipleIncidentsAreIndependent`, `listSortsMostRecentlyUpdatedFirst`:
+  a host shares exactly one incident.
+- `deletedIncidentsStayDeleted`: delete is host-administrative.
+- `deletionConflictsWithAnEditLock`: the remote store offers no edit locks.
+- `exportAndImportCreateIndependentCopies`: import is host-administrative.
+  Export is covered directly instead, by importing the exported JSON into a
+  standalone store.
+- Numeric `AppData` revision assertions inside the remaining tests: tokens are
+  opaque and the remote snapshot's revision is not a client concept.
+
+Directly covered on the remote store: detached loads and identity, failed saves
+preserving persisted and unsaved data, exactly one concurrent writer winning,
+state surviving a host restart with a usable token from a fresh store, `list()`
+of the one shared incident, and explicit failure of administrative operations.
+`AbstractSnapshotIncidentStoreContractTest.attempt` gives each writer a distinct
+name: with record-level three-way merge two identical edits are not a conflict,
+so the concurrent writers must change the field to different values. The file
+store suites still pass with that change.
+
+*Revision in output.* `AppData.getRevision()` is never printed by a PDF renderer
+or export; it is only copied between documents. A remote snapshot's value is a
+store-internal number and is not displayed.
+
 ### 5. Add cross-instance refresh and explicit conflict recovery
 
 Start with conditional polling of an opaque committed revision, not device-clock

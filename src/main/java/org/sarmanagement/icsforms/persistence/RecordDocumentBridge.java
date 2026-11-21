@@ -14,6 +14,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Identified;
 import org.sarmanagement.icsforms.model.RecordIndex;
 import org.sarmanagement.icsforms.model.RecordIndex.RecordKey;
+import org.sarmanagement.icsforms.model.RootSettings;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -72,6 +73,19 @@ final class RecordDocumentBridge {
 	 * @return true when the document was changed
 	 */
 	boolean apply(AppData data, List<RecordHistory> histories) {
+		return apply(data, histories, false);
+	}
+
+	/**
+	 * Projects latest record snapshots into a detached incident document.
+	 *
+	 * @param data detached incident document
+	 * @param histories retained record histories
+	 * @param replaceDefaults whether a single-valued parent field holding another record, such as the default a
+	 *            new document carries, is replaced by the record from the histories rather than rejected
+	 * @return true when the document was changed
+	 */
+	boolean apply(AppData data, List<RecordHistory> histories, boolean replaceDefaults) {
 		JsonNode before = MAPPER.valueToTree(data);
 		RecordIndex index = RecordIndex.of(data);
 		Map<RecordKey, Object> values = new HashMap<>();
@@ -79,7 +93,8 @@ final class RecordDocumentBridge {
 		List<RecordHistory> ordered = histories.stream()
 				.sorted(Comparator.comparing(history -> history.key().type() + ":" + history.key().id())).toList();
 		List<RecordHistory> missing = new ArrayList<>(ordered.stream()
-				.filter(history -> !values.containsKey(history.key())).toList());
+				.filter(history -> !values.containsKey(history.key()) && !RootSettings.isRoot(history.key()))
+				.toList());
 		while (!missing.isEmpty()) {
 			boolean attached = false;
 			for (int indexPosition = 0; indexPosition < missing.size();) {
@@ -90,7 +105,7 @@ final class RecordDocumentBridge {
 					continue;
 				}
 				Object created = create(history.key(), latest(history).content());
-				attach(parent, history.parentField(), created);
+				attach(parent, history.parentField(), created, replaceDefaults);
 				values.put(history.key(), created);
 				missing.remove(indexPosition);
 				attached = true;
@@ -100,6 +115,14 @@ final class RecordDocumentBridge {
 			}
 		}
 		for (RecordHistory history : ordered) {
+			if (RootSettings.isRoot(history.key())) {
+				try {
+					RootSettings.apply(data, latest(history).content());
+				} catch (IllegalArgumentException exception) {
+					throw new StoreValidationException("Cannot apply incident-wide settings", exception);
+				}
+				continue;
+			}
 			Object target = values.get(history.key());
 			if (target != null) {
 				update(target, latest(history).content());
@@ -190,8 +213,9 @@ final class RecordDocumentBridge {
 	 * @param parent parent model object
 	 * @param fieldName parent field name
 	 * @param value new record object
+	 * @param replaceDefaults whether an existing single-valued record is replaced instead of rejected
 	 */
-	private void attach(Object parent, String fieldName, Object value) {
+	private void attach(Object parent, String fieldName, Object value, boolean replaceDefaults) {
 		if (fieldName == null || fieldName.isBlank()) {
 			throw new StoreValidationException("New record is missing its parent field");
 		}
@@ -206,7 +230,7 @@ final class RecordDocumentBridge {
 				@SuppressWarnings("unchecked")
 				Collection<Object> writable = (Collection<Object>) collection;
 				writable.add(value);
-			} else if (existing == null) {
+			} else if (existing == null || replaceDefaults && existing instanceof Identified) {
 				field.set(parent, value);
 			} else {
 				throw new StoreValidationException("Parent field already contains a record");

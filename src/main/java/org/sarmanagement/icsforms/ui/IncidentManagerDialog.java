@@ -96,8 +96,14 @@ public class IncidentManagerDialog extends JDialog {
 		refreshButton.addActionListener(event -> refresh());
 		JButton importButton = new JButton("Load JSON…");
 		importButton.addActionListener(event -> importIncident());
+		importButton.setEnabled(store.supportsImport());
+		importButton.setToolTipText(store.supportsImport() ? "Import an incident JSON file."
+				: "This store does not accept imports; ask the host operator to import it.");
 		JButton newButton = new JButton("New…");
 		newButton.addActionListener(event -> newIncident());
+		newButton.setEnabled(store.supportsCreate());
+		newButton.setToolTipText(store.supportsCreate() ? "Create a new incident."
+				: "This store shares one incident; the host operator creates incidents.");
 		JButton closeButton = new JButton("Close");
 		closeButton.addActionListener(event -> dispose());
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -145,7 +151,9 @@ public class IncidentManagerDialog extends JDialog {
 		backupButton.setToolTipText(store.supportsBackup()
 				? "Create a new JSON file outside the live store; existing files are never overwritten."
 				: "This store does not support safe incident backups.");
-		deleteButton.setEnabled(selected && !summary.incidentId().equals(activeId));
+		deleteButton.setEnabled(selected && store.supportsDelete() && !summary.incidentId().equals(activeId));
+		deleteButton.setToolTipText(store.supportsDelete() ? "Delete the selected incident."
+				: "This store does not allow deleting incidents from this device.");
 	}
 
 	/** Loads detached summaries on a worker and refreshes atomically, retaining rows on failure. */

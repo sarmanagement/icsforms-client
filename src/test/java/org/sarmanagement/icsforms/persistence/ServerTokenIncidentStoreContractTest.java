@@ -20,13 +20,13 @@ class ServerTokenIncidentStoreContractTest extends AbstractSnapshotIncidentStore
 	/** {@inheritDoc} */
 	@Override
 	protected IncidentStore openStore() {
-		return new RemoteIncidentStore(documents, retired);
+		return new InMemoryServerIncidentStore(documents, retired);
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	protected void failNext(IncidentStore store, ControllableIncidentStore.Operation operation) {
-		((RemoteIncidentStore) store).failNext(operation);
+		((InMemoryServerIncidentStore) store).failNext(operation);
 	}
 
 	@Test

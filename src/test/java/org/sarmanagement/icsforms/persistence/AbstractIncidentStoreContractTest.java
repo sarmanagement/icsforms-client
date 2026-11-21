@@ -3,6 +3,7 @@
  */
 package org.sarmanagement.icsforms.persistence;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
@@ -22,8 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Legacy numeric file-store compatibility checks. Backend-neutral token semantics
- * are verified by {@link AbstractSnapshotIncidentStoreContractTest}.
+ * Legacy numeric file-store compatibility checks, split by store capability. Backend-neutral token semantics are
+ * verified by {@link AbstractSnapshotIncidentStoreContractTest}. Every test states the capability it needs; an
+ * implementation that lacks the capability skips the test with a documented reason (see the
+ * {@code supports...} methods). {@link FileIncidentStoreTest} declares every capability and runs the full set.
  */
 public abstract class AbstractIncidentStoreContractTest {
 	@TempDir
@@ -69,9 +72,97 @@ public abstract class AbstractIncidentStoreContractTest {
 	 */
 	protected abstract void failNextDelete(IncidentStore store);
 
+
+	/**
+	 * Whether the store can create incidents itself (otherwise the fixture seeds them with {@link #seed}).
+	 *
+	 * @return {@code true} by default.
+	 */
+	protected boolean supportsCreate() {
+		return true;
+	}
+
+	/**
+	 * Whether one store scope can hold several incidents.
+	 *
+	 * @return {@code true} by default.
+	 */
+	protected boolean supportsMultipleIncidents() {
+		return true;
+	}
+
+	/**
+	 * Whether the store can delete incidents.
+	 *
+	 * @return {@code true} by default.
+	 */
+	protected boolean supportsDelete() {
+		return true;
+	}
+
+	/**
+	 * Whether the store offers advisory edit locks.
+	 *
+	 * @return {@code true} by default.
+	 */
+	protected boolean supportsEditLocks() {
+		return true;
+	}
+
+	/**
+	 * Whether {@code AppData.getRevision()} carries the committed numeric revision.
+	 *
+	 * @return {@code true} by default.
+	 */
+	protected boolean supportsNumericRevisions() {
+		return true;
+	}
+
+	/**
+	 * Whether the store can import incident JSON files.
+	 *
+	 * @return {@code true} by default.
+	 */
+	protected boolean supportsImport() {
+		return true;
+	}
+
+	/**
+	 * Places an initial incident in the store, through {@link IncidentStore#create} unless overridden.
+	 *
+	 * @param store store under test.
+	 * @param data initial document.
+	 * @return the new incident's identity.
+	 */
+	protected IncidentId seed(IncidentStore store, AppData data) {
+		return store.create(data);
+	}
+
+	/**
+	 * Saves a loaded document, tokenless for legacy stores and with the document's own token otherwise.
+	 *
+	 * @param store store under test.
+	 * @param id incident identity.
+	 * @param data document previously loaded from the store.
+	 */
+	protected void persist(IncidentStore store, IncidentId id, AppData data) {
+		store.save(id, data);
+	}
+
+	/**
+	 * Skips the calling test unless a capability is present.
+	 *
+	 * @param supported whether the capability is present.
+	 * @param reason why the test does not apply without it.
+	 */
+	private static void requires(boolean supported, String reason) {
+		Assumptions.assumeTrue(supported, "Skipped: " + reason);
+	}
+
 	/** Distinct incidents retain independent identities and documents. */
 	@Test
 	void multipleIncidentsAreIndependent() {
+		requires(supportsCreate() && supportsMultipleIncidents(), "needs client-side create of several incidents");
 		try (IncidentStore store = createStore(tempDir)) {
 			AppData first = named("First");
 			AppData second = named("Second");
@@ -89,14 +180,16 @@ public abstract class AbstractIncidentStoreContractTest {
 	@Test
 	void revisionProtectsWrites() {
 		try (IncidentStore store = createStore(tempDir)) {
-			IncidentId id = store.create(named("Initial"));
+			IncidentId id = seed(store, named("Initial"));
 			AppData current = store.load(id);
 			AppData stale = store.load(id);
 			current.getIncidentContext().setIncidentName("Changed");
-			store.save(id, current);
-			assertEquals(1, current.getRevision());
-			assertEquals(1, store.load(id).getRevision());
-			assertThrows(StoreConflictException.class, () -> store.save(id, stale));
+			persist(store, id, current);
+			if (supportsNumericRevisions()) {
+				assertEquals(1, current.getRevision());
+				assertEquals(1, store.load(id).getRevision());
+			}
+			assertThrows(StoreConflictException.class, () -> persist(store, id, stale));
 			assertEquals("Changed", store.load(id).getIncidentContext().getIncidentName());
 		}
 	}
@@ -106,7 +199,7 @@ public abstract class AbstractIncidentStoreContractTest {
 	void concurrentWritesRejectOneStaleSnapshot() throws Exception {
 		ExecutorService executor = Executors.newFixedThreadPool(2);
 		try (IncidentStore store = createStore(tempDir)) {
-			IncidentId id = store.create(named("Concurrent"));
+			IncidentId id = seed(store, named("Concurrent"));
 			AppData first = store.load(id);
 			AppData second = store.load(id);
 			first.getIncidentContext().setIncidentName("First writer");
@@ -119,7 +212,9 @@ public abstract class AbstractIncidentStoreContractTest {
 			assertTrue(ready.await(5, TimeUnit.SECONDS));
 			start.countDown();
 			assertNotEquals(firstResult.get(5, TimeUnit.SECONDS), secondResult.get(5, TimeUnit.SECONDS));
-			assertEquals(1, store.load(id).getRevision());
+			if (supportsNumericRevisions()) {
+				assertEquals(1, store.load(id).getRevision());
+			}
 		} finally {
 			executor.shutdownNow();
 		}
@@ -129,7 +224,7 @@ public abstract class AbstractIncidentStoreContractTest {
 	@Test
 	void loadsAreDetachedAndPreserveIdentity() {
 		try (IncidentStore store = createStore(tempDir)) {
-			IncidentId id = store.create(named("Detached"));
+			IncidentId id = seed(store, named("Detached"));
 			AppData first = store.load(id);
 			AppData second = store.load(id);
 			assertNotSame(first, second);
@@ -137,7 +232,9 @@ public abstract class AbstractIncidentStoreContractTest {
 			assertEquals(id.value(), second.getIncidentId());
 			first.getIncidentContext().setIncidentName("Changed only in memory");
 			assertEquals("Detached", store.load(id).getIncidentContext().getIncidentName());
-			assertEquals(0, store.load(id).getRevision());
+			if (supportsNumericRevisions()) {
+				assertEquals(0, store.load(id).getRevision());
+			}
 		}
 	}
 
@@ -146,22 +243,25 @@ public abstract class AbstractIncidentStoreContractTest {
 	void persistedIncidentsSurviveRestart() {
 		IncidentId id;
 		try (IncidentStore store = createStore(tempDir)) {
-			AppData data = named("Durable");
-			id = store.create(data);
+			id = seed(store, named("Durable"));
+			AppData data = store.load(id);
 			data.getIncidentContext().setIncidentName("Saved before restart");
-			store.save(id, data);
+			persist(store, id, data);
 		}
 		try (IncidentStore reopened = createStore(tempDir)) {
 			AppData restored = reopened.load(id);
 			assertEquals(id.value(), restored.getIncidentId());
 			assertEquals("Saved before restart", restored.getIncidentContext().getIncidentName());
-			assertEquals(1, restored.getRevision());
+			if (supportsNumericRevisions()) {
+				assertEquals(1, restored.getRevision());
+			}
 		}
 	}
 
 	/** Tombstones are hidden and cannot be reopened. */
 	@Test
 	void deletedIncidentsStayDeleted() {
+		requires(supportsCreate() && supportsDelete(), "devices cannot create or delete incidents");
 		try (IncidentStore store = createStore(tempDir)) {
 			IncidentId id = store.create(named("Deleted"));
 			store.delete(id);
@@ -173,6 +273,8 @@ public abstract class AbstractIncidentStoreContractTest {
 	/** An active editor prevents deletion without erasing its persisted document. */
 	@Test
 	void deletionConflictsWithAnEditLock() {
+		requires(supportsCreate() && supportsDelete() && supportsEditLocks(),
+				"no edit locks and no client-side delete");
 		try (IncidentStore store = createStore(tempDir)) {
 			IncidentId id = store.create(named("Locked"));
 			assertTrue(lock(store, id));
@@ -189,17 +291,21 @@ public abstract class AbstractIncidentStoreContractTest {
 	@Test
 	void failedOperationsPreservePersistedAndUnsavedData() {
 		try (IncidentStore store = createStore(tempDir)) {
-			IncidentId id = store.create(named("Persisted"));
+			IncidentId id = seed(store, named("Persisted"));
 			AppData unsaved = store.load(id);
 			unsaved.getIncidentContext().setIncidentName("Unsaved editor input");
 			failNextSave(store);
-			assertThrows(IllegalStateException.class, () -> store.save(id, unsaved));
+			assertThrows(IllegalStateException.class, () -> persist(store, id, unsaved));
 			assertEquals("Unsaved editor input", unsaved.getIncidentContext().getIncidentName());
-			assertEquals(0, unsaved.getRevision());
+			if (supportsNumericRevisions()) {
+				assertEquals(0, unsaved.getRevision());
+			}
 			assertEquals("Persisted", store.load(id).getIncidentContext().getIncidentName());
 
-			failNextDelete(store);
-			assertThrows(IllegalStateException.class, () -> store.delete(id));
+			if (supportsDelete()) {
+				failNextDelete(store);
+				assertThrows(IllegalStateException.class, () -> store.delete(id));
+			}
 			assertEquals("Persisted", store.load(id).getIncidentContext().getIncidentName());
 			assertEquals(1, store.list().size());
 		}
@@ -208,6 +314,7 @@ public abstract class AbstractIncidentStoreContractTest {
 	/** Exported JSON can be imported as an independent incident. */
 	@Test
 	void exportAndImportCreateIndependentCopies() {
+		requires(supportsCreate() && supportsImport(), "devices cannot import; export is covered by the remote tests");
 		try (IncidentStore store = createStore(tempDir)) {
 			IncidentId id = store.create(named("Exported"));
 			Path json = tempDir.resolve("export.json");
@@ -222,6 +329,7 @@ public abstract class AbstractIncidentStoreContractTest {
 	/** Recently updated incidents appear first. */
 	@Test
 	void listSortsMostRecentlyUpdatedFirst() {
+		requires(supportsCreate() && supportsMultipleIncidents(), "a remote scope lists exactly one shared incident");
 		try (IncidentStore store = createStore(tempDir)) {
 			IncidentId old = store.create(named("Old"));
 			IncidentId recent = store.create(named("Recent"));
@@ -262,7 +370,7 @@ public abstract class AbstractIncidentStoreContractTest {
 		ready.countDown();
 		start.await();
 		try {
-			store.save(id, data);
+			persist(store, id, data);
 			return true;
 		} catch (StoreConflictException exception) {
 			return false;

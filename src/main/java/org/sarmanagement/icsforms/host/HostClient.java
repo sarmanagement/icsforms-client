@@ -188,6 +188,7 @@ public final class HostClient {
 		} catch (HostClientException failure) {
 			return switch (failure.kind()) {
 				case IDENTITY_CHANGED -> HostConnectionState.HOST_IDENTITY_CHANGED;
+				case HOST_UNAVAILABLE -> HostConnectionState.HOST_UNAVAILABLE;
 				default -> HostConnectionState.HOST_UNREACHABLE;
 			};
 		}
