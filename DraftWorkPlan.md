@@ -538,7 +538,9 @@ Implement the incident-scoped API, host-side validation and persistence, and a
 `RemoteIncidentStore` built on the Stage 1 contract. Issue #58 delivered the
 written contract and an in-process service over the file backend. It does not
 include network transport, admission, a remote store, UI changes, or an outbox;
-those remain in issues #59–#62. A persisted record is the
+those remain in issues #59–#62. Issue #59 has since delivered the transport,
+admission and host lifecycle (see [completed work](docs/completed-work.md));
+issues #60–#62 remain. A persisted record is the
 unit of submission and versioning: the client supplies the record version it
 edited, and the host compares base, current and proposed values field by field.
 A field changed only by the client is accepted; a field changed only by the host

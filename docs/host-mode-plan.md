@@ -245,3 +245,48 @@ Treat three cases separately:
 Detection rules and how confirmed duplicates are represented remain decisions,
 not prescribed algorithms. Preserve provenance and existing strike-out/history
 semantics rather than deleting evidence merely to make entries look unique.
+
+## Operations (issue #59)
+
+**Firewall and ports.** Allow inbound TCP on the data port (default 8443) and
+the pairing/status port (default 8444) on the incident network only. Set the
+"address clients use" to a name or IP clients can reach. Sharing binds a
+wildcard or loopback address only.
+
+**Starting.** Use *Sharing → Host this incident…* with the incident saved in the
+local file store. Starting saves open editors, takes exclusive ownership of the
+incident files, then opens the listeners. Failures (port in use, storage
+failure, unsaved edits) leave the incident usable and nothing shared. While
+hosting, a standalone editor or second host process cannot write the files.
+
+**Admitting.** Press *Create invitation* (copied to the clipboard) and send the
+text to the device operator over a trusted channel. It works once and expires
+quickly. Confirm the fingerprint shown in the dialog when the client pins it.
+
+**Revoking.** Select a device in the list and *Revoke*. Revocation persists
+across restarts; a revoked device is told so by the pre-auth status check.
+
+**Stopping.** *Stop sharing* warns when devices are connected, reports
+`stopping` to clients for a grace period, finishes or explicitly fails in-flight
+requests, then closes. Closing the window stops sharing only after confirmation;
+closing a client never stops the host.
+
+**Backup and restore.** `HostBackup` writes one archive containing the incident
+file, record history, device registry (with revocations) and the CA/server keys,
+with per-entry checksums, so versions cannot be mixed. The archive is
+sensitive (it can mint device credentials): it is created owner-only and must be
+stored accordingly and never logged. Restore only while not sharing; it
+verifies everything before writing anything.
+
+**Threats considered.** *Invitation interception*: single-use, short-lived and
+incident-scoped; an intercepted-and-used invitation is visible as an unexpected
+device, which can be revoked. *Host impersonation*: the client pins the CA
+fingerprint and refuses a changed certificate. *Credential compromise / lost
+device*: revoke the device; credentials expire after 72 hours regardless.
+*Evil-twin hotspot*: without the pinned fingerprint an impostor cannot complete
+the handshake, but an attacker who also captures the invitation before use could
+pair a rogue host, so deliver invitations and fingerprints out of band.
+
+**Known limits.** Host identity rotation is deferred. Host-editor whole-document
+saves may report a revision conflict after remote writes because refresh is out
+of scope here.

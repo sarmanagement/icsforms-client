@@ -86,3 +86,13 @@ The following decisions were provided on 2026-11-17:
 The Stage 1 substitute-store evidence was accepted separately; it does not
 demonstrate a network-backed store. See the
 [Stage 1 exit assessment](completed-work.md#stage-1--local-persistence-foundation-prerequisite-for-any-remote-store).
+
+## Credential and admission decisions (issue #59)
+
+- Mutual TLS with a host-run CA; the device generates its key pair and the host signs its certificate. The JDK TLS/HTTP server and Jackson are used. BouncyCastle (`bcpkix`/`bcprov` 1.87) is added solely because the JDK has no public API to build X.509 certificates or parse PKCS#10 requests; no custom cryptography is written.
+- Invitations are short-lived, single-use, scoped to the shared incident, and carry host address plus the CA fingerprint so the client pins the host.
+- Credentials last 72 hours by default and also expire at period close/demobilisation when a cutoff is set. They are individually revocable and revocations persist across restarts.
+- Pilot permissions: connect, read, write, update, delete at incident granularity only. No roles or operator claim.
+- The host application is the pilot administrator, using an in-memory per-start credential over loopback; remote devices are never administrators.
+- The CA key, device registry and revocations live in host-owned storage (`host/` beside the incident store, owner-only) and are included in the host backup. The client private key is held in an owner-only Java keystore.
+- Host identity rotation is **deferred** (open item). A changed host certificate is never trusted silently.

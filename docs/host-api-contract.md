@@ -334,3 +334,57 @@ Errors use this shape:
   }
 }
 ```
+
+## Transport, pairing and pre-auth status (issue #59)
+
+The host runs two HTTPS listeners (JDK `HttpsServer`), both using a server
+certificate signed by the host-run certificate authority (CA):
+
+| Listener | Client certificate | Purpose |
+| --- | --- | --- |
+| Data port (default 8443) | Required (mutual TLS, trust store holds only the host CA) | Incident read, changes, submit and host administration |
+| Enrollment port (default 8444) | Not requested | Pre-auth status and pairing only |
+
+Requests carry `X-ICS-Api-Version` and `X-ICS-Client-Version`. A missing or
+unsupported API version, or a client older than the host minimum, receives
+`426 incompatible_client`. Bodies over 1 MiB (16 KiB for pairing) receive
+`413 payload_too_large`; batches over 100 records are also rejected with `413`.
+
+### Data port endpoints
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /v1/incidents/{id}` | Read the shared incident |
+| `GET /v1/incidents/{id}/changes?after={cursor}` | Changes since a cursor |
+| `POST /v1/incidents/{id}/records:submit` | Submit a batch |
+| `POST /v1/admin/invitations`, `GET /v1/admin/devices`, `POST /v1/admin/devices/{id}:revoke` | Administration; only the host's own local credential over a loopback connection is accepted, remote devices always receive `403` |
+
+A device credential grants connect, read, write, update and delete (strike-out)
+on **the single invited incident**. Any other incident id returns `404`, the
+same as an absent incident. The credential state is checked on every request:
+expired → `401 credential_expired`, revoked → `403 credential_revoked`.
+
+### Pre-auth status (enrollment port)
+
+Mutual TLS fails at the handshake, so a deliberate pre-auth signal exists:
+
+- `GET /v1/status` returns `{state, apiVersions, minimumClientVersion, hostFingerprint}` and nothing about incidents. `503` is returned unless the host is running; state `stopping` lets clients see a controlled shutdown.
+- `POST /v1/status/credential` with `{deviceId}` returns `{state}` (`active`, `expired`, `revoked` or `unknown`). It reveals nothing about incident content and is rate limited.
+
+A client therefore distinguishes *credential expired/revoked* (credential status),
+*host unreachable* (no response from either port) and *host identity changed*
+(the presented CA/host certificate does not match the pinned fingerprint; the
+connection is refused and never silently trusted).
+
+### Pairing
+
+`POST /v1/pairing/redeem` is the only unauthenticated mutating endpoint. The
+body is `{invitation, incidentId, deviceName, certificateRequest}` where the
+request is a PKCS#10 PEM generated on the device (its private key never leaves
+it). The host verifies the proof of possession, atomically consumes the
+invitation use, and returns `{deviceId, incidentId, certificate, caCertificate,
+expiresAt}`. Expired, reused, unknown and wrong-incident invitations all
+produce the same `403 invitation_invalid` so nothing is revealed. Pairing is
+rate limited per address and globally (`429 rate_limited`). Pairing never
+grants incident access; the issued certificate is needed for the data port.
+Invitation secrets and credentials are never logged.

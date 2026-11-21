@@ -130,6 +130,8 @@ public class MainFrame extends JFrame {
 	private final SafetyPanel safetyPanel;
 	private final SafetyDashboardPanel safetyDashboardPanel;
 	private final JTabbedPane tabs = new JTabbedPane();
+	private HostSharingDialog hostSharingDialog;
+	private IncidentId hostedIncident;
 	private final Preferences userPreferences = Preferences.userNodeForPackage(MainFrame.class);
 	private boolean descriptiveTabs = userPreferences.getBoolean(DESCRIPTIVE_TABS_PREFERENCE, false);
 	private boolean showObjectiveAssessments = userPreferences.getBoolean(SHOW_OBJECTIVE_ASSESSMENTS_PREFERENCE, false);
@@ -838,7 +840,64 @@ public class MainFrame extends JFrame {
 		bar.add(exportMenu);
 		bar.add(logsMenu);
 		bar.add(configMenu);
+		bar.add(createSharingMenu());
 		return bar;
+	}
+
+	/**
+	 * Builds the sharing menu offering standalone, host and connect modes.
+	 *
+	 * @return the sharing menu.
+	 */
+	private JMenu createSharingMenu() {
+		JMenu sharingMenu = new JMenu("Sharing");
+		JMenuItem standaloneItem = new JMenuItem("Standalone (stop sharing)");
+		standaloneItem.addActionListener(event -> {
+			if (hostSharingDialog != null && hostSharingDialog.isSharing() && hostSharingDialog.confirmStop()) {
+				hostSharingDialog.stopAsync(null);
+			}
+		});
+		JMenuItem hostItem = new JMenuItem("Host this incident...");
+		hostItem.addActionListener(event -> showHostSharing());
+		JMenuItem connectItem = new JMenuItem("Connect to a host (not yet available)");
+		connectItem.setEnabled(false);
+		sharingMenu.add(standaloneItem);
+		sharingMenu.add(hostItem);
+		sharingMenu.add(connectItem);
+		return sharingMenu;
+	}
+
+	/**
+	 * Opens the host-sharing window for the active incident when the store supports hosting.
+	 */
+	private void showHostSharing() {
+		IncidentStore store = controller.getStore();
+		IncidentId incident = controller.getActiveIncidentId();
+		if (store == null || incident == null || !"File".equals(store.describe().type())) {
+			JOptionPane.showMessageDialog(this, "Hosting needs an incident saved in the local file store.",
+					"Host this incident", JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		if (hostSharingDialog == null || hostSharingDialog.isSharing() && !incident.equals(hostedIncident)) {
+			if (hostSharingDialog != null) {
+				JOptionPane.showMessageDialog(this, "Stop sharing the current incident before hosting another.",
+						"Host this incident", JOptionPane.INFORMATION_MESSAGE);
+				hostSharingDialog.setVisible(true);
+				return;
+			}
+		}
+		if (hostSharingDialog == null || !incident.equals(hostedIncident)) {
+			if (hostSharingDialog != null) {
+				hostSharingDialog.dispose();
+			}
+			hostedIncident = incident;
+			hostSharingDialog = new HostSharingDialog(this, store, incident, () -> {
+				if (!saveBeforeSwitch()) {
+					throw new IllegalStateException("Pending edits could not be saved");
+				}
+			});
+		}
+		hostSharingDialog.setVisible(true);
 	}
 
 	/**
@@ -2603,6 +2662,15 @@ public class MainFrame extends JFrame {
 	 * Closes the editor only after its active incident has been saved successfully.
 	 */
 	private void closeAfterSave() {
+		if (hostSharingDialog != null && hostSharingDialog.isSharing()) {
+			if (JOptionPane.showConfirmDialog(this, "This window is sharing an incident ("
+					+ hostSharingDialog.connectedDeviceCount() + " device(s) connected). Closing it stops sharing "
+					+ "and tells clients the host is stopping. Stop sharing and close?", "Stop sharing and close",
+					JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION) {
+				hostSharingDialog.stopAsync(this::closeAfterSave);
+			}
+			return;
+		}
 		if (!saveBeforeSwitch()) {
 			Object[] choices = {"Keep editing", "Export unsaved changes and close", "Discard changes and close"};
 			int selected = JOptionPane.showOptionDialog(this,
@@ -2633,6 +2701,9 @@ public class MainFrame extends JFrame {
 
 	/** Closes resources only after save, recovery export, or explicit discard has resolved pending edits. */
 	private void finishClose() {
+		if (hostSharingDialog != null) {
+			hostSharingDialog.dispose();
+		}
 		closeOwnedResources();
 		controller.closeStore();
 		dispose();
