@@ -184,6 +184,52 @@ Exit evidence: host and multiple connected instances can open and save the same
 incident, produce local PDFs, and recover from failed saves without losing edits;
 standalone workflows remain unchanged.
 
+**Delivered (issue #60).** `persistence/RemoteIncidentStore` (production; the
+former test-only class is now `InMemoryServerIncidentStore`) talks to the host
+through `RemoteIncidentGateway`; `host/HostGateway` is the HTTPS/mTLS adapter
+and `HostSession.loopbackStore()` gives the host window its own loopback store
+with the administrator credential, so the host UI has no direct-write bypass
+while sharing. Snapshots are rebuilt from records (`RecordDocumentBridge`);
+saves diff against the base snapshot with `RecordDiff` and submit records with
+base versions and a deterministic operation id, so retrying an identical save
+after a failure after commit is idempotent. Tokens are opaque
+(`remote/<cursor>/<digest>`). Field conflicts raise `StoreConflictException`
+with expected and current tokens and are never retried automatically.
+Create, delete and import are host-administrative and throw
+`UnsupportedOperationException` remotely; edit locks are absent and `localFile`
+is empty.
+
+*Polling and staleness.* `ConnectionMonitor` polls the committed cursor on a
+daemon thread (never the EDT). Interval: system property
+`icsforms.remote.pollIntervalMillis` (default 5000). The view becomes **stale**
+when no poll has succeeded for `icsforms.remote.staleAfterMillis` (default
+3 × interval). "Last confirmed" is the local time of the last successful poll;
+it is display-only and never compared with host time. A loss of contact is
+detected within one interval plus the request timeout (10 s); staleness within
+`staleAfter` plus one check period (`maximumStaleDetectionDelay()`). A reply
+for a host that announced its stop is shown as **host stopped**; any other
+failure is **lost contact**, because a network failure and a host crash cannot
+be told apart. A changed cursor calls `AppController.refreshFromRemote()`:
+clean views refresh in place; dirty views keep the draft and its *old* token,
+so the draft can only conflict, never overwrite newer data. The host dialog's
+device table marks active devices that lost contact.
+
+*Connected operation.* *Sharing → Connect to a host…* redeems an invitation,
+pins the host, and opens the shared incident in a new window. PDFs and exports
+are produced locally. If the host is unreachable, edits stay in the open editors
+and unsaved state stays visible (the durable outbox is part 5). Credentials are
+session-only; reconnecting after a restart needs a new invitation (persistence
+is part 6).
+
+*Known limits.* Root-level document scalars that are not records (IAP phase,
+incident mode, time zone) are not synchronised; records cannot be removed
+remotely (strike-out is used); the legacy numeric-revision/edit-lock suite
+`AbstractIncidentStoreContractTest` does not apply to an opaque, lockless store,
+while `AbstractSnapshotIncidentStoreContractTest` runs against the real host in
+`RealHostIncidentStoreContractTest`. If the host's file projection fails after
+the durable commit the client sees a persistence failure, and retrying the same
+save succeeds without double application.
+
 ### 5. Add cross-instance refresh and explicit conflict recovery
 
 Start with conditional polling of an opaque committed revision, not device-clock

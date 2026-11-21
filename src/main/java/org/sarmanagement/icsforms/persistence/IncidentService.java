@@ -464,7 +464,8 @@ public final class IncidentService {
 		histories(state).entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
 			RecordVersion version = latest(entry.getValue());
 			records.add(new VersionedRecord(entry.getKey(), version.version(), version.cursor(),
-					version.receivedAt(), version.content()));
+					version.receivedAt(), version.content(), entry.getValue().parent(),
+					entry.getValue().parentField()));
 		});
 		return new ReadResult(incident, state.cursor(), records);
 	}
@@ -640,13 +641,29 @@ public final class IncidentService {
 	 * @param cursor latest incident-wide cursor
 	 * @param receivedAt host-assigned timestamp
 	 * @param content detached record snapshot
+	 * @param parent containing record, or null when attached directly to the incident root
+	 * @param parentField containing Java field name, used to rebuild the document tree
 	 */
-	public record VersionedRecord(RecordKey key, long version, long cursor, Instant receivedAt, JsonNode content) {
+	public record VersionedRecord(RecordKey key, long version, long cursor, Instant receivedAt, JsonNode content,
+			RecordKey parent, String parentField) {
 		/**
 		 * Detaches the JSON content.
 		 */
 		public VersionedRecord {
 			content = content.deepCopy();
+		}
+
+		/**
+		 * Creates a record snapshot without placement metadata.
+		 *
+		 * @param key stable record identity
+		 * @param version per-record version
+		 * @param cursor latest incident-wide cursor
+		 * @param receivedAt host-assigned timestamp
+		 * @param content detached record snapshot
+		 */
+		public VersionedRecord(RecordKey key, long version, long cursor, Instant receivedAt, JsonNode content) {
+			this(key, version, cursor, receivedAt, content, null, null);
 		}
 
 		/**

@@ -96,3 +96,12 @@ demonstrate a network-backed store. See the
 - The host application is the pilot administrator, using an in-memory per-start credential over loopback; remote devices are never administrators.
 - The CA key, device registry and revocations live in host-owned storage (`host/` beside the incident store, owner-only) and are included in the host backup. The client private key is held in an owner-only Java keystore.
 - Host identity rotation is **deferred** (open item). A changed host certificate is never trusted silently.
+
+## Remote store and connected operation decisions (issue #60)
+
+- The host UI uses a loopback `RemoteIncidentStore` with its administrator credential while sharing; standalone keeps `FileIncidentStore`. Stopping sharing switches the window back to the local store (unsaved work must be saved first).
+- Production `RemoteIncidentStore` is distinct from the test double `InMemoryServerIncidentStore`. Tokens are snapshot-specific and opaque; edit locks are not offered; file paths never reach clients.
+- Refresh is conditional polling of the committed cursor. Interval and stale threshold are configurable (`icsforms.remote.pollIntervalMillis`, `icsforms.remote.staleAfterMillis`); "last confirmed" is the local time of the last successful poll, with no device-clock comparison with the host.
+- A notified host stop is shown differently from an unexplained loss of contact.
+- Newer remote revisions never advance the token of an older draft.
+- Create, delete and import remain host-administrative; credentials stay session-only until part 6; the outbox is part 5.

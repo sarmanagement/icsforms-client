@@ -58,6 +58,7 @@ when history synchronization fails.
 | File-backed `IncidentStore` with UUID identity, revision checks, per-incident edit locks and backups | PR #34 and predecessors; hardening in #39–#42 | `persistence/IncidentStore.java`, `persistence/FileIncidentStore.java`, `persistence/IncidentDocumentReader.java` | **Complete for standalone use;** backend-neutral contract and asynchronous saving are delivered. |
 | Host-mode Part 1: stable record IDs, load migration, record index/diff | #57 | `model/Identified.java`, `model/IdentityMigration.java`, `model/RecordIndex.java`, `model/RecordDiff.java`, `docs/record-identity.md` | **Delivered in this PR.** Local persistence only; no host/network behavior. |
 | Host-mode Part 2: service contract and in-process versioned records | #58 | `docs/host-api-contract.md`, `persistence/IncidentService.java`, `persistence/RecordVersionStore.java`, `persistence/FileRecordVersionStore.java` | **Delivered in this PR.** No network transport, authentication, UI, remote store, or outbox. |
+| Host-mode Part 4: production remote store, polling and connected operation | #60 | `persistence/RemoteIncidentStore.java`, `persistence/ConnectionMonitor.java`, `host/HostGateway.java`, `ui/AppController.java`, `ui/MainFrame.java` | **Delivered in this PR.** No durable outbox, re-authorization, roles or operator claim. |
 | Live local role panels (ten-phase plan) | #33 and #46 — closed; PRs #32 and #48 merged | See phase table and acceptance record below | **Implementation delivered.** Automated coverage and user-confirmed desktop checks are recorded separately below. |
 
 ## Host-mode series — issue #57: stable record identity and record diff
@@ -493,3 +494,19 @@ close-while-hosting confirmation.
 
 Evidence: `HostSessionTest`, `HostBackupTest`, `HostProtocolTest`,
 `HostSharingDialogTest`, `MainFrameHostSharingTest`.
+
+## Host mode 4/6: production remote store and connected operation (issue #60)
+
+Delivered the production `RemoteIncidentStore` over `RemoteIncidentGateway`
+(`HostGateway` for HTTPS/mTLS), renamed the test-only class to
+`InMemoryServerIncidentStore`, added `ConnectionMonitor` (conditional polling,
+last-confirmed, stale, lost-contact versus notified host stop; configurable and
+documented in the [plan](host-mode-plan.md#4-implement-the-production-remote-store-and-wire-both-uis)),
+`AppController.switchStore`/`refreshFromRemote` (draft-preserving), loopback
+host mode, *Connect to a host…*, a connection/authority/last-confirmed status
+label, and a lost-contact marker in the host device table. Additive
+`parent`/`parentField` on read records support document rebuilding.
+
+Evidence: `RealHostIncidentStoreContractTest` (shared snapshot contract against
+the real service), `RemoteIncidentStoreHostTest`, `ConnectionMonitorTest`,
+`AppControllerRemoteRefreshTest`.

@@ -478,7 +478,7 @@ recoverable standalone application. Completed stages are recorded in
 | --- | --- | --- | --- |
 | 0 | Written decisions and constraints | Not evidenced as complete | 1–2 weeks |
 | 1 | Local persistence foundation, including live refresh without flicker | Complete; substitute-store evidence accepted | done (4–7 weeks) |
-| 2 | Record-level incident API and local host (T1) | Identity/index/diff foundation (#57) and in-process contract/service (#58) delivered; transport/admission, remote store, and outbox remain | 7–12 weeks |
+| 2 | Record-level incident API and local host (T1) | Identity/index/diff foundation (#57) and in-process contract/service (#58) delivered; transport/admission (#59) and remote store/connected operation (#60) delivered; outbox, re-authorization remain | 7–12 weeks |
 | 3 | Device lifecycle, operator claim, roles and attributable audit (T2) | Not started | 4–6 weeks |
 | 4 | Offline replay/conflict recovery and attachments | Not started | 4–8 weeks |
 | 5 | Field-host packaging and authority transfer | Not started | 4–8 weeks |
@@ -540,7 +540,7 @@ written contract and an in-process service over the file backend. It does not
 include network transport, admission, a remote store, UI changes, or an outbox;
 those remain in issues #59–#62. Issue #59 has since delivered the transport,
 admission and host lifecycle (see [completed work](docs/completed-work.md));
-issues #60–#62 remain. A persisted record is the
+issue #60 has delivered the production remote store, polling and connected operation; issues #61–#62 remain. A persisted record is the
 unit of submission and versioning: the client supplies the record version it
 edited, and the host compares base, current and proposed values field by field.
 A field changed only by the client is accepted; a field changed only by the host

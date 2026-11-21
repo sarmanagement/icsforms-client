@@ -129,6 +129,8 @@ public class HostSharingDialog extends JDialog {
 	private final transient Runnable onRestored;
 	private transient Prompts prompts = new SwingPrompts();
 	private transient HostSession session;
+	private transient java.util.function.Consumer<IncidentStore> onLoopback = loopback -> { };
+	private transient Runnable onLocal = () -> { };
 	private final JLabel stateLabel = new JLabel("Not sharing");
 	private final JTextField hostField = new JTextField(defaultHost(), 18);
 	private final JSpinner portSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_PORT, 0, 65535, 1));
@@ -184,6 +186,19 @@ public class HostSharingDialog extends JDialog {
 		refreshTimer.start();
 		pack();
 		setLocationRelativeTo(owner);
+	}
+
+	/**
+	 * Installs the callbacks that move the host window between the local file store and the loopback remote
+	 * store. The host window has no direct-write bypass while sharing: it edits through the same service as
+	 * connected devices.
+	 *
+	 * @param loopbackStarted receives the loopback store once sharing runs; a failure stops sharing again
+	 * @param localRestored invoked on the event thread after sharing stopped, to return to the local store
+	 */
+	public void setStoreSwitch(java.util.function.Consumer<IncidentStore> loopbackStarted, Runnable localRestored) {
+		this.onLoopback = loopbackStarted == null ? loopback -> { } : loopbackStarted;
+		this.onLocal = localRestored == null ? () -> { } : localRestored;
 	}
 
 	/**
@@ -330,6 +345,12 @@ public class HostSharingDialog extends JDialog {
 			HostSession candidate = new HostSession(store, incident, config, flushEditors);
 			candidate.start();
 			candidate.setPeriodCloseCutoff(periodCloseSource.get());
+			try {
+				onLoopback.accept(candidate.loopbackStore());
+			} catch (RuntimeException switchFailure) {
+				candidate.stop();
+				throw switchFailure;
+			}
 			session = candidate;
 			invitationArea.setText("");
 		} catch (RuntimeException failure) {
@@ -399,6 +420,13 @@ public class HostSharingDialog extends JDialog {
 			@Override
 			protected void done() {
 				session = null;
+				try {
+					onLocal.run();
+				} catch (RuntimeException failure) {
+					prompts.show(HostSharingDialog.this, "Stop sharing", "Sharing stopped, but this window could not "
+							+ "return to the local file: " + failure.getMessage() + "\nYour edits are kept; export "
+							+ "them before closing.", true);
+				}
 				refresh();
 				if (afterStop != null) {
 					afterStop.run();
@@ -613,7 +641,9 @@ public class HostSharingDialog extends JDialog {
 			for (DeviceInfo device : shownDevices) {
 				deviceModel.addRow(new Object[] {device.name(), device.state(), device.expiresAt(),
 						device.lastContact() == null ? "never" : device.lastContact(),
-						device.connected() ? "yes" : "no"});
+						device.connected() ? "yes"
+								: device.lastContact() != null && device.state() == org.sarmanagement.icsforms.host.CredentialState.ACTIVE
+										? "no - lost contact" : "no"});
 			}
 		}
 	}

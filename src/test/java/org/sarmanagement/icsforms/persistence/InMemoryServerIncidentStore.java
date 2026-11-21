@@ -23,7 +23,7 @@ import java.util.IdentityHashMap;
 import java.util.EnumMap;
 
 /** Lockless in-memory server double with opaque tokens and no file identities. */
-public final class RemoteIncidentStore implements IncidentStore {
+public final class InMemoryServerIncidentStore implements IncidentStore {
 	private static final ObjectMapper COPIER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE)
 			.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
@@ -35,7 +35,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	private boolean closed;
 
 	/** Opens an isolated pathless server fixture. */
-	public RemoteIncidentStore() {
+	public InMemoryServerIncidentStore() {
 		this(new HashMap<>(), new HashSet<>());
 	}
 
@@ -45,7 +45,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 * @param documents persistent server documents
 	 * @param retired tombstoned identities
 	 */
-	RemoteIncidentStore(Map<IncidentId, StoredIncident> documents, Set<IncidentId> retired) {
+	InMemoryServerIncidentStore(Map<IncidentId, StoredIncident> documents, Set<IncidentId> retired) {
 		this.documents = documents;
 		this.retired = retired;
 	}

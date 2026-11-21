@@ -46,6 +46,7 @@ import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.text.JTextComponent;
 import javax.swing.JComboBox;
 import javax.swing.JFormattedTextField;
@@ -131,6 +132,13 @@ public class MainFrame extends JFrame {
 	private final SafetyDashboardPanel safetyDashboardPanel;
 	private final JTabbedPane tabs = new JTabbedPane();
 	private HostSharingDialog hostSharingDialog;
+	private IncidentStore hostLocalStore;
+	private Path homeDirectory;
+	private final JLabel connectionLabel = new JLabel("Standalone");
+	private String authorityText = "Standalone";
+	private transient org.sarmanagement.icsforms.persistence.ConnectionMonitor connectionMonitor;
+	private transient org.sarmanagement.icsforms.persistence.ConnectionMonitor.Status connectionStatus;
+	private volatile boolean remoteNewer;
 	private java.util.function.Predicate<String> closeWhileSharingConfirmation = message -> JOptionPane
 			.showConfirmDialog(this, message, "Stop sharing and close", JOptionPane.YES_NO_OPTION,
 					JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
@@ -226,6 +234,7 @@ public class MainFrame extends JFrame {
 		super("ICS Forms Desktop");
 		ApplicationIcon.install(this);
 		this.controller = controller;
+		this.homeDirectory = defaultDirectory;
 		this.lastData = controller.getData();
 		if (Boolean.getBoolean("icsforms.testMode")) {
 			this.controller.setAutosaveErrorHandler(exception -> {
@@ -358,6 +367,7 @@ public class MainFrame extends JFrame {
 		validationLabel.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
 		JPanel statusPanel = new JPanel(new BorderLayout());
 		statusPanel.add(validationLabel, BorderLayout.CENTER);
+		statusPanel.add(connectionLabel, BorderLayout.WEST);
 		JPanel persistencePanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
 		persistencePanel.add(persistenceLabel);
 		persistencePanel.add(retryPersistenceButton);
@@ -377,6 +387,7 @@ public class MainFrame extends JFrame {
 	/** Releases live-editor listeners before disposing the frame. */
 	@Override
 	public void dispose() {
+		detachMonitor();
 		if (editorChangeSubscription != null) {
 			editorChangeSubscription.close();
 			editorChangeSubscription = null;
@@ -862,8 +873,8 @@ public class MainFrame extends JFrame {
 		});
 		JMenuItem hostItem = new JMenuItem("Host this incident...");
 		hostItem.addActionListener(event -> showHostSharing());
-		JMenuItem connectItem = new JMenuItem("Connect to a host (not yet available)");
-		connectItem.setEnabled(false);
+		JMenuItem connectItem = new JMenuItem("Connect to a host...");
+		connectItem.addActionListener(event -> showConnect());
 		sharingMenu.add(standaloneItem);
 		sharingMenu.add(hostItem);
 		sharingMenu.add(connectItem);
@@ -874,6 +885,10 @@ public class MainFrame extends JFrame {
 	 * Opens the host-sharing window for the active incident when the store supports hosting.
 	 */
 	private void showHostSharing() {
+		if (hostSharingDialog != null && hostSharingDialog.isSharing()) {
+			hostSharingDialog.setVisible(true);
+			return;
+		}
 		IncidentStore store = controller.getStore();
 		IncidentId incident = controller.getActiveIncidentId();
 		if (store == null || incident == null || !"File".equals(store.describe().type())) {
@@ -894,6 +909,7 @@ public class MainFrame extends JFrame {
 				hostSharingDialog.dispose();
 			}
 			hostedIncident = incident;
+			hostLocalStore = store;
 			hostSharingDialog = new HostSharingDialog(this, store, incident, () -> {
 				if (!saveBeforeSwitch()) {
 					throw new IllegalStateException("Pending edits could not be saved");
@@ -902,8 +918,160 @@ public class MainFrame extends JFrame {
 				controller.replaceActiveDocumentFromStore();
 				refreshFromModel();
 			});
+			hostSharingDialog.setStoreSwitch(loopback -> {
+				controller.switchStore(loopback, incident);
+				refreshFromModel();
+				attachMonitor((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) loopback, "Host");
+			}, () -> {
+				detachMonitor();
+				authorityText = "Standalone";
+				connectionStatus = null;
+				showConnectionStatus();
+				controller.switchStore(hostLocalStore, incident);
+				refreshFromModel();
+			});
 		}
 		hostSharingDialog.setVisible(true);
+	}
+
+	/**
+	 * Asks for an invitation and opens the shared incident in a new connected window. Pairing and the first load
+	 * run on a background worker so the event thread never waits on the network.
+	 */
+	private void showConnect() {
+		JTextArea invitation = new JTextArea(4, 48);
+		invitation.setLineWrap(true);
+		JTextField device = new JTextField(System.getProperty("user.name", "device"), 20);
+		Object[] form = {"Invitation from the host:", new JScrollPane(invitation), "Device name:", device};
+		if (JOptionPane.showConfirmDialog(this, form, "Connect to a host", JOptionPane.OK_CANCEL_OPTION,
+				JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
+			return;
+		}
+		connectWithInvitation(invitation.getText(), device.getText().strip());
+	}
+
+	/**
+	 * Redeems an invitation, loads the shared incident and opens it in a new window, reporting failures without
+	 * changing this window.
+	 *
+	 * @param invitationText invitation text.
+	 * @param deviceName name shown to the host operator.
+	 */
+	void connectWithInvitation(String invitationText, String deviceName) {
+		new javax.swing.SwingWorker<Object[], Void>() {
+			/**
+			 * Pairs and loads off the event thread.
+			 *
+			 * @return the store and its first snapshot
+			 */
+			@Override
+			protected Object[] doInBackground() {
+				org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote =
+						org.sarmanagement.icsforms.host.HostGateway.pair(invitationText,
+								deviceName.isBlank() ? "device" : deviceName);
+				return new Object[] {remote, remote.loadSnapshot(remote.incident())};
+			}
+
+			/**
+			 * Opens the connected window or reports the failure.
+			 */
+			@Override
+			protected void done() {
+				try {
+					Object[] result = get();
+					openConnectedWindow((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) result[0],
+							(org.sarmanagement.icsforms.persistence.StoredIncident) result[1]);
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					showError("Could not connect to the host", failure.getCause() instanceof RuntimeException runtime
+							? runtime : new IllegalStateException(failure.getCause()));
+				}
+			}
+		}.execute();
+	}
+
+	/**
+	 * Opens a connected window for an already paired remote store.
+	 *
+	 * @param remote paired remote store.
+	 * @param first first snapshot of the shared incident.
+	 */
+	private void openConnectedWindow(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
+			org.sarmanagement.icsforms.persistence.StoredIncident first) {
+		MainFrame frame = new MainFrame(first.data(), remote, remote.incident(), controller.exportService(),
+				controller.validator(), homeDirectory);
+		frame.attachMonitor(remote, "Connected to " + remote.describe().location());
+		frame.setVisible(true);
+	}
+
+	/**
+	 * Starts conditional polling of the host for this window and shows authority, connection state and the last
+	 * confirmed time. A newer remote state refreshes a clean view and is kept out of a dirty one.
+	 *
+	 * @param remote remote store the controller edits through.
+	 * @param authority authority text shown on the status line.
+	 */
+	void attachMonitor(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote, String authority) {
+		detachMonitor();
+		authorityText = authority;
+		remoteNewer = false;
+		connectionStatus = null;
+		org.sarmanagement.icsforms.persistence.ConnectionMonitor monitor =
+				org.sarmanagement.icsforms.persistence.ConnectionMonitor.withDefaults(remote.gateway(),
+						remote.incident(), 0, cursor -> {
+							AppController.RemoteRefreshOutcome outcome = controller.refreshFromRemote();
+							remoteNewer = outcome == AppController.RemoteRefreshOutcome.DRAFT_PRESERVED;
+							return !remoteNewer;
+						}, status -> javax.swing.SwingUtilities.invokeLater(() -> {
+							connectionStatus = status;
+							showConnectionStatus();
+						}));
+		connectionMonitor = monitor;
+		showConnectionStatus();
+		monitor.start();
+	}
+
+	/**
+	 * Stops polling, when a monitor is attached.
+	 */
+	private void detachMonitor() {
+		org.sarmanagement.icsforms.persistence.ConnectionMonitor current = connectionMonitor;
+		connectionMonitor = null;
+		if (current != null) {
+			current.close();
+		}
+	}
+
+	/**
+	 * Renders authority, connection state, last confirmed time and any kept draft on the status line.
+	 */
+	private void showConnectionStatus() {
+		org.sarmanagement.icsforms.persistence.ConnectionMonitor.Status status = connectionStatus;
+		if (status == null) {
+			connectionLabel.setText(authorityText);
+			return;
+		}
+		StringBuilder text = new StringBuilder(authorityText).append(" | ").append(status.detail());
+		if (status.lastConfirmed() != null) {
+			text.append(" | last confirmed ").append(java.time.format.DateTimeFormatter.ISO_LOCAL_TIME
+					.format(status.lastConfirmed().atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+							.truncatedTo(java.time.temporal.ChronoUnit.SECONDS)));
+		}
+		text.append(" | ").append(status.state());
+		if (remoteNewer) {
+			text.append(" | newer changes on the host; your draft is kept");
+		}
+		connectionLabel.setText(text.toString());
+	}
+
+	/**
+	 * Returns the status line text for tests.
+	 *
+	 * @return authority and connection text
+	 */
+	String connectionStatusText() {
+		return connectionLabel.getText();
 	}
 
 	/**
