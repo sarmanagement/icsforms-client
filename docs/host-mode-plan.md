@@ -257,7 +257,20 @@ wildcard or loopback address only.
 local file store. Starting saves open editors, takes exclusive ownership of the
 incident files, then opens the listeners. Failures (port in use, storage
 failure, unsaved edits) leave the incident usable and nothing shared. While
-hosting, a standalone editor or second host process cannot write the files.
+hosting, a standalone editor or second host process cannot write the files:
+the exclusive lock is an operating-system file lock, and a test spawns a
+separate JVM that is refused while hosting and succeeds after stopping. Locks
+are advisory to processes that do not use the application's store, so other
+tools can still modify the files directly.
+
+**Period close.** On start, and every two seconds while hosting, the dialog
+reads the incident's operational period end and applies it as the credential
+cutoff: new credentials last `min(now + 72h, period end)`, existing device
+credentials stop working once the period end has passed (and resume if the end
+is moved later), and invitations are refused after it. With no period end the
+72-hour default applies. *Open item:* the incident model has no demobilised
+indicator, so demobilisation does not yet set a cutoff; until it does, set the
+operational period end to demobilise credentials.
 
 **Admitting.** Press *Create invitation* (copied to the clipboard) and send the
 text to the device operator over a trusted channel. It works once and expires
@@ -271,7 +284,10 @@ across restarts; a revoked device is told so by the pre-auth status check.
 requests, then closes. Closing the window stops sharing only after confirmation;
 closing a client never stops the host.
 
-**Backup and restore.** `HostBackup` writes one archive containing the incident
+**Backup and restore.** *Sharing → Host this incident…* offers *Back up host
+data…* and *Restore host data…*. Both first show the sensitivity warning. Restore
+is refused while sharing and reloads the open incident afterwards; failures are
+reported in a dialog. `HostBackup` writes one archive containing the incident
 file, record history, device registry (with revocations) and the CA/server keys,
 with per-entry checksums, so versions cannot be mixed. The archive is
 sensitive (it can mint device credentials): it is created owner-only and must be
@@ -285,8 +301,12 @@ fingerprint and refuses a changed certificate. *Credential compromise / lost
 device*: revoke the device; credentials expire after 72 hours regardless.
 *Evil-twin hotspot*: without the pinned fingerprint an impostor cannot complete
 the handshake, but an attacker who also captures the invitation before use could
-pair a rogue host, so deliver invitations and fingerprints out of band.
+pair a rogue host, so deliver the fingerprint together with the invitation out of band (for
+example read aloud, printed or in person) rather than over the same
+network the clients are joining.
 
 **Known limits.** Host identity rotation is deferred. Host-editor whole-document
 saves may report a revision conflict after remote writes because refresh is out
-of scope here.
+of scope here. The window then says remote devices changed the incident, that
+nothing was lost and the edit is still in the window, and advises exporting
+unsaved changes; the edit is never discarded.

@@ -137,7 +137,7 @@ final class HostApiHandler implements HttpHandler {
 			return null;
 		}
 		DeviceRegistry.DeviceRecord device = found.get();
-		switch (device.stateAt(context.config.clock().instant())) {
+		switch (context.effectiveState(device)) {
 			case REVOKED -> {
 				HostHttp.error(exchange, 403, "credential_revoked", "The device credential was revoked.", false);
 				return null;
@@ -399,7 +399,7 @@ final class HostApiHandler implements HttpHandler {
 		ArrayNode array = HostHttp.MAPPER.createArrayNode();
 		for (DeviceRegistry.DeviceRecord record : context.registry.devices()) {
 			Instant contact = context.registry.lastContact(record.deviceId()).orElse(null);
-			CredentialState state = record.stateAt(now);
+			CredentialState state = context.effectiveState(record);
 			array.add(HostHttp.MAPPER.valueToTree(new DeviceInfo(record.deviceId(), record.name(), record.issuedAt(),
 					record.expiresAt(), state, contact,
 					state == CredentialState.ACTIVE && contact != null && contact.isAfter(cutoff))));

@@ -4,15 +4,19 @@
 package org.sarmanagement.icsforms.ui;
 
 import org.sarmanagement.icsforms.host.DeviceInfo;
+import org.sarmanagement.icsforms.host.HostBackup;
 import org.sarmanagement.icsforms.host.HostConfig;
 import org.sarmanagement.icsforms.host.HostSession;
 import org.sarmanagement.icsforms.host.HostState;
 import org.sarmanagement.icsforms.host.HostStatus;
+import org.sarmanagement.icsforms.host.HostStorage;
+import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -28,12 +32,19 @@ import javax.swing.SwingWorker;
 import javax.swing.Timer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Frame;
 import java.awt.GridLayout;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Lets the host operator start and stop sharing the active incident, issue invitations and revoke devices.
@@ -44,19 +55,90 @@ public class HostSharingDialog extends JDialog {
 	private static final int DEFAULT_PORT = 8443;
 	private static final int DEFAULT_ENROLLMENT_PORT = 8444;
 	private static final int REFRESH_MILLIS = 2000;
+	/** Sensitivity warning shown before a backup or restore is chosen. */
+	static final String SENSITIVITY_WARNING = "The host backup contains the host's certificate authority key, the "
+			+ "device registry and the incident data. Anyone holding it can mint device credentials. Keep it "
+			+ "owner-only on trusted storage and never share it.";
+
+	/**
+	 * Presents confirmations, messages and file choices so the dialog's guard logic can be exercised without
+	 * modal windows.
+	 */
+	public interface Prompts {
+		/**
+		 * Asks a yes/no question.
+		 *
+		 * @param parent parent component
+		 * @param title title
+		 * @param message question text
+		 * @return true when the operator agrees
+		 */
+		boolean confirm(Component parent, String title, String message);
+
+		/**
+		 * Shows a message.
+		 *
+		 * @param parent parent component
+		 * @param title title
+		 * @param message message text
+		 * @param error true for a failure message
+		 */
+		void show(Component parent, String title, String message, boolean error);
+
+		/**
+		 * Asks for a file location.
+		 *
+		 * @param parent parent component
+		 * @param title title
+		 * @param save true to choose a new file to write, false to choose an existing file
+		 * @return chosen path, or null when cancelled
+		 */
+		Path chooseFile(Component parent, String title, boolean save);
+	}
+
+	/** Swing implementation of {@link Prompts}. */
+	private static final class SwingPrompts implements Prompts {
+		/** {@inheritDoc} */
+		@Override
+		public boolean confirm(Component parent, String title, String message) {
+			return JOptionPane.showConfirmDialog(parent, message, title, JOptionPane.YES_NO_OPTION,
+					JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void show(Component parent, String title, String message, boolean error) {
+			JOptionPane.showMessageDialog(parent, message, title,
+					error ? JOptionPane.ERROR_MESSAGE : JOptionPane.INFORMATION_MESSAGE);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Path chooseFile(Component parent, String title, boolean save) {
+			JFileChooser chooser = new JFileChooser();
+			chooser.setDialogTitle(title);
+			int result = save ? chooser.showSaveDialog(parent) : chooser.showOpenDialog(parent);
+			return result == JFileChooser.APPROVE_OPTION ? chooser.getSelectedFile().toPath() : null;
+		}
+	}
 
 	private final transient IncidentStore store;
 	private final transient IncidentId incident;
 	private final transient Runnable flushEditors;
+	private final transient Supplier<Instant> periodCloseSource;
+	private final transient Runnable onRestored;
+	private transient Prompts prompts = new SwingPrompts();
 	private transient HostSession session;
 	private final JLabel stateLabel = new JLabel("Not sharing");
 	private final JTextField hostField = new JTextField(defaultHost(), 18);
-	private final JSpinner portSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_PORT, 1, 65535, 1));
-	private final JSpinner enrollmentSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_ENROLLMENT_PORT, 1, 65535, 1));
+	private final JSpinner portSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_PORT, 0, 65535, 1));
+	private final JSpinner enrollmentSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_ENROLLMENT_PORT, 0, 65535, 1));
 	private final JButton startButton = new JButton("Start sharing");
 	private final JButton stopButton = new JButton("Stop sharing");
 	private final JButton inviteButton = new JButton("Create invitation");
 	private final JButton revokeButton = new JButton("Revoke selected device");
+	private final JButton backupButton = new JButton("Back up host data...");
+	private final JButton restoreButton = new JButton("Restore host data...");
 	private final JTextArea invitationArea = new JTextArea(4, 48);
 	private final DefaultTableModel deviceModel = new DefaultTableModel(
 			new Object[] {"Device", "State", "Expires", "Last contact", "Connected"}, 0) {
@@ -85,18 +167,60 @@ public class HostSharingDialog extends JDialog {
 	 * @param store incident store
 	 * @param incident incident to share
 	 * @param flushEditors callback that saves pending editors and throws when they cannot be saved
+	 * @param periodCloseSource supplies the current operational period close, or null when none is defined
+	 * @param onRestored callback run after a successful restore so the editor can reload the incident, or null
 	 */
-	public HostSharingDialog(Frame owner, IncidentStore store, IncidentId incident, Runnable flushEditors) {
+	public HostSharingDialog(Frame owner, IncidentStore store, IncidentId incident, Runnable flushEditors,
+			Supplier<Instant> periodCloseSource, Runnable onRestored) {
 		super(owner, "Host this incident", false);
 		this.store = store;
 		this.incident = incident;
 		this.flushEditors = flushEditors;
+		this.periodCloseSource = periodCloseSource == null ? () -> null : periodCloseSource;
+		this.onRestored = onRestored == null ? () -> { } : onRestored;
 		setDefaultCloseOperation(HIDE_ON_CLOSE);
 		buildLayout();
 		refresh();
 		refreshTimer.start();
 		pack();
 		setLocationRelativeTo(owner);
+	}
+
+	/**
+	 * Derives the credential cutoff from an incident's current operational period end. The stored value is a
+	 * UTC date-time. No demobilisation indicator exists in the model yet, so only the period end is used.
+	 *
+	 * @param data incident data
+	 * @return period close instant, or null when no period end is defined
+	 */
+	public static Instant periodCloseOf(AppData data) {
+		if (data == null || data.getIncidentContext() == null) {
+			return null;
+		}
+		LocalDateTime end = data.getIncidentContext().getOperationalPeriodEnd();
+		return end == null ? null : end.toInstant(ZoneOffset.UTC);
+	}
+
+	/**
+	 * Sets the address and ports used on the next start, for tests and scripted setup.
+	 *
+	 * @param host address clients use
+	 * @param port mutual-TLS port
+	 * @param enrollmentPort pairing and status port
+	 */
+	void configure(String host, int port, int enrollmentPort) {
+		hostField.setText(host);
+		portSpinner.setValue(port);
+		enrollmentSpinner.setValue(enrollmentPort);
+	}
+
+	/**
+	 * Replaces the prompt implementation, for tests.
+	 *
+	 * @param replacement prompt implementation
+	 */
+	void setPrompts(Prompts replacement) {
+		this.prompts = replacement;
 	}
 
 	/**
@@ -120,7 +244,7 @@ public class HostSharingDialog extends JDialog {
 		JPanel settings = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		settings.add(new JLabel("Address clients use:"));
 		settings.add(hostField);
-		settings.add(new JLabel("Port:"));
+		settings.add(new JLabel("Port (0 = any free port):"));
 		settings.add(portSpinner);
 		settings.add(new JLabel("Pairing port:"));
 		settings.add(enrollmentSpinner);
@@ -149,7 +273,11 @@ public class HostSharingDialog extends JDialog {
 		JPanel devices = new JPanel(new BorderLayout());
 		devices.setBorder(BorderFactory.createTitledBorder("Paired devices"));
 		devices.add(new JScrollPane(deviceTable), BorderLayout.CENTER);
-		devices.add(revokeButton, BorderLayout.SOUTH);
+		JPanel deviceButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		deviceButtons.add(revokeButton);
+		deviceButtons.add(backupButton);
+		deviceButtons.add(restoreButton);
+		devices.add(deviceButtons, BorderLayout.SOUTH);
 
 		JPanel center = new JPanel(new GridLayout(0, 1));
 		center.add(invitePanel);
@@ -161,6 +289,8 @@ public class HostSharingDialog extends JDialog {
 		stopButton.addActionListener(event -> stopSharing());
 		inviteButton.addActionListener(event -> issueInvitation());
 		revokeButton.addActionListener(event -> revokeSelected());
+		backupButton.addActionListener(event -> backupAction());
+		restoreButton.addActionListener(event -> restoreAction());
 	}
 
 	/**
@@ -190,7 +320,7 @@ public class HostSharingDialog extends JDialog {
 	/**
 	 * Starts sharing after flushing editors; a failure leaves the incident usable and is shown.
 	 */
-	private void startSharing() {
+	void startSharing() {
 		if (isSharing()) {
 			return;
 		}
@@ -199,12 +329,13 @@ public class HostSharingDialog extends JDialog {
 					(Integer) enrollmentSpinner.getValue());
 			HostSession candidate = new HostSession(store, incident, config, flushEditors);
 			candidate.start();
+			candidate.setPeriodCloseCutoff(periodCloseSource.get());
 			session = candidate;
 			invitationArea.setText("");
 		} catch (RuntimeException failure) {
 			session = null;
-			JOptionPane.showMessageDialog(this, "Sharing could not be started; the incident is unchanged.\n"
-					+ failure.getMessage(), "Host this incident", JOptionPane.ERROR_MESSAGE);
+			prompts.show(this, "Host this incident", "Sharing could not be started; the incident is unchanged.\n"
+					+ failure.getMessage(), true);
 		}
 		refresh();
 	}
@@ -212,7 +343,7 @@ public class HostSharingDialog extends JDialog {
 	/**
 	 * Stops sharing after warning when devices are connected.
 	 */
-	private void stopSharing() {
+	void stopSharing() {
 		if (session == null) {
 			return;
 		}
@@ -232,9 +363,8 @@ public class HostSharingDialog extends JDialog {
 		if (connected == 0) {
 			return true;
 		}
-		return JOptionPane.showConfirmDialog(this, connected + " device(s) are connected. Stopping sharing tells "
-				+ "them the host is stopping and ends their access. Stop sharing?", "Stop sharing",
-				JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
+		return prompts.confirm(this, "Stop sharing", connected + " device(s) are connected. Stopping sharing tells "
+				+ "them the host is stopping and ends their access. Stop sharing?");
 	}
 
 	/**
@@ -280,40 +410,173 @@ public class HostSharingDialog extends JDialog {
 	/**
 	 * Issues a new invitation and shows its text.
 	 */
-	private void issueInvitation() {
+	void issueInvitation() {
 		HostSession current = session;
 		if (current == null) {
 			return;
 		}
 		try {
 			invitationArea.setText(current.issueInvitation());
-			invitationArea.selectAll();
-			invitationArea.copy();
+			copyInvitation();
 		} catch (RuntimeException failure) {
-			JOptionPane.showMessageDialog(this, "Could not create an invitation: " + failure.getMessage(),
-					"Invitation", JOptionPane.ERROR_MESSAGE);
+			prompts.show(this, "Invitation", "Could not create an invitation: " + failure.getMessage(), true);
 		}
+	}
+
+	/**
+	 * Copies the displayed invitation text to the clipboard.
+	 */
+	void copyInvitation() {
+		invitationArea.selectAll();
+		invitationArea.copy();
+	}
+
+	/**
+	 * Returns the invitation text currently shown.
+	 *
+	 * @return invitation text, empty when none
+	 */
+	String invitationText() {
+		return invitationArea.getText();
+	}
+
+	/**
+	 * Returns the status line text.
+	 *
+	 * @return status text
+	 */
+	String statusText() {
+		return stateLabel.getText();
+	}
+
+	/**
+	 * Returns the device table.
+	 *
+	 * @return table of paired devices
+	 */
+	JTable deviceTable() {
+		return deviceTable;
+	}
+
+	/**
+	 * Returns the sharing session while one exists.
+	 *
+	 * @return session, or null
+	 */
+	HostSession session() {
+		return session;
+	}
+
+	/**
+	 * Resolves the host-owned storage for backup and restore, preferring the live session's instance.
+	 *
+	 * @return storage
+	 */
+	private HostStorage storage() {
+		HostSession current = session;
+		if (current != null && current.storage() != null) {
+			return current.storage();
+		}
+		return new HostStorage(Path.of(store.describe().location()), Clock.systemUTC());
+	}
+
+	/**
+	 * Warns about sensitivity, asks for a destination and writes the host backup.
+	 */
+	private void backupAction() {
+		if (!prompts.confirm(this, "Back up host data", SENSITIVITY_WARNING + "\n\nContinue?")) {
+			return;
+		}
+		Path target = prompts.chooseFile(this, "Save host backup", true);
+		if (target == null) {
+			return;
+		}
+		String problem = backupTo(target);
+		prompts.show(this, "Back up host data", problem == null ? "Backup written (owner-only) to " + target
+				: "Backup failed: " + problem, problem != null);
+	}
+
+	/**
+	 * Writes the combined incident, registry and key backup; the file is created owner-only.
+	 *
+	 * @param target new backup file
+	 * @return null on success, otherwise a description of the failure
+	 */
+	String backupTo(Path target) {
+		try {
+			flushEditors.run();
+			HostBackup.create(store, incident, storage(), target);
+			return null;
+		} catch (RuntimeException failure) {
+			return String.valueOf(failure.getMessage());
+		}
+	}
+
+	/**
+	 * Warns, asks for a backup and restores it unless sharing is active.
+	 */
+	private void restoreAction() {
+		if (isSharing()) {
+			prompts.show(this, "Restore host data", RESTORE_WHILE_SHARING, true);
+			return;
+		}
+		if (!prompts.confirm(this, "Restore host data", SENSITIVITY_WARNING
+				+ "\n\nRestoring replaces this incident, its history, the device registry and the host keys. "
+				+ "Continue?")) {
+			return;
+		}
+		Path source = prompts.chooseFile(this, "Open host backup", false);
+		if (source == null) {
+			return;
+		}
+		String problem = restoreFrom(source);
+		prompts.show(this, "Restore host data", problem == null ? "Backup restored. Devices and revocations in the "
+				+ "backup are in force." : "Restore failed: " + problem, problem != null);
+	}
+
+	/** Message shown when a restore is attempted while sharing. */
+	static final String RESTORE_WHILE_SHARING = "Stop sharing before restoring a host backup.";
+
+	/**
+	 * Restores a host backup; refused while sharing. On success the editor reloads the restored incident.
+	 *
+	 * @param source backup file
+	 * @return null on success, otherwise a description of the failure
+	 */
+	String restoreFrom(Path source) {
+		if (isSharing()) {
+			return RESTORE_WHILE_SHARING;
+		}
+		try {
+			HostBackup.restore(store, incident, storage(), source, true);
+		} catch (RuntimeException failure) {
+			return String.valueOf(failure.getMessage());
+		}
+		try {
+			onRestored.run();
+		} catch (RuntimeException failure) {
+			return "The backup was restored but the editor could not reload it: " + failure.getMessage();
+		}
+		return null;
 	}
 
 	/**
 	 * Revokes the selected device after confirmation.
 	 */
-	private void revokeSelected() {
+	void revokeSelected() {
 		HostSession current = session;
 		int row = deviceTable.getSelectedRow();
 		if (current == null || row < 0 || row >= shownDevices.size()) {
 			return;
 		}
 		DeviceInfo device = shownDevices.get(row);
-		if (JOptionPane.showConfirmDialog(this, "Revoke access for \"" + device.name() + "\"?", "Revoke device",
-				JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION) {
+		if (!prompts.confirm(this, "Revoke device", "Revoke access for \"" + device.name() + "\"?")) {
 			return;
 		}
 		try {
 			current.revoke(device.deviceId());
 		} catch (RuntimeException failure) {
-			JOptionPane.showMessageDialog(this, "Could not revoke the device: " + failure.getMessage(), "Revoke device",
-					JOptionPane.ERROR_MESSAGE);
+			prompts.show(this, "Revoke device", "Could not revoke the device: " + failure.getMessage(), true);
 		}
 		refresh();
 	}
@@ -321,9 +584,12 @@ public class HostSharingDialog extends JDialog {
 	/**
 	 * Refreshes the status line, buttons and device list.
 	 */
-	private void refresh() {
+	void refresh() {
 		HostSession current = session;
 		boolean running = current != null && current.state() == HostState.RUNNING;
+		if (running) {
+			current.setPeriodCloseCutoff(periodCloseSource.get());
+		}
 		startButton.setEnabled(current == null);
 		stopButton.setEnabled(current != null && current.state() != HostState.STOPPING);
 		inviteButton.setEnabled(running);

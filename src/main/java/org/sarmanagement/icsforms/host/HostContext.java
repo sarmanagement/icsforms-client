@@ -73,6 +73,23 @@ final class HostContext {
 	}
 
 	/**
+	 * Evaluates a credential now, treating a non-administrator credential as expired once the operational period
+	 * has closed even when it was issued earlier with a later expiry.
+	 *
+	 * @param device registry record
+	 * @return effective credential state
+	 */
+	CredentialState effectiveState(DeviceRegistry.DeviceRecord device) {
+		Instant now = config.clock().instant();
+		CredentialState state = device.stateAt(now);
+		Instant close = periodClose;
+		if (state == CredentialState.ACTIVE && !device.admin() && close != null && !now.isBefore(close)) {
+			return CredentialState.EXPIRED;
+		}
+		return state;
+	}
+
+	/**
 	 * Returns the bound mutual-TLS port.
 	 *
 	 * @return port

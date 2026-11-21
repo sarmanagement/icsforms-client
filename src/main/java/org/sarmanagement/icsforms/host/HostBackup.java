@@ -45,7 +45,8 @@ public final class HostBackup {
 	}
 
 	/**
-	 * Creates a backup of the incident and host-owned storage as a single consistent snapshot.
+	 * Creates a backup of the incident and host-owned storage as a single consistent snapshot. The host identity
+	 * is created first when sharing has never been started, so the backup always carries the authority key.
 	 *
 	 * @param store file-based incident store holding the incident
 	 * @param incident incident to back up
@@ -62,6 +63,7 @@ public final class HostBackup {
 		if (Files.exists(destination)) {
 			throw new HostStorageException("The backup file already exists");
 		}
+		storage.keys().loadOrCreate();
 		byte[] archive = store.withIncidentLock(incident, () -> storage.registry().withLock(() -> {
 			try {
 				return buildArchive(root, incident, storage);
@@ -87,6 +89,22 @@ public final class HostBackup {
 	 * @throws HostStorageException when verification fails or the incident is in use
 	 */
 	public static void restore(IncidentStore store, IncidentId incident, HostStorage storage, Path source) {
+		restore(store, incident, storage, source, false);
+	}
+
+	/**
+	 * Restores a backup, optionally into an incident the caller already holds open for editing. In that case the
+	 * caller's existing exclusive lock is used and left in place, and the caller must reload the incident.
+	 *
+	 * @param store file-based incident store to restore into
+	 * @param incident incident being restored
+	 * @param storage host-owned storage
+	 * @param source backup file
+	 * @param callerMayHoldLock true when the calling editor may already hold the incident's edit lock
+	 * @throws HostStorageException when verification fails or the incident is in use
+	 */
+	public static void restore(IncidentStore store, IncidentId incident, HostStorage storage, Path source,
+			boolean callerMayHoldLock) {
 		Path root = storeRoot(store);
 		Optional<EditLockSupport> locks = store.editLocks();
 		if (locks.isEmpty()) {
@@ -101,7 +119,8 @@ public final class HostBackup {
 			}
 		}
 		EditLockSupport lockSupport = locks.get();
-		if (lockSupport.isHeldByCaller(incident) || !lockSupport.lock(incident)) {
+		boolean held = lockSupport.isHeldByCaller(incident);
+		if (held && !callerMayHoldLock || !held && !lockSupport.lock(incident)) {
 			throw new HostStorageException("The incident is open or being shared; stop sharing and close it first");
 		}
 		try {
@@ -110,7 +129,9 @@ public final class HostBackup {
 				return null;
 			}));
 		} finally {
-			lockSupport.unlock(incident);
+			if (!held) {
+				lockSupport.unlock(incident);
+			}
 		}
 	}
 

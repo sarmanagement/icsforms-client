@@ -485,4 +485,11 @@ the [API contract](host-api-contract.md), [plan](host-mode-plan.md#operations-is
 and [Stage 0 decisions](stage-0-decisions.md). Connect mode, refresh, outbox,
 roles and identity rotation remain out of scope.
 
-Evidence: `HostSessionTest`, `HostBackupTest`, `HostProtocolTest`.
+Review follow-up: operational period end now caps and enforces credential
+expiry (demobilisation has no source yet; open item in the plan); backup and
+restore actions in the sharing dialog; clear non-destructive save-conflict
+message; cross-process exclusivity test; UI tests for the dialog and the
+close-while-hosting confirmation.
+
+Evidence: `HostSessionTest`, `HostBackupTest`, `HostProtocolTest`,
+`HostSharingDialogTest`, `MainFrameHostSharingTest`.

@@ -94,6 +94,40 @@ class HostSessionTest {
 	}
 
 	@Test
+	void periodCloseCapsIssuedCredentialsAndNoCutoffMeansSeventyTwoHours() {
+		try (HostFixture fixture = new HostFixture(directory)) {
+			fixture.start();
+			Instant close = fixture.clock.instant().plus(Duration.ofHours(10));
+			fixture.session.setPeriodCloseCutoff(close);
+			DeviceCredential underPeriod = fixture.pair("Under period");
+			assertFalse(underPeriod.expiresAt().isAfter(close));
+			fixture.session.setPeriodCloseCutoff(null);
+			DeviceCredential noCutoff = fixture.pair("No cutoff");
+			assertEquals(fixture.clock.instant().plus(Duration.ofHours(72)), noCutoff.expiresAt());
+		}
+	}
+
+	@Test
+	void shorteningThePeriodEndsExistingCredentialsAtTheNewClose() {
+		try (HostFixture fixture = new HostFixture(directory)) {
+			fixture.start();
+			DeviceCredential device = fixture.pair("Tablet");
+			HostClient client = fixture.client(device);
+			assertEquals(HostConnectionState.CONNECTED, client.diagnose(device));
+			fixture.session.setPeriodCloseCutoff(fixture.clock.instant().plus(Duration.ofHours(1)));
+			assertEquals(HostConnectionState.CONNECTED, client.diagnose(device));
+			fixture.clock.advance(Duration.ofHours(2));
+			HostClientException expired = assertThrows(HostClientException.class,
+					() -> client.readIncident(fixture.incident.value()));
+			assertEquals(HostClientException.Kind.CREDENTIAL_EXPIRED, expired.kind());
+			assertEquals(HostConnectionState.CREDENTIAL_EXPIRED, client.diagnose(device));
+			assertEquals(CredentialState.EXPIRED, fixture.session.devices().get(0).state());
+			fixture.session.setPeriodCloseCutoff(null);
+			assertEquals(HostConnectionState.CONNECTED, client.diagnose(device));
+		}
+	}
+
+	@Test
 	void expiredCredentialIsDistinguishedFromUnreachable() {
 		try (HostFixture fixture = new HostFixture(directory)) {
 			fixture.start();
@@ -491,6 +525,46 @@ class HostSessionTest {
 				assertTrue(other.lock(fixture.incident));
 			}
 		}
+	}
+
+	@Test
+	void separateProcessCannotWriteSharedFilesWhileHostingButCanAfterStop() throws Exception {
+		try (HostFixture fixture = new HostFixture(directory)) {
+			fixture.start();
+			List<String> whileHosting = runForeignWriter(fixture);
+			assertTrue(whileHosting.contains("LOCK=false"), whileHosting.toString());
+			assertTrue(whileHosting.contains("SAVE=REFUSED"), whileHosting.toString());
+			assertFalse(fixture.store.load(fixture.incident).getIncidentContext().getIncidentName()
+					.equals("written by another process"));
+			fixture.session.stop();
+			List<String> afterStop = runForeignWriter(fixture);
+			assertTrue(afterStop.contains("LOCK=true"), afterStop.toString());
+			assertTrue(afterStop.contains("SAVE=OK"), afterStop.toString());
+		}
+	}
+
+	/**
+	 * Runs {@link HostForeignWriter} in a new JVM using this test's class path.
+	 *
+	 * @param fixture fixture whose store and incident to use
+	 * @return output lines of the child process
+	 * @throws Exception when the process cannot run or times out
+	 */
+	private static List<String> runForeignWriter(HostFixture fixture) throws Exception {
+		String javaBinary = Path.of(System.getProperty("java.home"), "bin", "java").toString();
+		Process process = new ProcessBuilder(javaBinary, "-Djava.awt.headless=true", "-cp",
+				System.getProperty("java.class.path"), HostForeignWriter.class.getName(),
+				fixture.directory.toString(), fixture.incident.value()).redirectErrorStream(true).start();
+		List<String> lines = new ArrayList<>();
+		try (java.io.BufferedReader reader = new java.io.BufferedReader(
+				new java.io.InputStreamReader(process.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+			String line;
+			while ((line = reader.readLine()) != null) {
+				lines.add(line);
+			}
+		}
+		assertTrue(process.waitFor(60, TimeUnit.SECONDS), "child JVM timed out");
+		return lines;
 	}
 
 	@Test

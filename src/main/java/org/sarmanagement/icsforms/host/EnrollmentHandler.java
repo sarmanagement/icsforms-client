@@ -108,7 +108,9 @@ final class EnrollmentHandler implements HttpHandler {
 			return;
 		}
 		String fingerprint = request.path("certificateFingerprint").asText("");
-		CredentialState state = fingerprint.matches("[0-9a-f]{64}") ? context.registry.stateOf(fingerprint)
+		CredentialState state = fingerprint.matches("[0-9a-f]{64}")
+				? context.registry.byFingerprint(fingerprint).map(context::effectiveState)
+						.orElse(CredentialState.UNKNOWN)
 				: CredentialState.UNKNOWN;
 		ObjectNode body = HostHttp.MAPPER.createObjectNode();
 		body.put("state", state.name().toLowerCase(Locale.ROOT));
