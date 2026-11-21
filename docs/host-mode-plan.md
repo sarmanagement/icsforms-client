@@ -245,3 +245,68 @@ Treat three cases separately:
 Detection rules and how confirmed duplicates are represented remain decisions,
 not prescribed algorithms. Preserve provenance and existing strike-out/history
 semantics rather than deleting evidence merely to make entries look unique.
+
+## Operations (issue #59)
+
+**Firewall and ports.** Allow inbound TCP on the data port (default 8443) and
+the pairing/status port (default 8444) on the incident network only. Set the
+"address clients use" to a name or IP clients can reach. Sharing binds a
+wildcard or loopback address only.
+
+**Starting.** Use *Sharing → Host this incident…* with the incident saved in the
+local file store. Starting saves open editors, takes exclusive ownership of the
+incident files, then opens the listeners. Failures (port in use, storage
+failure, unsaved edits) leave the incident usable and nothing shared. While
+hosting, a standalone editor or second host process cannot write the files:
+the exclusive lock is an operating-system file lock, and a test spawns a
+separate JVM that is refused while hosting and succeeds after stopping. Locks
+are advisory to processes that do not use the application's store, so other
+tools can still modify the files directly.
+
+**Period close.** On start, and every two seconds while hosting, the dialog
+reads the incident's operational period end and applies it as the credential
+cutoff: new credentials last `min(now + 72h, period end)`, existing device
+credentials stop working once the period end has passed (and resume if the end
+is moved later), and invitations are refused after it. With no period end the
+72-hour default applies. *Open item:* the incident model has no demobilised
+indicator, so demobilisation does not yet set a cutoff; until it does, set the
+operational period end to demobilise credentials.
+
+**Admitting.** Press *Create invitation* (copied to the clipboard) and send the
+text to the device operator over a trusted channel. It works once and expires
+quickly. Confirm the fingerprint shown in the dialog when the client pins it.
+
+**Revoking.** Select a device in the list and *Revoke*. Revocation persists
+across restarts; a revoked device is told so by the pre-auth status check.
+
+**Stopping.** *Stop sharing* warns when devices are connected, reports
+`stopping` to clients for a grace period, finishes or explicitly fails in-flight
+requests, then closes. Closing the window stops sharing only after confirmation;
+closing a client never stops the host.
+
+**Backup and restore.** *Sharing → Host this incident…* offers *Back up host
+data…* and *Restore host data…*. Both first show the sensitivity warning. Restore
+is refused while sharing and reloads the open incident afterwards; failures are
+reported in a dialog. `HostBackup` writes one archive containing the incident
+file, record history, device registry (with revocations) and the CA/server keys,
+with per-entry checksums, so versions cannot be mixed. The archive is
+sensitive (it can mint device credentials): it is created owner-only and must be
+stored accordingly and never logged. Restore only while not sharing; it
+verifies everything before writing anything.
+
+**Threats considered.** *Invitation interception*: single-use, short-lived and
+incident-scoped; an intercepted-and-used invitation is visible as an unexpected
+device, which can be revoked. *Host impersonation*: the client pins the CA
+fingerprint and refuses a changed certificate. *Credential compromise / lost
+device*: revoke the device; credentials expire after 72 hours regardless.
+*Evil-twin hotspot*: without the pinned fingerprint an impostor cannot complete
+the handshake, but an attacker who also captures the invitation before use could
+pair a rogue host, so deliver the fingerprint together with the invitation out of band (for
+example read aloud, printed or in person) rather than over the same
+network the clients are joining.
+
+**Known limits.** Host identity rotation is deferred. Host-editor whole-document
+saves may report a revision conflict after remote writes because refresh is out
+of scope here. The window then says remote devices changed the incident, that
+nothing was lost and the edit is still in the window, and advises exporting
+unsaved changes; the edit is never discarded.

@@ -470,3 +470,26 @@ button; the incident list offers **Open** and **Open and add new operational
 period…**, and the latter asks for confirmation (with the ICS 215 promotion
 option). Evidence: `IncidentManagerDialogTest.openingWithNewOperationalPeriodRequiresConfirmation`,
 `MainFrameIcs205WorkspaceTest.startupOffersSingleOpenActionWithoutNewPeriodShortcut`.
+
+## Host mode 3/6: secure transport, admission and lifecycle (issue #59)
+
+Delivered the `org.sarmanagement.icsforms.host` package: mutual-TLS HTTPS host
+server over the part-2 `IncidentService`, a host-run CA with device-generated
+keys, single-use invitations with atomic redemption, a persistent revocable
+device registry (72-hour default lifetime), a pre-auth status/credential signal,
+rate limits, version negotiation and size limits, loopback-only host
+administration, exclusive file ownership with safe start/stop, a combined
+host backup/restore including CA keys and registry, and a *Sharing* menu with
+`HostSharingDialog`. Standalone mode starts no listener. Documentation lives in
+the [API contract](host-api-contract.md), [plan](host-mode-plan.md#operations-issue-59)
+and [Stage 0 decisions](stage-0-decisions.md). Connect mode, refresh, outbox,
+roles and identity rotation remain out of scope.
+
+Review follow-up: operational period end now caps and enforces credential
+expiry (demobilisation has no source yet; open item in the plan); backup and
+restore actions in the sharing dialog; clear non-destructive save-conflict
+message; cross-process exclusivity test; UI tests for the dialog and the
+close-while-hosting confirmation.
+
+Evidence: `HostSessionTest`, `HostBackupTest`, `HostProtocolTest`,
+`HostSharingDialogTest`, `MainFrameHostSharingTest`.

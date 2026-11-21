@@ -538,7 +538,9 @@ Implement the incident-scoped API, host-side validation and persistence, and a
 `RemoteIncidentStore` built on the Stage 1 contract. Issue #58 delivered the
 written contract and an in-process service over the file backend. It does not
 include network transport, admission, a remote store, UI changes, or an outbox;
-those remain in issues #59–#62. A persisted record is the
+those remain in issues #59–#62. Issue #59 has since delivered the transport,
+admission and host lifecycle (see [completed work](docs/completed-work.md));
+issues #60–#62 remain. A persisted record is the
 unit of submission and versioning: the client supplies the record version it
 edited, and the host compares base, current and proposed values field by field.
 A field changed only by the client is accepted; a field changed only by the host
@@ -553,6 +555,9 @@ shares one selected incident at a time. Both the host UI and connected UIs use
 that service boundary, with no direct-write bypass. See the
 [host mode implementation plan](docs/host-mode-plan.md) for the record contract,
 admission flow, concurrency and recovery evidence, and open scope decisions.
+Status: part 3/6 (transport, admission, lifecycle, backup) is delivered; remaining
+open item from it is a demobilisation source for the credential cutoff (the
+operational period end is already wired). See [completed work](docs/completed-work.md).
 Add explicit host identity (self-signed certificate with fingerprint shown for
 QR embedding) and health status. Device admission by invitation is included
 here in its simplest form so that the API is never reachable without a
