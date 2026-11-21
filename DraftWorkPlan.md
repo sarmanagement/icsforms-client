@@ -557,7 +557,9 @@ that service boundary, with no direct-write bypass. See the
 admission flow, concurrency and recovery evidence, and open scope decisions.
 Status: part 3/6 (transport, admission, lifecycle, backup) is delivered; remaining
 open item from it is a demobilisation source for the credential cutoff (the
-operational period end is already wired). See [completed work](docs/completed-work.md).
+operational period end is already wired). Part 4/6 (production remote store,
+polling, connected operation, capability-driven UI and contract suites against
+the real host) is delivered; see [completed work](docs/completed-work.md).
 Add explicit host identity (self-signed certificate with fingerprint shown for
 QR embedding) and health status. Device admission by invitation is included
 here in its simplest form so that the API is never reachable without a

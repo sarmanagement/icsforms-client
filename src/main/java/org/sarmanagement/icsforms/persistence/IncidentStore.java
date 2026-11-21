@@ -275,6 +275,34 @@ public interface IncidentStore extends AutoCloseable {
 	}
 
 	/**
+	 * Reports whether this store lets the caller create incidents (new, duplicate). Stores that share a single
+	 * administratively created incident report {@code false}; callers disable the actions instead of failing.
+	 *
+	 * @return true when {@link #create} is supported.
+	 */
+	default boolean supportsCreate() {
+		return true;
+	}
+
+	/**
+	 * Reports whether this store lets the caller delete incidents.
+	 *
+	 * @return true when {@link #delete(IncidentId, RevisionToken)} is supported.
+	 */
+	default boolean supportsDelete() {
+		return true;
+	}
+
+	/**
+	 * Reports whether this store lets the caller import incident JSON files.
+	 *
+	 * @return true when {@link #importFile} is supported.
+	 */
+	default boolean supportsImport() {
+		return true;
+	}
+
+	/**
 	 * Reports whether this store supports safe, non-overwriting backups.
 	 *
 	 * @return true when {@link #backupFile} is supported.

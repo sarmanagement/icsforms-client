@@ -104,4 +104,5 @@ demonstrate a network-backed store. See the
 - Refresh is conditional polling of the committed cursor. Interval and stale threshold are configurable (`icsforms.remote.pollIntervalMillis`, `icsforms.remote.staleAfterMillis`); "last confirmed" is the local time of the last successful poll, with no device-clock comparison with the host.
 - A notified host stop is shown differently from an unexplained loss of contact.
 - Newer remote revisions never advance the token of an older draft.
+- UI actions that a store cannot perform (create, delete, import) are disabled from the store's capabilities (`supportsCreate/Delete/Import`), not from a mode flag.
 - Create, delete and import remain host-administrative; credentials stay session-only until part 6; the outbox is part 5.

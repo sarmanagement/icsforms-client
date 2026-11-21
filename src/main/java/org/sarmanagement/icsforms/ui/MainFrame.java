@@ -138,6 +138,12 @@ public class MainFrame extends JFrame {
 	private String authorityText = "Standalone";
 	private transient org.sarmanagement.icsforms.persistence.ConnectionMonitor connectionMonitor;
 	private transient org.sarmanagement.icsforms.persistence.ConnectionMonitor.Status connectionStatus;
+	private transient java.util.function.BiFunction<String, String,
+			org.sarmanagement.icsforms.persistence.RemoteIncidentStore> invitationRedeemer =
+					org.sarmanagement.icsforms.host.HostGateway::pair;
+	private JMenuItem newItem;
+	private JMenuItem duplicateItem;
+	private JMenuItem importIncidentItem;
 	private volatile boolean remoteNewer;
 	private java.util.function.Predicate<String> closeWhileSharingConfirmation = message -> JOptionPane
 			.showConfirmDialog(this, message, "Stop sharing and close", JOptionPane.YES_NO_OPTION,
@@ -474,7 +480,7 @@ public class MainFrame extends JFrame {
 		JMenu openLogInNewWindowMenu = new JMenu("Open Log in New Window");
 		openLogInNewWindowMenu.setMnemonic(KeyEvent.VK_O);
 
-		JMenuItem newItem = new JMenuItem("New…");
+		newItem = new JMenuItem("New…");
 		newItem.setMnemonic(KeyEvent.VK_N);
 		newItem.addActionListener(event -> {
 			if (controller.getStore() == null || !saveBeforeSwitch()) {
@@ -561,7 +567,7 @@ public class MainFrame extends JFrame {
 			closeAfterSave();
 		});
 
-		JMenuItem duplicateItem = new JMenuItem("Duplicate Incident");
+		duplicateItem = new JMenuItem("Duplicate Incident");
 		duplicateItem.addActionListener(event -> {
 			if (!saveBeforeSwitch()) {
 				return;
@@ -573,7 +579,7 @@ public class MainFrame extends JFrame {
 				showSaveError(exception);
 			}
 		});
-		JMenuItem importIncidentItem = new JMenuItem("Import Incident JSON…");
+		importIncidentItem = new JMenuItem("Import Incident JSON…");
 		importIncidentItem.addActionListener(event -> chooseFile(defaultDirectory, false, path -> {
 			if (!saveBeforeSwitch()) {
 				return;
@@ -687,6 +693,7 @@ public class MainFrame extends JFrame {
 		});
 
 		fileMenu.add(newItem);
+		applyStoreCapabilities();
 		fileMenu.add(openItem);
 		fileMenu.add(manageIncidentsItem);
 		fileMenu.add(saveItem);
@@ -920,6 +927,7 @@ public class MainFrame extends JFrame {
 			});
 			hostSharingDialog.setStoreSwitch(loopback -> {
 				controller.switchStore(loopback, incident);
+				applyStoreCapabilities();
 				refreshFromModel();
 				attachMonitor((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) loopback, "Host");
 			}, () -> {
@@ -928,6 +936,7 @@ public class MainFrame extends JFrame {
 				connectionStatus = null;
 				showConnectionStatus();
 				controller.switchStore(hostLocalStore, incident);
+				applyStoreCapabilities();
 				refreshFromModel();
 			});
 		}
@@ -967,8 +976,7 @@ public class MainFrame extends JFrame {
 			@Override
 			protected Object[] doInBackground() {
 				org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote =
-						org.sarmanagement.icsforms.host.HostGateway.pair(invitationText,
-								deviceName.isBlank() ? "device" : deviceName);
+						invitationRedeemer.apply(invitationText, deviceName.isBlank() ? "device" : deviceName);
 				return new Object[] {remote, remote.loadSnapshot(remote.incident())};
 			}
 
@@ -989,6 +997,17 @@ public class MainFrame extends JFrame {
 				}
 			}
 		}.execute();
+	}
+
+	/**
+	 * Replaces how invitations are redeemed, so tests can inject a deliberately slow transport. The redeemer
+	 * always runs on a background worker.
+	 *
+	 * @param redeemer function from invitation text and device name to a paired remote store.
+	 */
+	void setInvitationRedeemer(java.util.function.BiFunction<String, String,
+			org.sarmanagement.icsforms.persistence.RemoteIncidentStore> redeemer) {
+		this.invitationRedeemer = java.util.Objects.requireNonNull(redeemer, "redeemer");
 	}
 
 	/**
@@ -1063,6 +1082,24 @@ public class MainFrame extends JFrame {
 			text.append(" | newer changes on the host; your draft is kept");
 		}
 		connectionLabel.setText(text.toString());
+	}
+
+	/**
+	 * Enables or disables New, Duplicate and Import from the active store's capabilities, explaining why an
+	 * action is unavailable instead of letting it fail.
+	 */
+	private void applyStoreCapabilities() {
+		org.sarmanagement.icsforms.persistence.IncidentStore store = controller.getStore();
+		boolean create = store == null || store.supportsCreate();
+		boolean importing = store == null || store.supportsImport();
+		String createReason = "This store shares one incident; the host operator creates incidents.";
+		String importReason = "This store does not accept imports; ask the host operator to import it.";
+		newItem.setEnabled(create);
+		newItem.setToolTipText(create ? null : createReason);
+		duplicateItem.setEnabled(create);
+		duplicateItem.setToolTipText(create ? null : createReason);
+		importIncidentItem.setEnabled(importing);
+		importIncidentItem.setToolTipText(importing ? null : importReason);
 	}
 
 	/**

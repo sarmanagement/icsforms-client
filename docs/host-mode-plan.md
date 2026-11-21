@@ -227,14 +227,52 @@ incident mode, time zone and similar) are synchronised as a virtual singleton
 and conflicts, and are included in `loadSnapshot`, refresh and the file
 projection.
 
-*Known limits.* Records cannot be removed
-remotely (strike-out is used); the legacy numeric-revision/edit-lock suite
-`AbstractIncidentStoreContractTest` does not apply to an opaque, lockless store,
-while `AbstractSnapshotIncidentStoreContractTest` runs against the real host in
-`RealHostIncidentStoreContractTest`. If the host's file projection fails after
-the durable commit the client sees the distinct `StoreCommittedException` (`committed_not_projected`,
-"committed; retry is safe"), and retrying the same
-save succeeds without double application.
+*Known limits.* Records cannot be removed remotely (strike-out is used). If the
+host's file projection fails after the durable commit the client sees the
+distinct `StoreCommittedException` (`committed_not_projected`, "committed; retry
+is safe"), and retrying the same save succeeds without double application.
+
+*Store capabilities.* `IncidentStore` exposes `supportsCreate()`,
+`supportsDelete()` and `supportsImport()` (all true by default; the remote store
+returns false for each). New, Duplicate and Import in the File menu, and the
+incident manager's New, Load JSON and Delete buttons, are enabled from these
+capabilities, not from a mode flag, and show a tooltip explaining why an action
+is unavailable. Starting to share runs `HostSession.start()` on a background
+worker with a visible "Starting" state, so binding ports and the first loopback
+read never block the event thread.
+
+*Contract suites against the real service.*
+`AbstractSnapshotIncidentStoreContractTest` runs against the real host in
+`RealHostIncidentStoreContractTest`. `AbstractIncidentStoreContractTest` is split
+by capability hooks (`supportsCreate`, `supportsMultipleIncidents`,
+`supportsDelete`, `supportsEditLocks`, `supportsNumericRevisions`,
+`supportsImport`, plus `seed`/`persist` hooks), `FileIncidentStoreTest` runs the
+full set unchanged, and `RemoteIncidentStoreLegacyContractTest` runs it against
+a real host. The incident is seeded in the host's backing store. Skipped for the
+remote store, with the reason shown in the test report:
+
+- `multipleIncidentsAreIndependent`, `listSortsMostRecentlyUpdatedFirst`:
+  a host shares exactly one incident.
+- `deletedIncidentsStayDeleted`: delete is host-administrative.
+- `deletionConflictsWithAnEditLock`: the remote store offers no edit locks.
+- `exportAndImportCreateIndependentCopies`: import is host-administrative.
+  Export is covered directly instead, by importing the exported JSON into a
+  standalone store.
+- Numeric `AppData` revision assertions inside the remaining tests: tokens are
+  opaque and the remote snapshot's revision is not a client concept.
+
+Directly covered on the remote store: detached loads and identity, failed saves
+preserving persisted and unsaved data, exactly one concurrent writer winning,
+state surviving a host restart with a usable token from a fresh store, `list()`
+of the one shared incident, and explicit failure of administrative operations.
+`AbstractSnapshotIncidentStoreContractTest.attempt` gives each writer a distinct
+name: with record-level three-way merge two identical edits are not a conflict,
+so the concurrent writers must change the field to different values. The file
+store suites still pass with that change.
+
+*Revision in output.* `AppData.getRevision()` is never printed by a PDF renderer
+or export; it is only copied between documents. A remote snapshot's value is a
+store-internal number and is not displayed.
 
 ### 5. Add cross-instance refresh and explicit conflict recovery
 

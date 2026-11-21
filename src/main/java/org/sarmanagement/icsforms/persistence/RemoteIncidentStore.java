@@ -332,6 +332,36 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
+	 * Reports that a device cannot create incidents; the host does that administratively.
+	 *
+	 * @return {@code false}
+	 */
+	@Override
+	public boolean supportsCreate() {
+		return false;
+	}
+
+	/**
+	 * Reports that a device cannot delete incidents.
+	 *
+	 * @return {@code false}
+	 */
+	@Override
+	public boolean supportsDelete() {
+		return false;
+	}
+
+	/**
+	 * Reports that a device cannot import incidents into the host.
+	 *
+	 * @return {@code false}
+	 */
+	@Override
+	public boolean supportsImport() {
+		return false;
+	}
+
+	/**
 	 * Describes the remote store without exposing host paths.
 	 *
 	 * @return descriptor naming the host address

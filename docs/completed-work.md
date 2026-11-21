@@ -510,3 +510,24 @@ label, and a lost-contact marker in the host device table. Additive
 Evidence: `RealHostIncidentStoreContractTest` (shared snapshot contract against
 the real service), `RemoteIncidentStoreHostTest`, `ConnectionMonitorTest`,
 `AppControllerRemoteRefreshTest`.
+
+### Follow-up review items (issue #60)
+
+- Contract suites: `AbstractIncidentStoreContractTest` is split by capability and
+  runs against the real host in `RemoteIncidentStoreLegacyContractTest`; the
+  skipped legacy tests and reasons are listed in the
+  [plan](host-mode-plan.md#4-implement-the-production-remote-store-and-wire-both-uis).
+- Capability-driven disabling of New, Duplicate, Import and the incident
+  manager's New/Load/Delete (`IncidentStore.supportsCreate/Delete/Import`).
+- `HostSharingDialog.startSharing()` runs the host start on a background worker.
+- Evidence: `SlowGatewayEventThreadTest` (slow gateway under the real store,
+  controller and monitor: save, refresh, switch store and polling keep the event
+  thread serviced with no gateway call on it), `ConnectedOperationEndToEndTest`
+  (host plus two clients, polling, failed-save recovery, local PDFs, root-field
+  clean and dirty refresh), `MainFrameConnectedModeTest` (displayed lane: menu
+  capabilities, slow connect flow, status line, notified stop versus lost
+  contact, draft-kept message, host/standalone switching, clean refresh keeps the
+  tab), `DeviceConnectionTextTest` (lost-contact marker).
+- Not covered: focus and scroll retention on a remote refresh is exercised by the
+  existing live-change tests but not by a new remote-specific test.
+
