@@ -932,12 +932,12 @@ public class MainFrame extends JFrame {
 				attachMonitor((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) loopback, "Host");
 			}, () -> {
 				detachMonitor();
-				authorityText = "Standalone";
-				connectionStatus = null;
-				showConnectionStatus();
 				controller.switchStore(hostLocalStore, incident);
 				applyStoreCapabilities();
 				refreshFromModel();
+				authorityText = "Standalone";
+				connectionStatus = null;
+				showConnectionStatus();
 			});
 		}
 		hostSharingDialog.setVisible(true);

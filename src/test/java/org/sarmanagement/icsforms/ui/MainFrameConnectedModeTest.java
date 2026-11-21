@@ -30,6 +30,7 @@ import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -190,7 +191,32 @@ class MainFrameConnectedModeTest {
 
 	@Test
 	void hostWindowSwitchesToTheLoopbackStoreWhileSharingAndBackWhenSharingStops() throws Exception {
-		try (FileIncidentStore local = new FileIncidentStore(directory.resolve("local"))) {
+		AtomicBoolean delayLocalLoad = new AtomicBoolean();
+		CountDownLatch loadStarted = new CountDownLatch(1);
+		CountDownLatch releaseLoad = new CountDownLatch(1);
+		try (FileIncidentStore local = new FileIncidentStore(directory.resolve("local")) {
+			/**
+			 * Delays the local snapshot load when the test is checking the stop transition.
+			 *
+			 * @param id incident to load
+			 * @return the local snapshot
+			 */
+			@Override
+			public StoredIncident loadSnapshot(IncidentId id) {
+				if (delayLocalLoad.get()) {
+					loadStarted.countDown();
+					try {
+						if (!releaseLoad.await(30, TimeUnit.SECONDS)) {
+							throw new IllegalStateException("Timed out waiting to restore the local store");
+						}
+					} catch (InterruptedException interrupted) {
+						Thread.currentThread().interrupt();
+						throw new IllegalStateException(interrupted);
+					}
+				}
+				return super.loadSnapshot(id);
+			}
+		}) {
 			MainFrame frame = frame(local, 'H');
 			AppController controller = (AppController) field(frame, "controller");
 			assertEquals("Standalone", text(frame));
@@ -213,9 +239,21 @@ class MainFrameConnectedModeTest {
 			assertFalse(enabled(frame, "Duplicate Incident"));
 			assertFalse(enabled(frame, "Import Incident JSON…"));
 
-			SwingUtilities.invokeAndWait(() -> dialog.stopAsync(null));
-			waitFor(() -> !dialog.isSharing() && "Standalone".equals(text(frame)));
-			assertEquals(local, controller.getStore());
+			CountDownLatch stopped = new CountDownLatch(1);
+			delayLocalLoad.set(true);
+			try {
+				SwingUtilities.invokeAndWait(() -> dialog.stopAsync(stopped::countDown));
+				assertTrue(loadStarted.await(30, TimeUnit.SECONDS), "local store load did not start");
+				assertFalse("Standalone".equals(text(frame)));
+			} finally {
+				releaseLoad.countDown();
+			}
+			assertTrue(stopped.await(30, TimeUnit.SECONDS), "sharing did not stop");
+			SwingUtilities.invokeAndWait(() -> {
+				assertFalse(dialog.isSharing());
+				assertEquals(local, controller.getStore());
+				assertEquals("Standalone", frame.connectionStatusText());
+			});
 			assertTrue(enabled(frame, "New…"));
 			assertTrue(enabled(frame, "Duplicate Incident"));
 			assertTrue(enabled(frame, "Import Incident JSON…"));

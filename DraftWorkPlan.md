@@ -561,7 +561,8 @@ operational period end is already wired). Part 4/6 (production remote store,
 polling, connected operation, capability-driven UI and contract suites against
 the real host) is delivered; see [completed work](docs/completed-work.md).
 The connected-operation CI follow-up uses the saved host baseline and tests
-independent stale-client edits before polling.
+independent stale-client edits before polling. The host-stop follow-up waits
+for local-store restoration before reporting standalone.
 Add explicit host identity (self-signed certificate with fingerprint shown for
 QR embedding) and health status. Device admission by invitation is included
 here in its simplest form so that the API is never reachable without a

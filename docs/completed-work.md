@@ -535,3 +535,5 @@ the real service), `RemoteIncidentStoreHostTest`, `ConnectionMonitorTest`,
 saved controller-default baseline used by host sharing before opening clients.
 It exercises stale, independent client edits before polling and applies test
 edits and polling assertions on the Swing event thread.
+The host-stop displayed test also waits for the completion callback and checks
+that standalone status is not shown while the local-store load is pending.
