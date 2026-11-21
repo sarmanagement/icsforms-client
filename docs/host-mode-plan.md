@@ -270,9 +270,10 @@ name: with record-level three-way merge two identical edits are not a conflict,
 so the concurrent writers must change the field to different values. The file
 store suites still pass with that change.
 
-*Revision in output.* `AppData.getRevision()` is never printed by a PDF renderer
-or export; it is only copied between documents. A remote snapshot's value is a
-store-internal number and is not displayed.
+*Revision in output.* A remote JSON export currently includes `"revision": 1`,
+the default document value, not a host revision or concurrency token. Import
+into a standalone store assigns a new local revision. PDF renderers do not
+print the numeric `AppData` revision; remote concurrency uses opaque tokens.
 
 ### 5. Add cross-instance refresh and explicit conflict recovery
 

@@ -121,9 +121,12 @@ class HostSharingDialogTest {
 			edt(dialog::startSharing);
 			long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30);
 			boolean[] starting = {true};
-			while (starting[0] && System.nanoTime() < deadline) {
+			while (starting[0]) {
 				edt(() -> starting[0] = dialog.isStarting());
-				Thread.sleep(25);
+				if (starting[0]) {
+					assertTrue(System.nanoTime() < deadline, "host start did not complete");
+					Thread.sleep(25);
+				}
 			}
 		}
 

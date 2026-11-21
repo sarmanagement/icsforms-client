@@ -356,10 +356,14 @@ class RemoteIncidentStoreLegacyContractTest extends AbstractIncidentStoreContrac
 			Path json = tempDir.resolve("export.json");
 			store.exportFile(id, json);
 			assertTrue(Files.size(json) > 0);
+			assertEquals(1, store.loadSnapshot(id).data().getRevision());
+			assertEquals(1, new com.fasterxml.jackson.databind.ObjectMapper().readTree(json.toFile())
+					.path("revision").asLong(-1));
 			try (FileIncidentStore standalone = new FileIncidentStore(tempDir.resolve("standalone"))) {
 				IncidentId copy = standalone.importFile(json).orElseThrow();
 				assertNotEquals(id, copy);
 				assertEquals("Exported", standalone.load(copy).getIncidentContext().getIncidentName());
+				assertEquals(0, standalone.load(copy).getRevision());
 			}
 		}
 	}

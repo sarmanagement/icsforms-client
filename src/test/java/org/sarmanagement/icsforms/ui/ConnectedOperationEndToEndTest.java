@@ -21,6 +21,7 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.SwingUtilities;
 
+import java.awt.GraphicsEnvironment;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
@@ -28,12 +29,14 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * End-to-end connected operation: a host controller over the loopback store and two connected controllers share
@@ -43,6 +46,73 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConnectedOperationEndToEndTest {
 	@TempDir
 	Path directory;
+
+	@Test
+	void displayedHostAndTwoWindowsShareRecoverAndExport() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		String previous = System.setProperty(ConnectionMonitor.POLL_INTERVAL_PROPERTY, "50");
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("displayed-host"), "Shared")) {
+			AtomicBoolean submitsFail = new AtomicBoolean();
+			RemoteIncidentStore hostStore = host.session().loopbackStore();
+			MainFrame hostFrame = window(hostStore, host, "Host");
+			AppController hostController = (AppController) Ics205PanelTest.field(hostFrame, "controller");
+			hostController.save();
+			MainFrame frameA = window(host.pair(), host, "Connected to host");
+			MainFrame frameB = window(host.pairThrough(real -> failingSubmit(real, submitsFail)), host,
+					"Connected to host");
+			AppController clientA = (AppController) Ics205PanelTest.field(frameA, "controller");
+			AppController clientB = (AppController) Ics205PanelTest.field(frameB, "controller");
+			List<AppController> controllers = List.of(hostController, clientA, clientB);
+			SwingUtilities.invokeAndWait(() -> {
+				clientA.getData().setIapPhase(IapPhase.DURING_OP);
+				clientA.markDirty();
+			});
+			clientA.save();
+			for (AppController controller : controllers) {
+				waitFor(() -> controller.getData().getIapPhase() == IapPhase.DURING_OP);
+			}
+			submitsFail.set(true);
+			SwingUtilities.invokeAndWait(() -> {
+				clientB.getData().setIncidentMode(IncidentMode.GENERIC);
+				clientB.markDirty();
+			});
+			assertThrows(StoreUnavailableException.class, clientB::save);
+			assertTrue(clientB.isDirty());
+			assertEquals(IncidentMode.GENERIC, clientB.getData().getIncidentMode());
+			submitsFail.set(false);
+			clientB.save();
+			for (AppController controller : controllers) {
+				waitFor(() -> controller.getData().getIncidentMode() == IncidentMode.GENERIC);
+			}
+			SwingUtilities.invokeAndWait(() -> {
+				hostController.getData().setConfiguredTimeZoneId("America/New_York");
+				hostController.markDirty();
+			});
+			hostController.save();
+			for (AppController controller : controllers) {
+				waitFor(() -> "America/New_York".equals(controller.getData().getConfiguredTimeZoneId()));
+			}
+			PdfExportService pdf = new PdfExportService(new Ics201PdfRenderer());
+			int index = 0;
+			for (AppController controller : controllers) {
+				Path output = Files.createDirectory(directory.resolve("window-pdf-" + index++));
+				Path file = pdf.exportSelected(pdf.formKeys().get(0), controller.getData(), output);
+				assertTrue(file.startsWith(output));
+				assertTrue(Files.size(file) > 0);
+			}
+			SwingUtilities.invokeAndWait(() -> {
+				hostFrame.dispose();
+				frameA.dispose();
+				frameB.dispose();
+			});
+		} finally {
+			if (previous == null) {
+				System.clearProperty(ConnectionMonitor.POLL_INTERVAL_PROPERTY);
+			} else {
+				System.setProperty(ConnectionMonitor.POLL_INTERVAL_PROPERTY, previous);
+			}
+		}
+	}
 
 	@Test
 	void hostAndTwoConnectedInstancesShareEditsRecoverFromFailedSavesAndExportLocally() throws Exception {
@@ -192,6 +262,28 @@ class ConnectedOperationEndToEndTest {
 		AppData data = store.loadSnapshot(host.incident()).data();
 		return SwingTestLifecycleExtension
 				.track(new AppController(data, store, host.incident(), new PdfExportService(), new IncidentValidator()));
+	}
+
+	/**
+	 * Opens a displayed incident window using the same polling path as connected windows.
+	 *
+	 * @param store remote store for this window
+	 * @param host fixture identifying the shared incident
+	 * @param authority status-line authority
+	 * @return displayed window
+	 * @throws Exception when the event thread cannot create the window
+	 */
+	private MainFrame window(RemoteIncidentStore store, HostedIncidentFixture host, String authority) throws Exception {
+		AppData data = store.loadSnapshot(host.incident()).data();
+		AtomicReference<MainFrame> frame = new AtomicReference<>();
+		SwingUtilities.invokeAndWait(() -> {
+			MainFrame created = new MainFrame(data, store, host.incident(), new PdfExportService(),
+					new IncidentValidator(), directory);
+			created.attachMonitor(store, authority);
+			created.setVisible(true);
+			frame.set(created);
+		});
+		return frame.get();
 	}
 
 	/**

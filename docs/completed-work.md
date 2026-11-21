@@ -528,8 +528,8 @@ the real service), `RemoteIncidentStoreHostTest`, `ConnectionMonitorTest`,
   capabilities, slow connect flow, status line, notified stop versus lost
   contact, draft-kept message, host/standalone switching, clean refresh keeps the
   tab), `DeviceConnectionTextTest` (lost-contact marker).
-- Not covered: focus and scroll retention on a remote refresh is exercised by the
-  existing live-change tests but not by a new remote-specific test.
+- Not covered: remote-specific focus, selection, caret and scroll retention,
+  including uncommitted editor controls, remains open.
 
 **Displayed-test CI follow-up:** the connected-operation test establishes the
 saved controller-default baseline used by host sharing before opening clients.
@@ -537,3 +537,12 @@ It exercises stale, independent client edits before polling and applies test
 edits and polling assertions on the Swing event thread.
 The host-stop displayed test also waits for the completion callback and checks
 that standalone status is not shown while the local-store load is pending.
+
+**Remote-refresh and displayed-window follow-up:** `AppControllerLiveChangeTest`
+checks that refresh during and after a failed save keeps the model draft and its
+original token and exposes a conflict.
+`ConnectedOperationEndToEndTest` exercises a host loopback window and two
+connected windows, polling, failed-save recovery and local PDFs. The sharing
+tests arm slow transport before connecting and assert their bounded start wait.
+The [host plan](host-mode-plan.md#4-implement-the-production-remote-store-and-wire-both-uis)
+clarifies the numeric revision placeholder in remote JSON exports.

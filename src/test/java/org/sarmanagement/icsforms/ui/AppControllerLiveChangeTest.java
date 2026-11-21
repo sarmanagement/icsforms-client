@@ -6,25 +6,96 @@ package org.sarmanagement.icsforms.ui;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.pdf.PdfExportService;
+import org.sarmanagement.icsforms.persistence.RemoteIncidentGateway;
+import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
+import org.sarmanagement.icsforms.persistence.StoreConflictException;
+import org.sarmanagement.icsforms.persistence.StoreUnavailableException;
+import org.sarmanagement.icsforms.validation.IncidentValidator;
 
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Verifies incident-bound live notifications and stale-edit rejection. */
 class AppControllerLiveChangeTest {
 	@TempDir
 	Path directory;
+
+	@Test
+	void remoteRefreshDuringAndAfterFailedSavePreservesDraftAndItsBaseToken() throws Exception {
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("remote"), "Shared")) {
+			CountDownLatch entered = new CountDownLatch(1);
+			CountDownLatch release = new CountDownLatch(1);
+			AtomicBoolean fail = new AtomicBoolean(true);
+			RemoteIncidentStore mine = host.pairThrough(real -> (RemoteIncidentGateway) Proxy.newProxyInstance(
+					RemoteIncidentGateway.class.getClassLoader(), new Class<?>[] {RemoteIncidentGateway.class},
+					(proxy, method, args) -> {
+						if (method.getName().equals("submit") && fail.get()) {
+							entered.countDown();
+							if (!release.await(30, TimeUnit.SECONDS)) {
+								throw new IllegalStateException("save gate timed out");
+							}
+							throw new StoreUnavailableException("Save failed", null);
+						}
+						try {
+							return method.invoke(real, args);
+						} catch (InvocationTargetException failure) {
+							throw failure.getCause();
+						}
+					}));
+			var snapshot = mine.loadSnapshot(host.incident());
+			AppController controller = SwingTestLifecycleExtension.track(new AppController(snapshot.data(), mine,
+					host.incident(), new PdfExportService(), new IncidentValidator()));
+			RemoteIncidentStore other = host.pair();
+			var theirs = other.loadSnapshot(host.incident());
+			theirs.data().getIncidentContext().setIncidentName("Remote edit");
+			other.save(host.incident(), theirs.data(), theirs.revision());
+			CountDownLatch finished = new CountDownLatch(1);
+			AtomicReference<RuntimeException> failure = new AtomicReference<>();
+			SwingUtilities.invokeAndWait(() -> {
+				controller.getData().getIncidentContext().setIncidentName("Local draft");
+				controller.markDirty();
+				controller.saveAsync(AppController.LinkSource.NONE, result -> {
+					failure.set(result);
+					finished.countDown();
+				});
+			});
+			try {
+				assertTrue(entered.await(30, TimeUnit.SECONDS), "save did not reach gateway");
+				assertEquals(AppController.RemoteRefreshOutcome.DRAFT_PRESERVED, controller.refreshFromRemote());
+				assertEquals(snapshot.revision(), controller.getPersistenceStatus().revision());
+			} finally {
+				release.countDown();
+			}
+			assertTrue(finished.await(30, TimeUnit.SECONDS), "failed save did not finish");
+			assertTrue(failure.get() instanceof StoreUnavailableException);
+			assertEquals(AppController.RemoteRefreshOutcome.DRAFT_PRESERVED, controller.refreshFromRemote());
+			assertEquals(snapshot.revision(), controller.getPersistenceStatus().revision());
+			assertEquals("Local draft", controller.getData().getIncidentContext().getIncidentName());
+			fail.set(false);
+			assertThrows(StoreConflictException.class, controller::save);
+			assertEquals("Local draft", controller.getData().getIncidentContext().getIncidentName());
+			assertEquals("Remote edit", other.loadSnapshot(host.incident()).data().getIncidentContext()
+					.getIncidentName());
+		}
+	}
 
 	@Test
 	void deliversCommittedChangesAndDisposesListener() throws Exception {

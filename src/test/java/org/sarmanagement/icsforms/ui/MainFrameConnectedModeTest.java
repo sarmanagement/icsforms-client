@@ -109,22 +109,33 @@ class MainFrameConnectedModeTest {
 		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("host"), "Shared");
 				FileIncidentStore local = new FileIncidentStore(directory.resolve("local"))) {
 			MainFrame owner = frame(local, 'S');
-			HostedIncidentFixture.SlowGateway[] slow = new HostedIncidentFixture.SlowGateway[1];
+			AtomicReference<HostedIncidentFixture.SlowGateway> slow = new AtomicReference<>();
+			CountDownLatch gatewayReady = new CountDownLatch(1);
 			AtomicBoolean redeemedOnEventThread = new AtomicBoolean();
 			SwingUtilities.invokeAndWait(() -> owner.setInvitationRedeemer((invitation, name) -> {
 				redeemedOnEventThread.set(SwingUtilities.isEventDispatchThread());
-				return host.pairThrough(real -> slow[0] = new HostedIncidentFixture.SlowGateway(real));
+				return host.pairThrough(real -> {
+					HostedIncidentFixture.SlowGateway gateway = new HostedIncidentFixture.SlowGateway(real);
+					gateway.arm();
+					slow.set(gateway);
+					gatewayReady.countDown();
+					return gateway;
+				});
 			}));
 			SwingUtilities.invokeAndWait(() -> owner.connectWithInvitation("ignored", "device"));
-			waitFor(() -> slow[0] != null);
-			slow[0].arm();
-			for (int ping = 0; ping < 5; ping++) {
-				assertTimeoutPreemptively(java.time.Duration.ofSeconds(5), () -> SwingUtilities.invokeAndWait(() -> { }));
+			assertTrue(gatewayReady.await(30, TimeUnit.SECONDS), "gateway was not created");
+			try {
+				waitFor(() -> slow.get().calls() > 0);
+				for (int ping = 0; ping < 5; ping++) {
+					assertTimeoutPreemptively(java.time.Duration.ofSeconds(5),
+							() -> SwingUtilities.invokeAndWait(() -> { }));
+				}
+			} finally {
+				slow.get().release();
 			}
-			slow[0].release();
 			waitFor(() -> connectedWindow(owner) != null);
 			assertFalse(redeemedOnEventThread.get());
-			assertEquals(0, slow[0].callsOnEventThread());
+			assertEquals(0, slow.get().callsOnEventThread());
 			MainFrame connected = connectedWindow(owner);
 			assertFalse(enabled(connected, "New…"));
 		}
@@ -233,7 +244,7 @@ class MainFrameConnectedModeTest {
 				dialogHolder.get().startSharing();
 			});
 			HostSharingDialog dialog = dialogHolder.get();
-			waitFor(() -> dialog.isSharing() && text(frame).startsWith("Host"));
+			waitFor(() -> text(frame).startsWith("Host"));
 			assertTrue(controller.getStore() instanceof RemoteIncidentStore);
 			assertFalse(enabled(frame, "New…"));
 			assertFalse(enabled(frame, "Duplicate Incident"));

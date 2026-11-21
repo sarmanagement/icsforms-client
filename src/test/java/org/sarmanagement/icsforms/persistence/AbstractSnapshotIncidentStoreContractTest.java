@@ -195,7 +195,7 @@ abstract class AbstractSnapshotIncidentStoreContractTest {
 	}
 
 	/**
-	 * Attempts a concurrent token-aware save.
+	 * Attempts a concurrent token-aware save. Names must differ because record-level merge accepts identical edits.
 	 *
 	 * @param store writer handle
 	 * @param id incident identity
