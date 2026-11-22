@@ -72,12 +72,7 @@ public final class IncidentService {
 	 * @return detached snapshot with current ordered cursor
 	 */
 	public ReadResult read(IncidentId incident) {
-		return incidents.withIncidentLock(incident, () -> {
-			IncidentState current = state(incident);
-			ReadResult result = readResult(incident, current);
-			System.err.println("RESULT " + result.records().stream().map(VersionedRecord::content).toList());
-			return result;
-		});
+		return incidents.withIncidentLock(incident, () -> readResult(incident, state(incident)));
 	}
 
 	/**
@@ -180,12 +175,7 @@ public final class IncidentService {
 				newVersions, List.of());
 		IncidentState updated = new IncidentState(cursor, updatedHistories, changes,
 				appendReceipt(current.receipts(), new OperationReceipt(batch.operationId(), batch, result)));
-		System.err.println("UPDATED " + updatedHistories.stream().flatMap(history -> history.versions().stream())
-				.map(RecordVersion::content).filter(content -> content.path("provenance").has("acceptedAt")).toList());
 		versions.save(batch.incident(), updated);
-		System.err.println("RELOADED " + versions.load(batch.incident()).histories().stream()
-				.flatMap(history -> history.versions().stream()).map(RecordVersion::content)
-				.filter(content -> content.path("provenance").has("acceptedAt")).toList());
 		try {
 			project(batch.incident(), updated);
 		} catch (RuntimeException projectionFailure) {
@@ -258,18 +248,22 @@ public final class IncidentService {
 				continue;
 			}
 			RecordHistory history = histories.get(entry.getKey());
-			if (history != null && RecordJson.same(latest(history).content(), entry.getValue())) {
-				continue;
+			JsonNode synchronizedContent = entry.getValue();
+			if (history != null) {
+				synchronizedContent = preserveHostAttribution(latest(history).content(), synchronizedContent, false);
+				if (RecordJson.same(latest(history).content(), synchronizedContent)) {
+					continue;
+				}
 			}
 			long version = history == null ? 1 : latest(history).version() + 1;
 			cursor++;
-			RecordVersion next = new RecordVersion(version, cursor, receivedAt, entry.getValue());
+			RecordVersion next = new RecordVersion(version, cursor, receivedAt, synchronizedContent);
 			List<RecordVersion> retained = history == null ? new ArrayList<>()
 					: new ArrayList<>(history.versions());
 			retained.add(next);
 			histories.put(entry.getKey(), new RecordHistory(entry.getKey(), index.parentOf(entry.getKey()),
 					index.parentFieldOf(entry.getKey()), retained));
-			changes.add(new RecordChange(cursor, entry.getKey(), version, receivedAt, entry.getValue()));
+			changes.add(new RecordChange(cursor, entry.getKey(), version, receivedAt, synchronizedContent));
 		}
 		RecordHistory rootHistory = histories.get(RootSettings.key());
 		JsonNode rootSnapshot = RootSettings.snapshot(data);
@@ -332,6 +326,51 @@ public final class IncidentService {
 		if (documentBridge.apply(stored.data(), state.histories())) {
 			incidents.save(IncidentId.of(stored.data().getIncidentId()), stored.data(), stored.revision());
 		}
+	}
+
+	/**
+	 * Retains host-controlled attribution when local persistence omits or changes it.
+	 *
+	 * @param authoritative current record content from version history
+	 * @param candidate record content from the whole-document store
+	 * @param provenance true when the current value is a provenance object
+	 * @return detached content with any existing host attribution preserved
+	 */
+	private JsonNode preserveHostAttribution(JsonNode authoritative, JsonNode candidate, boolean provenance) {
+		if (candidate == null) {
+			return null;
+		}
+		if (candidate.isObject()) {
+			ObjectNode copy = ((ObjectNode) candidate).deepCopy();
+			List<String> fields = new ArrayList<>();
+			copy.fieldNames().forEachRemaining(fields::add);
+			for (String field : fields) {
+				copy.set(field, preserveHostAttribution(authoritative == null ? null : authoritative.get(field),
+						copy.get(field), "provenance".equals(field)));
+			}
+			if (provenance && authoritative != null && authoritative.isObject()
+					&& authoritative.hasNonNull("acceptedAt")) {
+				for (String field : List.of("acceptedAt", "deviceId", "originalDeviceId")) {
+					if (authoritative.has(field)) {
+						copy.set(field, authoritative.get(field).deepCopy());
+					} else {
+						copy.remove(field);
+					}
+				}
+			}
+			return copy;
+		}
+		if (candidate.isArray()) {
+			com.fasterxml.jackson.databind.node.ArrayNode copy =
+					(com.fasterxml.jackson.databind.node.ArrayNode) candidate.deepCopy();
+			for (int index = 0; index < copy.size(); index++) {
+				JsonNode previous = authoritative != null && authoritative.isArray()
+						&& index < authoritative.size() ? authoritative.get(index) : null;
+				copy.set(index, preserveHostAttribution(previous, copy.get(index), false));
+			}
+			return copy;
+		}
+		return candidate.deepCopy();
 	}
 
 	/**
@@ -517,13 +556,8 @@ public final class IncidentService {
 	 */
 	private ReadResult readResult(IncidentId incident, IncidentState state) {
 		List<VersionedRecord> records = new ArrayList<>();
-		System.err.println("HISTORY KEYS " + state.histories().stream().map(RecordHistory::key).toList());
 		histories(state).entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
 			RecordVersion version = latest(entry.getValue());
-			if (version.content().path("description").asText().contains("Accepted after approval")) {
-				System.err.println("SELECTED HISTORY " + entry.getKey() + " "
-						+ version.content().path("provenance"));
-			}
 			records.add(new VersionedRecord(entry.getKey(), version.version(), version.cursor(),
 					version.receivedAt(), version.content(), entry.getValue().parent(),
 					entry.getValue().parentField()));

@@ -100,6 +100,7 @@ public final class HostGateway implements RemoteIncidentGateway {
 	/**
 	 * Requests approval to renew an expired credential using its existing key.
 	 *
+	 * @param deviceName operator-visible device name
 	 * @param pendingOutbox pending operations for administrator review
 	 * @return approval ticket
 	 */
@@ -111,6 +112,7 @@ public final class HostGateway implements RemoteIncidentGateway {
 	 * Requests approval to replace this revoked identity with a newly invited device.
 	 *
 	 * @param invitationText single-use invitation
+	 * @param deviceName operator-visible device name
 	 * @param pendingOutbox pending operations for administrator review
 	 * @return approval ticket
 	 */

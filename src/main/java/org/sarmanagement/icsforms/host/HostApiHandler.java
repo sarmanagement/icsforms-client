@@ -250,9 +250,6 @@ final class HostApiHandler implements HttpHandler {
 	 */
 	private void read(HttpExchange exchange) throws IOException {
 		IncidentService.ReadResult result = context.service.read(context.incident);
-		System.err.println("READ " + result.records().stream()
-				.filter(record -> record.content().path("provenance").has("acceptedAt"))
-				.map(record -> record.content().path("provenance").path("acceptedAt")).toList());
 		ObjectNode body = HostHttp.MAPPER.createObjectNode();
 		body.put("incidentId", result.incident().value());
 		body.put("cursor", result.cursor());
@@ -312,9 +309,7 @@ final class HostApiHandler implements HttpHandler {
 			for (JsonNode record : records) {
 				IncidentService.RecordSubmission submission =
 						HostHttp.MAPPER.treeToValue(record, IncidentService.RecordSubmission.class);
-				IncidentService.RecordSubmission attributed = withDeviceAttribution(submission, device, acceptedAt);
-				System.err.println("ATTRIBUTED " + attributed.content());
-				submissions.add(attributed);
+				submissions.add(withDeviceAttribution(submission, device, acceptedAt));
 			}
 			String operationId = request.path("operationId").asText("");
 			if (operationId.isBlank()) {

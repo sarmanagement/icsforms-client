@@ -225,6 +225,8 @@ public final class DeviceRegistry {
 	 * @param formatVersion file format version
 	 * @param invitations pending and recently used invitations
 	 * @param devices admitted devices
+	 * @param requests pending re-authorization requests
+	 * @param audit approval decisions
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	record RegistryState(int formatVersion, List<InvitationRecord> invitations, List<DeviceRecord> devices,
@@ -519,6 +521,7 @@ public final class DeviceRegistry {
 	 * @param requestedKey public key from a signed certificate request
 	 * @param deviceName operator-visible name
 	 * @param outboxJson serialized pending outbox work
+	 * @param cutoff optional issuance cutoff
 	 * @return request and one-time polling token
 	 * @throws InvitationRejectedException when the device is unknown, revoked, not expired, or proof differs
 	 * @throws HostStorageException when the request cannot be persisted
