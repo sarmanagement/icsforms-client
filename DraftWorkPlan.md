@@ -478,7 +478,7 @@ recoverable standalone application. Completed stages are recorded in
 | --- | --- | --- | --- |
 | 0 | Written decisions and constraints | Not evidenced as complete | 1–2 weeks |
 | 1 | Local persistence foundation, including live refresh without flicker | Complete; substitute-store evidence accepted | done (4–7 weeks) |
-| 2 | Record-level incident API and local host (T1) | Identity/index/diff foundation (#57) and in-process contract/service (#58) delivered; transport/admission, remote store, and outbox remain | 7–12 weeks |
+| 2 | Record-level incident API and local host (T1) | Identity/index/diff foundation (#57) and in-process contract/service (#58) delivered; transport/admission (#59) and remote store/connected operation (#60) delivered; outbox, re-authorization remain | 7–12 weeks |
 | 3 | Device lifecycle, operator claim, roles and attributable audit (T2) | Not started | 4–6 weeks |
 | 4 | Offline replay/conflict recovery and attachments | Not started | 4–8 weeks |
 | 5 | Field-host packaging and authority transfer | Not started | 4–8 weeks |
@@ -540,7 +540,7 @@ written contract and an in-process service over the file backend. It does not
 include network transport, admission, a remote store, UI changes, or an outbox;
 those remain in issues #59–#62. Issue #59 has since delivered the transport,
 admission and host lifecycle (see [completed work](docs/completed-work.md));
-issues #60–#62 remain. A persisted record is the
+issue #60 has delivered the production remote store, polling and connected operation; issues #61–#62 remain. A persisted record is the
 unit of submission and versioning: the client supplies the record version it
 edited, and the host compares base, current and proposed values field by field.
 A field changed only by the client is accepted; a field changed only by the host
@@ -557,7 +557,18 @@ that service boundary, with no direct-write bypass. See the
 admission flow, concurrency and recovery evidence, and open scope decisions.
 Status: part 3/6 (transport, admission, lifecycle, backup) is delivered; remaining
 open item from it is a demobilisation source for the credential cutoff (the
-operational period end is already wired). See [completed work](docs/completed-work.md).
+operational period end is already wired). Part 4/6 (production remote store,
+polling, connected operation, capability-driven UI and contract suites against
+the real host) is delivered; see [completed work](docs/completed-work.md).
+The connected-operation CI follow-up uses the saved host baseline and tests
+independent stale-client edits before polling. The host-stop follow-up waits
+for local-store restoration before reporting standalone. Remote-refresh
+follow-up coverage checks failed/in-flight model drafts, and the displayed
+end-to-end scenario exercises three windows. Remote refresh defers while any editor holds uncommitted input (edited text or
+spinner text, a table cell being edited, a retained conflicting draft, or an open
+editor window) and offers the snapshot again on the next poll. Focus, caret,
+selection and scroll retention for clean views across a remote refresh is a known
+limit tracked as a follow-up.
 Add explicit host identity (self-signed certificate with fingerprint shown for
 QR embedding) and health status. Device admission by invitation is included
 here in its simplest form so that the API is never reachable without a

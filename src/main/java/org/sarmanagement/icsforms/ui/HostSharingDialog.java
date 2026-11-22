@@ -129,6 +129,9 @@ public class HostSharingDialog extends JDialog {
 	private final transient Runnable onRestored;
 	private transient Prompts prompts = new SwingPrompts();
 	private transient HostSession session;
+	private volatile boolean starting;
+	private transient java.util.function.Consumer<IncidentStore> onLoopback = loopback -> { };
+	private transient Runnable onLocal = () -> { };
 	private final JLabel stateLabel = new JLabel("Not sharing");
 	private final JTextField hostField = new JTextField(defaultHost(), 18);
 	private final JSpinner portSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_PORT, 0, 65535, 1));
@@ -184,6 +187,19 @@ public class HostSharingDialog extends JDialog {
 		refreshTimer.start();
 		pack();
 		setLocationRelativeTo(owner);
+	}
+
+	/**
+	 * Installs the callbacks that move the host window between the local file store and the loopback remote
+	 * store. The host window has no direct-write bypass while sharing: it edits through the same service as
+	 * connected devices.
+	 *
+	 * @param loopbackStarted receives the loopback store once sharing runs; a failure stops sharing again
+	 * @param localRestored invoked on the event thread after sharing stopped, to return to the local store
+	 */
+	public void setStoreSwitch(java.util.function.Consumer<IncidentStore> loopbackStarted, Runnable localRestored) {
+		this.onLoopback = loopbackStarted == null ? loopback -> { } : loopbackStarted;
+		this.onLocal = localRestored == null ? () -> { } : localRestored;
 	}
 
 	/**
@@ -318,25 +334,106 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
-	 * Starts sharing after flushing editors; a failure leaves the incident usable and is shown.
+	 * Starts sharing after flushing editors; a failure leaves the incident usable and is shown. Binding the
+	 * listeners and the first loopback read run on a background worker with a visible "Starting" state, so the
+	 * event thread is never blocked; the switch to the loopback store happens back on the event thread once the
+	 * host is running.
 	 */
 	void startSharing() {
-		if (isSharing()) {
+		if (isSharing() || starting) {
 			return;
 		}
+		HostConfig config;
+		HostSession candidate;
 		try {
-			HostConfig config = HostConfig.defaults(hostField.getText().strip(), (Integer) portSpinner.getValue(),
+			config = HostConfig.defaults(hostField.getText().strip(), (Integer) portSpinner.getValue(),
 					(Integer) enrollmentSpinner.getValue());
-			HostSession candidate = new HostSession(store, incident, config, flushEditors);
-			candidate.start();
-			candidate.setPeriodCloseCutoff(periodCloseSource.get());
-			session = candidate;
-			invitationArea.setText("");
+			candidate = new HostSession(store, incident, config, flushEditors);
 		} catch (RuntimeException failure) {
-			session = null;
-			prompts.show(this, "Host this incident", "Sharing could not be started; the incident is unchanged.\n"
-					+ failure.getMessage(), true);
+			showStartFailure(failure);
+			return;
 		}
+		starting = true;
+		startButton.setEnabled(false);
+		stateLabel.setText("Starting - binding ports and reading the incident…");
+		new SwingWorker<Void, Void>() {
+			/**
+			 * Starts the host session off the event thread.
+			 *
+			 * @return nothing
+			 */
+			@Override
+			protected Void doInBackground() {
+				candidate.start();
+				return null;
+			}
+
+			/**
+			 * Completes the start on the event thread or reports the failure.
+			 */
+			@Override
+			protected void done() {
+				try {
+					get();
+					candidate.setPeriodCloseCutoff(periodCloseSource.get());
+					try {
+						onLoopback.accept(candidate.loopbackStore());
+					} catch (RuntimeException switchFailure) {
+						candidate.stop();
+						throw switchFailure;
+					}
+					session = candidate;
+					invitationArea.setText("");
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+					session = null;
+				} catch (java.util.concurrent.ExecutionException failure) {
+					session = null;
+					showStartFailure(failure.getCause() instanceof RuntimeException runtime ? runtime
+							: new IllegalStateException(failure.getCause()));
+				} catch (RuntimeException failure) {
+					session = null;
+					showStartFailure(failure);
+				}
+				starting = false;
+				refresh();
+			}
+		}.execute();
+	}
+
+	/**
+	 * Describes whether a device is connected; an active device that was once in contact but no longer is
+	 * is marked as having lost contact.
+	 *
+	 * @param device device row
+	 * @return "yes", "no - lost contact" or "no"
+	 */
+	static String connectionText(DeviceInfo device) {
+		if (device.connected()) {
+			return "yes";
+		}
+		return device.lastContact() != null && device.state() == org.sarmanagement.icsforms.host.CredentialState.ACTIVE
+				? "no - lost contact" : "no";
+	}
+
+	/**
+	 * Returns whether a start is still in progress.
+	 *
+	 * @return true while the host session is being started
+	 */
+	boolean isStarting() {
+		return starting;
+	}
+
+	/**
+	 * Tells the operator the start failed and that the incident is unchanged.
+	 *
+	 * @param failure why the start failed
+	 */
+	private void showStartFailure(RuntimeException failure) {
+		session = null;
+		prompts.show(this, "Host this incident", "Sharing could not be started; the incident is unchanged.\n"
+				+ failure.getMessage(), true);
 		refresh();
 	}
 
@@ -399,6 +496,13 @@ public class HostSharingDialog extends JDialog {
 			@Override
 			protected void done() {
 				session = null;
+				try {
+					onLocal.run();
+				} catch (RuntimeException failure) {
+					prompts.show(HostSharingDialog.this, "Stop sharing", "Sharing stopped, but this window could not "
+							+ "return to the local file: " + failure.getMessage() + "\nYour edits are kept; export "
+							+ "them before closing.", true);
+				}
 				refresh();
 				if (afterStop != null) {
 					afterStop.run();
@@ -590,13 +694,16 @@ public class HostSharingDialog extends JDialog {
 		if (running) {
 			current.setPeriodCloseCutoff(periodCloseSource.get());
 		}
-		startButton.setEnabled(current == null);
+		startButton.setEnabled(current == null && !starting);
 		stopButton.setEnabled(current != null && current.state() != HostState.STOPPING);
 		inviteButton.setEnabled(running);
 		revokeButton.setEnabled(running);
 		hostField.setEnabled(current == null);
 		portSpinner.setEnabled(current == null);
 		enrollmentSpinner.setEnabled(current == null);
+		if (current == null && starting) {
+			return;
+		}
 		if (current == null) {
 			stateLabel.setText("Not sharing");
 			shownDevices = List.of();
@@ -613,7 +720,7 @@ public class HostSharingDialog extends JDialog {
 			for (DeviceInfo device : shownDevices) {
 				deviceModel.addRow(new Object[] {device.name(), device.state(), device.expiresAt(),
 						device.lastContact() == null ? "never" : device.lastContact(),
-						device.connected() ? "yes" : "no"});
+						connectionText(device)});
 			}
 		}
 	}

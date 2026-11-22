@@ -85,8 +85,8 @@ public class AppController implements AutoCloseable {
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
 	private final LocalRepository repository;
-	private final IncidentStore store;
-	private final IncidentStore saveStore;
+	private volatile IncidentStore store;
+	private volatile IncidentStore saveStore;
 	private List<ImportValidationException.Problem> lastImportProblems = List.of();
 	private IncidentId activeIncidentId;
 	private RevisionToken storedRevision = new RevisionToken("legacy");
@@ -123,6 +123,7 @@ public class AppController implements AutoCloseable {
 	private final Object incidentChangeDeliveryLock = new Object();
 	private IncidentChange pendingIncidentChange;
 	private boolean incidentChangeDeliveryScheduled;
+	private java.util.function.BooleanSupplier editorDraftProbe = () -> false;
 	private Runnable beforePlanReuse = () -> { };
 	private Runnable afterPlanReuse = () -> { };
 	private final Set<EditorCommitGuard> editorCommitGuards =
@@ -597,6 +598,140 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
+	 * Result of offering a remote snapshot to the controller.
+	 */
+	public enum RemoteRefreshOutcome {
+		/** The controller is closed, or the snapshot belongs to a different incident. */
+		IGNORED,
+		/** The snapshot is the state the controller already holds. */
+		UNCHANGED,
+		/** Newer remote data exists, but local drafts or unsaved work were kept and the old token retained. */
+		DRAFT_PRESERVED,
+		/** The remote state replaced the clean local view. */
+		REFRESHED
+	}
+
+	/**
+	 * Switches the persistence backend of the active incident, for example from the local file to the host's
+	 * loopback remote store when sharing starts. Local work must be saved first; the new store's snapshot becomes
+	 * the document and the token that goes with it. Store I/O runs on the persistence worker, never on the event
+	 * thread. The previous store is neither closed nor unlocked: its owner decides.
+	 *
+	 * @param newStore store that now holds the incident.
+	 * @param incidentId incident identifier within the new store.
+	 * @throws RuntimeException when unsaved work prevents the switch or the new store cannot load the incident;
+	 *             the controller then keeps its previous store and document.
+	 */
+	public void switchStore(IncidentStore newStore, IncidentId incidentId) {
+		Objects.requireNonNull(newStore, "newStore");
+		Objects.requireNonNull(incidentId, "incidentId");
+		if (!SwingUtilities.isEventDispatchThread()) {
+			onOwner(() -> {
+				switchStore(newStore, incidentId);
+				return null;
+			});
+			return;
+		}
+		if (atomicSave) {
+			throw new IllegalStateException("An atomic editor commit is pending.");
+		}
+		drainSaves();
+		requireSavedForReplacement();
+		StoredIncident loaded = workerIo(() -> newStore.loadSnapshot(incidentId));
+		IncidentStore previousStore = store;
+		IncidentStore previousSaveStore = saveStore;
+		store = newStore;
+		saveStore = newStore;
+		otherIncidentsCache = null;
+		try {
+			replaceData(loaded.data(), false);
+		} catch (RuntimeException failure) {
+			store = previousStore;
+			saveStore = previousSaveStore;
+			throw failure;
+		}
+		autosaveTimer.stop();
+		activeIncidentId = incidentId;
+		storedRevision = loaded.revision();
+		bindPersistence();
+	}
+
+	/**
+	 * Loads the current remote snapshot of the active incident on the calling thread and offers it to the
+	 * controller. This performs network I/O, so it must be called from a background thread and never from the
+	 * event-dispatch thread.
+	 *
+	 * @return what the controller did with the snapshot.
+	 * @throws IllegalStateException when called on the event-dispatch thread.
+	 * @throws RuntimeException when the store cannot be read; the controller is unchanged.
+	 */
+	public RemoteRefreshOutcome refreshFromRemote() {
+		if (SwingUtilities.isEventDispatchThread()) {
+			throw new IllegalStateException("Remote refresh performs network I/O and must not run on the event thread.");
+		}
+		IncidentStore source = store;
+		IncidentId id = activeIncidentId;
+		if (source == null || id == null || closed) {
+			return RemoteRefreshOutcome.IGNORED;
+		}
+		StoredIncident remote = source.loadSnapshot(id);
+		return onOwner(() -> applyRemoteSnapshot(source, id, remote));
+	}
+
+	/**
+	 * Applies a remote snapshot on the owner thread without ever letting it overwrite an operator's draft. A newer
+	 * remote revision never advances the token associated with unsaved local work, so a later save of that work is
+	 * still checked against the revision the draft was based on and surfaces as a conflict. Editor input that has
+	 * not reached the model is detected through the editor draft probe and defers the refresh; the monitor offers
+	 * the snapshot again on its next poll.
+	 *
+	 * @param source store the snapshot came from.
+	 * @param id incident the snapshot belongs to.
+	 * @param remote detached remote snapshot.
+	 * @return the outcome.
+	 */
+	private RemoteRefreshOutcome applyRemoteSnapshot(IncidentStore source, IncidentId id, StoredIncident remote) {
+		if (closed || source != store || !id.equals(activeIncidentId)) {
+			return RemoteRefreshOutcome.IGNORED;
+		}
+		if (remote.revision().equals(storedRevision)) {
+			return RemoteRefreshOutcome.UNCHANGED;
+		}
+		PersistenceStatus status = saves.status();
+		if (atomicSave || dirty || editorDraftProbe.getAsBoolean() || status.failure() != null || status.durability() != PersistenceStatus.Durability.SAVED
+				|| !saves.pendingChanges().isEmpty() || saves.isBusy()) {
+			return RemoteRefreshOutcome.DRAFT_PRESERVED;
+		}
+		RevisionToken previous = storedRevision;
+		storedRevision = remote.revision();
+		try {
+			replaceData(remote.data(), false);
+		} catch (RuntimeException failure) {
+			storedRevision = previous;
+			return RemoteRefreshOutcome.DRAFT_PRESERVED;
+		}
+		return RemoteRefreshOutcome.REFRESHED;
+	}
+
+	/**
+	 * Returns the PDF export service, so another window opened for the same workstation exports locally.
+	 *
+	 * @return export service.
+	 */
+	PdfExportService exportService() {
+		return exportService;
+	}
+
+	/**
+	 * Returns the validator, so another window opened for the same workstation validates identically.
+	 *
+	 * @return incident validator.
+	 */
+	IncidentValidator validator() {
+		return validator;
+	}
+
+	/**
 	 * Returns the identifier of the incident currently being edited.
 	 *
 	 * @return active incident identifier, or {@code null} for legacy controllers.
@@ -681,6 +816,17 @@ public class AppController implements AutoCloseable {
 	public void setPlanReuseEditorCallbacks(Runnable before, Runnable after) {
 		beforePlanReuse = Objects.requireNonNull(before);
 		afterPlanReuse = Objects.requireNonNull(after);
+	}
+
+	/**
+	 * Installs the probe a remote refresh consults, on the event thread, to learn whether an editor holds input
+	 * that has not reached the model, such as a half-typed field, a table cell being edited, or an open editor
+	 * dialog. While it answers true a remote snapshot is deferred, never applied.
+	 *
+	 * @param probe answers whether any editor holds uncommitted input; never flushes or alters editors.
+	 */
+	public void setEditorDraftProbe(java.util.function.BooleanSupplier probe) {
+		editorDraftProbe = Objects.requireNonNull(probe);
 	}
 
 	/**

@@ -24,7 +24,7 @@ import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.ImportValidationException;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentNotFoundException;
-import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
+import org.sarmanagement.icsforms.persistence.InMemoryServerIncidentStore;
 import org.sarmanagement.icsforms.persistence.RevisionToken;
 import org.sarmanagement.icsforms.persistence.StoreConflictException;
 import org.sarmanagement.icsforms.persistence.StorePersistenceException;
@@ -403,7 +403,7 @@ class AppControllerStoreTest {
 
 	@Test
 	void locklessRemoteStoreEditsAndSavesUsingServerTokensInsteadOfLegacyRevisions() {
-		try (RemoteIncidentStore store = new RemoteIncidentStore()) {
+		try (InMemoryServerIncidentStore store = new InMemoryServerIncidentStore()) {
 			AppData data = new AppData();
 			IncidentId id = store.create(data);
 			RevisionToken created = store.revisionToken(data);
@@ -434,7 +434,7 @@ class AppControllerStoreTest {
 
 	@Test
 	void remoteConflictPreservesEditsAndReloadRecoversTheCurrentServerToken() {
-		try (RemoteIncidentStore store = new RemoteIncidentStore()) {
+		try (InMemoryServerIncidentStore store = new InMemoryServerIncidentStore()) {
 			AppData data = new AppData();
 			IncidentId id = store.create(data);
 			RevisionToken expected = store.revisionToken(data);
@@ -472,7 +472,7 @@ class AppControllerStoreTest {
 
 	@Test
 	void remoteConflictCanBeRecoveredByDuplicatingUnsavedEdits() {
-		try (RemoteIncidentStore store = new RemoteIncidentStore()) {
+		try (InMemoryServerIncidentStore store = new InMemoryServerIncidentStore()) {
 			AppData data = new AppData();
 			IncidentId original = store.create(data);
 			AppController controller = controller(store, original, data);
@@ -500,7 +500,7 @@ class AppControllerStoreTest {
 
 	@Test
 	void remoteDeletionChecksTheTokenObservedByTheController() {
-		try (RemoteIncidentStore store = new RemoteIncidentStore()) {
+		try (InMemoryServerIncidentStore store = new InMemoryServerIncidentStore()) {
 			AppData data = new AppData();
 			IncidentId id = store.create(data);
 			RevisionToken expected = store.revisionToken(data);
@@ -532,7 +532,7 @@ class AppControllerStoreTest {
 	void remoteLoadAndCreationFailuresRetainTheActiveDocumentAndDirtyState() {
 		for (RuntimeException failure : List.of(new StoreUnavailableException("Remote service unavailable"),
 				new StorePersistenceException("Remote storage failed", null))) {
-			try (RemoteIncidentStore store = new RemoteIncidentStore()) {
+			try (InMemoryServerIncidentStore store = new InMemoryServerIncidentStore()) {
 				AppData data = new AppData();
 				IncidentId active = store.create(data);
 				RevisionToken expected = store.revisionToken(data);
@@ -582,7 +582,7 @@ class AppControllerStoreTest {
 	void remoteSaveFailuresRemainDistinctAndKeepEditsAvailableForRetry() throws ReflectiveOperationException {
 		for (RuntimeException failure : List.of(new StoreUnavailableException("Remote service unavailable"),
 				new StorePersistenceException("Remote storage failed", null))) {
-			try (RemoteIncidentStore store = new RemoteIncidentStore()) {
+			try (InMemoryServerIncidentStore store = new InMemoryServerIncidentStore()) {
 				AppData data = new AppData();
 				IncidentId id = store.create(data);
 				RevisionToken expected = store.revisionToken(data);
@@ -611,7 +611,7 @@ class AppControllerStoreTest {
 
 	@Test
 	void closingALocklessRemoteControllerIsIdempotentAndDoesNotSaveDirtyEdits() {
-		try (RemoteIncidentStore store = new RemoteIncidentStore()) {
+		try (InMemoryServerIncidentStore store = new InMemoryServerIncidentStore()) {
 			AppData data = new AppData();
 			IncidentId id = store.create(data);
 			AppController controller = controller(store, id, data);
@@ -791,7 +791,7 @@ class AppControllerStoreTest {
 
 	@Test
 	void remoteSaveFailureMarksPreviouslyCleanEditorDirty() {
-		try (RemoteIncidentStore store = new RemoteIncidentStore()) {
+		try (InMemoryServerIncidentStore store = new InMemoryServerIncidentStore()) {
 			AppData data = new AppData();
 			IncidentId id = store.create(data);
 			AppController controller = controller(store, id, data);

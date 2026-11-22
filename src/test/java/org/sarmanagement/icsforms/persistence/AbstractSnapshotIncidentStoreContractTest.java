@@ -183,8 +183,8 @@ abstract class AbstractSnapshotIncidentStoreContractTest {
 			StoredIncident second = secondStore.loadSnapshot(id);
 			var ready = new CountDownLatch(2);
 			var start = new CountDownLatch(1);
-			var firstResult = executor.submit(() -> attempt(firstStore, id, first, ready, start));
-			var secondResult = executor.submit(() -> attempt(secondStore, id, second, ready, start));
+			var firstResult = executor.submit(() -> attempt(firstStore, id, first, "First writer", ready, start));
+			var secondResult = executor.submit(() -> attempt(secondStore, id, second, "Second writer", ready, start));
 			assertTrue(ready.await(5, TimeUnit.SECONDS));
 			start.countDown();
 			assertNotEquals(firstResult.get(5, TimeUnit.SECONDS), secondResult.get(5, TimeUnit.SECONDS));
@@ -195,20 +195,22 @@ abstract class AbstractSnapshotIncidentStoreContractTest {
 	}
 
 	/**
-	 * Attempts a concurrent token-aware save.
+	 * Attempts a concurrent token-aware save. Names must differ because record-level merge accepts identical edits.
 	 *
 	 * @param store writer handle
 	 * @param id incident identity
 	 * @param snapshot writer's initial snapshot
+	 * @param name distinct incident name this writer commits, so the compare-and-write is never a no-op
 	 * @param ready ready barrier
 	 * @param start start barrier
 	 * @return whether the save committed
 	 * @throws InterruptedException when interrupted at the barrier
 	 */
 	private boolean attempt(IncidentStore store, IncidentId id, StoredIncident snapshot,
-			CountDownLatch ready, CountDownLatch start) throws InterruptedException {
+			String name, CountDownLatch ready, CountDownLatch start) throws InterruptedException {
 		ready.countDown();
 		start.await();
+		snapshot.data().getIncidentContext().setIncidentName(name);
 		try {
 			store.save(id, snapshot.data(), snapshot.revision());
 			return true;

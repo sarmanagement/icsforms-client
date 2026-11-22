@@ -9,6 +9,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Identified;
 import org.sarmanagement.icsforms.model.RecordDiff;
 import org.sarmanagement.icsforms.model.RecordIndex;
+import org.sarmanagement.icsforms.model.RootSettings;
 import org.sarmanagement.icsforms.model.RecordIndex.RecordKey;
 
 import java.time.Instant;
@@ -175,7 +176,11 @@ public final class IncidentService {
 		IncidentState updated = new IncidentState(cursor, updatedHistories, changes,
 				appendReceipt(current.receipts(), new OperationReceipt(batch.operationId(), batch, result)));
 		versions.save(batch.incident(), updated);
-		project(batch.incident(), updated);
+		try {
+			project(batch.incident(), updated);
+		} catch (RuntimeException projectionFailure) {
+			throw new StoreCommittedException(projectionFailure);
+		}
 		return result;
 	}
 
@@ -256,6 +261,17 @@ public final class IncidentService {
 					index.parentFieldOf(entry.getKey()), retained));
 			changes.add(new RecordChange(cursor, entry.getKey(), version, receivedAt, entry.getValue()));
 		}
+		RecordHistory rootHistory = histories.get(RootSettings.key());
+		JsonNode rootSnapshot = RootSettings.snapshot(data);
+		if (rootHistory == null || !RecordJson.same(latest(rootHistory).content(), rootSnapshot)) {
+			long version = rootHistory == null ? 1 : latest(rootHistory).version() + 1;
+			cursor++;
+			List<RecordVersion> retained = rootHistory == null ? new ArrayList<>()
+					: new ArrayList<>(rootHistory.versions());
+			retained.add(new RecordVersion(version, cursor, receivedAt, rootSnapshot));
+			histories.put(RootSettings.key(), new RecordHistory(RootSettings.key(), null, null, retained));
+			changes.add(new RecordChange(cursor, RootSettings.key(), version, receivedAt, rootSnapshot));
+		}
 		versions.save(incident, new IncidentState(cursor, new ArrayList<>(histories.values()), changes,
 				state.receipts()));
 	}
@@ -278,7 +294,12 @@ public final class IncidentService {
 		}
 		project(stored, state);
 		IncidentState projected = versions.load(incident);
-		return projected == null ? state : projected;
+		IncidentState current = projected == null ? state : projected;
+		IncidentState seeded = withRoot(current, stored.data());
+		if (seeded != current) {
+			versions.save(incident, seeded);
+		}
+		return seeded;
 	}
 
 	/**
@@ -322,7 +343,32 @@ public final class IncidentService {
 					index.parentFieldOf(entry.getKey()), List.of(first)));
 			changes.add(new RecordChange(cursor, entry.getKey(), 1, receivedAt, entry.getValue()));
 		}
+		cursor++;
+		RecordVersion root = new RecordVersion(1, cursor, receivedAt, RootSettings.snapshot(data));
+		histories.add(new RecordHistory(RootSettings.key(), null, null, List.of(root)));
+		changes.add(new RecordChange(cursor, RootSettings.key(), 1, receivedAt, root.content()));
 		return new IncidentState(cursor, histories, changes, List.of());
+	}
+
+	/**
+	 * Adds the incident-wide settings record to a state that predates it, seeding it from the stored document.
+	 *
+	 * @param state authoritative state
+	 * @param data stored document the state was projected into
+	 * @return the same state when it already holds the record, otherwise a state with its first version
+	 */
+	private IncidentState withRoot(IncidentState state, AppData data) {
+		if (histories(state).containsKey(RootSettings.key())) {
+			return state;
+		}
+		long cursor = state.cursor() + 1;
+		Instant receivedAt = Instant.now();
+		RecordVersion root = new RecordVersion(1, cursor, receivedAt, RootSettings.snapshot(data));
+		List<RecordHistory> histories = new ArrayList<>(state.histories());
+		histories.add(new RecordHistory(RootSettings.key(), null, null, List.of(root)));
+		List<RecordChange> changes = new ArrayList<>(state.changes());
+		changes.add(new RecordChange(cursor, RootSettings.key(), 1, receivedAt, root.content()));
+		return new IncidentState(cursor, histories, changes, state.receipts());
 	}
 
 	/**
@@ -464,7 +510,8 @@ public final class IncidentService {
 		histories(state).entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
 			RecordVersion version = latest(entry.getValue());
 			records.add(new VersionedRecord(entry.getKey(), version.version(), version.cursor(),
-					version.receivedAt(), version.content()));
+					version.receivedAt(), version.content(), entry.getValue().parent(),
+					entry.getValue().parentField()));
 		});
 		return new ReadResult(incident, state.cursor(), records);
 	}
@@ -640,13 +687,29 @@ public final class IncidentService {
 	 * @param cursor latest incident-wide cursor
 	 * @param receivedAt host-assigned timestamp
 	 * @param content detached record snapshot
+	 * @param parent containing record, or null when attached directly to the incident root
+	 * @param parentField containing Java field name, used to rebuild the document tree
 	 */
-	public record VersionedRecord(RecordKey key, long version, long cursor, Instant receivedAt, JsonNode content) {
+	public record VersionedRecord(RecordKey key, long version, long cursor, Instant receivedAt, JsonNode content,
+			RecordKey parent, String parentField) {
 		/**
 		 * Detaches the JSON content.
 		 */
 		public VersionedRecord {
 			content = content.deepCopy();
+		}
+
+		/**
+		 * Creates a record snapshot without placement metadata.
+		 *
+		 * @param key stable record identity
+		 * @param version per-record version
+		 * @param cursor latest incident-wide cursor
+		 * @param receivedAt host-assigned timestamp
+		 * @param content detached record snapshot
+		 */
+		public VersionedRecord(RecordKey key, long version, long cursor, Instant receivedAt, JsonNode content) {
+			this(key, version, cursor, receivedAt, content, null, null);
 		}
 
 		/**

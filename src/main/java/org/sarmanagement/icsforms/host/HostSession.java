@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentNotFoundException;
 import org.sarmanagement.icsforms.persistence.IncidentService;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
+import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
 import org.sarmanagement.icsforms.persistence.StoreDescriptor;
 
 import java.io.IOException;
@@ -64,6 +65,7 @@ public final class HostSession implements AutoCloseable {
 	private HttpsServer enrollmentServer;
 	private ExecutorService executor;
 	private HostClient admin;
+	private DeviceCredential adminCredential;
 	private boolean lockAcquired;
 	private String lastFailure;
 
@@ -396,6 +398,7 @@ public final class HostSession implements AutoCloseable {
 			String loopback = "::".equals(config.bindAddress()) || "::1".equals(config.bindAddress()) ? "::1"
 					: "127.0.0.1";
 			admin = HostClient.forDevice(loopback, context.port(), context.enrollmentPort(), credential);
+			adminCredential = credential;
 		} catch (GeneralSecurityException | IOException | HostStorageException failure) {
 			throw new HostStartException(HostStartException.Reason.STORAGE_FAILURE,
 					"The host administrator credential could not be created", failure);
@@ -472,6 +475,18 @@ public final class HostSession implements AutoCloseable {
 	}
 
 	/**
+	 * Creates the loopback store the host window edits through. The host UI has no direct-write bypass: it uses
+	 * the same service as connected devices, over loopback, with its local administrator credential.
+	 *
+	 * @return a production remote store for the shared incident
+	 * @throws IllegalStateException when hosting is not running
+	 */
+	public RemoteIncidentStore loopbackStore() {
+		requireAdmin();
+		return new RemoteIncidentStore(new HostGateway(admin, adminCredential, "This workstation (host)"), incident);
+	}
+
+	/**
 	 * Returns the administrator client.
 	 *
 	 * @return client
@@ -526,6 +541,7 @@ public final class HostSession implements AutoCloseable {
 			executor = null;
 		}
 		admin = null;
+		adminCredential = null;
 		if (storage != null && (removeAdmin || context != null)) {
 			try {
 				storage.registry().removeAdministrator();

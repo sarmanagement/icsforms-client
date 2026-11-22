@@ -112,6 +112,24 @@ class HostSharingDialogTest {
 			SwingUtilities.invokeAndWait(action);
 		}
 
+		/**
+		 * Starts sharing and waits until the background start has completed on the event thread.
+		 *
+		 * @throws Exception when the wait is interrupted or times out
+		 */
+		void start() throws Exception {
+			edt(dialog::startSharing);
+			long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30);
+			boolean[] starting = {true};
+			while (starting[0]) {
+				edt(() -> starting[0] = dialog.isStarting());
+				if (starting[0]) {
+					assertTrue(System.nanoTime() < deadline, "host start did not complete");
+					Thread.sleep(25);
+				}
+			}
+		}
+
 		/** {@inheritDoc} */
 		@Override
 		public void close() throws Exception {
@@ -140,7 +158,7 @@ class HostSharingDialogTest {
 	void startShowsInvitationCopiesItAndStopEndsSharing() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (Harness harness = new Harness(directory)) {
-			harness.edt(harness.dialog::startSharing);
+			harness.start();
 			assertTrue(harness.dialog.isSharing());
 			assertEquals(HostState.RUNNING, harness.dialog.session().state());
 			harness.edt(harness.dialog::issueInvitation);
@@ -178,7 +196,7 @@ class HostSharingDialogTest {
 	void stopWithConnectedDevicesWarnsFirst() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (Harness harness = new Harness(directory)) {
-			harness.edt(harness.dialog::startSharing);
+			harness.start();
 			harness.edt(harness.dialog::issueInvitation);
 			DeviceCredential device = HostClient.pair(HostInvitation.parse(harness.dialog.invitationText()), "Tablet");
 			var status = harness.dialog.session().status();
@@ -196,7 +214,7 @@ class HostSharingDialogTest {
 	void revokeMarksSelectedDeviceRevoked() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (Harness harness = new Harness(directory)) {
-			harness.edt(harness.dialog::startSharing);
+			harness.start();
 			harness.edt(harness.dialog::issueInvitation);
 			HostClient.pair(HostInvitation.parse(harness.dialog.invitationText()), "Tablet");
 			harness.edt(harness.dialog::refresh);
@@ -213,7 +231,7 @@ class HostSharingDialogTest {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (Harness harness = new Harness(directory); ServerSocket busy = new ServerSocket(0)) {
 			harness.edt(() -> harness.dialog.configure("127.0.0.1", busy.getLocalPort(), 0));
-			harness.edt(harness.dialog::startSharing);
+			harness.start();
 			assertFalse(harness.dialog.isSharing());
 			assertNull(harness.dialog.session());
 			assertEquals(1, harness.prompts.messages.size());
@@ -231,7 +249,7 @@ class HostSharingDialogTest {
 		try (Harness harness = new Harness(directory)) {
 			Instant close = Instant.now().plusSeconds(3600);
 			harness.periodClose.set(close);
-			harness.edt(harness.dialog::startSharing);
+			harness.start();
 			harness.edt(harness.dialog::issueInvitation);
 			DeviceCredential first = HostClient.pair(HostInvitation.parse(harness.dialog.invitationText()), "A");
 			assertFalse(first.expiresAt().isAfter(close));
@@ -260,7 +278,7 @@ class HostSharingDialogTest {
 			assertTrue(harness.dialog.backupTo(backup).contains("already exists"));
 			assertTrue(harness.dialog.backupTo(directory.resolve("inside.zip")).contains("outside"));
 
-			harness.edt(harness.dialog::startSharing);
+			harness.start();
 			assertEquals(HostSharingDialog.RESTORE_WHILE_SHARING, harness.dialog.restoreFrom(backup));
 			assertFalse(harness.restored.get());
 			assertTrue(harness.dialog.isSharing());
