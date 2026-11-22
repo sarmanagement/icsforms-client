@@ -345,8 +345,16 @@ permissions on POSIX file systems and an explicit owner-only access control
 list (inherited entries replaced) on Windows-style file systems
 (`PrivateFiles`); directory synchronization is skipped where the platform does
 not allow opening a directory, since the atomic rename is already durable
-there. The ACL branch is unit-tested but has not been verified on a real
-Windows host.
+there. After setting POSIX permissions the journal reads them back and refuses
+a volume that ignores them. If a volume cannot be restricted to the owner (for
+example FAT or exFAT), `RemoteIncidentStore.connect` fails over to the next
+candidate cache location (the configured home, then the user's home, then the
+platform state directory) and offline editing continues; a location that
+already holds the incident's journal is preferred, and discovery and reopening
+search every candidate. Only if no candidate can be protected does the window
+continue connected-only, with a status note and dialog. Temporary directories
+are deliberately not candidates, because unsynced work must survive a reboot.
+The ACL branch is unit-tested but has not been verified on a real Windows host.
 The journal is not an authoritative incident store and does not replace host
 receipts or backups.
 

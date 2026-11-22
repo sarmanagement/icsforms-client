@@ -31,7 +31,10 @@ and targeted regression tests address those specific cases as detailed in that
 plan. Pre-submit rejection and stale-refresh/cursor retry have targeted fixes
 and regression tests. The journal now restricts storage to its owner on POSIX
 (mode bits) and Windows-style (owner-only ACL) file systems and still fails
-closed elsewhere (`PrivateFiles`, `PrivateFilesTest`). A rejected queue head can
+closed elsewhere (`PrivateFiles`, `PrivateFilesTest`); on an unsecurable volume
+such as FAT or exFAT the journal fails over to another protected location
+(`RemoteIncidentStore.connect`), and only when none exists does the window
+continue connected-only with a notice. A rejected queue head can
 be replaced, from Outbox review, by one edit built from the corrected local
 draft after the rejected operations are archived exactly
 (`RemoteIncidentStore.replaceRejected`, `RemoteIncidentStoreRejectionTest`).

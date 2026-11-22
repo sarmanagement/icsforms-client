@@ -34,7 +34,7 @@ class PrivateFilesTest {
 	Path directory;
 
 	/** File store reporting a fixed set of attribute views. */
-	private static final class FakeStore extends FileStore {
+	static final class FakeStore extends FileStore {
 		private final boolean posix;
 		private final boolean acl;
 
@@ -119,6 +119,23 @@ class PrivateFilesTest {
 	@Test
 	void storeWithoutOwnerRestrictionFailsClosed() {
 		assertThrows(IOException.class, () -> PrivateFiles.modeFor(new FakeStore(false, false)));
+	}
+
+	@Test
+	void journalOnUnsecurableVolumeRefusesWithAnOperatorFacingNotice() {
+		PrivateFiles.setStoreResolver(path -> new FakeStore(false, false));
+		try {
+			var failure = assertThrows(StorageNotSecurableException.class, () -> new DisconnectedStateFile(
+					directory.resolve("fat"), "a".repeat(64), new IncidentId(java.util.UUID.randomUUID().toString())));
+			assertTrue(failure.getMessage().contains("FAT"));
+			try (var files = Files.walk(directory.resolve("fat"))) {
+				assertFalse(files.anyMatch(Files::isRegularFile));
+			} catch (java.io.IOException unexpected) {
+				throw new java.io.UncheckedIOException(unexpected);
+			}
+		} finally {
+			PrivateFiles.setStoreResolver(null);
+		}
 	}
 
 	@Test

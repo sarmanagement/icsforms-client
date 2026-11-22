@@ -41,7 +41,61 @@ final class PrivateFiles {
 		ACL
 	}
 
+	/** The file system cannot enforce owner-only access. */
+	static final class UnsecurableStorageException extends IOException {
+		private static final long serialVersionUID = 1L;
+
+		/**
+		 * Creates the failure.
+		 *
+		 * @param message explanation
+		 */
+		UnsecurableStorageException(String message) {
+			super(message);
+		}
+	}
+
+	private static volatile java.util.function.Function<Path, FileStore> storeResolver = PrivateFiles::defaultStore;
+
 	private PrivateFiles() {
+	}
+
+	/**
+	 * Resolves the file store of a path.
+	 *
+	 * @param path existing path
+	 * @return its file store
+	 */
+	private static FileStore defaultStore(Path path) {
+		try {
+			return Files.getFileStore(path);
+		} catch (IOException failure) {
+			throw new java.io.UncheckedIOException(failure);
+		}
+	}
+
+	/**
+	 * Substitutes file store resolution so that tests can simulate volumes such as FAT.
+	 *
+	 * @param resolver replacement resolver, or null to restore the default
+	 */
+	static void setStoreResolver(java.util.function.Function<Path, FileStore> resolver) {
+		storeResolver = resolver == null ? PrivateFiles::defaultStore : resolver;
+	}
+
+	/**
+	 * Resolves the file store for a path through the active resolver.
+	 *
+	 * @param path existing path
+	 * @return its file store
+	 * @throws IOException when the store cannot be resolved
+	 */
+	private static FileStore storeOf(Path path) throws IOException {
+		try {
+			return storeResolver.apply(path);
+		} catch (java.io.UncheckedIOException failure) {
+			throw failure.getCause();
+		}
 	}
 
 	/**
@@ -67,7 +121,7 @@ final class PrivateFiles {
 		if (store.supportsFileAttributeView(AclFileAttributeView.class)) {
 			return Mode.ACL;
 		}
-		throw new IOException("The file system cannot restrict storage to its owner");
+		throw new UnsecurableStorageException("The file system cannot restrict storage to its owner");
 	}
 
 	/**
@@ -132,9 +186,13 @@ final class PrivateFiles {
 	 * @throws IOException when the restriction cannot be applied
 	 */
 	static void secure(Path path, boolean directory) throws IOException {
-		FileStore store = Files.getFileStore(path);
+		FileStore store = storeOf(path);
 		if (modeFor(store) == Mode.POSIX) {
-			Files.setPosixFilePermissions(path, directory ? DIRECTORY_PERMISSIONS : FILE_PERMISSIONS);
+			Set<PosixFilePermission> wanted = directory ? DIRECTORY_PERMISSIONS : FILE_PERMISSIONS;
+			Files.setPosixFilePermissions(path, wanted);
+			if (!Files.getPosixFilePermissions(path).equals(wanted)) {
+				throw new UnsecurableStorageException("The file system ignores permission changes");
+			}
 			return;
 		}
 		AclFileAttributeView view = Files.getFileAttributeView(path, AclFileAttributeView.class,
@@ -151,7 +209,7 @@ final class PrivateFiles {
 	 * @throws IOException when a supported flush fails
 	 */
 	static void syncDirectory(Path directory) throws IOException {
-		if (modeFor(Files.getFileStore(directory)) != Mode.POSIX) {
+		if (modeFor(storeOf(directory)) != Mode.POSIX) {
 			return;
 		}
 		try (FileChannel parent = FileChannel.open(directory, StandardOpenOption.READ)) {

@@ -134,7 +134,8 @@ public class HostSharingDialog extends JDialog {
 	private volatile boolean starting;
 	private boolean stopping;
 	private boolean refreshingDevices;
-	private transient Path cacheRoot = Path.of(System.getProperty("user.home"), ".icsforms", "remote-cache");
+	private transient java.util.List<Path> cacheRoots =
+			java.util.List.of(Path.of(System.getProperty("user.home"), ".icsforms", "remote-cache"));
 	private transient java.util.function.Consumer<IncidentStore> onLoopback = loopback -> { };
 	private transient Runnable onLocal = () -> { };
 	private transient java.util.function.Consumer<Boolean> transitionGuard = active -> { };
@@ -217,7 +218,22 @@ public class HostSharingDialog extends JDialog {
 		if (starting || session != null) {
 			throw new IllegalStateException("Cannot change the cache root while sharing");
 		}
-		cacheRoot = java.util.Objects.requireNonNull(root, "root");
+		setCacheRoots(java.util.List.of(java.util.Objects.requireNonNull(root, "root")));
+	}
+
+	/**
+	 * Sets the candidate private cache roots, in order of preference, before starting a host.
+	 *
+	 * @param roots disconnected cache roots
+	 */
+	public void setCacheRoots(java.util.List<Path> roots) {
+		if (starting || session != null) {
+			throw new IllegalStateException("Cannot change the cache root while sharing");
+		}
+		if (roots.isEmpty()) {
+			throw new IllegalArgumentException("At least one cache root is required");
+		}
+		cacheRoots = java.util.List.copyOf(roots);
 	}
 
 	/**
@@ -397,7 +413,7 @@ public class HostSharingDialog extends JDialog {
 			protected RemoteIncidentStore doInBackground() {
 				candidate.start();
 				try {
-					return candidate.loopbackStore(cacheRoot);
+					return candidate.loopbackStore(cacheRoots);
 				} catch (RuntimeException failure) {
 					candidate.stop();
 					throw failure;

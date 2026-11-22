@@ -949,7 +949,7 @@ public class MainFrame extends JFrame {
 				controller.replaceActiveDocumentFromStore();
 				refreshFromModel();
 			});
-			hostSharingDialog.setCacheRoot(cacheRoot());
+			hostSharingDialog.setCacheRoots(cacheRoots());
 			hostSharingDialog.setTransitionGuard(active -> {
 				hostTransitionActive = active;
 				refreshIncidentInputAvailability();
@@ -1014,13 +1014,35 @@ public class MainFrame extends JFrame {
 		return homeDirectory.resolve(".icsforms").resolve("remote-cache");
 	}
 
+	/**
+	 * Returns candidate private roots for disconnected journals, in order of preference. Later entries are used
+	 * only when an earlier file system cannot be restricted to the owner (for example FAT or exFAT).
+	 *
+	 * @return distinct candidate cache directories
+	 */
+	private List<Path> cacheRoots() {
+		java.util.LinkedHashSet<Path> roots = new java.util.LinkedHashSet<>();
+		roots.add(cacheRoot());
+		roots.add(Path.of(System.getProperty("user.home"), ".icsforms", "remote-cache"));
+		String windows = System.getenv("LOCALAPPDATA");
+		String state = System.getenv("XDG_STATE_HOME");
+		if (windows != null && !windows.isBlank()) {
+			roots.add(Path.of(windows, "icsforms", "remote-cache"));
+		} else if (state != null && !state.isBlank()) {
+			roots.add(Path.of(state, "icsforms", "remote-cache"));
+		} else {
+			roots.add(Path.of(System.getProperty("user.home"), ".local", "state", "icsforms", "remote-cache"));
+		}
+		return roots.stream().map(root -> root.toAbsolutePath().normalize()).distinct().toList();
+	}
+
 	/** Discovers cached incidents without reading the filesystem on the event thread. */
 	private void showOfflineIncidents() {
 		new javax.swing.SwingWorker<List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.CachedIncident>, Void>() {
 			/** {@inheritDoc} */
 			@Override
 			protected List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.CachedIncident> doInBackground() {
-				return org.sarmanagement.icsforms.persistence.RemoteIncidentStore.discoverCached(cacheRoot());
+				return org.sarmanagement.icsforms.persistence.RemoteIncidentStore.discoverCached(cacheRoots());
 			}
 
 			/** {@inheritDoc} */
@@ -1057,7 +1079,7 @@ public class MainFrame extends JFrame {
 			/** {@inheritDoc} */
 			@Override
 			protected Object[] doInBackground() {
-				var remote = org.sarmanagement.icsforms.persistence.RemoteIncidentStore.openOffline(cacheRoot(),
+				var remote = org.sarmanagement.icsforms.persistence.RemoteIncidentStore.openOffline(cacheRoots(),
 						item.authorityFingerprint(), item.incident());
 				try {
 					return new Object[] {remote, remote.loadSnapshot(item.incident())};
@@ -1741,8 +1763,8 @@ public class MainFrame extends JFrame {
 				var gateway = paired.detachGateway();
 				paired.close();
 				try {
-					remote = new org.sarmanagement.icsforms.persistence.RemoteIncidentStore(
-							gateway, paired.incident(), cacheRoot());
+					remote = org.sarmanagement.icsforms.persistence.RemoteIncidentStore.connect(
+							gateway, paired.incident(), cacheRoots());
 				} catch (RuntimeException failure) {
 					gateway.close();
 					throw failure;
@@ -1800,7 +1822,13 @@ public class MainFrame extends JFrame {
 			frame.showConnectionStatus();
 			frame.refreshOutbox(remote);
 		} else {
-			frame.attachMonitor(remote, "Connected to " + remote.describe().location());
+			String notice = remote.disconnectedStorageNotice().orElse(null);
+			frame.attachMonitor(remote, "Connected to " + remote.describe().location()
+					+ (notice == null ? "" : " (offline editing unavailable)"));
+			if (notice != null) {
+				javax.swing.SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(frame, notice,
+						"Offline editing unavailable", JOptionPane.WARNING_MESSAGE));
+			}
 		}
 		frame.setVisible(true);
 	}

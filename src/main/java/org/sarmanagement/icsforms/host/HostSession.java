@@ -495,9 +495,21 @@ public final class HostSession implements AutoCloseable {
 	 * @throws IllegalStateException when hosting is not running
 	 */
 	public RemoteIncidentStore loopbackStore(Path cacheRoot) {
+		return loopbackStore(java.util.List.of(cacheRoot));
+	}
+
+	/**
+	 * Opens the host's durable loopback journal in the first candidate location that can be protected. This
+	 * performs disk I/O and must run off the event thread.
+	 *
+	 * @param cacheRoots candidate private cache roots in order of preference
+	 * @return durable remote store for the shared incident
+	 * @throws IllegalStateException when hosting is not running
+	 */
+	public RemoteIncidentStore loopbackStore(java.util.List<Path> cacheRoots) {
 		requireAdmin();
-		return new RemoteIncidentStore(new HostGateway(admin, adminCredential, "This workstation (host)"),
-				incident, cacheRoot);
+		return RemoteIncidentStore.connect(new HostGateway(admin, adminCredential, "This workstation (host)"),
+				incident, cacheRoots);
 	}
 
 	/**

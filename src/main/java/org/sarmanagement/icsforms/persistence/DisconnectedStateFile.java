@@ -121,6 +121,9 @@ final class DisconnectedStateFile implements AutoCloseable {
 			}
 			lock = acquired;
 			this.observer = observer;
+		} catch (PrivateFiles.UnsecurableStorageException failure) {
+			throw new StorageNotSecurableException("Offline editing is unavailable: this storage location "
+					+ "(for example a FAT or exFAT drive) cannot be restricted to your account", failure);
 		} catch (IOException | UnsupportedOperationException failure) {
 			throw new StorePersistenceException("Cannot secure disconnected incident storage", failure);
 		}

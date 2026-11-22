@@ -187,6 +187,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	private DisconnectedStateFile stateFile;
 	private DisconnectedStateFile.State state;
 	private String authorityFingerprint;
+	private String storageNotice;
 	private final RecordDocumentBridge bridge = new RecordDocumentBridge();
 	private final Object cacheLock = new Object();
 	private final Map<RevisionToken, Base> bases = new LinkedHashMap<>(16, 0.75f, true);
@@ -217,6 +218,103 @@ public final class RemoteIncidentStore implements IncidentStore {
 		this(gateway, incident);
 		openState(root, gateway.authorityFingerprint().orElseThrow(
 				() -> new StoreValidationException("A pinned host authority is required for disconnected storage")));
+	}
+
+	/**
+	 * Enables durable disconnected operation, failing over between candidate cache locations. A location that
+	 * already holds this incident's journal is preferred; otherwise the first location whose file system can be
+	 * restricted to the owner is used, so that a FAT or exFAT drive does not cost the operator offline editing.
+	 * Only when no candidate can be secured does the store continue connected-only, with
+	 * {@link #disconnectedStorageNotice()} explaining why.
+	 *
+	 * @param gateway authenticated host transport
+	 * @param incident shared incident
+	 * @param roots candidate private cache roots in order of preference
+	 * @return a store with disconnected storage, or a connected-only store with a notice
+	 */
+	public static RemoteIncidentStore connect(RemoteIncidentGateway gateway, IncidentId incident, List<Path> roots) {
+		String fingerprint = gateway.authorityFingerprint().orElseThrow(
+				() -> new StoreValidationException("A pinned host authority is required for disconnected storage"));
+		List<Path> ordered = new ArrayList<>(roots.stream()
+				.filter(root -> Files.exists(journalPath(root, fingerprint, incident))).toList());
+		roots.stream().filter(root -> !ordered.contains(root)).forEach(ordered::add);
+		StorageNotSecurableException last = null;
+		for (Path root : ordered) {
+			try {
+				return new RemoteIncidentStore(gateway, incident, root);
+			} catch (StorageNotSecurableException failure) {
+				last = failure;
+			}
+		}
+		RemoteIncidentStore degraded = new RemoteIncidentStore(gateway, incident);
+		degraded.storageNotice = last == null ? "No location is available for offline storage" : last.getMessage();
+		return degraded;
+	}
+
+	/**
+	 * Enables durable disconnected operation in one location, or continues connected-only when it cannot be
+	 * protected.
+	 *
+	 * @param gateway authenticated host transport
+	 * @param incident shared incident
+	 * @param root private local cache root
+	 * @return a store with disconnected storage, or a connected-only store with a notice
+	 */
+	public static RemoteIncidentStore connect(RemoteIncidentGateway gateway, IncidentId incident, Path root) {
+		return connect(gateway, incident, List.of(root));
+	}
+
+	/**
+	 * Names where a journal lives under a cache root.
+	 *
+	 * @param root cache root
+	 * @param fingerprint pinned authority fingerprint
+	 * @param incident incident identity
+	 * @return journal file path
+	 */
+	private static Path journalPath(Path root, String fingerprint, IncidentId incident) {
+		return root.toAbsolutePath().normalize().resolve(fingerprint).resolve(incident.value() + ".json");
+	}
+
+	/**
+	 * Opens a cached incident from whichever candidate location holds its journal.
+	 *
+	 * @param roots candidate cache roots
+	 * @param authorityFingerprint pinned host authority SHA-256 fingerprint
+	 * @param incident cached incident identity
+	 * @return offline-capable store
+	 * @throws IncidentNotFoundException when no location holds the journal
+	 */
+	public static RemoteIncidentStore openOffline(List<Path> roots, String authorityFingerprint, IncidentId incident) {
+		for (Path root : roots) {
+			if (Files.exists(journalPath(root, authorityFingerprint, incident))) {
+				return openOffline(root, authorityFingerprint, incident);
+			}
+		}
+		throw new IncidentNotFoundException("No disconnected snapshot exists for incident: " + incident);
+	}
+
+	/**
+	 * Finds locally cached incidents across several candidate locations, without duplicates.
+	 *
+	 * @param roots candidate cache roots
+	 * @return cached identities
+	 */
+	public static List<CachedIncident> discoverCached(List<Path> roots) {
+		java.util.Set<CachedIncident> found = new java.util.LinkedHashSet<>();
+		for (Path root : roots) {
+			found.addAll(discoverCached(root));
+		}
+		return List.copyOf(found);
+	}
+
+	/**
+	 * Explains why disconnected storage was not enabled, if it was refused.
+	 *
+	 * @return operator-facing notice, or empty
+	 */
+	public Optional<String> disconnectedStorageNotice() {
+		return Optional.ofNullable(storageNotice);
 	}
 
 	/**

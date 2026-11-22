@@ -16,9 +16,11 @@ import org.sarmanagement.icsforms.model.ClueLogEntry;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -140,6 +142,62 @@ class RemoteIncidentStoreRejectionTest {
 			assertTrue(local.pendingOperations().isEmpty());
 			assertEquals(1, local.acceptedReceiptCount());
 			assertEquals("accepted once", backing.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+		}
+	}
+
+	@Test
+	void unsecurableCacheVolumeDegradesToConnectedOnlyWithANotice() {
+		PrivateFiles.setStoreResolver(path -> new PrivateFilesTest.FakeStore(false, false));
+		try (RemoteIncidentStore store = RemoteIncidentStore.connect(pair(), incident, List.of(directory.resolve("fat")))) {
+			assertFalse(store.disconnectedStorageEnabled());
+			assertTrue(store.disconnectedStorageNotice().orElseThrow().contains("exFAT"));
+			StoredIncident snapshot = store.loadSnapshot(incident);
+			snapshot.data().getIncidentContext().setIncidentName("online only");
+			store.save(incident, snapshot.data(), snapshot.revision());
+			assertEquals("online only", backing.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+		} finally {
+			PrivateFiles.setStoreResolver(null);
+		}
+	}
+
+	@Test
+	void unsecurableCachePrimaryFailsOverToASecureLocationAndIsRediscovered() throws Exception {
+		Path fat = directory.resolve("fat");
+		Path secure = directory.resolve("secure");
+		PrivateFiles.setStoreResolver(path -> path.startsWith(fat) ? new PrivateFilesTest.FakeStore(false, false)
+				: realStore(path));
+		try {
+			RemoteIncidentGateway gateway = pair();
+			String fingerprint = gateway.authorityFingerprint().orElseThrow();
+			try (RemoteIncidentStore store = RemoteIncidentStore.connect(gateway, incident, List.of(fat, secure))) {
+				assertTrue(store.disconnectedStorageEnabled());
+				assertTrue(store.disconnectedStorageNotice().isEmpty());
+				StoredIncident snapshot = store.loadSnapshot(incident);
+				snapshot.data().getIncidentContext().setIncidentName("kept offline");
+				store.save(incident, snapshot.data(), snapshot.revision());
+			}
+			assertEquals(List.of(new RemoteIncidentStore.CachedIncident(fingerprint, incident)),
+					RemoteIncidentStore.discoverCached(List.of(fat, secure)));
+			try (RemoteIncidentStore restored = RemoteIncidentStore.openOffline(List.of(fat, secure), fingerprint,
+					incident)) {
+				assertEquals(1, restored.pendingOperations().size());
+			}
+		} finally {
+			PrivateFiles.setStoreResolver(null);
+		}
+	}
+
+	/**
+	 * Resolves the real file store of a path.
+	 *
+	 * @param path existing path
+	 * @return its store
+	 */
+	private static java.nio.file.FileStore realStore(Path path) {
+		try {
+			return Files.getFileStore(path);
+		} catch (java.io.IOException failure) {
+			throw new java.io.UncheckedIOException(failure);
 		}
 	}
 
