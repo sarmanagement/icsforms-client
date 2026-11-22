@@ -146,6 +146,7 @@ public class ClueLogPdfRenderer extends AbstractPdfRenderer implements PdfFormRe
 			ClueLogEntry e = entries.get(i);
 			List<String> block = new ArrayList<>();
 			block.add("Clue #" + (i + 1) + (e.isPossibleDuplicate() ? "  [POSSIBLE DUPLICATE]" : ""));
+			block.add(ClueReviewPdfText.history(e));
 			block.add("Detecting Task:    " + safe(e.getDetectingTask()));
 			block.add("Date/Time:         " + formatPdfDateTime(data, e.getDateTimeCollected()));
 			block.add("Location:          " + safe(e.getLocation()));

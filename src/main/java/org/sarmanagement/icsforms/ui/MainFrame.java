@@ -132,12 +132,20 @@ public class MainFrame extends JFrame {
 	private final SafetyDashboardPanel safetyDashboardPanel;
 	private final JTabbedPane tabs = new JTabbedPane();
 	private HostSharingDialog hostSharingDialog;
+	private boolean hostTransitionActive;
 	private IncidentStore hostLocalStore;
 	private Path homeDirectory;
 	private final JLabel connectionLabel = new JLabel("Standalone");
 	private String authorityText = "Standalone";
 	private transient org.sarmanagement.icsforms.persistence.ConnectionMonitor connectionMonitor;
 	private transient org.sarmanagement.icsforms.persistence.ConnectionMonitor.Status connectionStatus;
+	private long monitorGeneration;
+	private List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingOperation> outbox = List.of();
+	private boolean outboxKnown;
+	private boolean outboxRefreshInProgress;
+	private boolean outboxRefreshAgain;
+	private java.time.Instant cachedConfirmation;
+	private long acceptedReceipts;
 	private transient java.util.function.BiFunction<String, String,
 			org.sarmanagement.icsforms.persistence.RemoteIncidentStore> invitationRedeemer =
 					org.sarmanagement.icsforms.host.HostGateway::pair;
@@ -883,9 +891,18 @@ public class MainFrame extends JFrame {
 		hostItem.addActionListener(event -> showHostSharing());
 		JMenuItem connectItem = new JMenuItem("Connect to a host...");
 		connectItem.addActionListener(event -> showConnect());
+		JMenuItem offlineItem = new JMenuItem("Open cached incident offline...");
+		offlineItem.addActionListener(event -> showOfflineIncidents());
+		JMenuItem reconnectItem = new JMenuItem("Re-pair this incident...");
+		reconnectItem.addActionListener(event -> showReconnect());
+		JMenuItem outboxItem = new JMenuItem("Review outbox...");
+		outboxItem.addActionListener(event -> showOutbox());
 		sharingMenu.add(standaloneItem);
 		sharingMenu.add(hostItem);
 		sharingMenu.add(connectItem);
+		sharingMenu.add(offlineItem);
+		sharingMenu.add(reconnectItem);
+		sharingMenu.add(outboxItem);
 		return sharingMenu;
 	}
 
@@ -926,6 +943,11 @@ public class MainFrame extends JFrame {
 				controller.replaceActiveDocumentFromStore();
 				refreshFromModel();
 			});
+			hostSharingDialog.setCacheRoot(cacheRoot());
+			hostSharingDialog.setTransitionGuard(active -> {
+				hostTransitionActive = active;
+				refreshIncidentInputAvailability();
+			});
 			hostSharingDialog.setStoreSwitch(loopback -> {
 				controller.switchStore(loopback, incident);
 				applyStoreCapabilities();
@@ -933,12 +955,27 @@ public class MainFrame extends JFrame {
 				attachMonitor((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) loopback, "Host");
 			}, () -> {
 				detachMonitor();
-				controller.switchStore(hostLocalStore, incident);
-				applyStoreCapabilities();
-				refreshFromModel();
+				try {
+					controller.switchStore(hostLocalStore, incident);
+				} catch (RuntimeException failure) {
+					if (controller.getStore() instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote) {
+						attachMonitor(remote, "Host");
+					}
+					throw failure;
+				}
 				authorityText = "Standalone";
 				connectionStatus = null;
+				cachedConfirmation = null;
+				outbox = List.of();
+				outboxKnown = false;
+				acceptedReceipts = 0;
 				showConnectionStatus();
+				try {
+					applyStoreCapabilities();
+					refreshFromModel();
+				} catch (RuntimeException failure) {
+					showError("The local incident was opened but the view could not be refreshed", failure);
+				}
 			});
 		}
 		hostSharingDialog.setVisible(true);
@@ -961,6 +998,450 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
+	 * Returns the private root for disconnected journals.
+	 *
+	 * @return cache directory
+	 */
+	private Path cacheRoot() {
+		return homeDirectory.resolve(".icsforms").resolve("remote-cache");
+	}
+
+	/** Discovers cached incidents without reading the filesystem on the event thread. */
+	private void showOfflineIncidents() {
+		new javax.swing.SwingWorker<List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.CachedIncident>, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.CachedIncident> doInBackground() {
+				return org.sarmanagement.icsforms.persistence.RemoteIncidentStore.discoverCached(cacheRoot());
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					var cached = get();
+					if (cached.isEmpty()) {
+						JOptionPane.showMessageDialog(MainFrame.this, "No cached shared incidents were found.");
+						return;
+					}
+					Object selected = JOptionPane.showInputDialog(MainFrame.this,
+							"Select the pinned authority and incident to open:", "Open offline",
+							JOptionPane.PLAIN_MESSAGE, null, cached.toArray(), cached.get(0));
+					if (selected instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore.CachedIncident item) {
+						openOffline(item);
+					}
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					showError("Could not discover cached incidents", new IllegalStateException(failure.getCause()));
+				}
+			}
+		}.execute();
+	}
+
+	/**
+	 * Opens a cached incident on a worker and leaves this window unchanged on failure.
+	 *
+	 * @param item cached incident identity
+	 */
+	private void openOffline(org.sarmanagement.icsforms.persistence.RemoteIncidentStore.CachedIncident item) {
+		new javax.swing.SwingWorker<Object[], Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected Object[] doInBackground() {
+				var remote = org.sarmanagement.icsforms.persistence.RemoteIncidentStore.openOffline(cacheRoot(),
+						item.authorityFingerprint(), item.incident());
+				try {
+					return new Object[] {remote, remote.loadSnapshot(item.incident())};
+				} catch (RuntimeException failure) {
+					remote.close();
+					throw failure;
+				}
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					Object[] result = get();
+					openConnectedWindow((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) result[0],
+							(org.sarmanagement.icsforms.persistence.StoredIncident) result[1]);
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					showError("Could not open cached incident", new IllegalStateException(failure.getCause()));
+				}
+			}
+		}.execute();
+	}
+
+	/** Requests an invitation for the current cached incident. */
+	private void showReconnect() {
+		if (!(controller.getStore() instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote)) {
+			JOptionPane.showMessageDialog(this, "Open a cached shared incident first.");
+			return;
+		}
+		JTextArea invitation = new JTextArea(4, 48);
+		JTextField device = new JTextField(System.getProperty("user.name", "device"), 20);
+		Object[] form = {"Invitation from the same host:", new JScrollPane(invitation), "Device name:", device};
+		if (JOptionPane.showConfirmDialog(this, form, "Re-pair", JOptionPane.OK_CANCEL_OPTION,
+				JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION) {
+			reconnect(remote, invitation.getText(), device.getText().strip());
+		}
+	}
+
+	/**
+	 * Pairs and verifies both incident and pinned authority before replacing the transport.
+	 *
+	 * @param remote cached store
+	 * @param invitation invitation text
+	 * @param device device name
+	 */
+	private void reconnect(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote, String invitation,
+			String device) {
+		detachMonitor();
+		new javax.swing.SwingWorker<Void, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected Void doInBackground() {
+				var paired = invitationRedeemer.apply(invitation, device.isBlank() ? "device" : device);
+				attachPairedGateway(remote, paired);
+				return null;
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					get();
+					if (controller.getStore() == remote) {
+						attachMonitor(remote, "Connected to " + remote.describe().location());
+					}
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					if (controller.getStore() == remote && remote.gateway() != null) {
+						attachMonitor(remote, "Connected to " + remote.describe().location());
+					}
+					showError("Could not re-pair", new IllegalStateException(failure.getCause()));
+				}
+			}
+		}.execute();
+	}
+
+	/**
+	 * Transfers a newly paired gateway only to the same incident and pinned authority.
+	 *
+	 * @param remote cached store to reconnect
+	 * @param paired newly paired temporary store
+	 */
+	private static void attachPairedGateway(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
+			org.sarmanagement.icsforms.persistence.RemoteIncidentStore paired) {
+		try {
+			if (!remote.incident().equals(paired.incident())) {
+				throw new IllegalArgumentException("The invitation is for a different incident");
+			}
+			var gateway = paired.detachGateway();
+			try {
+				remote.attachGateway(gateway);
+			} catch (RuntimeException failure) {
+				gateway.close();
+				throw failure;
+			}
+		} finally {
+			paired.close();
+		}
+	}
+
+	/**
+	 * Fetches a queue snapshot off the event thread, since replay may hold the store lock during network I/O.
+	 *
+	 * @param remote store whose queue is requested
+	 */
+	private void refreshOutbox(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote) {
+		if (outboxRefreshInProgress) {
+			outboxRefreshAgain = true;
+			return;
+		}
+		outboxRefreshInProgress = true;
+		new javax.swing.SwingWorker<Void, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected Void doInBackground() {
+				synchronized (remote) {
+					publishOutbox(remote, remote.pendingOperations());
+				}
+				return null;
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				outboxRefreshInProgress = false;
+				if (outboxRefreshAgain) {
+					outboxRefreshAgain = false;
+					if (controller.getStore() instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore current) {
+						refreshOutbox(current);
+					}
+				}
+			}
+		}.execute();
+	}
+
+	/**
+	 * Publishes an immutable snapshot only while its store is still active.
+	 *
+	 * @param remote source store
+	 * @param snapshot pending operations
+	 */
+	private void publishOutbox(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
+			List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingOperation> snapshot) {
+		java.time.Instant confirmation = remote.lastConfirmedAt().orElse(null);
+		long accepted = remote.acceptedReceiptCount();
+		javax.swing.SwingUtilities.invokeLater(() -> {
+			if (controller.getStore() == remote) {
+				outbox = snapshot;
+				outboxKnown = true;
+				cachedConfirmation = confirmation;
+				acceptedReceipts = accepted;
+				showConnectionStatus();
+			}
+		});
+	}
+
+	/** Shows durable drafts and explicit recovery actions without reading the journal on the event thread. */
+	private void showOutbox() {
+		if (!(controller.getStore() instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote)) {
+			JOptionPane.showMessageDialog(this, "No shared incident is open.");
+			return;
+		}
+		new javax.swing.SwingWorker<List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingOperation>, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingOperation> doInBackground() {
+				return remote.pendingOperations();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					var snapshot = get();
+					if (controller.getStore() != remote) {
+						return;
+					}
+					OutboxReviewPanel[] holder = new OutboxReviewPanel[1];
+					OutboxReviewPanel panel = new OutboxReviewPanel(new OutboxReviewPanel.Actions() {
+						/** {@inheritDoc} */
+						@Override
+						public void exportDraft(OutboxReviewPanel.Entry entry) {
+							chooseFile(homeDirectory, true, path -> new javax.swing.SwingWorker<Void, Void>() {
+								/** {@inheritDoc} */
+								@Override
+								protected Void doInBackground() {
+									remote.exportOutbox(path);
+									return null;
+								}
+
+								/** {@inheritDoc} */
+								@Override
+								protected void done() {
+									try {
+										get();
+									} catch (InterruptedException interrupted) {
+										Thread.currentThread().interrupt();
+									} catch (java.util.concurrent.ExecutionException failure) {
+										showError("Could not export draft", new IllegalStateException(failure.getCause()));
+									}
+								}
+							}.execute());
+						}
+
+						/** {@inheritDoc} */
+						@Override
+						public void resolve(OutboxReviewPanel.Entry entry, List<OutboxReviewPanel.Decision> decisions) {
+							if (!saveBeforeSwitch()) {
+								return;
+							}
+							java.awt.Window dialog = javax.swing.SwingUtilities.getWindowAncestor(holder[0]);
+							if (dialog != null) {
+								dialog.dispose();
+							}
+							resolveOutbox(remote, entry, decisions);
+						}
+
+						/** {@inheritDoc} */
+						@Override
+						public void refreshConflict(OutboxReviewPanel.Entry entry) {
+							if (!saveBeforeSwitch()) {
+								return;
+							}
+							java.awt.Window dialog = javax.swing.SwingUtilities.getWindowAncestor(holder[0]);
+							if (dialog != null) {
+								dialog.dispose();
+							}
+							refreshOutboxConflict(remote, entry);
+						}
+
+						/** {@inheritDoc} */
+						@Override
+						public void confirm(OutboxReviewPanel.Entry entry) {
+							if (JOptionPane.showConfirmDialog(MainFrame.this,
+									"Approve this reviewed draft for submission to the host?",
+									"Approve rebased draft", JOptionPane.YES_NO_OPTION,
+									JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION) {
+								return;
+							}
+							java.awt.Window dialog = javax.swing.SwingUtilities.getWindowAncestor(holder[0]);
+							if (dialog != null) {
+								dialog.dispose();
+							}
+							new javax.swing.SwingWorker<Void, Void>() {
+								/** {@inheritDoc} */
+								@Override
+								protected Void doInBackground() {
+									remote.confirmPending(entry.operationId());
+									return null;
+								}
+
+								/** {@inheritDoc} */
+								@Override
+								protected void done() {
+									try {
+										get();
+										if (controller.getStore() == remote) {
+											refreshOutbox(remote);
+										}
+									} catch (InterruptedException interrupted) {
+										Thread.currentThread().interrupt();
+									} catch (java.util.concurrent.ExecutionException failure) {
+										showError("Could not approve the draft",
+												new IllegalStateException(failure.getCause()));
+									}
+								}
+							}.execute();
+						}
+					});
+					holder[0] = panel;
+					panel.setEntries(snapshot.stream().map(item -> new OutboxReviewPanel.Entry(item.operationId(),
+							item.before(), item.draft(), item.batch(), OutboxReviewPanel.Status.valueOf(item.status().name()),
+							item.conflicts(), item.rejection())).toList());
+					JOptionPane.showMessageDialog(MainFrame.this, panel, "Outbox review", JOptionPane.PLAIN_MESSAGE);
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					showError("Could not read the outbox", new IllegalStateException(failure.getCause()));
+				}
+			}
+		}.execute();
+	}
+
+	/**
+	 * Refreshes host conflict values and binds any rebased local revision before editing resumes.
+	 *
+	 * @param remote active remote store
+	 * @param entry reviewed operation
+	 */
+	private void refreshOutboxConflict(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
+			OutboxReviewPanel.Entry entry) {
+		detachMonitor();
+		setEnabled(false);
+		new javax.swing.SwingWorker<AppController.RemoteRefreshOutcome, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected AppController.RemoteRefreshOutcome doInBackground() {
+				remote.refreshConflict(entry.operationId());
+				return controller.refreshFromRemote();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				setEnabled(true);
+				try {
+					if (get() == AppController.RemoteRefreshOutcome.DRAFT_PRESERVED) {
+						JOptionPane.showMessageDialog(MainFrame.this, "The current editor draft was kept. "
+								+ "Save or recover it before refreshing.");
+					}
+					if (controller.getStore() == remote) {
+						refreshOutbox(remote);
+						showOutbox();
+					}
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					showError("Could not refresh the conflict", new IllegalStateException(failure.getCause()));
+				} finally {
+					if (controller.getStore() == remote && remote.gateway() != null) {
+						attachMonitor(remote, "Connected to " + remote.describe().location());
+					}
+				}
+			}
+		}.execute();
+	}
+
+	/**
+	 * Resolves a reviewed conflict without allowing editor input to race the new local revision.
+	 *
+	 * @param remote active remote store
+	 * @param entry reviewed durable operation
+	 * @param decisions explicit field choices
+	 */
+	private void resolveOutbox(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
+			OutboxReviewPanel.Entry entry, List<OutboxReviewPanel.Decision> decisions) {
+		detachMonitor();
+		setEnabled(false);
+		new javax.swing.SwingWorker<AppController.RemoteRefreshOutcome, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected AppController.RemoteRefreshOutcome doInBackground() {
+				synchronized (remote) {
+					var current = remote.pendingOperations().stream()
+							.filter(item -> item.operationId().equals(entry.operationId())).findFirst()
+							.orElseThrow(() -> new IllegalStateException("The reviewed operation no longer exists"));
+					if (!current.conflicts().equals(entry.conflicts())
+							|| !java.util.Objects.equals(current.batch(), entry.batch())) {
+						throw new IllegalStateException("The reviewed operation changed; review it again");
+					}
+					Map<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.ConflictField,
+							org.sarmanagement.icsforms.persistence.RemoteIncidentStore.ConflictChoice> choices =
+									new LinkedHashMap<>();
+					for (OutboxReviewPanel.Decision decision : decisions) {
+						choices.put(new org.sarmanagement.icsforms.persistence.RemoteIncidentStore.ConflictField(
+								decision.conflict().key(), decision.conflict().field()),
+								org.sarmanagement.icsforms.persistence.RemoteIncidentStore.ConflictChoice
+										.valueOf(decision.choice().name()));
+					}
+					remote.resolvePending(entry.operationId(), choices);
+				}
+				return controller.refreshFromRemote();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				setEnabled(true);
+				try {
+					if (get() == AppController.RemoteRefreshOutcome.DRAFT_PRESERVED) {
+						JOptionPane.showMessageDialog(MainFrame.this, "The resolution is saved locally, but the "
+								+ "current editor draft was kept. Save or recover it before refreshing.");
+					}
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					showError("Could not resolve the conflict", new IllegalStateException(failure.getCause()));
+				}
+				if (controller.getStore() == remote) {
+					refreshOutbox(remote);
+					if (remote.gateway() != null) {
+						attachMonitor(remote, "Connected to " + remote.describe().location());
+					}
+				}
+			}
+		}.execute();
+	}
+
+	/**
 	 * Redeems an invitation, loads the shared incident and opens it in a new window, reporting failures without
 	 * changing this window.
 	 *
@@ -976,9 +1457,24 @@ public class MainFrame extends JFrame {
 			 */
 			@Override
 			protected Object[] doInBackground() {
-				org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote =
+				org.sarmanagement.icsforms.persistence.RemoteIncidentStore paired =
 						invitationRedeemer.apply(invitationText, deviceName.isBlank() ? "device" : deviceName);
-				return new Object[] {remote, remote.loadSnapshot(remote.incident())};
+				org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote;
+				var gateway = paired.detachGateway();
+				paired.close();
+				try {
+					remote = new org.sarmanagement.icsforms.persistence.RemoteIncidentStore(
+							gateway, paired.incident(), cacheRoot());
+				} catch (RuntimeException failure) {
+					gateway.close();
+					throw failure;
+				}
+				try {
+					return new Object[] {remote, remote.loadSnapshot(remote.incident())};
+				} catch (RuntimeException failure) {
+					remote.close();
+					throw failure;
+				}
 			}
 
 			/**
@@ -1021,7 +1517,13 @@ public class MainFrame extends JFrame {
 			org.sarmanagement.icsforms.persistence.StoredIncident first) {
 		MainFrame frame = new MainFrame(first.data(), remote, remote.incident(), controller.exportService(),
 				controller.validator(), homeDirectory);
-		frame.attachMonitor(remote, "Connected to " + remote.describe().location());
+		if (remote.gateway() == null) {
+			frame.authorityText = "Offline cached incident";
+			frame.showConnectionStatus();
+			frame.refreshOutbox(remote);
+		} else {
+			frame.attachMonitor(remote, "Connected to " + remote.describe().location());
+		}
 		frame.setVisible(true);
 	}
 
@@ -1034,21 +1536,34 @@ public class MainFrame extends JFrame {
 	 */
 	void attachMonitor(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote, String authority) {
 		detachMonitor();
+		long generation = monitorGeneration;
 		authorityText = authority;
 		remoteNewer = false;
 		connectionStatus = null;
+		outboxKnown = false;
 		org.sarmanagement.icsforms.persistence.ConnectionMonitor monitor =
 				org.sarmanagement.icsforms.persistence.ConnectionMonitor.withDefaults(remote.gateway(),
-						remote.incident(), 0, cursor -> {
+						remote.incident(), 0, () -> {
+							synchronized (remote) {
+								try {
+									remote.replayPending();
+								} finally {
+									publishOutbox(remote, remote.pendingOperations());
+								}
+							}
+						}, cursor -> {
 							AppController.RemoteRefreshOutcome outcome = controller.refreshFromRemote();
 							remoteNewer = outcome == AppController.RemoteRefreshOutcome.DRAFT_PRESERVED;
 							return !remoteNewer;
 						}, status -> javax.swing.SwingUtilities.invokeLater(() -> {
-							connectionStatus = status;
-							showConnectionStatus();
+							if (generation == monitorGeneration && controller.getStore() == remote) {
+								connectionStatus = status;
+								showConnectionStatus();
+							}
 						}));
 		connectionMonitor = monitor;
 		showConnectionStatus();
+		refreshOutbox(remote);
 		monitor.start();
 	}
 
@@ -1056,6 +1571,7 @@ public class MainFrame extends JFrame {
 	 * Stops polling, when a monitor is attached.
 	 */
 	private void detachMonitor() {
+		monitorGeneration++;
 		org.sarmanagement.icsforms.persistence.ConnectionMonitor current = connectionMonitor;
 		connectionMonitor = null;
 		if (current != null) {
@@ -1068,17 +1584,37 @@ public class MainFrame extends JFrame {
 	 */
 	private void showConnectionStatus() {
 		org.sarmanagement.icsforms.persistence.ConnectionMonitor.Status status = connectionStatus;
-		if (status == null) {
-			connectionLabel.setText(authorityText);
-			return;
+		StringBuilder text = new StringBuilder(authorityText);
+		if (status != null) {
+			text.append(" | ").append(status.detail());
 		}
-		StringBuilder text = new StringBuilder(authorityText).append(" | ").append(status.detail());
-		if (status.lastConfirmed() != null) {
+		java.time.Instant confirmed = status != null && status.lastConfirmed() != null
+				? status.lastConfirmed() : cachedConfirmation;
+		if (confirmed != null) {
 			text.append(" | last confirmed ").append(java.time.format.DateTimeFormatter.ISO_LOCAL_TIME
-					.format(status.lastConfirmed().atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+					.format(confirmed.atZone(java.time.ZoneId.systemDefault()).toLocalTime()
 							.truncatedTo(java.time.temporal.ChronoUnit.SECONDS)));
 		}
-		text.append(" | ").append(status.state());
+		if (status != null) {
+			text.append(" | ").append(status.state());
+		}
+		if (controller.getStore() instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore) {
+			if (!outboxKnown) {
+				text.append(" | outbox checking");
+			} else {
+				long pending = outbox.stream().filter(item -> item.status()
+						== org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus.PENDING).count();
+				long conflicts = outbox.stream().filter(item -> item.status()
+						== org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus.CONFLICT).count();
+				long rejected = outbox.stream().filter(item -> item.status()
+						== org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus.REJECTED).count();
+				long review = outbox.stream().filter(item -> item.status()
+						== org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus.REVIEW_REQUIRED).count();
+				text.append(" | pending ").append(pending).append(", conflicted ").append(conflicts)
+						.append(", rejected ").append(rejected).append(", review required ").append(review)
+						.append(", accepted ").append(acceptedReceipts);
+			}
+		}
 		if (remoteNewer) {
 			text.append(" | newer changes on the host; your draft is kept");
 		}
@@ -1116,6 +1652,11 @@ public class MainFrame extends JFrame {
 	 * Opens the shared incident manager and applies its open or new-incident action.
 	 */
 	private void showIncidentManager() {
+		if (controller.getStore() instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore) {
+			JOptionPane.showMessageDialog(this, "A shared window is pinned to one incident. Open another window "
+					+ "instead; its durable outbox remains associated with this incident.");
+			return;
+		}
 		if (controller.getStore() == null || !saveBeforeSwitch()) {
 			return;
 		}
@@ -2941,15 +3482,20 @@ public class MainFrame extends JFrame {
 			controller.markEditorDraftDirty();
 			return;
 		}
+		boolean remote = controller.getStore() instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
 		persistenceLabel.setText("Durability: " + status.durability().name().toLowerCase(java.util.Locale.ROOT)
-				+ " | Synchronization: not applicable");
+				+ (remote ? " | Host synchronization: see outbox" : " | Synchronization: not applicable"));
 		persistenceLabel.setToolTipText(status.failure() == null ? null : status.failure().getMessage());
 		retryPersistenceButton.setEnabled(status.failure() != null);
+		if (remote && status.durability()
+				== org.sarmanagement.icsforms.persistence.PersistenceStatus.Durability.SAVED) {
+			refreshOutbox((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) controller.getStore());
+		}
 	}
 
 	/** Pauses user input during synchronous worker waits without blocking Swing dispatch or asynchronous saves. */
 	private void refreshIncidentInputAvailability() {
-		if (controller.isAtomicSavePending() || controller.isPersistenceWaitPending()) {
+		if (hostTransitionActive || controller.isAtomicSavePending() || controller.isPersistenceWaitPending()) {
 			List<java.awt.Window> windows = new ArrayList<>(UiSupport.outstandingIncidentWindows(this,
 					controller.getData()));
 			windows.add(this);
@@ -3020,6 +3566,9 @@ public class MainFrame extends JFrame {
 	 * Closes the editor only after its active incident has been saved successfully.
 	 */
 	private void closeAfterSave() {
+		if (hostTransitionActive) {
+			return;
+		}
 		if (hostSharingDialog != null && hostSharingDialog.isSharing()) {
 			if (closeWhileSharingConfirmation.test("This window is sharing an incident ("
 					+ hostSharingDialog.connectedDeviceCount() + " device(s) connected). Closing it stops sharing "
@@ -3071,6 +3620,7 @@ public class MainFrame extends JFrame {
 	 * Releases controller and background work owned by this frame.
 	 */
 	private void closeOwnedResources() {
+		detachMonitor();
 		canineMedicalPanel.dispose();
 		controller.close();
 	}

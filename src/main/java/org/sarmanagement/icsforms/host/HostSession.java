@@ -487,6 +487,20 @@ public final class HostSession implements AutoCloseable {
 	}
 
 	/**
+	 * Opens the host's durable loopback journal under the pinned authority. This performs disk I/O and must
+	 * run off the event thread.
+	 *
+	 * @param cacheRoot private disconnected cache root
+	 * @return durable remote store for the shared incident
+	 * @throws IllegalStateException when hosting is not running
+	 */
+	public RemoteIncidentStore loopbackStore(Path cacheRoot) {
+		requireAdmin();
+		return new RemoteIncidentStore(new HostGateway(admin, adminCredential, "This workstation (host)"),
+				incident, cacheRoot);
+	}
+
+	/**
 	 * Returns the administrator client.
 	 *
 	 * @return client
@@ -501,6 +515,38 @@ public final class HostSession implements AutoCloseable {
 	}
 
 	/**
+	 * Rejects new requests and waits for admitted requests to finish before the local incident is reloaded.
+	 * If requests do not drain in time, sharing resumes and the caller must not switch stores.
+	 *
+	 * @throws IllegalStateException when the host is not running or admitted requests do not drain
+	 */
+	public synchronized void prepareStop() {
+		if (state.get() != HostState.RUNNING) {
+			throw new IllegalStateException("Hosting is not running");
+		}
+		state.set(HostState.STOPPING);
+		pause(config.stopGrace());
+		HostContext running = context;
+		long deadline = System.nanoTime() + config.drainTimeout().toNanos();
+		while (running != null && running.inFlight.get() > 0 && System.nanoTime() < deadline) {
+			pause(Duration.ofMillis(20));
+		}
+		if (running != null && running.inFlight.get() > 0) {
+			state.set(HostState.RUNNING);
+			throw new IllegalStateException("Host requests did not finish; sharing remains active");
+		}
+	}
+
+	/**
+	 * Resumes a prepared stop when the local store switch fails.
+	 */
+	public synchronized void cancelPreparedStop() {
+		if (state.get() == HostState.STOPPING) {
+			state.set(HostState.RUNNING);
+		}
+	}
+
+	/**
 	 * Stops sharing: reports the stopping state to reachable clients, drains in-flight requests, closes the
 	 * listeners, removes the administrator credential and releases the file lock. Safe to call repeatedly.
 	 */
@@ -509,13 +555,15 @@ public final class HostSession implements AutoCloseable {
 		if (current == HostState.STOPPED || current == HostState.STARTING) {
 			return;
 		}
-		state.set(HostState.STOPPING);
-		pause(config.stopGrace());
-		HostContext running = context;
-		if (running != null) {
-			long deadline = System.nanoTime() + config.drainTimeout().toNanos();
-			while (running.inFlight.get() > 0 && System.nanoTime() < deadline) {
-				pause(Duration.ofMillis(20));
+		if (current != HostState.STOPPING) {
+			state.set(HostState.STOPPING);
+			pause(config.stopGrace());
+			HostContext running = context;
+			if (running != null) {
+				long deadline = System.nanoTime() + config.drainTimeout().toNanos();
+				while (running.inFlight.get() > 0 && System.nanoTime() < deadline) {
+					pause(Duration.ofMillis(20));
+				}
 			}
 		}
 		teardown(true);

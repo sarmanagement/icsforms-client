@@ -173,6 +173,12 @@ final class HostedIncidentFixture implements AutoCloseable {
 
 		/** {@inheritDoc} */
 		@Override
+		public java.util.Optional<String> authorityFingerprint() {
+			return delegate.authorityFingerprint();
+		}
+
+		/** {@inheritDoc} */
+		@Override
 		public org.sarmanagement.icsforms.persistence.IncidentService.ReadResult read(IncidentId id) {
 			enter();
 			return delegate.read(id);

@@ -13,11 +13,13 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.PocAssignment;
 import org.sarmanagement.icsforms.model.PdfLayoutSettings;
+import org.sarmanagement.icsforms.model.Provenance;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -73,6 +75,38 @@ class ClueLogHistoryPdfTest {
 			assertTrue(text.contains("2023-12-31 17:30"));
 		} finally {
 			Files.deleteIfExists(pdf);
+		}
+	}
+
+	@Test
+	void bothClueExportsShowRetainedEvidenceAndDuplicateDecision() throws Exception {
+		AppData data = new AppData();
+		ClueLogEntry original = new ClueLogEntry();
+		original.setDescription("Original report");
+		ClueLogEntry duplicate = new ClueLogEntry();
+		duplicate.setDescription("Second report");
+		duplicate.setProvenance(Provenance.local("Original reporter", "unit-1", Instant.parse("2026-01-01T00:00:00Z")));
+		duplicate.confirmDuplicate(original.getEntryId(), Instant.parse("2026-01-02T03:04:05Z"),
+				Provenance.local("Reviewer", "station-3", Instant.parse("2026-01-02T03:04:05Z")));
+		data.setClueLogEntries(List.of(original, duplicate));
+		List<PdfFormRenderer> renderers = List.of(new ClueLogPdfRenderer(), new ClueLogIcs233PdfRenderer());
+		for (int index = 0; index < renderers.size(); index++) {
+			Path pdf = output.resolve("duplicate-review-" + index + ".pdf");
+			renderers.get(index).render(data, pdf);
+			try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
+				String text = new PDFTextStripper().getText(document).replaceAll("\\s+", "");
+				assertTrue(text.contains("Originalreport"));
+				assertTrue(text.contains("Secondreport"));
+				assertTrue(text.contains("STRUCKOUT"));
+				assertTrue(text.contains("ConfirmedduplicateofclueID:" + original.getEntryId()));
+				assertTrue(text.contains(duplicate.getEntryId()));
+				assertTrue(text.contains("2026-01-02T03:04:05Z"));
+				assertTrue(text.contains("Originalreporter"));
+				assertTrue(text.contains("Reviewer"));
+				assertTrue(text.contains("station-3"));
+			} finally {
+				Files.deleteIfExists(pdf);
+			}
 		}
 	}
 

@@ -13,6 +13,7 @@ import org.sarmanagement.icsforms.host.HostStorage;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
+import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -129,9 +130,14 @@ public class HostSharingDialog extends JDialog {
 	private final transient Runnable onRestored;
 	private transient Prompts prompts = new SwingPrompts();
 	private transient HostSession session;
+	private transient RemoteIncidentStore loopbackStore;
 	private volatile boolean starting;
+	private boolean stopping;
+	private boolean refreshingDevices;
+	private transient Path cacheRoot = Path.of(System.getProperty("user.home"), ".icsforms", "remote-cache");
 	private transient java.util.function.Consumer<IncidentStore> onLoopback = loopback -> { };
 	private transient Runnable onLocal = () -> { };
+	private transient java.util.function.Consumer<Boolean> transitionGuard = active -> { };
 	private final JLabel stateLabel = new JLabel("Not sharing");
 	private final JTextField hostField = new JTextField(defaultHost(), 18);
 	private final JSpinner portSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_PORT, 0, 65535, 1));
@@ -200,6 +206,28 @@ public class HostSharingDialog extends JDialog {
 	public void setStoreSwitch(java.util.function.Consumer<IncidentStore> loopbackStarted, Runnable localRestored) {
 		this.onLoopback = loopbackStarted == null ? loopback -> { } : loopbackStarted;
 		this.onLocal = localRestored == null ? () -> { } : localRestored;
+	}
+
+	/**
+	 * Sets the private durable cache root before starting a host.
+	 *
+	 * @param root disconnected cache root
+	 */
+	public void setCacheRoot(Path root) {
+		if (starting || session != null) {
+			throw new IllegalStateException("Cannot change the cache root while sharing");
+		}
+		cacheRoot = java.util.Objects.requireNonNull(root, "root");
+	}
+
+	/**
+	 * Installs a callback that prevents editing and other store transitions while a host transition is in progress.
+	 * The callback runs on the event thread.
+	 *
+	 * @param guard receives true when a transition begins and false when it finishes
+	 */
+	public void setTransitionGuard(java.util.function.Consumer<Boolean> guard) {
+		transitionGuard = guard == null ? active -> { } : guard;
 	}
 
 	/**
@@ -348,24 +376,32 @@ public class HostSharingDialog extends JDialog {
 		try {
 			config = HostConfig.defaults(hostField.getText().strip(), (Integer) portSpinner.getValue(),
 					(Integer) enrollmentSpinner.getValue());
-			candidate = new HostSession(store, incident, config, flushEditors);
+			transitionGuard.accept(true);
+			flushEditors.run();
+			candidate = new HostSession(store, incident, config, null);
 		} catch (RuntimeException failure) {
+			transitionGuard.accept(false);
 			showStartFailure(failure);
 			return;
 		}
 		starting = true;
 		startButton.setEnabled(false);
 		stateLabel.setText("Starting - binding ports and reading the incident…");
-		new SwingWorker<Void, Void>() {
+		new SwingWorker<RemoteIncidentStore, Void>() {
 			/**
 			 * Starts the host session off the event thread.
 			 *
 			 * @return nothing
 			 */
 			@Override
-			protected Void doInBackground() {
+			protected RemoteIncidentStore doInBackground() {
 				candidate.start();
-				return null;
+				try {
+					return candidate.loopbackStore(cacheRoot);
+				} catch (RuntimeException failure) {
+					candidate.stop();
+					throw failure;
+				}
 			}
 
 			/**
@@ -374,14 +410,34 @@ public class HostSharingDialog extends JDialog {
 			@Override
 			protected void done() {
 				try {
-					get();
+					RemoteIncidentStore opened = get();
 					candidate.setPeriodCloseCutoff(periodCloseSource.get());
 					try {
-						onLoopback.accept(candidate.loopbackStore());
+						onLoopback.accept(opened);
 					} catch (RuntimeException switchFailure) {
-						candidate.stop();
-						throw switchFailure;
+						new SwingWorker<Void, Void>() {
+							/** {@inheritDoc} */
+							@Override
+							protected Void doInBackground() {
+								try {
+									opened.close();
+								} finally {
+									candidate.stop();
+								}
+								return null;
+							}
+
+							/** {@inheritDoc} */
+							@Override
+							protected void done() {
+								starting = false;
+								transitionGuard.accept(false);
+								showStartFailure(switchFailure);
+							}
+						}.execute();
+						return;
 					}
+					loopbackStore = opened;
 					session = candidate;
 					invitationArea.setText("");
 				} catch (InterruptedException interrupted) {
@@ -396,6 +452,7 @@ public class HostSharingDialog extends JDialog {
 					showStartFailure(failure);
 				}
 				starting = false;
+				transitionGuard.accept(false);
 				refresh();
 			}
 		}.execute();
@@ -471,23 +528,48 @@ public class HostSharingDialog extends JDialog {
 	 */
 	public void stopAsync(Runnable afterStop) {
 		HostSession current = session;
+		if (starting || stopping) {
+			return;
+		}
 		if (current == null) {
 			if (afterStop != null) {
 				afterStop.run();
 			}
 			return;
 		}
+		stopping = true;
+		transitionGuard.accept(true);
+		try {
+			flushEditors.run();
+		} catch (RuntimeException failure) {
+			stopping = false;
+			transitionGuard.accept(false);
+			prompts.show(this, "Stop sharing", "Pending edits could not be saved: " + failure.getMessage(), true);
+			refresh();
+			return;
+		}
 		stopButton.setEnabled(false);
-		new SwingWorker<Void, Void>() {
+		RemoteIncidentStore remote = loopbackStore;
+		new SwingWorker<Boolean, Void>() {
 			/**
 			 * Stops the session off the event thread.
 			 *
 			 * @return nothing
 			 */
 			@Override
-			protected Void doInBackground() {
-				current.stop();
-				return null;
+			protected Boolean doInBackground() {
+				if (remote != null && !remote.pendingOperations().isEmpty()) {
+					try {
+						remote.replayPending();
+					} catch (RuntimeException failure) {
+						// The journal retains failed or ambiguous work for review.
+					}
+					if (!remote.pendingOperations().isEmpty()) {
+						return false;
+					}
+				}
+				current.prepareStop();
+				return true;
 			}
 
 			/**
@@ -495,20 +577,70 @@ public class HostSharingDialog extends JDialog {
 			 */
 			@Override
 			protected void done() {
-				session = null;
 				try {
+					if (!get()) {
+						prompts.show(HostSharingDialog.this, "Stop sharing",
+								"Sharing cannot stop while the host outbox contains unsynchronized work. "
+										+ "Review and resolve the outbox first.", true);
+						finishStopTransition();
+						return;
+					}
 					onLocal.run();
-				} catch (RuntimeException failure) {
-					prompts.show(HostSharingDialog.this, "Stop sharing", "Sharing stopped, but this window could not "
-							+ "return to the local file: " + failure.getMessage() + "\nYour edits are kept; export "
-							+ "them before closing.", true);
+				} catch (Exception failure) {
+					current.cancelPreparedStop();
+					if (failure instanceof InterruptedException) {
+						Thread.currentThread().interrupt();
+					}
+					prompts.show(HostSharingDialog.this, "Stop sharing",
+							"Sharing was not stopped; the outbox could not be checked or the local file could not "
+									+ "be opened: " + failure.getMessage(), true);
+					finishStopTransition();
+					return;
 				}
-				refresh();
-				if (afterStop != null) {
-					afterStop.run();
-				}
+				new SwingWorker<Void, Void>() {
+					/** {@inheritDoc} */
+					@Override
+					protected Void doInBackground() {
+						try {
+							current.stop();
+						} finally {
+							if (remote != null) {
+								remote.close();
+							}
+						}
+						return null;
+					}
+
+					/** {@inheritDoc} */
+					@Override
+					protected void done() {
+						try {
+							get();
+							session = null;
+							loopbackStore = null;
+							finishStopTransition();
+							if (afterStop != null) {
+								afterStop.run();
+							}
+						} catch (Exception failure) {
+							if (failure instanceof InterruptedException) {
+								Thread.currentThread().interrupt();
+							}
+							prompts.show(HostSharingDialog.this, "Stop sharing",
+									"Could not finish stopping sharing: " + failure.getMessage(), true);
+							finishStopTransition();
+						}
+					}
+				}.execute();
 			}
 		}.execute();
+	}
+
+	/** Ends a stop attempt and restores the controls on the event thread. */
+	private void finishStopTransition() {
+		stopping = false;
+		transitionGuard.accept(false);
+		refresh();
 	}
 
 	/**
@@ -519,12 +651,33 @@ public class HostSharingDialog extends JDialog {
 		if (current == null) {
 			return;
 		}
-		try {
-			invitationArea.setText(current.issueInvitation());
-			copyInvitation();
-		} catch (RuntimeException failure) {
-			prompts.show(this, "Invitation", "Could not create an invitation: " + failure.getMessage(), true);
-		}
+		inviteButton.setEnabled(false);
+		new SwingWorker<String, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected String doInBackground() {
+				return current.issueInvitation();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					String invitation = get();
+					if (session == current && !stopping) {
+						invitationArea.setText(invitation);
+						copyInvitation();
+					}
+				} catch (Exception failure) {
+					if (failure instanceof InterruptedException) {
+						Thread.currentThread().interrupt();
+					}
+					prompts.show(HostSharingDialog.this, "Invitation",
+							"Could not create an invitation: " + failure.getMessage(), true);
+				}
+				refresh();
+			}
+		}.execute();
 	}
 
 	/**
@@ -677,12 +830,30 @@ public class HostSharingDialog extends JDialog {
 		if (!prompts.confirm(this, "Revoke device", "Revoke access for \"" + device.name() + "\"?")) {
 			return;
 		}
-		try {
-			current.revoke(device.deviceId());
-		} catch (RuntimeException failure) {
-			prompts.show(this, "Revoke device", "Could not revoke the device: " + failure.getMessage(), true);
-		}
-		refresh();
+		revokeButton.setEnabled(false);
+		new SwingWorker<Void, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected Void doInBackground() {
+				current.revoke(device.deviceId());
+				return null;
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					get();
+				} catch (Exception failure) {
+					if (failure instanceof InterruptedException) {
+						Thread.currentThread().interrupt();
+					}
+					prompts.show(HostSharingDialog.this, "Revoke device",
+							"Could not revoke the device: " + failure.getMessage(), true);
+				}
+				refresh();
+			}
+		}.execute();
 	}
 
 	/**
@@ -695,9 +866,9 @@ public class HostSharingDialog extends JDialog {
 			current.setPeriodCloseCutoff(periodCloseSource.get());
 		}
 		startButton.setEnabled(current == null && !starting);
-		stopButton.setEnabled(current != null && current.state() != HostState.STOPPING);
-		inviteButton.setEnabled(running);
-		revokeButton.setEnabled(running);
+		stopButton.setEnabled(current != null && !stopping && current.state() != HostState.STOPPING);
+		inviteButton.setEnabled(running && !stopping);
+		revokeButton.setEnabled(running && !stopping);
 		hostField.setEnabled(current == null);
 		portSpinner.setEnabled(current == null);
 		enrollmentSpinner.setEnabled(current == null);
@@ -714,14 +885,38 @@ public class HostSharingDialog extends JDialog {
 		stateLabel.setText(status.state() == HostState.FAILED ? "FAILED: " + status.failure()
 				: status.state() + " - " + status.connectedDevices() + " connected; fingerprint "
 						+ status.hostFingerprint());
-		if (running) {
-			shownDevices = current.devices();
-			deviceModel.setRowCount(0);
-			for (DeviceInfo device : shownDevices) {
-				deviceModel.addRow(new Object[] {device.name(), device.state(), device.expiresAt(),
-						device.lastContact() == null ? "never" : device.lastContact(),
-						connectionText(device)});
-			}
+		if (running && !stopping && !refreshingDevices) {
+			refreshingDevices = true;
+			new SwingWorker<List<DeviceInfo>, Void>() {
+				/** {@inheritDoc} */
+				@Override
+				protected List<DeviceInfo> doInBackground() {
+					return current.devices();
+				}
+
+				/** {@inheritDoc} */
+				@Override
+				protected void done() {
+					refreshingDevices = false;
+					try {
+						List<DeviceInfo> devices = get();
+						if (session != current || stopping) {
+							return;
+						}
+						shownDevices = devices;
+						deviceModel.setRowCount(0);
+						for (DeviceInfo device : devices) {
+							deviceModel.addRow(new Object[] {device.name(), device.state(), device.expiresAt(),
+									device.lastContact() == null ? "never" : device.lastContact(),
+									connectionText(device)});
+						}
+					} catch (InterruptedException failure) {
+						Thread.currentThread().interrupt();
+					} catch (java.util.concurrent.ExecutionException failure) {
+						// A later refresh will retry after transient connection failures.
+					}
+				}
+			}.execute();
 		}
 	}
 

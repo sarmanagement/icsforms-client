@@ -20,6 +20,7 @@ import org.sarmanagement.icsforms.host.HostState;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
+import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
 
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
@@ -37,6 +38,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 /** Exercises the host-sharing window: start/stop, invitation, devices, failure, backup and restore guards. */
 class HostSharingDialogTest {
@@ -81,6 +83,10 @@ class HostSharingDialogTest {
 		final HostSharingDialog dialog;
 		final AtomicReference<Instant> periodClose = new AtomicReference<>();
 		final AtomicReference<Boolean> restored = new AtomicReference<>(false);
+		final AtomicReference<RemoteIncidentStore> remote = new AtomicReference<>();
+		final AtomicReference<Boolean> transitioning = new AtomicReference<>(false);
+		final AtomicReference<Runnable> flush = new AtomicReference<>(() -> { });
+		final AtomicReference<Runnable> switchLocal = new AtomicReference<>(() -> { });
 
 		/**
 		 * Creates the harness on the event thread.
@@ -93,10 +99,14 @@ class HostSharingDialogTest {
 			incident = store.create(new AppData());
 			AtomicReference<HostSharingDialog> created = new AtomicReference<>();
 			SwingUtilities.invokeAndWait(() -> {
-				HostSharingDialog value = new HostSharingDialog(owner, store, incident, () -> { },
+				HostSharingDialog value = new HostSharingDialog(owner, store, incident, () -> flush.get().run(),
 						periodClose::get, () -> restored.set(true));
 				value.setPrompts(prompts);
 				value.configure("127.0.0.1", 0, 0);
+				value.setCacheRoot(directory.resolve("remote-cache"));
+				value.setStoreSwitch(loopback -> remote.set((RemoteIncidentStore) loopback),
+						() -> switchLocal.get().run());
+				value.setTransitionGuard(transitioning::set);
 				created.set(value);
 			});
 			dialog = created.get();
@@ -130,13 +140,45 @@ class HostSharingDialogTest {
 			}
 		}
 
+		/**
+		 * Waits for an event-thread condition without blocking its asynchronous workers.
+		 *
+		 * @param condition condition evaluated on the event thread
+		 * @throws Exception when dispatch fails or the wait times out
+		 */
+		void await(BooleanSupplier condition) throws Exception {
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+			boolean[] done = {false};
+			while (!done[0]) {
+				edt(() -> done[0] = condition.getAsBoolean());
+				if (!done[0]) {
+					assertTrue(System.nanoTime() < deadline, "condition did not complete");
+					Thread.sleep(25);
+				}
+			}
+		}
+
+		/**
+		 * Issues an invitation and waits for the background request.
+		 *
+		 * @throws Exception when dispatch fails or the request times out
+		 */
+		void invite() throws Exception {
+			edt(dialog::issueInvitation);
+			await(() -> !dialog.invitationText().isBlank());
+		}
+
 		/** {@inheritDoc} */
 		@Override
 		public void close() throws Exception {
-			SwingUtilities.invokeAndWait(() -> {
-				if (dialog.session() != null) {
-					dialog.session().stop();
+			if (dialog.session() != null) {
+				dialog.session().stop();
+				RemoteIncidentStore opened = remote.get();
+				if (opened != null) {
+					opened.close();
 				}
+			}
+			SwingUtilities.invokeAndWait(() -> {
 				dialog.dispose();
 				owner.dispose();
 			});
@@ -161,7 +203,7 @@ class HostSharingDialogTest {
 			harness.start();
 			assertTrue(harness.dialog.isSharing());
 			assertEquals(HostState.RUNNING, harness.dialog.session().state());
-			harness.edt(harness.dialog::issueInvitation);
+			harness.invite();
 			String text = harness.dialog.invitationText();
 			assertNotNull(HostInvitation.parse(text));
 			String clipboard = Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor)
@@ -170,7 +212,10 @@ class HostSharingDialogTest {
 
 			DeviceCredential device = HostClient.pair(HostInvitation.parse(text), "Tablet");
 			assertNotNull(device);
+			HostClient.forDevice("127.0.0.1", harness.dialog.session().status().port(),
+					harness.dialog.session().status().enrollmentPort(), device).readIncident(harness.incident.value());
 			harness.edt(harness.dialog::refresh);
+			harness.await(() -> harness.dialog.deviceTable().getRowCount() == 1);
 			assertEquals(1, harness.dialog.deviceTable().getRowCount());
 			assertEquals("Tablet", harness.dialog.deviceTable().getValueAt(0, 0));
 
@@ -186,7 +231,8 @@ class HostSharingDialogTest {
 			harness.prompts.answer = true;
 			CountDownLatch stopped = new CountDownLatch(1);
 			harness.edt(() -> harness.dialog.stopAsync(stopped::countDown));
-			assertTrue(stopped.await(15, TimeUnit.SECONDS));
+			assertTrue(stopped.await(15, TimeUnit.SECONDS), () -> "session=" + harness.dialog.session()
+					+ ", transition=" + harness.transitioning.get() + ", messages=" + harness.prompts.messages);
 			assertFalse(harness.dialog.isSharing());
 			assertEquals("Not sharing", harness.dialog.statusText());
 		}
@@ -197,7 +243,7 @@ class HostSharingDialogTest {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (Harness harness = new Harness(directory)) {
 			harness.start();
-			harness.edt(harness.dialog::issueInvitation);
+			harness.invite();
 			DeviceCredential device = HostClient.pair(HostInvitation.parse(harness.dialog.invitationText()), "Tablet");
 			var status = harness.dialog.session().status();
 			HostClient client = HostClient.forDevice("127.0.0.1", status.port(), status.enrollmentPort(), device);
@@ -215,13 +261,15 @@ class HostSharingDialogTest {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (Harness harness = new Harness(directory)) {
 			harness.start();
-			harness.edt(harness.dialog::issueInvitation);
+			harness.invite();
 			HostClient.pair(HostInvitation.parse(harness.dialog.invitationText()), "Tablet");
 			harness.edt(harness.dialog::refresh);
+			harness.await(() -> harness.dialog.deviceTable().getRowCount() == 1);
 			harness.edt(() -> harness.dialog.deviceTable().setRowSelectionInterval(0, 0));
 			harness.edt(harness.dialog::revokeSelected);
+			harness.await(() -> harness.dialog.deviceTable().getRowCount() == 1
+					&& CredentialState.REVOKED.toString().equals(harness.dialog.deviceTable().getValueAt(0, 1).toString()));
 			assertEquals(CredentialState.REVOKED, harness.dialog.session().devices().get(0).state());
-			harness.edt(harness.dialog::refresh);
 			assertEquals(CredentialState.REVOKED.toString(), harness.dialog.deviceTable().getValueAt(0, 1).toString());
 		}
 	}
@@ -250,15 +298,84 @@ class HostSharingDialogTest {
 			Instant close = Instant.now().plusSeconds(3600);
 			harness.periodClose.set(close);
 			harness.start();
-			harness.edt(harness.dialog::issueInvitation);
+			harness.invite();
 			DeviceCredential first = HostClient.pair(HostInvitation.parse(harness.dialog.invitationText()), "A");
 			assertFalse(first.expiresAt().isAfter(close));
 			Instant moved = Instant.now().plusSeconds(1800);
 			harness.periodClose.set(moved);
 			harness.edt(harness.dialog::refresh);
+			String firstInvitation = harness.dialog.invitationText();
 			harness.edt(harness.dialog::issueInvitation);
+			harness.await(() -> !firstInvitation.equals(harness.dialog.invitationText()));
 			DeviceCredential second = HostClient.pair(HostInvitation.parse(harness.dialog.invitationText()), "B");
 			assertFalse(second.expiresAt().isAfter(moved));
+		}
+	}
+
+	@Test
+	void pendingLoopbackWorkBlocksStopUntilReplayedAndJournalIsReleased() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (Harness harness = new Harness(directory)) {
+			harness.start();
+			RemoteIncidentStore remote = harness.remote.get();
+			var snapshot = remote.loadSnapshot(harness.incident);
+			var gateway = remote.detachGateway();
+			snapshot.data().getIncidentContext().setIncidentName("Offline host draft");
+			remote.save(harness.incident, snapshot.data(), snapshot.revision());
+			assertEquals(1, remote.pendingOperations().size());
+
+			CountDownLatch stopped = new CountDownLatch(1);
+			harness.edt(() -> harness.dialog.stopAsync(stopped::countDown));
+			harness.await(() -> !harness.transitioning.get() && !harness.prompts.messages.isEmpty());
+			assertTrue(harness.dialog.isSharing());
+			assertEquals(1, stopped.getCount());
+			assertTrue(harness.prompts.messages.get(0).contains("unsynchronized"));
+			assertEquals(1, remote.pendingOperations().size());
+
+			remote.attachGateway(gateway);
+			remote.replayPending();
+			assertTrue(remote.pendingOperations().isEmpty());
+			harness.edt(() -> harness.dialog.stopAsync(stopped::countDown));
+			assertTrue(stopped.await(30, TimeUnit.SECONDS));
+			assertFalse(harness.dialog.isSharing());
+			try (RemoteIncidentStore reopened = RemoteIncidentStore.openOffline(directory.resolve("remote-cache"),
+					gateway.authorityFingerprint().orElseThrow(), harness.incident)) {
+				assertTrue(reopened.pendingOperations().isEmpty());
+				assertEquals("Offline host draft", reopened.loadSnapshot(harness.incident).data()
+						.getIncidentContext().getIncidentName());
+			}
+		}
+	}
+
+	@Test
+	void stopKeepsHostingWhenFlushOrLocalSwitchFails() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (Harness harness = new Harness(directory)) {
+			harness.start();
+			harness.flush.set(() -> {
+				assertTrue(SwingUtilities.isEventDispatchThread());
+				assertTrue(harness.transitioning.get());
+				throw new IllegalStateException("flush failed");
+			});
+			CountDownLatch stopped = new CountDownLatch(1);
+			harness.edt(() -> harness.dialog.stopAsync(stopped::countDown));
+			assertTrue(harness.dialog.isSharing());
+			assertFalse(harness.transitioning.get());
+			assertTrue(harness.prompts.messages.get(0).contains("flush failed"));
+
+			harness.flush.set(() -> { });
+			harness.switchLocal.set(() -> {
+				assertTrue(SwingUtilities.isEventDispatchThread());
+				assertTrue(harness.transitioning.get());
+				assertEquals(HostState.STOPPING, harness.dialog.session().state());
+				throw new IllegalStateException("switch failed");
+			});
+			harness.edt(() -> harness.dialog.stopAsync(stopped::countDown));
+			harness.await(() -> !harness.transitioning.get() && harness.prompts.messages.size() == 2);
+			assertTrue(harness.dialog.isSharing());
+			assertEquals(HostState.RUNNING, harness.dialog.session().state());
+			assertTrue(harness.prompts.messages.get(1).contains("switch failed"));
+			assertEquals(1, stopped.getCount());
 		}
 	}
 

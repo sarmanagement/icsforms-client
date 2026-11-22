@@ -1,9 +1,9 @@
 # Host mode implementation plan
 
-Status: **issue #58 in-process service delivered**, 2026-11-20. The service
-contract and versioned record service are implemented without a listener,
-authentication, remote store, outbox, or UI change. This does not deliver host
-mode or complete Stage 2/T1. The remaining work expands
+Status: **Stage 2/T1 incomplete; issue #61 disconnected workflow is work in
+progress**. Issues #58–#60 supplied the service, transport and connected
+remote-store slices described below. The #61 implementation is not yet a
+delivered or fully validated offline workflow. The remaining work expands
 [Stage 2](../DraftWorkPlan.md#stage-2--incident-api-and-single-local-host-delivers-t1);
 the remaining [Stage 0 decisions](stage-0-decisions.md) still apply.
 See the [host API contract](host-api-contract.md) for version 1 DTOs and
@@ -333,9 +333,41 @@ Treat three cases separately:
   version for explicit resolution. Later per-record versions reduce unnecessary
   conflicts but do not eliminate this requirement.
 
-Detection rules and how confirmed duplicates are represented remain decisions,
-not prescribed algorithms. Preserve provenance and existing strike-out/history
-semantics rather than deleting evidence merely to make entries look unique.
+### Issue #61 work in progress
+
+The implementation under development uses a local journal scoped to the pinned
+host authority and incident. It holds an acknowledged base, the local draft and
+an ordered queue of pending operations, so the intended recovery path can retain
+work across restart. The journal requires exclusive local access, owner-only
+POSIX permissions, atomic replacement and directory synchronization; unsupported
+platforms or filesystems fail closed. Windows ACL support remains outstanding.
+The journal is not an authoritative incident store and does not replace host
+receipts or backups.
+
+The intended replay order is the stable queue order for each incident, not the
+device clock; the host cursor orders accepted changes. Once a batch has been
+submitted, its operation ID and payload must remain unchanged, including after
+an ambiguous response. Only unsubmitted work can be prepared against an
+acknowledged predecessor; conflicts or rejections must stop later replay for
+review. A conflict review needs base, local and host values and explicit choices;
+it must preserve dependent drafts and recheck changes made since review.
+
+The clue-log duplicate review being developed is separate from operation retry
+deduplication: people must review suspected duplicate events, retain provenance
+and history, and not automatically delete entries based on similar text or time.
+The current candidate rule is exact nonblank location and description after
+case and whitespace normalization, limited to the clue log; it is not fuzzy
+matching. Confirmation records a reference, timestamp and optional reviewer
+attribution and strikes out rather than deletes the duplicate. Linked activity
+log entries are not retroactively changed. These are implementation details
+under review, not evidence that duplicate detection finds every duplicate.
+End-to-end conflict, duplicate and recovery workflows are not yet established.
+Review has identified high-risk replay correctness problems involving dependent
+edits after host merges or conflict resolution and ambiguous submissions followed
+by authorization failure. These require fixes and regression evidence before
+replay can be considered safe. UI integration, recovery controls and full
+validation remain in progress. Stage 4 is not narrowed by this work-in-progress;
+its replay, conflict, attachment and closed-period exit criteria still apply.
 
 ## Operations (issue #59)
 

@@ -19,6 +19,18 @@ Contents:
 Note: the Stage 1 "T1" and "T2" gates are time gates (UTC and provenance) and
 are unrelated to the deployment topologies of the same names.
 
+## Work in progress — issue #61 disconnected workflow
+
+This is a status note, **not a delivery or stage-completion record**. A local
+per-authority, per-incident journal, stable queue ordering, replay, and conflict
+and clue-duplicate review are under development. The intended behavior and
+current limitations are tracked in the
+[host mode plan](host-mode-plan.md#issue-61-work-in-progress). Review identified
+high-risk replay correctness flaws; integration and full validation remain
+outstanding. Neither Stage 2 nor Stage 4 exit criteria are satisfied by this
+work-in-progress. Earlier entries below describe the scope delivered at the
+time, not the current status of #61.
+
 ## Part I — Current status
 
 ## Delivered work

@@ -3,12 +3,18 @@
  */
 package org.sarmanagement.icsforms.ui;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.Ics204Form;
 import org.sarmanagement.icsforms.model.IncidentContext;
+import org.sarmanagement.icsforms.model.OperatorContext;
+import org.sarmanagement.icsforms.model.Provenance;
+import org.sarmanagement.icsforms.model.RecordDiff;
+import org.sarmanagement.icsforms.model.RecordIndex;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.pdf.Ics202PdfRenderer;
 import org.sarmanagement.icsforms.pdf.Ics204PdfRenderer;
@@ -22,10 +28,13 @@ import javax.swing.JTable;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -123,6 +132,110 @@ class ClueLogPanelTest {
 		assertEquals("assignment-1", choices.get(0).assignmentId());
 		assertEquals("assignment-2", choices.get(1).assignmentId());
 		assertNotEquals(choices.get(0).label(), choices.get(1).label());
+	}
+
+	@Test
+	void duplicateCandidatesRequireMatchingNonblankLocationAndDescriptionAcrossSources() {
+		ClueLogEntry first = clue(" Ridge  North ", " Blue   pack ");
+		first.setDetectingTask("Team A");
+		ClueLogEntry second = clue("ridge north", "blue pack");
+		second.setDetectingTask("Team B");
+		second.setDateTimeCollected(LocalDateTime.parse("2026-01-02T03:00:00"));
+		ClueLogEntry different = clue("ridge north", "red pack");
+		ClueLogEntry blank = clue("", "");
+		List<ClueLogEntry> entries = List.of(first, second, different, blank, clue("", ""));
+
+		assertEquals(List.of(new ClueDuplicateReview.Candidate(first, second)), ClueDuplicateReview.candidates(entries));
+		assertFalse(first.isStruckOut());
+		assertFalse(second.isStruckOut());
+		assertNull(second.getDuplicateConfirmation());
+		second.setStruckOut(true);
+		assertTrue(ClueDuplicateReview.candidates(entries).isEmpty());
+	}
+
+	@Test
+	void confirmationRetainsEvidenceProvenanceAndProducesStrikeOutDiff() throws Exception {
+		AppController controller = sampleController();
+		controller.setOperatorContext(new OperatorContext("Reviewer", "station-3"));
+		ClueLogEntry first = clue("Ridge", "Pack");
+		ClueLogEntry second = clue("ridge", "pack");
+		Provenance original = Provenance.local("Reporter", "station-1", Instant.parse("2026-01-01T00:00:00Z"));
+		second.setProvenance(original);
+		second.setFollowUp("Check with team");
+		controller.getData().setClueLogEntries(new java.util.ArrayList<>(List.of(first, second)));
+		ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+		AppData before = mapper.readValue(mapper.writeValueAsBytes(controller.getData()), AppData.class);
+		ClueLogPanel panel = new ClueLogPanel(controller);
+		panel.refreshFromModel();
+
+		assertTrue(panel.confirmDuplicate(second.getEntryId(), first.getEntryId()));
+		assertEquals(2, controller.getData().getClueLogEntries().size());
+		assertFalse(first.isStruckOut());
+		assertTrue(second.isStruckOut());
+		assertEquals(original, second.getProvenance());
+		assertEquals("Check with team", second.getFollowUp());
+		assertEquals(first.getEntryId(), second.getDuplicateConfirmation().duplicateOfId());
+		assertEquals("Reviewer", second.getDuplicateConfirmation().provenance().operatorName());
+		assertEquals("station-3", second.getDuplicateConfirmation().provenance().stationId());
+		assertTrue(second.getDuplicateConfirmation().confirmedAt() != null);
+		assertFalse(clueTable(panel).isCellEditable(1, 4));
+		assertEquals("Struck out: duplicate", clueTable(panel).getValueAt(1, 8));
+		RecordDiff diff = RecordDiff.between(before, controller.getData());
+		assertTrue(diff.struckOut().contains(new RecordIndex.RecordKey(ClueLogEntry.class.getName(), second.getEntryId())));
+		assertTrue(diff.removed().isEmpty());
+		ClueLogEntry restored = mapper.readValue(mapper.writeValueAsBytes(second), ClueLogEntry.class);
+		assertEquals(second.getDuplicateConfirmation(), restored.getDuplicateConfirmation());
+		assertEquals(original, restored.getProvenance());
+		assertTrue(restored.isStruckOut());
+		assertFalse(panel.confirmDuplicate(second.getEntryId(), first.getEntryId()));
+	}
+
+	@Test
+	void staleOrCancelledReviewDoesNotStrikeOutClues() throws Exception {
+		AppController controller = sampleController();
+		ClueLogEntry first = clue("Ridge", "Pack");
+		ClueLogEntry second = clue("Ridge", "Pack");
+		controller.getData().setClueLogEntries(new java.util.ArrayList<>(List.of(first, second)));
+		ClueLogPanel panel = new ClueLogPanel(controller);
+		panel.refreshFromModel();
+		ClueDuplicateReview.candidates(controller.getData().getClueLogEntries());
+		assertFalse(first.isStruckOut());
+		assertFalse(second.isStruckOut());
+		second.setDescription("Different clue");
+		assertFalse(panel.confirmDuplicate(second.getEntryId(), first.getEntryId()));
+		assertNull(second.getDuplicateConfirmation());
+		controller.getData().setClueLogEntries(List.of(first));
+		assertFalse(panel.confirmDuplicate(second.getEntryId(), first.getEntryId()));
+		assertFalse(first.isStruckOut());
+	}
+
+	@Test
+	void pendingEditCannotChangeAnExternallyStruckOutClue() throws Exception {
+		AppController controller = sampleController();
+		ClueLogEntry clue = clue("Ridge", "Pack");
+		controller.getData().setClueLogEntries(new java.util.ArrayList<>(List.of(clue)));
+		ClueLogPanel panel = new ClueLogPanel(controller);
+		panel.refreshFromModel();
+		JTable table = clueTable(panel);
+		assertTrue(table.editCellAt(0, 4));
+		((JTextField) table.getEditorComponent()).setText("Stale change");
+		clue.confirmDuplicate("another-clue", Instant.parse("2026-01-02T03:04:05Z"), null);
+		panel.pushToModel();
+		assertEquals("Pack", clue.getDescription());
+		assertNull(clue.getDuplicateConfirmation().provenance());
+	}
+
+	/**
+	 * Creates a clue with evidence suitable for candidate matching.
+	 * @param location reported location
+	 * @param description reported description
+	 * @return configured clue
+	 */
+	private static ClueLogEntry clue(String location, String description) {
+		ClueLogEntry clue = new ClueLogEntry();
+		clue.setLocation(location);
+		clue.setDescription(description);
+		return clue;
 	}
 
 	/**

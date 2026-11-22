@@ -7,9 +7,9 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonAlias;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,6 +57,70 @@ public class ClueLogEntry implements Identified {
 	private LocalDateTime followUpCompletedDate;
 	private String followUpStatus = "";
 	private Provenance provenance;
+	private boolean struckOut;
+	private DuplicateConfirmation duplicateConfirmation;
+
+	/**
+	 * Records the explicit duplicate decision on the retained, struck-out clue.
+	 *
+	 * @param duplicateOfId identity of the other retained clue
+	 * @param confirmedAt UTC time of the decision
+	 * @param provenance reviewer attribution, or null when unavailable
+	 */
+	public record DuplicateConfirmation(String duplicateOfId, Instant confirmedAt, Provenance provenance) {
+	}
+
+	/**
+	 * Returns whether this clue has been struck out rather than deleted.
+	 * @return true for a struck-out clue
+	 */
+	public boolean isStruckOut() {
+		return struckOut;
+	}
+
+	/**
+	 * Sets the strike-out state when loading or updating a clue.
+	 * @param struckOut true when struck out
+	 */
+	public void setStruckOut(boolean struckOut) {
+		this.struckOut = struckOut;
+	}
+
+	/**
+	 * Returns the recorded duplicate decision, if any.
+	 * @return confirmation or null for an unreviewed clue
+	 */
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public DuplicateConfirmation getDuplicateConfirmation() {
+		return duplicateConfirmation;
+	}
+
+	/**
+	 * Restores the recorded duplicate decision.
+	 * @param duplicateConfirmation confirmation or null
+	 */
+	public void setDuplicateConfirmation(DuplicateConfirmation duplicateConfirmation) {
+		this.duplicateConfirmation = duplicateConfirmation;
+	}
+
+	/**
+	 * Confirms that this clue duplicates another retained clue without deleting either.
+	 * @param otherId identity of the clue to retain as the reference
+	 * @param confirmedAt UTC time of confirmation
+	 * @param reviewer reviewer attribution, or null when unavailable
+	 * @throws IllegalArgumentException if the reference or time is invalid
+	 * @throws IllegalStateException if this clue is already struck out
+	 */
+	public void confirmDuplicate(String otherId, Instant confirmedAt, Provenance reviewer) {
+		if (otherId == null || otherId.isBlank() || otherId.equals(getEntryId()) || confirmedAt == null) {
+			throw new IllegalArgumentException("A different clue and confirmation time are required.");
+		}
+		if (struckOut) {
+			throw new IllegalStateException("The clue is already struck out.");
+		}
+		duplicateConfirmation = new DuplicateConfirmation(otherId, confirmedAt, reviewer);
+		struckOut = true;
+	}
 
 	/**
 	 * Returns the optional attribution for this clue entry.

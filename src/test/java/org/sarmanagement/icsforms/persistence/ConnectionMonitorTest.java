@@ -5,6 +5,8 @@ package org.sarmanagement.icsforms.persistence;
 
 import org.junit.jupiter.api.Test;
 
+import javax.swing.SwingUtilities;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -123,6 +126,83 @@ class ConnectionMonitorTest {
 			monitor.start();
 			assertTrue(changed.await(5, TimeUnit.SECONDS));
 			assertEquals(Duration.ofMillis(20), monitor.pollInterval());
+		}
+	}
+
+	@Test
+	void afterContactRunsForEverySuccessBeforeChangeIncludingUnchangedCursor() {
+		FakeGateway gateway = new FakeGateway();
+		List<String> calls = new ArrayList<>();
+		try (ConnectionMonitor monitor = ConnectionMonitor.withDefaults(gateway, INCIDENT, 0,
+				() -> calls.add("replay"), cursor -> {
+					calls.add("change " + cursor);
+					return true;
+				}, status -> { })) {
+			monitor.pollOnce();
+			gateway.cursor = 3;
+			monitor.pollOnce();
+			monitor.pollOnce();
+			gateway.failure = new StoreUnavailableException("down", null);
+			monitor.pollOnce();
+			assertEquals(List.of("replay", "replay", "change 3", "replay"), calls);
+		}
+	}
+
+	@Test
+	void failedReplayDoesNotAdvanceCursorAndIsRetried() {
+		FakeGateway gateway = new FakeGateway();
+		gateway.cursor = 3;
+		AtomicBoolean fail = new AtomicBoolean(true);
+		List<Long> offered = new ArrayList<>();
+		try (ConnectionMonitor monitor = new ConnectionMonitor(gateway, INCIDENT, 0, Duration.ofSeconds(5),
+				Duration.ofSeconds(30), Clock.systemUTC(), () -> {
+					if (fail.getAndSet(false)) {
+						throw new IllegalStateException("replay failed");
+					}
+				}, cursor -> {
+					offered.add(cursor);
+					return true;
+				}, status -> { })) {
+			monitor.pollOnce();
+			assertEquals(ConnectionMonitor.State.LOST_CONTACT, monitor.status().state());
+			assertTrue(offered.isEmpty());
+			monitor.pollOnce();
+			assertEquals(ConnectionMonitor.State.CONNECTED, monitor.status().state());
+			assertEquals(List.of(3L), offered);
+		}
+	}
+
+	@Test
+	void scheduledReplayBlocksRefreshOnBackgroundThread() throws Exception {
+		FakeGateway gateway = new FakeGateway();
+		gateway.cursor = 9;
+		CountDownLatch entered = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		CountDownLatch changed = new CountDownLatch(1);
+		AtomicBoolean onEdt = new AtomicBoolean(true);
+		try (ConnectionMonitor monitor = new ConnectionMonitor(gateway, INCIDENT, 0, Duration.ofSeconds(5),
+				Duration.ofSeconds(30), Clock.systemUTC(), () -> {
+					onEdt.set(SwingUtilities.isEventDispatchThread());
+					entered.countDown();
+					try {
+						release.await();
+					} catch (InterruptedException interrupted) {
+						Thread.currentThread().interrupt();
+						throw new IllegalStateException(interrupted);
+					}
+				}, cursor -> {
+					changed.countDown();
+					return true;
+				}, status -> { })) {
+			try {
+				monitor.start();
+				assertTrue(entered.await(5, TimeUnit.SECONDS));
+				assertFalse(onEdt.get());
+				assertEquals(1, changed.getCount());
+			} finally {
+				release.countDown();
+			}
+			assertTrue(changed.await(5, TimeUnit.SECONDS));
 		}
 	}
 

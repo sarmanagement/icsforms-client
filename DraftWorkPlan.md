@@ -28,10 +28,12 @@ and copied-record identity boundaries. The current #57 review follow-up adds
 copy/reuse coverage, schema-17 compatibility, and write-once identity setters;
 adjacent controller shutdown hardening restores retryability after a failed
 save drain. Issue #58 adds the in-process versioned service and file-backed
-record history, but no deployed host or network transport exists. Delivery
-evidence is in [`docs/completed-work.md`](docs/completed-work.md). Work to make
+record history; #59 and #60 add host transport and connected operation. Issue
+#61's disconnected workflow remains WIP, with correctness and validation work
+outstanding; Stage 2/T1 is not complete. Delivery evidence is in
+[`docs/completed-work.md`](docs/completed-work.md). Work to make
 open views refresh without flicker or stale content is merged
-(PR #56). This is standalone operation, not yet a local-host deployment.
+(PR #56). Production host deployment also depends on the open Stage 0 decisions.
 Details of delivered work are in
 [`docs/completed-work.md`](docs/completed-work.md).
 
@@ -478,9 +480,9 @@ recoverable standalone application. Completed stages are recorded in
 | --- | --- | --- | --- |
 | 0 | Written decisions and constraints | Not evidenced as complete | 1–2 weeks |
 | 1 | Local persistence foundation, including live refresh without flicker | Complete; substitute-store evidence accepted | done (4–7 weeks) |
-| 2 | Record-level incident API and local host (T1) | Identity/index/diff foundation (#57) and in-process contract/service (#58) delivered; transport/admission (#59) and remote store/connected operation (#60) delivered; outbox, re-authorization remain | 7–12 weeks |
+| 2 | Record-level incident API and local host (T1) | Identity/index/diff foundation (#57), service (#58), transport/admission (#59) and connected operation (#60) delivered; #61 outbox/replay **WIP**, with high-risk correctness flaws and incomplete validation; re-authorization remains | 7–12 weeks |
 | 3 | Device lifecycle, operator claim, roles and attributable audit (T2) | Not started | 4–6 weeks |
-| 4 | Offline replay/conflict recovery and attachments | Not started | 4–8 weeks |
+| 4 | Offline replay/conflict recovery and attachments | Not started; #61 Stage 2 work remains WIP and does not narrow this scope | 4–8 weeks |
 | 5 | Field-host packaging and authority transfer | Not started | 4–8 weeks |
 | 6 | Hosted deployment and remote mirrors (T3) | Not started | 4–8 weeks |
 | 7 | Mobile client and hardening | Not started | 6–12 weeks |
@@ -560,6 +562,9 @@ open item from it is a demobilisation source for the credential cutoff (the
 operational period end is already wired). Part 4/6 (production remote store,
 polling, connected operation, capability-driven UI and contract suites against
 the real host) is delivered; see [completed work](docs/completed-work.md).
+Part 5 (#61) is **work in progress**, not delivered: the local journal and
+review workflows are under development, with high-risk replay defects and
+full validation outstanding. See the [disconnected workflow status](docs/host-mode-plan.md#issue-61-work-in-progress).
 The connected-operation CI follow-up uses the saved host baseline and tests
 independent stale-client edits before polling. The host-stop follow-up waits
 for local-store restoration before reporting standalone. Remote-refresh
@@ -614,7 +619,11 @@ the operator's draft preserved.
 Extend the Stage 2 durable outbox with ordered host change cursors, robust replay,
 reconnect and conflict-resolution workflows, attachment transfer, and
 closed-operational-period behavior. Unsynced work survives client restarts and
-can be exported.
+can be exported. Issue #61 is still WIP; it does not narrow this scope or satisfy
+these exit criteria. The intended queue order is stable per incident, not based
+on device clocks; submitted batches retain their exact identity and payload
+through ambiguous retries. Conflict review and duplicate-event review remain
+distinct from operation receipt deduplication.
 
 **Exit criteria:** airplane-mode edits sync correctly after reconnect; replay does
 not duplicate work; conflicts and rejected edits are visible and recoverable;

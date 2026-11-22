@@ -59,7 +59,8 @@ public final class ClueLogIcs233PdfRenderer extends AbstractPdfRenderer implemen
 			String item = "Description: " + Ics233PdfLayout.safe(clue.getDescription())
 					+ "\nLocation: " + Ics233PdfLayout.safe(clue.getLocation())
 					+ "\nFound by: " + Ics233PdfLayout.safe(clue.getDetectedBy())
-					+ " (Task: " + Ics233PdfLayout.safe(clue.getDetectingTask()) + ")";
+					+ " (Task: " + Ics233PdfLayout.safe(clue.getDetectingTask()) + ")"
+					+ "\n" + ClueReviewPdfText.history(clue);
 			String status = "Immediate action: " + Ics233PdfLayout.safe(clue.getImmediateAction())
 					+ "\nFollow-up: " + Ics233PdfLayout.safe(clue.getFollowUp())
 					+ (clue.isPossibleDuplicate() ? "\nPossible duplicate" : "")
