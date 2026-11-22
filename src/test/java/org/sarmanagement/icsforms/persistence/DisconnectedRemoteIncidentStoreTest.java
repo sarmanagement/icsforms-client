@@ -311,6 +311,50 @@ class DisconnectedRemoteIncidentStoreTest {
 	}
 
 	@Test
+	void sameClueEnteredOfflineByTwoClientsReplaysAsTwoRetainedUnstruckRecords() {
+		String[] fingerprint = new String[2];
+		String[] ids = new String[2];
+		Path[] caches = {directory.resolve("cache-a"), directory.resolve("cache-b")};
+		for (int client = 0; client < 2; client++) {
+			RemoteIncidentGateway gateway = pair();
+			fingerprint[client] = gateway.authorityFingerprint().orElseThrow();
+			try (RemoteIncidentStore online = new RemoteIncidentStore(gateway, incident, caches[client])) {
+				online.loadSnapshot(incident);
+			}
+		}
+		for (int client = 0; client < 2; client++) {
+			try (RemoteIncidentStore offline = RemoteIncidentStore.openOffline(caches[client], fingerprint[client],
+					incident)) {
+				StoredIncident draft = offline.loadSnapshot(incident);
+				ClueLogEntry clue = new ClueLogEntry();
+				clue.setLocation("North  ridge");
+				clue.setDescription("Blue glove");
+				draft.data().getClueLogEntries().add(clue);
+				ids[client] = clue.getEntryId();
+				offline.save(incident, draft.data(), draft.revision());
+				assertEquals(1, offline.pendingOperations().size());
+			}
+		}
+		for (int client = 0; client < 2; client++) {
+			try (RemoteIncidentStore offline = RemoteIncidentStore.openOffline(caches[client], fingerprint[client],
+					incident)) {
+				offline.attachGateway(pair());
+				offline.replayPending();
+				assertTrue(offline.pendingOperations().isEmpty());
+			}
+		}
+		assertNotEquals(ids[0], ids[1]);
+		java.util.List<ClueLogEntry> committed = backing.loadSnapshot(incident).data().getClueLogEntries();
+		assertEquals(2, committed.size());
+		for (ClueLogEntry clue : committed) {
+			assertFalse(clue.isStruckOut());
+			assertEquals("Blue glove", clue.getDescription());
+		}
+		assertEquals(java.util.Set.of(ids[0], ids[1]),
+				java.util.Set.of(committed.get(0).getEntryId(), committed.get(1).getEntryId()));
+	}
+
+	@Test
 	void revertingFieldAcrossOrderedOfflineOperationsIsNotCoalescedAway() {
 		try (RemoteIncidentStore local = new RemoteIncidentStore(pair(), incident, cache)) {
 			StoredIncident draft = local.loadSnapshot(incident);
