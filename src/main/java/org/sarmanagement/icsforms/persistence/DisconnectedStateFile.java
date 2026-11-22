@@ -64,7 +64,25 @@ final class DisconnectedStateFile implements AutoCloseable {
 	private final Path file;
 	private final FileChannel lockChannel;
 	private final FileLock lock;
+	private final CommitObserver observer;
 	private boolean failed;
+
+	/** Checkpoints at which an interrupted replacement can be recovered. */
+	enum CommitPoint {
+		STAGING_SYNCED, REPLACED
+	}
+
+	/** Observes replacement checkpoints. */
+	@FunctionalInterface
+	interface CommitObserver {
+		/**
+		 * Called at a replacement checkpoint.
+		 *
+		 * @param point reached checkpoint
+		 * @throws IOException if the observer cannot proceed
+		 */
+		void reached(CommitPoint point) throws IOException;
+	}
 
 	/**
 	 * Acquires the exclusive writer lease for one authority and incident.
@@ -74,6 +92,18 @@ final class DisconnectedStateFile implements AutoCloseable {
 	 * @param incident incident identity
 	 */
 	DisconnectedStateFile(Path root, String authority, IncidentId incident) {
+		this(root, authority, incident, point -> { });
+	}
+
+	/**
+	 * Acquires a writer lease with a replacement checkpoint observer.
+	 *
+	 * @param root private storage root
+	 * @param authority pinned authority fingerprint
+	 * @param incident incident identity
+	 * @param observer replacement checkpoint observer
+	 */
+	DisconnectedStateFile(Path root, String authority, IncidentId incident, CommitObserver observer) {
 		try {
 			Path absoluteRoot = root.toAbsolutePath().normalize();
 			ensureNoSymlinks(absoluteRoot);
@@ -100,6 +130,7 @@ final class DisconnectedStateFile implements AutoCloseable {
 				throw new StorePersistenceException("Disconnected incident is already open for writing", null);
 			}
 			lock = acquired;
+			this.observer = observer;
 		} catch (IOException | UnsupportedOperationException failure) {
 			throw new StorePersistenceException("Cannot secure disconnected incident storage", failure);
 		}
@@ -142,7 +173,9 @@ final class DisconnectedStateFile implements AutoCloseable {
 				}
 				output.force(true);
 			}
+			observer.reached(CommitPoint.STAGING_SYNCED);
 			Files.move(staging, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+			observer.reached(CommitPoint.REPLACED);
 			try (FileChannel parent = FileChannel.open(directory, StandardOpenOption.READ)) {
 				parent.force(true);
 			}

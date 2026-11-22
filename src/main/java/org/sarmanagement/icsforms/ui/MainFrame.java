@@ -146,6 +146,10 @@ public class MainFrame extends JFrame {
 	private boolean outboxRefreshAgain;
 	private java.time.Instant cachedConfirmation;
 	private long acceptedReceipts;
+	private Map<WorkspaceId, Set<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus>>
+			workspaceQueueStatus = Map.of();
+	private Map<String, Set<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus>>
+			logQueueStatus = Map.of();
 	private transient java.util.function.BiFunction<String, String,
 			org.sarmanagement.icsforms.persistence.RemoteIncidentStore> invitationRedeemer =
 					org.sarmanagement.icsforms.host.HostGateway::pair;
@@ -1164,12 +1168,13 @@ public class MainFrame extends JFrame {
 			return;
 		}
 		outboxRefreshInProgress = true;
+		long generation = monitorGeneration;
 		new javax.swing.SwingWorker<Void, Void>() {
 			/** {@inheritDoc} */
 			@Override
 			protected Void doInBackground() {
 				synchronized (remote) {
-					publishOutbox(remote, remote.pendingOperations());
+					publishOutbox(remote, remote.pendingOperations(), generation);
 				}
 				return null;
 			}
@@ -1193,20 +1198,206 @@ public class MainFrame extends JFrame {
 	 *
 	 * @param remote source store
 	 * @param snapshot pending operations
+	 * @param generation active monitor generation when the request started
 	 */
 	private void publishOutbox(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
-			List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingOperation> snapshot) {
+			List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingOperation> snapshot,
+			long generation) {
 		java.time.Instant confirmation = remote.lastConfirmedAt().orElse(null);
 		long accepted = remote.acceptedReceiptCount();
+		WorkspaceQueueSnapshot queueStatus = workspaceQueueSnapshot(snapshot);
 		javax.swing.SwingUtilities.invokeLater(() -> {
-			if (controller.getStore() == remote) {
+			if (generation == monitorGeneration && controller.getStore() == remote) {
 				outbox = snapshot;
 				outboxKnown = true;
 				cachedConfirmation = confirmation;
 				acceptedReceipts = accepted;
+				workspaceQueueStatus = queueStatus.workspaces();
+				logQueueStatus = queueStatus.logs();
 				showConnectionStatus();
+				updateWorkspaceSyncIndicators();
 			}
 		});
+	}
+
+	/**
+	 * Queue states for each workspace and each individually identified activity log.
+	 *
+	 * @param workspaces states affecting top-level workspaces
+	 * @param logs states affecting activity logs by persistent ID
+	 */
+	record WorkspaceQueueSnapshot(
+			Map<WorkspaceId, Set<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus>> workspaces,
+			Map<String, Set<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus>> logs) {
+	}
+
+	/**
+	 * Identifies edited workspace content from detached before-and-after snapshots, including operations whose
+	 * wire batch has not yet been materialized.
+	 *
+	 * @param operations durable queued operations
+	 * @return queue states grouped by affected workspace and log
+	 */
+	static WorkspaceQueueSnapshot workspaceQueueSnapshot(
+			List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingOperation> operations) {
+		Map<WorkspaceId, Set<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus>> workspaces =
+				new EnumMap<>(WorkspaceId.class);
+		Map<String, Set<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus>> logs =
+				new LinkedHashMap<>();
+		com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+				.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+		for (var operation : operations) {
+			com.fasterxml.jackson.databind.JsonNode before = mapper.valueToTree(operation.before());
+			com.fasterxml.jackson.databind.JsonNode after = mapper.valueToTree(operation.draft());
+			for (var entry : workspaceProperties().entrySet()) {
+				if (entry.getValue().stream().anyMatch(property -> !before.path(property).equals(after.path(property)))) {
+					workspaces.computeIfAbsent(entry.getKey(), ignored -> new HashSet<>()).add(operation.status());
+				}
+			}
+			for (var entry : historyProperties().entrySet()) {
+				if (!historySnapshots(before, entry.getValue()).equals(historySnapshots(after, entry.getValue()))) {
+					workspaces.computeIfAbsent(entry.getKey(), ignored -> new HashSet<>()).add(operation.status());
+				}
+			}
+			Set<String> mapped = new HashSet<>();
+			workspaceProperties().values().forEach(mapped::addAll);
+			mapped.addAll(Set.of("activityLogs", "operationalPeriodHistory", "schemaVersion", "incidentId",
+					"revision", "createdAt", "updatedAt", "originNodeId"));
+			Set<String> properties = new HashSet<>();
+			before.fieldNames().forEachRemaining(properties::add);
+			after.fieldNames().forEachRemaining(properties::add);
+			if (properties.stream().filter(property -> !mapped.contains(property))
+					.anyMatch(property -> !before.path(property).equals(after.path(property)))) {
+				workspaces.computeIfAbsent(WorkspaceId.SHARED, ignored -> new HashSet<>()).add(operation.status());
+			}
+			Map<String, com.fasterxml.jackson.databind.JsonNode> oldLogs = activityLogSnapshots(before);
+			Map<String, com.fasterxml.jackson.databind.JsonNode> newLogs = activityLogSnapshots(after);
+			Set<String> ids = new HashSet<>(oldLogs.keySet());
+			ids.addAll(newLogs.keySet());
+			for (String id : ids) {
+				if (!java.util.Objects.equals(oldLogs.get(id), newLogs.get(id))) {
+					logs.computeIfAbsent(id, ignored -> new HashSet<>()).add(operation.status());
+				}
+			}
+		}
+		return new WorkspaceQueueSnapshot(workspaces, logs);
+	}
+
+	/**
+	 * Maps persisted root properties to the editors responsible for them.
+	 *
+	 * @return workspace properties
+	 */
+	private static Map<WorkspaceId, List<String>> workspaceProperties() {
+		return Map.ofEntries(
+				Map.entry(WorkspaceId.SHARED, List.of("incidentContext", "incidentMode", "iapPhase",
+						"iapPlanningStage", "useSystemTimeZone", "configuredTimeZoneId", "incidentLocations",
+						"canineRoutingBaseLocationId", "pdfLayoutSettings")),
+				Map.entry(WorkspaceId.ORG_CHART, List.of("organizationalChart", "form207",
+						"medicalUnitLeaderAssignment")),
+				Map.entry(WorkspaceId.ICS_201, List.of("form201")),
+				Map.entry(WorkspaceId.ICS_202, List.of("form202")),
+				Map.entry(WorkspaceId.ICS_204, List.of("form204", "additionalForms204")),
+				Map.entry(WorkspaceId.ICS_215, List.of("form215", "nextPeriodForm215", "ics215Enabled")),
+				Map.entry(WorkspaceId.ICS_205, List.of("form205", "ics205Enabled", "communicationsReview",
+						"form205aIapPage")),
+				Map.entry(WorkspaceId.MEDICAL, List.of("medicalPlan", "canineMedicalPlan", "vetDirectory",
+						"stagingLocation", "humanMedicalReview", "canineMedicalReview")),
+				Map.entry(WorkspaceId.SAFETY, List.of("form215a", "form208", "safetyReview",
+						"commonSafetyHazards", "archivedSafetyHazardReports")),
+				Map.entry(WorkspaceId.SAR_TASKS, List.of("sarTaskAssignments")),
+				Map.entry(WorkspaceId.CLUE_LOG, List.of("clueLogEntries", "clueLogIcs233Enabled", "ics233Portrait")),
+				Map.entry(WorkspaceId.OPEN_ACTION_TRACKER, List.of("openActionItems", "openActionTrackerEnabled")),
+				Map.entry(WorkspaceId.ACTIVITY_LOG, List.of("activityEventTypes")),
+				Map.entry(WorkspaceId.TCARDS, List.of("tcards", "tCards")));
+	}
+
+	/**
+	 * Maps archived operational-period fields to their respective workspaces.
+	 *
+	 * @return workspace history properties
+	 */
+	private static Map<WorkspaceId, List<String>> historyProperties() {
+		return Map.ofEntries(
+				Map.entry(WorkspaceId.SHARED, List.of("periodStart", "periodEnd", "iapPlanningStage",
+						"incidentCommanders")),
+				Map.entry(WorkspaceId.ICS_202, List.of("form202")),
+				Map.entry(WorkspaceId.ICS_204, List.of("forms204")),
+				Map.entry(WorkspaceId.ICS_205, List.of("form205", "communicationsReview")),
+				Map.entry(WorkspaceId.ICS_215, List.of("form215", "nextPeriodForm215")),
+				Map.entry(WorkspaceId.MEDICAL, List.of("medicalPlan", "canineMedicalPlan",
+						"humanMedicalReview", "canineMedicalReview")),
+				Map.entry(WorkspaceId.SAFETY, List.of("form215a", "form208", "safetyReview")),
+				Map.entry(WorkspaceId.SAR_TASKS, List.of("sarTaskAssignments")));
+	}
+
+	/**
+	 * Projects archived period data without attributing another workspace's edits to this workspace.
+	 *
+	 * @param document serialized incident
+	 * @param fields archived fields owned by the workspace
+	 * @return period identities and their projected fields
+	 */
+	private static Map<String, List<com.fasterxml.jackson.databind.JsonNode>> historySnapshots(
+			com.fasterxml.jackson.databind.JsonNode document, List<String> fields) {
+		Map<String, List<com.fasterxml.jackson.databind.JsonNode>> result = new LinkedHashMap<>();
+		for (com.fasterxml.jackson.databind.JsonNode period : document.path("operationalPeriodHistory")) {
+			result.put(period.path("id").asText(), fields.stream().map(period::path).toList());
+		}
+		return result;
+	}
+
+	/**
+	 * Indexes serialized logs by their persistent identities rather than their position in the tab strip.
+	 *
+	 * @param document serialized incident
+	 * @return log snapshots indexed by ID
+	 */
+	private static Map<String, com.fasterxml.jackson.databind.JsonNode> activityLogSnapshots(
+			com.fasterxml.jackson.databind.JsonNode document) {
+		Map<String, com.fasterxml.jackson.databind.JsonNode> result = new LinkedHashMap<>();
+		for (com.fasterxml.jackson.databind.JsonNode log : document.path("activityLogs")) {
+			String id = log.path("id").asText();
+			if (!id.isBlank()) {
+				result.put(id, log);
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Changes tab decorations only; never reloads an editor or flushes an in-progress draft.
+	 */
+	private void updateWorkspaceSyncIndicators() {
+		boolean remote = controller.getStore() instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
+		for (int index = 0; index < tabs.getTabCount(); index++) {
+			Component component = tabs.getComponentAt(index);
+			WorkspaceDefinition definition = tabWorkspaces.get(component);
+			if (definition == null) {
+				continue;
+			}
+			String label = visibleTabLabel(component);
+			if (label == null) {
+				continue;
+			}
+			if (!remote) {
+				tabs.setTitleAt(index, label);
+				tabs.setToolTipTextAt(index, null);
+				continue;
+			}
+			Set<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus> states =
+					new HashSet<>(workspaceQueueStatus.getOrDefault(definition.id(), Set.of()));
+			if (component instanceof Ics214Panel log) {
+				states.addAll(logQueueStatus.getOrDefault(log.getCurrentForm().getId(), Set.of()));
+			}
+			String state = !outboxKnown ? "checking" : states.isEmpty() ? "no queued changes"
+					: states.stream().map(value -> value.name().toLowerCase(java.util.Locale.ROOT)
+							.replace('_', ' ')).sorted().collect(java.util.stream.Collectors.joining(", "));
+			tabs.setTitleAt(index, label + " [" + state + "]");
+			tabs.setToolTipTextAt(index, "Queue: " + state + ". Last successful sync: "
+					+ (cachedConfirmation == null ? "unknown" : cachedConfirmation.toString())
+					+ ". Accepted receipts are not tracked per workspace; unsaved editor drafts are not queued.");
+		}
 	}
 
 	/** Shows durable drafts and explicit recovery actions without reading the journal on the event thread. */
@@ -1541,6 +1732,9 @@ public class MainFrame extends JFrame {
 		remoteNewer = false;
 		connectionStatus = null;
 		outboxKnown = false;
+		cachedConfirmation = null;
+		workspaceQueueStatus = Map.of();
+		logQueueStatus = Map.of();
 		org.sarmanagement.icsforms.persistence.ConnectionMonitor monitor =
 				org.sarmanagement.icsforms.persistence.ConnectionMonitor.withDefaults(remote.gateway(),
 						remote.incident(), 0, () -> {
@@ -1548,14 +1742,11 @@ public class MainFrame extends JFrame {
 								try {
 									remote.replayPending();
 								} finally {
-									publishOutbox(remote, remote.pendingOperations());
+									publishOutbox(remote, remote.pendingOperations(), generation);
 								}
 							}
-						}, cursor -> {
-							AppController.RemoteRefreshOutcome outcome = controller.refreshFromRemote();
-							remoteNewer = outcome == AppController.RemoteRefreshOutcome.DRAFT_PRESERVED;
-							return !remoteNewer;
-						}, status -> javax.swing.SwingUtilities.invokeLater(() -> {
+						}, monitorChangeHandler(controller, newer -> remoteNewer = newer),
+						status -> javax.swing.SwingUtilities.invokeLater(() -> {
 							if (generation == monitorGeneration && controller.getStore() == remote) {
 								connectionStatus = status;
 								showConnectionStatus();
@@ -1563,8 +1754,25 @@ public class MainFrame extends JFrame {
 						}));
 		connectionMonitor = monitor;
 		showConnectionStatus();
+		updateWorkspaceSyncIndicators();
 		refreshOutbox(remote);
 		monitor.start();
+	}
+
+	/**
+	 * Creates the monitor callback without acknowledging changes whose refresh must be retried.
+	 *
+	 * @param controller controller receiving remote snapshots.
+	 * @param newerHandler receives whether a newer remote snapshot was blocked by a draft.
+	 * @return callback that acknowledges only handled changes.
+	 */
+	static org.sarmanagement.icsforms.persistence.ConnectionMonitor.ChangeHandler monitorChangeHandler(
+			AppController controller, java.util.function.Consumer<Boolean> newerHandler) {
+		return cursor -> {
+			AppController.RemoteRefreshOutcome outcome = controller.refreshFromRemote();
+			newerHandler.accept(outcome == AppController.RemoteRefreshOutcome.DRAFT_PRESERVED);
+			return outcome.acknowledgesRemoteChange();
+		};
 	}
 
 	/**
@@ -1599,6 +1807,8 @@ public class MainFrame extends JFrame {
 			text.append(" | ").append(status.state());
 		}
 		if (controller.getStore() instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore) {
+			text.append(" | last successful sync ")
+					.append(cachedConfirmation == null ? "unknown" : cachedConfirmation.toString());
 			if (!outboxKnown) {
 				text.append(" | outbox checking");
 			} else {
@@ -3159,6 +3369,7 @@ public class MainFrame extends JFrame {
 			rebuildingTabs = false;
 		}
 		lastSelectedTabIndex = tabs.getSelectedIndex();
+		updateWorkspaceSyncIndicators();
 	}
 
 	/**

@@ -26,10 +26,18 @@ per-authority, per-incident journal, stable queue ordering, replay, and conflict
 and clue-duplicate review are under development. The intended behavior and
 current limitations are tracked in the
 [host mode plan](host-mode-plan.md#issue-61-work-in-progress). Review identified
-high-risk replay correctness flaws; integration and full validation remain
-outstanding. Neither Stage 2 nor Stage 4 exit criteria are satisfied by this
-work-in-progress. Earlier entries below describe the scope delivered at the
-time, not the current status of #61.
+dependent-edit and ambiguous-authorization replay defects; the current code
+and targeted regression tests address those specific cases as detailed in that
+plan. Pre-submit rejection and stale-refresh/cursor retry have targeted fixes
+and regression tests. Corrective recovery for rejected work, including
+oversized batches, remains open. Accepted receipts are counted only in
+aggregate, not per view.
+This is not a claim of overall replay safety or
+acceptance: end-to-end validation and Windows journal verification remain
+outstanding.
+Neither Stage 2 nor Stage 4 exit criteria are satisfied by this work-in-progress;
+any future Stage 4 narrowing depends on #61 acceptance. Earlier entries below
+describe the scope delivered at the time, not the current status of #61.
 
 ## Part I — Current status
 

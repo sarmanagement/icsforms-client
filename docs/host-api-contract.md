@@ -235,8 +235,12 @@ replay order. Once submitted, a batch's operation ID **and exact payload** must
 remain immutable, including after an ambiguous result. A new ID is appropriate
 only for a new, explicitly resolved operation, not a retry of the old one.
 Conflict and duplicate-event review are separate from receipt replay. These are
-client requirements, not a claim that the current replay implementation is safe:
-correctness defects and end-to-end validation remain open. See the
+client requirements, not a claim of overall replay safety: the current code
+and targeted regression tests address the named dependent-edit and
+ambiguous-authorization defects. The stale-refresh guard and monitor cursor
+retry also have targeted regression tests. Pre-submit validation now
+retains oversized work as rejected rather than leaving it pending; corrective
+recovery and end-to-end acceptance remain open. See the
 [disconnected workflow status](host-mode-plan.md#issue-61-work-in-progress).
 
 ## Version negotiation, limits, and errors

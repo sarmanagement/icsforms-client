@@ -480,9 +480,9 @@ recoverable standalone application. Completed stages are recorded in
 | --- | --- | --- | --- |
 | 0 | Written decisions and constraints | Not evidenced as complete | 1–2 weeks |
 | 1 | Local persistence foundation, including live refresh without flicker | Complete; substitute-store evidence accepted | done (4–7 weeks) |
-| 2 | Record-level incident API and local host (T1) | Identity/index/diff foundation (#57), service (#58), transport/admission (#59) and connected operation (#60) delivered; #61 outbox/replay **WIP**, with high-risk correctness flaws and incomplete validation; re-authorization remains | 7–12 weeks |
+| 2 | Record-level incident API and local host (T1) | Identity/index/diff foundation (#57), service (#58), transport/admission (#59) and connected operation (#60) delivered; #61 **WIP**, rejected-work recovery, acceptance and Windows verification remain open; re-authorization remains | 7–12 weeks |
 | 3 | Device lifecycle, operator claim, roles and attributable audit (T2) | Not started | 4–6 weeks |
-| 4 | Offline replay/conflict recovery and attachments | Not started; #61 Stage 2 work remains WIP and does not narrow this scope | 4–8 weeks |
+| 4 | Offline replay/conflict recovery and attachments | Not started; #61 remains WIP; scope can be narrowed only after its acceptance | 4–8 weeks |
 | 5 | Field-host packaging and authority transfer | Not started | 4–8 weeks |
 | 6 | Hosted deployment and remote mirrors (T3) | Not started | 4–8 weeks |
 | 7 | Mobile client and hardening | Not started | 6–12 weeks |
@@ -563,8 +563,12 @@ operational period end is already wired). Part 4/6 (production remote store,
 polling, connected operation, capability-driven UI and contract suites against
 the real host) is delivered; see [completed work](docs/completed-work.md).
 Part 5 (#61) is **work in progress**, not delivered: the local journal and
-review workflows are under development, with high-risk replay defects and
-full validation outstanding. See the [disconnected workflow status](docs/host-mode-plan.md#issue-61-work-in-progress).
+review workflows are under development. The named dependent-edit,
+ambiguous-authorization, stale-refresh/cursor retry and pre-submit rejection
+defects have targeted fixes and regression tests. Corrective recovery for
+rejected work, including oversized batches, remains open.
+Full validation, acceptance and Windows verification remain outstanding. See the
+[disconnected workflow status](docs/host-mode-plan.md#issue-61-work-in-progress).
 The connected-operation CI follow-up uses the saved host baseline and tests
 independent stale-client edits before polling. The host-stop follow-up waits
 for local-store restoration before reporting standalone. Remote-refresh
@@ -620,10 +624,15 @@ Extend the Stage 2 durable outbox with ordered host change cursors, robust repla
 reconnect and conflict-resolution workflows, attachment transfer, and
 closed-operational-period behavior. Unsynced work survives client restarts and
 can be exported. Issue #61 is still WIP; it does not narrow this scope or satisfy
-these exit criteria. The intended queue order is stable per incident, not based
+these exit criteria. Any future narrowing depends on #61 acceptance. The intended
+queue order is stable per incident, not based
 on device clocks; submitted batches retain their exact identity and payload
 through ambiguous retries. Conflict review and duplicate-event review remain
 distinct from operation receipt deduplication.
+Workspace indicators currently show queue state, but accepted receipts are
+counted only in aggregate, not attributed per view; “no queued changes” is not
+per-view acceptance. The displayed last successful sync uses cached confirmation
+time, not the monitor's last-contact time.
 
 **Exit criteria:** airplane-mode edits sync correctly after reconnect; replay does
 not duplicate work; conflicts and rejected edits are visible and recoverable;

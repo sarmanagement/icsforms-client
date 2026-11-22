@@ -74,6 +74,7 @@ public class ClueLogEntry implements Identified {
 	 * Returns whether this clue has been struck out rather than deleted.
 	 * @return true for a struck-out clue
 	 */
+	@JsonInclude(JsonInclude.Include.NON_DEFAULT)
 	public boolean isStruckOut() {
 		return struckOut;
 	}

@@ -788,17 +788,28 @@ public final class RemoteIncidentStore implements IncidentStore {
 				return;
 			}
 			if (operation.batch() == null) {
-				Base base = new Base(operation.before(), indexRecords(state.records()), state.cursor());
-				RecordDiff diff = RecordDiff.between(operation.before(), operation.draft());
-				List<IncidentService.RecordSubmission> edits = submissions(base, operation.draft(), diff);
+				List<IncidentService.RecordSubmission> edits;
+				IncidentService.RecordBatch exact = null;
+				List<IncidentService.FieldConflict> conflicts = List.of();
+				try {
+					Base base = new Base(operation.before(), indexRecords(state.records()), state.cursor());
+					RecordDiff diff = RecordDiff.between(operation.before(), operation.draft());
+					edits = submissions(base, operation.draft(), diff);
+					if (!edits.isEmpty()) {
+						IncidentService.RecordBatch validated = batch(state.revision(), edits);
+						exact = new IncidentService.RecordBatch(incident, operation.operationId(),
+								validated.records());
+						conflicts = dependentConflicts(operation, edits, state.records());
+					}
+				} catch (StoreValidationException failure) {
+					replaceHead(new PendingOperation(operation.operationId(), operation.before(), operation.draft(),
+							null, PendingStatus.REJECTED, List.of(), failure.getMessage(), operation.reviewBase()));
+					return;
+				}
 				if (edits.isEmpty()) {
 					removeAcknowledged(operation, state.records(), state.cursor(), false);
 					continue;
 				}
-				IncidentService.RecordBatch validated = batch(state.revision(), edits);
-				IncidentService.RecordBatch exact = new IncidentService.RecordBatch(incident, operation.operationId(),
-						validated.records());
-				List<IncidentService.FieldConflict> conflicts = dependentConflicts(operation, edits, state.records());
 				operation = new PendingOperation(operation.operationId(), operation.before(), operation.draft(), exact,
 						conflicts.isEmpty() ? PendingStatus.PENDING : PendingStatus.CONFLICT, conflicts, null,
 						operation.reviewBase());
@@ -1551,7 +1562,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 			node.set("content", submission.content());
 		}
 		String text = canonical.toString();
-		if (text.length() > MAX_BATCH_BYTES) {
+		if (text.getBytes(StandardCharsets.UTF_8).length > MAX_BATCH_BYTES) {
 			throw new StoreValidationException("The edit is larger than one batch allows");
 		}
 		String operationId = "remote-" + digest(expected.value() + '\n' + text).substring(0, 40);
