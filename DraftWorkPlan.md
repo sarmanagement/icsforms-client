@@ -564,10 +564,11 @@ The connected-operation CI follow-up uses the saved host baseline and tests
 independent stale-client edits before polling. The host-stop follow-up waits
 for local-store restoration before reporting standalone. Remote-refresh
 follow-up coverage checks failed/in-flight model drafts, and the displayed
-end-to-end scenario exercises three windows. Remote-specific retention of
-selection, focus, caret, scroll and uncommitted editor controls remains open.
-In particular, protect editor-only drafts before accepting a remote snapshot;
-controller dirty state alone does not cover every unflushed control.
+end-to-end scenario exercises three windows. Remote refresh defers while any editor holds uncommitted input (edited text or
+spinner text, a table cell being edited, a retained conflicting draft, or an open
+editor window) and offers the snapshot again on the next poll. Focus, caret,
+selection and scroll retention for clean views across a remote refresh is a known
+limit tracked as a follow-up.
 Add explicit host identity (self-signed certificate with fingerprint shown for
 QR embedding) and health status. Device admission by invitation is included
 here in its simplest form so that the API is never reachable without a

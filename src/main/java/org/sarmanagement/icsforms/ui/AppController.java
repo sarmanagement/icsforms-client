@@ -123,6 +123,7 @@ public class AppController implements AutoCloseable {
 	private final Object incidentChangeDeliveryLock = new Object();
 	private IncidentChange pendingIncidentChange;
 	private boolean incidentChangeDeliveryScheduled;
+	private java.util.function.BooleanSupplier editorDraftProbe = () -> false;
 	private Runnable beforePlanReuse = () -> { };
 	private Runnable afterPlanReuse = () -> { };
 	private final Set<EditorCommitGuard> editorCommitGuards =
@@ -680,7 +681,9 @@ public class AppController implements AutoCloseable {
 	/**
 	 * Applies a remote snapshot on the owner thread without ever letting it overwrite an operator's draft. A newer
 	 * remote revision never advances the token associated with unsaved local work, so a later save of that work is
-	 * still checked against the revision the draft was based on and surfaces as a conflict.
+	 * still checked against the revision the draft was based on and surfaces as a conflict. Editor input that has
+	 * not reached the model is detected through the editor draft probe and defers the refresh; the monitor offers
+	 * the snapshot again on its next poll.
 	 *
 	 * @param source store the snapshot came from.
 	 * @param id incident the snapshot belongs to.
@@ -695,7 +698,7 @@ public class AppController implements AutoCloseable {
 			return RemoteRefreshOutcome.UNCHANGED;
 		}
 		PersistenceStatus status = saves.status();
-		if (atomicSave || dirty || status.failure() != null || status.durability() != PersistenceStatus.Durability.SAVED
+		if (atomicSave || dirty || editorDraftProbe.getAsBoolean() || status.failure() != null || status.durability() != PersistenceStatus.Durability.SAVED
 				|| !saves.pendingChanges().isEmpty() || saves.isBusy()) {
 			return RemoteRefreshOutcome.DRAFT_PRESERVED;
 		}
@@ -813,6 +816,17 @@ public class AppController implements AutoCloseable {
 	public void setPlanReuseEditorCallbacks(Runnable before, Runnable after) {
 		beforePlanReuse = Objects.requireNonNull(before);
 		afterPlanReuse = Objects.requireNonNull(after);
+	}
+
+	/**
+	 * Installs the probe a remote refresh consults, on the event thread, to learn whether an editor holds input
+	 * that has not reached the model, such as a half-typed field, a table cell being edited, or an open editor
+	 * dialog. While it answers true a remote snapshot is deferred, never applied.
+	 *
+	 * @param probe answers whether any editor holds uncommitted input; never flushes or alters editors.
+	 */
+	public void setEditorDraftProbe(java.util.function.BooleanSupplier probe) {
+		editorDraftProbe = Objects.requireNonNull(probe);
 	}
 
 	/**

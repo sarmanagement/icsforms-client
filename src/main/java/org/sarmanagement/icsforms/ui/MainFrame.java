@@ -272,6 +272,7 @@ public class MainFrame extends JFrame {
 						throw new IllegalStateException("Refresh the active editor before reusing a plan.");
 					}
 				}, this::refreshFromModel);
+		controller.setEditorDraftProbe(this::hasPendingEditorInput);
 		safetyPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		medicalPlanPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
 		canineMedicalPanel.setExportRequest(formKey -> openFormsExportDialog(defaultDirectory, formKey));
@@ -2009,6 +2010,56 @@ public class MainFrame extends JFrame {
 		refreshFromModel(!sameContext);
 		if (viewState != null) {
 			restoreEditorViewState(viewState, previousBinding, latest);
+		}
+	}
+
+	/**
+	 * Reports whether any editor holds input that has not reached the model. Used by remote refresh, which defers
+	 * instead of flushing: it covers edited text inputs and spinner text, table cells being edited, a retained
+	 * conflicting draft, and open editor dialogs or detached windows. Must run on the event thread.
+	 *
+	 * @return true when replacing the document now could discard operator input.
+	 */
+	boolean hasPendingEditorInput() {
+		if (!pendingDraftComponents.isEmpty() || pendingEditorConflict) {
+			return true;
+		}
+		for (JTextComponent text : descendants(tabs, JTextComponent.class)) {
+			if (isTableEditor(text)) {
+				continue;
+			}
+			if (text instanceof javax.swing.JFormattedTextField formatted && formatted.isEditable()
+					&& hasUncommittedFormattedText(formatted)) {
+				return true;
+			}
+			if (text.isEditable() && !java.util.Objects.equals(text.getText(),
+					editorTextBaselines.getOrDefault(text, text.getText()))) {
+				return true;
+			}
+		}
+		for (JTable table : descendants(tabs, JTable.class)) {
+			if (table.isEditing()) {
+				return true;
+			}
+		}
+		return !UiSupport.outstandingIncidentWindows(this, controller.getData()).isEmpty();
+	}
+
+	/**
+	 * Reports whether a formatted field (such as spinner text) shows text that differs from its committed value.
+	 *
+	 * @param field formatted field to inspect.
+	 * @return true when the displayed text has not been committed.
+	 */
+	static boolean hasUncommittedFormattedText(javax.swing.JFormattedTextField field) {
+		javax.swing.JFormattedTextField.AbstractFormatter formatter = field.getFormatter();
+		if (formatter == null) {
+			return false;
+		}
+		try {
+			return !java.util.Objects.equals(field.getText(), formatter.valueToString(field.getValue()));
+		} catch (java.text.ParseException failure) {
+			return true;
 		}
 	}
 

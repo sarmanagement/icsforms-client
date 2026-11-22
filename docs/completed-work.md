@@ -528,10 +528,14 @@ the real service), `RemoteIncidentStoreHostTest`, `ConnectionMonitorTest`,
   capabilities, slow connect flow, status line, notified stop versus lost
   contact, draft-kept message, host/standalone switching, clean refresh keeps the
   tab), `DeviceConnectionTextTest` (lost-contact marker).
-- Not covered: remote-specific focus, selection, caret and scroll retention,
-  including uncommitted editor controls, remains open. Remote refresh currently
-  checks controller persistence state, not every unflushed editor control;
-  such a draft may be replaced even when the controller appears clean.
+- Editor drafts: `AppController.setEditorDraftProbe` lets `MainFrame` report
+  uncommitted editor input (edited text, uncommitted spinner text, a table cell
+  being edited, a retained conflicting draft, open editor windows). A remote
+  refresh then returns `DRAFT_PRESERVED` without flushing or replacing anything;
+  the monitor offers the snapshot again on its next poll. Covered by
+  `RemoteRefreshEditorDraftTest` (displayed lane).
+- Known limit: focus, caret, selection and scroll are not retained for a clean
+  view across a remote refresh (the selected tab is); tracked as a follow-up.
 
 **Displayed-test CI follow-up:** the connected-operation test establishes the
 saved controller-default baseline used by host sharing before opening clients.
