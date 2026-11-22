@@ -1,5 +1,6 @@
 org.sarmanagement.icsforms.pdf.PdfTextTest
 org.sarmanagement.icsforms.ui.ActivityEntryDialogTest
+org.sarmanagement.icsforms.ui.AppControllerLiveChangeTest
 org.sarmanagement.icsforms.ui.BringForwardDialogTest
 org.sarmanagement.icsforms.ui.ExportCompletePanelTest
 org.sarmanagement.icsforms.ui.FocusedPanelLayoutTest
@@ -25,4 +26,5 @@ org.sarmanagement.icsforms.ui.SarTaskPanelTest
 org.sarmanagement.icsforms.ui.StartupDialogTest
 org.sarmanagement.icsforms.ui.TCardPanelContextTest
 org.sarmanagement.icsforms.ui.UiSupportDesktopIntegrationTest
+org.sarmanagement.icsforms.ui.UiRefreshStateTest
 org.sarmanagement.icsforms.ui.UiSupportModalityTest

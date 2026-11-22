@@ -566,9 +566,11 @@ for local-store restoration before reporting standalone. Remote-refresh
 follow-up coverage checks failed/in-flight model drafts, and the displayed
 end-to-end scenario exercises three windows. Remote refresh defers while any editor holds uncommitted input (edited text or
 spinner text, a table cell being edited, a retained conflicting draft, or an open
-editor window) and offers the snapshot again on the next poll. Focus, caret,
-selection and scroll retention for clean views across a remote refresh is a known
-limit tracked as a follow-up.
+editor window) and offers the snapshot again on the next poll. Clean remote
+refresh retains text focus, caret, selection and scroll; activity log tabs are
+matched by identity; location and ICS 214 resource selections use stable IDs,
+and other table selections are cleared rather than moved to potentially
+different records. See [completed work](docs/completed-work.md#host-mode-46-production-remote-store-and-connected-operation-issue-60).
 Add explicit host identity (self-signed certificate with fingerprint shown for
 QR embedding) and health status. Device admission by invitation is included
 here in its simplest form so that the API is never reachable without a

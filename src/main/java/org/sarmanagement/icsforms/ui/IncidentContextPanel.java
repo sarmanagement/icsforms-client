@@ -69,6 +69,15 @@ public class IncidentContextPanel extends JPanel {
 	private boolean loadingLocations;
 	private boolean savingLocations;
 
+	/**
+	 * Returns the location table, whose hidden fourth column contains stable identities.
+	 *
+	 * @return incident locations table.
+	 */
+	JTable locationsTable() {
+		return locationsTable;
+	}
+
 	// Operational period history table
 	private final DefaultTableModel historyTableModel = new DefaultTableModel(
 			new String[]{"#", "Period Start", "Period End", "Incident Commander(s)"}, 0) {

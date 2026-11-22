@@ -39,6 +39,31 @@ class AppControllerLiveChangeTest {
 	Path directory;
 
 	@Test
+	void cleanRemoteRefreshInvalidatesOldBindingsAndPublishesBeforeReturning() throws Exception {
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("clean"), "Shared")) {
+			RemoteIncidentStore mine = host.pair();
+			var snapshot = mine.loadSnapshot(host.incident());
+			AppController controller = SwingTestLifecycleExtension.track(new AppController(snapshot.data(), mine,
+					host.incident(), new PdfExportService(), new IncidentValidator()));
+			AppController.EditorCommitBinding old = controller.captureEditorCommitBinding();
+			List<AppController.IncidentChange> changes = new ArrayList<>();
+			controller.addIncidentChangeListener(changes::add);
+			RemoteIncidentStore other = host.pair();
+			var remote = other.loadSnapshot(host.incident());
+			remote.data().getIncidentContext().setIncidentName("Remote edit");
+			other.save(host.incident(), remote.data(), remote.revision());
+
+			assertEquals(AppController.RemoteRefreshOutcome.REFRESHED, controller.refreshFromRemote());
+			assertEquals(1, changes.size());
+			assertEquals(AppController.IncidentChangeKind.REMOTE_REFRESHED, changes.get(0).kind());
+			assertTrue(controller.isCurrent(changes.get(0).binding()));
+			assertFalse(controller.commitEditorIfCurrent(old, AppController.LinkSource.NONE,
+					() -> controller.getData().getIncidentContext().setIncidentName("Stale edit")));
+			assertEquals("Remote edit", controller.getData().getIncidentContext().getIncidentName());
+		}
+	}
+
+	@Test
 	void remoteRefreshDuringAndAfterFailedSavePreservesDraftAndItsBaseToken() throws Exception {
 		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("remote"), "Shared")) {
 			CountDownLatch entered = new CountDownLatch(1);
