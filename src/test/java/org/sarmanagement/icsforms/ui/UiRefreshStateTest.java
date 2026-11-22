@@ -55,11 +55,12 @@ class UiRefreshStateTest {
 			var initial = remote.loadSnapshot(host.incident());
 			initial.data().getForm202().setCommandEmphasis("Line of text for scrolling\n".repeat(80));
 			remote.save(host.incident(), initial.data(), initial.revision());
+			AppData local = store.loadSnapshot(host.incident()).data();
 			AtomicReference<MainFrame> frameRef = new AtomicReference<>();
 			AtomicReference<JTextArea> editorRef = new AtomicReference<>();
 			AtomicReference<JScrollPane> scrollRef = new AtomicReference<>();
 			SwingUtilities.invokeAndWait(() -> {
-				MainFrame frame = new MainFrame(store.loadSnapshot(host.incident()).data(), store, host.incident(),
+				MainFrame frame = new MainFrame(local, store, host.incident(),
 						new PdfExportService(), new IncidentValidator(), directory);
 				frame.setSize(800, 600);
 				frame.setVisible(true);
