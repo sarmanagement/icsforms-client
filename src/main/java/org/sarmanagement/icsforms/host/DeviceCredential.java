@@ -10,6 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
+import java.security.KeyPair;
+import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
 
@@ -87,6 +89,19 @@ public final class DeviceCredential {
 	}
 
 	/**
+	 * Returns the current device certificate.
+	 *
+	 * @return device certificate
+	 */
+	X509Certificate certificate() {
+		try {
+			return (X509Certificate) keyStore.getCertificate(KEY_ALIAS);
+		} catch (java.security.KeyStoreException exception) {
+			throw new IllegalStateException("Credential key store is not readable", exception);
+		}
+	}
+
+	/**
 	 * Returns the key store holding the device key and chain.
 	 *
 	 * @return key store
@@ -102,6 +117,21 @@ public final class DeviceCredential {
 	 */
 	char[] password() {
 		return password.clone();
+	}
+
+	/**
+	 * Returns the existing device key pair for same-key renewal.
+	 *
+	 * @return key pair held by this credential
+	 */
+	KeyPair keyPair() {
+		try {
+			X509Certificate certificate = (X509Certificate) keyStore.getCertificate(KEY_ALIAS);
+			PrivateKey privateKey = (PrivateKey) keyStore.getKey(KEY_ALIAS, password);
+			return new KeyPair(certificate.getPublicKey(), privateKey);
+		} catch (GeneralSecurityException exception) {
+			throw new IllegalStateException("Credential key store is not readable", exception);
+		}
 	}
 
 	/**

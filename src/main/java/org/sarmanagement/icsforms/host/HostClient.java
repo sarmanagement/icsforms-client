@@ -42,6 +42,68 @@ public final class HostClient {
 	private final String hostFingerprint;
 
 	/**
+	 * In-memory proof and key material for a pending administrator decision.
+	 */
+	public static final class ReauthorizationTicket {
+		private final String host;
+		private final int enrollmentPort;
+		private final String hostFingerprint;
+		private final String token;
+		private final String requestId;
+		private final KeyPair keys;
+		private final String deviceName;
+
+		/**
+		 * Creates a polling ticket.
+		 *
+		 * @param host host name
+		 * @param enrollmentPort host enrollment port
+		 * @param hostFingerprint pinned host identity
+		 * @param token one-time status token
+		 * @param keys device key pair
+		 * @param deviceName device name
+		 */
+		private ReauthorizationTicket(String host, int enrollmentPort, String hostFingerprint, String token,
+				String requestId, KeyPair keys, String deviceName) {
+			this.host = host;
+			this.enrollmentPort = enrollmentPort;
+			this.hostFingerprint = hostFingerprint;
+			this.token = token;
+			this.requestId = requestId;
+			this.keys = keys;
+			this.deviceName = deviceName;
+		}
+
+		/**
+		 * Redacts the bearer token and private key from diagnostic output.
+		 *
+		 * @return text that omits secrets
+		 */
+		@Override
+		public String toString() {
+			return "ReauthorizationTicket[waiting for administrator approval]";
+		}
+
+		/**
+		 * Returns the public request identifier.
+		 *
+		 * @return request identifier
+		 */
+		public String requestId() {
+			return requestId;
+		}
+	}
+
+	/**
+	 * Result of checking a re-authorization request.
+	 *
+	 * @param state waiting_for_approval, denied or approved
+	 * @param credential approved device credential, or null until approved
+	 */
+	public record ReauthorizationResult(String state, DeviceCredential credential) {
+	}
+
+	/**
 	 * Creates a client.
 	 *
 	 * @param host host name or address
@@ -168,6 +230,137 @@ public final class HostClient {
 	}
 
 	/**
+	 * Requests approval to renew an expired credential with its existing key pair.
+	 *
+	 * @param credential expired device credential
+	 * @param deviceName device name shown to the administrator
+	 * @param pendingOutbox full pending operation array for administrator review
+	 * @return ticket to poll while retaining the local outbox
+	 */
+	public ReauthorizationTicket requestRenewal(DeviceCredential credential, String deviceName,
+			JsonNode pendingOutbox) {
+		if (!hostFingerprint.equals(credential.hostFingerprint())) {
+			throw new IllegalArgumentException("The credential belongs to a different host");
+		}
+		if (pendingOutbox == null || !pendingOutbox.isArray()) {
+			throw new IllegalArgumentException("Pending outbox must be an array");
+		}
+		KeyPair keys = credential.keyPair();
+		ObjectNode body = HostHttp.MAPPER.createObjectNode();
+		body.put("deviceId", credential.deviceId());
+		body.put("certificateFingerprint", credential.certificateFingerprint());
+		body.put("certificate", HostCrypto.pem(credential.certificate()));
+		body.put("certificateRequest", HostCrypto.createRequest(keys, deviceName));
+		body.put("deviceName", deviceName);
+		body.set("pendingOutbox", pendingOutbox);
+		JsonNode response = post(enrollmentUri("/v1/reauthorization/renew"), body.toString());
+		return ticket(response, keys, deviceName);
+	}
+
+	/**
+	 * Requests approval to replace a revoked identity using a fresh key pair and invitation.
+	 *
+	 * @param invitation single-use host invitation
+	 * @param originalDeviceId revoked device identity
+	 * @param deviceName replacement device name
+	 * @param pendingOutbox full pending operation array for administrator review
+	 * @return ticket to poll while retaining the local outbox
+	 */
+	public static ReauthorizationTicket requestRepair(HostInvitation invitation, String originalDeviceId,
+			String deviceName, JsonNode pendingOutbox) {
+		if (pendingOutbox == null || !pendingOutbox.isArray()) {
+			throw new IllegalArgumentException("Pending outbox must be an array");
+		}
+		HostClient client = anonymous(invitation);
+		KeyPair keys = HostCrypto.generateKeyPair();
+		ObjectNode body = HostHttp.MAPPER.createObjectNode();
+		body.put("invitation", invitation.secret());
+		body.put("incidentId", invitation.incidentId());
+		body.put("originalDeviceId", originalDeviceId);
+		body.put("deviceName", deviceName);
+		body.put("certificateRequest", HostCrypto.createRequest(keys, deviceName));
+		body.set("pendingOutbox", pendingOutbox);
+		JsonNode response = client.post(client.enrollmentUri("/v1/reauthorization/repair"), body.toString());
+		return client.ticket(response, keys, deviceName);
+	}
+
+	/**
+	 * Checks whether a pending request has been approved or denied.
+	 *
+	 * @param ticket request proof and key material
+	 * @return current decision and a credential after approval
+	 */
+	public ReauthorizationResult pollReauthorization(ReauthorizationTicket ticket) {
+		if (!hostFingerprint.equals(ticket.hostFingerprint)) {
+			throw new IllegalArgumentException("The request belongs to a different host");
+		}
+		ObjectNode body = HostHttp.MAPPER.createObjectNode();
+		body.put("statusToken", ticket.token);
+		JsonNode response = post(URI.create("https://" + formatAuthority(ticket.host) + ":"
+				+ ticket.enrollmentPort + "/v1/reauthorization/status"), body.toString());
+		String state = response.path("state").asText("unknown");
+		if (!"approved".equals(state)) {
+			return new ReauthorizationResult(state, null);
+		}
+		try {
+			X509Certificate certificate = HostCrypto.parseCertificate(response.path("certificate").asText(""));
+			X509Certificate authority = HostCrypto.parseCertificate(response.path("caCertificate").asText(""));
+			if (!ticket.hostFingerprint.equalsIgnoreCase(HostCrypto.fingerprint(authority))) {
+				throw new HostClientException(HostClientException.Kind.IDENTITY_CHANGED, 0, null,
+						"The host identity does not match the request.", null);
+			}
+			return new ReauthorizationResult(state, createCredential(ticket.keys, ticket.deviceName, certificate,
+					authority, ticket.hostFingerprint, response.path("deviceId").asText(),
+					Instant.parse(response.path("expiresAt").asText())));
+		} catch (GeneralSecurityException | IOException | RuntimeException exception) {
+			if (exception instanceof HostClientException hostFailure) {
+				throw hostFailure;
+			}
+			throw new HostClientException(HostClientException.Kind.REJECTED, 200, null,
+					"The host returned an unusable credential.", exception);
+		}
+	}
+
+	/**
+	 * Creates a polling ticket from the initial request response.
+	 *
+	 * @param response accepted request response
+	 * @param keys device keys
+	 * @param deviceName operator-visible name
+	 * @return ticket
+	 */
+	private ReauthorizationTicket ticket(JsonNode response, KeyPair keys, String deviceName) {
+		return new ReauthorizationTicket(host, enrollmentPort, hostFingerprint,
+				response.path("statusToken").asText(), response.path("requestId").asText(), keys, deviceName);
+	}
+
+	/**
+	 * Creates a PKCS12 credential from an approved certificate.
+	 *
+	 * @param keys device key pair
+	 * @param deviceName device name
+	 * @param certificate issued certificate
+	 * @param authority host certificate authority
+	 * @param fingerprint pinned authority fingerprint
+	 * @param deviceId host-assigned device identity
+	 * @param expiresAt certificate expiry
+	 * @return in-memory credential
+	 * @throws GeneralSecurityException when the credential cannot be assembled
+	 * @throws IOException when the key store cannot be initialized
+	 */
+	private static DeviceCredential createCredential(KeyPair keys, String deviceName, X509Certificate certificate,
+			X509Certificate authority, String fingerprint, String deviceId, Instant expiresAt)
+			throws GeneralSecurityException, IOException {
+		char[] password = HostCrypto.sha256(Instant.now() + HostCrypto.fingerprint(certificate)).toCharArray();
+		KeyStore store = KeyStore.getInstance("PKCS12");
+		store.load(null, null);
+		store.setKeyEntry(DeviceCredential.KEY_ALIAS, keys.getPrivate(), password,
+				new X509Certificate[] {certificate, authority});
+		store.setCertificateEntry(DeviceCredential.CA_ALIAS, authority);
+		return new DeviceCredential(store, password, fingerprint, deviceId, expiresAt);
+	}
+
+	/**
 	 * Diagnoses why the host is or is not usable, using only the pre-authentication endpoints.
 	 *
 	 * @param credential device credential
@@ -255,6 +448,37 @@ public final class HostClient {
 	}
 
 	/**
+	 * Lists pending re-authorization requests for the host administrator.
+	 *
+	 * @return request objects with queued outbox contents
+	 */
+	public List<JsonNode> listReauthorizationRequests() {
+		List<JsonNode> requests = new ArrayList<>();
+		for (JsonNode node : get(dataUri("/v1/admin/reauthorizations")).path("requests")) {
+			requests.add(node.deepCopy());
+		}
+		return List.copyOf(requests);
+	}
+
+	/**
+	 * Approves a pending request.
+	 *
+	 * @param requestId request to approve
+	 */
+	public void approveReauthorization(String requestId) {
+		post(dataUri("/v1/admin/reauthorizations/" + requestId + ":approve"), "{}");
+	}
+
+	/**
+	 * Denies a pending request.
+	 *
+	 * @param requestId request to deny
+	 */
+	public void denyReauthorization(String requestId) {
+		post(dataUri("/v1/admin/reauthorizations/" + requestId + ":deny"), "{}");
+	}
+
+	/**
 	 * Revokes a device (administrator only, loopback only).
 	 *
 	 * @param deviceId device identifier
@@ -270,6 +494,16 @@ public final class HostClient {
 	 */
 	public String hostFingerprint() {
 		return hostFingerprint;
+	}
+
+	/**
+	 * Creates a client for the same host with a newly approved device credential.
+	 *
+	 * @param credential approved credential
+	 * @return client authenticated as the approved identity
+	 */
+	HostClient withCredential(DeviceCredential credential) {
+		return forDevice(host, port, enrollmentPort, credential);
 	}
 
 	/**
@@ -298,7 +532,17 @@ public final class HostClient {
 	 * @return URI host part
 	 */
 	private String authority() {
-		return host.contains(":") && !host.startsWith("[") ? "[" + host + "]" : host;
+		return formatAuthority(host);
+	}
+
+	/**
+	 * Formats a host for a URI.
+	 *
+	 * @param value host name or address
+	 * @return URI host part
+	 */
+	private static String formatAuthority(String value) {
+		return value.contains(":") && !value.startsWith("[") ? "[" + value + "]" : value;
 	}
 
 	/**

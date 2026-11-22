@@ -23,6 +23,8 @@ public final class HostProtocol {
 	public static final int MAX_BATCH_RECORDS = 100;
 	/** Largest accepted request body of the unauthenticated pairing endpoint, in bytes. */
 	public static final int MAX_PAIRING_BYTES = 16 * 1024;
+	/** Largest accepted re-authorization request, including the pending outbox shown to the administrator. */
+	public static final int MAX_REAUTHORIZATION_BYTES = 1024 * 1024;
 	/** Versions this host supports. */
 	static final List<Integer> SUPPORTED_API_VERSIONS = List.of(API_VERSION);
 

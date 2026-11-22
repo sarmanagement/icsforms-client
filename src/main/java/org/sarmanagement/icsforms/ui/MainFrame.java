@@ -1111,13 +1111,98 @@ public class MainFrame extends JFrame {
 			JOptionPane.showMessageDialog(this, "Open a cached shared incident first.");
 			return;
 		}
+		if (remote.gateway() == null && !remote.pendingOperations().isEmpty()) {
+			JOptionPane.showMessageDialog(this,
+					"The saved outbox is intact, but this offline cache has no device identity to request approval. "
+							+ "Reconnect from the original device session; do not discard or export the outbox.");
+			return;
+		}
 		JTextArea invitation = new JTextArea(4, 48);
 		JTextField device = new JTextField(System.getProperty("user.name", "device"), 20);
-		Object[] form = {"Invitation from the same host:", new JScrollPane(invitation), "Device name:", device};
+		Object[] form = {"Invitation from the same host (required only after revocation):",
+				new JScrollPane(invitation), "Device name:", device};
 		if (JOptionPane.showConfirmDialog(this, form, "Re-pair", JOptionPane.OK_CANCEL_OPTION,
 				JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION) {
-			reconnect(remote, invitation.getText(), device.getText().strip());
+			if (remote.gateway() instanceof org.sarmanagement.icsforms.host.HostGateway hostGateway) {
+				requestApprovedReconnect(remote, hostGateway, invitation.getText(), device.getText().strip());
+			} else {
+				reconnect(remote, invitation.getText(), device.getText().strip());
+			}
 		}
+	}
+
+	/**
+	 * Requests host approval and waits without modifying the durable outbox.
+	 *
+	 * @param remote cached remote store
+	 * @param hostGateway current device transport
+	 * @param invitationText invitation for revoked-device replacement
+	 * @param deviceName operator-visible replacement name
+	 */
+	private void requestApprovedReconnect(
+			org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
+			org.sarmanagement.icsforms.host.HostGateway hostGateway, String invitationText, String deviceName) {
+		detachMonitor();
+		new javax.swing.SwingWorker<String, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected String doInBackground() throws Exception {
+				String currentState = hostGateway.credentialState();
+				com.fasterxml.jackson.databind.JsonNode outbox =
+						new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(remote.pendingOperations());
+				org.sarmanagement.icsforms.host.HostClient.ReauthorizationTicket ticket;
+				if ("expired".equals(currentState)) {
+					ticket = hostGateway.requestRenewal(deviceName, outbox);
+				} else if ("revoked".equals(currentState)) {
+					org.sarmanagement.icsforms.host.HostInvitation parsed =
+							org.sarmanagement.icsforms.host.HostInvitation.parse(invitationText);
+					if (!remote.incident().value().equals(parsed.incidentId())) {
+						throw new IllegalArgumentException("The invitation is for a different incident");
+					}
+					ticket = hostGateway.requestRepair(invitationText, deviceName, outbox);
+				} else {
+					throw new IllegalStateException("The host does not report an expired or revoked credential");
+				}
+				javax.swing.SwingUtilities.invokeLater(() ->
+						connectionLabel.setText("Waiting for administrator approval; outbox retained"));
+				while (true) {
+					org.sarmanagement.icsforms.host.HostClient.ReauthorizationResult result =
+							hostGateway.pollReauthorization(ticket);
+					if ("approved".equals(result.state())) {
+						remote.attachGateway(hostGateway.withCredential(result.credential()));
+						remote.replayPending();
+						return "approved";
+					}
+					if ("denied".equals(result.state())) {
+						return "denied";
+					}
+					Thread.sleep(2000);
+				}
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					String result = get();
+					if ("denied".equals(result)) {
+						connectionLabel.setText("Re-authorization denied; outbox retained");
+						JOptionPane.showMessageDialog(MainFrame.this,
+								"The request was denied. The local outbox remains available for export.");
+					} else if (controller.getStore() == remote && remote.gateway() != null) {
+						attachMonitor(remote, "Connected to " + remote.describe().location());
+					}
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					if (controller.getStore() == remote && remote.gateway() != null) {
+						attachMonitor(remote, "Connected to " + remote.describe().location());
+					}
+					showError("Could not request administrator approval",
+							new IllegalStateException(failure.getCause()));
+				}
+			}
+		}.execute();
 	}
 
 	/**
