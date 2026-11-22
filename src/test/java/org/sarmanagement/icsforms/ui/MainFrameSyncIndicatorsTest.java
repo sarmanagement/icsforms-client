@@ -104,6 +104,22 @@ class MainFrameSyncIndicatorsTest {
 	}
 
 	@Test
+	void acknowledgedOperationsAreAttributedOnlyWhenReceiptsAccountForThem() {
+		AppData base = new AppData();
+		AppData objectives = FullDocumentSnapshot.detach(base);
+		objectives.getForm202().setCommandEmphasis("Safety first");
+		AppData named = FullDocumentSnapshot.detach(objectives);
+		named.getIncidentContext().setIncidentName("Incident");
+		PendingOperation first = operation("a", base, objectives, PendingStatus.PENDING);
+		PendingOperation second = operation("b", objectives, named, PendingStatus.PENDING);
+		var accepted = MainFrame.acceptedSnapshot(List.of(first, second), List.of(second), 4, 5);
+		assertEquals(Set.of(WorkspaceId.ICS_202), accepted.workspaces().keySet());
+		assertTrue(MainFrame.acceptedSnapshot(List.of(first, second), List.of(second), 4, 4).workspaces().isEmpty());
+		assertTrue(MainFrame.acceptedSnapshot(List.of(first, second), List.of(), 4, 5).workspaces().isEmpty());
+		assertTrue(MainFrame.acceptedSnapshot(List.of(first), List.of(first), 4, 5).workspaces().isEmpty());
+	}
+
+	@Test
 	void queuedStatusUpdatesTabsWithoutReplacingAnEditorDraft() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("host"), "Shared")) {
@@ -135,7 +151,7 @@ class MainFrameSyncIndicatorsTest {
 				SwingUtilities.invokeAndWait(() -> {
 					JTabbedPane tabs = (JTabbedPane) field(frame.get(), "tabs");
 					assertEquals("Uncommitted typing", draft.get().getText());
-					assertTrue(tabs.getToolTipTextAt(0).contains("Accepted receipts are not tracked per workspace"));
+					assertTrue(tabs.getToolTipTextAt(0).contains("Last accepted by the host in this window: none"));
 					assertTrue(tabs.getToolTipTextAt(0).contains("Last successful sync: "));
 					assertTrue(frame.get().connectionStatusText().contains("last successful sync "));
 					assertFalse(tabs.getTitleAt(1).contains("accepted"));
@@ -182,7 +198,20 @@ class MainFrameSyncIndicatorsTest {
 	 * @return operation for attribution
 	 */
 	private static PendingOperation operation(AppData before, AppData draft, PendingStatus status) {
-		return new PendingOperation("test", before, draft, null, status, List.of(), null);
+		return operation("test", before, draft, status);
+	}
+
+	/**
+	 * Builds a detached queue entry with a chosen identity.
+	 *
+	 * @param id operation identifier
+	 * @param before previous document
+	 * @param draft edited document
+	 * @param status queue state
+	 * @return operation for attribution
+	 */
+	private static PendingOperation operation(String id, AppData before, AppData draft, PendingStatus status) {
+		return new PendingOperation(id, before, draft, null, status, List.of(), null);
 	}
 
 	/**

@@ -146,6 +146,8 @@ public class MainFrame extends JFrame {
 	private boolean outboxRefreshAgain;
 	private java.time.Instant cachedConfirmation;
 	private long acceptedReceipts;
+	private final Map<WorkspaceId, java.time.Instant> acceptedWorkspaces = new EnumMap<>(WorkspaceId.class);
+	private final Map<String, java.time.Instant> acceptedLogs = new LinkedHashMap<>();
 	private Map<WorkspaceId, Set<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus>>
 			workspaceQueueStatus = Map.of();
 	private Map<String, Set<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus>>
@@ -973,6 +975,8 @@ public class MainFrame extends JFrame {
 				outbox = List.of();
 				outboxKnown = false;
 				acceptedReceipts = 0;
+				acceptedWorkspaces.clear();
+				acceptedLogs.clear();
 				showConnectionStatus();
 				try {
 					applyStoreCapabilities();
@@ -1208,6 +1212,12 @@ public class MainFrame extends JFrame {
 		WorkspaceQueueSnapshot queueStatus = workspaceQueueSnapshot(snapshot);
 		javax.swing.SwingUtilities.invokeLater(() -> {
 			if (generation == monitorGeneration && controller.getStore() == remote) {
+				if (outboxKnown) {
+					WorkspaceQueueSnapshot done = acceptedSnapshot(outbox, snapshot, acceptedReceipts, accepted);
+					java.time.Instant now = java.time.Instant.now();
+					done.workspaces().keySet().forEach(id -> acceptedWorkspaces.put(id, now));
+					done.logs().keySet().forEach(id -> acceptedLogs.put(id, now));
+				}
 				outbox = snapshot;
 				outboxKnown = true;
 				cachedConfirmation = confirmation;
@@ -1218,6 +1228,30 @@ public class MainFrame extends JFrame {
 				updateWorkspaceSyncIndicators();
 			}
 		});
+	}
+
+	/**
+	 * Attributes operations the host acknowledged between two outbox snapshots to the workspaces they edited.
+	 * Operations that left the queue without a matching increase in accepted receipts (discarded, superseded or
+	 * resolved into a new operation) are not reported as accepted.
+	 *
+	 * @param previous earlier durable queue
+	 * @param current latest durable queue
+	 * @param previousAccepted earlier accepted-receipt count
+	 * @param accepted latest accepted-receipt count
+	 * @return workspaces and logs whose edits were acknowledged, or empty maps when attribution is uncertain
+	 */
+	static WorkspaceQueueSnapshot acceptedSnapshot(
+			List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingOperation> previous,
+			List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingOperation> current,
+			long previousAccepted, long accepted) {
+		Set<String> remaining = new HashSet<>();
+		current.forEach(operation -> remaining.add(operation.operationId()));
+		var removed = previous.stream().filter(operation -> !remaining.contains(operation.operationId())).toList();
+		if (removed.isEmpty() || accepted - previousAccepted != removed.size()) {
+			return new WorkspaceQueueSnapshot(Map.of(), Map.of());
+		}
+		return workspaceQueueSnapshot(removed);
 	}
 
 	/**
@@ -1390,13 +1424,25 @@ public class MainFrame extends JFrame {
 			if (component instanceof Ics214Panel log) {
 				states.addAll(logQueueStatus.getOrDefault(log.getCurrentForm().getId(), Set.of()));
 			}
-			String state = !outboxKnown ? "checking" : states.isEmpty() ? "no queued changes"
-					: states.stream().map(value -> value.name().toLowerCase(java.util.Locale.ROOT)
-							.replace('_', ' ')).sorted().collect(java.util.stream.Collectors.joining(", "));
+			java.time.Instant acceptedAt = acceptedWorkspaces.get(definition.id());
+			if (component instanceof Ics214Panel log) {
+				java.time.Instant logAccepted = acceptedLogs.get(log.getCurrentForm().getId());
+				if (logAccepted != null && (acceptedAt == null || logAccepted.isAfter(acceptedAt))) {
+					acceptedAt = logAccepted;
+				}
+			}
+			java.util.List<String> names = new java.util.ArrayList<>(states.stream()
+					.map(value -> value.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ')).sorted().toList());
+			if (acceptedAt != null) {
+				names.add("accepted");
+			}
+			String state = !outboxKnown ? "checking" : names.isEmpty() ? "no queued changes"
+					: String.join(", ", names);
 			tabs.setTitleAt(index, label + " [" + state + "]");
-			tabs.setToolTipTextAt(index, "Queue: " + state + ". Last successful sync: "
+			tabs.setToolTipTextAt(index, "Queue: " + state + ". Last accepted by the host in this window: "
+					+ (acceptedAt == null ? "none" : acceptedAt.toString()) + ". Last successful sync: "
 					+ (cachedConfirmation == null ? "unknown" : cachedConfirmation.toString())
-					+ ". Accepted receipts are not tracked per workspace; unsaved editor drafts are not queued.");
+					+ ". Unsaved editor drafts are not queued.");
 		}
 	}
 
@@ -1472,6 +1518,47 @@ public class MainFrame extends JFrame {
 								dialog.dispose();
 							}
 							refreshOutboxConflict(remote, entry);
+						}
+
+						/** {@inheritDoc} */
+						@Override
+						public void replaceRejected(OutboxReviewPanel.Entry entry) {
+							if (JOptionPane.showConfirmDialog(MainFrame.this,
+									"Replace the rejected edit and everything queued behind it with one edit "
+											+ "built from your current saved document? The rejected operations "
+											+ "are archived first.",
+									"Replace rejected edit", JOptionPane.YES_NO_OPTION,
+									JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION) {
+								return;
+							}
+							java.awt.Window dialog = javax.swing.SwingUtilities.getWindowAncestor(holder[0]);
+							if (dialog != null) {
+								dialog.dispose();
+							}
+							new javax.swing.SwingWorker<Void, Void>() {
+								/** {@inheritDoc} */
+								@Override
+								protected Void doInBackground() {
+									remote.replaceRejected(entry.operationId());
+									return null;
+								}
+
+								/** {@inheritDoc} */
+								@Override
+								protected void done() {
+									try {
+										get();
+										if (controller.getStore() == remote) {
+											refreshOutbox(remote);
+										}
+									} catch (InterruptedException interrupted) {
+										Thread.currentThread().interrupt();
+									} catch (java.util.concurrent.ExecutionException failure) {
+										showError("Could not replace the rejected edit",
+												new IllegalStateException(failure.getCause()));
+									}
+								}
+							}.execute();
 						}
 
 						/** {@inheritDoc} */
@@ -1733,6 +1820,8 @@ public class MainFrame extends JFrame {
 		connectionStatus = null;
 		outboxKnown = false;
 		cachedConfirmation = null;
+		acceptedWorkspaces.clear();
+		acceptedLogs.clear();
 		workspaceQueueStatus = Map.of();
 		logQueueStatus = Map.of();
 		org.sarmanagement.icsforms.persistence.ConnectionMonitor monitor =

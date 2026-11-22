@@ -239,8 +239,10 @@ client requirements, not a claim of overall replay safety: the current code
 and targeted regression tests address the named dependent-edit and
 ambiguous-authorization defects. The stale-refresh guard and monitor cursor
 retry also have targeted regression tests. Pre-submit validation now
-retains oversized work as rejected rather than leaving it pending; corrective
-recovery and end-to-end acceptance remain open. See the
+retains oversized work as rejected rather than leaving it pending. A rejected
+head can be replaced by a new operation built from the corrected local draft
+after the rejected operations are archived; oversized edits cannot be
+corrected, and end-to-end acceptance remains open. See the
 [disconnected workflow status](host-mode-plan.md#issue-61-work-in-progress).
 
 ## Version negotiation, limits, and errors

@@ -1022,6 +1022,44 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
+	 * Replaces a rejected queue with one new edit built from the current local draft, so that an operator who has
+	 * corrected the cause in the editors can unblock synchronization. The rejected operations are first archived,
+	 * exactly, in owner-only storage next to the journal, and remain available through {@link #exportOutbox(Path)}
+	 * until then. The host's explicit rejection means the head was not applied; if the host had in fact applied
+	 * it, the replacement is detected as a conflict or creation collision rather than duplicated. At least one
+	 * later edit (the correction) must exist. The new operation has a fresh identity and the head's original base.
+	 *
+	 * @param operationId identifier of the rejected head operation
+	 * @return identifier of the replacement operation
+	 * @throws StoreValidationException when the head is not rejected or no correcting edit has been saved
+	 */
+	public synchronized String replaceRejected(String operationId) {
+		ensureOpen();
+		if (state == null || state.pending().isEmpty()) {
+			throw new StoreValidationException("No rejected operation exists");
+		}
+		PendingOperation head = state.pending().get(0);
+		if (!head.operationId().equals(operationId) || head.status() != PendingStatus.REJECTED) {
+			throw new StoreValidationException("The selected operation is not rejected");
+		}
+		if (state.pending().size() < 2) {
+			throw new StoreValidationException("Correct the cause in the editors and save before replacing the "
+					+ "rejected edit");
+		}
+		try {
+			stateFile.archive(operationId, state.pending());
+		} catch (IOException failure) {
+			throw new StorePersistenceException("Cannot archive the rejected operations", failure);
+		}
+		String replacementId = "offline-" + UUID.randomUUID();
+		PendingOperation replacement = new PendingOperation(replacementId, head.before(), state.draft(), null,
+				PendingStatus.PENDING, List.of(), null, head.reviewBase());
+		commitState(new DisconnectedStateFile.State(state.base(), state.records(), state.cursor(), state.draft(),
+				state.revision(), state.confirmedAt(), state.acceptedReceipts(), List.of(replacement)));
+		return replacementId;
+	}
+
+	/**
 	 * Resolves the head conflict against a freshly read host state and preserves dependent local edits.
 	 * Each recorded conflict must have an explicit choice. If a reviewed field has changed since the conflict,
 	 * or another locally edited field now conflicts, resolution fails without changing the journal.

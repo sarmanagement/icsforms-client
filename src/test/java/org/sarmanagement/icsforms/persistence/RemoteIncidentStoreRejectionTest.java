@@ -143,9 +143,45 @@ class RemoteIncidentStoreRejectionTest {
 		}
 	}
 
+	@Test
+	void rejectedHeadIsReplacedByCorrectedDraftAfterArchivingTheOriginal() throws Exception {
+		AmbiguousGateway gateway = new AmbiguousGateway(pair(), true);
+		Path cache = directory.resolve("cache");
+		try (RemoteIncidentStore local = new RemoteIncidentStore(gateway, incident, cache)) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			snapshot.data().getIncidentContext().setIncidentName("wrong name");
+			RevisionToken revision = local.save(incident, snapshot.data(), snapshot.revision());
+			local.replayPending();
+			var rejected = local.pendingOperations().get(0);
+			assertEquals(RemoteIncidentStore.PendingStatus.REJECTED, rejected.status());
+			assertThrows(StoreValidationException.class, () -> local.replaceRejected(rejected.operationId()));
+			snapshot.data().getIncidentContext().setIncidentName("corrected name");
+			local.save(incident, snapshot.data(), revision);
+			assertEquals(2, local.pendingOperations().size());
+			assertThrows(StoreValidationException.class, () -> local.replaceRejected("unknown"));
+			String replacement = local.replaceRejected(rejected.operationId());
+			assertEquals(1, local.pendingOperations().size());
+			assertEquals(replacement, local.pendingOperations().get(0).operationId());
+			assertEquals(RemoteIncidentStore.PendingStatus.PENDING, local.pendingOperations().get(0).status());
+			Path archive;
+			try (var files = Files.walk(cache)) {
+				archive = files.filter(path -> path.getFileName().toString().contains(".rejected-")).findFirst()
+						.orElseThrow();
+			}
+			String archived = Files.readString(archive);
+			assertTrue(archived.contains(rejected.operationId()));
+			assertTrue(archived.contains("wrong name"));
+			local.replayPending();
+			assertTrue(local.pendingOperations().isEmpty());
+			assertEquals("corrected name",
+					backing.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+		}
+	}
+
 	/** Simulates a lost acceptance, followed by a validation error, then normal receipt replay. */
 	private static final class AmbiguousGateway implements RemoteIncidentGateway {
 		private final RemoteIncidentGateway delegate;
+		private final boolean rejectFirst;
 		private int submissions;
 
 		/**
@@ -154,7 +190,18 @@ class RemoteIncidentStoreRejectionTest {
 		 * @param delegate actual host transport
 		 */
 		AmbiguousGateway(RemoteIncidentGateway delegate) {
+			this(delegate, false);
+		}
+
+		/**
+		 * Wraps an authenticated transport.
+		 *
+		 * @param delegate actual host transport
+		 * @param rejectFirst when true, the first submission is rejected without reaching the host
+		 */
+		AmbiguousGateway(RemoteIncidentGateway delegate, boolean rejectFirst) {
 			this.delegate = delegate;
+			this.rejectFirst = rejectFirst;
 		}
 
 		/** {@inheritDoc} */
@@ -185,6 +232,12 @@ class RemoteIncidentStoreRejectionTest {
 		@Override
 		public IncidentService.SubmissionResult submit(IncidentService.RecordBatch batch) {
 			submissions++;
+			if (rejectFirst) {
+				if (submissions == 1) {
+					throw new StoreValidationException("Host policy rejected the edit");
+				}
+				return delegate.submit(batch);
+			}
 			if (submissions == 1) {
 				delegate.submit(batch);
 				throw new StoreUnavailableException("Lost response");

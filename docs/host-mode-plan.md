@@ -341,8 +341,12 @@ an ordered queue of pending operations, so the intended recovery path can retain
 work across restart. The journal requires exclusive local access, owner-only
 file protection, atomic replacement and directory synchronization; unsupported
 platforms or filesystems fail closed. The current implementation uses POSIX
-permissions. Windows journal support and verification remain outstanding;
-usable support also requires durable directory synchronization.
+permissions on POSIX file systems and an explicit owner-only access control
+list (inherited entries replaced) on Windows-style file systems
+(`PrivateFiles`); directory synchronization is skipped where the platform does
+not allow opening a directory, since the atomic rename is already durable
+there. The ACL branch is unit-tested but has not been verified on a real
+Windows host.
 The journal is not an authoritative incident store and does not replace host
 receipts or backups.
 
@@ -395,18 +399,25 @@ limits, export, restart and dependent drafts. Other limitations remain open:
 
 - Oversized edits can still be queued before preparation. A rejected head
   blocks later replay; retrying unchanged oversized work rejects it again.
-  There is no batch splitting or in-place corrective workflow, and exports
-  retain the draft and dependent edits.
+  Records cannot be removed and batches are not split, so an oversized edit
+  has no in-place correction; exports retain the draft and dependent edits.
+  For other rejections, once the operator has saved a correcting edit,
+  `RemoteIncidentStore.replaceRejected` archives the rejected operations
+  exactly (an owner-only `.rejected-<id>.json` file beside the journal) and
+  replaces the queue with one new operation, with a fresh ID, built from the
+  current local draft.
 - The UI has cached-incident, re-pair and outbox-review paths, with integration
-  tests. Outbox review offers export, conflict refresh and resolution, and
-  rebased-draft confirmation, but no corrective action for a rejected head;
-  the store's `retryRejected` and `discardPending` methods have no UI callers.
+  tests. Outbox review offers export, conflict refresh and resolution,
+  rebased-draft confirmation and replacement of a rejected head; the store's
+  `retryRejected` and `discardPending` methods have no UI callers.
   A materialized rejected batch remains exact and cannot be discarded, since
   its submission may have succeeded; the store permits exact retry or export.
-- Workspace indicators describe queued changes, not accepted changes per view:
-  the journal stores only an aggregate accepted-receipt count, not accepted
-  operation IDs or workspace effects. Queue disappearance can also reflect
-  discard or rebase, so “no queued changes” is not proof of per-view acceptance.
+- Workspace indicators describe queued changes and add an “accepted” label
+  when operations leave the queue with a matching increase in accepted
+  receipts while the window is open. The journal still stores only an
+  aggregate count, so the label is not persisted across restarts, and an
+  uncertain attribution is omitted. “No queued changes” is not proof of
+  per-view acceptance.
   Last successful sync uses the cached confirmation time, distinct from the
   monitor's last-contact time.
 

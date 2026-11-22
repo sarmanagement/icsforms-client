@@ -162,6 +162,13 @@ public final class OutboxReviewPanel extends JPanel {
 		 */
 		void confirm(Entry entry);
 
+		/**
+		 * Requests replacing a rejected queue by one edit built from the current corrected local draft.
+		 *
+		 * @param entry rejected head operation
+		 */
+		default void replaceRejected(Entry entry) {
+		}
 	}
 
 	private final Actions actions;
@@ -180,6 +187,7 @@ public final class OutboxReviewPanel extends JPanel {
 	private final JTextArea details = new JTextArea(3, 30);
 	private final JButton export = new JButton("Export / recover draft");
 	private final JButton resolve = new JButton("Request resolution");
+	private final JButton replace = new JButton("Replace rejected edit with corrected draft");
 	private final JButton refresh = new JButton("Refresh conflict values");
 	private final JCheckBox reviewed = new JCheckBox("I reviewed the rebased changes");
 	private final JButton confirm = new JButton("Approve reviewed changes for sync");
@@ -213,6 +221,7 @@ public final class OutboxReviewPanel extends JPanel {
 		JPanel buttons = new JPanel(new GridLayout(0, 1, 2, 2));
 		buttons.add(export);
 		buttons.add(resolve);
+		buttons.add(replace);
 		buttons.add(refresh);
 		buttons.add(reviewed);
 		buttons.add(confirm);
@@ -238,6 +247,7 @@ public final class OutboxReviewPanel extends JPanel {
 		reviewed.addActionListener(event -> updateButtons());
 		export.addActionListener(event -> actions.exportDraft(list.getSelectedValue()));
 		resolve.addActionListener(event -> requestResolution());
+		replace.addActionListener(event -> actions.replaceRejected(list.getSelectedValue()));
 		refresh.addActionListener(event -> actions.refreshConflict(list.getSelectedValue()));
 		confirm.addActionListener(event -> {
 			Entry selected = list.getSelectedValue();
@@ -387,6 +397,8 @@ public final class OutboxReviewPanel extends JPanel {
 		Entry entry = list.getSelectedValue();
 		export.setEnabled(entry != null);
 		refresh.setEnabled(entry != null && entry.status() == Status.CONFLICT);
+		replace.setEnabled(entry != null && entry.status() == Status.REJECTED && entries.size() > 1
+				&& entries.getElementAt(0).operationId().equals(entry.operationId()));
 		reviewed.setEnabled(entry != null && entry.status() == Status.REVIEW_REQUIRED);
 		confirm.setEnabled(reviewed.isEnabled() && reviewed.isSelected());
 		boolean complete = entry != null && entry.batch() != null

@@ -17,9 +17,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.LinkOption;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.List;
 import java.util.Set;
 import java.time.Instant;
@@ -31,10 +28,6 @@ final class DisconnectedStateFile implements AutoCloseable {
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE)
 			.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
-	private static final Set<PosixFilePermission> DIRECTORY_PERMISSIONS = Set.of(PosixFilePermission.OWNER_READ,
-			PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE);
-	private static final Set<PosixFilePermission> FILE_PERMISSIONS = Set.of(PosixFilePermission.OWNER_READ,
-			PosixFilePermission.OWNER_WRITE);
 
 	/**
 	 * One durable state, including both the visible draft and the ordered queue.
@@ -107,18 +100,15 @@ final class DisconnectedStateFile implements AutoCloseable {
 		try {
 			Path absoluteRoot = root.toAbsolutePath().normalize();
 			ensureNoSymlinks(absoluteRoot);
-			Files.createDirectories(absoluteRoot, PosixFilePermissions.asFileAttribute(DIRECTORY_PERMISSIONS));
-			Files.setPosixFilePermissions(absoluteRoot, DIRECTORY_PERMISSIONS);
+			PrivateFiles.secureDirectory(absoluteRoot);
 			directory = absoluteRoot.resolve(authority);
 			ensureNoSymlinks(directory);
-			Files.createDirectories(directory, PosixFilePermissions.asFileAttribute(DIRECTORY_PERMISSIONS));
-			Files.setPosixFilePermissions(directory, DIRECTORY_PERMISSIONS);
+			PrivateFiles.secureDirectory(directory);
 			file = directory.resolve(incident.value() + ".json");
 			Path lockPath = directory.resolve(incident.value() + ".lock");
 			ensureNoSymlinks(file);
-			lockChannel = FileChannel.open(lockPath, Set.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-					LinkOption.NOFOLLOW_LINKS), PosixFilePermissions.asFileAttribute(FILE_PERMISSIONS));
-			Files.setPosixFilePermissions(lockPath, FILE_PERMISSIONS);
+			lockChannel = PrivateFiles.openPrivate(lockPath,
+					Set.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE));
 			FileLock acquired;
 			try {
 				acquired = lockChannel.tryLock();
@@ -163,10 +153,8 @@ final class DisconnectedStateFile implements AutoCloseable {
 			ensureNoSymlinks(directory);
 			ensureNoSymlinks(file);
 			byte[] bytes = MAPPER.writeValueAsBytes(state);
-			try (FileChannel output = FileChannel.open(staging, Set.of(StandardOpenOption.CREATE,
-					StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS),
-					PosixFilePermissions.asFileAttribute(FILE_PERMISSIONS))) {
-				Files.setPosixFilePermissions(staging, FILE_PERMISSIONS);
+			try (FileChannel output = PrivateFiles.openPrivate(staging, Set.of(StandardOpenOption.CREATE,
+					StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE))) {
 				java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(bytes);
 				while (buffer.hasRemaining()) {
 					output.write(buffer);
@@ -176,9 +164,7 @@ final class DisconnectedStateFile implements AutoCloseable {
 			observer.reached(CommitPoint.STAGING_SYNCED);
 			Files.move(staging, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
 			observer.reached(CommitPoint.REPLACED);
-			try (FileChannel parent = FileChannel.open(directory, StandardOpenOption.READ)) {
-				parent.force(true);
-			}
+			PrivateFiles.syncDirectory(directory);
 		} catch (IOException | UnsupportedOperationException failure) {
 			failed = true;
 			throw new StorePersistenceException("Cannot commit disconnected incident state atomically", failure);
@@ -213,6 +199,28 @@ final class DisconnectedStateFile implements AutoCloseable {
 	 */
 	void export(Path target, List<RemoteIncidentStore.PendingOperation> pending) throws IOException {
 		MAPPER.writerWithDefaultPrettyPrinter().writeValue(target.toFile(), pending);
+	}
+
+	/**
+	 * Durably keeps an owner-only audit copy of operations that are being superseded.
+	 *
+	 * @param label file-name-safe label for this archive
+	 * @param operations operations to preserve exactly
+	 * @throws IOException when the archive cannot be written
+	 */
+	void archive(String label, List<RemoteIncidentStore.PendingOperation> operations) throws IOException {
+		Path target = directory.resolve(file.getFileName() + ".rejected-" + label + ".json");
+		ensureNoSymlinks(target);
+		try (FileChannel output = PrivateFiles.openPrivate(target, Set.of(StandardOpenOption.CREATE,
+				StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE))) {
+			java.nio.ByteBuffer buffer = java.nio.ByteBuffer
+					.wrap(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(operations));
+			while (buffer.hasRemaining()) {
+				output.write(buffer);
+			}
+			output.force(true);
+		}
+		PrivateFiles.syncDirectory(directory);
 	}
 
 	/**

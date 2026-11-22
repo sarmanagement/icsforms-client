@@ -107,4 +107,6 @@ demonstrate a network-backed store. See the
 - UI actions that a store cannot perform (create, delete, import) are disabled from the store's capabilities (`supportsCreate/Delete/Import`), not from a mode flag.
 - Create, delete and import remain host-administrative. Issue #60 used session-only
   credentials; re-authorization and credential persistence remain outstanding.
-  The part 5 outbox is work in progress, not delivered.
+  The part 5 outbox is work in progress, not delivered; its journal uses
+  owner-only permissions (POSIX) or ACLs (Windows-style) and fails closed
+  otherwise.
