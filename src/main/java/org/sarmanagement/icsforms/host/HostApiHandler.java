@@ -250,6 +250,9 @@ final class HostApiHandler implements HttpHandler {
 	 */
 	private void read(HttpExchange exchange) throws IOException {
 		IncidentService.ReadResult result = context.service.read(context.incident);
+		System.err.println("READ " + result.records().stream()
+				.filter(record -> record.content().path("provenance").has("acceptedAt"))
+				.map(record -> record.content().path("provenance").path("acceptedAt")).toList());
 		ObjectNode body = HostHttp.MAPPER.createObjectNode();
 		body.put("incidentId", result.incident().value());
 		body.put("cursor", result.cursor());
@@ -305,10 +308,13 @@ final class HostApiHandler implements HttpHandler {
 		IncidentService.RecordBatch batch;
 		try {
 			List<IncidentService.RecordSubmission> submissions = new ArrayList<>();
+			Instant acceptedAt = context.config.clock().instant();
 			for (JsonNode record : records) {
 				IncidentService.RecordSubmission submission =
 						HostHttp.MAPPER.treeToValue(record, IncidentService.RecordSubmission.class);
-				submissions.add(withDeviceAttribution(submission, device));
+				IncidentService.RecordSubmission attributed = withDeviceAttribution(submission, device, acceptedAt);
+				System.err.println("ATTRIBUTED " + attributed.content());
+				submissions.add(attributed);
 			}
 			String operationId = request.path("operationId").asText("");
 			if (operationId.isBlank()) {
@@ -334,28 +340,62 @@ final class HostApiHandler implements HttpHandler {
 	}
 
 	/**
-	 * Adds host-verified device attribution to submitted provenance.
+	 * Adds host-verified identity and acceptance time to all submitted provenance.
 	 *
 	 * @param submission client record submission
 	 * @param device device authenticated by the TLS certificate
-	 * @return submission with the authenticated identity pair, when provenance exists
+	 * @param acceptedAt host acceptance time
+	 * @return submission with host-authoritative provenance
 	 */
 	private IncidentService.RecordSubmission withDeviceAttribution(
-			IncidentService.RecordSubmission submission, DeviceRegistry.DeviceRecord device) {
+			IncidentService.RecordSubmission submission, DeviceRegistry.DeviceRecord device, Instant acceptedAt) {
 		JsonNode content = submission.content();
-		if (content != null && content.isObject() && content.path("provenance").isObject()) {
-			com.fasterxml.jackson.databind.node.ObjectNode copy = ((ObjectNode) content).deepCopy();
-			ObjectNode provenance = (ObjectNode) copy.path("provenance");
-			provenance.put("deviceId", device.deviceId());
-			if (device.originalDeviceId() == null) {
-				provenance.remove("originalDeviceId");
-			} else {
-				provenance.put("originalDeviceId", device.originalDeviceId());
-			}
-			return new IncidentService.RecordSubmission(submission.key(), submission.parent(),
-					submission.parentField(), submission.baseVersion(), submission.operation(), copy);
+		JsonNode attributed = normalizeProvenance(content, device, acceptedAt, false);
+		return new IncidentService.RecordSubmission(submission.key(), submission.parent(),
+				submission.parentField(), submission.baseVersion(), submission.operation(), attributed);
+	}
+
+	/**
+	 * Recursively replaces client-controlled metadata inside provenance objects.
+	 *
+	 * @param value submitted JSON value
+	 * @param device authenticated device
+	 * @param acceptedAt host acceptance time
+	 * @param provenance true when the current object is provenance
+	 * @return detached value with normalized provenance
+	 */
+	private JsonNode normalizeProvenance(JsonNode value, DeviceRegistry.DeviceRecord device, Instant acceptedAt,
+			boolean provenance) {
+		if (value == null) {
+			return null;
 		}
-		return submission;
+		if (value.isObject()) {
+			ObjectNode copy = ((ObjectNode) value).deepCopy();
+			List<String> fields = new ArrayList<>();
+			copy.fieldNames().forEachRemaining(fields::add);
+			for (String field : fields) {
+				copy.set(field, normalizeProvenance(copy.get(field), device, acceptedAt, "provenance".equals(field)));
+			}
+			if (provenance) {
+				copy.put("acceptedAt", acceptedAt.toString());
+				copy.put("deviceId", device.deviceId());
+				if (device.originalDeviceId() == null) {
+					copy.remove("originalDeviceId");
+				} else {
+					copy.put("originalDeviceId", device.originalDeviceId());
+				}
+			}
+			return copy;
+		}
+		if (value.isArray()) {
+			com.fasterxml.jackson.databind.node.ArrayNode copy =
+					(com.fasterxml.jackson.databind.node.ArrayNode) value.deepCopy();
+			for (int index = 0; index < copy.size(); index++) {
+				copy.set(index, normalizeProvenance(copy.get(index), device, acceptedAt, false));
+			}
+			return copy;
+		}
+		return value.deepCopy();
 	}
 
 	/**

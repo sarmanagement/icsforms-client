@@ -72,7 +72,12 @@ public final class IncidentService {
 	 * @return detached snapshot with current ordered cursor
 	 */
 	public ReadResult read(IncidentId incident) {
-		return incidents.withIncidentLock(incident, () -> readResult(incident, state(incident)));
+		return incidents.withIncidentLock(incident, () -> {
+			IncidentState current = state(incident);
+			ReadResult result = readResult(incident, current);
+			System.err.println("RESULT " + result.records().stream().map(VersionedRecord::content).toList());
+			return result;
+		});
 	}
 
 	/**
@@ -175,7 +180,12 @@ public final class IncidentService {
 				newVersions, List.of());
 		IncidentState updated = new IncidentState(cursor, updatedHistories, changes,
 				appendReceipt(current.receipts(), new OperationReceipt(batch.operationId(), batch, result)));
+		System.err.println("UPDATED " + updatedHistories.stream().flatMap(history -> history.versions().stream())
+				.map(RecordVersion::content).filter(content -> content.path("provenance").has("acceptedAt")).toList());
 		versions.save(batch.incident(), updated);
+		System.err.println("RELOADED " + versions.load(batch.incident()).histories().stream()
+				.flatMap(history -> history.versions().stream()).map(RecordVersion::content)
+				.filter(content -> content.path("provenance").has("acceptedAt")).toList());
 		try {
 			project(batch.incident(), updated);
 		} catch (RuntimeException projectionFailure) {
@@ -507,8 +517,13 @@ public final class IncidentService {
 	 */
 	private ReadResult readResult(IncidentId incident, IncidentState state) {
 		List<VersionedRecord> records = new ArrayList<>();
+		System.err.println("HISTORY KEYS " + state.histories().stream().map(RecordHistory::key).toList());
 		histories(state).entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
 			RecordVersion version = latest(entry.getValue());
+			if (version.content().path("description").asText().contains("Accepted after approval")) {
+				System.err.println("SELECTED HISTORY " + entry.getKey() + " "
+						+ version.content().path("provenance"));
+			}
 			records.add(new VersionedRecord(entry.getKey(), version.version(), version.cursor(),
 					version.receivedAt(), version.content(), entry.getValue().parent(),
 					entry.getValue().parentField()));

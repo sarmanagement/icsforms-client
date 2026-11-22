@@ -30,7 +30,10 @@ adjacent controller shutdown hardening restores retryability after a failed
 save drain. Issue #58 adds the in-process versioned service and file-backed
 record history; #59 and #60 add host transport and connected operation. Issue
 #61's disconnected workflow remains WIP, pending Windows-host verification,
-CodeQL and acceptance; Stage 2/T1 is not complete. Delivery evidence is in
+CodeQL and acceptance. Issue #62 implements administrator-approved renewal and
+revoked-device replacement with request limits and operations documentation;
+full Stage 2 acceptance and durable client credential/ticket recovery remain
+open. Stage 2/T1 is not complete. Delivery evidence is in
 [`docs/completed-work.md`](docs/completed-work.md). Work to make
 open views refresh without flicker or stale content is merged
 (PR #56). Production host deployment also depends on the open Stage 0 decisions.
@@ -540,7 +543,7 @@ Implement the incident-scoped API, host-side validation and persistence, and a
 `RemoteIncidentStore` built on the Stage 1 contract. Issue #58 delivered the
 written contract and an in-process service over the file backend. It does not
 include network transport, admission, a remote store, UI changes, or an outbox;
-those remain in issues #59–#62. Issue #59 has since delivered the transport,
+those were assigned to issues #59–#62. Issue #59 has since delivered the transport,
 admission and host lifecycle (see [completed work](docs/completed-work.md));
 issue #60 has delivered the production remote store, polling and connected operation; issues #61–#62 remain. A persisted record is the
 unit of submission and versioning: the client supplies the record version it
@@ -571,6 +574,14 @@ Windows-style ACLs, and tabs show per-view accepted labels for the current
 window. Oversized-edit correction, real-Windows verification, CodeQL and
 acceptance remain outstanding. See the
 [disconnected workflow status](docs/host-mode-plan.md#issue-61-work-in-progress).
+Part 6 (#62) includes a durable host approval queue and decision audit,
+same-key expired renewal, invitation-backed new identity for revoked devices,
+pending-outbox review, client waiting/preservation and post-approval replay,
+plus operational and security documentation. The polling ticket and credentials
+are still session-memory-only, and #61 acceptance, real Windows verification,
+an end-to-end three-process exercise and final CodeQL remain outstanding. See
+[host-mode validation](docs/host-mode-validation.md) and the
+[security review](docs/host-mode-security-review.md).
 The connected-operation CI follow-up uses the saved host baseline and tests
 independent stale-client edits before polling. The host-stop follow-up waits
 for local-store restoration before reporting standalone. Remote-refresh
@@ -596,6 +607,11 @@ passes against the remote store.
 A client shows when it cannot reach the host and labels what it shows as
 possibly stale, with the time it was last confirmed; remote changes refresh
 open views without flicker or loss of drafts.
+Expired renewal and revoked-device replacement require explicit administrator
+approval; denial and host unavailability preserve the durable outbox. Restoring
+the complete host backup retains its device registry and revocations. Proposed
+data-size, response and refresh measures are documented for pilot agreement but
+are not yet accepted.
 **Rough size:** 7–12 person-weeks.
 
 ### Stage 3 — Device lifecycle, operator claim, roles and audit (delivers T2)

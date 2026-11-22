@@ -51,6 +51,34 @@ Neither Stage 2 nor Stage 4 exit criteria are satisfied by this work-in-progress
 any future Stage 4 narrowing depends on #61 acceptance. Earlier entries below
 describe the scope delivered at the time, not the current status of #61.
 
+## Host-mode series — issue #62 re-authorization and operations
+
+The #62 implementation adds a persisted, capacity-limited host approval queue
+and bounded decision audit. Expired non-revoked devices can request a
+same-key/same-identity certificate renewal with signed proof; revoked devices
+must use a fresh invitation and key pair and receive a new identity. The host
+administrator reviews the pending outbox before approval, and the client keeps
+its durable work while waiting or after denial. Replay is initiated only after
+approval. Accepted repaired work carries both the replacement and revoked
+source device IDs in provenance.
+
+The unauthenticated request/status routes have per-address/global rate limits,
+body caps and generic authorization errors. Approval state is included with the
+CA key and registry in the complete host backup. Targeted
+`ReauthorizationTest` coverage passed for renewal, denial, repair, rejected old
+credentials, provenance, rate limiting and restore continuity. This does not
+close Stage 2: issue #61 remains WIP, full headless/displayed CI and the
+multi-instance release exercise remain outstanding, and client credentials and
+approval tickets are session-memory-only. The latter is a release risk if a
+client process closes while approval is pending.
+
+Operational procedures, the self-review findings, validation map and proposed
+(not yet agreed) response/data-size measures are in
+[host operations](host-operations.md),
+[security review](host-mode-security-review.md), and
+[validation exercise](host-mode-validation.md). Stage 0 and Stage 2 remain
+open; host identity rotation is deferred pending real-world use.
+
 ## Part I — Current status
 
 ## Delivered work

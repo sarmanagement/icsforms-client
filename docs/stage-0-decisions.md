@@ -67,12 +67,12 @@ The following decisions were provided on 2026-11-17:
 | Offline edits and conflicts | Users can add information while disconnected; no silent overwrites or discarded drafts. Stage 2 owns the durable outbox; Stage 4 expands it into robust replay and conflict recovery. | Issue #61 is [work in progress](host-mode-plan.md#issue-61-work-in-progress): targeted fixes and regression tests address the named dependent-edit, ambiguous-authorization, stale-refresh/cursor retry and pre-submit rejection defects, not full acceptance. Oversized rejected work and rejected-head corrective recovery remain open. Verify recovery and duplicate-event review separately from retry deduplication; resolve closed-period behavior, synchronization and attachments. Windows journal verification remains open. |
 | Current information | Views update affected content without flicker or lost drafts; disconnected or stale information is labelled with its last confirmed time. | Define confirmation and staleness semantics, polling or notification expectations and measurable responsiveness; specify behavior when a refresh or host connection fails. |
 | Devices and networks | Devices able to run Java; Java application packaging; incident Wi-Fi with no internet required; no direct client database access. | Minimum Java runtime, platform and hardware requirements, client count, network and connectivity assumptions, host discovery and address changes, and realistic incident/data sizes for the pilot. |
-| Admission, roles and recovery | Invitation-based device admission and host identity verification; no shared incident password. Stage 2 includes basic admission; Stage 3 expands lifecycle, operator claims and roles. | Stage 2 invitation and credential lifecycle, secure credential storage, expiry and revocation, administrator bootstrap and recovery, lost-device handling, and which permissions are actually enforced in the pilot. Resolve the Stage 2/Stage 3 boundary without weakening the device trust boundary. |
+| Admission, roles and recovery | Invitation-based admission and host identity verification; no shared incident password. Expired renewal and revoked-device replacement always require administrator approval; revoked keys are never reused. | Decide pilot key custody, host recovery and Stage 2/Stage 3 boundary without weakening the device trust boundary. |
 | Host operations and recovery | Local host without internet; backups and restore are required for later field packaging. | Pilot installation and startup, health and diagnostics, backup frequency and location, restore procedure and drill, host/disk/power failure handling, acceptable data loss and recovery time, and responsible operators. |
 | Versions and technology | Java application packaging with an embedded host service; host and connected UIs use the service boundary. Versioned JSON API and explicit transfer objects; host owns authorization, validation and storage. Later topologies are opt-in. | Select persistence and identity technologies after constraints are agreed; define supported client/API versions, compatibility, upgrades, rollback and incompatible-client behavior. |
 | Threat assumptions | Data in transit must be encrypted against network monitoring. Same-network outsiders must be refused; incident boundaries enforced on the host; host identity pinned and device credentials individually revocable in the target design. | Document other attacker capabilities and physical assumptions, sensitive assets, invitation interception, lost devices, host impersonation, credential compromise and residual risks; decide mitigations and recovery appropriate to the pilot. |
 | First API/domain boundary | Issue #58 specifies record operations and DTOs, incident isolation, per-record versions, merge/conflict semantics, cursors, errors, compatibility, and request limits in the [host API contract](host-api-contract.md). | Implement and verify the transport and authorization boundary; decide refresh/freshness behavior and operational compatibility policy. Do not assume file-store revisions or advisory locks are universally available. |
-| Success measures and pilot | Stage 2 exit criteria require two admitted workstations, isolation, unchanged standalone operation, remote-store contract coverage, visible staleness and draft-preserving refresh. | Agree measurable performance, join, reliability, recovery and usability thresholds and how they will be tested; choose participants, environment, duration, permitted data, scope, stop conditions and decision owner. |
+| Success measures and pilot | Stage 2 exit criteria require two admitted workstations, isolation, unchanged standalone operation, remote-store contract coverage, visible staleness and draft-preserving refresh. [Proposed values](host-mode-validation.md#proposed-acceptance-measures-not-yet-agreed) now cover representative data size, response, refresh and restore. | Agree or revise the proposed performance, join, reliability, recovery and usability thresholds; choose participants, environment, duration, permitted data, scope, stop conditions and decision owner. |
 
 ## Exit checklist
 
@@ -94,8 +94,27 @@ demonstrate a network-backed store. See the
 - Credentials last 72 hours by default and also expire at period close/demobilisation when a cutoff is set. They are individually revocable and revocations persist across restarts.
 - Pilot permissions: connect, read, write, update, delete at incident granularity only. No roles or operator claim.
 - The host application is the pilot administrator, using an in-memory per-start credential over loopback; remote devices are never administrators.
-- The CA key, device registry and revocations live in host-owned storage (`host/` beside the incident store, owner-only) and are included in the host backup. The client private key is held in an owner-only Java keystore.
+- The CA key, device registry and revocations live in host-owned storage (`host/` beside the incident store, owner-only) and are included in the host backup. Device credentials and approval tickets remain in memory for the session; durable ticket/key recovery is an open release risk. `DeviceCredential.save` can write an owner-only keystore but the current connection flow does not persist it.
 - Host identity rotation is **deferred** (open item). A changed host certificate is never trusted silently.
+
+## Re-authorization decisions (issue #62)
+
+- Renewal uses the same device identity and key pair, requires a signed proof of
+  key possession, and is queued for explicit host-administrator approval.
+- A revoked credential can never renew. Replacement requires a new invitation,
+  a new key and a new device identity. The approval request carries the
+  revoked identity and pending outbox for operator review; accepted provenance
+  records both source and replacement device IDs.
+- While approval is pending or denied, local pending work remains available and
+  replay does not run. The unauthenticated request/status surfaces have
+  per-address and global limits, a 64-request queue cap and bounded bodies.
+- Host backups include the CA key, device registry, revocations and approval
+  queue/audit together with incident data. The full archive is highly
+  sensitive, including when it contains queued outbox contents.
+- Host identity rotation remains open pending real-world use. Proposed
+  response/refresh and data-size measures are recorded in
+  [host-mode validation](host-mode-validation.md); Stage 0 is still open until
+  a pilot owner accepts the thresholds and deployment assumptions.
 
 ## Remote store and connected operation decisions (issue #60)
 
@@ -105,8 +124,9 @@ demonstrate a network-backed store. See the
 - A notified host stop is shown differently from an unexplained loss of contact.
 - Newer remote revisions never advance the token of an older draft.
 - UI actions that a store cannot perform (create, delete, import) are disabled from the store's capabilities (`supportsCreate/Delete/Import`), not from a mode flag.
-- Create, delete and import remain host-administrative. Issue #60 used session-only
-  credentials; re-authorization and credential persistence remain outstanding.
-  The part 5 outbox is work in progress, not delivered; its journal uses
+- Create, delete and import remain host-administrative. Issue #62 adds
+  administrator-approved re-authorization, but the client credential and
+  request ticket are still session-only. Credential recovery across process
+  restart remains open. The part 5 outbox is work in progress, not delivered; its journal uses
   owner-only permissions (POSIX) or ACLs (Windows-style) and fails closed
   otherwise.

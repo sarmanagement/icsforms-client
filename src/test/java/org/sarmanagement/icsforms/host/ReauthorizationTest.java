@@ -96,6 +96,19 @@ class ReauthorizationTest {
 			JsonNode clueRecord = recordsOfType(read, ClueLogEntry.class.getName()).get(0);
 			ObjectNode content = ((ObjectNode) clueRecord.path("content")).deepCopy();
 			content.put("description", "Accepted after approval");
+			ObjectNode provenance = (ObjectNode) content.path("provenance");
+			provenance.put("deviceId", "forged-device");
+			provenance.put("originalDeviceId", "forged-source");
+			provenance.put("acceptedAt", "2000-01-01T00:00:00Z");
+			ObjectNode duplicateConfirmation = content.putObject("duplicateConfirmation");
+			duplicateConfirmation.put("duplicateOfId", "reviewed-clue");
+			duplicateConfirmation.put("confirmedAt", "2026-01-01T00:00:00Z");
+			ObjectNode nestedProvenance = duplicateConfirmation.putObject("provenance");
+			nestedProvenance.put("operatorName", "Reviewer");
+			nestedProvenance.put("enteredAt", "2026-01-01T00:00:00Z");
+			nestedProvenance.put("deviceId", "forged-nested-device");
+			nestedProvenance.put("originalDeviceId", "forged-nested-source");
+			nestedProvenance.put("acceptedAt", "2000-01-01T00:00:00Z");
 			ObjectNode submission = HostHttp.MAPPER.createObjectNode();
 			submission.set("key", clueRecord.path("key"));
 			submission.put("baseVersion", clueRecord.path("version").asLong());
@@ -109,6 +122,13 @@ class ReauthorizationTest {
 					ClueLogEntry.class.getName()).get(0).path("content").path("provenance");
 			assertEquals(replacement.deviceId(), accepted.path("deviceId").asText());
 			assertEquals(revoked.deviceId(), accepted.path("originalDeviceId").asText());
+			assertEquals(fixture.clock.instant().toString(), accepted.path("acceptedAt").asText());
+			JsonNode nestedAccepted = recordsOfType(replacementClient.readIncident(fixture.incident.value()),
+					ClueLogEntry.class.getName()).get(0).path("content").path("duplicateConfirmation")
+					.path("provenance");
+			assertEquals(replacement.deviceId(), nestedAccepted.path("deviceId").asText());
+			assertEquals(revoked.deviceId(), nestedAccepted.path("originalDeviceId").asText());
+			assertEquals(fixture.clock.instant().toString(), nestedAccepted.path("acceptedAt").asText());
 
 			Path backup = backupDirectory.resolve("host-backup.zip");
 			HostBackup.create(fixture.store, fixture.incident, fixture.session.storage(), backup);
