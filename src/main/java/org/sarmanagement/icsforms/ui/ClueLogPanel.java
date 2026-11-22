@@ -6,6 +6,8 @@ package org.sarmanagement.icsforms.ui;
 import org.sarmanagement.icsforms.model.ActivityLogScope;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.PocAssignment;
+import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.SarTaskAssignment;
 import org.sarmanagement.icsforms.model.UtcTimestamp;
 
@@ -13,6 +15,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -34,11 +37,9 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Shared clue log editor showing clues captured across SAR task debriefings.
@@ -65,6 +66,11 @@ public class ClueLogPanel extends JPanel {
 			if (!isRowSelected(row)) {
 				component.setBackground(followUpTargetColor(tableModel.getRows().get(convertRowIndexToModel(row)),
 						getBackground()));
+			}
+			ClueLogEntry clue = tableModel.getRows().get(convertRowIndexToModel(row));
+			if (clue.isStruckOut() && component instanceof JLabel label) {
+				Object value = getValueAt(row, column);
+				label.setText("<html><strike>" + escape(value == null ? "" : value.toString()) + "</strike></html>");
 			}
 			return component;
 		}
@@ -315,6 +321,13 @@ public class ClueLogPanel extends JPanel {
 	 */
 	private void showClueDetails(int row) {
 		ClueLogEntry clue = tableModel.getRows().get(row);
+		if (clue.isStruckOut()) {
+			JTextArea details = new JTextArea(describeClue(clue));
+			details.setEditable(false);
+			JOptionPane.showMessageDialog(this, new JScrollPane(details), "Struck-out clue history",
+					JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
 		String taskLabel = (String) tableModel.getValueAt(row, 0);
 
 		JPanel form = UiSupport.formPanel();
@@ -466,7 +479,7 @@ public class ClueLogPanel extends JPanel {
 		pushToModel();
 		int count = 0;
 		for (ClueLogEntry clue : tableModel.getRows()) {
-			if (clue.getAssignmentId() != null && !clue.getAssignmentId().isBlank()) {
+			if (!clue.isStruckOut() && clue.getAssignmentId() != null && !clue.getAssignmentId().isBlank()) {
 				if (controller.propagateClueToActivityLog(clue)) {
 					count++;
 				}
@@ -478,53 +491,113 @@ public class ClueLogPanel extends JPanel {
 	}
 
 	/**
-	 * Finds potential duplicate clues (same detecting task and same location) and
-	 * offers to mark the later ones as possible duplicates or remove them.
+	 * Presents matching pairs for explicit, individual review.
 	 */
 	private void findAndResolveDuplicates() {
-		List<ClueLogEntry> rows = tableModel.getRows();
-		// Group by detectingTask + location (case-insensitive, trimmed).
-		Map<String, List<Integer>> groups = new LinkedHashMap<>();
-		for (int i = 0; i < rows.size(); i++) {
-			ClueLogEntry e = rows.get(i);
-			String key = e.getDetectingTask().trim().toLowerCase() + "|" + e.getLocation().trim().toLowerCase();
-			groups.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
-		}
-		List<Map.Entry<String, List<Integer>>> duplicateGroups = groups.entrySet().stream()
-				.filter(en -> en.getValue().size() > 1).collect(Collectors.toList());
-
-		if (duplicateGroups.isEmpty()) {
+		pushToModel();
+		List<ClueDuplicateReview.Candidate> candidates = ClueDuplicateReview.candidates(tableModel.getRows());
+		if (candidates.isEmpty()) {
 			JOptionPane.showMessageDialog(this,
-					"No potential duplicates found (matching detecting resource and location).", "Find Duplicates",
+					"No candidates found. Nonblank location and description must match, ignoring case and whitespace.",
+					"Find Duplicates",
 					JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
-
-		StringBuilder sb = new StringBuilder(
-				"<html><body>The following clues share the same detecting resource and location:<br><br>");
-		for (Map.Entry<String, List<Integer>> group : duplicateGroups) {
-			ClueLogEntry first = rows.get(group.getValue().get(0));
-			sb.append("&bull; <b>").append(escape(first.getDetectingTask())).append("</b> @ <i>")
-					.append(escape(first.getLocation())).append("</i>: ").append(group.getValue().size())
-					.append(" entries<br>");
-		}
-		sb.append("<br>Mark the later entries in each group as 'Possible Duplicate'?</body></html>");
-
-		int choice = JOptionPane.showConfirmDialog(this, sb.toString(), "Resolve Duplicates", JOptionPane.YES_NO_OPTION,
-				JOptionPane.QUESTION_MESSAGE);
-		if (choice != JOptionPane.YES_OPTION) {
+		JComboBox<ClueDuplicateReview.Candidate> pairs = new JComboBox<>(
+				candidates.toArray(new ClueDuplicateReview.Candidate[0]));
+		JTextArea details = new JTextArea(18, 70);
+		details.setEditable(false);
+		details.setCaretPosition(0);
+		String[] displayed = new String[2];
+		Runnable updateDetails = () -> {
+			ClueDuplicateReview.Candidate pair = (ClueDuplicateReview.Candidate) pairs.getSelectedItem();
+			displayed[0] = describeClue(pair.first());
+			displayed[1] = describeClue(pair.second());
+			details.setText("FIRST\n" + displayed[0] + "\n\nSECOND\n" + displayed[1]);
+			details.setCaretPosition(0);
+		};
+		pairs.addActionListener(event -> updateDetails.run());
+		updateDetails.run();
+		JPanel review = new JPanel(new BorderLayout(5, 5));
+		review.add(new JLabel("Candidates: matching nonblank location and description, ignoring case and whitespace."),
+				BorderLayout.NORTH);
+		review.add(new JScrollPane(details), BorderLayout.CENTER);
+		review.add(pairs, BorderLayout.SOUTH);
+		Object[] options = {"Strike out first", "Strike out second", "Cancel"};
+		int choice = JOptionPane.showOptionDialog(this, review, "Review suspected duplicates",
+				JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[2]);
+		if (choice != 0 && choice != 1) {
 			return;
 		}
+		ClueDuplicateReview.Candidate pair = (ClueDuplicateReview.Candidate) pairs.getSelectedItem();
+		ClueLogEntry struck = choice == 0 ? pair.first() : pair.second();
+		ClueLogEntry retained = choice == 0 ? pair.second() : pair.first();
+		Provenance reviewer = controller.createProvenance();
+		if (JOptionPane.showConfirmDialog(this, "Confirm that clue " + struck.getEntryId()
+				+ " duplicates clue " + retained.getEntryId()
+				+ " and strike it out? Both records will remain in the log.\nReviewer: "
+				+ (reviewer == null ? "unavailable" : reviewer.operatorName()),
+				"Confirm duplicate",
+				JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+			return;
+		}
+		pushToModel();
+		if (!tableModel.getRows().contains(pair.first()) || !tableModel.getRows().contains(pair.second())
+				|| !displayed[0].equals(describeClue(pair.first())) || !displayed[1].equals(describeClue(pair.second()))) {
+			JOptionPane.showMessageDialog(this, "The clues changed during review. Refresh and review again.");
+			return;
+		}
+		if (!confirmDuplicate(struck.getEntryId(), retained.getEntryId())) {
+			JOptionPane.showMessageDialog(this, "The clues changed during review. Refresh and review again.");
+		}
+	}
 
-		// Mark all but the first entry in each group as possible duplicate.
-		for (Map.Entry<String, List<Integer>> group : duplicateGroups) {
-			List<Integer> indices = group.getValue();
-			for (int i = 1; i < indices.size(); i++) {
-				rows.get(indices.get(i)).setPossibleDuplicate(true);
+	/**
+	 * Confirms a still-current candidate, retaining both records and their attribution.
+	 * @param struckId identity of the clue to strike out
+	 * @param retainedId identity of the reference clue
+	 * @return true if the decision was recorded
+	 */
+	boolean confirmDuplicate(String struckId, String retainedId) {
+		pushToModel();
+		for (ClueDuplicateReview.Candidate pair : ClueDuplicateReview.candidates(tableModel.getRows())) {
+			ClueLogEntry a = pair.first();
+			ClueLogEntry b = pair.second();
+			if (a.getEntryId().equals(struckId) && b.getEntryId().equals(retainedId)
+					|| b.getEntryId().equals(struckId) && a.getEntryId().equals(retainedId)) {
+				ClueLogEntry struck = a.getEntryId().equals(struckId) ? a : b;
+				struck.confirmDuplicate(retainedId, UtcTimestamp.nowInstant(), controller.createProvenance());
+				tableModel.fireTableDataChanged();
+				controller.markDirty();
+				return true;
 			}
 		}
-		tableModel.fireTableDataChanged();
-		controller.markDirty();
+		return false;
+	}
+
+	/**
+	 * Formats clue evidence and provenance for review and history.
+	 * @param clue clue to display
+	 * @return text describing the recorded entry
+	 */
+	private static String describeClue(ClueLogEntry clue) {
+		List<String> assignments = new ArrayList<>();
+		for (PocAssignment assignment : clue.getFollowUpAssignments()) {
+			if (assignment != null) {
+				assignments.add(assignment.getId() + ": " + assignment.getAssignee() + " at " + assignment.getAssignedAt());
+			}
+		}
+		return "ID: " + clue.getEntryId() + "\nTask: " + clue.getDetectingTask()
+				+ "\nAssignment ID: " + clue.getAssignmentId() + "\nDetected by: " + clue.getDetectedBy()
+				+ "\nCollected: " + clue.getDateTimeCollected() + "\nLocation: " + clue.getLocation()
+				+ "\nDescription: " + clue.getDescription() + "\nImmediate action: " + clue.getImmediateAction()
+				+ "\nPossible duplicate: " + clue.isPossibleDuplicate()
+				+ "\nFollow up: " + clue.getFollowUp() + "\nFollow-up assignments: " + String.join("; ", assignments)
+				+ "\nFollow-up briefed: " + clue.isFollowUpBriefed()
+				+ "\nFollow-up target: " + clue.getFollowUpTargetDate()
+				+ "\nFollow-up completed: " + clue.getFollowUpCompletedDate()
+				+ "\nFollow-up status: " + clue.getFollowUpStatus() + "\nEntry provenance: " + clue.getProvenance()
+				+ "\nDuplicate confirmation: " + clue.getDuplicateConfirmation();
 	}
 
 	/**
@@ -539,7 +612,7 @@ public class ClueLogPanel extends JPanel {
 	/** Shared clue columns retaining the original in-table editing workflow. */
 	private static class ClueLogTableModel extends AbstractTableModel {
 		private final String[] columns = {"Task", "Detected By", "Date/Time Collected", "Location", "Description",
-				"Immediate Action", "Poss. Dup", "Follow Up"};
+				"Immediate Action", "Poss. Dup", "Follow Up", "Review Status"};
 		private List<ClueLogEntry> rows = new ArrayList<>();
 		/**
 		 * Map from assignmentId → computed task label (e.g. "T3 – Dog X"), refreshed on
@@ -610,7 +683,7 @@ public class ClueLogPanel extends JPanel {
 		/** {@inheritDoc} */
 		public boolean isCellEditable(int rowIndex, int columnIndex) {
 			// Col 0 (Task) is read-only — derived from assignmentId.
-			return columnIndex != 0;
+			return columnIndex != 0 && columnIndex != 8 && !rows.get(rowIndex).isStruckOut();
 		}
 
 		@Override
@@ -638,7 +711,9 @@ public class ClueLogPanel extends JPanel {
 				case 4 -> row.getDescription();
 				case 5 -> row.getImmediateAction();
 				case 6 -> row.isPossibleDuplicate();
-				default -> row.getFollowUp();
+				case 7 -> row.getFollowUp();
+				default -> row.isStruckOut()
+						? (row.getDuplicateConfirmation() == null ? "Struck out" : "Struck out: duplicate") : "";
 			};
 		}
 
@@ -646,6 +721,9 @@ public class ClueLogPanel extends JPanel {
 		/** {@inheritDoc} */
 		public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
 			ClueLogEntry row = rows.get(rowIndex);
+			if (row.isStruckOut()) {
+				return;
+			}
 			switch (columnIndex) {
 				case 0 -> {
 				} // read-only, derived from assignmentId

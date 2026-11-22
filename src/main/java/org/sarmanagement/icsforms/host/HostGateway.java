@@ -81,6 +81,12 @@ public final class HostGateway implements RemoteIncidentGateway {
 
 	/** {@inheritDoc} */
 	@Override
+	public java.util.Optional<String> authorityFingerprint() {
+		return java.util.Optional.of(credential.hostFingerprint());
+	}
+
+	/** {@inheritDoc} */
+	@Override
 	public IncidentService.ReadResult read(IncidentId incident) {
 		try {
 			JsonNode body = client.readIncident(incident.value());

@@ -463,6 +463,65 @@ class SarTaskPanelTest {
 	}
 
 	@Test
+	void debriefKeepsConfirmedDuplicateEvidenceReadOnlyAndUnchanged() throws Exception {
+		SarTaskAssignment task = sampleTask();
+		ClueLogEntry clue = new ClueLogEntry();
+		clue.setAssignmentId(task.getAssignmentId());
+		clue.setDetectingTask("Original task label");
+		clue.setDescription("  Original evidence  ");
+		clue.setFollowUp("Original follow-up");
+		Provenance reviewer = Provenance.local("Reviewer", "station-3", Instant.parse("2026-01-02T03:04:05Z"));
+		clue.confirmDuplicate("reference-clue", Instant.parse("2026-01-02T03:04:05Z"), reviewer);
+		Object editor = createEditor(task, "DEBRIEFING", 1, List.of(), null, List.of(clue));
+		Field field = editor.getClass().getDeclaredField("clueEntryTableModel");
+		field.setAccessible(true);
+		AbstractTableModel model = (AbstractTableModel) field.get(editor);
+		for (int column = 0; column < model.getColumnCount(); column++) {
+			assertFalse(model.isCellEditable(0, column));
+		}
+		assertEquals("Struck out", model.getValueAt(0, 6));
+		model.setValueAt("Changed evidence", 0, 2);
+		assertEquals("  Original evidence  ", model.getValueAt(0, 2));
+		Method apply = editor.getClass().getDeclaredMethod("applyTo", SarTaskAssignment.class, List.class);
+		apply.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		List<ClueLogEntry> merged = (List<ClueLogEntry>) apply.invoke(editor, task, List.of(clue));
+		assertSame(clue, merged.get(0));
+		assertEquals("Original task label", clue.getDetectingTask());
+		assertEquals("  Original evidence  ", clue.getDescription());
+		assertEquals("Original follow-up", clue.getFollowUp());
+		assertEquals("reference-clue", clue.getDuplicateConfirmation().duplicateOfId());
+		assertEquals(reviewer, clue.getDuplicateConfirmation().provenance());
+	}
+
+	@Test
+	void debriefCannotOverwriteOrRemoveAClueStruckOutWhileEditorWasOpen() throws Exception {
+		for (boolean clearEvidence : List.of(false, true)) {
+			SarTaskAssignment task = sampleTask();
+			ClueLogEntry clue = new ClueLogEntry();
+			clue.setAssignmentId(task.getAssignmentId());
+			clue.setDescription("Original evidence");
+			Object editor = createEditor(task, "DEBRIEFING", 1, List.of(), null, List.of(clue));
+			Field field = editor.getClass().getDeclaredField("clueEntryTableModel");
+			field.setAccessible(true);
+			AbstractTableModel model = (AbstractTableModel) field.get(editor);
+			assertTrue(model.isCellEditable(0, 2));
+			model.setValueAt(clearEvidence ? "" : "Stale edit", 0, 2);
+			Provenance reviewer = Provenance.local("Reviewer", null, Instant.parse("2026-01-02T03:04:05Z"));
+			clue.confirmDuplicate("reference-clue", Instant.parse("2026-01-02T03:04:05Z"), reviewer);
+			Method apply = editor.getClass().getDeclaredMethod("applyTo", SarTaskAssignment.class, List.class);
+			apply.setAccessible(true);
+			@SuppressWarnings("unchecked")
+			List<ClueLogEntry> merged = (List<ClueLogEntry>) apply.invoke(editor, task, List.of(clue));
+			assertEquals(1, merged.size());
+			assertSame(clue, merged.get(0));
+			assertEquals("Original evidence", clue.getDescription());
+			assertTrue(clue.isStruckOut());
+			assertEquals(reviewer, clue.getDuplicateConfirmation().provenance());
+		}
+	}
+
+	@Test
 	void debriefCreatesNewClueWithCurrentOperatorProvenance() throws Exception {
 		SarTaskAssignment task = sampleTask();
 		AppController controller = IncidentStoreTestFixtures.controller(new AppData());

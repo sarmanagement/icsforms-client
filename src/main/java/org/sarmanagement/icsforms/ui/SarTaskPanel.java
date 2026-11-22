@@ -2134,13 +2134,16 @@ public class SarTaskPanel extends JPanel {
 	}
 
 	/**
-	 * Copies stable identity and follow-up fields untouched by the debrief editor.
+	 * Copies identity, attribution, review state and follow-up fields untouched by
+	 * the debrief editor.
 	 * @param source source clue
 	 * @param target destination clue
 	 */
 	private static void copyFollowUp(ClueLogEntry source, ClueLogEntry target) {
 		IdentityMigration.preserveIdentity(target, source);
 		target.setProvenance(source.getProvenance());
+		target.setStruckOut(source.isStruckOut());
+		target.setDuplicateConfirmation(source.getDuplicateConfirmation());
 		target.setDetectedBy(source.getDetectedBy());
 		target.setFollowUpAssignments(source.getFollowUpAssignments());
 		target.setFollowUpBriefed(source.isFollowUpBriefed());
@@ -2186,9 +2189,10 @@ public class SarTaskPanel extends JPanel {
 		private String originalRadioChannelId = "";
 	}
 
+	/** Detached debrief clue rows, with struck-out evidence kept read-only. */
 	private static class ClueEntriesTableModel extends AbstractTableModel {
 		private final String[] columns = {"Date/Time", "Location", "Description", "Immediate Action", "Poss. Dup",
-				"Follow Up"};
+				"Follow Up", "Review Status"};
 		private final List<ClueLogEntry> rows = new ArrayList<>();
 
 		/**
@@ -2244,8 +2248,9 @@ public class SarTaskPanel extends JPanel {
 		}
 
 		@Override
+		/** {@inheritDoc} */
 		public boolean isCellEditable(int rowIndex, int columnIndex) {
-			return true;
+			return columnIndex != 6 && !rows.get(rowIndex).isStruckOut();
 		}
 
 		@Override
@@ -2254,6 +2259,7 @@ public class SarTaskPanel extends JPanel {
 		}
 
 		@Override
+		/** {@inheritDoc} */
 		public Object getValueAt(int rowIndex, int columnIndex) {
 			ClueLogEntry row = rows.get(rowIndex);
 			return switch (columnIndex) {
@@ -2262,13 +2268,18 @@ public class SarTaskPanel extends JPanel {
 				case 2 -> row.getDescription();
 				case 3 -> row.getImmediateAction();
 				case 4 -> row.isPossibleDuplicate();
-				default -> row.getFollowUp();
+				case 5 -> row.getFollowUp();
+				default -> row.isStruckOut() ? "Struck out" : "";
 			};
 		}
 
 		@Override
+		/** {@inheritDoc} */
 		public void setValueAt(Object value, int rowIndex, int columnIndex) {
 			ClueLogEntry row = rows.get(rowIndex);
+			if (row.isStruckOut() || columnIndex == 6) {
+				return;
+			}
 			switch (columnIndex) {
 				case 0 -> row.setDateTimeCollected(parseDateTimeValue(value == null ? "" : value.toString().trim()));
 				case 1 -> row.setLocation(value == null ? "" : value.toString().trim());
@@ -2882,7 +2893,7 @@ public class SarTaskPanel extends JPanel {
 				}
 				initialClueIds.add(edited.getEntryId());
 			}
-			updatedClues.removeIf(clue -> initialClueIds.contains(clue.getEntryId()));
+			updatedClues.removeIf(clue -> initialClueIds.contains(clue.getEntryId()) && !clue.isStruckOut());
 			Set<String> currentIds = updatedClues.stream().map(ClueLogEntry::getEntryId)
 					.collect(java.util.stream.Collectors.toSet());
 			for (ClueLogEntry edited : editedClues) {

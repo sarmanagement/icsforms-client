@@ -10,6 +10,15 @@ package org.sarmanagement.icsforms.persistence;
  */
 public interface RemoteIncidentGateway extends AutoCloseable {
 	/**
+	 * Identifies the authenticated host authority without exposing credentials.
+	 *
+	 * @return pinned SHA-256 authority fingerprint, or empty when unavailable
+	 */
+	default java.util.Optional<String> authorityFingerprint() {
+		return java.util.Optional.empty();
+	}
+
+	/**
 	 * Host reachability as observed by a probe.
 	 */
 	enum HostProbe {

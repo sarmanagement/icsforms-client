@@ -19,6 +19,38 @@ Contents:
 Note: the Stage 1 "T1" and "T2" gates are time gates (UTC and provenance) and
 are unrelated to the deployment topologies of the same names.
 
+## Work in progress — issue #61 disconnected workflow
+
+This is a status note, **not a delivery or stage-completion record**. A local
+per-authority, per-incident journal, stable queue ordering, replay, and conflict
+and clue-duplicate review are under development. The intended behavior and
+current limitations are tracked in the
+[host mode plan](host-mode-plan.md#issue-61-work-in-progress). Review identified
+dependent-edit and ambiguous-authorization replay defects; the current code
+and targeted regression tests address those specific cases as detailed in that
+plan. Pre-submit rejection and stale-refresh/cursor retry have targeted fixes
+and regression tests. The journal now restricts storage to its owner on POSIX
+(mode bits) and Windows-style (owner-only ACL) file systems and still fails
+closed elsewhere (`PrivateFiles`, `PrivateFilesTest`); on an unsecurable volume
+such as FAT or exFAT the journal fails over to another protected location
+(`RemoteIncidentStore.connect`), and only when none exists does the window
+continue connected-only with a notice. A rejected queue head can
+be replaced, from Outbox review, by one edit built from the corrected local
+draft after the rejected operations are archived exactly
+(`RemoteIncidentStore.replaceRejected`, `RemoteIncidentStoreRejectionTest`).
+Tabs label edits the host accepted in the current window
+(`MainFrame.acceptedSnapshot`, `MainFrameSyncIndicatorsTest`).
+This is not a claim of overall replay safety or acceptance. Still open: the
+ACL branch has been exercised only through unit tests on Linux, not on a real
+Windows host; an oversized edit cannot be corrected, because records cannot be
+removed and batches are not split; per-view acceptance is not persisted across
+restarts; the acceptance scenarios rebuild stores and windows in one JVM (only
+the journal commit is exercised across real process kills); and CodeQL on the
+final commit is outstanding.
+Neither Stage 2 nor Stage 4 exit criteria are satisfied by this work-in-progress;
+any future Stage 4 narrowing depends on #61 acceptance. Earlier entries below
+describe the scope delivered at the time, not the current status of #61.
+
 ## Part I — Current status
 
 ## Delivered work

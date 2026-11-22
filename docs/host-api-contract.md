@@ -3,8 +3,9 @@
 Status: **version 1 contract for issue #58**, 2026-11-20. The in-process
 `IncidentService` implements record reads, ordered changes, merge, durable
 receipts, and file-backed history. This document also defines the transport
-envelope for a later issue; no listener, authentication mechanism, remote store,
-UI, or outbox is delivered here.
+envelope for a later issue; issue #58 itself did not deliver a listener,
+authentication mechanism, remote store, UI, or outbox. Issues #59–#60 later
+added transport and connected operation; the #61 outbox remains WIP.
 
 ## Resource and version model
 
@@ -227,6 +228,22 @@ failure from a missing response or create a replacement ID. A crash before
 replacement leaves neither the proposed effect nor its receipt; a crash after
 replacement leaves both. This retry rule does not deduplicate independently
 created reports describing the same real-world event.
+
+For the client-side #61 workflow under development, the journal retains pending
+work in stable per-incident queue order; device timestamps do not determine
+replay order. Once submitted, a batch's operation ID **and exact payload** must
+remain immutable, including after an ambiguous result. A new ID is appropriate
+only for a new, explicitly resolved operation, not a retry of the old one.
+Conflict and duplicate-event review are separate from receipt replay. These are
+client requirements, not a claim of overall replay safety: the current code
+and targeted regression tests address the named dependent-edit and
+ambiguous-authorization defects. The stale-refresh guard and monitor cursor
+retry also have targeted regression tests. Pre-submit validation now
+retains oversized work as rejected rather than leaving it pending. A rejected
+head can be replaced by a new operation built from the corrected local draft
+after the rejected operations are archived; oversized edits cannot be
+corrected, and end-to-end acceptance remains open. See the
+[disconnected workflow status](host-mode-plan.md#issue-61-work-in-progress).
 
 ## Version negotiation, limits, and errors
 

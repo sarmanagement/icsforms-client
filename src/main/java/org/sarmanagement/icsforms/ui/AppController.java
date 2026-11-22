@@ -118,6 +118,7 @@ public class AppController implements AutoCloseable {
 	private final List<IncidentChangeListener> incidentChangeListeners = new CopyOnWriteArrayList<>();
 	private long incidentGeneration = 1;
 	private long modelRevision;
+	private long saveCompletionVersion;
 	private long changeSequence;
 	private boolean suppressChangeNotifications;
 	private final Object incidentChangeDeliveryLock = new Object();
@@ -170,6 +171,21 @@ public class AppController implements AutoCloseable {
 	 * @param revision controller revision observed by the editor.
 	 */
 	public record EditorCommitBinding(IncidentBinding incidentBinding, long revision) {
+	}
+
+	/**
+	 * Captures the owner-thread state against which a remote read was started.
+	 *
+	 * @param source store used for the read.
+	 * @param id active incident identifier.
+	 * @param generation active incident generation.
+	 * @param revision persisted revision held at the start of the read.
+	 * @param editVersion local edit generation.
+	 * @param saveCompletionVersion completed save generation.
+	 * @param saveInFlight whether a save was already in progress.
+	 */
+	private record RemoteRefreshBinding(IncidentStore source, IncidentId id, long generation, RevisionToken revision,
+			long editVersion, long saveCompletionVersion, boolean saveInFlight) {
 	}
 
 	/**
@@ -393,6 +409,7 @@ public class AppController implements AutoCloseable {
 				|| !request.incidentId().equals(saves.status().incidentId())) {
 			return;
 		}
+		saveCompletionVersion++;
 		if (completion.failure() == null) {
 			storedRevision = saves.status().revision();
 			if (store != null && !atomicSave && request instanceof FullDocumentSnapshot full) {
@@ -602,14 +619,25 @@ public class AppController implements AutoCloseable {
 	 * Result of offering a remote snapshot to the controller.
 	 */
 	public enum RemoteRefreshOutcome {
-		/** The controller is closed, or the snapshot belongs to a different incident. */
+		/** The controller is closed, or the snapshot belongs to a different store or incident. */
 		IGNORED,
+		/** The active state or an overlapping save makes the read unsafe to acknowledge; retry it. */
+		RETRY,
 		/** The snapshot is the state the controller already holds. */
 		UNCHANGED,
 		/** Newer remote data exists, but local drafts or unsaved work were kept and the old token retained. */
 		DRAFT_PRESERVED,
 		/** The remote state replaced the clean local view. */
-		REFRESHED
+		REFRESHED;
+
+		/**
+		 * Indicates whether a monitor can acknowledge the offered change cursor.
+		 *
+		 * @return false when the change must be offered again.
+		 */
+		public boolean acknowledgesRemoteChange() {
+			return this != RETRY && this != DRAFT_PRESERVED;
+		}
 	}
 
 	/**
@@ -660,7 +688,8 @@ public class AppController implements AutoCloseable {
 	/**
 	 * Loads the current remote snapshot of the active incident on the calling thread and offers it to the
 	 * controller. This performs network I/O, so it must be called from a background thread and never from the
-	 * event-dispatch thread.
+	 * event-dispatch thread. The read is bound to the owner-thread incident, revision, edits and in-flight saves;
+	 * if any of them change while reading, the snapshot is deferred until a later poll.
 	 *
 	 * @return what the controller did with the snapshot.
 	 * @throws IllegalStateException when called on the event-dispatch thread.
@@ -670,13 +699,18 @@ public class AppController implements AutoCloseable {
 		if (SwingUtilities.isEventDispatchThread()) {
 			throw new IllegalStateException("Remote refresh performs network I/O and must not run on the event thread.");
 		}
-		IncidentStore source = store;
-		IncidentId id = activeIncidentId;
-		if (source == null || id == null || closed) {
+		RemoteRefreshBinding binding = onOwner(() -> {
+			if (store == null || activeIncidentId == null || closed) {
+				return null;
+			}
+			return new RemoteRefreshBinding(store, activeIncidentId, incidentGeneration, storedRevision, editVersion,
+					saveCompletionVersion, atomicSave || saves.isBusy());
+		});
+		if (binding == null) {
 			return RemoteRefreshOutcome.IGNORED;
 		}
-		StoredIncident remote = source.loadSnapshot(id);
-		return onOwner(() -> applyRemoteSnapshot(source, id, remote));
+		StoredIncident remote = binding.source().loadSnapshot(binding.id());
+		return onOwner(() -> applyRemoteSnapshot(binding, remote));
 	}
 
 	/**
@@ -686,14 +720,19 @@ public class AppController implements AutoCloseable {
 	 * not reached the model is detected through the editor draft probe and defers the refresh; the monitor offers
 	 * the snapshot again on its next poll.
 	 *
-	 * @param source store the snapshot came from.
-	 * @param id incident the snapshot belongs to.
+	 * @param binding owner-thread state at the start of the read.
 	 * @param remote detached remote snapshot.
 	 * @return the outcome.
 	 */
-	private RemoteRefreshOutcome applyRemoteSnapshot(IncidentStore source, IncidentId id, StoredIncident remote) {
-		if (closed || source != store || !id.equals(activeIncidentId)) {
+	private RemoteRefreshOutcome applyRemoteSnapshot(RemoteRefreshBinding binding, StoredIncident remote) {
+		if (closed || binding.source() != store || !binding.id().equals(activeIncidentId)) {
 			return RemoteRefreshOutcome.IGNORED;
+		}
+		if (binding.generation() != incidentGeneration || binding.saveInFlight() || atomicSave || saves.isBusy()
+				|| binding.editVersion() != editVersion
+				|| binding.saveCompletionVersion() != saveCompletionVersion
+				|| !binding.revision().equals(storedRevision)) {
+			return RemoteRefreshOutcome.RETRY;
 		}
 		if (remote.revision().equals(storedRevision)) {
 			return RemoteRefreshOutcome.UNCHANGED;

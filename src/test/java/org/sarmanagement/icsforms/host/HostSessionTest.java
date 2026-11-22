@@ -17,6 +17,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.persistence.EditLockSupport;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
+import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -56,6 +57,41 @@ class HostSessionTest {
 			assertNull(status.hostFingerprint());
 			fixture.session.stop();
 			assertEquals(HostState.STOPPED, fixture.session.state());
+		}
+	}
+
+	@Test
+	void durableLoopbackRetainsOfflineWorkAcrossReopen() {
+		try (HostFixture fixture = new HostFixture(directory)) {
+			fixture.start();
+			Path cache = directory.resolve("cache");
+			String fingerprint = fixture.session.status().hostFingerprint();
+			try (RemoteIncidentStore remote = fixture.session.loopbackStore(cache)) {
+				var snapshot = remote.loadSnapshot(fixture.incident);
+				remote.detachGateway();
+				snapshot.data().getIncidentContext().setIncidentName("Offline host draft");
+				remote.save(fixture.incident, snapshot.data(), snapshot.revision());
+				assertEquals(1, remote.pendingOperations().size());
+			}
+			try (RemoteIncidentStore reopened = RemoteIncidentStore.openOffline(cache, fingerprint, fixture.incident)) {
+				assertEquals(1, reopened.pendingOperations().size());
+				assertEquals("Offline host draft", reopened.loadSnapshot(fixture.incident).data()
+						.getIncidentContext().getIncidentName());
+			}
+		}
+	}
+
+	@Test
+	void preparedStopRejectsRequestsAndCanResumeAfterFailedSwitch() {
+		try (HostFixture fixture = new HostFixture(directory)) {
+			fixture.start();
+			HostClient client = fixture.client(fixture.pair("Tablet"));
+			fixture.session.prepareStop();
+			assertEquals(HostState.STOPPING, fixture.session.state());
+			assertThrows(HostClientException.class, () -> client.readIncident(fixture.incident.value()));
+			fixture.session.cancelPreparedStop();
+			assertEquals(HostState.RUNNING, fixture.session.state());
+			assertEquals(fixture.incident.value(), client.readIncident(fixture.incident.value()).path("incidentId").asText());
 		}
 	}
 

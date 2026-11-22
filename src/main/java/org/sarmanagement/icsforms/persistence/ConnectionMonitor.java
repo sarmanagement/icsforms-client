@@ -19,7 +19,9 @@ import java.util.logging.Logger;
  * position and "last confirmed" is the local time of the last successful poll, used for display and staleness only.
  *
  * <p><b>Semantics.</b> A poll is a conditional read of the changes after the last cursor the handler accepted. A
- * successful poll confirms contact. A poll that observes a newer cursor calls the {@link ChangeHandler}; the
+ * successful poll confirms contact and invokes the optional after-contact hook before offering remote changes, even
+ * when the cursor is unchanged. Scheduled polls run the hook on a monitor thread, where it may block on network I/O.
+ * A poll that observes a newer cursor calls the {@link ChangeHandler}; the
  * cursor only advances when the handler accepts, so a view that kept an operator's draft is offered the change
  * again on every poll until it can be applied. The state is {@link State#STALE} when the last confirmation is older
  * than the stale threshold even if the next poll is still waiting on a slow network.
@@ -104,6 +106,7 @@ public final class ConnectionMonitor implements AutoCloseable {
 	private final Duration pollInterval;
 	private final Duration staleAfter;
 	private final Clock clock;
+	private final Runnable afterContact;
 	private final ChangeHandler handler;
 	private final Listener listener;
 	private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, task -> {
@@ -133,10 +136,26 @@ public final class ConnectionMonitor implements AutoCloseable {
 	 */
 	public static ConnectionMonitor withDefaults(RemoteIncidentGateway gateway, IncidentId incident,
 			long initialCursor, ChangeHandler handler, Listener listener) {
+		return withDefaults(gateway, incident, initialCursor, () -> { }, handler, listener);
+	}
+
+	/**
+	 * Creates a monitor with default timing and an action to run after every successful host contact.
+	 *
+	 * @param gateway transport to the host
+	 * @param incident shared incident
+	 * @param initialCursor committed cursor of the snapshot already held
+	 * @param afterContact blocking action to run after contact and before remote changes are applied
+	 * @param handler change handler
+	 * @param listener status listener
+	 * @return an unstarted monitor
+	 */
+	public static ConnectionMonitor withDefaults(RemoteIncidentGateway gateway, IncidentId incident,
+			long initialCursor, Runnable afterContact, ChangeHandler handler, Listener listener) {
 		Duration interval = millisProperty(POLL_INTERVAL_PROPERTY, DEFAULT_POLL_INTERVAL);
 		Duration stale = millisProperty(STALE_AFTER_PROPERTY, interval.multipliedBy(3));
-		return new ConnectionMonitor(gateway, incident, initialCursor, interval, stale, Clock.systemUTC(), handler,
-				listener);
+		return new ConnectionMonitor(gateway, incident, initialCursor, interval, stale, Clock.systemUTC(),
+				afterContact, handler, listener);
 	}
 
 	/**
@@ -169,12 +188,32 @@ public final class ConnectionMonitor implements AutoCloseable {
 	 */
 	public ConnectionMonitor(RemoteIncidentGateway gateway, IncidentId incident, long initialCursor,
 			Duration pollInterval, Duration staleAfter, Clock clock, ChangeHandler handler, Listener listener) {
+		this(gateway, incident, initialCursor, pollInterval, staleAfter, clock, () -> { }, handler, listener);
+	}
+
+	/**
+	 * Creates a monitor with an action to run after every successful host contact.
+	 *
+	 * @param gateway transport to the host
+	 * @param incident shared incident
+	 * @param initialCursor committed cursor of the snapshot already held
+	 * @param pollInterval delay between polls
+	 * @param staleAfter age of the last confirmation after which the view is stale
+	 * @param clock local clock used only for display and staleness
+	 * @param afterContact blocking action to run after contact and before remote changes are applied
+	 * @param handler change handler
+	 * @param listener status listener
+	 */
+	public ConnectionMonitor(RemoteIncidentGateway gateway, IncidentId incident, long initialCursor,
+			Duration pollInterval, Duration staleAfter, Clock clock, Runnable afterContact, ChangeHandler handler,
+			Listener listener) {
 		this.gateway = Objects.requireNonNull(gateway, "gateway");
 		this.incident = Objects.requireNonNull(incident, "incident");
 		this.cursor = initialCursor;
 		this.pollInterval = Objects.requireNonNull(pollInterval, "pollInterval");
 		this.staleAfter = Objects.requireNonNull(staleAfter, "staleAfter");
 		this.clock = Objects.requireNonNull(clock, "clock");
+		this.afterContact = Objects.requireNonNull(afterContact, "afterContact");
 		this.handler = Objects.requireNonNull(handler, "handler");
 		this.listener = Objects.requireNonNull(listener, "listener");
 		if (pollInterval.isZero() || pollInterval.isNegative() || staleAfter.isZero() || staleAfter.isNegative()) {
@@ -228,7 +267,8 @@ public final class ConnectionMonitor implements AutoCloseable {
 
 	/**
 	 * Polls once. Public so a view can refresh on demand and tests can drive it deterministically; calls are
-	 * serialized.
+	 * serialized. The after-contact action and change handler run on the calling thread, so callers must not invoke
+	 * this method from the Swing event-dispatch thread.
 	 */
 	public synchronized void pollOnce() {
 		if (closed) {
@@ -242,6 +282,7 @@ public final class ConnectionMonitor implements AutoCloseable {
 			reason = null;
 			stopNotified = false;
 			publish();
+			afterContact.run();
 			if (result.cursor() != cursor && handler.remoteChanged(result.cursor())) {
 				cursor = result.cursor();
 			}

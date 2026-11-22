@@ -1,9 +1,9 @@
 # Host mode implementation plan
 
-Status: **issue #58 in-process service delivered**, 2026-11-20. The service
-contract and versioned record service are implemented without a listener,
-authentication, remote store, outbox, or UI change. This does not deliver host
-mode or complete Stage 2/T1. The remaining work expands
+Status: **Stage 2/T1 incomplete; issue #61 disconnected workflow is work in
+progress**. Issues #58–#60 supplied the service, transport and connected
+remote-store slices described below. The #61 implementation is not yet a
+delivered or fully validated offline workflow. The remaining work expands
 [Stage 2](../DraftWorkPlan.md#stage-2--incident-api-and-single-local-host-delivers-t1);
 the remaining [Stage 0 decisions](stage-0-decisions.md) still apply.
 See the [host API contract](host-api-contract.md) for version 1 DTOs and
@@ -333,9 +333,114 @@ Treat three cases separately:
   version for explicit resolution. Later per-record versions reduce unnecessary
   conflicts but do not eliminate this requirement.
 
-Detection rules and how confirmed duplicates are represented remain decisions,
-not prescribed algorithms. Preserve provenance and existing strike-out/history
-semantics rather than deleting evidence merely to make entries look unique.
+### Issue #61 work in progress
+
+The implementation under development uses a local journal scoped to the pinned
+host authority and incident. It holds an acknowledged base, the local draft and
+an ordered queue of pending operations, so the intended recovery path can retain
+work across restart. The journal requires exclusive local access, owner-only
+file protection, atomic replacement and directory synchronization; unsupported
+platforms or filesystems fail closed. The current implementation uses POSIX
+permissions on POSIX file systems and an explicit owner-only access control
+list (inherited entries replaced) on Windows-style file systems
+(`PrivateFiles`); directory synchronization is skipped where the platform does
+not allow opening a directory, since the atomic rename is already durable
+there. After setting POSIX permissions the journal reads them back and refuses
+a volume that ignores them. If a volume cannot be restricted to the owner (for
+example FAT or exFAT), `RemoteIncidentStore.connect` fails over to the next
+candidate cache location (the configured home, then the user's home, then the
+platform state directory) and offline editing continues; a location that
+already holds the incident's journal is preferred, and discovery and reopening
+search every candidate. Only if no candidate can be protected does the window
+continue connected-only, with a status note and dialog. Temporary directories
+are deliberately not candidates, because unsynced work must survive a reboot.
+The ACL branch is unit-tested but has not been verified on a real Windows host.
+The journal is not an authoritative incident store and does not replace host
+receipts or backups.
+
+The intended replay order is the stable queue order for each incident, not the
+device clock; the host cursor orders accepted changes. Once a batch has been
+submitted, its operation ID and payload must remain unchanged, including after
+an ambiguous response. Only unsubmitted work can be prepared against an
+acknowledged predecessor; conflicts or rejections must stop later replay for
+review. A conflict review needs base, local and host values and explicit choices;
+it must preserve dependent drafts and recheck changes made since review.
+
+The clue-log duplicate review being developed is separate from operation retry
+deduplication: people must review suspected duplicate events, retain provenance
+and history, and not automatically delete entries based on similar text or time.
+The current candidate rule is exact nonblank location and description after
+case and whitespace normalization, limited to the clue log; it is not fuzzy
+matching. Confirmation records a reference, timestamp and optional reviewer
+attribution and strikes out rather than deletes the duplicate. Linked activity
+log entries are not retroactively changed. These are implementation details
+under review, not evidence that duplicate detection finds every duplicate.
+The previously identified dependent-edit and ambiguous-authorization defects
+have targeted fixes in the current implementation:
+
+- `RemoteIncidentStore` reconstructs accepted record versions from host history
+  and compares later edits with their original operator-observed base. A
+  conflicting unseen host field stops replay for review; resolving an earlier
+  conflict retains the later edit's review base. The regression cases
+  `unseenMergedFieldInPredecessorRequiresReviewBeforeDependentEdit` and
+  `resolvingHeadDoesNotEraseConflictInLaterQueuedEdit` cover these paths in
+  `DisconnectedRemoteIncidentStoreTest`.
+- An access failure after an ambiguous submission propagates without marking
+  the operation rejected; the materialized batch stays pending and cannot be
+  discarded. `ambiguousAcceptanceFollowedByAccessFailureCannotBeDiscarded`
+  exercises an accepted but lost response followed by access failure. The
+  lost-response and lost-history tests separately exercise receipt recovery
+  across restart.
+
+The stale-refresh race identified in further review has a targeted fix:
+`AppController` binds a read to the incident, revision, edits and save state
+at its start and returns `RETRY` if that binding becomes stale or a save was
+already in flight. The monitor does not acknowledge the cursor for `RETRY`,
+so it offers the change again. `AppControllerRefreshRaceTest` covers a save completing
+after the read, an in-flight save, a no-op save, concurrent edits and incident
+replacement, as well as retrying the same cursor after an overlapping no-op
+save. These targeted regressions do not establish full workflow acceptance.
+Pre-submit validation now durably marks an invalid queue head
+`REJECTED` with no batch, preserving dependent edits rather than leaving it
+pending. `RemoteIncidentStoreRejectionTest` covers record-count and UTF-8 byte
+limits, export, restart and dependent drafts. Other limitations remain open:
+
+- Oversized edits can still be queued before preparation. A rejected head
+  blocks later replay; retrying unchanged oversized work rejects it again.
+  Records cannot be removed and batches are not split, so an oversized edit
+  has no in-place correction; exports retain the draft and dependent edits.
+  For other rejections, once the operator has saved a correcting edit,
+  `RemoteIncidentStore.replaceRejected` archives the rejected operations
+  exactly (an owner-only `.rejected-<id>.json` file beside the journal) and
+  replaces the queue with one new operation, with a fresh ID, built from the
+  current local draft.
+- The UI has cached-incident, re-pair and outbox-review paths, with integration
+  tests. Outbox review offers export, conflict refresh and resolution,
+  rebased-draft confirmation and replacement of a rejected head; the store's
+  `retryRejected` and `discardPending` methods have no UI callers.
+  A materialized rejected batch remains exact and cannot be discarded, since
+  its submission may have succeeded; the store permits exact retry or export.
+- Workspace indicators describe queued changes and add an “accepted” label
+  when operations leave the queue with a matching increase in accepted
+  receipts while the window is open. The journal still stores only an
+  aggregate count, so the label is not persisted across restarts, and an
+  uncertain attribution is omitted. “No queued changes” is not proof of
+  per-view acceptance.
+  Last successful sync uses the cached confirmation time, distinct from the
+  monitor's last-contact time.
+
+Complete conflict, duplicate and recovery workflows and their full validation
+remain open. Duplicate candidates are limited to the rule above; ordered
+synchronization, attachment transfer and closed-period behavior still need
+Stage 4 work and evidence.
+Stage 4 is not narrowed by this WIP: any future narrowing depends on acceptance
+of #61, and its remaining exit criteria still apply.
+
+The acceptance agent reports five displayed `ConnectedWorkflowAcceptanceTest`
+cases passing, including two disconnected clients, cache reconstruction, a
+create-then-edit dependency and conflict resolution. These reconstruct stores
+in the same JVM, not a new process; some edits are model-level and polling is
+not exercised. This is partial automated evidence, not full acceptance.
 
 ## Operations (issue #59)
 

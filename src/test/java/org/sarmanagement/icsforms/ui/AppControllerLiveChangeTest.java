@@ -7,9 +7,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
+import org.sarmanagement.icsforms.persistence.IncidentService;
+import org.sarmanagement.icsforms.persistence.IncidentStore;
+import org.sarmanagement.icsforms.persistence.PersistenceStatus;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentGateway;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
-import org.sarmanagement.icsforms.persistence.StoreConflictException;
+import org.sarmanagement.icsforms.persistence.RevisionToken;
 import org.sarmanagement.icsforms.persistence.StoreUnavailableException;
 import org.sarmanagement.icsforms.validation.IncidentValidator;
 
@@ -23,6 +26,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,6 +34,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,61 +70,129 @@ class AppControllerLiveChangeTest {
 	}
 
 	@Test
-	void remoteRefreshDuringAndAfterFailedSavePreservesDraftAndItsBaseToken() throws Exception {
+	void disconnectedSaveRetainsDraftAndOriginalBaseUntilReplayDetectsConflict() throws Exception {
 		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("remote"), "Shared")) {
-			CountDownLatch entered = new CountDownLatch(1);
-			CountDownLatch release = new CountDownLatch(1);
-			AtomicBoolean fail = new AtomicBoolean(true);
-			RemoteIncidentStore mine = host.pairThrough(real -> (RemoteIncidentGateway) Proxy.newProxyInstance(
+			RemoteIncidentStore paired = host.pair();
+			RemoteIncidentGateway real = paired.detachGateway();
+			paired.close();
+			AtomicBoolean offline = new AtomicBoolean();
+			RemoteIncidentGateway gateway = (RemoteIncidentGateway) Proxy.newProxyInstance(
 					RemoteIncidentGateway.class.getClassLoader(), new Class<?>[] {RemoteIncidentGateway.class},
 					(proxy, method, args) -> {
-						if (method.getName().equals("submit") && fail.get()) {
-							entered.countDown();
-							if (!release.await(30, TimeUnit.SECONDS)) {
-								throw new IllegalStateException("save gate timed out");
-							}
-							throw new StoreUnavailableException("Save failed", null);
+						if (offline.get() && (method.getName().equals("read")
+								|| method.getName().equals("changesSince") || method.getName().equals("submit"))) {
+							throw new StoreUnavailableException("Host unreachable", null);
 						}
 						try {
 							return method.invoke(real, args);
 						} catch (InvocationTargetException failure) {
 							throw failure.getCause();
 						}
-					}));
+					});
+			RemoteIncidentStore mine = new RemoteIncidentStore(gateway, host.incident(), directory.resolve("cache"));
 			var snapshot = mine.loadSnapshot(host.incident());
-			AppController controller = SwingTestLifecycleExtension.track(new AppController(snapshot.data(), mine,
+			IncidentService.ReadResult originalRecords = real.read(host.incident());
+			CountDownLatch entered = new CountDownLatch(1);
+			CountDownLatch release = new CountDownLatch(1);
+			List<RevisionToken> expectedTokens = new CopyOnWriteArrayList<>();
+			IncidentStore gatedStore = (IncidentStore) Proxy.newProxyInstance(IncidentStore.class.getClassLoader(),
+					new Class<?>[] {IncidentStore.class}, (proxy, method, args) -> {
+						if (method.getName().equals("save") && args.length == 3) {
+							expectedTokens.add((RevisionToken) args[2]);
+							if (expectedTokens.size() == 1) {
+								entered.countDown();
+								if (!release.await(30, TimeUnit.SECONDS)) {
+									throw new IllegalStateException("local save gate timed out");
+								}
+							}
+						}
+						try {
+							return method.invoke(mine, args);
+						} catch (InvocationTargetException problem) {
+							throw problem.getCause();
+						}
+					});
+			AppController controller = SwingTestLifecycleExtension.track(new AppController(snapshot.data(), gatedStore,
 					host.incident(), new PdfExportService(), new IncidentValidator()));
 			RemoteIncidentStore other = host.pair();
 			var theirs = other.loadSnapshot(host.incident());
 			theirs.data().getIncidentContext().setIncidentName("Remote edit");
 			other.save(host.incident(), theirs.data(), theirs.revision());
+			offline.set(true);
 			CountDownLatch finished = new CountDownLatch(1);
 			AtomicReference<RuntimeException> failure = new AtomicReference<>();
 			SwingUtilities.invokeAndWait(() -> {
 				controller.getData().getIncidentContext().setIncidentName("Local draft");
 				controller.markDirty();
+			});
+			assertEquals(AppController.RemoteRefreshOutcome.UNCHANGED, controller.refreshFromRemote());
+			assertEquals(snapshot.revision(), controller.getPersistenceStatus().revision());
+			SwingUtilities.invokeAndWait(() -> {
 				controller.saveAsync(AppController.LinkSource.NONE, result -> {
 					failure.set(result);
 					finished.countDown();
 				});
 			});
 			try {
-				assertTrue(entered.await(30, TimeUnit.SECONDS), "save did not reach gateway");
-				assertEquals(AppController.RemoteRefreshOutcome.DRAFT_PRESERVED, controller.refreshFromRemote());
+				assertTrue(entered.await(30, TimeUnit.SECONDS), "local save did not enter worker");
+				assertEquals(AppController.RemoteRefreshOutcome.RETRY, controller.refreshFromRemote());
 				assertEquals(snapshot.revision(), controller.getPersistenceStatus().revision());
+				assertEquals("Local draft", controller.getData().getIncidentContext().getIncidentName());
 			} finally {
 				release.countDown();
 			}
-			assertTrue(finished.await(30, TimeUnit.SECONDS), "failed save did not finish");
-			assertTrue(failure.get() instanceof StoreUnavailableException);
-			assertEquals(AppController.RemoteRefreshOutcome.DRAFT_PRESERVED, controller.refreshFromRemote());
-			assertEquals(snapshot.revision(), controller.getPersistenceStatus().revision());
+			assertTrue(finished.await(30, TimeUnit.SECONDS), "local save did not finish");
+			assertNull(failure.get());
+			assertEquals(PersistenceStatus.Durability.SAVED, controller.getPersistenceStatus().durability());
+			assertNotEquals(snapshot.revision(), controller.getPersistenceStatus().revision());
+			var localRevision = controller.getPersistenceStatus().revision();
+			assertEquals(AppController.RemoteRefreshOutcome.UNCHANGED, controller.refreshFromRemote());
+			assertEquals(localRevision, controller.getPersistenceStatus().revision());
+			assertEquals(1, mine.pendingOperations().size());
+			var pending = mine.pendingOperations().get(0);
+			assertEquals(RemoteIncidentStore.PendingStatus.PENDING, pending.status());
+			assertEquals("Shared", pending.before().getIncidentContext().getIncidentName());
+			assertEquals("Shared", pending.reviewBase().getIncidentContext().getIncidentName());
+			assertEquals("Local draft", pending.draft().getIncidentContext().getIncidentName());
 			assertEquals("Local draft", controller.getData().getIncidentContext().getIncidentName());
-			fail.set(false);
-			assertThrows(StoreConflictException.class, controller::save);
+			SwingUtilities.invokeAndWait(() -> {
+				controller.getData().getIncidentContext().setTaskMap("Later local edit");
+				controller.markDirty();
+			});
+			controller.save();
+			assertEquals(List.of(snapshot.revision(), localRevision), expectedTokens);
+			assertEquals(2, mine.pendingOperations().size());
+			assertEquals("Shared", mine.pendingOperations().get(0).reviewBase()
+					.getIncidentContext().getIncidentName());
+			assertEquals("Local draft", mine.pendingOperations().get(1).before()
+					.getIncidentContext().getIncidentName());
+			var laterRevision = controller.getPersistenceStatus().revision();
+			assertThrows(StoreUnavailableException.class, mine::replayPending);
+			var batch = mine.pendingOperations().get(0).batch();
+			assertEquals(RemoteIncidentStore.PendingStatus.PENDING, mine.pendingOperations().get(0).status());
+			assertFalse(batch.records().isEmpty());
+			for (var record : batch.records()) {
+				if (record.operation() == IncidentService.Operation.CREATE) {
+					assertEquals(0, record.baseVersion());
+				} else {
+					assertEquals(originalRecords.records().stream().filter(item -> item.key().equals(record.key()))
+							.findFirst().orElseThrow().version(), record.baseVersion());
+				}
+			}
+			offline.set(false);
+			mine.replayPending();
+			var conflict = mine.pendingOperations().get(0);
+			assertEquals(RemoteIncidentStore.PendingStatus.CONFLICT, conflict.status());
+			assertEquals(batch, conflict.batch());
+			assertEquals("Shared", conflict.reviewBase().getIncidentContext().getIncidentName());
+			assertTrue(conflict.conflicts().stream().anyMatch(field -> field.field().equals("incidentName")));
+			assertEquals(2, mine.pendingOperations().size());
+			assertEquals(RemoteIncidentStore.PendingStatus.PENDING, mine.pendingOperations().get(1).status());
+			assertEquals(laterRevision, controller.getPersistenceStatus().revision());
 			assertEquals("Local draft", controller.getData().getIncidentContext().getIncidentName());
 			assertEquals("Remote edit", other.loadSnapshot(host.incident()).data().getIncidentContext()
 					.getIncidentName());
+			other.close();
 		}
 	}
 
