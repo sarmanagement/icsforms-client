@@ -534,8 +534,12 @@ the real service), `RemoteIncidentStoreHostTest`, `ConnectionMonitorTest`,
   refresh then returns `DRAFT_PRESERVED` without flushing or replacing anything;
   the monitor offers the snapshot again on its next poll. Covered by
   `RemoteRefreshEditorDraftTest` (displayed lane).
-- Known limit: focus, caret, selection and scroll are not retained for a clean
-  view across a remote refresh (the selected tab is); tracked as a follow-up.
+- Issue #69: clean remote refresh retains text focus, caret, selection and
+  viewport positions. Activity-log editors are retained by stable log identity;
+  location and ICS 214 resource selections use stable IDs; other table selections
+  are cleared rather than transferred to a potentially different row.
+  `UiRefreshStateTest` covers displayed view state
+  and log identity, and `AppControllerLiveChangeTest` checks stale bindings.
 
 **Displayed-test CI follow-up:** the connected-operation test establishes the
 saved controller-default baseline used by host sharing before opening clients.

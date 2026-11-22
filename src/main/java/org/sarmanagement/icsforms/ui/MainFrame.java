@@ -1781,12 +1781,25 @@ public class MainFrame extends JFrame {
 
 	/** Recreates activity-log editors for the current incident's logs. */
 	private void rebuildLogTabs() {
+		rebuildLogTabs(false);
+	}
+
+	/**
+	 * Recreates activity-log editors, retaining matching panels for a remote refresh.
+	 *
+	 * @param remoteRefresh whether to match logs by stable identity.
+	 */
+	private void rebuildLogTabs(boolean remoteRefresh) {
 		rebuildingTabs = true;
 		try {
 			Map<Ics214Form, Ics214Panel> existingPanels = new IdentityHashMap<>();
+			Map<String, Ics214Panel> remotePanels = new LinkedHashMap<>();
 			for (Ics214Panel panel : new ArrayList<>(ics214Panels)) {
 				if (panel.getCurrentForm() != null) {
 					existingPanels.put(panel.getCurrentForm(), panel);
+					if (remoteRefresh) {
+						remotePanels.put(panel.getCurrentForm().getLogId(), panel);
+					}
 				}
 			}
 			ics214Panels.clear();
@@ -1800,6 +1813,12 @@ public class MainFrame extends JFrame {
 					continue;
 				}
 				Ics214Panel panel = existingPanels.remove(form);
+				if (panel == null && remoteRefresh) {
+					panel = remotePanels.remove(form.getLogId());
+					if (panel != null) {
+						existingPanels.values().remove(panel);
+					}
+				}
 				if (panel == null) {
 					panel = new Ics214Panel(controller);
 				}
@@ -1841,6 +1860,16 @@ public class MainFrame extends JFrame {
 	 * @param fullRefresh whether every editor must be reloaded.
 	 */
 	private void refreshFromModel(boolean fullRefresh) {
+		refreshFromModel(fullRefresh, false);
+	}
+
+	/**
+	 * Reloads editors, optionally retaining activity log panels by stable identity.
+	 *
+	 * @param fullRefresh whether every editor must be reloaded.
+	 * @param remoteRefresh whether this is a clean refresh of the same incident.
+	 */
+	private void refreshFromModel(boolean fullRefresh, boolean remoteRefresh) {
 		AppData data = controller.getData();
 		ensureLogs(data);
 		boolean reconcileTabs = fullRefresh || tabRefreshState.needsRefresh(data, data.getIncidentMode(), data.getIapPhase(),
@@ -1852,7 +1881,7 @@ public class MainFrame extends JFrame {
 		lastRefreshedIncident = controller.getData();
 		applyConfiguredTimeZone();
 		Component selectedComponent = tabs.getSelectedComponent();
-		int selectedLogIndex = selectedLogIndex(selectedComponent);
+		int selectedLogIndex = remoteRefresh ? -1 : selectedLogIndex(selectedComponent);
 		refreshEditor(fullRefresh, incidentContextPanel, incidentContextPanel::refreshFromModel,
 				data.getIncidentContext(), data.getIapPhase(), controller.getStoreDisplayLabel(), data.getOrganizationalChart(), data.getTCards(),
 				data.getIncidentLocations(), data.getCanineRoutingBaseLocationId(), data.getOperationalPeriodHistory());
@@ -1905,7 +1934,7 @@ public class MainFrame extends JFrame {
 			closedLogForms.retainAll(controller.getData().getActivityLogs());
 		}
 		if (reconcileTabs) {
-			rebuildLogTabs();
+			rebuildLogTabs(remoteRefresh);
 		}
 		for (Ics214Panel panel : ics214Panels) {
 			refreshEditor(fullRefresh, panel, () -> panel.loadFromModel(panel.getCurrentForm(), data),
@@ -1999,17 +2028,19 @@ public class MainFrame extends JFrame {
 			refreshStatus();
 			return;
 		}
+		boolean remoteRefresh = change.kind() == AppController.IncidentChangeKind.REMOTE_REFRESHED
+				&& editorCommitBinding.incidentBinding().generation() + 1 == change.binding().generation();
 		boolean sameContext = controller.isCurrent(editorCommitBinding.incidentBinding())
 				&& change.kind() == AppController.IncidentChangeKind.MODEL_COMMITTED;
 		AppController.EditorCommitBinding previousBinding = editorCommitBinding;
-		EditorViewState viewState = sameContext ? captureEditorViewState() : null;
-		if (!sameContext) {
+		EditorViewState viewState = sameContext || remoteRefresh ? captureEditorViewState() : null;
+		if (!sameContext && !remoteRefresh) {
 			clearPendingDraft();
 			lastFocusedEditor = null;
 		}
-		refreshFromModel(!sameContext);
+		refreshFromModel(!sameContext, remoteRefresh);
 		if (viewState != null) {
-			restoreEditorViewState(viewState, previousBinding, latest);
+			restoreEditorViewState(viewState, previousBinding, latest, remoteRefresh);
 		}
 	}
 
@@ -2069,7 +2100,10 @@ public class MainFrame extends JFrame {
 	 * @return detached view state for a safe live refresh.
 	 */
 	private EditorViewState captureEditorViewState() {
-		JTextComponent focusedText = lastFocusedEditor instanceof JTextComponent text
+		Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+		Component focused = focusOwner != null && javax.swing.SwingUtilities.isDescendingFrom(focusOwner, this)
+				? focusOwner : lastFocusedEditor;
+		JTextComponent focusedText = focused instanceof JTextComponent text
 				&& javax.swing.SwingUtilities.isDescendingFrom(text, this) ? text : null;
 		List<TextViewState> textInputs = new ArrayList<>();
 		for (JTextComponent text : descendants(tabs, JTextComponent.class)) {
@@ -2087,6 +2121,15 @@ public class MainFrame extends JFrame {
 		for (JTable table : descendants(tabs, JTable.class)) {
 			int[] selectedRows = table.getSelectedRows();
 			int[] selectedColumns = table.getSelectedColumns();
+			List<String> locationIds = new ArrayList<>();
+			if (table == incidentContextPanel.locationsTable()) {
+				for (int row : selectedRows) {
+					Object id = table.getModel().getValueAt(table.convertRowIndexToModel(row), 3);
+					if (id instanceof String value && !value.isBlank() && locationIdCount(table, value) == 1) {
+						locationIds.add(value);
+					}
+				}
+			}
 			int editingRow = table.isEditing() ? table.getEditingRow() : -1;
 			int editingColumn = table.isEditing() ? table.getEditingColumn() : -1;
 			Component editorComponent = table.isEditing() ? table.getEditorComponent() : null;
@@ -2094,16 +2137,20 @@ public class MainFrame extends JFrame {
 			int selectionStart = editorComponent instanceof JTextComponent text ? text.getSelectionStart() : 0;
 			int selectionEnd = editorComponent instanceof JTextComponent text ? text.getSelectionEnd() : 0;
 			int caretPosition = editorComponent instanceof JTextComponent text ? text.getCaretPosition() : 0;
-			boolean focused = editorComponent == focusedText;
+			boolean editorFocused = editorComponent == focusedText;
 			boolean edited = table.isEditing() && editorText != null
 					&& !java.util.Objects.equals(editorText, String.valueOf(table.getValueAt(editingRow, editingColumn)));
 			tables.add(new TableViewState(table, selectedRows, selectedColumns, editingRow, editingColumn,
-					editorText, edited, selectionStart, selectionEnd, caretPosition, focused));
+					editorText, edited, selectionStart, selectionEnd, caretPosition, editorFocused, locationIds));
 			if (table.isEditing() && table.getCellEditor() != null) {
 				table.getCellEditor().cancelCellEditing();
 			}
 		}
-		return new EditorViewState(tables, textInputs, focusedText);
+		Map<javax.swing.JViewport, java.awt.Point> scrollPositions = new IdentityHashMap<>();
+		for (JScrollPane scroll : descendants(tabs, JScrollPane.class)) {
+			scrollPositions.put(scroll.getViewport(), scroll.getViewport().getViewPosition());
+		}
+		return new EditorViewState(tables, textInputs, focusedText, focused, scrollPositions);
 	}
 
 	/**
@@ -2113,15 +2160,31 @@ public class MainFrame extends JFrame {
 	 * @param state captured editor view state.
 	 * @param previousBinding revision on which the preserved draft began.
 	 * @param latestBinding current shared-model revision.
+	 * @param remoteRefresh whether records were replaced by a remote snapshot.
 	 */
 	private void restoreEditorViewState(EditorViewState state,
 			AppController.EditorCommitBinding previousBinding,
-			AppController.EditorCommitBinding latestBinding) {
+			AppController.EditorCommitBinding latestBinding, boolean remoteRefresh) {
 		restoringEditorState = true;
 		Component focusTarget = null;
 		List<Component> conflictTargets = new ArrayList<>();
 		for (TableViewState tableState : state.tables()) {
 			JTable table = tableState.table();
+			if (remoteRefresh) {
+				if (table == incidentContextPanel.locationsTable()) {
+					table.clearSelection();
+					for (int row = 0; row < table.getRowCount(); row++) {
+						Object id = table.getModel().getValueAt(table.convertRowIndexToModel(row), 3);
+						if (id instanceof String value && tableState.locationIds().contains(value)
+								&& locationIdCount(table, value) == 1) {
+							table.addRowSelectionInterval(row, row);
+						}
+					}
+				} else if (ics214Panels.stream().noneMatch(panel -> panel.resourcesTable() == table)) {
+					table.clearSelection();
+				}
+				continue;
+			}
 			if (ics214Panels.stream().noneMatch(panel -> panel.resourcesTable() == table)) {
 				table.clearSelection();
 				for (int row : tableState.selectedRows()) {
@@ -2166,7 +2229,7 @@ public class MainFrame extends JFrame {
 				continue;
 			}
 			String refreshedText = component.getText();
-			if (textState.edited() && !java.util.Objects.equals(textState.text(), refreshedText)) {
+			if (!remoteRefresh && textState.edited() && !java.util.Objects.equals(textState.text(), refreshedText)) {
 				component.setText(textState.text());
 				conflictTargets.add(component);
 			}
@@ -2179,9 +2242,22 @@ public class MainFrame extends JFrame {
 				focusTarget = component;
 			}
 		}
+		if (focusTarget == null && state.focused() != null
+				&& javax.swing.SwingUtilities.isDescendingFrom(state.focused(), this) && state.focused().isShowing()) {
+			focusTarget = state.focused();
+		}
 		if (focusTarget != null) {
 			focusTarget.requestFocusInWindow();
 		}
+		javax.swing.SwingUtilities.invokeLater(() -> {
+			if (controller.isCurrent(latestBinding.incidentBinding())) {
+				state.scrollPositions().forEach((viewport, position) -> {
+					if (javax.swing.SwingUtilities.isDescendingFrom(viewport, this)) {
+						viewport.setViewPosition(position);
+					}
+				});
+			}
+		});
 		restoringEditorState = false;
 		if (!conflictTargets.isEmpty()) {
 			pendingEditorConflict = true;
@@ -2205,6 +2281,23 @@ public class MainFrame extends JFrame {
 	 */
 	private static String textOf(Component component) {
 		return component instanceof JTextComponent text ? text.getText() : null;
+	}
+
+	/**
+	 * Counts occurrences of a location identity in a table model.
+	 *
+	 * @param table location table.
+	 * @param id stable location identity.
+	 * @return number of rows with that identity.
+	 */
+	private static int locationIdCount(JTable table, String id) {
+		int count = 0;
+		for (int row = 0; row < table.getModel().getRowCount(); row++) {
+			if (id.equals(table.getModel().getValueAt(row, 3))) {
+				count++;
+			}
+		}
+		return count;
 	}
 
 	/** Records the current value of each editable full-form text input. */
@@ -2372,9 +2465,11 @@ public class MainFrame extends JFrame {
 	 * @param tables active table states.
 	 * @param textInputs locally edited or focused text inputs.
 	 * @param focusedText most recently focused text input.
+	 * @param focused focus owner before refresh.
+	 * @param scrollPositions viewport positions before refresh.
 	 */
 	private record EditorViewState(List<TableViewState> tables, List<TextViewState> textInputs,
-			JTextComponent focusedText) {
+			JTextComponent focusedText, Component focused, Map<javax.swing.JViewport, java.awt.Point> scrollPositions) {
 	}
 
 	/**
@@ -2405,10 +2500,11 @@ public class MainFrame extends JFrame {
 	 * @param selectionEnd selected text end.
 	 * @param caretPosition caret location.
 	 * @param focused whether this cell editor owned focus before refresh.
+	 * @param locationIds selected stable incident-location identifiers.
 	 */
 	private record TableViewState(JTable table, int[] selectedRows, int[] selectedColumns, int editingRow,
 			int editingColumn, String editorText, boolean edited, int selectionStart, int selectionEnd,
-			int caretPosition, boolean focused) {
+			int caretPosition, boolean focused, List<String> locationIds) {
 	}
 
 	/**

@@ -72,7 +72,7 @@ jobs:
                       class_skipped = sum(int(suite.attrib.get("skipped", "0")) for suite in suites)
                       if class_skipped:
                           failures.append(f"`{class_name}` skipped {class_skipped} test(s)")
-              summary += "\nDisplayed-test baseline: 28 classes; all reports must be present with zero skipped tests.\n"
+              summary += "\nDisplayed-test baseline: all reports must be present with zero skipped tests.\n"
 
           if failures:
               summary += "\n**Displayed-test gate failures:**\n" + "\n".join(f"- {failure}" for failure in failures) + "\n"

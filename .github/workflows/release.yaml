@@ -89,7 +89,7 @@ jobs:
                       failures.append(f"`{class_name}` skipped {class_skipped} test(s)")
 
           summary = f"### Displayed test summary\n\nSkipped tests: **{skipped}**\n\n"
-          summary += "Displayed-test baseline: 28 classes; all reports must be present with zero skipped tests.\n"
+          summary += "Displayed-test baseline: all reports must be present with zero skipped tests.\n"
           if failures:
               summary += "\n**Displayed-test gate failures:**\n" + "\n".join(f"- {failure}" for failure in failures) + "\n"
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as output:

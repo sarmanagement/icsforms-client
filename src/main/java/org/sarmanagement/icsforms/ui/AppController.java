@@ -151,7 +151,7 @@ public class AppController implements AutoCloseable {
 	 * Describes why live incident views should update.
 	 */
 	public enum IncidentChangeKind {
-		MODEL_COMMITTED, INCIDENT_REPLACED, OPERATIONAL_PERIOD_CHANGED
+		MODEL_COMMITTED, INCIDENT_REPLACED, REMOTE_REFRESHED, OPERATIONAL_PERIOD_CHANGED
 	}
 
 	/**
@@ -183,7 +183,8 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
-	 * Receives shared incident changes on the Swing event dispatch thread.
+	 * Receives shared incident changes on the Swing event dispatch thread. Clean remote replacements are
+	 * delivered before returning to the event queue; other changes are deferred and coalesced.
 	 */
 	@FunctionalInterface
 	public interface IncidentChangeListener {
@@ -705,7 +706,8 @@ public class AppController implements AutoCloseable {
 		RevisionToken previous = storedRevision;
 		storedRevision = remote.revision();
 		try {
-			replaceData(remote.data(), false);
+			replaceData(remote.data(), false, IncidentChangeKind.REMOTE_REFRESHED);
+			deliverPendingIncidentChange();
 		} catch (RuntimeException failure) {
 			storedRevision = previous;
 			return RemoteRefreshOutcome.DRAFT_PRESERVED;
@@ -1360,9 +1362,20 @@ public class AppController implements AutoCloseable {
 	 * @param discardUnsavedChanges whether the caller explicitly approved discard.
 	 */
 	private void replaceData(AppData data, boolean discardUnsavedChanges) {
+		replaceData(data, discardUnsavedChanges, IncidentChangeKind.INCIDENT_REPLACED);
+	}
+
+	/**
+	 * Installs a document and publishes the specified replacement category.
+	 *
+	 * @param data candidate document.
+	 * @param discardUnsavedChanges whether local changes may be discarded.
+	 * @param kind replacement notification category.
+	 */
+	private void replaceData(AppData data, boolean discardUnsavedChanges, IncidentChangeKind kind) {
 		if (!SwingUtilities.isEventDispatchThread()) {
 			onOwner(() -> {
-				replaceData(data, discardUnsavedChanges);
+				replaceData(data, discardUnsavedChanges, kind);
 				return null;
 			});
 			return;
@@ -1385,7 +1398,7 @@ public class AppController implements AutoCloseable {
 		modelRevision++;
 		editVersion++;
 		bindPersistence();
-		publishIncidentChange(IncidentChangeKind.INCIDENT_REPLACED);
+		publishIncidentChange(kind);
 	}
 
 	/**

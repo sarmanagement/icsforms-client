@@ -45,7 +45,7 @@ class AppControllerRemoteRefreshTest {
 			SwingUtilities.invokeAndWait(() -> { });
 
 			assertEquals("Edited elsewhere", controller.getData().getIncidentContext().getIncidentName());
-			assertTrue(kinds.contains(AppController.IncidentChangeKind.INCIDENT_REPLACED));
+			assertTrue(kinds.contains(AppController.IncidentChangeKind.REMOTE_REFRESHED));
 			assertEquals(AppController.RemoteRefreshOutcome.UNCHANGED, controller.refreshFromRemote());
 		}
 	}
