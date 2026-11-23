@@ -143,11 +143,11 @@ class MainFrameSyncIndicatorsTest {
 			try {
 				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
 				AtomicReference<String> label = new AtomicReference<>("");
-				while (!label.get().contains("[pending]") && System.nanoTime() < deadline) {
+				while (!label.get().endsWith("\u2022") && System.nanoTime() < deadline) {
 					SwingUtilities.invokeAndWait(() -> label.set(((JTabbedPane) field(frame.get(), "tabs")).getTitleAt(0)));
 					Thread.sleep(20);
 				}
-				assertTrue(label.get().contains("[pending]"), label.get());
+				assertTrue(label.get().endsWith("\u2022"), label.get());
 				SwingUtilities.invokeAndWait(() -> {
 					JTabbedPane tabs = (JTabbedPane) field(frame.get(), "tabs");
 					assertEquals("Uncommitted typing", draft.get().getText());
@@ -155,6 +155,7 @@ class MainFrameSyncIndicatorsTest {
 					assertTrue(tabs.getToolTipTextAt(0).contains("Last successful sync: "));
 					assertTrue(frame.get().connectionStatusText().contains("last successful sync "));
 					assertFalse(tabs.getTitleAt(1).contains("accepted"));
+					assertFalse(tabs.getTitleAt(1).endsWith("\u2022"));
 				});
 			} finally {
 				SwingUtilities.invokeAndWait(() -> {
@@ -179,9 +180,19 @@ class MainFrameSyncIndicatorsTest {
 						new IncidentValidator(), directory));
 				JTabbedPane tabs = (JTabbedPane) field(frame.get(), "tabs");
 				for (int index = 0; index < tabs.getTabCount(); index++) {
-					assertFalse(tabs.getTitleAt(index).contains("[no queued changes]"));
-					assertFalse(tabs.getTitleAt(index).contains("[checking]"));
+					assertFalse(tabs.getTitleAt(index).contains("["));
+					assertFalse(tabs.getTitleAt(index).endsWith("\u2022"));
 				}
+				javax.swing.JMenu sharing = null;
+				for (int index = 0; index < frame.get().getJMenuBar().getMenuCount(); index++) {
+					if ("Sharing".equals(frame.get().getJMenuBar().getMenu(index).getText())) {
+						sharing = frame.get().getJMenuBar().getMenu(index);
+					}
+				}
+				for (javax.swing.event.MenuListener listener : sharing.getMenuListeners()) {
+					listener.menuSelected(new javax.swing.event.MenuEvent(sharing));
+				}
+				assertFalse(sharing.getItem(0).isEnabled(), "Stop sharing needs an active host");
 				assertEquals("Standalone", frame.get().connectionStatusText());
 				((AppController) field(frame.get(), "controller")).close();
 				frame.get().dispose();

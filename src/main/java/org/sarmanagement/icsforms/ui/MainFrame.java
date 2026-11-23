@@ -880,6 +880,9 @@ public class MainFrame extends JFrame {
 		return bar;
 	}
 
+	/** Single-character tab suffix shown when a workspace has changes queued for the host. */
+	private static final String QUEUED_MARK = " \u2022";
+
 	/**
 	 * Builds the sharing menu offering standalone, host and connect modes.
 	 *
@@ -903,6 +906,26 @@ public class MainFrame extends JFrame {
 		reconnectItem.addActionListener(event -> showReconnect());
 		JMenuItem outboxItem = new JMenuItem("Review outbox...");
 		outboxItem.addActionListener(event -> showOutbox());
+		sharingMenu.addMenuListener(new javax.swing.event.MenuListener() {
+			/** {@inheritDoc} */
+			@Override
+			public void menuSelected(javax.swing.event.MenuEvent event) {
+				standaloneItem.setEnabled(hostSharingDialog != null && hostSharingDialog.isSharing());
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void menuDeselected(javax.swing.event.MenuEvent event) {
+				// Nothing to restore; the state is recomputed whenever the menu opens.
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void menuCanceled(javax.swing.event.MenuEvent event) {
+				// Nothing to restore; the state is recomputed whenever the menu opens.
+			}
+		});
+		standaloneItem.setEnabled(false);
 		sharingMenu.add(standaloneItem);
 		sharingMenu.add(hostItem);
 		sharingMenu.add(connectItem);
@@ -1523,7 +1546,7 @@ public class MainFrame extends JFrame {
 			}
 			String state = !outboxKnown ? "checking" : names.isEmpty() ? "no queued changes"
 					: String.join(", ", names);
-			tabs.setTitleAt(index, label + " [" + state + "]");
+			tabs.setTitleAt(index, outboxKnown && !states.isEmpty() ? label + QUEUED_MARK : label);
 			tabs.setToolTipTextAt(index, "Queue: " + state + ". Last accepted by the host in this window: "
 					+ (acceptedAt == null ? "none" : acceptedAt.toString()) + ". Last successful sync: "
 					+ (cachedConfirmation == null ? "unknown" : cachedConfirmation.toString())
