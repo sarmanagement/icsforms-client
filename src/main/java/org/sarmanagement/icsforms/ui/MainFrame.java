@@ -920,6 +920,11 @@ public class MainFrame extends JFrame {
 			hostSharingDialog.setVisible(true);
 			return;
 		}
+		String periodClosed = HostSharingDialog.periodClosedMessage(controller.getData(), java.time.Instant.now());
+		if (periodClosed != null) {
+			JOptionPane.showMessageDialog(this, periodClosed, "Host this incident", JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
 		IncidentStore store = controller.getStore();
 		IncidentId incident = controller.getActiveIncidentId();
 		if (store == null || incident == null || !"File".equals(store.describe().type())) {

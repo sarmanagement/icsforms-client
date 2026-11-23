@@ -265,6 +265,25 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
+	 * Explains why an incident cannot be hosted because its operational period has already closed. Hosts refuse to
+	 * issue credentials after the close, so sharing would start and then fail at the first invitation.
+	 *
+	 * @param data incident data
+	 * @param now current time
+	 * @return the message to show the operator, or null when the period is open or has no defined end
+	 */
+	public static String periodClosedMessage(AppData data, Instant now) {
+		Instant close = periodCloseOf(data);
+		if (close == null || now.isBefore(close)) {
+			return null;
+		}
+		return "The operational period ended "
+				+ java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").format(close.atOffset(ZoneOffset.UTC))
+				+ ", so devices cannot be admitted and the incident cannot be hosted.\n"
+				+ "Set a later operational period end in the incident details, then try again.";
+	}
+
+	/**
 	 * Sets the address and ports used on the next start, for tests and scripted setup.
 	 *
 	 * @param host address clients use

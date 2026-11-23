@@ -197,6 +197,18 @@ class HostSharingDialogTest {
 	}
 
 	@Test
+	void closedOperationalPeriodIsExplainedBeforeHostingAndOpenOrUndefinedIsNot() {
+		AppData data = new AppData();
+		java.time.Instant now = java.time.Instant.parse("2026-11-22T12:00:00Z");
+		assertNull(HostSharingDialog.periodClosedMessage(data, now));
+		data.getIncidentContext().setOperationalPeriodEnd(LocalDateTime.of(2026, 11, 22, 18, 0));
+		assertNull(HostSharingDialog.periodClosedMessage(data, now));
+		String message = HostSharingDialog.periodClosedMessage(data, java.time.Instant.parse("2026-11-22T18:00:00Z"));
+		org.junit.jupiter.api.Assertions.assertTrue(message.contains("2026-11-22 18:00 UTC"), message);
+		assertNull(HostSharingDialog.periodClosedMessage(null, now));
+	}
+
+	@Test
 	void startShowsInvitationCopiesItAndStopEndsSharing() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (Harness harness = new Harness(directory)) {
