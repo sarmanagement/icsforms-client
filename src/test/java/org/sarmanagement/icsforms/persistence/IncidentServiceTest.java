@@ -628,6 +628,7 @@ class IncidentServiceTest {
 			}
 			return super.save(id, data, expected);
 		}
+
 	}
 
 	/** Record history store that fails before one state replacement. */

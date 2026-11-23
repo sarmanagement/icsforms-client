@@ -27,6 +27,8 @@ final class HostContext {
 	final RateLimiter pairingPerAddress;
 	final RateLimiter pairingGlobal;
 	final RateLimiter statusPerAddress;
+	final RateLimiter reauthorizationPerAddress;
+	final RateLimiter reauthorizationGlobal;
 	private volatile Instant periodClose;
 	private volatile int port;
 	private volatile int enrollmentPort;
@@ -52,6 +54,8 @@ final class HostContext {
 		this.pairingPerAddress = new RateLimiter(config.pairingAttemptsPerAddress(), RATE_WINDOW, config.clock());
 		this.pairingGlobal = new RateLimiter(config.pairingAttemptsGlobal(), RATE_WINDOW, config.clock());
 		this.statusPerAddress = new RateLimiter(config.statusRequestsPerAddress(), RATE_WINDOW, config.clock());
+		this.reauthorizationPerAddress = new RateLimiter(3, RATE_WINDOW, config.clock());
+		this.reauthorizationGlobal = new RateLimiter(20, RATE_WINDOW, config.clock());
 	}
 
 	/**

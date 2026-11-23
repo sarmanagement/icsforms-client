@@ -1,7 +1,8 @@
 # Host mode implementation plan
 
 Status: **Stage 2/T1 incomplete; issue #61 disconnected workflow is work in
-progress**. Issues #58–#60 supplied the service, transport and connected
+progress and issue #62 re-authorization is implemented but not fully
+validated**. Issues #58–#60 supplied the service, transport and connected
 remote-store slices described below. The #61 implementation is not yet a
 delivered or fully validated offline workflow. The remaining work expands
 [Stage 2](../DraftWorkPlan.md#stage-2--incident-api-and-single-local-host-delivers-t1);
@@ -506,3 +507,39 @@ saves may report a revision conflict after remote writes because refresh is out
 of scope here. The window then says remote devices changed the incident, that
 nothing was lost and the edit is still in the window, and advises exporting
 unsaved changes; the edit is never discarded.
+
+## Issue #62 — administrator-approved re-authorization
+
+The host registry persists a bounded approval queue and administrator decision
+audit alongside devices. An expired, non-revoked device submits a signed
+certificate request using the existing public key. An administrator reviews
+the queued outbox and approves or denies; approval keeps the device ID and
+issues a new certificate only after the registry write succeeds.
+
+A revoked device cannot renew. Its replacement requires a fresh invitation and
+key pair, identifies the revoked source device, and is admitted as a new ID only
+after administrator approval. The host annotates accepted record provenance
+with the authenticated replacement ID and source revoked ID. The old
+certificate remains rejected. `MainFrame` retains the disconnected outbox while
+waiting, shows the waiting or denial status, and begins replay only after
+approval. Denial does not discard local pending work.
+
+Enrollment requests are limited to three per source address and 20 globally
+per minute; 64 requests may wait in the host queue. The request body is capped
+at 1 MiB and the outbox string at 900,000 characters. Failed authorization
+responses are generic. Re-authorization requests and decisions are in the
+complete host backup with the CA key, registry and incident.
+
+The requesting client ticket and credentials remain session-memory-only. If
+the process closes while a request is pending, the durable outbox remains, but
+the client can lose the ticket needed to collect an approved certificate.
+This is a release risk; retain the client session until a decision.
+
+See the [operations runbook](host-operations.md), the
+[transport and authorization review](host-mode-security-review.md), and the
+[validation exercise and proposed thresholds](host-mode-validation.md). The
+focused `ReauthorizationTest` covers approval, denial, same-key renewal,
+revoked-key rejection, identity attribution, request rate limiting and backup
+restore; `ReauthorizationFlowTest` and `HostReleaseExerciseTest` add the client
+flow and a multi-instance scenario. Neither replaces the multi-window, real
+disk-exhaustion and platform validation still outstanding.

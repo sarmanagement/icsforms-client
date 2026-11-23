@@ -305,12 +305,16 @@ final class HostApiHandler implements HttpHandler {
 		IncidentService.RecordBatch batch;
 		try {
 			List<IncidentService.RecordSubmission> submissions = new ArrayList<>();
-			for (JsonNode record : records) {
-				submissions.add(HostHttp.MAPPER.treeToValue(record, IncidentService.RecordSubmission.class));
-			}
+			Instant acceptedAt = context.config.clock().instant();
 			String operationId = request.path("operationId").asText("");
 			if (operationId.isBlank()) {
 				throw new IllegalArgumentException("operationId is required");
+			}
+			boolean recovered = device.recoversOperation(operationId);
+			for (JsonNode record : records) {
+				IncidentService.RecordSubmission submission =
+						HostHttp.MAPPER.treeToValue(record, IncidentService.RecordSubmission.class);
+				submissions.add(withDeviceAttribution(submission, device, acceptedAt, recovered));
 			}
 			batch = new IncidentService.RecordBatch(context.incident, operationId, submissions);
 		} catch (IOException | RuntimeException exception) {
@@ -332,6 +336,68 @@ final class HostApiHandler implements HttpHandler {
 	}
 
 	/**
+	 * Adds host-verified identity and acceptance time to all submitted provenance.
+	 *
+	 * @param submission client record submission
+	 * @param device device authenticated by the TLS certificate
+	 * @param acceptedAt host acceptance time
+	 * @param recovered true when the batch is work the administrator saw queued on a revoked identity
+	 * @return submission with host-authoritative provenance
+	 */
+	private IncidentService.RecordSubmission withDeviceAttribution(
+			IncidentService.RecordSubmission submission, DeviceRegistry.DeviceRecord device, Instant acceptedAt,
+			boolean recovered) {
+		JsonNode content = submission.content();
+		JsonNode attributed = normalizeProvenance(content, device, acceptedAt, recovered, false);
+		return new IncidentService.RecordSubmission(submission.key(), submission.parent(),
+				submission.parentField(), submission.baseVersion(), submission.operation(), attributed);
+	}
+
+	/**
+	 * Recursively replaces client-controlled metadata inside provenance objects.
+	 *
+	 * @param value submitted JSON value
+	 * @param device authenticated device
+	 * @param acceptedAt host acceptance time
+	 * @param recovered true when the original identity should be recorded
+	 * @param provenance true when the current object is provenance
+	 * @return detached value with normalized provenance
+	 */
+	private JsonNode normalizeProvenance(JsonNode value, DeviceRegistry.DeviceRecord device, Instant acceptedAt,
+			boolean recovered, boolean provenance) {
+		if (value == null) {
+			return null;
+		}
+		if (value.isObject()) {
+			ObjectNode copy = ((ObjectNode) value).deepCopy();
+			List<String> fields = new ArrayList<>();
+			copy.fieldNames().forEachRemaining(fields::add);
+			for (String field : fields) {
+				copy.set(field, normalizeProvenance(copy.get(field), device, acceptedAt, recovered, "provenance".equals(field)));
+			}
+			if (provenance) {
+				copy.put("acceptedAt", acceptedAt.toString());
+				copy.put("deviceId", device.deviceId());
+				if (!recovered) {
+					copy.remove("originalDeviceId");
+				} else {
+					copy.put("originalDeviceId", device.originalDeviceId());
+				}
+			}
+			return copy;
+		}
+		if (value.isArray()) {
+			com.fasterxml.jackson.databind.node.ArrayNode copy =
+					(com.fasterxml.jackson.databind.node.ArrayNode) value.deepCopy();
+			for (int index = 0; index < copy.size(); index++) {
+				copy.set(index, normalizeProvenance(copy.get(index), device, acceptedAt, recovered, false));
+			}
+			return copy;
+		}
+		return value.deepCopy();
+	}
+
+	/**
 	 * Serves administrator operations, which are limited to the host's own loopback credential.
 	 *
 	 * @param exchange exchange to answer
@@ -349,6 +415,16 @@ final class HostApiHandler implements HttpHandler {
 			invitation(exchange);
 		} else if (DEVICES.equals(path) && "GET".equals(method)) {
 			devices(exchange);
+		} else if ("/v1/admin/reauthorizations".equals(path) && "GET".equals(method)) {
+			reauthorizations(exchange);
+		} else if ("/v1/admin/reauthorizations/audit".equals(path) && "GET".equals(method)) {
+			reauthorizationAudit(exchange);
+		} else if (path.startsWith("/v1/admin/reauthorizations/") && path.endsWith(":approve")
+				&& "POST".equals(method)) {
+			decideReauthorization(exchange, path, true);
+		} else if (path.startsWith("/v1/admin/reauthorizations/") && path.endsWith(":deny")
+				&& "POST".equals(method)) {
+			decideReauthorization(exchange, path, false);
 		} else if (path.startsWith(DEVICES + "/") && path.endsWith(":revoke") && "POST".equals(method)) {
 			String id = path.substring(DEVICES.length() + 1, path.length() - ":revoke".length());
 			if (context.registry.revoke(id)) {
@@ -360,6 +436,87 @@ final class HostApiHandler implements HttpHandler {
 			}
 		} else {
 			HostHttp.error(exchange, 404, "not_found", "No such resource.", false);
+		}
+	}
+
+	/**
+	 * Lists pending requests, including their queued work for administrator review.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void reauthorizations(HttpExchange exchange) throws IOException {
+		ArrayNode requests = HostHttp.MAPPER.createArrayNode();
+		for (DeviceRegistry.ReauthorizationRequest request : context.registry.pendingRequests()) {
+			ObjectNode item = HostHttp.MAPPER.createObjectNode();
+			item.put("requestId", request.requestId());
+			item.put("kind", request.kind().name().toLowerCase(Locale.ROOT));
+			item.put("originalDeviceId", request.originalDeviceId());
+			item.put("deviceName", request.deviceName());
+			item.put("createdAt", request.createdAt().toString());
+			item.set("outbox", HostHttp.MAPPER.readTree(request.outboxJson()));
+			requests.add(item);
+		}
+		ObjectNode body = HostHttp.MAPPER.createObjectNode();
+		body.set("requests", requests);
+		HostHttp.send(exchange, 200, body);
+	}
+
+	/**
+	 * Lists administrator decisions without exposing request tokens or device credentials.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void reauthorizationAudit(HttpExchange exchange) throws IOException {
+		ArrayNode audit = HostHttp.MAPPER.createArrayNode();
+		for (DeviceRegistry.ApprovalAudit entry : context.registry.approvalAudit()) {
+			ObjectNode item = HostHttp.MAPPER.createObjectNode();
+			item.put("requestId", entry.requestId());
+			item.put("decision", entry.decision().name().toLowerCase(Locale.ROOT));
+			item.put("decidedAt", entry.decidedAt().toString());
+			item.put("originalDeviceId", entry.originalDeviceId());
+			if (entry.deviceId() != null) {
+				item.put("deviceId", entry.deviceId());
+			}
+			audit.add(item);
+		}
+		ObjectNode body = HostHttp.MAPPER.createObjectNode();
+		body.set("audit", audit);
+		HostHttp.send(exchange, 200, body);
+	}
+
+	/**
+	 * Approves or denies a pending request.
+	 *
+	 * @param exchange exchange to answer
+	 * @param path request path
+	 * @param approve true to approve, false to deny
+	 * @throws IOException when the response cannot be written
+	 */
+	private void decideReauthorization(HttpExchange exchange, String path, boolean approve) throws IOException {
+		String suffix = approve ? ":approve" : ":deny";
+		String requestId = path.substring("/v1/admin/reauthorizations/".length(), path.length() - suffix.length());
+		try {
+			DeviceRegistry.ReauthorizationRequest request;
+			if (approve) {
+				request = context.registry.approveRequest(requestId, context.config.credentialLifetime(),
+						context.periodClose(), (publicKey, deviceId, now, notAfter) ->
+								context.authority.issueDevice(publicKey, deviceId, now, notAfter));
+			} else {
+				request = context.registry.denyRequest(requestId);
+			}
+			ObjectNode body = HostHttp.MAPPER.createObjectNode();
+			body.put("state", request.state().name().toLowerCase(Locale.ROOT));
+			if (approve) {
+				body.put("deviceId", request.deviceId());
+			}
+			HostHttp.send(exchange, 200, body);
+		} catch (InvitationRejectedException rejected) {
+			HostHttp.error(exchange, 409, "request_not_pending", "The request is no longer pending.", false);
+		} catch (HostStorageException failure) {
+			context.fail("Device registry storage failed");
+			HostHttp.error(exchange, 503, "service_unavailable", "The host cannot update approvals right now.", true);
 		}
 	}
 

@@ -79,6 +79,72 @@ public final class HostGateway implements RemoteIncidentGateway {
 		return location;
 	}
 
+	/**
+	 * Returns the current host-known identity.
+	 *
+	 * @return device identifier
+	 */
+	public String deviceId() {
+		return credential.deviceId();
+	}
+
+	/**
+	 * Checks the pre-authentication credential state.
+	 *
+	 * @return active, expired, revoked or unknown
+	 */
+	public String credentialState() {
+		return client.credentialState(credential);
+	}
+
+	/**
+	 * Requests approval to renew an expired credential using its existing key.
+	 *
+	 * @param deviceName operator-visible device name
+	 * @param pendingOutbox pending operations for administrator review
+	 * @return approval ticket
+	 */
+	public HostClient.ReauthorizationTicket requestRenewal(String deviceName, JsonNode pendingOutbox) {
+		return client.requestRenewal(credential, deviceName, pendingOutbox);
+	}
+
+	/**
+	 * Requests approval to replace this revoked identity with a newly invited device.
+	 *
+	 * @param invitationText single-use invitation
+	 * @param deviceName operator-visible device name
+	 * @param pendingOutbox pending operations for administrator review
+	 * @return approval ticket
+	 */
+	public HostClient.ReauthorizationTicket requestRepair(String invitationText, String deviceName,
+			JsonNode pendingOutbox) {
+		HostInvitation invitation = HostInvitation.parse(invitationText);
+		if (!credential.hostFingerprint().equalsIgnoreCase(invitation.hostFingerprint())) {
+			throw new IllegalArgumentException("The invitation is for a different host");
+		}
+		return HostClient.requestRepair(invitation, credential.deviceId(), deviceName, pendingOutbox);
+	}
+
+	/**
+	 * Polls an approval request.
+	 *
+	 * @param ticket request proof and key material
+	 * @return decision state and approved credential if available
+	 */
+	public HostClient.ReauthorizationResult pollReauthorization(HostClient.ReauthorizationTicket ticket) {
+		return client.pollReauthorization(ticket);
+	}
+
+	/**
+	 * Creates a gateway for a newly approved credential.
+	 *
+	 * @param replacement approved credential
+	 * @return authenticated replacement gateway
+	 */
+	public HostGateway withCredential(DeviceCredential replacement) {
+		return new HostGateway(client.withCredential(replacement), replacement, location);
+	}
+
 	/** {@inheritDoc} */
 	@Override
 	public java.util.Optional<String> authorityFingerprint() {

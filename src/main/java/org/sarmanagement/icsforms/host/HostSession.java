@@ -465,6 +465,33 @@ public final class HostSession implements AutoCloseable {
 	}
 
 	/**
+	 * Lists pending re-authorization requests, including their queued work for review.
+	 *
+	 * @return request objects
+	 */
+	public List<com.fasterxml.jackson.databind.JsonNode> reauthorizationRequests() {
+		return requireAdmin().listReauthorizationRequests();
+	}
+
+	/**
+	 * Approves a pending device re-authorization.
+	 *
+	 * @param requestId request to approve
+	 */
+	public void approveReauthorization(String requestId) {
+		requireAdmin().approveReauthorization(requestId);
+	}
+
+	/**
+	 * Denies a pending device re-authorization without deleting the device's local outbox.
+	 *
+	 * @param requestId request to deny
+	 */
+	public void denyReauthorization(String requestId) {
+		requireAdmin().denyReauthorization(requestId);
+	}
+
+	/**
 	 * Revokes a device through the administrator path.
 	 *
 	 * @param deviceId device to revoke

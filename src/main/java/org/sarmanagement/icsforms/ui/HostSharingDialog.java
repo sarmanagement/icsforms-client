@@ -10,6 +10,7 @@ import org.sarmanagement.icsforms.host.HostSession;
 import org.sarmanagement.icsforms.host.HostState;
 import org.sarmanagement.icsforms.host.HostStatus;
 import org.sarmanagement.icsforms.host.HostStorage;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.IncidentStore;
@@ -134,6 +135,7 @@ public class HostSharingDialog extends JDialog {
 	private volatile boolean starting;
 	private boolean stopping;
 	private boolean refreshingDevices;
+	private boolean reviewingRequests;
 	private transient java.util.List<Path> cacheRoots =
 			java.util.List.of(Path.of(System.getProperty("user.home"), ".icsforms", "remote-cache"));
 	private transient java.util.function.Consumer<IncidentStore> onLoopback = loopback -> { };
@@ -147,6 +149,7 @@ public class HostSharingDialog extends JDialog {
 	private final JButton stopButton = new JButton("Stop sharing");
 	private final JButton inviteButton = new JButton("Create invitation");
 	private final JButton revokeButton = new JButton("Revoke selected device");
+	private final JButton reviewRequestsButton = new JButton("Review re-authorization requests");
 	private final JButton backupButton = new JButton("Back up host data...");
 	private final JButton restoreButton = new JButton("Restore host data...");
 	private final JTextArea invitationArea = new JTextArea(4, 48);
@@ -335,6 +338,7 @@ public class HostSharingDialog extends JDialog {
 		devices.add(new JScrollPane(deviceTable), BorderLayout.CENTER);
 		JPanel deviceButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		deviceButtons.add(revokeButton);
+		deviceButtons.add(reviewRequestsButton);
 		deviceButtons.add(backupButton);
 		deviceButtons.add(restoreButton);
 		devices.add(deviceButtons, BorderLayout.SOUTH);
@@ -349,8 +353,120 @@ public class HostSharingDialog extends JDialog {
 		stopButton.addActionListener(event -> stopSharing());
 		inviteButton.addActionListener(event -> issueInvitation());
 		revokeButton.addActionListener(event -> revokeSelected());
+		reviewRequestsButton.addActionListener(event -> reviewReauthorizationRequests());
 		backupButton.addActionListener(event -> backupAction());
 		restoreButton.addActionListener(event -> restoreAction());
+	}
+
+	/**
+	 * Loads pending re-authorization requests off the event thread.
+	 */
+	private void reviewReauthorizationRequests() {
+		HostSession current = session;
+		if (current == null || reviewingRequests) {
+			return;
+		}
+		reviewingRequests = true;
+		reviewRequestsButton.setEnabled(false);
+		new SwingWorker<List<JsonNode>, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected List<JsonNode> doInBackground() {
+				return current.reauthorizationRequests();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				reviewingRequests = false;
+				reviewRequestsButton.setEnabled(isSharing());
+				try {
+					List<JsonNode> requests = get();
+					if (requests.isEmpty()) {
+						prompts.show(HostSharingDialog.this, "Re-authorization",
+								"There are no pending requests.", false);
+					} else {
+						presentReauthorizationRequest(current, requests);
+					}
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					prompts.show(HostSharingDialog.this, "Re-authorization",
+							"Could not load requests: " + failure.getCause().getMessage(), true);
+				}
+			}
+		}.execute();
+	}
+
+	/**
+	 * Shows one request's queued work before allowing an administrator decision.
+	 *
+	 * @param current active host session
+	 * @param requests pending requests
+	 */
+	private void presentReauthorizationRequest(HostSession current, List<JsonNode> requests) {
+		String[] labels = requests.stream().map(request -> request.path("kind").asText() + " · "
+				+ request.path("deviceName").asText() + " · original device "
+				+ request.path("originalDeviceId").asText()).toArray(String[]::new);
+		int selected = JOptionPane.showOptionDialog(this, "Select a request to review:", "Re-authorization requests",
+				JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, labels, labels[0]);
+		if (selected < 0 || selected >= requests.size()) {
+			return;
+		}
+		JsonNode request = requests.get(selected);
+		JTextArea outbox = new JTextArea(request.path("outbox").toPrettyString(), 20, 72);
+		outbox.setEditable(false);
+		outbox.setCaretPosition(0);
+		JPanel review = new JPanel(new BorderLayout(6, 6));
+		review.add(new JLabel("Request " + request.path("requestId").asText() + " · " + labels[selected]),
+				BorderLayout.NORTH);
+		review.add(new JScrollPane(outbox), BorderLayout.CENTER);
+		String[] decisions = {"Approve", "Deny", "Leave pending"};
+		int decision = JOptionPane.showOptionDialog(this, review, "Review pending outbox",
+				JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, decisions, decisions[2]);
+		if (decision == 0 || decision == 1) {
+			resolveReauthorization(current, request.path("requestId").asText(), decision == 0);
+		}
+	}
+
+	/**
+	 * Records the administrator's decision off the event thread.
+	 *
+	 * @param current active host session
+	 * @param requestId request to resolve
+	 * @param approve true to approve, false to deny
+	 */
+	private void resolveReauthorization(HostSession current, String requestId, boolean approve) {
+		reviewRequestsButton.setEnabled(false);
+		new SwingWorker<Void, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected Void doInBackground() {
+				if (approve) {
+					current.approveReauthorization(requestId);
+				} else {
+					current.denyReauthorization(requestId);
+				}
+				return null;
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				reviewRequestsButton.setEnabled(isSharing());
+				try {
+					get();
+					prompts.show(HostSharingDialog.this, "Re-authorization",
+							approve ? "Request approved." : "Request denied. The device's local outbox is unchanged.",
+							false);
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					prompts.show(HostSharingDialog.this, "Re-authorization",
+							"Could not resolve request: " + failure.getCause().getMessage(), true);
+				}
+			}
+		}.execute();
 	}
 
 	/**
@@ -885,6 +1001,7 @@ public class HostSharingDialog extends JDialog {
 		stopButton.setEnabled(current != null && !stopping && current.state() != HostState.STOPPING);
 		inviteButton.setEnabled(running && !stopping);
 		revokeButton.setEnabled(running && !stopping);
+		reviewRequestsButton.setEnabled(running && !stopping && !reviewingRequests);
 		hostField.setEnabled(current == null);
 		portSpinner.setEnabled(current == null);
 		enrollmentSpinner.setEnabled(current == null);

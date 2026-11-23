@@ -12,6 +12,7 @@ import org.sarmanagement.icsforms.persistence.IncidentId;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.PublicKey;
+import java.security.cert.X509Certificate;
 import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Level;
@@ -63,6 +64,26 @@ final class EnrollmentHandler implements HttpHandler {
 					HostHttp.error(exchange, 405, "method_not_allowed", "Use POST.", false);
 				} else {
 					redeem(exchange);
+				}
+			} else if ("/v1/reauthorization/renew".equals(path)) {
+				if (!"POST".equals(method)) {
+					HostHttp.error(exchange, 405, "method_not_allowed", "Use POST.", false);
+				} else {
+					requestRenewal(exchange);
+				}
+			} else if ("/v1/reauthorization/repair".equals(path)) {
+				if (!"POST".equals(method)) {
+					HostHttp.error(exchange, 405, "method_not_allowed", "Use POST.", false);
+				} else {
+					requestRepair(exchange);
+				}
+			} else if ("/v1/reauthorization/status".equals(path)) {
+				if (!"POST".equals(method)) {
+					HostHttp.error(exchange, 405, "method_not_allowed", "Use POST.", false);
+				} else if (!context.statusPerAddress.tryAcquire(HostHttp.remoteKey(exchange))) {
+					rateLimited(exchange);
+				} else {
+					reauthorizationStatus(exchange);
 				}
 			} else {
 				HostHttp.error(exchange, 404, "not_found", "No such resource.", false);
@@ -174,6 +195,155 @@ final class EnrollmentHandler implements HttpHandler {
 		body.put("expiresAt", admission.device().expiresAt().toString());
 		LOGGER.log(Level.INFO, "Device admitted: {0}", admission.device().deviceId());
 		HostHttp.send(exchange, 200, body);
+	}
+
+	/**
+	 * Queues same-key renewal of an expired device for administrator approval.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void requestRenewal(HttpExchange exchange) throws IOException {
+		if (!allowReauthorization(exchange)) {
+			return;
+		}
+		JsonNode request = readReauthorizationRequest(exchange);
+		if (request == null) {
+			return;
+		}
+		try {
+			X509Certificate certificate = HostCrypto.parseCertificate(request.path("certificate").asText(""));
+			java.security.PublicKey key = HostCrypto.verifyRequest(request.path("certificateRequest").asText(""));
+			String fingerprint = request.path("certificateFingerprint").asText("");
+			String deviceId = request.path("deviceId").asText("");
+			DeviceRegistry.DeviceRecord device = context.registry.byFingerprint(fingerprint).orElse(null);
+			if (device == null || !device.deviceId().equals(deviceId)
+					|| context.effectiveState(device) != CredentialState.EXPIRED) {
+				throw new InvitationRejectedException("renewal not eligible");
+			}
+			DeviceRegistry.SubmittedRequest submitted = context.registry.requestRenewal(deviceId, fingerprint,
+					certificate, key, sanitizeName(request.path("deviceName").asText("")),
+					HostHttp.MAPPER.writeValueAsString(request.path("pendingOutbox")), context.periodClose());
+			sendSubmitted(exchange, submitted);
+		} catch (GeneralSecurityException | IOException | InvitationRejectedException failure) {
+			HostHttp.error(exchange, 403, "reauthorization_unavailable",
+					"The credential cannot request renewal.", false);
+		}
+	}
+
+	/**
+	 * Queues a new invitation-backed identity for a revoked device's retained outbox.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void requestRepair(HttpExchange exchange) throws IOException {
+		if (!allowReauthorization(exchange)) {
+			return;
+		}
+		JsonNode request = readReauthorizationRequest(exchange);
+		if (request == null) {
+			return;
+		}
+		try {
+			java.security.PublicKey key = HostCrypto.verifyRequest(request.path("certificateRequest").asText(""));
+			IncidentId incident = IncidentId.of(request.path("incidentId").asText(""));
+			DeviceRegistry.SubmittedRequest submitted = context.registry.requestRepair(
+					request.path("invitation").asText(""), incident, context.incident,
+					request.path("originalDeviceId").asText(""),
+					sanitizeName(request.path("deviceName").asText("")),
+					key, HostHttp.MAPPER.writeValueAsString(request.path("pendingOutbox")));
+			sendSubmitted(exchange, submitted);
+		} catch (GeneralSecurityException | IllegalArgumentException | IOException
+				| InvitationRejectedException failure) {
+			HostHttp.error(exchange, 403, "reauthorization_unavailable",
+					"The request cannot be approved with these credentials.", false);
+		}
+	}
+
+	/**
+	 * Reads a bounded re-authorization body.
+	 *
+	 * @param exchange exchange to read
+	 * @return request object, or null after sending an error
+	 * @throws IOException when the body cannot be read
+	 */
+	private JsonNode readReauthorizationRequest(HttpExchange exchange) throws IOException {
+		byte[] raw = HostHttp.readBody(exchange, HostProtocol.MAX_REAUTHORIZATION_BYTES);
+		return raw == null ? null : HostHttp.parseObject(exchange, raw);
+	}
+
+	/**
+	 * Applies global and per-address limits to queue submissions.
+	 *
+	 * @param exchange exchange to answer
+	 * @return true when the request may proceed
+	 * @throws IOException when the response cannot be written
+	 */
+	private boolean allowReauthorization(HttpExchange exchange) throws IOException {
+		if (!context.reauthorizationGlobal.tryAcquire("global")
+				|| !context.reauthorizationPerAddress.tryAcquire(HostHttp.remoteKey(exchange))) {
+			rateLimited(exchange);
+			return false;
+		}
+		if (context.state.get() != HostState.RUNNING) {
+			HostHttp.error(exchange, 503, "service_unavailable", "The host is not accepting requests.", true);
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Sends the request identifier and its one-time polling token.
+	 *
+	 * @param exchange exchange to answer
+	 * @param submitted accepted request
+	 * @throws IOException when the response cannot be written
+	 */
+	private void sendSubmitted(HttpExchange exchange, DeviceRegistry.SubmittedRequest submitted) throws IOException {
+		ObjectNode body = HostHttp.MAPPER.createObjectNode();
+		body.put("requestId", submitted.request().requestId());
+		body.put("statusToken", submitted.token());
+		body.put("state", "waiting_for_approval");
+		HostHttp.send(exchange, 202, body);
+	}
+
+	/**
+	 * Returns only the decision for the request identified by a bearer token.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void reauthorizationStatus(HttpExchange exchange) throws IOException {
+		byte[] raw = HostHttp.readBody(exchange, HostProtocol.MAX_PAIRING_BYTES);
+		if (raw == null) {
+			return;
+		}
+		JsonNode body = HostHttp.parseObject(exchange, raw);
+		if (body == null) {
+			return;
+		}
+		DeviceRegistry.ReauthorizationRequest request = context.registry
+				.requestForToken(body.path("statusToken").asText("")).orElse(null);
+		if (request == null) {
+			HostHttp.error(exchange, 404, "not_found", "No such request.", false);
+			return;
+		}
+		ObjectNode response = HostHttp.MAPPER.createObjectNode();
+		response.put("state", switch (request.state()) {
+			case PENDING -> "waiting_for_approval";
+			case DENIED -> "denied";
+			case APPROVED -> "approved";
+		});
+		if (request.state() == DeviceRegistry.ApprovalState.APPROVED) {
+			response.put("deviceId", request.deviceId());
+			response.put("certificate", request.certificate());
+			response.put("caCertificate", context.authority.certificatePem());
+			response.put("expiresAt", context.registry.devices().stream()
+					.filter(device -> device.deviceId().equals(request.deviceId())).findFirst()
+					.map(device -> device.expiresAt().toString()).orElse(""));
+		}
+		HostHttp.send(exchange, 200, response);
 	}
 
 	/**
