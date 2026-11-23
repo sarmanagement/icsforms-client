@@ -62,7 +62,9 @@ final class ConnectForm {
 		JTextArea advanced = new JTextArea(3, 40);
 		advanced.setLineWrap(true);
 		JTextField device = new JTextField(System.getProperty("user.name", "device"), 20);
-		Object[] form = {"Host address (name or IP, optionally :port):", host, "Pairing code shown on the host:",
+		javax.swing.JButton find = new javax.swing.JButton("Find hosts on this network");
+		find.addActionListener(event -> findHosts(parent, find, host));
+		Object[] form = {"Host address (name or IP, optionally :port):", host, find, "Pairing code shown on the host:",
 				code, "Or paste an invitation or QR text (advanced):", new JScrollPane(advanced), "Device name:",
 				device};
 		while (true) {
@@ -88,5 +90,54 @@ final class ConnectForm {
 			return new ConnectForm(HostGateway.TYPED_PREFIX + host.getText().strip() + ":" + code.getText().strip(),
 					name);
 		}
+	}
+
+	/**
+	 * Browses for hosts with an open pairing window off the event thread and lets the operator pick one.
+	 *
+	 * @param parent component to center on
+	 * @param button button to disable while browsing
+	 * @param host field to fill with the chosen address
+	 */
+	private static void findHosts(Component parent, javax.swing.JButton button, JTextField host) {
+		button.setEnabled(false);
+		new javax.swing.SwingWorker<java.util.List<org.sarmanagement.icsforms.host.HostDiscovery.Found>, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected java.util.List<org.sarmanagement.icsforms.host.HostDiscovery.Found> doInBackground() {
+				return org.sarmanagement.icsforms.host.HostDiscovery.create().browse(java.time.Duration.ofSeconds(3));
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				button.setEnabled(true);
+				try {
+					java.util.List<org.sarmanagement.icsforms.host.HostDiscovery.Found> found = get();
+					if (found.isEmpty()) {
+						JOptionPane.showMessageDialog(parent, "No host with an open pairing code was found. "
+								+ "Type the address shown on the host instead.", "Connect to a host",
+								JOptionPane.INFORMATION_MESSAGE);
+						return;
+					}
+					String[] labels = found.stream().map(f -> f.name() + " (" + f.address() + ")")
+							.toArray(String[]::new);
+					Object choice = JOptionPane.showInputDialog(parent, "Hosts found:", "Connect to a host",
+							JOptionPane.PLAIN_MESSAGE, null, labels, labels[0]);
+					for (int i = 0; i < labels.length; i++) {
+						if (labels[i].equals(choice)) {
+							String address = found.get(i).address();
+							host.setText((address.contains(":") ? "[" + address + "]" : address) + ":"
+									+ found.get(i).enrollmentPort());
+						}
+					}
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					JOptionPane.showMessageDialog(parent, "Host discovery is not available.", "Connect to a host",
+							JOptionPane.WARNING_MESSAGE);
+				}
+			}
+		}.execute();
 	}
 }

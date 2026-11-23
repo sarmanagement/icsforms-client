@@ -621,3 +621,31 @@ connected windows, polling, failed-save recovery and local PDFs. The sharing
 tests arm slow transport before connecting and assert their bounded start wait.
 The [host plan](host-mode-plan.md#4-implement-the-production-remote-store-and-wire-both-uis)
 clarifies the numeric revision placeholder in remote JSON exports.
+
+## Short-code pairing — issue #74
+
+Replaces copying a roughly 560-character invitation with a short, spoken or
+scanned pairing code (PR #75, in progress).
+
+* `host/pairing` holds the swappable `PakeSuite` (finite-field J-PAKE,
+  `jpake-ff-3072`) and `ChannelSuite` (HKDF-SHA-256 with AES-256-GCM)
+  behind `PairingSuites`, plus `PairingCode`, `PairingPayload` and
+  `PairingTranscript`. EC-J-PAKE was rejected because Bouncy Castle cannot
+  rebuild received Schnorr proofs; no cryptography is hand-written.
+* `ShortPairing` is the single in-memory window (single use, expiry, burned
+  after three failed confirmations); `EnrollmentHandler` serves
+  `/v1/pairing/short/begin` and `/finish`, and admits through the existing
+  invitation path. `HostApiHandler` serves `/v1/admin/pairing` and
+  `/v1/admin/pairing:close`.
+* `HostClient.pairWithCode` supports a typed code (capturing trust, host
+  fingerprint bound by key confirmation) and a QR payload (pinned trust).
+  `HostGateway.pair` accepts a long invitation, `ICSFORMS-PAIR-2` QR text or
+  `ICSFORMS-PAIR-1` typed entry.
+* UI: **Create pairing code** with QR in the Sharing dialog; one connect form
+  (address, code, advanced paste, find hosts) shared by the Connect menu and the
+  startup dialog. mDNS discovery (`HostDiscovery`, JmDNS) advertises only
+  while a window is open.
+* Tests: `PairingCoreTest`, `ShortPairingTest`, `QrImagesTest`.
+* Camera scanning, short-code re-pairing of revoked devices and replacing
+  J-PAKE are out of scope.
+

@@ -36,6 +36,23 @@ penetration test or a Stage 2 release approval.
 
 ## Findings and residual risks
 
+### Short-code pairing (#74)
+
+* The code carries 40 bits. A guess must pass the PAKE online, so the attacker
+  gets one guess per attempt; the window is burned after 3 failed
+  confirmations, it expires after the invitation lifetime, it is closed by a
+  successful pairing, and the existing per-address and global pairing rate
+  limits apply. Offline guessing from a captured exchange is not possible
+  because the PAKE reveals nothing testable about the code.
+* A network attacker can deliberately burn a window (denial of service); the
+  operator opens a new one. This is accepted, because the alternative is to let
+  guesses accumulate.
+* Without a QR the device has no fingerprint. TLS validates against the chain's
+  own authority, and the key confirmation binds the fingerprint the device saw,
+  so an interposed authority fails confirmation and consumes an attempt.
+* Cryptography is provided by Bouncy Castle J-PAKE, HKDF, HMAC and AES-GCM;
+  none is hand-written. Discovery (mDNS) advertises only the host name and port.
+
 1. **Client credentials and approval tickets are session-memory-only.** The
    existing connection flow does not persist credentials across application
    restarts, and a pending re-authorization ticket holds its status token and

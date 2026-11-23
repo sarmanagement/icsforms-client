@@ -20,7 +20,13 @@ not require internet access.
 
 ## Admission and revocation
 
-1. From the host's **Sharing** dialog, create an invitation. It is single-use,
+1. From the host's **Sharing** dialog, either create a pairing code or create
+   an invitation.
+   For a nearby device, prefer **Create pairing code**: read the 8-character
+   code aloud or show the QR code. The device chooses **Connect to a host**,
+   enters the address and the code (or uses **Find hosts on this network**).
+   The code works once, expires, and is burned after three wrong attempts.
+   The long invitation is the advanced alternative. An invitation is single-use,
    short-lived and scoped to the current incident. Send the invitation and its
    displayed host fingerprint through a trusted channel; verify the fingerprint
    out of band.
