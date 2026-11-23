@@ -1023,19 +1023,15 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Asks for an invitation and opens the shared incident in a new connected window. Pairing and the first load
+	 * Asks for the host address and pairing code and opens the shared incident in a new connected window. Pairing and the first load
 	 * run on a background worker so the event thread never waits on the network.
 	 */
 	private void showConnect() {
-		JTextArea invitation = new JTextArea(4, 48);
-		invitation.setLineWrap(true);
-		JTextField device = new JTextField(System.getProperty("user.name", "device"), 20);
-		Object[] form = {"Invitation from the host:", new JScrollPane(invitation), "Device name:", device};
-		if (JOptionPane.showConfirmDialog(this, form, "Connect to a host", JOptionPane.OK_CANCEL_OPTION,
-				JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
+		ConnectForm entry = ConnectForm.ask(this);
+		if (entry == null) {
 			return;
 		}
-		connectWithInvitation(invitation.getText(), device.getText().strip());
+		connectWithInvitation(entry.pairingText(), entry.deviceName());
 	}
 
 	/**

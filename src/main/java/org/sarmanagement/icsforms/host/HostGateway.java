@@ -33,6 +33,9 @@ public final class HostGateway implements RemoteIncidentGateway {
 	private final HostClient client;
 	private final DeviceCredential credential;
 	private final String location;
+	/** Prefix of typed short-code entry. */
+	public static final String TYPED_PREFIX = "ICSFORMS-PAIR-1:";
+	private static final int DEFAULT_ENROLLMENT_PORT = 8444;
 
 	/**
 	 * Creates a gateway.
@@ -60,6 +63,16 @@ public final class HostGateway implements RemoteIncidentGateway {
 	 * @throws StoreUnavailableException when the host cannot be reached
 	 */
 	public static RemoteIncidentStore pair(String invitationText, String deviceName) {
+		String trimmed = invitationText == null ? "" : invitationText.trim();
+		if (org.sarmanagement.icsforms.host.pairing.PairingPayload.isPayload(trimmed)) {
+			org.sarmanagement.icsforms.host.pairing.PairingPayload payload = org.sarmanagement.icsforms.host.pairing.PairingPayload
+					.parse(trimmed);
+			return pairWithCode(payload.host(), payload.enrollmentPort(), payload.fingerprint(), payload.code(),
+					deviceName);
+		}
+		if (trimmed.startsWith(TYPED_PREFIX)) {
+			return pairTyped(trimmed, deviceName);
+		}
 		HostInvitation invitation = HostInvitation.parse(invitationText);
 		try {
 			DeviceCredential credential = HostClient.pair(invitation, deviceName);
@@ -68,6 +81,69 @@ public final class HostGateway implements RemoteIncidentGateway {
 			return new RemoteIncidentStore(
 					new HostGateway(client, credential, invitation.host() + ":" + invitation.port()),
 					new IncidentId(invitation.incidentId()));
+		} catch (HostClientException failure) {
+			throw map(failure);
+		}
+	}
+
+	/**
+	 * Pairs from typed entry of the form {@code ICSFORMS-PAIR-1:host[:enrollmentPort]:CODE}, where an IPv6 host is
+	 * written in brackets. The device has no fingerprint, so the exchange itself authenticates the host.
+	 *
+	 * @param text typed entry
+	 * @param deviceName name shown to the host operator
+	 * @return remote store for the shared incident
+	 * @throws IllegalArgumentException when the entry is malformed
+	 */
+	private static RemoteIncidentStore pairTyped(String text, String deviceName) {
+		String body = text.substring(TYPED_PREFIX.length());
+		int split = body.lastIndexOf(':');
+		if (split < 1) {
+			throw new IllegalArgumentException("Enter the host address and the pairing code.");
+		}
+		String code = body.substring(split + 1);
+		String address = body.substring(0, split);
+		int port = DEFAULT_ENROLLMENT_PORT;
+		boolean bracketed = address.startsWith("[");
+		int colon = bracketed ? address.indexOf("]:") + 1 : address.indexOf(':');
+		boolean hasPort = bracketed ? colon > 0 : colon > 0 && colon == address.lastIndexOf(':');
+		if (hasPort) {
+			try {
+				port = Integer.parseInt(address.substring(colon + 1));
+			} catch (NumberFormatException failure) {
+				throw new IllegalArgumentException("The port is not a number.", failure);
+			}
+			address = address.substring(0, colon);
+		}
+		if (address.startsWith("[") && address.endsWith("]")) {
+			address = address.substring(1, address.length() - 1);
+		}
+		if (address.isBlank()) {
+			throw new IllegalArgumentException("Enter the host address.");
+		}
+		return pairWithCode(address, port, null, org.sarmanagement.icsforms.host.pairing.PairingCode.normalize(code),
+				deviceName);
+	}
+
+	/**
+	 * Pairs using a short code and returns the remote store.
+	 *
+	 * @param host host name or address
+	 * @param enrollmentPort enrollment port
+	 * @param fingerprint fingerprint read out of band, or null
+	 * @param code normalized pairing code
+	 * @param deviceName name shown to the host operator
+	 * @return remote store for the shared incident
+	 */
+	private static RemoteIncidentStore pairWithCode(String host, int enrollmentPort, String fingerprint, String code,
+			String deviceName) {
+		try {
+			HostClient.ShortPairingResult result = HostClient.pairWithCode(host, enrollmentPort, fingerprint, code,
+					deviceName, org.sarmanagement.icsforms.host.pairing.PairingSuites.defaults());
+			HostClient client = HostClient.forDevice(host, result.port(), enrollmentPort, result.credential());
+			return new RemoteIncidentStore(
+					new HostGateway(client, result.credential(), host + ":" + result.port()),
+					new IncidentId(result.incidentId()));
 		} catch (HostClientException failure) {
 			throw map(failure);
 		}

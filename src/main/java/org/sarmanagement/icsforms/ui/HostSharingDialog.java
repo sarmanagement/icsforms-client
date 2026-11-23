@@ -147,7 +147,12 @@ public class HostSharingDialog extends JDialog {
 	private final JSpinner enrollmentSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_ENROLLMENT_PORT, 0, 65535, 1));
 	private final JButton startButton = new JButton("Start sharing");
 	private final JButton stopButton = new JButton("Stop sharing");
-	private final JButton inviteButton = new JButton("Create invitation");
+	private final JButton inviteButton = new JButton("Create long invitation");
+	private final JButton pairButton = new JButton("Create pairing code");
+	private final JLabel pairingCodeLabel = new JLabel(" ");
+	private final JLabel pairingDetailLabel = new JLabel(" ");
+	private final JLabel qrLabel = new JLabel();
+	private String pairingPayloadText = "";
 	private final JButton revokeButton = new JButton("Revoke selected device");
 	private final JButton reviewRequestsButton = new JButton("Review re-authorization requests");
 	private final JButton backupButton = new JButton("Back up host data...");
@@ -347,9 +352,20 @@ public class HostSharingDialog extends JDialog {
 		invitationArea.setEditable(false);
 		invitationArea.setLineWrap(true);
 		JPanel invitePanel = new JPanel(new BorderLayout());
-		invitePanel.setBorder(BorderFactory.createTitledBorder("Invitation (copy and send to the device operator)"));
+		invitePanel.setBorder(BorderFactory.createTitledBorder("Long invitation (advanced; a secret)"));
 		invitePanel.add(new JScrollPane(invitationArea), BorderLayout.CENTER);
 		invitePanel.add(inviteButton, BorderLayout.SOUTH);
+
+		pairingCodeLabel.setFont(pairingCodeLabel.getFont().deriveFont(java.awt.Font.BOLD, 28f));
+		JPanel codeText = new JPanel(new GridLayout(0, 1));
+		codeText.add(pairButton);
+		codeText.add(pairingCodeLabel);
+		codeText.add(pairingDetailLabel);
+		JPanel pairPanel = new JPanel(new BorderLayout(8, 0));
+		pairPanel.setBorder(BorderFactory.createTitledBorder(
+				"Pairing code (read it out or show the QR code; single use, short-lived)"));
+		pairPanel.add(codeText, BorderLayout.CENTER);
+		pairPanel.add(qrLabel, BorderLayout.EAST);
 
 		deviceTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		JPanel devices = new JPanel(new BorderLayout());
@@ -363,6 +379,7 @@ public class HostSharingDialog extends JDialog {
 		devices.add(deviceButtons, BorderLayout.SOUTH);
 
 		JPanel center = new JPanel(new GridLayout(0, 1));
+		center.add(pairPanel);
 		center.add(invitePanel);
 		center.add(devices);
 		add(top, BorderLayout.NORTH);
@@ -371,6 +388,7 @@ public class HostSharingDialog extends JDialog {
 		startButton.addActionListener(event -> startSharing());
 		stopButton.addActionListener(event -> stopSharing());
 		inviteButton.addActionListener(event -> issueInvitation());
+		pairButton.addActionListener(event -> openPairing());
 		revokeButton.addActionListener(event -> revokeSelected());
 		reviewRequestsButton.addActionListener(event -> reviewReauthorizationRequests());
 		backupButton.addActionListener(event -> backupAction());
@@ -591,6 +609,7 @@ public class HostSharingDialog extends JDialog {
 					loopbackStore = opened;
 					session = candidate;
 					invitationArea.setText("");
+					clearPairing();
 				} catch (InterruptedException interrupted) {
 					Thread.currentThread().interrupt();
 					session = null;
@@ -832,6 +851,74 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
+	 * Opens the short-code pairing window and shows the code, address, expiry and a QR code. Opening a new
+	 * window replaces the previous code.
+	 */
+	void openPairing() {
+		HostSession current = session;
+		if (current == null) {
+			return;
+		}
+		pairButton.setEnabled(false);
+		new SwingWorker<org.sarmanagement.icsforms.host.HostClient.PairingOffer, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected org.sarmanagement.icsforms.host.HostClient.PairingOffer doInBackground() {
+				return current.openPairing();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					org.sarmanagement.icsforms.host.HostClient.PairingOffer offer = get();
+					if (session == current && !stopping) {
+						showPairing(offer);
+					}
+				} catch (Exception failure) {
+					if (failure instanceof InterruptedException) {
+						Thread.currentThread().interrupt();
+					}
+					prompts.show(HostSharingDialog.this, "Pairing code",
+							"Could not create a pairing code: " + failure.getMessage(), true);
+				}
+				refresh();
+			}
+		}.execute();
+	}
+
+	/**
+	 * Displays a pairing offer.
+	 *
+	 * @param offer the open pairing window
+	 */
+	private void showPairing(org.sarmanagement.icsforms.host.HostClient.PairingOffer offer) {
+		pairingCodeLabel.setText(org.sarmanagement.icsforms.host.pairing.PairingCode.display(offer.code()));
+		pairingDetailLabel.setText("Host " + offer.host() + ":" + offer.enrollmentPort() + " until "
+				+ java.time.LocalTime.ofInstant(offer.expiresAt(), java.time.ZoneId.systemDefault())
+						.truncatedTo(java.time.temporal.ChronoUnit.MINUTES));
+		pairingPayloadText = offer.payload().toText();
+		qrLabel.setIcon(new javax.swing.ImageIcon(QrImages.render(pairingPayloadText, 200)));
+	}
+
+	/** Forgets any displayed pairing code and QR image. */
+	private void clearPairing() {
+		pairingCodeLabel.setText(" ");
+		pairingDetailLabel.setText(" ");
+		qrLabel.setIcon(null);
+		pairingPayloadText = "";
+	}
+
+	/**
+	 * Returns the QR and clipboard text of the displayed pairing offer.
+	 *
+	 * @return payload text, empty when none is shown
+	 */
+	String pairingPayload() {
+		return pairingPayloadText;
+	}
+
+	/**
 	 * Copies the displayed invitation text to the clipboard.
 	 */
 	void copyInvitation() {
@@ -1019,6 +1106,7 @@ public class HostSharingDialog extends JDialog {
 		startButton.setEnabled(current == null && !starting);
 		stopButton.setEnabled(current != null && !stopping && current.state() != HostState.STOPPING);
 		inviteButton.setEnabled(running && !stopping);
+		pairButton.setEnabled(running && !stopping);
 		revokeButton.setEnabled(running && !stopping);
 		reviewRequestsButton.setEnabled(running && !stopping && !reviewingRequests);
 		hostField.setEnabled(current == null);

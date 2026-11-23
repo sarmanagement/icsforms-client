@@ -273,23 +273,17 @@ public class StartupDialog extends JDialog {
 	}
 
 	/**
-	 * Asks for the host invitation and a device name.
+	 * Asks for the host address and pairing code, or a pasted invitation, and a device name.
 	 *
-	 * @return true when the operator supplied an invitation and confirmed.
+	 * @return true when the operator supplied pairing details and confirmed.
 	 */
 	private boolean askInvitation() {
-		javax.swing.JTextArea invitation = new javax.swing.JTextArea(4, 48);
-		invitation.setLineWrap(true);
-		javax.swing.JTextField device = new javax.swing.JTextField(System.getProperty("user.name", "device"), 20);
-		Object[] form = {"Invitation from the host:", new javax.swing.JScrollPane(invitation), "Device name:",
-				device};
-		if (javax.swing.JOptionPane.showConfirmDialog(this, form, "Connect to a host",
-				javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE)
-				!= javax.swing.JOptionPane.OK_OPTION || invitation.getText().isBlank()) {
+		ConnectForm entry = ConnectForm.ask(this);
+		if (entry == null) {
 			return false;
 		}
-		chosenInvitation = invitation.getText();
-		chosenDeviceName = device.getText().strip();
+		chosenInvitation = entry.pairingText();
+		chosenDeviceName = entry.deviceName();
 		return true;
 	}
 

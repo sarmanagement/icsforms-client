@@ -84,4 +84,18 @@ class ShortPairingTest {
 					"ab".repeat(32), offer.code(), "mitm", PairingSuites.defaults()));
 		}
 	}
+
+	/** The gateway accepts typed entry and the QR payload, as the connect dialogs pass them. */
+	@Test
+	void gatewayAcceptsTypedEntryAndQrPayload() {
+		try (HostFixture fixture = new HostFixture(directory)) {
+			fixture.start();
+			HostClient.PairingOffer offer = fixture.session.openPairing();
+			String typed = HostGateway.TYPED_PREFIX + "127.0.0.1:" + offer.enrollmentPort() + ":"
+					+ org.sarmanagement.icsforms.host.pairing.PairingCode.display(offer.code()).toLowerCase();
+			assertNotNull(HostGateway.pair(typed, "typed"));
+			HostClient.PairingOffer second = fixture.session.openPairing();
+			assertNotNull(HostGateway.pair(second.payload().toText(), "qr"));
+		}
+	}
 }
