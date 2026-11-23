@@ -386,14 +386,19 @@ public class MainFrame extends JFrame {
 		content.add(tabs, BorderLayout.CENTER);
 
 		validationLabel.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+		// The connection text is long once sharing; on its own row it is clipped instead of painting over the
+		// validation text beside it.
+		connectionLabel.setBorder(BorderFactory.createEmptyBorder(4, 8, 0, 8));
 		JPanel statusPanel = new JPanel(new BorderLayout());
-		statusPanel.add(validationLabel, BorderLayout.CENTER);
-		statusPanel.add(connectionLabel, BorderLayout.WEST);
+		JPanel statusRow = new JPanel(new BorderLayout());
+		statusRow.add(validationLabel, BorderLayout.CENTER);
+		statusPanel.add(connectionLabel, BorderLayout.NORTH);
+		statusPanel.add(statusRow, BorderLayout.CENTER);
 		JPanel persistencePanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
 		persistencePanel.add(persistenceLabel);
 		persistencePanel.add(retryPersistenceButton);
 		retryPersistenceButton.addActionListener(event -> controller.retryPersistence());
-		statusPanel.add(persistencePanel, BorderLayout.EAST);
+		statusRow.add(persistencePanel, BorderLayout.EAST);
 		controller.setPersistenceStatusHandler(this::refreshPersistenceStatus);
 		controller.setPersistenceWaitHandler(waiting -> refreshIncidentInputAvailability());
 		add(content, BorderLayout.CENTER);
@@ -2032,6 +2037,7 @@ public class MainFrame extends JFrame {
 			text.append(" | newer changes on the host; your draft is kept");
 		}
 		connectionLabel.setText(text.toString());
+		connectionLabel.setToolTipText(text.toString());
 	}
 
 	/**
