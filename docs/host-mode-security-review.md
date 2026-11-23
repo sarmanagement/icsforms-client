@@ -22,7 +22,7 @@ penetration test or a Stage 2 release approval.
   accepted submissions.
 - Re-authorization requests are limited to three per source address and 20
   globally per minute. At most 64 may be pending. Request bodies are capped at
-  1 MiB; outbox strings at 900,000 characters. Failed authorization responses
+  1 MiB; outbox strings at 900,000 characters. The client describes its outbox in at most 600,000 characters, dropping record content, then record detail, before it would exceed the cap; operation IDs are always kept. Failed authorization responses
   do not include incident data. Request tokens are random, only their hashes
   are persisted, and diagnostic string forms redact tokens, keys and queued
   contents.

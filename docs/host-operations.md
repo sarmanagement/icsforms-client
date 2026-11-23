@@ -52,11 +52,21 @@ not replayed. Keep the client open until it reports the decision.
   **Review outbox…** for recovery. Resolve the cause and submit a new request
   only after the pending request has been decided.
 
+Accepted work from a repaired device carries both the replacement and revoked
+device IDs only for operations the administrator saw queued in the approved
+request; later work names only the new device. Operation IDs are asserted by the
+client, so the administrator's review of the queued operations bounds this
+attribution, and a rejected edit the operator replaces after the request is a
+new operation that is not attributed to the old device.
+
 Enrollment and re-authorization do not require a device certificate. They are
 rate-limited to three submissions per source address and 20 total per minute;
 the durable approval queue holds at most 64 pending requests. Re-authorization
 bodies are limited to 1 MiB and pending outboxes to 900,000 characters. These
-are abuse controls, not a way to increase incident capacity. A rejected or
+The client sends a bounded description of its outbox (record content, then record
+identities, then only operation IDs and counts as the size grows), so a large
+outbox still produces a request the host accepts. These are abuse controls, not
+a way to increase incident capacity. A rejected or
 oversized request leaves the client's local outbox in place.
 
 ## Backup, restore and shutdown

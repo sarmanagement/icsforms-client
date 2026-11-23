@@ -578,8 +578,10 @@ Part 6 (#62) includes a durable host approval queue and decision audit,
 same-key expired renewal, invitation-backed new identity for revoked devices,
 pending-outbox review, client waiting/preservation and post-approval replay,
 plus operational and security documentation. The polling ticket and credentials
-are still session-memory-only, and #61 acceptance, real Windows verification,
-an end-to-end three-process exercise and final CodeQL remain outstanding. See
+are still session-memory-only. The client flow, bounded outbox description,
+queued-work-only attribution and a one-JVM multi-instance scenario are now
+automated; #61 acceptance, real Windows verification, a true multi-process
+exercise and final CodeQL remain outstanding. See
 [host-mode validation](docs/host-mode-validation.md) and the
 [security review](docs/host-mode-security-review.md).
 The connected-operation CI follow-up uses the saved host baseline and tests

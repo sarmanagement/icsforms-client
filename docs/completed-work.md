@@ -60,16 +60,21 @@ must use a fresh invitation and key pair and receive a new identity. The host
 administrator reviews the pending outbox before approval, and the client keeps
 its durable work while waiting or after denial. Replay is initiated only after
 approval. Accepted repaired work carries both the replacement and revoked
-source device IDs in provenance.
+source device IDs in provenance, but only for operations the administrator saw
+queued in the approved request.
 
 The unauthenticated request/status routes have per-address/global rate limits,
 body caps and generic authorization errors. Approval state is included with the
 CA key and registry in the complete host backup. Targeted
 `ReauthorizationTest` coverage passed for renewal, denial, repair, rejected old
 credentials, provenance, rate limiting and restore continuity. This does not
-close Stage 2: issue #61 remains WIP, full headless/displayed CI and the
-multi-instance release exercise remain outstanding, and client credentials and
-approval tickets are session-memory-only. The latter is a release risk if a
+close Stage 2. Follow-up work on this PR: the client flow moved to
+`ReauthorizationFlow` and is tested against a real host and outbox
+(`ReauthorizationFlowTest`); the outbox is described to the administrator within
+a bounded size (`ReauthorizationOutbox`); `originalDeviceId` is stamped only on
+operations the administrator saw queued; and `HostReleaseExerciseTest` runs one
+multi-instance scenario. Client credentials and approval tickets remain
+session-memory-only. The latter is a release risk if a
 client process closes while approval is pending.
 
 Operational procedures, the self-review findings, validation map and proposed

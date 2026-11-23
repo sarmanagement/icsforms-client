@@ -540,5 +540,6 @@ See the [operations runbook](host-operations.md), the
 [validation exercise and proposed thresholds](host-mode-validation.md). The
 focused `ReauthorizationTest` covers approval, denial, same-key renewal,
 revoked-key rejection, identity attribution, request rate limiting and backup
-restore. Its evidence does not establish full Stage 2 acceptance or replace
-the multi-window and platform validation still outstanding.
+restore; `ReauthorizationFlowTest` and `HostReleaseExerciseTest` add the client
+flow and a multi-instance scenario. Neither replaces the multi-window, real
+disk-exhaustion and platform validation still outstanding.
