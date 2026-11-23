@@ -24,12 +24,14 @@ final class RecordJson {
 		if (first == second) {
 			return true;
 		}
-		if (first == null || second == null || first.getNodeType() != second.getNodeType()) {
-			return first != null && second != null && first.isNumber() && second.isNumber()
-					&& first.decimalValue().compareTo(second.decimalValue()) == 0;
+		if (first == null || second == null) {
+			return false;
 		}
-		if (first.isNumber()) {
-			return first.decimalValue().compareTo(second.decimalValue()) == 0;
+		if (first.isNumber() || second.isNumber()) {
+			return sameNumber(first, second);
+		}
+		if (first.getNodeType() != second.getNodeType()) {
+			return false;
 		}
 		if (first.isObject()) {
 			if (first.size() != second.size()) {
@@ -56,6 +58,34 @@ final class RecordJson {
 			return true;
 		}
 		return Objects.equals(first, second);
+	}
+
+	/**
+	 * Compares two values of which at least one is a number. NaN and infinite values have no decimal form, so they
+	 * are compared by their text form, which also matches how they are stored in JSON ("NaN", "Infinity").
+	 *
+	 * @param first first value
+	 * @param second second value
+	 * @return true when both are numerically equal, or both are the same non-finite value
+	 */
+	private static boolean sameNumber(JsonNode first, JsonNode second) {
+		if (first.isNumber() && second.isNumber() && isFinite(first) && isFinite(second)) {
+			return first.decimalValue().compareTo(second.decimalValue()) == 0;
+		}
+		if ((first.isNumber() && isFinite(first)) || (second.isNumber() && isFinite(second))) {
+			return false;
+		}
+		return first.asText().equals(second.asText());
+	}
+
+	/**
+	 * Tells whether a number node has a finite value.
+	 *
+	 * @param number a number node
+	 * @return false for NaN and infinite floating-point values
+	 */
+	private static boolean isFinite(JsonNode number) {
+		return !(number.isDouble() || number.isFloat()) || Double.isFinite(number.doubleValue());
 	}
 
 	/**

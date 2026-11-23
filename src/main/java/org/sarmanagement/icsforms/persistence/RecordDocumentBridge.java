@@ -260,6 +260,9 @@ final class RecordDocumentBridge {
 				writable.remove(name);
 			} else if (RecordJson.same(current.get(name), content.get(name))) {
 				writable.remove(name);
+			} else if (content.get(name) != null && content.get(name).isObject() && holdsRecordLinks(field.getType())) {
+				updateNested(target, field, content.get(name));
+				writable.remove(name);
 			}
 		}
 		try {
@@ -267,6 +270,39 @@ final class RecordDocumentBridge {
 		} catch (IOException | RuntimeException exception) {
 			throw new StoreValidationException("Cannot apply record snapshot", exception);
 		}
+	}
+
+	/**
+	 * Updates a nested value object in place so the child records it links to keep their identity.
+	 *
+	 * @param owner model object holding the value object
+	 * @param field field holding the value object
+	 * @param content latest snapshot of the value object, with child links as identifiers
+	 */
+	private void updateNested(Object owner, Field field, JsonNode content) {
+		try {
+			field.setAccessible(true);
+			Object nested = field.get(owner);
+			if (nested != null) {
+				update(nested, content);
+			}
+		} catch (IllegalAccessException exception) {
+			throw new StoreValidationException("Cannot apply record snapshot", exception);
+		}
+	}
+
+	/**
+	 * Checks whether a model value object directly holds links to identified child records, such as an assignment
+	 * list inside an organizational chart.
+	 *
+	 * @param type declared field type
+	 * @return true for a non-identified model class with at least one record-link field
+	 */
+	private boolean holdsRecordLinks(Class<?> type) {
+		if (Identified.class.isAssignableFrom(type) || !type.getName().startsWith("org.sarmanagement.icsforms.model.")) {
+			return false;
+		}
+		return fields(type).stream().anyMatch(this::isRecordLink);
 	}
 
 	/**

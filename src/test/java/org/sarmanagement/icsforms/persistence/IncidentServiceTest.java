@@ -19,7 +19,9 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.IncidentContext;
 import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.OpenActionItem;
+import org.sarmanagement.icsforms.model.OrgChartEntry;
 import org.sarmanagement.icsforms.model.RecordIndex;
+import org.sarmanagement.icsforms.model.VetFacility;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -35,6 +37,48 @@ import java.util.concurrent.TimeUnit;
 class IncidentServiceTest {
 	@TempDir
 	Path directory;
+
+	@Test
+	void readsIncidentWhoseVetFacilityHasNoRoutedDuration() {
+		AppData data = new AppData();
+		VetFacility facility = new VetFacility();
+		facility.setName("Unrouted clinic");
+		facility.setDistance(40233.6, Double.NaN, "straight-line", "test", java.time.Instant.EPOCH, 0L);
+		data.getVetDirectory().getFacilities().add(facility);
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			IncidentId incident = store.create(data);
+			IncidentService service = service(store);
+			service.read(incident);
+			StoredIncident stored = store.loadSnapshot(incident);
+			store.save(incident, stored.data(), stored.revision());
+			IncidentService.ReadResult again = service.read(incident);
+			assertFalse(again.records().isEmpty());
+		}
+	}
+
+	@Test
+	void rereadsIncidentWhoseOrgChartListsAgencyRepresentatives() {
+		AppData data = new AppData();
+		OrgChartEntry representative = new OrgChartEntry();
+		representative.setSection(OrgChartEntry.Section.COMMAND_STAFF);
+		representative.setTitle("Agency Representative");
+		representative.setName("Casey Lee");
+		data.getOrganizationalChart().getAssignmentList().getAgencyRepresentatives().add(representative);
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			IncidentId incident = store.create(data);
+			IncidentService service = service(store);
+			service.read(incident);
+			IncidentService.ReadResult again = service.read(incident);
+			assertTrue(again.records().stream()
+					.anyMatch(record -> record.key().type().equals(OrgChartEntry.class.getName())));
+			AppData projected = store.loadSnapshot(incident).data();
+			List<OrgChartEntry> kept = projected.getOrganizationalChart().getAssignmentList()
+					.getAgencyRepresentatives();
+			assertEquals(1, kept.size());
+			assertEquals("Casey Lee", kept.get(0).getName());
+			assertEquals(representative.getId(), kept.get(0).getId());
+		}
+	}
 
 	@Test
 	void mergesDisjointFieldsAndReplaysReceiptAfterRestart() {

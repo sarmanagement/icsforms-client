@@ -211,6 +211,7 @@ public final class HostSession implements AutoCloseable {
 			throw new HostStartException(HostStartException.Reason.INCIDENT_NOT_FOUND,
 					"The incident to share was not found", failure);
 		} catch (RuntimeException failure) {
+			LOGGER.log(java.util.logging.Level.WARNING, "The incident to share could not be read", failure);
 			throw new HostStartException(HostStartException.Reason.STORAGE_FAILURE,
 					"The incident could not be read: " + failure.getClass().getSimpleName(), failure);
 		}
