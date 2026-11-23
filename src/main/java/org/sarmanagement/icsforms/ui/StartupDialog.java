@@ -56,7 +56,9 @@ public class StartupDialog extends JDialog {
 		 * Open an existing saved incident workspace and advance it to a new operational
 		 * period.
 		 */
-		OPEN_NEW_PERIOD
+		OPEN_NEW_PERIOD,
+		/** Connect to an incident shared by a host, using an invitation, instead of a local database. */
+		CONNECT_TO_HOST
 	}
 
 	private StartupAction chosenAction;
@@ -64,6 +66,8 @@ public class StartupDialog extends JDialog {
 	private IncidentId chosenIncidentId;
 	private final boolean includeOpenActions;
 	private boolean promotePlannedIcs215;
+	private String chosenInvitation = "";
+	private String chosenDeviceName = "";
 
 	/**
 	 * Creates the startup dialog.
@@ -136,6 +140,24 @@ public class StartupDialog extends JDialog {
 	}
 
 	/**
+	 * Returns the invitation text entered for {@link StartupAction#CONNECT_TO_HOST}.
+	 *
+	 * @return invitation text, empty when none was entered.
+	 */
+	public String getChosenInvitation() {
+		return chosenInvitation;
+	}
+
+	/**
+	 * Returns the device name entered for {@link StartupAction#CONNECT_TO_HOST}.
+	 *
+	 * @return device name shown to the host operator.
+	 */
+	public String getChosenDeviceName() {
+		return chosenDeviceName;
+	}
+
+	/**
 	 * Retains caller compatibility; plan reuse is now selected in Bring Forward.
 	 *
 	 * @return false; startup no longer selects plans to copy.
@@ -191,6 +213,11 @@ public class StartupDialog extends JDialog {
 					"<html>Continue a previously saved incident, or choose one and add a new<br>"
 							+ "operational period (with confirmation) from the incident list.</html>",
 					StartupAction.OPEN_EXISTING, store));
+			panel.add(Box.createVerticalStrut(10));
+			panel.add(buildActionRow("Connect to a host…",
+					"<html>Join an incident shared by another device, using the invitation from its<br>"
+							+ "host operator, instead of opening a local database.</html>",
+					StartupAction.CONNECT_TO_HOST, store));
 		}
 
 		return panel;
@@ -222,6 +249,11 @@ public class StartupDialog extends JDialog {
 					chosenAction = manager.getChosenAction();
 					promotePlannedIcs215 = manager.isPromotePlannedIcs215();
 				}
+			} else if (action == StartupAction.CONNECT_TO_HOST) {
+				if (!askInvitation()) {
+					return;
+				}
+				chosenAction = action;
 			} else {
 				chosenAction = action;
 			}
@@ -238,6 +270,27 @@ public class StartupDialog extends JDialog {
 		row.add(button);
 		row.add(desc);
 		return row;
+	}
+
+	/**
+	 * Asks for the host invitation and a device name.
+	 *
+	 * @return true when the operator supplied an invitation and confirmed.
+	 */
+	private boolean askInvitation() {
+		javax.swing.JTextArea invitation = new javax.swing.JTextArea(4, 48);
+		invitation.setLineWrap(true);
+		javax.swing.JTextField device = new javax.swing.JTextField(System.getProperty("user.name", "device"), 20);
+		Object[] form = {"Invitation from the host:", new javax.swing.JScrollPane(invitation), "Device name:",
+				device};
+		if (javax.swing.JOptionPane.showConfirmDialog(this, form, "Connect to a host",
+				javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE)
+				!= javax.swing.JOptionPane.OK_OPTION || invitation.getText().isBlank()) {
+			return false;
+		}
+		chosenInvitation = invitation.getText();
+		chosenDeviceName = device.getText().strip();
+		return true;
 	}
 
 	/**

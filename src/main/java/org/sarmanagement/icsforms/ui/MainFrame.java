@@ -982,7 +982,7 @@ public class MainFrame extends JFrame {
 				controller.replaceActiveDocumentFromStore();
 				refreshFromModel();
 			});
-			hostSharingDialog.setCacheRoots(cacheRoots());
+			hostSharingDialog.setCacheRoots(cacheRoots(homeDirectory));
 			hostSharingDialog.setTransitionGuard(active -> {
 				hostTransitionActive = active;
 				refreshIncidentInputAvailability();
@@ -1041,9 +1041,10 @@ public class MainFrame extends JFrame {
 	/**
 	 * Returns the private root for disconnected journals.
 	 *
+	 * @param homeDirectory directory holding the application's private state
 	 * @return cache directory
 	 */
-	private Path cacheRoot() {
+	private static Path cacheRoot(Path homeDirectory) {
 		return homeDirectory.resolve(".icsforms").resolve("remote-cache");
 	}
 
@@ -1051,11 +1052,12 @@ public class MainFrame extends JFrame {
 	 * Returns candidate private roots for disconnected journals, in order of preference. Later entries are used
 	 * only when an earlier file system cannot be restricted to the owner (for example FAT or exFAT).
 	 *
+	 * @param homeDirectory directory holding the application's private state
 	 * @return distinct candidate cache directories
 	 */
-	private List<Path> cacheRoots() {
+	private static List<Path> cacheRoots(Path homeDirectory) {
 		java.util.LinkedHashSet<Path> roots = new java.util.LinkedHashSet<>();
-		roots.add(cacheRoot());
+		roots.add(cacheRoot(homeDirectory));
 		roots.add(Path.of(System.getProperty("user.home"), ".icsforms", "remote-cache"));
 		String windows = System.getenv("LOCALAPPDATA");
 		String state = System.getenv("XDG_STATE_HOME");
@@ -1075,7 +1077,7 @@ public class MainFrame extends JFrame {
 			/** {@inheritDoc} */
 			@Override
 			protected List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.CachedIncident> doInBackground() {
-				return org.sarmanagement.icsforms.persistence.RemoteIncidentStore.discoverCached(cacheRoots());
+				return org.sarmanagement.icsforms.persistence.RemoteIncidentStore.discoverCached(cacheRoots(homeDirectory));
 			}
 
 			/** {@inheritDoc} */
@@ -1112,7 +1114,7 @@ public class MainFrame extends JFrame {
 			/** {@inheritDoc} */
 			@Override
 			protected Object[] doInBackground() {
-				var remote = org.sarmanagement.icsforms.persistence.RemoteIncidentStore.openOffline(cacheRoots(),
+				var remote = org.sarmanagement.icsforms.persistence.RemoteIncidentStore.openOffline(cacheRoots(homeDirectory),
 						item.authorityFingerprint(), item.incident());
 				try {
 					return new Object[] {remote, remote.loadSnapshot(item.incident())};
@@ -1833,6 +1835,68 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
+	 * Redeems an invitation and loads the first snapshot of the shared incident. Blocks on the network, so it
+	 * must not run on the event thread.
+	 *
+	 * @param redeemer function from invitation text and device name to a paired remote store.
+	 * @param invitationText invitation text.
+	 * @param deviceName name shown to the host operator; blank uses a generic name.
+	 * @param home directory holding the application's private state.
+	 * @return the connected store and its first snapshot.
+	 */
+	private static Object[] pairAndLoad(java.util.function.BiFunction<String, String,
+			org.sarmanagement.icsforms.persistence.RemoteIncidentStore> redeemer, String invitationText,
+			String deviceName, Path home) {
+		org.sarmanagement.icsforms.persistence.RemoteIncidentStore paired =
+				redeemer.apply(invitationText, deviceName.isBlank() ? "device" : deviceName);
+		org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote;
+		var gateway = paired.detachGateway();
+		paired.close();
+		try {
+			remote = org.sarmanagement.icsforms.persistence.RemoteIncidentStore.connect(gateway,
+					paired.incident(), cacheRoots(home));
+		} catch (RuntimeException failure) {
+			gateway.close();
+			throw failure;
+		}
+		try {
+			return new Object[] {remote, remote.loadSnapshot(remote.incident())};
+		} catch (RuntimeException failure) {
+			remote.close();
+			throw failure;
+		}
+	}
+
+	/**
+	 * Connects to a host from an invitation before any editor window exists, as the startup dialog does. Blocks
+	 * on the network, so call it from a persistence worker rather than the event thread.
+	 *
+	 * @param invitationText invitation text.
+	 * @param deviceName name shown to the host operator.
+	 * @param home directory holding the application's private state.
+	 * @return the connected store and first snapshot, to pass to {@link #openConnected}.
+	 */
+	public static Object[] connectFromStartup(String invitationText, String deviceName, Path home) {
+		return pairAndLoad(org.sarmanagement.icsforms.host.HostGateway::pair, invitationText, deviceName, home);
+	}
+
+	/**
+	 * Opens the editor window for the result of {@link #connectFromStartup}.
+	 *
+	 * @param connection the store and first snapshot returned by {@link #connectFromStartup}.
+	 * @param exportService PDF export service.
+	 * @param validator validation service.
+	 * @param home directory holding the application's private state.
+	 * @return the visible connected window.
+	 */
+	public static MainFrame openConnected(Object[] connection, PdfExportService exportService,
+			IncidentValidator validator, Path home) {
+		return buildConnectedWindow((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) connection[0],
+				(org.sarmanagement.icsforms.persistence.StoredIncident) connection[1], exportService, validator,
+				home);
+	}
+
+	/**
 	 * Redeems an invitation, loads the shared incident and opens it in a new window, reporting failures without
 	 * changing this window.
 	 *
@@ -1848,24 +1912,7 @@ public class MainFrame extends JFrame {
 			 */
 			@Override
 			protected Object[] doInBackground() {
-				org.sarmanagement.icsforms.persistence.RemoteIncidentStore paired =
-						invitationRedeemer.apply(invitationText, deviceName.isBlank() ? "device" : deviceName);
-				org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote;
-				var gateway = paired.detachGateway();
-				paired.close();
-				try {
-					remote = org.sarmanagement.icsforms.persistence.RemoteIncidentStore.connect(
-							gateway, paired.incident(), cacheRoots());
-				} catch (RuntimeException failure) {
-					gateway.close();
-					throw failure;
-				}
-				try {
-					return new Object[] {remote, remote.loadSnapshot(remote.incident())};
-				} catch (RuntimeException failure) {
-					remote.close();
-					throw failure;
-				}
+				return pairAndLoad(invitationRedeemer, invitationText, deviceName, homeDirectory);
 			}
 
 			/**
@@ -1906,8 +1953,23 @@ public class MainFrame extends JFrame {
 	 */
 	private void openConnectedWindow(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
 			org.sarmanagement.icsforms.persistence.StoredIncident first) {
-		MainFrame frame = new MainFrame(first.data(), remote, remote.incident(), controller.exportService(),
-				controller.validator(), homeDirectory);
+		buildConnectedWindow(remote, first, controller.exportService(), controller.validator(), homeDirectory);
+	}
+
+	/**
+	 * Creates, wires and shows a connected window for a paired remote store.
+	 *
+	 * @param remote paired remote store.
+	 * @param first first snapshot of the shared incident.
+	 * @param exportService PDF export service.
+	 * @param validator validation service.
+	 * @param home default directory for file choosers.
+	 * @return the visible window.
+	 */
+	private static MainFrame buildConnectedWindow(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
+			org.sarmanagement.icsforms.persistence.StoredIncident first, PdfExportService exportService,
+			IncidentValidator validator, Path home) {
+		MainFrame frame = new MainFrame(first.data(), remote, remote.incident(), exportService, validator, home);
 		if (remote.gateway() == null) {
 			frame.authorityText = "Offline cached incident";
 			frame.showConnectionStatus();
@@ -1922,6 +1984,7 @@ public class MainFrame extends JFrame {
 			}
 		}
 		frame.setVisible(true);
+		return frame;
 	}
 
 	/**

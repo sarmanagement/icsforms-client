@@ -79,6 +79,12 @@ public final class App {
 				return;
 			}
 
+			if (action == StartupDialog.StartupAction.CONNECT_TO_HOST) {
+				closeStore(store);
+				connectToHost(startup, homeDir);
+				return;
+			}
+
 			AppData data;
 			IncidentId id;
 			try {
@@ -133,6 +139,24 @@ public final class App {
 				closeStore(store);
 			}
 		});
+	}
+
+	/**
+	 * Pairs with a host from the startup invitation and opens the shared incident, reporting failure without
+	 * leaving the application running with no window.
+	 *
+	 * @param startup startup dialog holding the invitation and device name.
+	 * @param homeDir directory holding the application's private state.
+	 */
+	private static void connectToHost(StartupDialog startup, Path homeDir) {
+		try {
+			Object[] connection = PersistenceWorker.call(null, () -> MainFrame.connectFromStartup(
+					startup.getChosenInvitation(), startup.getChosenDeviceName(), homeDir));
+			MainFrame.openConnected(connection, createExportService(), new IncidentValidator(), homeDir);
+		} catch (RuntimeException exception) {
+			JOptionPane.showMessageDialog(null, exception.getMessage(), "Could not connect to the host",
+					JOptionPane.ERROR_MESSAGE);
+		}
 	}
 
 	/**

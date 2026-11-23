@@ -88,6 +88,23 @@ class StartupDialogTest {
 				.filter(candidate -> title.equals(candidate.getText())).findFirst().orElseThrow();
 	}
 
+	@Test
+	void connectToHostIsOfferedAtStartupButNotInTheNewIncidentOnlyDialog() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (FileIncidentStore store = new FileIncidentStore(directory.resolve("store"))) {
+			SwingUtilities.invokeAndWait(() -> {
+				StartupDialog startup = new StartupDialog(null, store, true);
+				assertEquals(1, descendants(startup).stream().filter(JButton.class::isInstance)
+						.map(JButton.class::cast).filter(b -> "Connect to a host…".equals(b.getText())).count());
+				StartupDialog newOnly = new StartupDialog(null, store, true, false);
+				assertEquals(0, descendants(newOnly).stream().filter(JButton.class::isInstance)
+						.map(JButton.class::cast).filter(b -> "Connect to a host…".equals(b.getText())).count());
+				startup.dispose();
+				newOnly.dispose();
+			});
+		}
+	}
+
 	/**
 	 * Traverses nested Swing components.
 	 *
