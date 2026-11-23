@@ -44,6 +44,8 @@ public final class DeviceRegistry {
 	private static final int MAX_PENDING_REQUESTS = 64;
 	private static final int MAX_AUDIT_RECORDS = 500;
 	private static final int MAX_OUTBOX_CHARS = 900_000;
+	/** Most queued operation identifiers retained for attribution after approval. */
+	private static final int MAX_RECOVERED_OPERATIONS = 20_000;
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 			.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -67,11 +69,35 @@ public final class DeviceRegistry {
 	 * @param permissions granted permissions
 	 * @param roleCeiling role ceiling reserved for later stages
 	 * @param originalDeviceId revoked identity whose approved replacement this device is
+	 * @param recoveredOperationIds operation identifiers the administrator saw queued on the revoked identity;
+	 *        only submissions with these identifiers are attributed to that identity
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record DeviceRecord(String deviceId, String name, String incidentId, String certificateFingerprint,
 			Instant issuedAt, Instant expiresAt, Instant revokedAt, boolean admin, Set<HostPermission> permissions,
-			String roleCeiling, String originalDeviceId) {
+			String roleCeiling, String originalDeviceId, Set<String> recoveredOperationIds) {
+		/**
+		 * Creates a device record without recovered operation identifiers.
+		 *
+		 * @param deviceId stable device identifier
+		 * @param name operator-visible name
+		 * @param incidentId incident the credential is scoped to
+		 * @param certificateFingerprint SHA-256 certificate fingerprint
+		 * @param issuedAt issue time
+		 * @param expiresAt credential expiry
+		 * @param revokedAt revocation time, or null when active
+		 * @param admin true for the host administrator
+		 * @param permissions granted permissions
+		 * @param roleCeiling role ceiling
+		 * @param originalDeviceId revoked identity this device replaces, or null
+		 */
+		public DeviceRecord(String deviceId, String name, String incidentId, String certificateFingerprint,
+				Instant issuedAt, Instant expiresAt, Instant revokedAt, boolean admin, Set<HostPermission> permissions,
+				String roleCeiling, String originalDeviceId) {
+			this(deviceId, name, incidentId, certificateFingerprint, issuedAt, expiresAt, revokedAt, admin,
+					permissions, roleCeiling, originalDeviceId, Set.of());
+		}
+
 		/**
 		 * Creates a device record without an earlier device identity.
 		 *
@@ -98,6 +124,17 @@ public final class DeviceRegistry {
 		 */
 		public DeviceRecord {
 			permissions = permissions == null ? Set.of() : Set.copyOf(permissions);
+			recoveredOperationIds = recoveredOperationIds == null ? Set.of() : Set.copyOf(recoveredOperationIds);
+		}
+
+		/**
+		 * Reports whether a submission is recovered work queued on the revoked identity.
+		 *
+		 * @param operationId client operation identifier
+		 * @return true when this device replaced another and the administrator saw the operation queued
+		 */
+		public boolean recoversOperation(String operationId) {
+			return originalDeviceId != null && recoveredOperationIds.contains(operationId);
 		}
 
 		/**
@@ -658,12 +695,12 @@ public final class DeviceRegistry {
 			if (request.kind() == ReauthorizationKind.RENEWAL) {
 				DeviceRecord renewed = new DeviceRecord(original.deviceId(), original.name(), original.incidentId(),
 						fingerprint, now, notAfter, null, false, original.permissions(), original.roleCeiling(),
-						original.originalDeviceId());
+						original.originalDeviceId(), original.recoveredOperationIds());
 				devices.replaceAll(device -> device == original ? renewed : device);
 			} else {
 				devices.add(new DeviceRecord(deviceId, request.deviceName(), original.incidentId(), fingerprint, now,
 						notAfter, null, false, original.permissions(), original.roleCeiling(),
-						request.originalDeviceId()));
+						request.originalDeviceId(), queuedOperationIds(request.outboxJson())));
 			}
 			ReauthorizationRequest approved = new ReauthorizationRequest(request.requestId(), request.tokenHash(),
 					request.kind(), request.originalDeviceId(), request.deviceName(), request.publicKey(),
@@ -697,6 +734,27 @@ public final class DeviceRegistry {
 			commit(new RegistryState(FORMAT_VERSION, state.invitations(), state.devices(), requests, audit));
 			return denied;
 		}
+	}
+
+	/**
+	 * Reads the operation identifiers a device reported as queued.
+	 *
+	 * @param outboxJson serialized pending work array
+	 * @return bounded set of reported operation identifiers
+	 */
+	private static Set<String> queuedOperationIds(String outboxJson) {
+		java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
+		try {
+			for (com.fasterxml.jackson.databind.JsonNode entry : MAPPER.readTree(outboxJson)) {
+				String id = entry.path("operationId").asText("");
+				if (!id.isBlank() && ids.size() < MAX_RECOVERED_OPERATIONS) {
+					ids.add(id);
+				}
+			}
+		} catch (IOException exception) {
+			return Set.of();
+		}
+		return ids;
 	}
 
 	/**
@@ -884,7 +942,8 @@ public final class DeviceRegistry {
 			DeviceRecord current = target.get();
 			DeviceRecord revoked = new DeviceRecord(current.deviceId(), current.name(), current.incidentId(),
 					current.certificateFingerprint(), current.issuedAt(), current.expiresAt(), clock.instant(), false,
-					current.permissions(), current.roleCeiling(), current.originalDeviceId());
+					current.permissions(), current.roleCeiling(), current.originalDeviceId(),
+					current.recoveredOperationIds());
 			List<DeviceRecord> devices = new ArrayList<>(state.devices());
 			devices.replaceAll(device -> device == current ? revoked : device);
 			RegistryState next = new RegistryState(FORMAT_VERSION, state.invitations(), devices, state.requests(),

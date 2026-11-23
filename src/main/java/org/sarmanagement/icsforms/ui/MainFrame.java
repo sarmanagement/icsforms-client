@@ -1143,49 +1143,20 @@ public class MainFrame extends JFrame {
 			org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
 			org.sarmanagement.icsforms.host.HostGateway hostGateway, String invitationText, String deviceName) {
 		detachMonitor();
-		new javax.swing.SwingWorker<String, Void>() {
+		new javax.swing.SwingWorker<org.sarmanagement.icsforms.host.ReauthorizationFlow.Outcome, Void>() {
 			/** {@inheritDoc} */
 			@Override
-			protected String doInBackground() throws Exception {
-				String currentState = hostGateway.credentialState();
-				com.fasterxml.jackson.databind.JsonNode outbox =
-						new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(remote.pendingOperations());
-				org.sarmanagement.icsforms.host.HostClient.ReauthorizationTicket ticket;
-				if ("expired".equals(currentState)) {
-					ticket = hostGateway.requestRenewal(deviceName, outbox);
-				} else if ("revoked".equals(currentState)) {
-					org.sarmanagement.icsforms.host.HostInvitation parsed =
-							org.sarmanagement.icsforms.host.HostInvitation.parse(invitationText);
-					if (!remote.incident().value().equals(parsed.incidentId())) {
-						throw new IllegalArgumentException("The invitation is for a different incident");
-					}
-					ticket = hostGateway.requestRepair(invitationText, deviceName, outbox);
-				} else {
-					throw new IllegalStateException("The host does not report an expired or revoked credential");
-				}
-				javax.swing.SwingUtilities.invokeLater(() ->
-						connectionLabel.setText("Waiting for administrator approval; outbox retained"));
-				while (true) {
-					org.sarmanagement.icsforms.host.HostClient.ReauthorizationResult result =
-							hostGateway.pollReauthorization(ticket);
-					if ("approved".equals(result.state())) {
-						remote.attachGateway(hostGateway.withCredential(result.credential()));
-						remote.replayPending();
-						return "approved";
-					}
-					if ("denied".equals(result.state())) {
-						return "denied";
-					}
-					Thread.sleep(2000);
-				}
+			protected org.sarmanagement.icsforms.host.ReauthorizationFlow.Outcome doInBackground() throws Exception {
+				return org.sarmanagement.icsforms.host.ReauthorizationFlow.run(remote, hostGateway, invitationText,
+						deviceName, this::isCancelled, java.time.Duration.ofSeconds(2),
+						message -> javax.swing.SwingUtilities.invokeLater(() -> connectionLabel.setText(message)));
 			}
 
 			/** {@inheritDoc} */
 			@Override
 			protected void done() {
 				try {
-					String result = get();
-					if ("denied".equals(result)) {
+					if (get() == org.sarmanagement.icsforms.host.ReauthorizationFlow.Outcome.DENIED) {
 						connectionLabel.setText("Re-authorization denied; outbox retained");
 						JOptionPane.showMessageDialog(MainFrame.this,
 								"The request was denied. The local outbox remains available for export.");
@@ -1194,6 +1165,8 @@ public class MainFrame extends JFrame {
 					}
 				} catch (InterruptedException interrupted) {
 					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.CancellationException cancelled) {
+					connectionLabel.setText("Re-authorization wait cancelled; outbox retained");
 				} catch (java.util.concurrent.ExecutionException failure) {
 					if (controller.getStore() == remote && remote.gateway() != null) {
 						attachMonitor(remote, "Connected to " + remote.describe().location());

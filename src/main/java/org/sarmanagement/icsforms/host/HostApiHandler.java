@@ -306,14 +306,15 @@ final class HostApiHandler implements HttpHandler {
 		try {
 			List<IncidentService.RecordSubmission> submissions = new ArrayList<>();
 			Instant acceptedAt = context.config.clock().instant();
-			for (JsonNode record : records) {
-				IncidentService.RecordSubmission submission =
-						HostHttp.MAPPER.treeToValue(record, IncidentService.RecordSubmission.class);
-				submissions.add(withDeviceAttribution(submission, device, acceptedAt));
-			}
 			String operationId = request.path("operationId").asText("");
 			if (operationId.isBlank()) {
 				throw new IllegalArgumentException("operationId is required");
+			}
+			boolean recovered = device.recoversOperation(operationId);
+			for (JsonNode record : records) {
+				IncidentService.RecordSubmission submission =
+						HostHttp.MAPPER.treeToValue(record, IncidentService.RecordSubmission.class);
+				submissions.add(withDeviceAttribution(submission, device, acceptedAt, recovered));
 			}
 			batch = new IncidentService.RecordBatch(context.incident, operationId, submissions);
 		} catch (IOException | RuntimeException exception) {
@@ -340,12 +341,14 @@ final class HostApiHandler implements HttpHandler {
 	 * @param submission client record submission
 	 * @param device device authenticated by the TLS certificate
 	 * @param acceptedAt host acceptance time
+	 * @param recovered true when the batch is work the administrator saw queued on a revoked identity
 	 * @return submission with host-authoritative provenance
 	 */
 	private IncidentService.RecordSubmission withDeviceAttribution(
-			IncidentService.RecordSubmission submission, DeviceRegistry.DeviceRecord device, Instant acceptedAt) {
+			IncidentService.RecordSubmission submission, DeviceRegistry.DeviceRecord device, Instant acceptedAt,
+			boolean recovered) {
 		JsonNode content = submission.content();
-		JsonNode attributed = normalizeProvenance(content, device, acceptedAt, false);
+		JsonNode attributed = normalizeProvenance(content, device, acceptedAt, recovered, false);
 		return new IncidentService.RecordSubmission(submission.key(), submission.parent(),
 				submission.parentField(), submission.baseVersion(), submission.operation(), attributed);
 	}
@@ -356,11 +359,12 @@ final class HostApiHandler implements HttpHandler {
 	 * @param value submitted JSON value
 	 * @param device authenticated device
 	 * @param acceptedAt host acceptance time
+	 * @param recovered true when the original identity should be recorded
 	 * @param provenance true when the current object is provenance
 	 * @return detached value with normalized provenance
 	 */
 	private JsonNode normalizeProvenance(JsonNode value, DeviceRegistry.DeviceRecord device, Instant acceptedAt,
-			boolean provenance) {
+			boolean recovered, boolean provenance) {
 		if (value == null) {
 			return null;
 		}
@@ -369,12 +373,12 @@ final class HostApiHandler implements HttpHandler {
 			List<String> fields = new ArrayList<>();
 			copy.fieldNames().forEachRemaining(fields::add);
 			for (String field : fields) {
-				copy.set(field, normalizeProvenance(copy.get(field), device, acceptedAt, "provenance".equals(field)));
+				copy.set(field, normalizeProvenance(copy.get(field), device, acceptedAt, recovered, "provenance".equals(field)));
 			}
 			if (provenance) {
 				copy.put("acceptedAt", acceptedAt.toString());
 				copy.put("deviceId", device.deviceId());
-				if (device.originalDeviceId() == null) {
+				if (!recovered) {
 					copy.remove("originalDeviceId");
 				} else {
 					copy.put("originalDeviceId", device.originalDeviceId());
@@ -386,7 +390,7 @@ final class HostApiHandler implements HttpHandler {
 			com.fasterxml.jackson.databind.node.ArrayNode copy =
 					(com.fasterxml.jackson.databind.node.ArrayNode) value.deepCopy();
 			for (int index = 0; index < copy.size(); index++) {
-				copy.set(index, normalizeProvenance(copy.get(index), device, acceptedAt, false));
+				copy.set(index, normalizeProvenance(copy.get(index), device, acceptedAt, recovered, false));
 			}
 			return copy;
 		}

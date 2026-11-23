@@ -130,6 +130,25 @@ class ReauthorizationTest {
 			assertEquals(revoked.deviceId(), nestedAccepted.path("originalDeviceId").asText());
 			assertEquals(fixture.clock.instant().toString(), nestedAccepted.path("acceptedAt").asText());
 
+			JsonNode latest = recordsOfType(replacementClient.readIncident(fixture.incident.value()),
+					ClueLogEntry.class.getName()).get(0);
+			ObjectNode laterContent = ((ObjectNode) latest.path("content")).deepCopy();
+			laterContent.put("description", "Entered after repair");
+			ObjectNode laterSubmission = HostHttp.MAPPER.createObjectNode();
+			laterSubmission.set("key", latest.path("key"));
+			laterSubmission.put("baseVersion", latest.path("version").asLong());
+			laterSubmission.put("operation", "UPDATE");
+			laterSubmission.set("content", laterContent);
+			ObjectNode laterBatch = HostHttp.MAPPER.createObjectNode();
+			laterBatch.put("operationId", "entered-after-repair");
+			laterBatch.putArray("records").add(laterSubmission);
+			assertTrue(replacementClient.submit(fixture.incident.value(), laterBatch.toString()).path("applied")
+					.asBoolean());
+			JsonNode laterProvenance = recordsOfType(replacementClient.readIncident(fixture.incident.value()),
+					ClueLogEntry.class.getName()).get(0).path("content").path("provenance");
+			assertEquals(replacement.deviceId(), laterProvenance.path("deviceId").asText());
+			assertFalse(laterProvenance.has("originalDeviceId"));
+
 			Path backup = backupDirectory.resolve("host-backup.zip");
 			HostBackup.create(fixture.store, fixture.incident, fixture.session.storage(), backup);
 			fixture.session.revoke(replacement.deviceId());
@@ -186,6 +205,7 @@ class ReauthorizationTest {
 	 */
 	private static ArrayNode outbox() {
 		ObjectNode operation = HostHttp.MAPPER.createObjectNode();
+		operation.put("operationId", "approved-repair-operation");
 		operation.put("description", "queued operation");
 		return HostHttp.MAPPER.createArrayNode().add(operation);
 	}
