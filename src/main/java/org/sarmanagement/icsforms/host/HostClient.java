@@ -182,10 +182,24 @@ public final class HostClient {
 		body.put("deviceName", deviceName);
 		body.put("certificateRequest", HostCrypto.createRequest(keys, deviceName));
 		JsonNode response = client.post(client.enrollmentUri("/v1/pairing/redeem"), body.toString());
+		return buildCredential(keys, response, invitation.hostFingerprint());
+	}
+
+	/**
+	 * Builds the device credential from an admission response, requiring the returned authority to be the pinned
+	 * one.
+	 *
+	 * @param keys the device key pair the certificate was issued for
+	 * @param response admission response with certificate, authority certificate, device id and expiry
+	 * @param fingerprint host authority fingerprint the device pins
+	 * @return the device credential
+	 * @throws HostClientException when the response is unusable or names a different authority
+	 */
+	private static DeviceCredential buildCredential(KeyPair keys, JsonNode response, String fingerprint) {
 		try {
 			X509Certificate certificate = HostCrypto.parseCertificate(response.path("certificate").asText(""));
 			X509Certificate authority = HostCrypto.parseCertificate(response.path("caCertificate").asText(""));
-			if (!invitation.hostFingerprint().equalsIgnoreCase(HostCrypto.fingerprint(authority))) {
+			if (!fingerprint.equalsIgnoreCase(HostCrypto.fingerprint(authority))) {
 				throw new HostClientException(HostClientException.Kind.IDENTITY_CHANGED, 0, null,
 						"The host identity does not match the invitation.", null);
 			}
@@ -195,8 +209,8 @@ public final class HostClient {
 			store.setKeyEntry(DeviceCredential.KEY_ALIAS, keys.getPrivate(), password,
 					new X509Certificate[] {certificate, authority});
 			store.setCertificateEntry(DeviceCredential.CA_ALIAS, authority);
-			return new DeviceCredential(store, password, invitation.hostFingerprint(),
-					response.path("deviceId").asText(), Instant.parse(response.path("expiresAt").asText()));
+			return new DeviceCredential(store, password, fingerprint, response.path("deviceId").asText(),
+					Instant.parse(response.path("expiresAt").asText()));
 		} catch (GeneralSecurityException | IOException | RuntimeException exception) {
 			if (exception instanceof HostClientException hostFailure) {
 				throw hostFailure;
@@ -418,6 +432,170 @@ public final class HostClient {
 	public JsonNode submit(String incidentId, String json) {
 		return exchange(HttpRequest.newBuilder(dataUri("/v1/incidents/" + incidentId + "/records:submit"))
 				.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json)), true);
+	}
+
+	/**
+	 * The short-code pairing window as opened by the host.
+	 *
+	 * @param code normalized pairing code; a secret until the window closes
+	 * @param expiresAt when the window closes
+	 * @param host host name or address devices should use
+	 * @param port mutual-TLS port
+	 * @param enrollmentPort enrollment port
+	 * @param fingerprint host authority fingerprint
+	 */
+	public record PairingOffer(String code, Instant expiresAt, String host, int port, int enrollmentPort,
+			String fingerprint) {
+		/**
+		 * Redacts the code from diagnostic output.
+		 *
+		 * @return text that omits the code
+		 */
+		@Override
+		public String toString() {
+			return "PairingOffer[" + host + ":" + enrollmentPort + ", expires " + expiresAt + "]";
+		}
+
+		/**
+		 * Returns the QR and clipboard payload, which also carries the fingerprint.
+		 *
+		 * @return pairing payload
+		 */
+		public org.sarmanagement.icsforms.host.pairing.PairingPayload payload() {
+			return new org.sarmanagement.icsforms.host.pairing.PairingPayload(host, port, enrollmentPort, fingerprint,
+					code);
+		}
+	}
+
+	/**
+	 * The outcome of a short-code pairing.
+	 *
+	 * @param credential device credential, pinned to the verified host authority
+	 * @param port mutual-TLS port reported by the host
+	 * @param incidentId incident the host shares
+	 */
+	public record ShortPairingResult(DeviceCredential credential, int port, String incidentId) {
+	}
+
+	/**
+	 * Pairs with a host using a short code. The exchange authenticates both sides from the code and binds the host
+	 * identity this device observed, so a man in the middle who presents a different authority fails the key
+	 * confirmation. When {@code pinnedFingerprint} is known (read from a QR code) the TLS connection is pinned to
+	 * it from the start; otherwise the observed authority is checked by the confirmation alone.
+	 *
+	 * @param host host name or address
+	 * @param enrollmentPort enrollment port
+	 * @param pinnedFingerprint fingerprint obtained out of band, or null when the code was typed
+	 * @param code normalized pairing code
+	 * @param deviceName name shown to the host operator
+	 * @param suites suites this device supports, in order of preference
+	 * @return the credential and where to connect
+	 * @throws HostClientException when pairing fails
+	 */
+	public static ShortPairingResult pairWithCode(String host, int enrollmentPort, String pinnedFingerprint,
+			String code, String deviceName, org.sarmanagement.icsforms.host.pairing.PairingSuites suites) {
+		CapturingHostTrust capture = null;
+		HostClient client;
+		if (pinnedFingerprint != null) {
+			client = anonymous(host, 0, enrollmentPort, pinnedFingerprint.toLowerCase(Locale.ROOT));
+		} else {
+			capture = new CapturingHostTrust();
+			try {
+				SSLContext context = SSLContext.getInstance("TLS");
+				context.init(null, new TrustManager[] {capture}, null);
+				client = new HostClient(host, 0, enrollmentPort, "", context);
+			} catch (GeneralSecurityException exception) {
+				throw new IllegalStateException("Cannot create TLS context", exception);
+			}
+		}
+		JsonNode status = client.get(client.enrollmentUri("/v1/status"));
+		String pakeId = chooseSuite(status.path("pairingSuites").path("pake"), suites.pakeIds());
+		String channelId = chooseSuite(status.path("pairingSuites").path("channel"), suites.channelIds());
+		if (pakeId == null || channelId == null) {
+			throw new HostClientException(HostClientException.Kind.INCOMPATIBLE, 0, null,
+					"The host does not support a pairing method this device supports.", null);
+		}
+		String observed = pinnedFingerprint != null ? pinnedFingerprint.toLowerCase(Locale.ROOT)
+				: capture.observedFingerprint();
+		byte[] identity = observed.getBytes(StandardCharsets.UTF_8);
+		org.sarmanagement.icsforms.host.pairing.PakeExchange pake = suites.pake(pakeId).orElseThrow()
+				.start(org.sarmanagement.icsforms.host.pairing.PakeSuite.Role.CLIENT, code.toCharArray());
+		byte[] round1 = pake.round1();
+		ObjectNode begin = HostHttp.MAPPER.createObjectNode();
+		begin.put("suite", pakeId);
+		begin.put("channel", channelId);
+		begin.put("round1", java.util.Base64.getEncoder().encodeToString(round1));
+		JsonNode started = client.post(client.enrollmentUri("/v1/pairing/short/begin"), begin.toString());
+		try {
+			byte[] hostRound1 = java.util.Base64.getDecoder().decode(started.path("round1").asText(""));
+			byte[] hostRound2 = java.util.Base64.getDecoder().decode(started.path("round2").asText(""));
+			byte[] round2 = pake.round2(hostRound1);
+			byte[] key = pake.complete(hostRound2);
+			observed = pinnedFingerprint != null ? observed : capture.observedFingerprint();
+			identity = observed.getBytes(StandardCharsets.UTF_8);
+			org.sarmanagement.icsforms.host.pairing.ChannelSuite.PairingChannel channel = suites.channel(channelId)
+					.orElseThrow().open(key, org.sarmanagement.icsforms.host.pairing.PairingTranscript.of(
+							pakeId.getBytes(StandardCharsets.UTF_8), channelId.getBytes(StandardCharsets.UTF_8),
+							round1, hostRound1, hostRound2, round2));
+			KeyPair keys = HostCrypto.generateKeyPair();
+			ObjectNode request = HostHttp.MAPPER.createObjectNode();
+			request.put("deviceName", deviceName);
+			request.put("certificateRequest", HostCrypto.createRequest(keys, deviceName));
+			ObjectNode finish = HostHttp.MAPPER.createObjectNode();
+			finish.put("sessionId", started.path("sessionId").asText());
+			finish.put("round2", java.util.Base64.getEncoder().encodeToString(round2));
+			finish.put("confirmation",
+					java.util.Base64.getEncoder().encodeToString(channel.confirmation("client", identity)));
+			finish.put("sealed", java.util.Base64.getEncoder()
+					.encodeToString(channel.seal("request", HostHttp.MAPPER.writeValueAsBytes(request))));
+			JsonNode finished = client.post(client.enrollmentUri("/v1/pairing/short/finish"), finish.toString());
+			if (!channel.verifyConfirmation("server", identity,
+					java.util.Base64.getDecoder().decode(finished.path("confirmation").asText("")))) {
+				throw new HostClientException(HostClientException.Kind.REJECTED, 200, null,
+						"The host did not prove that it knows the pairing code.", null);
+			}
+			JsonNode result = HostHttp.MAPPER.readTree(
+					channel.unseal("result", java.util.Base64.getDecoder().decode(finished.path("sealed").asText(""))));
+			DeviceCredential credential = buildCredential(keys, result, observed);
+			return new ShortPairingResult(credential, result.path("port").asInt(), result.path("incidentId").asText());
+		} catch (GeneralSecurityException | IOException | IllegalArgumentException failure) {
+			throw new HostClientException(HostClientException.Kind.REJECTED, 200, null,
+					"The pairing exchange with the host failed.", failure);
+		}
+	}
+
+	/**
+	 * Picks the first identifier this device prefers that the host also supports.
+	 *
+	 * @param hostSupported identifiers the host reports
+	 * @param preferred identifiers this device supports, most preferred first
+	 * @return the identifier, or null when none match
+	 */
+	private static String chooseSuite(JsonNode hostSupported, List<String> preferred) {
+		List<String> offered = new ArrayList<>();
+		for (JsonNode node : hostSupported) {
+			offered.add(node.asText(""));
+		}
+		return preferred.stream().filter(offered::contains).findFirst().orElse(null);
+	}
+
+	/**
+	 * Opens the short-code pairing window (administrator only, loopback only).
+	 *
+	 * @return the code and where devices connect
+	 */
+	public PairingOffer openPairing() {
+		JsonNode body = post(dataUri("/v1/admin/pairing"), "{}");
+		return new PairingOffer(body.path("code").asText(), Instant.parse(body.path("expiresAt").asText()),
+				body.path("host").asText(), body.path("port").asInt(), body.path("enrollmentPort").asInt(),
+				body.path("fingerprint").asText());
+	}
+
+	/**
+	 * Closes the short-code pairing window and forgets its code (administrator only, loopback only).
+	 */
+	public void closePairing() {
+		post(dataUri("/v1/admin/pairing:close"), "{}");
 	}
 
 	/**

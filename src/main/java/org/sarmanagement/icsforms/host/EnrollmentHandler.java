@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.PublicKey;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Level;
@@ -65,6 +66,14 @@ final class EnrollmentHandler implements HttpHandler {
 				} else {
 					redeem(exchange);
 				}
+			} else if ("/v1/pairing/short/begin".equals(path) || "/v1/pairing/short/finish".equals(path)) {
+				if (!"POST".equals(method)) {
+					HostHttp.error(exchange, 405, "method_not_allowed", "Use POST.", false);
+				} else if ("/v1/pairing/short/begin".equals(path)) {
+					shortBegin(exchange);
+				} else {
+					shortFinish(exchange);
+				}
 			} else if ("/v1/reauthorization/renew".equals(path)) {
 				if (!"POST".equals(method)) {
 					HostHttp.error(exchange, 405, "method_not_allowed", "Use POST.", false);
@@ -110,6 +119,9 @@ final class EnrollmentHandler implements HttpHandler {
 		body.put("minimumClientVersion", context.config.minimumClientVersion());
 		body.put("hostState", context.state.get().name().toLowerCase(Locale.ROOT));
 		body.put("hostFingerprint", context.authority.fingerprint());
+		ObjectNode suites = body.putObject("pairingSuites");
+		suites.set("pake", HostHttp.MAPPER.valueToTree(context.suites.pakeIds()));
+		suites.set("channel", HostHttp.MAPPER.valueToTree(context.suites.channelIds()));
 		HostHttp.send(exchange, 200, body);
 	}
 
@@ -195,6 +207,193 @@ final class EnrollmentHandler implements HttpHandler {
 		body.put("expiresAt", admission.device().expiresAt().toString());
 		LOGGER.log(Level.INFO, "Device admitted: {0}", admission.device().deviceId());
 		HostHttp.send(exchange, 200, body);
+	}
+
+	/**
+	 * Starts a short-code exchange: negotiates suites, runs the host's first two PAKE rounds against the
+	 * device's first message, and returns the host's messages. Nothing about the code is revealed.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void shortBegin(HttpExchange exchange) throws IOException {
+		if (!context.pairingGlobal.tryAcquire("global")
+				|| !context.pairingPerAddress.tryAcquire(HostHttp.remoteKey(exchange))) {
+			rateLimited(exchange);
+			return;
+		}
+		JsonNode request = readShortRequest(exchange);
+		if (request == null) {
+			return;
+		}
+		String pakeId = supported(request.path("suite").asText(""), context.suites.pakeIds());
+		String channelId = supported(request.path("channel").asText(""), context.suites.channelIds());
+		byte[] clientRound1 = decode(request.path("round1").asText(""));
+		char[] code = context.shortPairing.codeChars();
+		if (pakeId == null || channelId == null || clientRound1 == null || code == null) {
+			HostHttp.error(exchange, 403, "invitation_invalid", INVITATION_INVALID, false);
+			return;
+		}
+		try {
+			org.sarmanagement.icsforms.host.pairing.PakeExchange host = context.suites.pake(pakeId).orElseThrow()
+					.start(org.sarmanagement.icsforms.host.pairing.PakeSuite.Role.SERVER, code);
+			byte[] hostRound1 = host.round1();
+			byte[] hostRound2 = host.round2(clientRound1);
+			byte[][] transcript = {pakeId.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+					channelId.getBytes(java.nio.charset.StandardCharsets.UTF_8), clientRound1, hostRound1, hostRound2};
+			ShortPairing.Session session = context.shortPairing.begin(host,
+					context.suites.channel(channelId).orElseThrow(), pakeId, transcript);
+			if (session == null) {
+				HostHttp.error(exchange, 403, "invitation_invalid", INVITATION_INVALID, false);
+				return;
+			}
+			ObjectNode body = HostHttp.MAPPER.createObjectNode();
+			body.put("sessionId", session.id());
+			body.put("suite", pakeId);
+			body.put("channel", channelId);
+			body.put("round1", java.util.Base64.getEncoder().encodeToString(hostRound1));
+			body.put("round2", java.util.Base64.getEncoder().encodeToString(hostRound2));
+			HostHttp.send(exchange, 200, body);
+		} catch (GeneralSecurityException malformed) {
+			HostHttp.error(exchange, 403, "invitation_invalid", INVITATION_INVALID, false);
+		} finally {
+			java.util.Arrays.fill(code, '\0');
+		}
+	}
+
+	/**
+	 * Finishes a short-code exchange: verifies the device's key confirmation, which binds the host identity the
+	 * device observed, then admits the device whose certificate request arrived sealed under the exchange key. A
+	 * failed confirmation counts against the window.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void shortFinish(HttpExchange exchange) throws IOException {
+		if (!context.pairingGlobal.tryAcquire("global")
+				|| !context.pairingPerAddress.tryAcquire(HostHttp.remoteKey(exchange))) {
+			rateLimited(exchange);
+			return;
+		}
+		if (context.state.get() != HostState.RUNNING) {
+			HostHttp.error(exchange, 503, "service_unavailable", "The host is not accepting new devices.", true,
+					Map.of("hostState", context.state.get().name().toLowerCase(Locale.ROOT)));
+			return;
+		}
+		JsonNode request = readShortRequest(exchange);
+		if (request == null) {
+			return;
+		}
+		ShortPairing.Session session = context.shortPairing.take(request.path("sessionId").asText(""));
+		byte[] clientRound2 = decode(request.path("round2").asText(""));
+		byte[] confirmation = decode(request.path("confirmation").asText(""));
+		byte[] sealed = decode(request.path("sealed").asText(""));
+		if (session == null || clientRound2 == null || confirmation == null || sealed == null) {
+			HostHttp.error(exchange, 403, "invitation_invalid", INVITATION_INVALID, false);
+			return;
+		}
+		byte[] hostIdentity = context.authority.fingerprint().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+		org.sarmanagement.icsforms.host.pairing.ChannelSuite.PairingChannel channel;
+		JsonNode payload;
+		try {
+			byte[] key = session.exchange().complete(clientRound2);
+			byte[][] parts = java.util.Arrays.copyOf(session.transcript(), session.transcript().length + 1);
+			parts[parts.length - 1] = clientRound2;
+			channel = session.channelSuite().open(key, org.sarmanagement.icsforms.host.pairing.PairingTranscript.of(parts));
+			if (!channel.verifyConfirmation("client", hostIdentity, confirmation)) {
+				context.shortPairing.failed();
+				LOGGER.log(Level.INFO, "Short-code pairing rejected: confirmation failed");
+				HostHttp.error(exchange, 403, "invitation_invalid", INVITATION_INVALID, false);
+				return;
+			}
+			payload = HostHttp.MAPPER.readTree(channel.unseal("request", sealed));
+		} catch (GeneralSecurityException | IOException failure) {
+			context.shortPairing.failed();
+			HostHttp.error(exchange, 403, "invitation_invalid", INVITATION_INVALID, false);
+			return;
+		}
+		PublicKey deviceKey;
+		try {
+			deviceKey = HostCrypto.verifyRequest(payload.path("certificateRequest").asText(""));
+		} catch (GeneralSecurityException | IllegalArgumentException exception) {
+			HostHttp.error(exchange, 400, "invalid_request", "The pairing request is malformed.", false);
+			return;
+		}
+		DeviceRegistry.Admission admission;
+		try {
+			DeviceRegistry.IssuedInvitation internal = context.registry.issueInvitation(context.incident,
+					Duration.ofMinutes(1));
+			admission = context.registry.redeem(internal.secret(), context.incident, context.incident,
+					sanitizeName(payload.path("deviceName").asText("")), context.config.credentialLifetime(),
+					context.periodClose(), (deviceId, now, notAfter) -> context.authority.issueDevice(deviceKey,
+							deviceId, now, notAfter));
+		} catch (InvitationRejectedException rejected) {
+			LOGGER.log(Level.INFO, "Short-code pairing rejected: {0}", rejected.getMessage());
+			HostHttp.error(exchange, 403, "invitation_invalid", INVITATION_INVALID, false);
+			return;
+		} catch (HostStorageException failure) {
+			context.fail("Device registry storage failed");
+			LOGGER.log(Level.SEVERE, "Device registry storage failed during pairing", failure);
+			HostHttp.error(exchange, 503, "service_unavailable", "The host cannot admit devices right now.", true);
+			return;
+		}
+		context.shortPairing.close();
+		ObjectNode result = HostHttp.MAPPER.createObjectNode();
+		result.put("deviceId", admission.device().deviceId());
+		result.put("incidentId", context.incident.value());
+		result.put("certificate", HostCrypto.pem(admission.certificate()));
+		result.put("caCertificate", context.authority.certificatePem());
+		result.put("expiresAt", admission.device().expiresAt().toString());
+		result.put("port", context.port());
+		ObjectNode body = HostHttp.MAPPER.createObjectNode();
+		try {
+			body.put("confirmation", java.util.Base64.getEncoder()
+					.encodeToString(channel.confirmation("server", hostIdentity)));
+			body.put("sealed", java.util.Base64.getEncoder()
+					.encodeToString(channel.seal("result", HostHttp.MAPPER.writeValueAsBytes(result))));
+		} catch (GeneralSecurityException failure) {
+			HostHttp.error(exchange, 500, "internal_error", "The host could not process the request.", true);
+			return;
+		}
+		LOGGER.log(Level.INFO, "Device admitted by short code: {0}", admission.device().deviceId());
+		HostHttp.send(exchange, 200, body);
+	}
+
+	/**
+	 * Reads a bounded JSON object for the short-code exchange.
+	 *
+	 * @param exchange exchange to answer on failure
+	 * @return the object, or null after an error response
+	 * @throws IOException when the body cannot be read
+	 */
+	private JsonNode readShortRequest(HttpExchange exchange) throws IOException {
+		byte[] raw = HostHttp.readBody(exchange, HostProtocol.MAX_PAIRING_BYTES);
+		return raw == null ? null : HostHttp.parseObject(exchange, raw);
+	}
+
+	/**
+	 * Accepts a suite identifier only when this host supports it.
+	 *
+	 * @param requested identifier the device chose
+	 * @param supported identifiers this host supports
+	 * @return the identifier, or null when unsupported
+	 */
+	private static String supported(String requested, java.util.List<String> supported) {
+		return supported.contains(requested) ? requested : null;
+	}
+
+	/**
+	 * Decodes Base64 text.
+	 *
+	 * @param text Base64 text
+	 * @return bytes, or null when blank or malformed
+	 */
+	private static byte[] decode(String text) {
+		try {
+			return text.isBlank() ? null : java.util.Base64.getDecoder().decode(text);
+		} catch (IllegalArgumentException malformed) {
+			return null;
+		}
 	}
 
 	/**

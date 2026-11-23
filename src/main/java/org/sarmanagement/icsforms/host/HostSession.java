@@ -456,6 +456,25 @@ public final class HostSession implements AutoCloseable {
 	}
 
 	/**
+	 * Opens the short-code pairing window through the administrator path over loopback.
+	 *
+	 * @return the code, its expiry and where devices connect; the code is a secret and must not be logged
+	 * @throws HostClientException when the host rejects the request
+	 */
+	public HostClient.PairingOffer openPairing() {
+		return requireAdmin().openPairing();
+	}
+
+	/**
+	 * Closes the short-code pairing window and discards its code.
+	 *
+	 * @throws HostClientException when the host rejects the request
+	 */
+	public void closePairing() {
+		requireAdmin().closePairing();
+	}
+
+	/**
 	 * Lists admitted devices through the administrator path.
 	 *
 	 * @return devices

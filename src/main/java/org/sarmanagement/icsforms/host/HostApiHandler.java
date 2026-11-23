@@ -413,6 +413,11 @@ final class HostApiHandler implements HttpHandler {
 		String method = exchange.getRequestMethod();
 		if ("/v1/admin/invitations".equals(path) && "POST".equals(method)) {
 			invitation(exchange);
+		} else if ("/v1/admin/pairing".equals(path) && "POST".equals(method)) {
+			openPairing(exchange);
+		} else if ("/v1/admin/pairing:close".equals(path) && "POST".equals(method)) {
+			context.shortPairing.close();
+			HostHttp.send(exchange, 200, HostHttp.MAPPER.createObjectNode().put("open", false));
 		} else if (DEVICES.equals(path) && "GET".equals(method)) {
 			devices(exchange);
 		} else if ("/v1/admin/reauthorizations".equals(path) && "GET".equals(method)) {
@@ -542,6 +547,31 @@ final class HostApiHandler implements HttpHandler {
 		body.put("invitationId", issued.invitationId());
 		body.put("expiresAt", issued.expiresAt().toString());
 		body.put("invitation", invitation.toText());
+		HostHttp.send(exchange, 201, body);
+	}
+
+	/**
+	 * Opens the short-code pairing window and returns the code with everything a device needs to find and verify
+	 * the host. The code is shown only in this response and is never persisted or logged.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void openPairing(HttpExchange exchange) throws IOException {
+		Instant close = context.periodClose();
+		if (close != null && !context.config.clock().instant().isBefore(close)) {
+			HostHttp.error(exchange, 409, "period_closed",
+					"The operational period has closed; credentials cannot be issued.", false);
+			return;
+		}
+		ShortPairing.Offer offer = context.shortPairing.open(context.config.invitationLifetime());
+		ObjectNode body = HostHttp.MAPPER.createObjectNode();
+		body.put("code", offer.code());
+		body.put("expiresAt", offer.expiresAt().toString());
+		body.put("host", context.config.advertisedHost());
+		body.put("port", context.port());
+		body.put("enrollmentPort", context.enrollmentPort());
+		body.put("fingerprint", context.authority.fingerprint());
 		HostHttp.send(exchange, 201, body);
 	}
 
