@@ -15,82 +15,100 @@ import java.security.GeneralSecurityException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Verifies the short-code pairing building blocks: codes, QR payload, PAKE suite and keyed channel. */
+/** Verifies the in-person pairing building blocks: numbers, QR payload, SAS suite and keyed channel. */
 class PairingCoreTest {
-	private static byte[][] exchange(String clientCode, String serverCode) throws GeneralSecurityException {
-		PakeSuite suite = new JpakeSuite();
-		PakeExchange client = suite.start(PakeSuite.Role.CLIENT, clientCode.toCharArray());
-		PakeExchange server = suite.start(PakeSuite.Role.SERVER, serverCode.toCharArray());
-		byte[] c1 = client.round1();
-		byte[] s1 = server.round1();
-		byte[] s2 = server.round2(c1);
-		byte[] c2 = client.round2(s1);
-		return new byte[][] {client.complete(s2), server.complete(c2)};
+	private static final byte[] HOST = "host-fingerprint".getBytes(StandardCharsets.UTF_8);
+	private static final byte[] MITM = "mitm-fingerprint".getBytes(StandardCharsets.UTF_8);
+
+	/**
+	 * Runs a full exchange in which the device believes it is talking to the given host identity.
+	 *
+	 * @param deviceSeesHost identity the device observed
+	 * @return the device outcome followed by the host outcome
+	 * @throws GeneralSecurityException when the exchange fails
+	 */
+	private static SasSuite.Outcome[] exchange(byte[] deviceSeesHost) throws GeneralSecurityException {
+		SasSuite suite = new EcdhSasSuite();
+		SasSuite.Initiator device = suite.initiator();
+		SasSuite.Responder host = suite.responder();
+		byte[] share = host.receiveCommitment(device.commitment());
+		byte[] opening = device.accept(share);
+		SasSuite.Outcome hostOutcome = host.open(opening, HOST);
+		return new SasSuite.Outcome[] {device.outcome(deviceSeesHost), hostOutcome};
 	}
 
 	@Test
-	void generatedCodesNormalizeAndTolerateTypingVariants() {
-		String code = PairingCode.generate();
+	void numbersDisplayAndNormalizeAndTolerateTypingVariants() {
+		String code = PairingCode.of(PairingCode.SPACE - 1);
 		assertEquals(PairingCode.LENGTH, code.length());
-		assertEquals(code, PairingCode.normalize(PairingCode.display(code).toLowerCase()));
-		assertEquals("01234567", PairingCode.normalize("o123-4567"));
-		assertEquals("11111111", PairingCode.normalize("iL1i l1Il"));
-		assertThrows(IllegalArgumentException.class, () -> PairingCode.normalize("ABCDEFG"));
-		assertThrows(IllegalArgumentException.class, () -> PairingCode.normalize("ABCDEFGU"));
+		assertEquals("9999-ZZ", PairingCode.display(code));
+		assertEquals(code, PairingCode.normalize("9999 zz"));
+		assertEquals("0123AB", PairingCode.normalize("o123-ab"));
+		assertEquals("1111AB", PairingCode.normalize("i111-ab"));
+		assertThrows(IllegalArgumentException.class, () -> PairingCode.normalize("1234-IO"));
+		assertThrows(IllegalArgumentException.class, () -> PairingCode.normalize("1234AB5"));
+		assertThrows(IllegalArgumentException.class, () -> PairingCode.normalize("12AB34"));
 	}
 
 	@Test
-	void payloadRoundTripsIncludingIpv6AndFitsAHighCorrectionQrCode() {
-		String fingerprint = "ab".repeat(32);
-		PairingPayload payload = new PairingPayload("fe80::1", 8443, 8444, fingerprint, "k7qm-4xd9");
-		PairingPayload parsed = PairingPayload.parse(payload.toText());
-		assertEquals(payload, parsed);
-		assertEquals("K7QM4XD9", parsed.code());
-		assertFalse(parsed.toString().contains("K7QM"));
-		assertTrue(PairingPayload.isPayload(" icsforms-pair-2:x"));
-		assertThrows(IllegalArgumentException.class, () -> PairingPayload.parse("ICSFORMS-PAIR-2:host:1:2:zz:K7QM4XD9"));
+	void payloadRoundTripsIncludingIpv6AndCarriesNoSecret() {
+		PairingPayload payload = new PairingPayload("fe80::1", 8443, 8444, "ab".repeat(32));
+		assertEquals(payload, PairingPayload.parse(payload.toText()));
+		assertTrue(PairingPayload.isPayload(" icsforms-pair-3:x"));
+		assertThrows(IllegalArgumentException.class, () -> PairingPayload.parse("ICSFORMS-PAIR-3:host:1:2:zz"));
 	}
 
 	@Test
-	void sameCodeYieldsTheSameKeyAndADifferentCodeDoesNot() throws GeneralSecurityException {
-		byte[][] keys = exchange("K7QM4XD9", "K7QM4XD9");
-		assertArrayEquals(keys[0], keys[1]);
-		byte[][] wrong = exchange("K7QM4XD9", "K7QM4XD8");
-		assertFalse(java.util.Arrays.equals(wrong[0], wrong[1]));
+	void bothSidesGetTheSameNumberAndKeyWhenTheyAgreeOnTheHost() throws GeneralSecurityException {
+		SasSuite.Outcome[] outcomes = exchange(HOST);
+		assertEquals(outcomes[0].code(), outcomes[1].code());
+		assertArrayEquals(outcomes[0].secret(), outcomes[1].secret());
+		assertEquals(PairingCode.LENGTH, outcomes[0].code().length());
+		assertFalse(outcomes[0].toString().contains(outcomes[0].code()));
 	}
 
 	@Test
-	void corruptedPeerMessagesAreRejected() {
-		PakeSuite suite = new JpakeSuite();
-		PakeExchange server = suite.start(PakeSuite.Role.SERVER, "K7QM4XD9".toCharArray());
-		assertThrows(GeneralSecurityException.class, () -> server.round2(new byte[] {1, 2, 3}));
-		assertThrows(GeneralSecurityException.class, () -> server.round2(new byte[0]));
+	void aDifferentObservedHostYieldsADifferentNumber() throws GeneralSecurityException {
+		int differing = 0;
+		for (int i = 0; i < 5; i++) {
+			SasSuite.Outcome[] outcomes = exchange(MITM);
+			if (!outcomes[0].code().equals(outcomes[1].code())) {
+				differing++;
+			}
+		}
+		assertTrue(differing >= 4);
+	}
+
+	@Test
+	void tamperedOpeningOrCommitmentIsRejected() throws GeneralSecurityException {
+		SasSuite suite = new EcdhSasSuite();
+		SasSuite.Initiator device = suite.initiator();
+		SasSuite.Responder host = suite.responder();
+		byte[] share = host.receiveCommitment(device.commitment());
+		byte[] opening = device.accept(share);
+		opening[opening.length - 1] ^= 1;
+		assertThrows(GeneralSecurityException.class, () -> host.open(opening, HOST));
+		assertThrows(GeneralSecurityException.class, () -> suite.responder().receiveCommitment(new byte[] {1}));
 	}
 
 	@Test
 	void confirmationBindsTheObservedHostIdentity() throws GeneralSecurityException {
-		byte[][] keys = exchange("K7QM4XD9", "K7QM4XD9");
-		byte[] transcript = "transcript".getBytes(StandardCharsets.UTF_8);
+		SasSuite.Outcome[] keys = exchange(HOST);
 		ChannelSuite suite = new HkdfAesGcmChannelSuite();
-		ChannelSuite.PairingChannel client = suite.open(keys[0], transcript);
-		ChannelSuite.PairingChannel server = suite.open(keys[1], transcript);
-		byte[] real = "real-fingerprint".getBytes(StandardCharsets.UTF_8);
-		byte[] mitm = "mitm-fingerprint".getBytes(StandardCharsets.UTF_8);
-		assertTrue(server.verifyConfirmation("client", real, client.confirmation("client", real)));
-		assertFalse(server.verifyConfirmation("client", real, client.confirmation("client", mitm)));
-		assertFalse(server.verifyConfirmation("server", real, client.confirmation("client", real)));
-		assertFalse(server.verifyConfirmation("client", real, null));
-		ChannelSuite.PairingChannel other = suite.open(keys[1], "other".getBytes(StandardCharsets.UTF_8));
-		assertFalse(other.verifyConfirmation("client", real, client.confirmation("client", real)));
+		ChannelSuite.PairingChannel client = suite.open(keys[0].secret(), keys[0].transcript());
+		ChannelSuite.PairingChannel server = suite.open(keys[1].secret(), keys[1].transcript());
+		assertTrue(server.verifyConfirmation("client", HOST, client.confirmation("client", HOST)));
+		assertFalse(server.verifyConfirmation("client", HOST, client.confirmation("client", MITM)));
+		assertFalse(server.verifyConfirmation("server", HOST, client.confirmation("client", HOST)));
+		assertFalse(server.verifyConfirmation("client", HOST, null));
 	}
 
 	@Test
 	void sealedPayloadsAuthenticateKeyAndPurpose() throws GeneralSecurityException {
-		byte[][] keys = exchange("K7QM4XD9", "K7QM4XD9");
+		SasSuite.Outcome[] keys = exchange(HOST);
 		ChannelSuite suite = new HkdfAesGcmChannelSuite();
-		byte[] transcript = new byte[] {9};
-		ChannelSuite.PairingChannel client = suite.open(keys[0], transcript);
-		ChannelSuite.PairingChannel server = suite.open(keys[1], transcript);
+		ChannelSuite.PairingChannel client = suite.open(keys[0].secret(), keys[0].transcript());
+		ChannelSuite.PairingChannel server = suite.open(keys[1].secret(), keys[1].transcript());
 		byte[] sealed = client.seal("csr", "payload".getBytes(StandardCharsets.UTF_8));
 		assertEquals("payload", new String(server.unseal("csr", sealed), StandardCharsets.UTF_8));
 		assertThrows(GeneralSecurityException.class, () -> server.unseal("other", sealed));
@@ -102,11 +120,11 @@ class PairingCoreTest {
 	@Test
 	void registryNegotiatesByOfferersPreferenceAndRejectsUnknownSuites() {
 		PairingSuites suites = PairingSuites.defaults();
-		assertEquals(List.of(JpakeSuite.ID), suites.pakeIds());
-		assertTrue(suites.pake(JpakeSuite.ID).isPresent());
+		assertEquals(List.of(EcdhSasSuite.ID), suites.sasIds());
+		assertTrue(suites.sas(EcdhSasSuite.ID).isPresent());
 		assertTrue(suites.channel("nope").isEmpty());
-		assertEquals(JpakeSuite.ID,
-				PairingSuites.choose(List.of("cpace-x", JpakeSuite.ID), suites.pakeIds()).orElseThrow());
-		assertTrue(PairingSuites.choose(List.of("cpace-x"), suites.pakeIds()).isEmpty());
+		assertEquals(EcdhSasSuite.ID,
+				PairingSuites.choose(List.of("cpace-x", EcdhSasSuite.ID), suites.sasIds()).orElseThrow());
+		assertTrue(PairingSuites.choose(List.of("cpace-x"), suites.sasIds()).isEmpty());
 	}
 }

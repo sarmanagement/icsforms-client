@@ -6,7 +6,6 @@ package org.sarmanagement.icsforms.host.pairing;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.util.Arrays;
 
 import javax.crypto.Cipher;
@@ -14,9 +13,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-import org.bouncycastle.crypto.digests.SHA256Digest;
-import org.bouncycastle.crypto.generators.HKDFBytesGenerator;
-import org.bouncycastle.crypto.params.HKDFParameters;
+import org.bouncycastle.crypto.fips.FipsKDF;
+import org.sarmanagement.icsforms.crypto.Fips;
 
 /**
  * HKDF-SHA-256 key schedule with HMAC-SHA-256 confirmation and AES-256-GCM payload protection. The key schedule is
@@ -28,7 +26,6 @@ public final class HkdfAesGcmChannelSuite implements ChannelSuite {
 	private static final int KEY_BYTES = 32;
 	private static final int NONCE_BYTES = 12;
 	private static final int TAG_BITS = 128;
-	private static final SecureRandom RANDOM = new SecureRandom();
 
 	/** {@inheritDoc} */
 	@Override
@@ -53,10 +50,10 @@ public final class HkdfAesGcmChannelSuite implements ChannelSuite {
 	 * @return derived key
 	 */
 	private static byte[] derive(byte[] secret, byte[] salt, String info) {
-		HKDFBytesGenerator generator = new HKDFBytesGenerator(new SHA256Digest());
-		generator.init(new HKDFParameters(secret, salt, info.getBytes(StandardCharsets.UTF_8)));
+		FipsKDF.AgreementKDFParameters parameters = FipsKDF.HKDF.withPRF(FipsKDF.AgreementKDFPRF.SHA256_HMAC)
+				.using(secret).withSalt(salt).withIV(info.getBytes(StandardCharsets.UTF_8));
 		byte[] key = new byte[KEY_BYTES];
-		generator.generateBytes(key, 0, key.length);
+		new FipsKDF.AgreementOperatorFactory().createKDFCalculator(parameters).generateBytes(key);
 		return key;
 	}
 
@@ -68,7 +65,7 @@ public final class HkdfAesGcmChannelSuite implements ChannelSuite {
 	 */
 	private static byte[] sha256(byte[] data) {
 		try {
-			return MessageDigest.getInstance("SHA-256").digest(data);
+			return MessageDigest.getInstance("SHA-256", Fips.provider()).digest(data);
 		} catch (GeneralSecurityException exception) {
 			throw new IllegalStateException("SHA-256 is unavailable", exception);
 		}
@@ -94,7 +91,7 @@ public final class HkdfAesGcmChannelSuite implements ChannelSuite {
 		@Override
 		public byte[] confirmation(String label, byte[] hostIdentity) {
 			try {
-				Mac mac = Mac.getInstance("HmacSHA256");
+				Mac mac = Mac.getInstance("HmacSHA256", Fips.provider());
 				mac.init(new SecretKeySpec(confirmationKey, "HmacSHA256"));
 				mac.update(label.getBytes(StandardCharsets.UTF_8));
 				mac.update((byte) 0);
@@ -113,10 +110,10 @@ public final class HkdfAesGcmChannelSuite implements ChannelSuite {
 		/** {@inheritDoc} */
 		@Override
 		public byte[] seal(String purpose, byte[] plaintext) throws GeneralSecurityException {
-			byte[] nonce = new byte[NONCE_BYTES];
-			RANDOM.nextBytes(nonce);
-			Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-			cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(payloadKey, "AES"), new GCMParameterSpec(TAG_BITS, nonce));
+			Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding", Fips.provider());
+			// The FIPS module generates the nonce itself; it is sent in front of the ciphertext.
+			cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(payloadKey, "AES"));
+			byte[] nonce = cipher.getIV();
 			cipher.updateAAD(purpose.getBytes(StandardCharsets.UTF_8));
 			byte[] body = cipher.doFinal(plaintext);
 			byte[] result = Arrays.copyOf(nonce, NONCE_BYTES + body.length);
@@ -130,7 +127,7 @@ public final class HkdfAesGcmChannelSuite implements ChannelSuite {
 			if (sealed == null || sealed.length < NONCE_BYTES + TAG_BITS / 8) {
 				throw new GeneralSecurityException("Protected payload is too short");
 			}
-			Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+			Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding", Fips.provider());
 			cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(payloadKey, "AES"),
 					new GCMParameterSpec(TAG_BITS, Arrays.copyOf(sealed, NONCE_BYTES)));
 			cipher.updateAAD(purpose.getBytes(StandardCharsets.UTF_8));

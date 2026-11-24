@@ -422,32 +422,42 @@ rate limited per address and globally (`429 rate_limited`). Pairing never
 grants incident access; the issued certificate is needed for the data port.
 Invitation secrets and credentials are never logged.
 
-### Short-code pairing
+### In-person pairing
 
-A host operator can open a single pairing window, which shows a short code
-(8 Crockford base32 characters), the host address and a QR code. The long
-invitation remains available. The code is a secret in memory only: it is never
-logged, persisted or sent to the device list, and a restart discards it.
+A host operator opens one pairing window. A device connects, shows a 6-character
+number (4 digits and 2 letters, I and O excluded) and the operator types it on
+the host. No secret is exchanged in advance; the QR code carries only the host
+address and authority fingerprint. The long invitation remains available.
 
 * `POST /v1/admin/pairing` (administrator, loopback) opens the window and
-  returns `{code, expiresAt, host, port, enrollmentPort, fingerprint}`; it
-  returns `409 period_closed` after the operational period closes.
-  `POST /v1/admin/pairing:close` closes it.
-* `GET /v1/status` also lists `pairingSuites` (`pake`, `channel` identifiers).
-* `POST /v1/pairing/short/begin` takes `{suite, channel, round1}` and returns
-  `{sessionId, suite, channel, round1, round2}` (Base64 PAKE messages).
-* `POST /v1/pairing/short/finish` takes `{sessionId, round2, confirmation,
-  sealed}`. `sealed` carries `{certificateRequest, deviceName}` encrypted under a
-  key derived from the PAKE. The response carries the host's key confirmation
-  and a sealed result with the credential, authority certificate, mutual-TLS
-  port and incident id.
+  returns `{expiresAt, host, port, enrollmentPort, fingerprint}`; it returns
+  `409 period_closed` after the operational period closes.
+  `GET /v1/admin/pairing` returns `{open, expiresAt, awaitingDevice, busy}`.
+  `POST /v1/admin/pairing:enter` takes `{code}` and returns `{result}`
+  (`confirmed`, `mismatch`, `burned` or `none`). `:cancel` drops the exchange in
+  progress and `:close` closes the window.
+* `GET /v1/status` also lists `pairingSuites` (`sas`, `channel` identifiers).
+* `POST /v1/pairing/short/begin` takes `{suite, channel, commitment,
+  deviceName}` and returns `{sessionId, suite, channel, share}`. Only one
+  exchange runs at a time (`409 busy` otherwise).
+* `POST /v1/pairing/short/open` takes `{sessionId, opening}`; the host verifies
+  the commitment and awaits the operator's entry.
+* `POST /v1/pairing/short/status` takes `{sessionId}` and returns `{state}`
+  (`awaiting_entry` or `confirmed`); the device polls it while showing the number.
+* `POST /v1/pairing/short/finish` takes `{sessionId, confirmation, sealed}`
+  once confirmed. `sealed` carries `{certificateRequest, deviceName}` encrypted
+  under the agreed key. The response carries the host's key confirmation and a
+  sealed result with the credential, authority certificate, mutual-TLS port and
+  incident id.
 
-The PAKE is finite-field J-PAKE (`jpake-ff-3072`, Bouncy Castle) and the keyed
-channel is HKDF-SHA-256 with AES-256-GCM (`hkdf-sha256-aes256gcm`). Both are
-behind `PakeSuite` and `ChannelSuite` and chosen by identifier, so either can be
-replaced without changing the endpoints. Key confirmation binds the transcript
-and the host authority fingerprint the device observed, so a man in the middle
-presenting a different authority fails. A device that read the fingerprint from
-the QR code additionally pins TLS to it from the first connection. The QR/clipboard
-text is `ICSFORMS-PAIR-2:HOST:PORT:ENROLLPORT:FINGERPRINT:CODE`; typed entry is
-`ICSFORMS-PAIR-1:host[:enrollmentPort]:CODE`.
+The agreement is ECDH P-256 with a hash commitment (`ecdh-p256-sha256-sas`) and
+the keyed channel is HKDF-SHA-256 with AES-256-GCM (`hkdf-sha256-aes256gcm`),
+both from the Bouncy Castle FIPS module. They are behind `SasSuite` and
+`ChannelSuite` and chosen by identifier, so either can be replaced without
+changing the endpoints. The number is derived from the transcript and the host
+authority fingerprint the device observed, so a man in the middle presenting a
+different authority produces a different number. A device that read the
+fingerprint from the QR code additionally pins TLS to it from the first
+connection. The QR/clipboard text is
+`ICSFORMS-PAIR-3:HOST:PORT:ENROLLPORT:FINGERPRINT`; typed entry is
+`ICSFORMS-PAIR-1:host[:enrollmentPort]`.

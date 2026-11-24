@@ -22,8 +22,7 @@ class QrImagesTest {
 	 */
 	@Test
 	void payloadRoundTripsThroughQr() throws Exception {
-		String text = new PairingPayload("host-" + "a".repeat(40) + ".example.org", 8443, 8444, "ab".repeat(32),
-				"ABCDEFGH").toText();
+		String text = new PairingPayload("host-" + "a".repeat(40) + ".example.org", 8443, 8444, "ab".repeat(32)).toText();
 		var image = QrImages.render(text, 400);
 		try {
 			String decoded = new QRCodeReader()

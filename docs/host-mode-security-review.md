@@ -36,22 +36,27 @@ penetration test or a Stage 2 release approval.
 
 ## Findings and residual risks
 
-### Short-code pairing (#74)
+### In-person pairing (#74)
 
-* The code carries 40 bits. A guess must pass the PAKE online, so the attacker
-  gets one guess per attempt; the window is burned after 3 failed
-  confirmations, it expires after the invitation lifetime, it is closed by a
-  successful pairing, and the existing per-address and global pairing rate
-  limits apply. Offline guessing from a captured exchange is not possible
-  because the PAKE reveals nothing testable about the code.
-* A network attacker can deliberately burn a window (denial of service); the
-  operator opens a new one. This is accepted, because the alternative is to let
-  guesses accumulate.
+* The number carries about 22.5 bits (10,000 x 24 x 24). The device commits to
+  its key share first, so an interposed attacker cannot search for a matching
+  share; each attempt succeeds with probability about 1 in 5.76 million. The
+  window is burned after 3 failures, expires after the invitation lifetime, is
+  closed by a successful pairing, and the existing per-address and global
+  pairing rate limits apply. Retyping a number gives no extra guess.
+* Because the operator types the number, the check cannot be reduced to
+  clicking approve. The exchange assumes the two people are together.
+* A network attacker can deliberately burn the window or occupy the single
+  awaiting slot (denial of service); the operator opens a new window. This is
+  accepted, because the alternative is to let guesses accumulate.
 * Without a QR the device has no fingerprint. TLS validates against the chain's
-  own authority, and the key confirmation binds the fingerprint the device saw,
-  so an interposed authority fails confirmation and consumes an attempt.
-* Cryptography is provided by Bouncy Castle J-PAKE, HKDF, HMAC and AES-GCM;
-  none is hand-written. Discovery (mDNS) advertises only the host name and port.
+  own authority, and the number binds the fingerprint the device saw, so an
+  interposed authority yields a number that does not match.
+* Cryptography is the Bouncy Castle FIPS module (ECDH, SHA-256, HMAC, HKDF,
+  AES-GCM); none is hand-written. The module runs in its default (general)
+  mode, not approved-only mode, and mutual TLS still uses the JDK stack, so
+  this is not a claim of FIPS-validated operation end to end. Discovery (mDNS)
+  advertises only the host name and port.
 
 1. **Client credentials and approval tickets are session-memory-only.** The
    existing connection flow does not persist credentials across application

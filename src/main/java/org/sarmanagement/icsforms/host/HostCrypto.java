@@ -72,7 +72,7 @@ final class HostCrypto {
 	 */
 	static KeyPair generateKeyPair() {
 		try {
-			KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
+			KeyPairGenerator generator = KeyPairGenerator.getInstance("EC", org.sarmanagement.icsforms.crypto.Fips.provider());
 			generator.initialize(new ECGenParameterSpec("secp256r1"), RANDOM);
 			return generator.generateKeyPair();
 		} catch (GeneralSecurityException exception) {
@@ -185,7 +185,7 @@ final class HostCrypto {
 	 */
 	private static X509Certificate sign(X509v3CertificateBuilder builder, PrivateKey signingKey) {
 		try {
-			ContentSigner signer = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).build(signingKey);
+			ContentSigner signer = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(org.sarmanagement.icsforms.crypto.Fips.provider()).build(signingKey);
 			return new JcaX509CertificateConverter().getCertificate(builder.build(signer));
 		} catch (OperatorCreationException | GeneralSecurityException exception) {
 			throw new IllegalStateException("Cannot sign certificate", exception);
@@ -217,7 +217,7 @@ final class HostCrypto {
 		try {
 			PKCS10CertificationRequest request = new JcaPKCS10CertificationRequestBuilder(
 					new X500Name("CN=" + escape(commonName)), keys.getPublic())
-					.build(new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).build(keys.getPrivate()));
+					.build(new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(org.sarmanagement.icsforms.crypto.Fips.provider()).build(keys.getPrivate()));
 			return pem("CERTIFICATE REQUEST", request.getEncoded());
 		} catch (OperatorCreationException | IOException exception) {
 			throw new IllegalStateException("Cannot build certification request", exception);
@@ -238,7 +238,7 @@ final class HostCrypto {
 			if (!(parsed instanceof PKCS10CertificationRequest request)) {
 				throw new GeneralSecurityException("Not a certification request");
 			}
-			if (!request.isSignatureValid(new JcaContentVerifierProviderBuilder().setProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider())
+			if (!request.isSignatureValid(new JcaContentVerifierProviderBuilder().setProvider(org.sarmanagement.icsforms.crypto.Fips.provider())
 					.build(request.getSubjectPublicKeyInfo()))) {
 				throw new GeneralSecurityException("Request signature is invalid");
 			}

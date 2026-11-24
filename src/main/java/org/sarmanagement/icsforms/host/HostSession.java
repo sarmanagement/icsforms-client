@@ -483,13 +483,34 @@ public final class HostSession implements AutoCloseable {
 	}
 
 	/**
-	 * Closes the short-code pairing window and discards its code.
+	 * Closes the in-person pairing window.
 	 *
 	 * @throws HostClientException when the host rejects the request
 	 */
 	public void closePairing() {
 		stopAdvertising();
 		requireAdmin().closePairing();
+	}
+
+	/**
+	 * Reads the pairing window state, including any device waiting for its number to be entered.
+	 *
+	 * @return window state
+	 * @throws HostClientException when the host rejects the request
+	 */
+	public HostClient.PairingState pairingState() {
+		return requireAdmin().pairingState();
+	}
+
+	/**
+	 * Submits the number the operator typed for the waiting device.
+	 *
+	 * @param code the typed number
+	 * @return {@code confirmed}, {@code mismatch}, {@code burned} or {@code none}
+	 * @throws HostClientException when the host rejects the request
+	 */
+	public String enterPairingCode(String code) {
+		return requireAdmin().enterPairingCode(code);
 	}
 
 	/**

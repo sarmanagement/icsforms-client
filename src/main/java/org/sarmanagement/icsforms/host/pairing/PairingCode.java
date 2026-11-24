@@ -3,66 +3,78 @@
  */
 package org.sarmanagement.icsforms.host.pairing;
 
-import java.security.SecureRandom;
 import java.util.Locale;
 
 /**
- * A short pairing code that a person can read aloud or type: eight characters of the Crockford base32 alphabet
- * (40 bits), shown as {@code XXXX-XXXX}. Entry is forgiving of case, hyphens, spaces and the look-alike letters
- * {@code O}, {@code I} and {@code L}.
+ * The short number a device shows and the host operator types: four digits and two letters, written
+ * {@code 4821-KH}. The letters I and O are never used. It is derived from the key exchange, so it is not a secret
+ * shared in advance; it lets a person confirm that both ends of the exchange are the devices in front of them.
+ * It has {@value #SPACE} values, about 22.5 bits.
  */
 public final class PairingCode {
-	/** Crockford base32: digits and letters without I, L, O and U. */
-	static final String ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-	/** Number of code characters. */
-	public static final int LENGTH = 8;
-	private static final SecureRandom RANDOM = new SecureRandom();
+	/** Letters used, without I and O. */
+	static final String LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+	/** Number of distinct codes. */
+	public static final int SPACE = 10_000 * LETTERS.length() * LETTERS.length();
+	/** Characters in a normalized code. */
+	public static final int LENGTH = 6;
 
-	/** Not instantiable; use the static methods. */
 	private PairingCode() {
 	}
 
 	/**
-	 * Generates a random code.
+	 * Builds the normalized code for a number in {@code [0, SPACE)}.
 	 *
-	 * @return normalized code of {@link #LENGTH} characters
+	 * @param number value derived from the exchange
+	 * @return normalized code, four digits then two letters
+	 * @throws IllegalArgumentException when the number is out of range
 	 */
-	public static String generate() {
-		StringBuilder code = new StringBuilder(LENGTH);
-		for (int index = 0; index < LENGTH; index++) {
-			code.append(ALPHABET.charAt(RANDOM.nextInt(ALPHABET.length())));
+	public static String of(long number) {
+		if (number < 0 || number >= SPACE) {
+			throw new IllegalArgumentException("Code number out of range");
 		}
-		return code.toString();
+		int letters = (int) (number % (LETTERS.length() * LETTERS.length()));
+		int digits = (int) (number / (LETTERS.length() * LETTERS.length()));
+		return String.format(Locale.ROOT, "%04d%c%c", digits, LETTERS.charAt(letters / LETTERS.length()),
+				LETTERS.charAt(letters % LETTERS.length()));
 	}
 
 	/**
 	 * Formats a normalized code for display.
 	 *
 	 * @param code normalized code
-	 * @return code with a hyphen after the fourth character
+	 * @return the code with a dash after the digits
 	 */
 	public static String display(String code) {
-		return code.substring(0, LENGTH / 2) + "-" + code.substring(LENGTH / 2);
+		return code.substring(0, 4) + "-" + code.substring(4);
 	}
 
 	/**
-	 * Normalizes typed input: upper case, no hyphens or spaces, {@code O} read as 0 and {@code I} or {@code L} as 1.
+	 * Normalizes typed input: case and the dash or spaces are ignored. In the digit positions the letters O and I
+	 * are read as 0 and 1; the letters I and O are not valid in the letter positions.
 	 *
 	 * @param input typed or pasted code
-	 * @return normalized code
+	 * @return normalized code of {@link #LENGTH} characters
 	 * @throws IllegalArgumentException when the input is not a valid code
 	 */
 	public static String normalize(String input) {
 		String text = input == null ? "" : input.strip().toUpperCase(Locale.ROOT).replace("-", "").replace(" ", "");
-		text = text.replace('O', '0').replace('I', '1').replace('L', '1');
 		if (text.length() != LENGTH) {
-			throw new IllegalArgumentException("A pairing code has " + LENGTH + " characters");
+			throw new IllegalArgumentException("A code is four digits and two letters, like 4821-KH");
 		}
-		for (int index = 0; index < text.length(); index++) {
-			if (ALPHABET.indexOf(text.charAt(index)) < 0) {
-				throw new IllegalArgumentException("The pairing code contains an invalid character");
+		StringBuilder result = new StringBuilder(LENGTH);
+		for (int index = 0; index < LENGTH; index++) {
+			char c = text.charAt(index);
+			if (index < 4) {
+				c = c == 'O' ? '0' : c == 'I' ? '1' : c;
+				if (c < '0' || c > '9') {
+					throw new IllegalArgumentException("The first four characters of a code are digits");
+				}
+			} else if (LETTERS.indexOf(c) < 0) {
+				throw new IllegalArgumentException("The last two characters of a code are letters (not I or O)");
 			}
+			result.append(c);
 		}
-		return text;
+		return result.toString();
 	}
 }

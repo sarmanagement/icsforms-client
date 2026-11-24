@@ -129,7 +129,7 @@ PR closure alone.
 | Live local role panels (ten phases): live multi-view, objectives and linkage, review tracking, medical references, Safety/MUL, Operations, Incident Command, Communications and console | #33, #46, #49 | Implementation delivered; automated coverage recorded. Manual assistive-technology review is not recorded (optional). |
 | Stage 1 persistence foundation: deterministic Swing tests, store contract suite, backend-neutral semantics, legacy import migration, UTC time, provenance seam, asynchronous snapshot persistence, and live refresh without flicker | #37, #39–#44, PR #56 | Complete; substitute-store evidence accepted |
 | Host-mode Part 1: stable record identity, schema 18 migration, index and diff | #57 | Delivered as local model/persistence groundwork; rollover/copy regressions, schema-17 compatibility, and write-once setter evidence recorded in [`docs/completed-work.md`](docs/completed-work.md); no host service |
-| Short-code pairing: finite-field J-PAKE behind swappable PAKE and channel interfaces, pairing window, QR, mDNS discovery | #74, PR #75 | In progress; details in [`docs/completed-work.md`](docs/completed-work.md#short-code-pairing--issue-74) |
+| In-person pairing: Bouncy Castle FIPS ECDH with a typed 6-character confirmation number behind swappable SAS and channel interfaces, pairing window, fingerprint QR, mDNS discovery | #74, PR #75 | In progress; details in [`docs/completed-work.md`](docs/completed-work.md#short-code-pairing--issue-74) |
 
 Role-panel work is independent of the persistence roadmap and must not
 introduce network, authentication or remote persistence features.

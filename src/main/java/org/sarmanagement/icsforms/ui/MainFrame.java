@@ -154,7 +154,8 @@ public class MainFrame extends JFrame {
 			logQueueStatus = Map.of();
 	private transient java.util.function.BiFunction<String, String,
 			org.sarmanagement.icsforms.persistence.RemoteIncidentStore> invitationRedeemer =
-					org.sarmanagement.icsforms.host.HostGateway::pair;
+					(text, name) -> org.sarmanagement.icsforms.host.HostGateway.pair(text, name,
+							PairingCodeWindow.listener());
 	private JMenuItem newItem;
 	private JMenuItem duplicateItem;
 	private JMenuItem importIncidentItem;
@@ -1873,7 +1874,10 @@ public class MainFrame extends JFrame {
 	 * @return the connected store and first snapshot, to pass to {@link #openConnected}.
 	 */
 	public static Object[] connectFromStartup(String invitationText, String deviceName, Path home) {
-		return pairAndLoad(org.sarmanagement.icsforms.host.HostGateway::pair, invitationText, deviceName, home);
+		return pairAndLoad(
+				(text, name) -> org.sarmanagement.icsforms.host.HostGateway.pair(text, name,
+						PairingCodeWindow.listener()),
+				invitationText, deviceName, home);
 	}
 
 	/**

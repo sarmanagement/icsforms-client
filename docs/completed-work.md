@@ -622,30 +622,38 @@ tests arm slow transport before connecting and assert their bounded start wait.
 The [host plan](host-mode-plan.md#4-implement-the-production-remote-store-and-wire-both-uis)
 clarifies the numeric revision placeholder in remote JSON exports.
 
-## Short-code pairing — issue #74
+## In-person pairing — issue #74
 
-Replaces copying a roughly 560-character invitation with a short, spoken or
-scanned pairing code (PR #75, in progress).
+Replaces copying a roughly 560-character invitation with a short number the
+device shows and the host operator types in (PR #75, in progress).
 
-* `host/pairing` holds the swappable `PakeSuite` (finite-field J-PAKE,
-  `jpake-ff-3072`) and `ChannelSuite` (HKDF-SHA-256 with AES-256-GCM)
-  behind `PairingSuites`, plus `PairingCode`, `PairingPayload` and
-  `PairingTranscript`. EC-J-PAKE was rejected because Bouncy Castle cannot
-  rebuild received Schnorr proofs; no cryptography is hand-written.
-* `ShortPairing` is the single in-memory window (single use, expiry, burned
-  after three failed confirmations); `EnrollmentHandler` serves
-  `/v1/pairing/short/begin` and `/finish`, and admits through the existing
-  invitation path. `HostApiHandler` serves `/v1/admin/pairing` and
-  `/v1/admin/pairing:close`.
-* `HostClient.pairWithCode` supports a typed code (capturing trust, host
-  fingerprint bound by key confirmation) and a QR payload (pinned trust).
-  `HostGateway.pair` accepts a long invitation, `ICSFORMS-PAIR-2` QR text or
-  `ICSFORMS-PAIR-1` typed entry.
-* UI: **Create pairing code** with QR in the Sharing dialog; one connect form
-  (address, code, advanced paste, find hosts) shared by the Connect menu and the
-  startup dialog. mDNS discovery (`HostDiscovery`, JmDNS) advertises only
-  while a window is open.
+* `host/pairing` holds the swappable `SasSuite` (`ecdh-p256-sha256-sas`: ECDH
+  P-256 with a hash commitment, giving a 6-character number of 4 digits and 2
+  letters, I and O excluded, about 22.5 bits) and `ChannelSuite` (HKDF-SHA-256
+  with AES-256-GCM) behind `PairingSuites`, plus `PairingCode`,
+  `PairingPayload` and `PairingTranscript`. All cryptography is the Bouncy
+  Castle FIPS module (`bc-fips`, `bcpkix-fips`) via `crypto/Fips`; nothing is
+  hand-written. The finite-field J-PAKE first draft was replaced because the
+  FIPS module has no PAKE and the exchange is in person.
+* `ShortPairing` is the single in-memory window (expiry, one awaiting device at
+  a time, burned after three failures). `EnrollmentHandler` serves
+  `/v1/pairing/short/begin`, `/open`, `/status` and `/finish`; `HostApiHandler`
+  serves `/v1/admin/pairing` (open, `GET` state), `:enter`, `:cancel` and
+  `:close`. Admission reuses the invitation path.
+* `HostClient.pairInPerson` supports typed entry (capturing trust) and a QR
+  payload (pinned fingerprint). `HostGateway.pair` accepts a long invitation,
+  `ICSFORMS-PAIR-3` QR text or `ICSFORMS-PAIR-1:host[:port]` typed entry, and a
+  `PairingListener` shows the number.
+* UI: **Start adding a device** in the Sharing dialog (address, fingerprint
+  QR, number entry); one connect form (address, advanced paste, find hosts)
+  and a `PairingCodeWindow` showing the number. mDNS discovery
+  (`HostDiscovery`, JmDNS with `slf4j-jdk14`) advertises only while a window is
+  open.
+* Packaging: the FIPS module checks its own jar, so it is not merged into the
+  shaded jar. It is embedded unmodified under `fips/`, and `Launcher` (the jar's
+  main class) extracts it to `~/.icsforms/lib/` and starts `App` through a
+  class loader over the extracted jars, so the release stays a single jar.
 * Tests: `PairingCoreTest`, `ShortPairingTest`, `QrImagesTest`.
-* Camera scanning, short-code re-pairing of revoked devices and replacing
-  J-PAKE are out of scope.
+* Camera scanning, in-person re-pairing of revoked devices and approved-only FIPS mode and
+  bctls-fips are out of scope.
 

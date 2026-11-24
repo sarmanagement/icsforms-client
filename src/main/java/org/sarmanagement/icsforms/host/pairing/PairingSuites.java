@@ -14,7 +14,7 @@ import java.util.Optional;
  * through this registry only, so adding or replacing a suite is a change here and in the suite class.
  */
 public final class PairingSuites {
-	private final Map<String, PakeSuite> pakes = new LinkedHashMap<>();
+	private final Map<String, SasSuite> sases = new LinkedHashMap<>();
 	private final Map<String, ChannelSuite> channels = new LinkedHashMap<>();
 
 	/**
@@ -30,7 +30,7 @@ public final class PairingSuites {
 	 * @return registry of default suites
 	 */
 	public static PairingSuites defaults() {
-		return new PairingSuites().register(new JpakeSuite()).register(new HkdfAesGcmChannelSuite());
+		return new PairingSuites().register(new EcdhSasSuite()).register(new HkdfAesGcmChannelSuite());
 	}
 
 	/**
@@ -39,8 +39,8 @@ public final class PairingSuites {
 	 * @param suite suite to add
 	 * @return this registry
 	 */
-	public PairingSuites register(PakeSuite suite) {
-		pakes.put(suite.id(), suite);
+	public PairingSuites register(SasSuite suite) {
+		sases.put(suite.id(), suite);
 		return this;
 	}
 
@@ -60,8 +60,8 @@ public final class PairingSuites {
 	 *
 	 * @return identifiers
 	 */
-	public List<String> pakeIds() {
-		return new ArrayList<>(pakes.keySet());
+	public List<String> sasIds() {
+		return new ArrayList<>(sases.keySet());
 	}
 
 	/**
@@ -79,8 +79,8 @@ public final class PairingSuites {
 	 * @param id wire identifier
 	 * @return the suite, or empty when unsupported
 	 */
-	public Optional<PakeSuite> pake(String id) {
-		return Optional.ofNullable(pakes.get(id));
+	public Optional<SasSuite> sas(String id) {
+		return Optional.ofNullable(sases.get(id));
 	}
 
 	/**

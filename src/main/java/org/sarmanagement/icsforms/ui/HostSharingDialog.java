@@ -148,8 +148,12 @@ public class HostSharingDialog extends JDialog {
 	private final JButton startButton = new JButton("Start sharing");
 	private final JButton stopButton = new JButton("Stop sharing");
 	private final JButton inviteButton = new JButton("Create long invitation");
-	private final JButton pairButton = new JButton("Create pairing code");
+	private final JButton pairButton = new JButton("Start adding a device");
 	private final JLabel pairingCodeLabel = new JLabel(" ");
+	private final JTextField entryField = new JTextField(8);
+	private final JButton entryButton = new JButton("Confirm number");
+	private final Timer pairingTimer = new Timer(1000, event -> pollPairing());
+	private boolean polling;
 	private final JLabel pairingDetailLabel = new JLabel(" ");
 	private final JLabel qrLabel = new JLabel();
 	private String pairingPayloadText = "";
@@ -356,14 +360,19 @@ public class HostSharingDialog extends JDialog {
 		invitePanel.add(new JScrollPane(invitationArea), BorderLayout.CENTER);
 		invitePanel.add(inviteButton, BorderLayout.SOUTH);
 
-		pairingCodeLabel.setFont(pairingCodeLabel.getFont().deriveFont(java.awt.Font.BOLD, 28f));
+		JPanel entryRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		entryRow.add(entryField);
+		entryRow.add(entryButton);
+		entryField.setEnabled(false);
+		entryButton.setEnabled(false);
 		JPanel codeText = new JPanel(new GridLayout(0, 1));
 		codeText.add(pairButton);
-		codeText.add(pairingCodeLabel);
 		codeText.add(pairingDetailLabel);
+		codeText.add(pairingCodeLabel);
+		codeText.add(entryRow);
 		JPanel pairPanel = new JPanel(new BorderLayout(8, 0));
 		pairPanel.setBorder(BorderFactory.createTitledBorder(
-				"Pairing code (read it out or show the QR code; single use, short-lived)"));
+				"Add a device in person (the device shows a number; type it here)"));
 		pairPanel.add(codeText, BorderLayout.CENTER);
 		pairPanel.add(qrLabel, BorderLayout.EAST);
 
@@ -389,6 +398,7 @@ public class HostSharingDialog extends JDialog {
 		stopButton.addActionListener(event -> stopSharing());
 		inviteButton.addActionListener(event -> issueInvitation());
 		pairButton.addActionListener(event -> openPairing());
+		entryButton.addActionListener(event -> enterPairingCode());
 		revokeButton.addActionListener(event -> revokeSelected());
 		reviewRequestsButton.addActionListener(event -> reviewReauthorizationRequests());
 		backupButton.addActionListener(event -> backupAction());
@@ -851,8 +861,7 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
-	 * Opens the short-code pairing window and shows the code, address, expiry and a QR code. Opening a new
-	 * window replaces the previous code.
+	 * Opens the in-person pairing window and shows the address, expiry and a fingerprint QR code.
 	 */
 	void openPairing() {
 		HostSession current = session;
@@ -879,8 +888,8 @@ public class HostSharingDialog extends JDialog {
 					if (failure instanceof InterruptedException) {
 						Thread.currentThread().interrupt();
 					}
-					prompts.show(HostSharingDialog.this, "Pairing code",
-							"Could not create a pairing code: " + failure.getMessage(), true);
+					prompts.show(HostSharingDialog.this, "Add a device",
+							"Could not open pairing: " + failure.getMessage(), true);
 				}
 				refresh();
 			}
@@ -888,23 +897,113 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
-	 * Displays a pairing offer.
+	 * Displays a pairing offer: the address and a QR code carrying only the host fingerprint, then starts
+	 * watching for a device that wants to join.
 	 *
 	 * @param offer the open pairing window
 	 */
 	private void showPairing(org.sarmanagement.icsforms.host.HostClient.PairingOffer offer) {
-		pairingCodeLabel.setText(org.sarmanagement.icsforms.host.pairing.PairingCode.display(offer.code()));
+		pairingCodeLabel.setText("Waiting for a device. On it choose Connect and enter this host.");
 		pairingDetailLabel.setText("Host " + offer.host() + ":" + offer.enrollmentPort() + " until "
 				+ java.time.LocalTime.ofInstant(offer.expiresAt(), java.time.ZoneId.systemDefault())
 						.truncatedTo(java.time.temporal.ChronoUnit.MINUTES));
 		pairingPayloadText = offer.payload().toText();
 		qrLabel.setIcon(new javax.swing.ImageIcon(QrImages.render(pairingPayloadText, 200)));
+		pairingTimer.start();
 	}
 
-	/** Forgets any displayed pairing code and QR image. */
+	/** Polls the host for a device waiting for its number to be entered. */
+	private void pollPairing() {
+		HostSession current = session;
+		if (current == null || polling) {
+			return;
+		}
+		polling = true;
+		new SwingWorker<org.sarmanagement.icsforms.host.HostClient.PairingState, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected org.sarmanagement.icsforms.host.HostClient.PairingState doInBackground() {
+				return current.pairingState();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				polling = false;
+				try {
+					org.sarmanagement.icsforms.host.HostClient.PairingState state = get();
+					if (session != current) {
+						return;
+					}
+					if (!state.open()) {
+						clearPairing();
+						return;
+					}
+					boolean waiting = state.awaitingDevice() != null;
+					entryField.setEnabled(waiting);
+					entryButton.setEnabled(waiting);
+					if (waiting) {
+						pairingCodeLabel.setText("'" + state.awaitingDevice()
+								+ "' wants to join. Type the number shown on that device:");
+					}
+				} catch (Exception failure) {
+					if (failure instanceof InterruptedException) {
+						Thread.currentThread().interrupt();
+					}
+					clearPairing();
+				}
+			}
+		}.execute();
+	}
+
+	/** Sends the number the operator typed and reports the result. */
+	void enterPairingCode() {
+		HostSession current = session;
+		String typed = entryField.getText();
+		if (current == null || typed.isBlank()) {
+			return;
+		}
+		entryButton.setEnabled(false);
+		new SwingWorker<String, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected String doInBackground() {
+				return current.enterPairingCode(typed);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				String message;
+				try {
+					String result = get();
+					message = switch (result) {
+						case "confirmed" -> "The number matches. The device is being added.";
+						case "burned" -> "Wrong number. Too many attempts; the pairing window is closed.";
+						case "mismatch" -> "That number does not match. Check the device and try again.";
+						default -> "No device is waiting.";
+					};
+					entryField.setText("");
+				} catch (Exception failure) {
+					if (failure instanceof InterruptedException) {
+						Thread.currentThread().interrupt();
+					}
+					message = "Could not check the number: " + failure.getMessage();
+				}
+				pairingDetailLabel.setText(message);
+				refresh();
+			}
+		}.execute();
+	}
+
+	/** Forgets any displayed pairing state and QR image. */
 	private void clearPairing() {
+		pairingTimer.stop();
 		pairingCodeLabel.setText(" ");
 		pairingDetailLabel.setText(" ");
+		entryField.setText("");
+		entryField.setEnabled(false);
+		entryButton.setEnabled(false);
 		qrLabel.setIcon(null);
 		pairingPayloadText = "";
 	}

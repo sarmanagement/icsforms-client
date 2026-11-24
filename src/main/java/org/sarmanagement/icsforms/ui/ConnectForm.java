@@ -9,14 +9,13 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import org.sarmanagement.icsforms.host.HostGateway;
-import org.sarmanagement.icsforms.host.pairing.PairingCode;
 
 /**
- * Collects what a device needs to join a hosted incident: normally the host address and the short pairing code, or,
+ * Collects what a device needs to join a hosted incident: normally the host address (the device then shows a number for the host operator to type in), or,
  * as an advanced alternative, a pasted invitation or pairing payload.
  */
 final class ConnectForm {
-	/** Pairing text in a form accepted by {@link HostGateway#pair(String, String)}. */
+	/** Pairing text in a form accepted by {@link HostGateway#pair(String, String, org.sarmanagement.icsforms.host.PairingListener)}. */
 	private final String pairingText;
 	/** Device name entered by the operator. */
 	private final String deviceName;
@@ -58,14 +57,12 @@ final class ConnectForm {
 	 */
 	static ConnectForm ask(Component parent) {
 		JTextField host = new JTextField(24);
-		JTextField code = new JTextField(12);
 		JTextArea advanced = new JTextArea(3, 40);
 		advanced.setLineWrap(true);
 		JTextField device = new JTextField(System.getProperty("user.name", "device"), 20);
 		javax.swing.JButton find = new javax.swing.JButton("Find hosts on this network");
 		find.addActionListener(event -> findHosts(parent, find, host));
-		Object[] form = {"Host address (name or IP, optionally :port):", host, find, "Pairing code shown on the host:",
-				code, "Or paste an invitation or QR text (advanced):", new JScrollPane(advanced), "Device name:",
+		Object[] form = {"Host address (name or IP, optionally :port):", host, find, "Or paste an invitation or QR text (advanced):", new JScrollPane(advanced), "Device name:",
 				device};
 		while (true) {
 			if (JOptionPane.showConfirmDialog(parent, form, "Connect to a host", JOptionPane.OK_CANCEL_OPTION,
@@ -77,18 +74,12 @@ final class ConnectForm {
 			if (!pasted.isEmpty()) {
 				return new ConnectForm(pasted, name);
 			}
-			String problem = host.getText().isBlank() ? "Enter the host address." : null;
-			try {
-				PairingCode.normalize(code.getText());
-			} catch (IllegalArgumentException failure) {
-				problem = failure.getMessage();
-			}
-			if (problem != null) {
-				JOptionPane.showMessageDialog(parent, problem, "Connect to a host", JOptionPane.WARNING_MESSAGE);
+			if (host.getText().isBlank()) {
+				JOptionPane.showMessageDialog(parent, "Enter the host address.", "Connect to a host",
+						JOptionPane.WARNING_MESSAGE);
 				continue;
 			}
-			return new ConnectForm(HostGateway.TYPED_PREFIX + host.getText().strip() + ":" + code.getText().strip(),
-					name);
+			return new ConnectForm(HostGateway.TYPED_PREFIX + host.getText().strip(), name);
 		}
 	}
 
@@ -115,7 +106,7 @@ final class ConnectForm {
 				try {
 					java.util.List<org.sarmanagement.icsforms.host.HostDiscovery.Found> found = get();
 					if (found.isEmpty()) {
-						JOptionPane.showMessageDialog(parent, "No host with an open pairing code was found. "
+						JOptionPane.showMessageDialog(parent, "No host with an open pairing window was found. "
 								+ "Type the address shown on the host instead.", "Connect to a host",
 								JOptionPane.INFORMATION_MESSAGE);
 						return;

@@ -7,19 +7,18 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
- * What a QR code (or its pasted text) carries for short-code pairing: where the host is, the host authority
- * fingerprint, and the code. The fingerprint travels out of band, so a device that reads it pins the host before
+ * What a QR code (or its pasted text) carries for short-code pairing: where the host is, and the host authority
+ * fingerprint. The fingerprint travels out of band, so a device that reads it pins the host before
  * any network exchange. The text is upper case so it encodes in a QR code's compact alphanumeric mode.
  *
  * @param host host name or address
  * @param port mutual-TLS port
  * @param enrollmentPort enrollment port
  * @param fingerprint SHA-256 fingerprint of the host authority certificate, lower-case hex
- * @param code normalized pairing code
  */
-public record PairingPayload(String host, int port, int enrollmentPort, String fingerprint, String code) {
+public record PairingPayload(String host, int port, int enrollmentPort, String fingerprint) {
 	/** Text prefix identifying the payload and its version. */
-	public static final String PREFIX = "ICSFORMS-PAIR-2:";
+	public static final String PREFIX = "ICSFORMS-PAIR-3:";
 	private static final Pattern FINGERPRINT = Pattern.compile("[0-9a-f]{64}");
 
 	/**
@@ -36,17 +35,6 @@ public record PairingPayload(String host, int port, int enrollmentPort, String f
 		if (!FINGERPRINT.matcher(fingerprint).matches()) {
 			throw new IllegalArgumentException("Invalid fingerprint");
 		}
-		code = PairingCode.normalize(code);
-	}
-
-	/**
-	 * Redacts the code from diagnostic output.
-	 *
-	 * @return text that omits the code
-	 */
-	@Override
-	public String toString() {
-		return "PairingPayload[" + host + ":" + enrollmentPort + "]";
 	}
 
 	/**
@@ -66,7 +54,7 @@ public record PairingPayload(String host, int port, int enrollmentPort, String f
 	 * @return text for a QR code or clipboard
 	 */
 	public String toText() {
-		return (PREFIX + host + ":" + port + ":" + enrollmentPort + ":" + fingerprint + ":" + code)
+		return (PREFIX + host + ":" + port + ":" + enrollmentPort + ":" + fingerprint)
 				.toUpperCase(Locale.ROOT);
 	}
 
@@ -83,14 +71,14 @@ public record PairingPayload(String host, int port, int enrollmentPort, String f
 			throw new IllegalArgumentException("Not an ICS Forms pairing payload");
 		}
 		String[] parts = trimmed.substring(PREFIX.length()).split(":");
-		if (parts.length < 5) {
+		if (parts.length < 4) {
 			throw new IllegalArgumentException("Pairing payload is malformed");
 		}
 		int last = parts.length - 1;
 		try {
-			String host = String.join(":", java.util.Arrays.copyOfRange(parts, 0, parts.length - 4));
-			return new PairingPayload(host.toLowerCase(Locale.ROOT), Integer.parseInt(parts[last - 3]),
-					Integer.parseInt(parts[last - 2]), parts[last - 1], parts[last]);
+			String host = String.join(":", java.util.Arrays.copyOfRange(parts, 0, parts.length - 3));
+			return new PairingPayload(host.toLowerCase(Locale.ROOT), Integer.parseInt(parts[last - 2]),
+					Integer.parseInt(parts[last - 1]), parts[last]);
 		} catch (NumberFormatException exception) {
 			throw new IllegalArgumentException("Pairing payload is malformed", exception);
 		}

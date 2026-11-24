@@ -415,6 +415,13 @@ final class HostApiHandler implements HttpHandler {
 			invitation(exchange);
 		} else if ("/v1/admin/pairing".equals(path) && "POST".equals(method)) {
 			openPairing(exchange);
+		} else if ("/v1/admin/pairing".equals(path) && "GET".equals(method)) {
+			pairingState(exchange);
+		} else if ("/v1/admin/pairing:enter".equals(path) && "POST".equals(method)) {
+			enterPairingCode(exchange);
+		} else if ("/v1/admin/pairing:cancel".equals(path) && "POST".equals(method)) {
+			context.shortPairing.cancel();
+			HostHttp.send(exchange, 200, HostHttp.MAPPER.createObjectNode().put("cancelled", true));
 		} else if ("/v1/admin/pairing:close".equals(path) && "POST".equals(method)) {
 			context.shortPairing.close();
 			HostHttp.send(exchange, 200, HostHttp.MAPPER.createObjectNode().put("open", false));
@@ -551,8 +558,7 @@ final class HostApiHandler implements HttpHandler {
 	}
 
 	/**
-	 * Opens the short-code pairing window and returns the code with everything a device needs to find and verify
-	 * the host. The code is shown only in this response and is never persisted or logged.
+	 * Opens the in-person pairing window and returns where devices connect and the host identity to pin.
 	 *
 	 * @param exchange exchange to answer
 	 * @throws IOException when the response cannot be written
@@ -564,15 +570,59 @@ final class HostApiHandler implements HttpHandler {
 					"The operational period has closed; credentials cannot be issued.", false);
 			return;
 		}
-		ShortPairing.Offer offer = context.shortPairing.open(context.config.invitationLifetime());
+		Instant expiresAt = context.shortPairing.open(context.config.invitationLifetime());
 		ObjectNode body = HostHttp.MAPPER.createObjectNode();
-		body.put("code", offer.code());
-		body.put("expiresAt", offer.expiresAt().toString());
+		body.put("expiresAt", expiresAt.toString());
 		body.put("host", context.config.advertisedHost());
 		body.put("port", context.port());
 		body.put("enrollmentPort", context.enrollmentPort());
 		body.put("fingerprint", context.authority.fingerprint());
 		HostHttp.send(exchange, 201, body);
+	}
+
+	/**
+	 * Reports whether the window is open and which device, if any, is waiting for its number to be entered.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void pairingState(HttpExchange exchange) throws IOException {
+		ObjectNode body = HostHttp.MAPPER.createObjectNode();
+		Instant expires = context.shortPairing.expiresAt();
+		body.put("open", expires != null);
+		if (expires != null) {
+			body.put("expiresAt", expires.toString());
+		}
+		String device = context.shortPairing.awaitingDevice();
+		if (device != null) {
+			body.put("awaitingDevice", device);
+		}
+		body.put("busy", context.shortPairing.busy());
+		HostHttp.send(exchange, 200, body);
+	}
+
+	/**
+	 * Checks the number the operator typed against the waiting device's number.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void enterPairingCode(HttpExchange exchange) throws IOException {
+		byte[] raw = HostHttp.readBody(exchange, HostProtocol.MAX_REQUEST_BYTES);
+		JsonNode request = raw == null ? null : HostHttp.parseObject(exchange, raw);
+		if (request == null) {
+			return;
+		}
+		String code;
+		try {
+			code = org.sarmanagement.icsforms.host.pairing.PairingCode.normalize(request.path("code").asText(""));
+		} catch (IllegalArgumentException malformed) {
+			HostHttp.error(exchange, 400, "invalid_request", malformed.getMessage(), false);
+			return;
+		}
+		ShortPairing.Entry entry = context.shortPairing.enter(code);
+		HostHttp.send(exchange, 200,
+				HostHttp.MAPPER.createObjectNode().put("result", entry.name().toLowerCase(java.util.Locale.ROOT)));
 	}
 
 	/**

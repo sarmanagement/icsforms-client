@@ -20,12 +20,15 @@ not require internet access.
 
 ## Admission and revocation
 
-1. From the host's **Sharing** dialog, either create a pairing code or create
+1. From the host's **Sharing** dialog, either add a device in person or create
    an invitation.
-   For a nearby device, prefer **Create pairing code**: read the 8-character
-   code aloud or show the QR code. The device chooses **Connect to a host**,
-   enters the address and the code (or uses **Find hosts on this network**).
-   The code works once, expires, and is burned after three wrong attempts.
+   For a device beside you, choose **Start adding a device**. The device
+   chooses **Connect to a host** and enters the address shown (or uses **Find
+   hosts on this network**, or scans the QR code, which carries the host
+   fingerprint but no secret). The device then displays a 6-character number
+   such as `4821-KH`. When the host shows the device's name, type the number
+   shown on the device into the host and choose **Confirm number**. The window
+   admits one device, expires, and is burned after three wrong numbers.
    The long invitation is the advanced alternative. An invitation is single-use,
    short-lived and scoped to the current incident. Send the invitation and its
    displayed host fingerprint through a trusted channel; verify the fingerprint
