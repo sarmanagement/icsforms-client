@@ -657,3 +657,8 @@ device shows and the host operator types in (PR #75, in progress).
 * Camera scanning, in-person re-pairing of revoked devices and approved-only FIPS mode and
   bctls-fips are out of scope.
 
+The host dialog now fits the usable screen and scrolls on smaller displays.
+An unresolved host-start failure remains when a standalone edit replaces a
+single-valued record: retained history can conflict with the current record
+during projection. A safe repair must preserve historical versions and receipts
+while keeping host and remote reconstruction consistent.

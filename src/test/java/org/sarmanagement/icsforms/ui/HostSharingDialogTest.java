@@ -23,9 +23,14 @@ import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
 
 import javax.swing.JFrame;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsEnvironment;
+import java.awt.Insets;
+import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
 import java.net.ServerSocket;
@@ -183,6 +188,25 @@ class HostSharingDialogTest {
 				owner.dispose();
 			});
 			store.close();
+		}
+	}
+
+	@Test
+	void fitsScreenAndKeepsContentsScrollable() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (Harness harness = new Harness(directory)) {
+			harness.edt(() -> {
+				GraphicsConfiguration screen = harness.dialog.getGraphicsConfiguration();
+				Rectangle bounds = screen.getBounds();
+				Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(screen);
+				assertTrue(harness.dialog.getWidth() <= bounds.width - insets.left - insets.right);
+				assertTrue(harness.dialog.getHeight() <= bounds.height - insets.top - insets.bottom);
+				JScrollPane scroll = (JScrollPane) harness.dialog.getContentPane().getComponent(0);
+				harness.dialog.setSize(new Dimension(400, 250));
+				harness.dialog.validate();
+				assertTrue(scroll.getVerticalScrollBar().getMaximum()
+						> scroll.getVerticalScrollBar().getVisibleAmount());
+			});
 		}
 	}
 

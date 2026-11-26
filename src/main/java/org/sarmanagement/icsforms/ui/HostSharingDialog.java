@@ -17,6 +17,7 @@ import org.sarmanagement.icsforms.persistence.IncidentStore;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JDialog;
@@ -35,9 +36,14 @@ import javax.swing.Timer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Frame;
+import java.awt.GraphicsConfiguration;
 import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Path;
@@ -205,6 +211,11 @@ public class HostSharingDialog extends JDialog {
 		refresh();
 		refreshTimer.start();
 		pack();
+		GraphicsConfiguration screen = getGraphicsConfiguration();
+		Rectangle bounds = screen.getBounds();
+		Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(screen);
+		setSize(Math.min(getWidth(), bounds.width - insets.left - insets.right),
+				Math.min(getHeight(), bounds.height - insets.top - insets.bottom));
 		setLocationRelativeTo(owner);
 	}
 
@@ -377,6 +388,7 @@ public class HostSharingDialog extends JDialog {
 		pairPanel.add(qrLabel, BorderLayout.EAST);
 
 		deviceTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		deviceTable.setPreferredScrollableViewportSize(new Dimension(450, deviceTable.getRowHeight() * 4));
 		JPanel devices = new JPanel(new BorderLayout());
 		devices.setBorder(BorderFactory.createTitledBorder("Paired devices"));
 		devices.add(new JScrollPane(deviceTable), BorderLayout.CENTER);
@@ -387,12 +399,15 @@ public class HostSharingDialog extends JDialog {
 		deviceButtons.add(restoreButton);
 		devices.add(deviceButtons, BorderLayout.SOUTH);
 
-		JPanel center = new JPanel(new GridLayout(0, 1));
+		JPanel center = new JPanel();
+		center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
 		center.add(pairPanel);
 		center.add(invitePanel);
 		center.add(devices);
-		add(top, BorderLayout.NORTH);
-		add(center, BorderLayout.CENTER);
+		JPanel contents = new JPanel(new BorderLayout());
+		contents.add(top, BorderLayout.NORTH);
+		contents.add(center, BorderLayout.CENTER);
+		add(new JScrollPane(contents), BorderLayout.CENTER);
 
 		startButton.addActionListener(event -> startSharing());
 		stopButton.addActionListener(event -> stopSharing());
