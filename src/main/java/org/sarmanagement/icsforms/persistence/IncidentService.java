@@ -26,6 +26,9 @@ import static org.sarmanagement.icsforms.persistence.RecordVersionStore.*;
  * In-process, per-record versioned incident service with durable operation receipts.
  */
 public final class IncidentService {
+	private static final java.util.logging.Logger LOGGER = java.util.logging.Logger
+			.getLogger(IncidentService.class.getName());
+
 	private final IncidentStore incidents;
 	private final RecordVersionStore versions;
 	private final RecordDocumentBridge documentBridge = new RecordDocumentBridge();
@@ -303,6 +306,11 @@ public final class IncidentService {
 		if (seeded != current) {
 			versions.save(incident, seeded);
 		}
+		LOGGER.log(java.util.logging.Level.INFO,
+				"Incident {0}: document revision {1}; record history sidecar {2}; document records {3}",
+				new Object[] { incident.value(), stored.revision(),
+						state == null ? "absent" : state.histories().size() + " histories, cursor " + state.cursor(),
+						RecordIndex.of(stored.data()).records().size() });
 		return seeded;
 	}
 
