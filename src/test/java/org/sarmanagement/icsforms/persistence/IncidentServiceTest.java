@@ -57,6 +57,46 @@ class IncidentServiceTest {
 	}
 
 	@Test
+	void readsIncidentAfterVetDirectoryIsReplacedWithoutLosingHistory() {
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			IncidentId incident = store.create(new AppData());
+			IncidentService service = service(store);
+			service.read(incident);
+			StoredIncident stored = store.loadSnapshot(incident);
+			String original = stored.data().getVetDirectory().getId();
+			org.sarmanagement.icsforms.model.VetDirectory imported = new org.sarmanagement.icsforms.model.VetDirectory();
+			VetFacility facility = new VetFacility();
+			facility.setName("Imported clinic");
+			imported.getFacilities().add(facility);
+			stored.data().setVetDirectory(imported);
+			store.save(incident, stored.data(), stored.revision());
+
+			IncidentService.ReadResult read = service.read(incident);
+			assertEquals(1, read.records().stream()
+					.filter(record -> record.key().type().endsWith(".VetDirectory")).count());
+			assertTrue(read.records().stream().noneMatch(record -> record.key().id().equals(original)));
+			assertEquals(imported.getId(), store.loadSnapshot(incident).data().getVetDirectory().getId());
+			assertTrue(service.changesSince(incident, 0).changes().stream()
+					.noneMatch(change -> change.key().id().equals(original)));
+			RecordVersionStore.IncidentState state = new FileRecordVersionStore(directory.resolve("incidents")).load(incident);
+			assertTrue(state.histories().stream().anyMatch(history -> history.key().id().equals(original)
+					&& history.retired()));
+
+			FileRecordVersionStore versions = new FileRecordVersionStore(directory.resolve("incidents"));
+			List<RecordVersionStore.RecordHistory> unretired = state.histories().stream()
+					.map(history -> new RecordVersionStore.RecordHistory(history.key(), history.parent(),
+							history.parentField(), history.versions()))
+					.toList();
+			versions.save(incident, new RecordVersionStore.IncidentState(state.cursor(), unretired,
+					state.changes(), state.receipts()));
+			assertEquals(1, service.read(incident).records().stream()
+					.filter(record -> record.key().type().endsWith(".VetDirectory")).count());
+			assertTrue(versions.load(incident).histories().stream()
+					.anyMatch(history -> history.key().id().equals(original) && history.retired()));
+		}
+	}
+
+	@Test
 	void rereadsIncidentWhoseOrgChartListsAgencyRepresentatives() {
 		AppData data = new AppData();
 		OrgChartEntry representative = new OrgChartEntry();

@@ -658,7 +658,13 @@ device shows and the host operator types in (PR #75, in progress).
   bctls-fips are out of scope.
 
 The host dialog now fits the usable screen and scrolls on smaller displays.
-An unresolved host-start failure remains when a standalone edit replaces a
-single-valued record: retained history can conflict with the current record
-during projection. A safe repair must preserve historical versions and receipts
-while keeping host and remote reconstruction consistent.
+Host start no longer fails when a standalone edit replaces a single-valued
+record, such as importing a vet directory over the default one. The record
+history (`<incident>.records.json`) now marks a removed or replaced record as
+retired (`retiredAtCursor`) instead of leaving it live. Retired histories keep
+their versions and receipts for audit but are not projected into the document
+or served in reads and change feeds. Existing histories that already hold a
+stale record are repaired on the next read: a live history whose single-valued
+slot is occupied by a newer record is retired, along with its descendants.
+Remote reconstruction through the change feed does not yet receive explicit
+retirement entries.

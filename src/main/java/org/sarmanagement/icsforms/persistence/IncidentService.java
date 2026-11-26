@@ -92,7 +92,10 @@ public final class IncidentService {
 			if (cursor < 0 || cursor > state.cursor()) {
 				throw new StoreValidationException("Change cursor is outside the incident history");
 			}
-			List<RecordChange> changes = state.changes().stream().filter(change -> change.cursor() > cursor).toList();
+			java.util.Set<RecordKey> retired = new java.util.HashSet<>();
+			state.histories().stream().filter(RecordHistory::retired).forEach(history -> retired.add(history.key()));
+			List<RecordChange> changes = state.changes().stream()
+					.filter(change -> change.cursor() > cursor && !retired.contains(change.key())).toList();
 			return new ChangeResult(state.cursor(), changes);
 		});
 	}
@@ -246,6 +249,15 @@ public final class IncidentService {
 			changed.addAll(diff.changed().keySet());
 			changed.addAll(diff.struckOut());
 		}
+		if (previous != null) {
+			for (RecordKey removed : RecordDiff.between(previous, data).removed()) {
+				RecordHistory history = histories.get(removed);
+				if (history != null && !history.retired()) {
+					cursor++;
+					histories.put(removed, history.retire(cursor));
+				}
+			}
+		}
 		for (Map.Entry<RecordKey, JsonNode> entry : index.records().entrySet()) {
 			if (!changed.contains(entry.getKey())) {
 				continue;
@@ -294,6 +306,11 @@ public final class IncidentService {
 		Objects.requireNonNull(incident, "incident");
 		StoredIncident stored = incidents.loadSnapshot(incident);
 		IncidentState state = versions.load(incident);
+		LOGGER.log(java.util.logging.Level.INFO,
+				"Incident {0}: document revision {1}; record history sidecar {2}; document records {3}",
+				new Object[] { incident.value(), stored.revision(),
+						state == null ? "absent" : state.histories().size() + " histories, cursor " + state.cursor(),
+						RecordIndex.of(stored.data()).records().size() });
 		if (state == null) {
 			state = initialState(stored.data());
 			versions.save(incident, state);
@@ -306,11 +323,6 @@ public final class IncidentService {
 		if (seeded != current) {
 			versions.save(incident, seeded);
 		}
-		LOGGER.log(java.util.logging.Level.INFO,
-				"Incident {0}: document revision {1}; record history sidecar {2}; document records {3}",
-				new Object[] { incident.value(), stored.revision(),
-						state == null ? "absent" : state.histories().size() + " histories, cursor " + state.cursor(),
-						RecordIndex.of(stored.data()).records().size() });
 		return seeded;
 	}
 
@@ -331,7 +343,25 @@ public final class IncidentService {
 	 * @param state authoritative versioned state
 	 */
 	private void project(StoredIncident stored, IncidentState state) {
-		if (documentBridge.apply(stored.data(), state.histories())) {
+		java.util.Set<RecordKey> superseded = new java.util.TreeSet<>();
+		boolean changed = documentBridge.apply(stored.data(), state.histories(), false, superseded);
+		if (!superseded.isEmpty()) {
+			IncidentId incident = IncidentId.of(stored.data().getIncidentId());
+			long cursor = state.cursor();
+			List<RecordHistory> updated = new ArrayList<>();
+			for (RecordHistory history : state.histories()) {
+				if (superseded.contains(history.key()) && !history.retired()) {
+					cursor++;
+					LOGGER.log(java.util.logging.Level.WARNING,
+							"Retiring {0}: the incident document holds a newer record in the same single-valued field",
+							history.key());
+					history = history.retire(cursor);
+				}
+				updated.add(history);
+			}
+			versions.save(incident, new IncidentState(cursor, updated, state.changes(), state.receipts()));
+		}
+		if (changed) {
 			incidents.save(IncidentId.of(stored.data().getIncidentId()), stored.data(), stored.revision());
 		}
 	}
@@ -564,7 +594,8 @@ public final class IncidentService {
 	 */
 	private ReadResult readResult(IncidentId incident, IncidentState state) {
 		List<VersionedRecord> records = new ArrayList<>();
-		histories(state).entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+		histories(state).entrySet().stream().filter(entry -> !entry.getValue().retired())
+				.sorted(Map.Entry.comparingByKey()).forEach(entry -> {
 			RecordVersion version = latest(entry.getValue());
 			records.add(new VersionedRecord(entry.getKey(), version.version(), version.cursor(),
 					version.receivedAt(), version.content(), entry.getValue().parent(),

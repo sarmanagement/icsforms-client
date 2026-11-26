@@ -26,8 +26,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.sarmanagement.icsforms.persistence.RecordVersionStore.*;
 
@@ -86,6 +88,24 @@ final class RecordDocumentBridge {
 	 * @return true when the document was changed
 	 */
 	boolean apply(AppData data, List<RecordHistory> histories, boolean replaceDefaults) {
+		return apply(data, histories, replaceDefaults, new HashSet<>());
+	}
+
+	/**
+	 * Projects latest record snapshots into a detached incident document, reporting superseded histories.
+	 *
+	 * @param data detached incident document
+	 * @param histories retained record histories
+	 * @param replaceDefaults whether a single-valued parent field holding another record is replaced rather
+	 *            than rejected
+	 * @param superseded receives live histories not projected because the document already holds a newer record
+	 *            in the same single-valued field, together with their descendants
+	 * @return true when the document was changed
+	 */
+	boolean apply(AppData data, List<RecordHistory> histories, boolean replaceDefaults, Set<RecordKey> superseded) {
+		Map<String, RecordHistory> byId = new HashMap<>();
+		histories.forEach(history -> byId.put(history.key().type() + ":" + history.key().id(), history));
+		histories = histories.stream().filter(history -> !history.retired()).toList();
 		JsonNode before = MAPPER.valueToTree(data);
 		RecordIndex index = RecordIndex.of(data);
 		Map<RecordKey, Object> values = new HashMap<>();
@@ -100,8 +120,20 @@ final class RecordDocumentBridge {
 			for (int indexPosition = 0; indexPosition < missing.size();) {
 				RecordHistory history = missing.get(indexPosition);
 				Object parent = history.parent() == null ? data : values.get(history.parent());
+				if (history.parent() != null && superseded.contains(history.parent())) {
+					superseded.add(history.key());
+					missing.remove(indexPosition);
+					attached = true;
+					continue;
+				}
 				if (parent == null) {
 					indexPosition++;
+					continue;
+				}
+				if (supersededByDocument(parent, history, byId)) {
+					superseded.add(history.key());
+					missing.remove(indexPosition);
+					attached = true;
 					continue;
 				}
 				Object created = create(history.key(), latest(history).content());
@@ -240,6 +272,34 @@ final class RecordDocumentBridge {
 				throw validationException;
 			}
 			throw new StoreValidationException("Cannot attach record to parent field: " + fieldName, exception);
+		}
+	}
+
+	/**
+	 * Checks whether the document already holds a newer record in the single-valued field a history targets.
+	 *
+	 * @param parent parent model object
+	 * @param history history that would be attached
+	 * @param byId all histories keyed by type and ID
+	 * @return true when the existing record's history began after the candidate's
+	 */
+	private boolean supersededByDocument(Object parent, RecordHistory history, Map<String, RecordHistory> byId) {
+		String fieldName = history.parentField();
+		Field field = fieldName == null ? null : field(parent.getClass(), fieldName);
+		if (field == null) {
+			return false;
+		}
+		try {
+			field.setAccessible(true);
+			Object existing = field.get(parent);
+			if (existing instanceof Identified identified && !(existing instanceof Collection<?>)) {
+				RecordHistory current = byId.get(existing.getClass().getName() + ":" + identified.getId());
+				return current != null && !current.retired() && !current.key().equals(history.key())
+						&& current.versions().get(0).cursor() > history.versions().get(0).cursor();
+			}
+			return false;
+		} catch (IllegalAccessException exception) {
+			return false;
 		}
 	}
 
