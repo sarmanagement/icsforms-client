@@ -559,12 +559,22 @@ public class AppController implements AutoCloseable {
 		});
 		if (!finished.get()) {
 			synchronousWaitDepth++;
+			boolean interrupted = false;
 			try {
 				persistenceWaitHandler.accept(true);
-				if (!finished.get() && !loop.enter()) {
-					throw new IllegalStateException("Cannot dispatch while waiting for persistence");
+				// An interrupted event thread makes the secondary loop return before its work has finished.
+				while (!finished.get()) {
+					if (!loop.enter()) {
+						throw new IllegalStateException("Cannot dispatch while waiting for persistence");
+					}
+					if (!finished.get() && Thread.interrupted()) {
+						interrupted = true;
+					}
 				}
 			} finally {
+				if (interrupted) {
+					Thread.currentThread().interrupt();
+				}
 				synchronousWaitDepth--;
 				if (synchronousWaitDepth == 0) {
 					persistenceWaitHandler.accept(false);

@@ -29,6 +29,45 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Detached persistence must keep Swing responsive without losing concurrent local edits. */
 class AppControllerAsyncPersistenceTest {
 	@Test
+	void interruptedEventThreadStillWaitsForTheWorkerResult() throws Exception {
+		try (BlockingStore store = new BlockingStore(directory()) {
+			/** {@inheritDoc} */
+			@Override
+			public synchronized java.util.List<org.sarmanagement.icsforms.persistence.IncidentSummary> list() {
+				try {
+					Thread.sleep(400);
+				} catch (InterruptedException exception) {
+					Thread.currentThread().interrupt();
+				}
+				return super.list();
+			}
+		}) {
+			AppData live = new AppData();
+			IncidentId id = store.create(live);
+			try (AppController controller = controller(store, id, live)) {
+				Thread[] edt = new Thread[1];
+				SwingUtilities.invokeAndWait(() -> edt[0] = Thread.currentThread());
+				Thread interrupter = new Thread(() -> {
+					try {
+						Thread.sleep(150);
+					} catch (InterruptedException exception) {
+						return;
+					}
+					edt[0].interrupt();
+				});
+				boolean[] result = new boolean[1];
+				interrupter.start();
+				SwingUtilities.invokeAndWait(() -> {
+					result[0] = controller.canReusePlans();
+					Thread.interrupted();
+				});
+				interrupter.join();
+				assertFalse(result[0]);
+			}
+		}
+	}
+
+	@Test
 	void queuedSnapshotRebasesOnTheAcceptedTokenAndPersistsTheNewestEdit() throws Exception {
 		try (BlockingStore store = new BlockingStore(directory())) {
 			AppData live = new AppData();
@@ -893,7 +932,7 @@ class AppControllerAsyncPersistenceTest {
 	}
 
 	/** Real local store with a controllable worker write boundary. */
-	static final class BlockingStore extends FileIncidentStore {
+	static class BlockingStore extends FileIncidentStore {
 		private CountDownLatch entered = new CountDownLatch(0);
 		private CountDownLatch release = new CountDownLatch(0);
 		private volatile AppData savedDocument;
