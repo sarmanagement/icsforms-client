@@ -141,6 +141,8 @@ public class HostSharingDialog extends JDialog {
 	private transient HostSession session;
 	private transient RemoteIncidentStore loopbackStore;
 	private volatile boolean starting;
+	/** Whether the dialog is showing an open in-person pairing window. */
+	private boolean pairingOpen;
 	/** Test-only stop grace applied to the next start, or null. */
 	private java.time.Duration stopGraceOverride;
 	private boolean stopping;
@@ -1073,6 +1075,7 @@ public class HostSharingDialog extends JDialog {
 			return;
 		}
 		pairButton.setEnabled(false);
+		pairingCodeLabel.setText("Opening the pairing window…");
 		new SwingWorker<org.sarmanagement.icsforms.host.HostClient.PairingOffer, Void>() {
 			/** {@inheritDoc} */
 			@Override
@@ -1092,6 +1095,7 @@ public class HostSharingDialog extends JDialog {
 					if (failure instanceof InterruptedException) {
 						Thread.currentThread().interrupt();
 					}
+					clearPairing();
 					prompts.show(HostSharingDialog.this, "Add a device",
 							"Could not open pairing: " + failure.getMessage(), true);
 				}
@@ -1113,6 +1117,8 @@ public class HostSharingDialog extends JDialog {
 						.truncatedTo(java.time.temporal.ChronoUnit.MINUTES));
 		pairingPayloadText = offer.payload().toText();
 		qrLabel.setIcon(new javax.swing.ImageIcon(QrImages.render(pairingPayloadText, 200)));
+		pairingOpen = true;
+		pairButton.setToolTipText("The pairing window is already open.");
 		pairingTimer.start();
 	}
 
@@ -1207,6 +1213,8 @@ public class HostSharingDialog extends JDialog {
 	/** Forgets any displayed pairing state and QR image. */
 	private void clearPairing() {
 		pairingTimer.stop();
+		pairingOpen = false;
+		pairButton.setToolTipText(null);
 		pairingCodeLabel.setText(" ");
 		pairingDetailLabel.setText(" ");
 		waitingModel.setRowCount(0);
@@ -1421,7 +1429,7 @@ public class HostSharingDialog extends JDialog {
 		startButton.setEnabled(current == null && !starting);
 		stopButton.setEnabled(current != null && !stopping && current.state() != HostState.STOPPING);
 		inviteButton.setEnabled(running && !stopping);
-		pairButton.setEnabled(running && !stopping);
+		pairButton.setEnabled(running && !stopping && !pairingOpen);
 		revokeButton.setEnabled(running && !stopping && deviceTable.getSelectedRow() >= 0);
 		reviewRequestsButton.setEnabled(running && !stopping && !reviewingRequests);
 		hideButton.setEnabled(current != null);

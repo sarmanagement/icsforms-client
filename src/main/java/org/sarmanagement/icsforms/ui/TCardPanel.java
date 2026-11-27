@@ -643,8 +643,9 @@ public class TCardPanel extends JPanel {
 
 	/**
 	 * Collects the HEADER cards that become rack columns. Duplicate labels, which independent default creation can
-	 * leave behind in a shared incident, collapse to the first card without altering the stored cards. When every
-	 * column is a standard one they are shown in canonical order; operator-customised layouts keep their order.
+	 * leave behind in a shared incident, collapse to the first card without altering the stored cards. The standard
+	 * columns come first in canonical order, because a shared incident does not preserve card order; any other
+	 * columns follow in stored order.
 	 *
 	 * @param cards all T-cards in stored order.
 	 * @return one HEADER card per distinct label, in display order.
@@ -657,10 +658,10 @@ public class TCardPanel extends JPanel {
 			}
 		}
 		List<TCard> headers = new ArrayList<>(byLabel.values());
-		if (STANDARD_HEADER_ORDER.containsAll(byLabel.keySet())) {
-			headers.sort(java.util.Comparator.comparingInt(card -> STANDARD_HEADER_ORDER
-					.indexOf(card.getDisplayLabel().trim().toLowerCase(java.util.Locale.ROOT))));
-		}
+		headers.sort(java.util.Comparator.comparingInt(card -> {
+			int index = STANDARD_HEADER_ORDER.indexOf(card.getDisplayLabel().trim().toLowerCase(java.util.Locale.ROOT));
+			return index < 0 ? STANDARD_HEADER_ORDER.size() : index;
+		}));
 		return headers;
 	}
 

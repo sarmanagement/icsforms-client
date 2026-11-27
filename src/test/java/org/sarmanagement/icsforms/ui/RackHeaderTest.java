@@ -37,15 +37,15 @@ class RackHeaderTest {
 	}
 
 	@Test
-	void customisedColumnsKeepOperatorOrder() {
+	void standardColumnsPrecedeCustomisedOnesWhichKeepStoredOrder() {
 		List<TCard> cards = new ArrayList<>();
-		for (String label : List.of("Staging", "Available", "Staging")) {
+		for (String label : List.of("Staging", "Out of Service", "Medical", "Available", "Staging", "ICP")) {
 			TCard header = new TCard();
 			header.setCardType(TCardType.HEADER);
 			header.setResourceIdentifier(label);
 			cards.add(header);
 		}
-		assertEquals(List.of("Staging", "Available"),
+		assertEquals(List.of("ICP", "Available", "Out of Service", "Staging", "Medical"),
 				TCardPanel.distinctRackHeaders(cards).stream().map(TCard::getDisplayLabel).toList());
 	}
 }
