@@ -388,7 +388,10 @@ final class RecordDocumentBridge {
 		for (Field field : fields(target.getClass())) {
 			JsonProperty property = field.getAnnotation(JsonProperty.class);
 			String name = property == null || property.value().isBlank() ? field.getName() : property.value();
-			if (isRecordLink(field) || isDerivedLegacyMirror(target, name)) {
+			if (isRecordLink(field) && content.get(name) != null && content.get(name).isObject()) {
+				adoptInlineChild(target, field, content.get(name));
+				writable.remove(name);
+			} else if (isRecordLink(field) || isDerivedLegacyMirror(target, name)) {
 				writable.remove(name);
 			} else if (RecordJson.same(current.get(name), content.get(name))) {
 				writable.remove(name);
@@ -414,6 +417,34 @@ final class RecordDocumentBridge {
 	 */
 	private static boolean isDerivedLegacyMirror(Object target, String name) {
 		return target instanceof org.sarmanagement.icsforms.model.Ics202Form && "objectives".equals(name);
+	}
+
+	/**
+	 * Adopts a child stored inline by an earlier build, where the parent record holds the child's content instead
+	 * of a link to it. The child keeps a deterministic identity derived from its parent and field, so that every
+	 * projection of the same host state yields the same identity rather than a fresh random one that would
+	 * register as a conflicting edit.
+	 *
+	 * @param owner parent model record
+	 * @param field single-valued field holding the child
+	 * @param inline stored inline content of the child
+	 */
+	private void adoptInlineChild(Object owner, Field field, JsonNode inline) {
+		try {
+			field.setAccessible(true);
+			Object child = field.get(owner);
+			Field parentIdentity = identityField(owner.getClass());
+			if (child == null || parentIdentity == null || identityField(child.getClass()) == null
+					|| !Identified.class.isAssignableFrom(field.getType())) {
+				return;
+			}
+			parentIdentity.setAccessible(true);
+			String seed = parentIdentity.get(owner) + "/" + field.getName();
+			setIdentity(child, java.util.UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8)).toString());
+			update(child, inline);
+		} catch (ReflectiveOperationException exception) {
+			throw new StoreValidationException("Cannot apply record snapshot", exception);
+		}
 	}
 
 	/**

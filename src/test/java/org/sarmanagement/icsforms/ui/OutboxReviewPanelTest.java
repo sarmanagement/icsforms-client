@@ -69,7 +69,7 @@ class OutboxReviewPanelTest {
 				assertEquals("\"\"", table.getValueAt(0, 2));
 				assertEquals("\"My name\"", table.getValueAt(0, 3));
 				assertEquals("\"Host name\"", table.getValueAt(0, 4));
-				JButton apply = button(panel, "Request resolution");
+				JButton apply = button(panel, "Apply my choices");
 				button(panel, "Refresh conflict values").doClick();
 				assertEquals(entry, recorder.refreshed);
 				assertEquals(0, recorder.resolutions);
@@ -115,7 +115,7 @@ class OutboxReviewPanelTest {
 			JTable table = find(panel, JTable.class);
 			assertEquals("(missing)", table.getValueAt(1, 3));
 			assertEquals("null", table.getValueAt(1, 4));
-			JButton apply = button(panel, "Request resolution");
+			JButton apply = button(panel, "Apply my choices");
 			table.setValueAt(Choice.MINE, 0, 5);
 			assertFalse(apply.isEnabled());
 			table.setValueAt(Choice.THEIRS, 1, 5);
@@ -133,6 +133,31 @@ class OutboxReviewPanelTest {
 	}
 
 	@Test
+	void keepAllButtonsDecideEveryRowAndTheListHidesTheInternalOperationPrefix() throws Exception {
+		IncidentService.RecordBatch batch = new IncidentService.RecordBatch(IncidentId.newId(),
+				"offline-1234abcd-0000", List.of());
+		var key = new org.sarmanagement.icsforms.model.RecordIndex.RecordKey("type", "id");
+		var first = new IncidentService.FieldConflict(key, "one", null,
+				com.fasterxml.jackson.databind.node.TextNode.valueOf("mine"),
+				com.fasterxml.jackson.databind.node.TextNode.valueOf("host"));
+		var second = new IncidentService.FieldConflict(key, "two", null, null,
+				com.fasterxml.jackson.databind.node.NullNode.instance);
+		Entry entry = new Entry(batch.operationId(), new AppData(), new AppData(), batch, Status.CONFLICT,
+				List.of(first, second), null);
+		SwingUtilities.invokeAndWait(() -> {
+			Recorder recorder = new Recorder();
+			OutboxReviewPanel panel = new OutboxReviewPanel(recorder);
+			panel.setEntries(List.of(entry));
+			find(panel, JList.class).setSelectedIndex(0);
+			assertEquals("CONFLICT — edit 1234abcd", entry.toString());
+			button(panel, "Keep all shared values").doClick();
+			button(panel, "Apply my choices").doClick();
+			assertEquals(List.of(new OutboxReviewPanel.Decision(first, Choice.THEIRS),
+					new OutboxReviewPanel.Decision(second, Choice.THEIRS)), recorder.decisions);
+		});
+	}
+
+	@Test
 	void pendingAndRejectedDraftsRemainExportableWithoutResolution() throws Exception {
 		var batch = new IncidentService.RecordBatch(IncidentId.newId(), "pending", List.of());
 		Entry pending = new Entry(batch.operationId(), new AppData(), new AppData(), null, Status.PENDING, List.of(), null);
@@ -146,7 +171,7 @@ class OutboxReviewPanelTest {
 			JList<?> list = find(panel, JList.class);
 			for (int i = 0; i < 2; i++) {
 				list.setSelectedIndex(i);
-				assertFalse(button(panel, "Request resolution").isEnabled());
+				assertFalse(button(panel, "Apply my choices").isEnabled());
 				assertFalse(button(panel, "Refresh conflict values").isEnabled());
 				assertFalse(button(panel, "Approve reviewed changes for sync").isEnabled());
 				button(panel, "Export / recover draft").doClick();

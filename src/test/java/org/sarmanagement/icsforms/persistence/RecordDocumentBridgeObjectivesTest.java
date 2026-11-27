@@ -4,6 +4,7 @@
 package org.sarmanagement.icsforms.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics202Form;
 import org.sarmanagement.icsforms.model.IncidentObjective;
+import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.RecordIndex.RecordKey;
 import org.sarmanagement.icsforms.persistence.RecordVersionStore.RecordHistory;
 import org.sarmanagement.icsforms.persistence.RecordVersionStore.RecordVersion;
@@ -39,5 +41,22 @@ class RecordDocumentBridgeObjectivesTest {
 		assertEquals(1, objectives.size());
 		assertEquals("objective-1", objectives.get(0).getObjectiveId());
 		assertEquals("Ma", objectives.get(0).getText());
+	}
+
+	@Test
+	void assignmentListStoredInlineByAnEarlierBuildKeepsOneIdentityAcrossProjections() throws Exception {
+		RecordKey chartKey = new RecordKey(OrganizationalChart.class.getName(), "chart-1");
+		JsonNode chart = MAPPER.readTree("{\"incidentCommanders\":[],\"assignmentList\":{\"includeInIap\":true,"
+				+ "\"preparedByName\":\"Casey\"}}");
+		List<RecordHistory> histories = List.of(new RecordHistory(chartKey, null, "organizationalChart",
+				List.of(new RecordVersion(1, 1, Instant.now(), chart))));
+		AppData first = new AppData();
+		AppData second = new AppData();
+		new RecordDocumentBridge().apply(first, histories, true);
+		new RecordDocumentBridge().apply(second, histories, true);
+		String firstId = first.getOrganizationalChart().getAssignmentList().getId();
+		assertEquals(firstId, second.getOrganizationalChart().getAssignmentList().getId());
+		assertEquals("Casey", first.getOrganizationalChart().getAssignmentList().getPreparedByName());
+		assertNotEquals("", firstId);
 	}
 }
