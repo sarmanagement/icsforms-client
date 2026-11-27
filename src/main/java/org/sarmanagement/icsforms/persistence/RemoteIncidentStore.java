@@ -954,7 +954,8 @@ public final class RemoteIncidentStore implements IncidentStore {
 		for (IncidentService.RecordSubmission edit : edits) {
 			IncidentService.VersionedRecord current = accepted.get(edit.key());
 			if (edit.operation() == IncidentService.Operation.CREATE) {
-				if (current != null) {
+				if (current != null
+						&& IncidentService.mergeIndependentCreates(edit.content(), current.content()) == null) {
 					conflicts.add(new IncidentService.FieldConflict(edit.key(), "$record", null, edit.content(),
 							current.content()));
 				}
@@ -1218,6 +1219,8 @@ public final class RemoteIncidentStore implements IncidentStore {
 								current.parentField(), current.version(), IncidentService.Operation.UPDATE,
 								item.content()));
 					}
+				} else if (IncidentService.mergeIndependentCreates(item.content(), current.content()) != null) {
+					resolved.add(item);
 				} else {
 					throw new StoreValidationException("The host changed since conflict review; review again");
 				}

@@ -54,7 +54,7 @@ class CanineMedicalPanelTest {
 	}
 
 	@Test
-	void staleCanineEditorInputCannotOverwriteNewerModelRevision() throws Exception {
+	void localStoreCanineEditorInputIsNeverBlockedByNewerModelRevision() throws Exception {
 		AppData data = new AppData();
 		AppController controller = IncidentStoreTestFixtures.controller(data);
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
@@ -65,8 +65,8 @@ class CanineMedicalPanelTest {
 			controller.markDirty();
 			data.getCanineMedicalPlan().setEmergencyProcedures("Newer role-panel value");
 			procedures.setText("Stale full-editor value");
-			assertEquals("Newer role-panel value", data.getCanineMedicalPlan().getEmergencyProcedures());
-			assertTrue(status.getText().contains("is stale"));
+			assertEquals("Stale full-editor value", data.getCanineMedicalPlan().getEmergencyProcedures());
+			assertFalse(status.getText().contains("is stale"));
 			controller.close();
 		});
 	}

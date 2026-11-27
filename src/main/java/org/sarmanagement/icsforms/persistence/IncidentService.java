@@ -551,8 +551,14 @@ public final class IncidentService {
 		}
 		if (submission.operation() == Operation.CREATE) {
 			if (history != null) {
-				conflicts.add(new FieldConflict(submission.key(), "$record", null, submission.content(),
-						latest(history).content()));
+				ObjectNode merged = history.retired() ? null
+						: mergeIndependentCreates(submission.content(), latest(history).content());
+				if (merged == null) {
+					conflicts.add(new FieldConflict(submission.key(), "$record", null, submission.content(),
+							latest(history).content()));
+				} else {
+					working.put(submission.key(), merged);
+				}
 				return;
 			}
 			if (submission.baseVersion() != 0) {
@@ -602,6 +608,59 @@ public final class IncidentService {
 	}
 
 	/**
+	 * Merges two independent creations of the same record, such as two devices each filling in a default record
+	 * that carries a stable identity. Neither writer saw the other's record, so only a field that both filled in
+	 * with different values is a conflict; a field one writer left empty takes the other writer's value.
+	 *
+	 * @param mine content being created
+	 * @param theirs content already held for the same record
+	 * @return merged content, or null when both writers filled in the same field differently
+	 */
+	static ObjectNode mergeIndependentCreates(JsonNode mine, JsonNode theirs) {
+		if (!mine.isObject() || !theirs.isObject()) {
+			return same(mine, theirs) ? (ObjectNode) theirs.deepCopy() : null;
+		}
+		ObjectNode merged = ((ObjectNode) theirs).deepCopy();
+		java.util.Set<String> names = new java.util.TreeSet<>();
+		mine.fieldNames().forEachRemaining(names::add);
+		for (String name : names) {
+			JsonNode mineValue = mine.get(name);
+			JsonNode theirsValue = theirs.get(name);
+			if (same(mineValue, theirsValue) || isEmptyValue(mineValue)) {
+				continue;
+			}
+			if (isEmptyValue(theirsValue)) {
+				merged.set(name, mineValue.deepCopy());
+			} else {
+				return null;
+			}
+		}
+		return merged;
+	}
+
+	/**
+	 * Tests whether a field value carries no entered data.
+	 *
+	 * @param value field value, or null when absent
+	 * @return true for an absent, null, blank-string, false, zero, empty-array or empty-object value
+	 */
+	private static boolean isEmptyValue(JsonNode value) {
+		if (value == null || value.isNull()) {
+			return true;
+		}
+		if (value.isTextual()) {
+			return value.asText().isBlank();
+		}
+		if (value.isBoolean()) {
+			return !value.asBoolean();
+		}
+		if (value.isNumber()) {
+			return value.asDouble() == 0;
+		}
+		return value.isContainerNode() && value.isEmpty();
+	}
+
+	/**
 	 * Applies a removal. A record someone else changed after the submitter last saw it is not removed: the removal
 	 * is reported as a whole-record conflict so the change and the removal can be reviewed together. Removing a
 	 * record that is already gone is accepted without effect. The record's versions stay in the history.
@@ -637,7 +696,7 @@ public final class IncidentService {
 	 * @param second second value
 	 * @return true when values are semantically identical
 	 */
-	private boolean same(JsonNode first, JsonNode second) {
+	private static boolean same(JsonNode first, JsonNode second) {
 		return RecordJson.same(first, second);
 	}
 

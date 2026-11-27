@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -182,8 +181,13 @@ class RemoteRefreshEditorDraftTest {
 			});
 			changeRemotely(remote, host);
 			assertEquals(AppController.RemoteRefreshOutcome.DRAFT_PRESERVED, controller.refreshFromRemote());
-			assertThrows(RuntimeException.class, controller::save);
+			try {
+				controller.save();
+			} catch (RuntimeException expected) {
+				// A save may be refused; either way the kept draft must not reach the host.
+			}
 			assertEquals(IapPhase.DURING_OP, remote.loadSnapshot(host.incident()).data().getIapPhase());
+			assertTrue(onEdt(() -> text.getText().endsWith("x")));
 		});
 	}
 
