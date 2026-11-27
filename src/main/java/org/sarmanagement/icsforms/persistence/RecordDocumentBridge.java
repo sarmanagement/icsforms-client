@@ -164,6 +164,63 @@ final class RecordDocumentBridge {
 	}
 
 	/**
+	 * Gives the default children of a document built entirely from host records a stable identity. Call only
+	 * after projecting the complete record set into a fresh document; a partial projection would rename children
+	 * that earlier projections attached.
+	 *
+	 * @param data fully projected document
+	 * @param histories every record history that was projected
+	 */
+	void stabilizeDefaults(AppData data, List<RecordHistory> histories) {
+		if (data.getIncidentId() == null || data.getIncidentId().isBlank()) {
+			return;
+		}
+		Set<String> known = new HashSet<>();
+		histories.forEach(history -> known.add(history.key().type() + ":" + history.key().id()));
+		stabilizeDefaults(data, data.getIncidentId(), known, new HashSet<>());
+	}
+
+	/**
+	 * Gives single-valued child records that no host history supplies an identity derived from their parent and
+	 * field. A freshly constructed document carries random default children, so without this every projection of
+	 * the same host state would hold different identities for them and each rebuild would look like an edit that
+	 * replaced the child.
+	 *
+	 * @param parent model record whose children are examined
+	 * @param parentId identity of the parent record
+	 * @param known keys of records the host supplied, as {@code type:id}
+	 * @param visited records already examined
+	 */
+	private void stabilizeDefaults(Object parent, String parentId, Set<String> known, Set<Object> visited) {
+		if (!visited.add(parent)) {
+			return;
+		}
+		for (Field field : fields(parent.getClass())) {
+			if (!Identified.class.isAssignableFrom(field.getType()) || Modifier.isStatic(field.getModifiers())) {
+				continue;
+			}
+			try {
+				field.setAccessible(true);
+				Object child = field.get(parent);
+				Field identity = child == null ? null : identityField(child.getClass());
+				if (identity == null) {
+					continue;
+				}
+				identity.setAccessible(true);
+				String current = String.valueOf(identity.get(child));
+				if (!known.contains(child.getClass().getName() + ":" + current)) {
+					String seed = parentId + "/" + field.getName();
+					current = java.util.UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8)).toString();
+					identity.set(child, current);
+				}
+				stabilizeDefaults(child, current, known, visited);
+			} catch (IllegalAccessException exception) {
+				throw new StoreValidationException("Cannot stabilize default record identity", exception);
+			}
+		}
+	}
+
+	/**
 	 * Removes records from a detached incident document, together with the records nested inside them.
 	 *
 	 * @param data detached incident document

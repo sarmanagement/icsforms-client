@@ -59,4 +59,21 @@ class RecordDocumentBridgeObjectivesTest {
 		assertEquals("Casey", first.getOrganizationalChart().getAssignmentList().getPreparedByName());
 		assertNotEquals("", firstId);
 	}
+
+	@Test
+	void singletonDefaultsTheHostDoesNotSupplyKeepOneIdentityAcrossProjections() {
+		AppData first = new AppData();
+		AppData second = new AppData();
+		first.setIncidentId("incident-1");
+		second.setIncidentId("incident-1");
+		new RecordDocumentBridge().apply(first, List.of(), true);
+		new RecordDocumentBridge().stabilizeDefaults(first, List.of());
+		new RecordDocumentBridge().apply(second, List.of(), true);
+		new RecordDocumentBridge().stabilizeDefaults(second, List.of());
+		assertEquals(first.getIncidentContext().getId(), second.getIncidentContext().getId());
+		assertEquals(first.getForm215().getId(), second.getForm215().getId());
+		assertEquals(first.getOrganizationalChart().getAssignmentList().getId(),
+				second.getOrganizationalChart().getAssignmentList().getId());
+		assertNotEquals(first.getForm215().getId(), first.getNextPeriodForm215().getId());
+	}
 }

@@ -61,7 +61,7 @@ public final class OutboxReviewPanel extends JPanel {
 		/** Retain the submitted value. */
 		MINE("Keep my edit"),
 		/** Use the host value. */
-		THEIRS("Keep the shared value");
+		THEIRS("Keep the stored copy");
 
 		private final String label;
 
@@ -194,7 +194,7 @@ public final class OutboxReviewPanel extends JPanel {
 	private final DefaultListModel<Entry> entries = new DefaultListModel<>();
 	private final JList<Entry> list = new JList<>(entries);
 	private final DefaultTableModel fields = new DefaultTableModel(
-			new Object[] {"Record", "Field", "Original", "My edit", "Shared incident", "Choice"}, 0) {
+			new Object[] {"Record", "Field", "Original", "My edit", "Stored on host", "Choice"}, 0) {
 		/** {@inheritDoc} */
 		@Override
 		public boolean isCellEditable(int row, int column) {
@@ -206,7 +206,7 @@ public final class OutboxReviewPanel extends JPanel {
 	private final JTextArea details = new JTextArea(3, 30);
 	private final JButton export = new JButton("Export / recover draft");
 	private final JButton keepMine = new JButton("Keep all my edits");
-	private final JButton keepShared = new JButton("Keep all shared values");
+	private final JButton keepShared = new JButton("Keep all stored copies");
 	private final JButton resolve = new JButton("Apply my choices");
 	private final JButton replace = new JButton("Replace rejected edit with corrected draft");
 	private final JButton refresh = new JButton("Refresh conflict values");
@@ -235,9 +235,10 @@ public final class OutboxReviewPanel extends JPanel {
 		details.setWrapStyleWord(true);
 		details.getAccessibleContext().setAccessibleName("Outbox operation details");
 		JPanel center = new JPanel(new BorderLayout(4, 4));
-		center.add(new JLabel("<html>An edit could not be applied because the shared incident changed the same field. For each "
-				+ "row, choose whether to keep your edit or the shared value (click the Choice cell, or use the "
-				+ "buttons below), then apply. Nothing is lost until you apply.</html>"),
+		center.add(new JLabel("<html>An edit could not be applied because the copy stored on the host differs from what your edit "
+				+ "started from. This is not always another person's change; it can be an older stored copy. For each "
+				+ "row, keep your edit or the stored copy (click the Choice cell, or use the buttons below), then "
+				+ "apply. Nothing is lost until you apply.</html>"),
 				BorderLayout.NORTH);
 		center.add(new JScrollPane(table), BorderLayout.CENTER);
 		center.add(new JScrollPane(details), BorderLayout.SOUTH);
@@ -391,7 +392,7 @@ public final class OutboxReviewPanel extends JPanel {
 			return;
 		}
 		details.setText("Original:\n" + fields.getValueAt(row, 2) + "\n\nMy edit:\n" + fields.getValueAt(row, 3)
-				+ "\n\nShared incident:\n" + fields.getValueAt(row, 4));
+				+ "\n\nStored on host:\n" + fields.getValueAt(row, 4));
 		details.setCaretPosition(0);
 	}
 

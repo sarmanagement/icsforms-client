@@ -150,7 +150,7 @@ class OutboxReviewPanelTest {
 			panel.setEntries(List.of(entry));
 			find(panel, JList.class).setSelectedIndex(0);
 			assertEquals("CONFLICT — edit 1234abcd", entry.toString());
-			button(panel, "Keep all shared values").doClick();
+			button(panel, "Keep all stored copies").doClick();
 			button(panel, "Apply my choices").doClick();
 			assertEquals(List.of(new OutboxReviewPanel.Decision(first, Choice.THEIRS),
 					new OutboxReviewPanel.Decision(second, Choice.THEIRS)), recorder.decisions);

@@ -1584,6 +1584,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 		}
 		try {
 			bridge.apply(data, histories, true);
+			bridge.stabilizeDefaults(data, histories);
 		} catch (StoreValidationException failure) {
 			throw new StorePersistenceException("The host returned records that cannot form a document", failure);
 		}
