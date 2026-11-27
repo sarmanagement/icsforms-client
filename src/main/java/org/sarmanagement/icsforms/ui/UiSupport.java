@@ -335,6 +335,9 @@ final class UiSupport {
 		updateBottomSpacer(panel, row + 1);
 	}
 
+	/** Client property naming the inner field a composite row component's label and required marking apply to. */
+	static final String LABEL_TARGET_PROPERTY = "icsforms.labelTarget";
+
 	private static void addRow(JPanel panel, int row, String label, JComponent component, boolean required) {
 		JLabel fieldLabel = new JLabel(required ? label + " (required)" : label);
 		fieldLabel.setLabelFor(labelTarget(component));
@@ -379,6 +382,9 @@ final class UiSupport {
 	}
 
 	private static JComponent labelTarget(JComponent component) {
+		if (component.getClientProperty(LABEL_TARGET_PROPERTY) instanceof JComponent target) {
+			return target;
+		}
 		if (component instanceof JScrollPane scrollPane
 				&& scrollPane.getViewport().getView() instanceof JComponent child) {
 			return child;
@@ -389,6 +395,9 @@ final class UiSupport {
 	private static void markRequired(JComponent component, String label) {
 		applyRequiredBackground(component);
 		JComponent accessibleTarget = labelTarget(component);
+		if (accessibleTarget != component && component.getClientProperty(LABEL_TARGET_PROPERTY) != null) {
+			applyRequiredBackground(accessibleTarget);
+		}
 		String existingDescription = accessibleTarget.getAccessibleContext().getAccessibleDescription();
 		String requiredDescription = label + " is a required field.";
 		accessibleTarget.getAccessibleContext()

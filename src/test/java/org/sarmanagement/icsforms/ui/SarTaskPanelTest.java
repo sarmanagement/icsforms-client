@@ -887,6 +887,55 @@ class SarTaskPanelTest {
 		assertTrue(scrollPane.getPreferredSize().height > initialHeight);
 	}
 
+	@Test
+	void editorOffersTheNextFreeNumberWhenAnotherDeviceTakesTheEnteredOne() throws Exception {
+		AppController controller = sampleController();
+		SarTaskAssignment other = sampleTask();
+		other.setAssignmentTeamNumber("G1");
+		SarTaskAssignment mine = new SarTaskAssignment();
+		mine.setAssignmentId("mine");
+		Object[] editor = new Object[1];
+		SwingUtilities.invokeAndWait(() -> {
+			try {
+				editor[0] = createEditor(mine, "ASSIGNMENT", 1, List.of(), controller, List.of());
+			} catch (Exception exception) {
+				throw new IllegalStateException(exception);
+			}
+		});
+		Field panelField = editor[0].getClass().getDeclaredField("panel");
+		panelField.setAccessible(true);
+		Field numberField = editor[0].getClass().getDeclaredField("assignmentTeamNumberField");
+		numberField.setAccessible(true);
+		JPanel content = (JPanel) panelField.get(editor[0]);
+		javax.swing.JTextField number = (javax.swing.JTextField) numberField.get(editor[0]);
+		javax.swing.JFrame frame = new javax.swing.JFrame();
+		SwingUtilities.invokeAndWait(() -> {
+			frame.add(content);
+			frame.pack();
+			frame.setVisible(true);
+			number.setText("G1");
+		});
+		try {
+			assertNull(findButton(content, "Use G2"));
+
+			SwingUtilities.invokeAndWait(() -> controller.getData().getSarTaskAssignments().add(other));
+			Method publish = AppController.class.getDeclaredMethod("publishIncidentChange",
+					AppController.IncidentChangeKind.class);
+			publish.setAccessible(true);
+			publish.invoke(controller, AppController.IncidentChangeKind.REMOTE_REFRESHED);
+			SwingUtilities.invokeAndWait(() -> {
+			});
+
+			JButton use = findButton(content, "Use G2");
+			assertNotNull(use);
+			assertTrue(use.isVisible());
+			SwingUtilities.invokeAndWait(use::doClick);
+			assertEquals("G2", number.getText());
+		} finally {
+			SwingUtilities.invokeAndWait(frame::dispose);
+		}
+	}
+
 	private static Object createEditor(SarTaskAssignment task, String modeName) throws Exception {
 		return createEditor(task, modeName, 1);
 	}
