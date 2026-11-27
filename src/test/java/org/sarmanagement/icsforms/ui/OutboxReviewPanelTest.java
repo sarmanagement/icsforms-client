@@ -194,8 +194,9 @@ class OutboxReviewPanelTest {
 			JTable table = find(panel, JTable.class);
 			assertEquals(1, table.getRowCount());
 			assertEquals("\"New\"", table.getValueAt(0, 3));
-			java.awt.Rectangle screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
-					.getMaximumWindowBounds();
+			java.awt.Rectangle screen = java.awt.GraphicsEnvironment.isHeadless()
+					? new java.awt.Rectangle(0, 0, 1280, 800)
+					: java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
 			assertTrue(panel.getPreferredSize().width <= Math.max(960, screen.width));
 		});
 	}
