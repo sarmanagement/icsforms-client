@@ -164,6 +164,78 @@ final class RecordDocumentBridge {
 	}
 
 	/**
+	 * Removes records from a detached incident document, together with the records nested inside them.
+	 *
+	 * @param data detached incident document
+	 * @param removed identities of the records to remove
+	 * @return true when the document was changed
+	 */
+	boolean remove(AppData data, Set<RecordKey> removed) {
+		if (removed.isEmpty()) {
+			return false;
+		}
+		RecordIndex index = RecordIndex.of(data);
+		Set<Object> targets = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		for (RecordKey key : removed) {
+			Object value = index.value(key);
+			if (value != null) {
+				targets.add(value);
+			}
+		}
+		if (targets.isEmpty()) {
+			return false;
+		}
+		return detach(data, targets, java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()));
+	}
+
+	/**
+	 * Detaches target objects from every collection or field reachable from a model object.
+	 *
+	 * @param node model object to search
+	 * @param targets identity set of objects to detach
+	 * @param visited objects already searched
+	 * @return true when anything was detached
+	 */
+	private boolean detach(Object node, Set<Object> targets, Set<Object> visited) {
+		if (node == null || !visited.add(node)) {
+			return false;
+		}
+		boolean changed = false;
+		if (node instanceof Collection<?> collection) {
+			changed |= collection.removeIf(targets::contains);
+			for (Object item : new ArrayList<>(collection)) {
+				changed |= detach(item, targets, visited);
+			}
+		} else if (node instanceof Map<?, ?> map) {
+			changed |= map.values().removeIf(targets::contains);
+			for (Object item : new ArrayList<>(map.values())) {
+				changed |= detach(item, targets, visited);
+			}
+		} else if (!(node instanceof Enum<?>)
+				&& node.getClass().getPackageName().equals(AppData.class.getPackageName())) {
+			for (Field field : fields(node.getClass())) {
+				if (field.getType().isPrimitive() || java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+					continue;
+				}
+				try {
+					field.setAccessible(true);
+					Object value = field.get(node);
+					if (targets.contains(value)) {
+						field.set(node, null);
+						changed = true;
+					} else {
+						changed |= detach(value, targets, visited);
+					}
+				} catch (IllegalAccessException | RuntimeException exception) {
+					throw new StoreValidationException("Cannot remove record from field: " + field.getName(),
+							exception);
+				}
+			}
+		}
+		return changed;
+	}
+
+	/**
 	 * Constructs a record from its stored JSON snapshot.
 	 *
 	 * @param key record identity

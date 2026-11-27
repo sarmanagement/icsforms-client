@@ -115,7 +115,13 @@ those values.
 `POST /v1/incidents/{incidentId}/records:submit` accepts an atomic batch.
 `CREATE` uses `baseVersion: 0`; `UPDATE` and `STRIKE_OUT` use a version
 previously returned by read. `STRIKE_OUT` submits the retained record with its
-application strike-out field set, not a physical delete. `parent` is null for
+application strike-out field set, not a physical delete. `REMOVE` takes a record
+out of the live incident and uses the version the submitter last saw, with the
+last known content. Every version stays in the record's history for audit and
+the record is no longer served by read or changes. If another writer changed
+the record after that version, the batch is not applied and reports a
+`$record` conflict (base, mine=null, theirs) for review. Removing a record that
+is already removed is accepted. `parent` is null for
 a top-level record and otherwise identifies the containing record.
 
 ```json

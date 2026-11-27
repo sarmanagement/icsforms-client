@@ -88,6 +88,24 @@ class RemoteIncidentStoreHostTest {
 	}
 
 	@Test
+	void removalFromOneDeviceReachesTheHostAndASecondClient() {
+		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
+			StoredIncident first = a.loadSnapshot(id);
+			org.sarmanagement.icsforms.model.OpenActionItem entry = new org.sarmanagement.icsforms.model.OpenActionItem();
+			entry.setItem("Check access");
+			first.data().getOpenActionItems().add(entry);
+			a.save(id, first.data(), first.revision());
+
+			StoredIncident withEntry = a.loadSnapshot(id);
+			withEntry.data().getOpenActionItems().clear();
+			a.save(id, withEntry.data(), withEntry.revision());
+
+			assertTrue(b.loadSnapshot(id).data().getOpenActionItems().isEmpty());
+			assertTrue(a.loadSnapshot(id).data().getOpenActionItems().isEmpty());
+		}
+	}
+
+	@Test
 	void sameFieldEditsConflictAndExposeTheCurrentToken() {
 		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
 			StoredIncident first = a.loadSnapshot(id);

@@ -325,7 +325,7 @@ final class HostApiHandler implements HttpHandler {
 			HostPermission needed = switch (submission.operation()) {
 				case CREATE -> HostPermission.WRITE;
 				case UPDATE -> HostPermission.UPDATE;
-				case STRIKE_OUT -> HostPermission.DELETE;
+				case STRIKE_OUT, REMOVE -> HostPermission.DELETE;
 			};
 			if (!require(exchange, device, needed)) {
 				return;

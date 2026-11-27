@@ -156,6 +156,64 @@ class IncidentServiceTest {
 	}
 
 	@Test
+	void removalRetiresRecordKeepsHistoryAndLeavesDocument() {
+		AppData data = new AppData();
+		OrgChartEntry entry = new OrgChartEntry();
+		entry.setSection(OrgChartEntry.Section.COMMAND_STAFF);
+		entry.setTitle("Agency Representative");
+		entry.setName("Casey Lee");
+		data.getOrganizationalChart().getAssignmentList().getAgencyRepresentatives().add(entry);
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			IncidentId incident = store.create(data);
+			IncidentService service = service(store);
+			IncidentService.ReadResult initial = service.read(incident);
+			IncidentService.VersionedRecord target = initial.records().stream()
+					.filter(record -> record.key().id().equals(entry.getId())).findFirst().orElseThrow();
+			IncidentService.RecordSubmission removal = new IncidentService.RecordSubmission(target.key(),
+					target.parent(), target.parentField(), target.version(), IncidentService.Operation.REMOVE,
+					target.content());
+			IncidentService.SubmissionResult result = service.submit(batch(incident, "remove-one", removal));
+			assertTrue(result.applied());
+			assertTrue(service.read(incident).records().stream()
+					.noneMatch(record -> record.key().equals(target.key())));
+			assertTrue(store.loadSnapshot(incident).data().getOrganizationalChart().getAssignmentList()
+					.getAgencyRepresentatives().isEmpty());
+			RecordVersionStore.IncidentState state = new FileRecordVersionStore(directory.resolve("incidents"))
+					.load(incident);
+			assertTrue(state.histories().stream()
+					.anyMatch(history -> history.key().equals(target.key()) && history.retired()
+							&& "Casey Lee".equals(history.versions().get(0).content().path("name").asText())));
+			assertTrue(service.submit(batch(incident, "remove-two", removal)).applied());
+		}
+	}
+
+	@Test
+	void removalOfConcurrentlyEditedRecordIsReportedAsConflict() {
+		AppData data = new AppData();
+		OrgChartEntry entry = new OrgChartEntry();
+		entry.setSection(OrgChartEntry.Section.COMMAND_STAFF);
+		entry.setTitle("Agency Representative");
+		entry.setName("Casey Lee");
+		data.getOrganizationalChart().getAssignmentList().getAgencyRepresentatives().add(entry);
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			IncidentId incident = store.create(data);
+			IncidentService service = service(store);
+			IncidentService.ReadResult initial = service.read(incident);
+			IncidentService.VersionedRecord target = initial.records().stream()
+					.filter(record -> record.key().id().equals(entry.getId())).findFirst().orElseThrow();
+			service.submit(batch(incident, "edit", updateRecord(initial, target.key(), "name", "Sam Roe")));
+			IncidentService.RecordSubmission removal = new IncidentService.RecordSubmission(target.key(),
+					target.parent(), target.parentField(), target.version(), IncidentService.Operation.REMOVE,
+					target.content());
+			IncidentService.SubmissionResult result = service.submit(batch(incident, "remove", removal));
+			assertFalse(result.applied());
+			assertEquals("$record", result.conflicts().get(0).field());
+			assertTrue(service.read(incident).records().stream()
+					.anyMatch(record -> record.key().equals(target.key())));
+		}
+	}
+
+	@Test
 	void acceptsOnlyMineChangedAndPreservesOnlyTheirsChanged() {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			IncidentId incident = store.create(new AppData());
