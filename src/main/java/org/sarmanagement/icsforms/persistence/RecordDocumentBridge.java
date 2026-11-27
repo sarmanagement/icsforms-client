@@ -137,6 +137,7 @@ final class RecordDocumentBridge {
 					continue;
 				}
 				Object created = create(history.key(), latest(history).content());
+				clearRetiredOccupant(parent, history, byId);
 				attach(parent, history.parentField(), created, replaceDefaults);
 				values.put(history.key(), created);
 				missing.remove(indexPosition);
@@ -429,6 +430,34 @@ final class RecordDocumentBridge {
 			return false;
 		} catch (IllegalAccessException exception) {
 			return false;
+		}
+	}
+
+	/**
+	 * Empties a single-valued field whose current occupant is a record the host has since retired, so the live
+	 * replacement can take its place instead of failing the whole projection.
+	 *
+	 * @param parent parent model object
+	 * @param history live history about to be attached
+	 * @param byId all histories keyed by type and ID
+	 */
+	private void clearRetiredOccupant(Object parent, RecordHistory history, Map<String, RecordHistory> byId) {
+		String fieldName = history.parentField();
+		Field field = fieldName == null ? null : field(parent.getClass(), fieldName);
+		if (field == null) {
+			return;
+		}
+		try {
+			field.setAccessible(true);
+			Object existing = field.get(parent);
+			if (existing instanceof Identified identified && !(existing instanceof Collection<?>)) {
+				RecordHistory current = byId.get(existing.getClass().getName() + ":" + identified.getId());
+				if (current != null && current.retired()) {
+					field.set(parent, null);
+				}
+			}
+		} catch (IllegalAccessException exception) {
+			// Leave the field alone; attach reports the conflict.
 		}
 	}
 

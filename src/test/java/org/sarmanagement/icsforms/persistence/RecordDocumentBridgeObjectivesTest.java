@@ -13,6 +13,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics202Form;
+import org.sarmanagement.icsforms.model.Ics203Form;
 import org.sarmanagement.icsforms.model.IncidentObjective;
 import org.sarmanagement.icsforms.model.OrganizationalChart;
 import org.sarmanagement.icsforms.model.RecordIndex.RecordKey;
@@ -75,5 +76,34 @@ class RecordDocumentBridgeObjectivesTest {
 		assertEquals(first.getOrganizationalChart().getAssignmentList().getId(),
 				second.getOrganizationalChart().getAssignmentList().getId());
 		assertNotEquals(first.getForm215().getId(), first.getNextPeriodForm215().getId());
+	}
+
+	@Test
+	void liveSingleValuedChildReplacesTheRetiredRecordThatTheDocumentStillHolds() throws Exception {
+		RecordKey chartKey = new RecordKey(OrganizationalChart.class.getName(), "chart-1");
+		RecordKey oldKey = new RecordKey(Ics203Form.class.getName(), "list-old");
+		RecordKey newKey = new RecordKey(Ics203Form.class.getName(), "list-new");
+		JsonNode oldChart = MAPPER.readTree("{\"incidentCommanders\":[],\"assignmentList\":\"list-old\"}");
+		JsonNode chart = MAPPER.readTree("{\"incidentCommanders\":[],\"assignmentList\":\"list-new\"}");
+		JsonNode oldList = MAPPER.readTree("{\"preparedByName\":\"old\"}");
+		JsonNode newList = MAPPER.readTree("{\"preparedByName\":\"new\"}");
+		List<RecordHistory> before = List.of(
+				new RecordHistory(chartKey, null, "organizationalChart",
+						List.of(new RecordVersion(1, 1, Instant.now(), oldChart))),
+				new RecordHistory(oldKey, chartKey, "assignmentList",
+						List.of(new RecordVersion(1, 2, Instant.now(), oldList))));
+		AppData data = new AppData();
+		new RecordDocumentBridge().apply(data, before, true);
+		assertEquals("list-old", data.getOrganizationalChart().getAssignmentList().getId());
+		List<RecordHistory> after = List.of(
+				new RecordHistory(chartKey, null, "organizationalChart",
+						List.of(new RecordVersion(2, 6, Instant.now(), chart))),
+				new RecordHistory(oldKey, chartKey, "assignmentList",
+						List.of(new RecordVersion(1, 2, Instant.now(), oldList)), 5),
+				new RecordHistory(newKey, chartKey, "assignmentList",
+						List.of(new RecordVersion(1, 6, Instant.now(), newList))));
+		new RecordDocumentBridge().apply(data, after, false);
+		assertEquals("list-new", data.getOrganizationalChart().getAssignmentList().getId());
+		assertEquals("new", data.getOrganizationalChart().getAssignmentList().getPreparedByName());
 	}
 }

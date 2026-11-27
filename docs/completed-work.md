@@ -753,6 +753,14 @@ conflict, nor are two instances filling separate empty fields.
   which looked like a replaced child and produced a self-conflict in the host's
   own journal. Merging duplicate T-cards now repoints SAR task and ICS 215
   links to the retained card (`AppController.repointTCardLinks`).
+- **Retired single-valued children.** When the host retires a record held in a
+  single-valued field (for example the ICS 203 assignment list replaced during
+  conflict resolution) and the stored document still holds it, projection now
+  empties the field before attaching the live replacement
+  (`RecordDocumentBridge.clearRetiredOccupant`). Previously the host failed to
+  read its own incident ("Parent field already contains a record"), so the
+  loopback journal could not acknowledge the accepted batch and its queue never
+  drained. A stale conflict now refreshes itself instead of failing.
 - **Outbox review wording.** Choices read "Keep my edit" / "Keep the stored
   copy", with keep-all buttons, and the list no longer shows the internal
   `offline-` operation prefix.
