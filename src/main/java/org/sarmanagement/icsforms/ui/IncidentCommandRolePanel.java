@@ -825,7 +825,7 @@ public class IncidentCommandRolePanel extends JPanel {
 				return false;
 			}
 		} else {
-			objective = new IncidentObjective();
+			objective = new IncidentObjective("", ordered.size());
 			ordered.add(objective);
 		}
 		ObjectiveAssessment previousAssessment = objective.getAssessment();

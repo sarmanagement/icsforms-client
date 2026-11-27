@@ -908,6 +908,7 @@ class SarTaskPanelTest {
 		numberField.setAccessible(true);
 		JPanel content = (JPanel) panelField.get(editor[0]);
 		javax.swing.JTextField number = (javax.swing.JTextField) numberField.get(editor[0]);
+		org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
 		javax.swing.JFrame frame = new javax.swing.JFrame();
 		SwingUtilities.invokeAndWait(() -> {
 			frame.add(content);
