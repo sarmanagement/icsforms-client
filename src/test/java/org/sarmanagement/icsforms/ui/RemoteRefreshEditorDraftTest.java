@@ -72,6 +72,42 @@ class RemoteRefreshEditorDraftTest {
 	}
 
 	@Test
+	void editedTextFieldLosingFocusIsCommittedByAutosave() throws Exception {
+		scenario((frame, controller, remote, host) -> {
+			JTextComponent text = onEdt(() -> firstEditableText(frame));
+			String original = onEdt(text::getText);
+			SwingUtilities.invokeAndWait(() -> text.setText(original + "x"));
+			assertTrue(onEdt(frame::hasPendingEditorInput));
+			SwingUtilities.invokeAndWait(() -> frame.focusOwnerChanged(text, null));
+			long deadline = System.currentTimeMillis() + 10_000;
+			while (onEdt(frame::hasPendingEditorInput) && System.currentTimeMillis() < deadline) {
+				Thread.sleep(100);
+			}
+			assertFalse(onEdt(frame::hasPendingEditorInput));
+			assertEquals(original + "x", onEdt(text::getText));
+		});
+	}
+
+	@Test
+	void keystrokeInEditedTextFieldIsCommittedByAutosave() throws Exception {
+		scenario((frame, controller, remote, host) -> {
+			JTextComponent text = onEdt(() -> firstEditableText(frame));
+			String original = onEdt(text::getText);
+			SwingUtilities.invokeAndWait(() -> text.setText(original + "k"));
+			assertTrue(onEdt(frame::hasPendingEditorInput));
+			SwingUtilities.invokeAndWait(() -> frame.entryEvent(new java.awt.event.KeyEvent(text,
+					java.awt.event.KeyEvent.KEY_RELEASED, System.currentTimeMillis(), 0,
+					java.awt.event.KeyEvent.VK_K, 'k')));
+			long deadline = System.currentTimeMillis() + 10_000;
+			while (onEdt(frame::hasPendingEditorInput) && System.currentTimeMillis() < deadline) {
+				Thread.sleep(100);
+			}
+			assertFalse(onEdt(frame::hasPendingEditorInput));
+			assertEquals(original + "k", onEdt(text::getText));
+		});
+	}
+
+	@Test
 	void uncommittedSpinnerTextDefersRemoteRefresh() throws Exception {
 		scenario((frame, controller, remote, host) -> {
 			JFormattedTextField field = onEdt(() -> descendants(frame, JFormattedTextField.class).stream()

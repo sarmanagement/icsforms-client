@@ -201,13 +201,56 @@ public class MainFrame extends JFrame {
 	private boolean restoringEditorState;
 	private boolean restoringTabSelection;
 	private boolean pendingEditorConflict;
-	private final PropertyChangeListener focusOwnerListener = event -> {
-		Object owner = event.getNewValue();
-		if (!restoringEditorState && owner instanceof JTextComponent text
-				&& javax.swing.SwingUtilities.isDescendingFrom(text, this)) {
+	private final PropertyChangeListener focusOwnerListener = event -> focusOwnerChanged(event.getOldValue(),
+			event.getNewValue());
+
+	private final java.awt.event.AWTEventListener entryListener = this::entryEvent;
+
+	/**
+	 * Schedules an autosave as soon as the user finishes a keystroke in an edited text field or table cell, or
+	 * toggles a combo box or check box, so entered data is saved without waiting for focus to leave the field.
+	 *
+	 * @param event AWT event observed application-wide.
+	 */
+	void entryEvent(java.awt.AWTEvent event) {
+		if (restoringEditorState || !(event.getSource() instanceof java.awt.Component component)
+				|| !javax.swing.SwingUtilities.isDescendingFrom(component, this)) {
+			return;
+		}
+		if (event instanceof java.awt.event.KeyEvent key && key.getID() == java.awt.event.KeyEvent.KEY_RELEASED
+				&& component instanceof JTextComponent text && text.isEditable()) {
+			if (isTableEditor(text) || (editorTextBaselines.containsKey(text)
+					&& !java.util.Objects.equals(text.getText(), editorTextBaselines.get(text)))) {
+				controller.markEditorDraftDirty();
+			}
+		} else if (event instanceof java.awt.event.ActionEvent
+				&& (component instanceof javax.swing.JComboBox<?> || component instanceof javax.swing.JCheckBox)
+				&& component.isFocusOwner()) {
+			controller.markEditorDraftDirty();
+		}
+	}
+
+	/**
+	 * Tracks the focused editor and schedules an autosave when an edited field loses focus, because finished
+	 * input must be committed and saved without an explicit save action.
+	 *
+	 * @param previous component that lost focus, or null.
+	 * @param owner component that gained focus, or null.
+	 */
+	void focusOwnerChanged(Object previous, Object owner) {
+		if (restoringEditorState) {
+			return;
+		}
+		if (owner instanceof JTextComponent text && javax.swing.SwingUtilities.isDescendingFrom(text, this)) {
 			lastFocusedEditor = text;
 		}
-	};
+		if (previous instanceof JTextComponent left && left.isEditable()
+				&& javax.swing.SwingUtilities.isDescendingFrom(left, this) && !isTableEditor(left)
+				&& editorTextBaselines.containsKey(left)
+				&& !java.util.Objects.equals(left.getText(), editorTextBaselines.get(left))) {
+			controller.markEditorDraftDirty();
+		}
+	}
 
 	/**
 	 * Creates the main application frame.
@@ -356,6 +399,8 @@ public class MainFrame extends JFrame {
 		KeyboardFocusManager.getCurrentKeyboardFocusManager()
 				.addPropertyChangeListener("focusOwner", focusOwnerListener);
 		setPreferredSize(new Dimension(1120, 820));
+		java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(entryListener,
+				java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.ACTION_EVENT_MASK);
 		setJMenuBar(createMenuBar(defaultDirectory));
 		setLayout(new BorderLayout(8, 8));
 
@@ -422,6 +467,8 @@ public class MainFrame extends JFrame {
 		KeyboardFocusManager.getCurrentKeyboardFocusManager()
 				.removePropertyChangeListener("focusOwner", focusOwnerListener);
 		clearPendingDraft();
+		java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(entryListener);
+		java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(entryListener);
 		editorTextBaselines.clear();
 		super.dispose();
 	}
