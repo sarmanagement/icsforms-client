@@ -106,6 +106,21 @@ class RemoteIncidentStoreHostTest {
 	}
 
 	@Test
+	void agencyRepresentativeAddedOnOneDeviceReachesTheOther() {
+		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
+			StoredIncident first = a.loadSnapshot(id);
+			org.sarmanagement.icsforms.model.OrgChartEntry entry = new org.sarmanagement.icsforms.model.OrgChartEntry();
+			entry.setTitle("Agency Representative");
+			entry.setName("Casey Lee");
+			first.data().getOrganizationalChart().getAssignmentList().getAgencyRepresentatives().add(entry);
+			a.save(id, first.data(), first.revision());
+
+			assertEquals("Casey Lee", b.loadSnapshot(id).data().getOrganizationalChart().getAssignmentList()
+					.getAgencyRepresentatives().get(0).getName());
+		}
+	}
+
+	@Test
 	void sameFieldEditsConflictAndExposeTheCurrentToken() {
 		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
 			StoredIncident first = a.loadSnapshot(id);

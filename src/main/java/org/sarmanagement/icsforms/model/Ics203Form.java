@@ -22,7 +22,7 @@ import java.util.UUID;
  * Supplemental ICS 203 Organization Assignment List data, alongside the shared chart.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Ics203Form {
+public class Ics203Form implements Identified {
 	/** Supplemental roles not already represented by the shared organizational chart. */
 	public enum Position {
 		DEPUTY_INCIDENT_COMMANDER, DEPUTY_PLANNING_CHIEF, DEPUTY_LOGISTICS_CHIEF,
@@ -30,6 +30,8 @@ public class Ics203Form {
 		SERVICE_BRANCH_DIRECTOR, MEDICAL_UNIT_LEADER, AIR_OPERATIONS_BRANCH_DIRECTOR
 	}
 
+	@com.fasterxml.jackson.annotation.JsonProperty("id")
+	private String id = UUID.randomUUID().toString();
 	private Map<Position, String> positions = new EnumMap<>(Position.class);
 	private List<OrgChartEntry> agencyRepresentatives = new ArrayList<>();
 	private List<Branch> branches = new ArrayList<>();
@@ -39,6 +41,20 @@ public class Ics203Form {
 	private String preparedByPositionTitle = "";
 	private String preparedBySignature = "";
 	private LocalDateTime preparedDateTime;
+
+	/** {@inheritDoc} */
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	@JsonIgnore
+	public void setId(String id) {
+		IdentityGuard.check(this.id, id);
+		this.id = id;
+	}
 
 	/**
 	 * Returns a supplemental role's assigned name.
