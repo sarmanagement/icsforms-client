@@ -354,9 +354,9 @@ class HostSharingDialogTest {
 		harness.edt(harness.dialog::openPairing);
 		harness.await(() -> harness.dialog.pairingHostText().contains(" until "));
 		harness.edt(() -> {
-			assertEquals("Devices can join", harness.dialog.pairButton().getText());
-			assertFalse(harness.dialog.pairButton().isEnabled());
-			assertTrue(harness.dialog.pairingHostText().startsWith("This Host: "));
+			assertFalse(harness.dialog.pairButton().isShowing() && harness.dialog.pairButton().isVisible()
+					&& harness.dialog.pairButton().isEnabled());
+			assertTrue(harness.dialog.pairingHostText().startsWith("Devices can join this Host: "));
 		});
 		harness.dialog.session().closePairing();
 		harness.await(() -> harness.dialog.pairButton().isEnabled());
