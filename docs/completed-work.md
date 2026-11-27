@@ -684,3 +684,11 @@ and user name. The host dialog is wider, lists the networks the host is on and
 detected addresses, labels the address and ports clearly, formats times to the
 minute, labels the host certificate fingerprint as advanced, and has a Hide
 button that keeps sharing running. `NetworkInfo` supplies the network details.
+
+## Host dialog workflow polish and quiet autosave
+
+- Autosave failures are logged and retried quietly instead of opening a modal; remote refreshes keep table row selections by content.
+- The Host this incident dialog is now laid out as numbered steps (1 set up, 2 start sharing, 3 add a device), left-aligned, with the firewall remark beside the ports.
+- Detected addresses are de-duplicated (`NetworkInfo.distinct`): all IPv4 addresses plus one global IPv6 address per interface.
+- A "waiting device" list shows the device (host and user) wanting to join; sharing opens the pairing window automatically.
+- Revoke is enabled only when a paired device is selected, and is also in a right-click menu.

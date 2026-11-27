@@ -102,7 +102,7 @@ final class ConnectDialog extends JDialog {
 	/** Instructions below the pairing number. */
 	private final JTextArea instructions = new JTextArea();
 	/** Networks this device is on. */
-	private final List<NetworkInfo.Network> networks = NetworkInfo.local();
+	private final List<NetworkInfo.Network> networks = NetworkInfo.distinct(NetworkInfo.local());
 	/** Connection produced by a successful attempt. */
 	private Object[] result;
 	/** Set when the operator cancelled, so a late success is released rather than used. */

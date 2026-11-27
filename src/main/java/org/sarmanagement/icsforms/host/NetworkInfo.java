@@ -120,6 +120,32 @@ public final class NetworkInfo {
 	}
 
 	/**
+	 * Reduces a list to the addresses worth showing an operator: every IPv4 address, and for IPv6 only one
+	 * stable global address per interface (no link-local, temporary-looking duplicates or zone suffixes).
+	 *
+	 * @param networks networks to reduce
+	 * @return distinct networks in the original order
+	 */
+	public static List<Network> distinct(List<Network> networks) {
+		List<Network> result = new ArrayList<>();
+		java.util.Set<String> ipv6Interfaces = new java.util.HashSet<>();
+		java.util.Set<String> seen = new java.util.HashSet<>();
+		for (Network network : networks) {
+			String text = network.hostAddress().replaceAll("%.*$", "");
+			if (!seen.add(text)) {
+				continue;
+			}
+			if (!(network.address() instanceof Inet4Address)) {
+				if (network.address().isLinkLocalAddress() || !ipv6Interfaces.add(network.interfaceName())) {
+					continue;
+				}
+			}
+			result.add(network);
+		}
+		return List.copyOf(result);
+	}
+
+	/**
 	 * Formats networks as lines of text for display.
 	 *
 	 * @param networks networks to describe

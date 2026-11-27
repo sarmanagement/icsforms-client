@@ -33,4 +33,16 @@ class NetworkInfoTest {
 	void summaryReportsWhenNoNetworkIsFound() {
 		assertEquals("No active network connection was found.", NetworkInfo.summary(List.of()));
 	}
+
+	@Test
+	void distinctKeepsIpv4AndOneGlobalIpv6PerInterface() throws Exception {
+		List<NetworkInfo.Network> input = List.of(wifi(),
+				new NetworkInfo.Network("wlan0", InetAddress.getByName("fe80::1"), 64),
+				new NetworkInfo.Network("wlan0", InetAddress.getByName("2001:db8::1"), 64),
+				new NetworkInfo.Network("wlan0", InetAddress.getByName("2001:db8::2"), 64),
+				wifi());
+		List<NetworkInfo.Network> result = NetworkInfo.distinct(input);
+		assertEquals(2, result.size());
+		assertEquals("192.168.1.32", result.get(0).hostAddress());
+	}
 }
