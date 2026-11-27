@@ -1588,6 +1588,7 @@ public class TCardPanel extends JPanel {
 					// Replace a with the merged card and remove b.
 					tableModel.replaceCard(i, merged);
 					tableModel.removeCard(j);
+					controller.repointTCardLinks(b.getResourceId(), merged.getResourceId());
 					mergedCount++;
 					continue outer; // restart after structural change
 				}

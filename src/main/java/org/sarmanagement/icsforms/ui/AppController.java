@@ -3708,6 +3708,84 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
+	 * Repoints every link to a merged-away T-card at the card that was kept, so no link refers to a removed
+	 * record. Covers SAR task resources and the current and next-period ICS 215 worksheets; archived periods are
+	 * left as recorded. Links that become duplicates of an existing link to the kept card are dropped.
+	 *
+	 * @param removedId resource identity of the card that was merged away.
+	 * @param keptId resource identity of the card that was retained.
+	 */
+	public void repointTCardLinks(String removedId, String keptId) {
+		if (removedId == null || keptId == null || removedId.isBlank() || removedId.equals(keptId)) {
+			return;
+		}
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			for (SarTaskResource res : task.getResourcesAssigned()) {
+				if (removedId.equals(res.getResourceId())) {
+					res.setResourceId(keptId);
+				}
+			}
+		}
+		repointIcs215Links(data.getForm215(), removedId, keptId);
+		repointIcs215Links(data.getNextPeriodForm215(), removedId, keptId);
+	}
+
+	/**
+	 * Repoints the T-card links of one ICS 215 worksheet.
+	 *
+	 * @param form worksheet to update, possibly null.
+	 * @param removedId identity of the removed card.
+	 * @param keptId identity of the retained card.
+	 */
+	private static void repointIcs215Links(org.sarmanagement.icsforms.model.Ics215Form form, String removedId,
+			String keptId) {
+		if (form == null) {
+			return;
+		}
+		for (org.sarmanagement.icsforms.model.Ics215Form.ResourceHeading heading : form.getResourceHeadings()) {
+			repointLinks(heading.linkedResourceIds, heading.linkedResources, removedId, keptId);
+		}
+		for (org.sarmanagement.icsforms.model.Ics215Form.WorkRow row : form.getWorkRows()) {
+			for (org.sarmanagement.icsforms.model.Ics215Form.ResourceAllocation allocation
+					: row.resourceAllocations.values()) {
+				repointLinks(allocation.linkedResourceIds, allocation.linkedResources, removedId, keptId);
+			}
+		}
+	}
+
+	/**
+	 * Replaces one identity in a pair of link collections, keeping a single link per card.
+	 *
+	 * @param ids linked identities, possibly null.
+	 * @param links classified links, possibly null.
+	 * @param removedId identity to replace.
+	 * @param keptId replacement identity.
+	 */
+	private static void repointLinks(List<String> ids,
+			List<org.sarmanagement.icsforms.model.Ics215Form.ResourceLink> links, String removedId, String keptId) {
+		if (ids != null && ids.contains(removedId)) {
+			List<String> updated = new ArrayList<>(new java.util.LinkedHashSet<>(
+					ids.stream().map(id -> removedId.equals(id) ? keptId : id).toList()));
+			ids.clear();
+			ids.addAll(updated);
+		}
+		if (links != null && links.stream().anyMatch(link -> removedId.equals(link.resourceId))) {
+			Set<String> seen = new java.util.HashSet<>();
+			List<org.sarmanagement.icsforms.model.Ics215Form.ResourceLink> updated = new ArrayList<>();
+			for (org.sarmanagement.icsforms.model.Ics215Form.ResourceLink link : links) {
+				if (removedId.equals(link.resourceId)) {
+					link.resourceId = keptId;
+				}
+				if (seen.add(link.resourceId)) {
+					updated.add(link);
+				}
+			}
+			links.clear();
+			links.addAll(updated);
+		}
+	}
+
+	/**
 	 * Returns a sorted list of all known resource names (personnel names and
 	 * equipment identifiers) from the current T-card rack. Used to populate pick
 	 * lists in the SAR task editor's Resources Assigned table.

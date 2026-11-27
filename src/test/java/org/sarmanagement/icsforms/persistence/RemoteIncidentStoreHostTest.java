@@ -106,6 +106,51 @@ class RemoteIncidentStoreHostTest {
 	}
 
 	@Test
+	void mergingDuplicateCardsRemovesTheCopyEverywhereAndKeepsLinksOnTheRetainedCard() {
+		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
+			StoredIncident first = a.loadSnapshot(id);
+			org.sarmanagement.icsforms.model.TCard kept = header("Available");
+			org.sarmanagement.icsforms.model.TCard copy = header("Available");
+			first.data().getTCards().add(kept);
+			first.data().getTCards().add(copy);
+			org.sarmanagement.icsforms.model.SarTaskAssignment task = new org.sarmanagement.icsforms.model.SarTaskAssignment();
+			org.sarmanagement.icsforms.model.SarTaskResource link = new org.sarmanagement.icsforms.model.SarTaskResource();
+			link.setResourceId(copy.getResourceId());
+			task.setResourcesAssigned(new java.util.ArrayList<>(java.util.List.of(link)));
+			first.data().getSarTaskAssignments().add(task);
+			a.save(id, first.data(), first.revision());
+			assertEquals(2, b.loadSnapshot(id).data().getTCards().size());
+
+			StoredIncident merging = a.loadSnapshot(id);
+			merging.data().getTCards().removeIf(card -> card.getResourceId().equals(copy.getResourceId()));
+			merging.data().getSarTaskAssignments().get(0).getResourcesAssigned().get(0)
+					.setResourceId(kept.getResourceId());
+			a.save(id, merging.data(), merging.revision());
+
+			for (RemoteIncidentStore store : java.util.List.of(a, b)) {
+				StoredIncident seen = store.loadSnapshot(id);
+				assertEquals(1, seen.data().getTCards().size());
+				assertEquals(kept.getResourceId(), seen.data().getTCards().get(0).getResourceId());
+				assertEquals(kept.getResourceId(), seen.data().getSarTaskAssignments().get(0).getResourcesAssigned()
+						.get(0).getResourceId());
+			}
+		}
+	}
+
+	/**
+	 * Creates a header card with a random identity.
+	 *
+	 * @param label column label
+	 * @return the card
+	 */
+	private static org.sarmanagement.icsforms.model.TCard header(String label) {
+		org.sarmanagement.icsforms.model.TCard card = new org.sarmanagement.icsforms.model.TCard();
+		card.setCardType(org.sarmanagement.icsforms.model.TCardType.HEADER);
+		card.setResourceIdentifier(label);
+		return card;
+	}
+
+	@Test
 	void agencyRepresentativeAddedOnOneDeviceReachesTheOther() {
 		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
 			StoredIncident first = a.loadSnapshot(id);
