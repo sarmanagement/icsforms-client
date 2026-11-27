@@ -62,6 +62,8 @@ import java.util.UUID;
  * event-dispatch thread.
  */
 public final class RemoteIncidentStore implements IncidentStore {
+	/** Message of the validation failure raised when the host moved on after a conflict was recorded. */
+	public static final String HOST_CHANGED = "The host changed since conflict review; review again";
 	private static final int MAX_CACHED_BASES = 16;
 	private static final int MAX_BATCH_RECORDS = 100;
 	private static final int MAX_BATCH_BYTES = 900_000;
@@ -1222,7 +1224,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 				} else if (IncidentService.mergeIndependentCreates(item.content(), current.content()) != null) {
 					resolved.add(item);
 				} else {
-					throw new StoreValidationException("The host changed since conflict review; review again");
+					throw new StoreValidationException(HOST_CHANGED);
 				}
 				continue;
 			}
@@ -1236,7 +1238,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 						continue;
 					}
 				} else if (old == null || !RecordJson.same(old.content(), current.content())) {
-					throw new StoreValidationException("The host changed since conflict review; review again");
+					throw new StoreValidationException(HOST_CHANGED);
 				}
 				resolved.add(new IncidentService.RecordSubmission(item.key(), current.parent(),
 						current.parentField(), current.version(), IncidentService.Operation.REMOVE,
@@ -1264,7 +1266,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 					}
 				} else if (!RecordJson.same(before, local) && !RecordJson.same(before, theirs)
 						&& !RecordJson.same(local, theirs)) {
-					throw new StoreValidationException("The host changed since conflict review; review again");
+					throw new StoreValidationException(HOST_CHANGED);
 				}
 				if (!RecordJson.same(before, local)) {
 					if (local == null) {
@@ -1310,7 +1312,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 */
 	private static void verifyConflict(IncidentService.FieldConflict conflict, JsonNode current) {
 		if (!RecordJson.same(conflict.theirs(), current)) {
-			throw new StoreValidationException("The host changed since conflict review; review again");
+			throw new StoreValidationException(HOST_CHANGED);
 		}
 	}
 

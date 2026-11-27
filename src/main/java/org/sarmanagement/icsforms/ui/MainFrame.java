@@ -1882,7 +1882,23 @@ public class MainFrame extends JFrame {
 								org.sarmanagement.icsforms.persistence.RemoteIncidentStore.ConflictChoice
 										.valueOf(decision.choice().name()));
 					}
-					remote.resolvePending(entry.operationId(), choices);
+					try {
+						remote.resolvePending(entry.operationId(), choices);
+					} catch (org.sarmanagement.icsforms.persistence.StoreValidationException stale) {
+						if (!org.sarmanagement.icsforms.persistence.RemoteIncidentStore.HOST_CHANGED
+								.equals(stale.getMessage())) {
+							throw stale;
+						}
+						// The stored host value moved on (for example the host rewrote a record after
+						// an upgrade); show the current values instead of leaving the review stuck.
+						remote.refreshConflict(entry.operationId());
+						if (remote.pendingOperations().stream()
+								.anyMatch(item -> item.operationId().equals(entry.operationId()))) {
+							throw new IllegalStateException("The host changed since this review was opened. "
+									+ "The stored values have been refreshed; check your choices and apply "
+									+ "them again.");
+						}
+					}
 				}
 				return controller.refreshFromRemote();
 			}

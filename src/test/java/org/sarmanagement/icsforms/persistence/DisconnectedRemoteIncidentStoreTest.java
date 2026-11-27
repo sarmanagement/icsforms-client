@@ -432,9 +432,11 @@ class DisconnectedRemoteIncidentStoreTest {
 			IncidentService.FieldConflict field = conflict.conflicts().get(0);
 			host.data().getIncidentContext().setIncidentName("changed again");
 			other.save(incident, host.data(), revision);
-			assertThrows(StoreValidationException.class, () -> local.resolvePending(conflict.operationId(), Map.of(
-					new RemoteIncidentStore.ConflictField(field.key(), field.field()),
-					RemoteIncidentStore.ConflictChoice.MINE)));
+			StoreValidationException stale = assertThrows(StoreValidationException.class,
+					() -> local.resolvePending(conflict.operationId(), Map.of(
+							new RemoteIncidentStore.ConflictField(field.key(), field.field()),
+							RemoteIncidentStore.ConflictChoice.MINE)));
+			assertEquals(RemoteIncidentStore.HOST_CHANGED, stale.getMessage());
 			assertEquals(conflict.operationId(), local.pendingOperations().get(0).operationId());
 			assertEquals("mine", local.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
 			RemoteIncidentStore.PendingOperation refreshed = local.refreshConflict(conflict.operationId());
