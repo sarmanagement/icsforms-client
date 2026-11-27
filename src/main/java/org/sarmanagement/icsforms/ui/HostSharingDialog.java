@@ -10,6 +10,7 @@ import org.sarmanagement.icsforms.host.HostSession;
 import org.sarmanagement.icsforms.host.HostState;
 import org.sarmanagement.icsforms.host.HostStatus;
 import org.sarmanagement.icsforms.host.HostStorage;
+import org.sarmanagement.icsforms.host.NetworkInfo;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.persistence.IncidentId;
@@ -153,6 +154,9 @@ public class HostSharingDialog extends JDialog {
 	private final JSpinner enrollmentSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_ENROLLMENT_PORT, 0, 65535, 1));
 	private final JButton startButton = new JButton("Start sharing");
 	private final JButton stopButton = new JButton("Stop sharing");
+	private final JButton hideButton = new JButton("Hide window (sharing continues)");
+	private final JLabel fingerprintLabel = new JLabel(" ");
+	private final javax.swing.JComboBox<String> addressChoice = new javax.swing.JComboBox<>(detectedAddresses());
 	private final JButton inviteButton = new JButton("Create long invitation");
 	private final JButton pairButton = new JButton("Start adding a device");
 	private final JLabel pairingCodeLabel = new JLabel(" ");
@@ -167,7 +171,7 @@ public class HostSharingDialog extends JDialog {
 	private final JButton reviewRequestsButton = new JButton("Review re-authorization requests");
 	private final JButton backupButton = new JButton("Back up host data...");
 	private final JButton restoreButton = new JButton("Restore host data...");
-	private final JTextArea invitationArea = new JTextArea(4, 48);
+	private final JTextArea invitationArea = new JTextArea(2, 48);
 	private final DefaultTableModel deviceModel = new DefaultTableModel(
 			new Object[] {"Device", "State", "Expires", "Last contact", "Connected"}, 0) {
 		private static final long serialVersionUID = 1L;
@@ -211,6 +215,7 @@ public class HostSharingDialog extends JDialog {
 		refresh();
 		refreshTimer.start();
 		pack();
+		setSize(Math.max(getWidth(), 900), getHeight());
 		GraphicsConfiguration screen = getGraphicsConfiguration();
 		Rectangle bounds = screen.getBounds();
 		Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(screen);
@@ -331,6 +336,11 @@ public class HostSharingDialog extends JDialog {
 	 * @return local host name or loopback address
 	 */
 	private static String defaultHost() {
+		for (NetworkInfo.Network network : NetworkInfo.local()) {
+			if (network.address() instanceof java.net.Inet4Address) {
+				return network.hostAddress();
+			}
+		}
 		try {
 			return InetAddress.getLocalHost().getHostName();
 		} catch (UnknownHostException failure) {
@@ -339,25 +349,86 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
+	 * Formats an instant in the local zone to the minute.
+	 *
+	 * @param instant time to format
+	 * @return text such as {@code 2026-11-26 17:45}
+	 */
+	private static String minutes(Instant instant) {
+		return java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+				.format(instant.atZone(java.time.ZoneId.systemDefault()));
+	}
+
+	/**
+	 * Lists the addresses and the host name that devices could use to reach this host.
+	 *
+	 * @return choices, starting with a prompt entry
+	 */
+	private static String[] detectedAddresses() {
+		java.util.List<String> choices = new java.util.ArrayList<>();
+		choices.add("Choose a detected address...");
+		for (NetworkInfo.Network network : NetworkInfo.local()) {
+			choices.add(network.hostAddress() + "   (" + network.interfaceName() + ", network " + network.networkText()
+					+ ")");
+		}
+		try {
+			choices.add(InetAddress.getLocalHost().getHostName() + "   (host name; works only if other devices can resolve it)");
+		} catch (UnknownHostException failure) {
+			// No host name is available; addresses are still offered.
+		}
+		return choices.toArray(String[]::new);
+	}
+
+	/**
+	 * Builds a read-only summary of the networks this host is on, with the addresses devices can use.
+	 *
+	 * @return text area listing each network and address
+	 */
+	private static JTextArea networksArea() {
+		JTextArea area = new JTextArea("Networks this host is on (interface: address on network):\n"
+				+ NetworkInfo.summary(NetworkInfo.local())
+				+ "\nA device can join only if it is on one of these networks (or can route to one) and its "
+				+ "operator enters one of these addresses as the host. Both ports below must be open in this "
+				+ "host's firewall.");
+		area.setEditable(false);
+		area.setOpaque(false);
+		area.setLineWrap(true);
+		area.setWrapStyleWord(true);
+		return area;
+	}
+
+	/**
 	 * Builds the dialog contents.
 	 */
 	private void buildLayout() {
 		JPanel top = new JPanel(new GridLayout(0, 1));
 		JPanel settings = new JPanel(new FlowLayout(FlowLayout.LEFT));
-		settings.add(new JLabel("Address clients use:"));
+		settings.add(new JLabel("Host address that devices enter (this host's IP address or name):"));
 		settings.add(hostField);
-		settings.add(new JLabel("Port (0 = any free port):"));
-		settings.add(portSpinner);
-		settings.add(new JLabel("Pairing port:"));
-		settings.add(enrollmentSpinner);
+		settings.add(addressChoice);
+		JPanel ports = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		ports.add(new JLabel("Data port (0 = any free port):"));
+		ports.add(portSpinner);
+		ports.add(new JLabel("Pairing port (devices enter this with the address):"));
+		ports.add(enrollmentSpinner);
+		addressChoice.addActionListener(event -> {
+			String chosen = (String) addressChoice.getSelectedItem();
+			if (addressChoice.getSelectedIndex() > 0 && chosen != null) {
+				hostField.setText(chosen.split("\\s", 2)[0]);
+			}
+		});
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		buttons.add(startButton);
 		buttons.add(stopButton);
+		buttons.add(hideButton);
 		buttons.add(stateLabel);
 		top.add(settings);
+		top.add(ports);
 		top.add(buttons);
-		JTextArea note = new JTextArea("Both ports must be allowed through the host firewall. Invitations are "
-				+ "single-use and short-lived; treat their text as a secret. Only this incident is shared.");
+		fingerprintLabel.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 0));
+		top.add(fingerprintLabel);
+		JTextArea note = new JTextArea("Invitations are single-use and short-lived; treat their text as a secret. "
+				+ "Only this incident is shared.");
 		note.setEditable(false);
 		note.setLineWrap(true);
 		note.setWrapStyleWord(true);
@@ -376,7 +447,12 @@ public class HostSharingDialog extends JDialog {
 		entryRow.add(entryButton);
 		entryField.setEnabled(false);
 		entryButton.setEnabled(false);
-		JPanel codeText = new JPanel(new GridLayout(0, 1));
+		JPanel codeText = new JPanel();
+		codeText.setLayout(new BoxLayout(codeText, BoxLayout.Y_AXIS));
+		pairButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+		pairingDetailLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		pairingCodeLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		entryRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 		codeText.add(pairButton);
 		codeText.add(pairingDetailLabel);
 		codeText.add(pairingCodeLabel);
@@ -386,6 +462,8 @@ public class HostSharingDialog extends JDialog {
 				"Add a device in person (the device shows a number; type it here)"));
 		pairPanel.add(codeText, BorderLayout.CENTER);
 		pairPanel.add(qrLabel, BorderLayout.EAST);
+		hideButton.addActionListener(event -> setVisible(false));
+		hideButton.setEnabled(false);
 
 		deviceTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		deviceTable.setPreferredScrollableViewportSize(new Dimension(450, deviceTable.getRowHeight() * 4));
@@ -401,6 +479,9 @@ public class HostSharingDialog extends JDialog {
 
 		JPanel center = new JPanel();
 		center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
+		JTextArea networks = networksArea();
+		networks.setAlignmentX(Component.LEFT_ALIGNMENT);
+		center.add(networks);
 		center.add(pairPanel);
 		center.add(invitePanel);
 		center.add(devices);
@@ -1223,6 +1304,8 @@ public class HostSharingDialog extends JDialog {
 		pairButton.setEnabled(running && !stopping);
 		revokeButton.setEnabled(running && !stopping);
 		reviewRequestsButton.setEnabled(running && !stopping && !reviewingRequests);
+		hideButton.setEnabled(current != null);
+		addressChoice.setEnabled(current == null);
 		hostField.setEnabled(current == null);
 		portSpinner.setEnabled(current == null);
 		enrollmentSpinner.setEnabled(current == null);
@@ -1231,14 +1314,16 @@ public class HostSharingDialog extends JDialog {
 		}
 		if (current == null) {
 			stateLabel.setText("Not sharing");
+			fingerprintLabel.setText(" ");
 			shownDevices = List.of();
 			deviceModel.setRowCount(0);
 			return;
 		}
 		HostStatus status = current.status();
 		stateLabel.setText(status.state() == HostState.FAILED ? "FAILED: " + status.failure()
-				: status.state() + " - " + status.connectedDevices() + " connected; fingerprint "
-						+ status.hostFingerprint());
+				: status.state() + " - " + status.connectedDevices() + " device(s) connected");
+		fingerprintLabel.setText("Host certificate fingerprint (advanced; devices check it when pairing): "
+				+ status.hostFingerprint());
 		if (running && !stopping && !refreshingDevices) {
 			refreshingDevices = true;
 			new SwingWorker<List<DeviceInfo>, Void>() {
@@ -1260,8 +1345,8 @@ public class HostSharingDialog extends JDialog {
 						shownDevices = devices;
 						deviceModel.setRowCount(0);
 						for (DeviceInfo device : devices) {
-							deviceModel.addRow(new Object[] {device.name(), device.state(), device.expiresAt(),
-									device.lastContact() == null ? "never" : device.lastContact(),
+							deviceModel.addRow(new Object[] {device.name(), device.state(), minutes(device.expiresAt()),
+									device.lastContact() == null ? "never" : minutes(device.lastContact()),
 									connectionText(device)});
 						}
 					} catch (InterruptedException failure) {

@@ -668,3 +668,19 @@ stale record are repaired on the next read: a live history whose single-valued
 slot is occupied by a newer record is retired, along with its descendants.
 Remote reconstruction through the change feed does not yet receive explicit
 retirement entries.
+
+Entered data is saved without an explicit save action. An edited text field
+schedules the autosave when it loses focus and on each key release, and
+combo-box and check-box actions do the same, so remote devices see edits
+promptly and a pending edit no longer blocks remote refresh. Multi-field record
+dialogs (for example a T-card) still save when the dialog completes.
+
+The connect and host dialogs were reworked. `ConnectDialog` replaces the old
+form and the separate pairing-number window: it finds hosts on the network,
+offers advanced options (typed address, pasted invitation), shows the networks
+this device is on, reports progress, and shows the pairing number in large print
+with instructions in the same dialog. A device is identified by its host name
+and user name. The host dialog is wider, lists the networks the host is on and
+detected addresses, labels the address and ports clearly, formats times to the
+minute, labels the host certificate fingerprint as advanced, and has a Hide
+button that keeps sharing running. `NetworkInfo` supplies the network details.
