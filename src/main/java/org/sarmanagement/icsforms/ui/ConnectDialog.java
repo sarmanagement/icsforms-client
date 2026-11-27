@@ -33,6 +33,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import org.sarmanagement.icsforms.host.HostDiscovery;
 import org.sarmanagement.icsforms.host.HostGateway;
+import org.sarmanagement.icsforms.host.HostReachability;
 import org.sarmanagement.icsforms.host.NetworkInfo;
 import org.sarmanagement.icsforms.host.PairingListener;
 
@@ -238,6 +239,10 @@ final class ConnectDialog extends JDialog {
 		connect.addActionListener(event -> connect());
 		JButton cancel = new JButton("Cancel");
 		cancel.addActionListener(event -> cancel());
+		JButton troubleshoot = new JButton("Troubleshoot...");
+		troubleshoot.setToolTipText("Checks whether the host can be pinged and its pairing and data ports reached");
+		troubleshoot.addActionListener(event -> troubleshoot());
+		buttons.add(troubleshoot);
 		buttons.add(advancedButton);
 		buttons.add(connect);
 		buttons.add(cancel);
@@ -381,6 +386,84 @@ final class ConnectDialog extends JDialog {
 				}
 			}
 		}.execute();
+	}
+
+	/**
+	 * Checks whether the chosen host can be reached and shows the result: whether it can be pinged and whether its
+	 * pairing and data ports accept connections. The host is taken from a pasted invitation or QR text, then a
+	 * typed address, then the selected discovered host.
+	 */
+	private void troubleshoot() {
+		String entered = invitationArea.getText().strip();
+		if (entered.isEmpty()) {
+			entered = addressField.getText().strip();
+		}
+		if (entered.isEmpty() && foundList.getSelectedValue() != null) {
+			entered = addressOf(foundList.getSelectedValue());
+		}
+		HostReachability.Target target;
+		try {
+			target = HostReachability.parse(entered);
+		} catch (IllegalArgumentException failure) {
+			formMessage.setText(entered.isEmpty()
+					? "Select a host in the list, or open Advanced options and enter its address, to troubleshoot."
+					: failure.getMessage());
+			return;
+		}
+		formMessage.setText(" ");
+		showTroubleshooting(target);
+	}
+
+	/**
+	 * Runs the reachability checks in the background and shows them in a dialog that opens at once and fills in
+	 * when they finish.
+	 *
+	 * @param target host to check
+	 */
+	private void showTroubleshooting(HostReachability.Target target) {
+		JTextArea report = readOnly("Checking " + target.host() + "...");
+		report.setFont(new Font(Font.MONOSPACED, Font.PLAIN, report.getFont().getSize()));
+		JDialog dialog = new JDialog(this, "Troubleshoot the connection", ModalityType.DOCUMENT_MODAL);
+		dialog.setLayout(new BorderLayout(8, 8));
+		JScrollPane scroll = new JScrollPane(report);
+		scroll.setPreferredSize(new java.awt.Dimension(640, 220));
+		dialog.add(scroll, BorderLayout.CENTER);
+		JButton close = new JButton("Close");
+		close.addActionListener(event -> dialog.dispose());
+		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+		buttons.add(close);
+		dialog.add(buttons, BorderLayout.SOUTH);
+		dialog.pack();
+		dialog.setLocationRelativeTo(this);
+		new SwingWorker<List<HostReachability.Step>, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected List<HostReachability.Step> doInBackground() {
+				return HostReachability.check(target.host(), target.pairingPort(), target.dataPort(),
+						HostReachability.DEFAULT_TIMEOUT_MILLIS);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					List<HostReachability.Step> steps = get();
+					String sameNetwork = NetworkInfo.networkContaining(target.host(), networks)
+							.map(network -> "This device and the host are both on " + network.networkText() + " ("
+									+ network.interfaceName() + ").\n")
+							.orElse("");
+					report.setText(sameNetwork + HostReachability.describe(steps) + (HostReachability.allPassed(steps)
+							? "\nThe host can be reached. If connecting still fails, make sure the host is sharing "
+									+ "and devices can join, then try again."
+							: "\nFix the failed step first; the host cannot be paired with until it passes."));
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					report.setText("The checks could not run: " + failure.getCause());
+				}
+			}
+		}.execute();
+		dialog.setVisible(true);
 	}
 
 	/** Validates the form and starts pairing. */

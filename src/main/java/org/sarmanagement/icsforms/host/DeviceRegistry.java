@@ -53,6 +53,7 @@ public final class DeviceRegistry {
 	private final Clock clock;
 	private final Object lock = new Object();
 	private final Map<String, Instant> contacts = new ConcurrentHashMap<>();
+	private final Map<String, String> contactAddresses = new ConcurrentHashMap<>();
 	private RegistryState state;
 
 	/**
@@ -374,6 +375,7 @@ public final class DeviceRegistry {
 		synchronized (lock) {
 			state = read();
 			contacts.clear();
+			contactAddresses.clear();
 		}
 	}
 
@@ -409,6 +411,7 @@ public final class DeviceRegistry {
 		synchronized (lock) {
 			commit(new RegistryState(FORMAT_VERSION, List.of(), loaded.devices(), loaded.requests(), loaded.audit()));
 			contacts.clear();
+			contactAddresses.clear();
 		}
 	}
 
@@ -996,6 +999,29 @@ public final class DeviceRegistry {
 	 */
 	public void recordContact(String deviceId) {
 		contacts.put(deviceId, clock.instant());
+	}
+
+	/**
+	 * Notes that a device just made an authenticated request from a network address. Transient, not persisted.
+	 *
+	 * @param deviceId device identifier
+	 * @param address address the request came from, or null when unknown
+	 */
+	public void recordContact(String deviceId, String address) {
+		recordContact(deviceId);
+		if (address != null && !address.isBlank()) {
+			contactAddresses.put(deviceId, address);
+		}
+	}
+
+	/**
+	 * Returns the address of the last authenticated request since the host started.
+	 *
+	 * @param deviceId device identifier
+	 * @return address text, if known
+	 */
+	public Optional<String> lastAddress(String deviceId) {
+		return Optional.ofNullable(contactAddresses.get(deviceId));
 	}
 
 	/**

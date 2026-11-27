@@ -154,7 +154,9 @@ final class HostApiHandler implements HttpHandler {
 				}
 			}
 		}
-		context.registry.recordContact(device.deviceId());
+		java.net.InetSocketAddress remote = exchange.getRemoteAddress();
+		context.registry.recordContact(device.deviceId(),
+				remote == null || remote.getAddress() == null ? null : remote.getAddress().getHostAddress());
 		return device;
 	}
 
@@ -640,7 +642,8 @@ final class HostApiHandler implements HttpHandler {
 			CredentialState state = context.effectiveState(record);
 			array.add(HostHttp.MAPPER.valueToTree(new DeviceInfo(record.deviceId(), record.name(), record.issuedAt(),
 					record.expiresAt(), state, contact,
-					state == CredentialState.ACTIVE && contact != null && contact.isAfter(cutoff))));
+					state == CredentialState.ACTIVE && contact != null && contact.isAfter(cutoff),
+					context.registry.lastAddress(record.deviceId()).orElse(null))));
 		}
 		ObjectNode body = HostHttp.MAPPER.createObjectNode();
 		body.set("devices", array);

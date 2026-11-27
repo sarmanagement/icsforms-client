@@ -8,6 +8,8 @@ import java.net.InetAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -23,8 +25,20 @@ public final class NetworkInfo {
 	 * @param interfaceName operating system name of the interface, for example {@code wlan0}
 	 * @param address address of this device on that interface
 	 * @param prefixLength length of the network prefix in bits
+	 * @param kind {@code wireless} or {@code wired} when it can be determined, otherwise an empty string
 	 */
-	public record Network(String interfaceName, InetAddress address, int prefixLength) {
+	public record Network(String interfaceName, InetAddress address, int prefixLength, String kind) {
+		/**
+		 * Creates a network whose connection kind is not known.
+		 *
+		 * @param interfaceName operating system name of the interface
+		 * @param address address of this device on that interface
+		 * @param prefixLength length of the network prefix in bits
+		 */
+		public Network(String interfaceName, InetAddress address, int prefixLength) {
+			this(interfaceName, address, prefixLength, "");
+		}
+
 		/**
 		 * Returns the address in textual form.
 		 *
@@ -58,7 +72,8 @@ public final class NetworkInfo {
 		 * @return text such as {@code wlan0: 192.168.1.32 on network 192.168.1.0/24}
 		 */
 		public String describe() {
-			return interfaceName + ": " + hostAddress() + " on network " + networkText();
+			String label = kind == null || kind.isEmpty() ? interfaceName : interfaceName + " (" + kind + ")";
+			return label + ": " + hostAddress() + " on network " + networkText();
 		}
 
 		/**
@@ -110,13 +125,42 @@ public final class NetworkInfo {
 					if (address.isLinkLocalAddress() && !(address instanceof Inet4Address)) {
 						continue;
 					}
-					result.add(new Network(candidate.getName(), address, entry.getNetworkPrefixLength()));
+					result.add(new Network(candidate.getName(), address, entry.getNetworkPrefixLength(),
+							kindOf(candidate.getName(), candidate.getDisplayName(), Path.of("/sys/class/net"))));
 				}
 			}
 		} catch (SocketException failure) {
 			return List.of();
 		}
 		return List.copyOf(result);
+	}
+
+	/**
+	 * Works out whether an interface is wireless or wired. On Linux the interface's {@code /sys/class/net}
+	 * entry says so; elsewhere the interface's display name is the only hint (for example "Wi-Fi" or "Ethernet").
+	 *
+	 * @param name operating system name of the interface
+	 * @param displayName human-readable interface name, possibly null
+	 * @param sysClassNet directory that holds one entry per interface on Linux
+	 * @return {@code wireless}, {@code wired}, or an empty string when it cannot be determined
+	 */
+	static String kindOf(String name, String displayName, Path sysClassNet) {
+		Path entry = sysClassNet.resolve(name);
+		if (Files.isDirectory(entry.resolve("wireless")) || Files.isDirectory(entry.resolve("phy80211"))) {
+			return "wireless";
+		}
+		if (Files.isDirectory(entry)) {
+			boolean virtual = !Files.exists(entry.resolve("device"));
+			return virtual ? "" : "wired";
+		}
+		String text = (displayName == null ? "" : displayName).toLowerCase(java.util.Locale.ROOT);
+		if (text.matches(".*(wi-?fi|wireless|802\\.11|wlan).*")) {
+			return "wireless";
+		}
+		if (text.matches(".*(ethernet|gigabit|\\blan\\b).*")) {
+			return "wired";
+		}
+		return "";
 	}
 
 	/**

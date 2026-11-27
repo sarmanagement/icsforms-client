@@ -818,3 +818,21 @@ setting, and CodeQL on the final commit.
 - Closing, switching or stopping sharing now saves open detached editors first
   and warns only when one cannot be saved automatically (for example a modal
   dialog).
+
+## Host dialog tuning and connection troubleshooting
+
+- While devices can join, the host dialog shows "Devices can join this Host:
+  address:port until hh:mm" in place of the disabled button, and the button
+  returns when the window closes. The QR code moved to Advanced, with guidance.
+- The long invitation is a secret: only its `ICSFORMS-INVITE-n:` marker is shown
+  and the rest is masked. "Copy to clipboard" copies the full text. Advanced
+  explains when to use it instead of the QR / join window.
+- Paired devices have a Details button and context-menu item. The host records
+  the address of each device's last authenticated request (in memory only,
+  `DeviceInfo.lastAddress`).
+- The networks list marks each interface wireless or wired where the operating
+  system says so (`NetworkInfo.kindOf`).
+- The Connect dialog has Troubleshoot, which checks name resolution, ping and the
+  pairing and data ports (`HostReachability`).
+- Canine medical plan: linked veterinary personnel lists only the linked people,
+  with an Add T-cards picker and Remove; links to missing cards are kept.

@@ -10,10 +10,23 @@ import org.sarmanagement.icsforms.host.DeviceInfo;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Verifies the host device table's connection column, including the lost-contact marker. */
 class DeviceConnectionTextTest {
 	private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
+
+	@Test
+	void theInvitationIsMaskedAfterItsMarkerAndDeviceDetailsShowTheAddress() {
+		String masked = HostSharingDialog.maskInvitation("ICSFORMS-INVITE-1:eyJzZWNyZXQiOiJ4In0");
+		assertEquals("ICSFORMS-INVITE-1:" + "\u2022".repeat(24), masked);
+		assertEquals("", HostSharingDialog.maskInvitation(""));
+		DeviceInfo seen = new DeviceInfo("id", "Tablet", NOW, NOW.plusSeconds(60), CredentialState.ACTIVE, NOW, true,
+				"192.168.1.40");
+		assertTrue(HostSharingDialog.deviceDetailsText(seen).contains("IP address: 192.168.1.40"));
+		assertTrue(HostSharingDialog.deviceDetailsText(device(CredentialState.ACTIVE, null, false))
+				.contains("IP address: not seen since the host started"));
+	}
 
 	@Test
 	void connectedDevicesShowYes() {
