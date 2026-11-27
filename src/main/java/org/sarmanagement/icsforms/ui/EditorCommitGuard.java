@@ -98,10 +98,10 @@ final class EditorCommitGuard {
 	/**
 	 * Tests whether the editor still observes the current incident and model revision.
 	 *
-	 * @return true when no model write has occurred since the editor was bound.
+	 * @return true when the incident is unchanged and, for a remote-backed incident, no model write has
+	 *         occurred since the editor was bound.
 	 */
 	boolean isCurrent() {
-		return controller.isCurrent(binding.incidentBinding())
-				&& binding.revision() == controller.captureEditorCommitBinding().revision();
+		return controller.isCurrent(binding.incidentBinding()) && controller.revisionCurrent(binding);
 	}
 }

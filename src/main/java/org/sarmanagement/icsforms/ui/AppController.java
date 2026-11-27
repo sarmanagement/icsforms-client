@@ -1097,6 +1097,20 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
+	 * Tests whether an editor's loaded model revision still permits its write. The revision gate protects an
+	 * editor from silently overwriting changes a remote writer merged into the model, so it applies only when the
+	 * incident is backed by a remote store. With a local store a single application instance is the only writer,
+	 * and a sequence of its own edits is never a conflict, so the gate never blocks a commit.
+	 *
+	 * @param binding editor's captured commit token.
+	 * @return true when the write may proceed.
+	 */
+	boolean revisionCurrent(EditorCommitBinding binding) {
+		return !(store instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore)
+				|| binding.revision() == modelRevision;
+	}
+
+	/**
 	 * Captures the active incident, period, and model revision for a full editor.
 	 *
 	 * @return token representing the current editable model revision.
@@ -1117,7 +1131,7 @@ public class AppController implements AutoCloseable {
 	public boolean commitEditorIfCurrent(EditorCommitBinding binding, LinkSource source, Runnable edit) {
 		Objects.requireNonNull(edit, "edit");
 		Objects.requireNonNull(source, "source");
-		if (binding == null || !isCurrent(binding.incidentBinding()) || binding.revision() != modelRevision) {
+		if (binding == null || !isCurrent(binding.incidentBinding()) || !revisionCurrent(binding)) {
 			return false;
 		}
 		EditorModelSnapshot snapshot = new EditorModelSnapshot();

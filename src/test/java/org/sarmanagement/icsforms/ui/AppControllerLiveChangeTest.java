@@ -262,7 +262,25 @@ class AppControllerLiveChangeTest {
 	}
 
 	@Test
-	void rejectsFullEditorCommitAfterNewerSharedCommit() {
+	void remoteBackedStoreStillRejectsFullEditorCommitAfterNewerSharedCommit() throws Exception {
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("stale"), "Shared")) {
+			RemoteIncidentStore mine = host.pair();
+			var snapshot = mine.loadSnapshot(host.incident());
+			AppController controller = SwingTestLifecycleExtension.track(new AppController(snapshot.data(), mine,
+					host.incident(), new PdfExportService(), new IncidentValidator()));
+			AppController.EditorCommitBinding staleEditor = controller.captureEditorCommitBinding();
+			controller.commitIfCurrent(controller.captureIncidentBinding(),
+					() -> controller.getData().getIncidentContext().setIncidentName("Newer shared value"));
+
+			assertFalse(controller.commitEditorIfCurrent(staleEditor, AppController.LinkSource.SHARED,
+					() -> controller.getData().getIncidentContext().setIncidentName("Stale value")));
+			assertEquals("Newer shared value", controller.getData().getIncidentContext().getIncidentName());
+			((javax.swing.Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
+		}
+	}
+
+	@Test
+	void localStoreAcceptsFullEditorCommitAfterNewerSharedCommit() {
 		AppController controller = controller(new AppData());
 		AppController.EditorCommitBinding staleEditor = controller.captureEditorCommitBinding();
 		controller.commitIfCurrent(controller.captureIncidentBinding(),
@@ -271,8 +289,8 @@ class AppControllerLiveChangeTest {
 		boolean applied = controller.commitEditorIfCurrent(staleEditor, AppController.LinkSource.SHARED,
 				() -> controller.getData().getIncidentContext().setIncidentName("Stale full-editor value"));
 
-		assertFalse(applied);
-		assertEquals("Newer shared value", controller.getData().getIncidentContext().getIncidentName());
+		assertTrue(applied);
+		assertEquals("Stale full-editor value", controller.getData().getIncidentContext().getIncidentName());
 	}
 
 	@Test
@@ -335,25 +353,25 @@ class AppControllerLiveChangeTest {
 	}
 
 	@Test
-	void fullEditorCommitAdvancesRevisionSoTheTokenCannotBeReused() {
+	void localStoreFullEditorCommitIsNeverBlockedByEarlierCommits() {
 		AppController controller = controller(new AppData());
 		AppController.EditorCommitBinding binding = controller.captureEditorCommitBinding();
 
 		assertTrue(controller.commitEditorIfCurrent(binding, AppController.LinkSource.SHARED,
 				() -> controller.getData().getIncidentContext().setIncidentName("Committed")));
-		assertFalse(controller.commitEditorIfCurrent(binding, AppController.LinkSource.SHARED,
-				() -> controller.getData().getIncidentContext().setIncidentName("Reused token")));
-		assertEquals("Committed", controller.getData().getIncidentContext().getIncidentName());
+		assertTrue(controller.commitEditorIfCurrent(binding, AppController.LinkSource.SHARED,
+				() -> controller.getData().getIncidentContext().setIncidentName("Second commit")));
+		assertEquals("Second commit", controller.getData().getIncidentContext().getIncidentName());
 	}
 
 	@Test
-	void registeredEditorGuardRejectsOldRevisionIncidentAndPeriodBindings() {
+	void registeredEditorGuardRejectsOldIncidentAndPeriodBindingsButNotOldRevisionsInLocalStore() {
 		AppController revisionController = controller(new AppData());
 		EditorCommitGuard revisionGuard = revisionController.createEditorCommitGuard();
 		revisionController.markDirty();
-		assertFalse(revisionGuard.commit(AppController.LinkSource.NONE,
-				() -> revisionController.getData().getIncidentContext().setIncidentName("Stale revision")));
-		assertEquals("", revisionController.getData().getIncidentContext().getIncidentName());
+		assertTrue(revisionGuard.commit(AppController.LinkSource.NONE,
+				() -> revisionController.getData().getIncidentContext().setIncidentName("Later revision")));
+		assertEquals("Later revision", revisionController.getData().getIncidentContext().getIncidentName());
 
 		AppController incidentController = controller(new AppData());
 		EditorCommitGuard incidentGuard = incidentController.createEditorCommitGuard();
