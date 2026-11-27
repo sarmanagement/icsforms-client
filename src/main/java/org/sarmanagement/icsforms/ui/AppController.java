@@ -132,6 +132,7 @@ public class AppController implements AutoCloseable {
 	private final Set<EditorCommitGuard> transactionEditorCommitGuards =
 			Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 	private int editorCommitDepth;
+	private java.util.function.BooleanSupplier autosaveDeferral = () -> false;
 	private java.util.function.Consumer<RuntimeException> autosaveErrorHandler = exception -> {
 		throw exception;
 	};
@@ -323,6 +324,10 @@ public class AppController implements AutoCloseable {
 				this::saveCompleted, this::persistenceStatusChanged, saveStore.saveRetryPolicy());
 		bindPersistence();
 		this.autosaveTimer = new Timer(AUTOSAVE_DELAY_MS, event -> {
+			if (autosaveDeferral.getAsBoolean()) {
+				((Timer) event.getSource()).restart();
+				return;
+			}
 			try {
 				saveAsync(activeLinkSource, failure -> {
 					if (failure != null) {
@@ -438,7 +443,8 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
-	 * Flushes every registered editor once before capturing a detached save request.
+	 * Flushes every registered editor once before capturing a detached save request. A flush failure is logged
+	 * and the already committed model is still captured; closing still warns through the editor draft probe.
 	 *
 	 * @param source authoritative linked-field source.
 	 * @return detached persistence request.
@@ -448,6 +454,10 @@ public class AppController implements AutoCloseable {
 			flushingEditors = true;
 			try {
 				beforePlanReuse.run();
+			} catch (RuntimeException exception) {
+				// A rejected or stale editor must never stop the committed model from being saved.
+				Logger.getLogger(AppController.class.getName()).log(Level.WARNING,
+						"Editor flush failed; saving the committed model without it", exception);
 			} finally {
 				flushingEditors = false;
 			}
@@ -960,6 +970,17 @@ public class AppController implements AutoCloseable {
 		var descriptor = store.describe();
 		return descriptor.type() + ": " + descriptor.location()
 				+ (activeIncidentId == null ? "" : " — " + activeIncidentId.value());
+	}
+
+	/**
+	 * Lets the presentation layer hold a scheduled autosave while the operator is still typing in a control, so
+	 * the save, which flushes every editor, never interrupts entry. The save runs once the supplier reports false,
+	 * normally when the control loses focus.
+	 *
+	 * @param deferral supplies true while an automatic save must wait; evaluated on the event thread.
+	 */
+	public void setAutosaveDeferral(java.util.function.BooleanSupplier deferral) {
+		autosaveDeferral = java.util.Objects.requireNonNull(deferral);
 	}
 
 	/**

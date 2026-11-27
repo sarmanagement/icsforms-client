@@ -587,7 +587,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 		Base base = baseFor(expected);
 		RecordDiff diff = RecordDiff.between(base.document(), data);
 		if (!diff.removed().isEmpty()) {
-			throw new StoreValidationException("The host cannot remove records; strike them out instead ("
+			throw new StoreValidationException("The edited document no longer contains records the host still holds, and the host does not delete records; this usually means the editor and the host disagree about a record's identity ("
 					+ diff.removed().size() + " removed: " + describeRemoved(diff) + ")");
 		}
 		List<IncidentService.RecordSubmission> submissions = submissions(base, data, diff);
@@ -1359,7 +1359,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 		}
 		RecordDiff diff = RecordDiff.between(before, data);
 		if (!diff.removed().isEmpty()) {
-			throw new StoreValidationException("The host cannot remove records; strike them out instead ("
+			throw new StoreValidationException("The edited document no longer contains records the host still holds, and the host does not delete records; this usually means the editor and the host disagree about a record's identity ("
 					+ diff.removed().size() + " removed: " + describeRemoved(diff) + ")");
 		}
 		if (!state.revision().equals(expected) && diff.created().isEmpty() && diff.changed().isEmpty()

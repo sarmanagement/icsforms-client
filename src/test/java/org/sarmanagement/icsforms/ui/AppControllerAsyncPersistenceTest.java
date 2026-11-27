@@ -60,6 +60,57 @@ class AppControllerAsyncPersistenceTest {
 	}
 
 	@Test
+	void failedEditorFlushStillSavesCommittedModel() throws Exception {
+		try (BlockingStore store = new BlockingStore(directory())) {
+			AppData live = new AppData();
+			IncidentId id = store.create(live);
+			try (AppController controller = controller(store, id, live)) {
+				controller.setPlanReuseEditorCallbacks(() -> {
+					throw new IllegalStateException("editor is stale");
+				}, () -> { });
+				CountDownLatch completed = new CountDownLatch(1);
+				SwingUtilities.invokeAndWait(() -> {
+					live.getIncidentContext().setIncidentName("Committed before flush failed");
+					controller.markDirty();
+					controller.saveAsync(AppController.LinkSource.NONE, failure -> {
+						assertNull(failure);
+						completed.countDown();
+					});
+				});
+				await(completed);
+				assertEquals("Committed before flush failed",
+						store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
+			}
+		}
+	}
+
+	@Test
+	void autosaveWaitsWhileEntryIsInProgressAndThenSaves() throws Exception {
+		try (BlockingStore store = new BlockingStore(directory())) {
+			AppData live = new AppData();
+			IncidentId id = store.create(live);
+			try (AppController controller = controller(store, id, live)) {
+				java.util.concurrent.atomic.AtomicBoolean typing = new java.util.concurrent.atomic.AtomicBoolean(true);
+				SwingUtilities.invokeAndWait(() -> {
+					controller.setAutosaveDeferral(typing::get);
+					live.getIncidentContext().setIncidentName("Typed while focused");
+					controller.markDirty();
+				});
+				Thread.sleep(2_500);
+				assertNotEquals("Typed while focused",
+						store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
+				typing.set(false);
+				long deadline = System.currentTimeMillis() + 10_000;
+				while (System.currentTimeMillis() < deadline && !"Typed while focused"
+						.equals(store.loadSnapshot(id).data().getIncidentContext().getIncidentName())) {
+					Thread.sleep(100);
+				}
+				assertEquals("Typed while focused", store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
+			}
+		}
+	}
+
+	@Test
 	void explicitDiscardWaitsForIssuedWritesBeforeReplacingAndClearingRetainedWork() throws Exception {
 		for (boolean failSave : java.util.List.of(false, true)) {
 			try (BlockingStore store = new BlockingStore(directory())) {

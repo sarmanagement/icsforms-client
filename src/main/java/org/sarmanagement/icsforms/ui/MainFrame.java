@@ -63,6 +63,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyAdapter;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.DateTimeException;
 import java.time.ZoneId;
@@ -233,6 +234,22 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
+	 * Tells whether the operator is still typing in a control. Autosave flushes every editor, which can end a
+	 * table cell edit or move focus, so it waits until the control is left and is then saved as finished input.
+	 *
+	 * @return true when the focused control holds edited, uncommitted text.
+	 */
+	boolean entryInProgress() {
+		java.awt.Component owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+		if (!(owner instanceof JTextComponent text) || !text.isEditable()
+				|| !javax.swing.SwingUtilities.isDescendingFrom(text, this)) {
+			return false;
+		}
+		return isTableEditor(text) || (editorTextBaselines.containsKey(text)
+				&& !java.util.Objects.equals(text.getText(), editorTextBaselines.get(text)));
+	}
+
+	/**
 	 * Tracks the focused editor and schedules an autosave when an edited field loses focus, because finished
 	 * input must be committed and saved without an explicit save action.
 	 *
@@ -309,6 +326,7 @@ public class MainFrame extends JFrame {
 		} else {
 			this.controller.setAutosaveErrorHandler(this::autosaveFailed);
 		}
+		this.controller.setAutosaveDeferral(this::entryInProgress);
 		this.incidentContextPanel = new IncidentContextPanel(controller);
 		this.organizationalChartPanel = new OrganizationalChartPanel(controller);
 		this.ics201Panel = new Ics201Panel(controller);
@@ -2794,11 +2812,13 @@ public class MainFrame extends JFrame {
 		if (!pendingDraftComponents.isEmpty()) {
 			validationLabel.setText("A shared value changed while this editor had a partial draft. Edit that draft "
 					+ "again before saving or navigating.");
+			java.util.logging.Logger.getLogger(MainFrame.class.getName()).log(java.util.logging.Level.WARNING, "Editor commit blocked: retained partial draft in {0}", pendingDraftComponents);
 			return false;
 		}
 		boolean committed;
 		try {
 			if (!controller.editorCommitBindingsCurrent()) {
+				java.util.logging.Logger.getLogger(MainFrame.class.getName()).warning("Editor commit blocked: an editor commit guard is stale");
 				validationLabel.setText("An editor is stale after another workspace changed the incident. "
 						+ "Refresh it before saving or navigating.");
 				return false;
@@ -2842,6 +2862,7 @@ public class MainFrame extends JFrame {
 				tCardPanel.pushToModel();
 			});
 		} catch (RuntimeException exception) {
+			java.util.logging.Logger.getLogger(MainFrame.class.getName()).log(java.util.logging.Level.WARNING, "Editor commit failed", exception);
 			validationLabel.setText("Editor changes were not committed: " + exception.getMessage()
 					+ " Correct the draft before retrying.");
 			return false;
@@ -3324,8 +3345,6 @@ public class MainFrame extends JFrame {
 					if (editor instanceof JTextComponent text) {
 						lastFocusedEditor = text;
 					}
-				} else if (focusTarget == null) {
-					focusTarget = editor;
 				}
 			}
 		}
@@ -3352,7 +3371,8 @@ public class MainFrame extends JFrame {
 				&& javax.swing.SwingUtilities.isDescendingFrom(state.focused(), this) && state.focused().isShowing()) {
 			focusTarget = state.focused();
 		}
-		if (focusTarget != null) {
+		if (focusTarget != null && KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() != focusTarget
+				&& isActive()) {
 			focusTarget.requestFocusInWindow();
 		}
 		javax.swing.SwingUtilities.invokeLater(() -> {
@@ -4277,10 +4297,33 @@ public class MainFrame extends JFrame {
 				"Background save failed; will retry", exception);
 		persistenceLabel.setToolTipText(exception.getMessage());
 		retryPersistenceButton.setEnabled(true);
+		writeRecoveryCopy();
 		if (exception instanceof StoreConflictException) {
 			return;
 		}
 		autosaveRetry.restart();
+	}
+
+	/**
+	 * Writes the current, unsaved edits to a recovery file under the user's data directory so that a failing
+	 * save, a forced kill or a crash can never lose what was typed. The file is overwritten on each failure.
+	 */
+	private void writeRecoveryCopy() {
+		if (entryInProgress()) {
+			return;
+		}
+		try {
+			String id = controller.getData().getIncidentId();
+			Path directory = Path.of(System.getProperty("user.home"), ".icsforms", "recovery");
+			Files.createDirectories(directory);
+			Path target = directory.resolve((id == null || id.isBlank() ? "incident" : id) + "-unsaved.json");
+			controller.exportUnsavedIncident(target, linkSourceForTab(tabs.getSelectedIndex()));
+			persistenceLabel.setToolTipText(persistenceLabel.getToolTipText() + " (recovery copy: " + target + ")");
+			java.util.logging.Logger.getLogger(MainFrame.class.getName()).warning("Unsaved edits copied to " + target);
+		} catch (java.io.IOException | RuntimeException failure) {
+			java.util.logging.Logger.getLogger(MainFrame.class.getName()).log(java.util.logging.Level.WARNING,
+					"Could not write recovery copy", failure);
+		}
 	}
 
 	/**
