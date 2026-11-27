@@ -182,6 +182,25 @@ class OutboxReviewPanelTest {
 	}
 
 	@Test
+	void pendingEditShowsItsChangesAndTheFirstEntryIsSelectedWithABoundedSize() throws Exception {
+		AppData before = new AppData();
+		before.getIncidentContext().setIncidentName("Old");
+		AppData draft = FullDocumentSnapshot.detach(before);
+		draft.getIncidentContext().setIncidentName("New");
+		Entry entry = new Entry("pending-1", before, draft, null, Status.PENDING, List.of(), null);
+		SwingUtilities.invokeAndWait(() -> {
+			OutboxReviewPanel panel = new OutboxReviewPanel(new Recorder());
+			panel.setEntries(List.of(entry));
+			JTable table = find(panel, JTable.class);
+			assertEquals(1, table.getRowCount());
+			assertEquals("\"New\"", table.getValueAt(0, 3));
+			java.awt.Rectangle screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+					.getMaximumWindowBounds();
+			assertTrue(panel.getPreferredSize().width <= Math.max(960, screen.width));
+		});
+	}
+
+	@Test
 	void rebasedDraftRequiresReviewAndExplicitApprovalWithoutResubmission() throws Exception {
 		AppData before = new AppData();
 		before.getIncidentContext().setIncidentName("Host name");

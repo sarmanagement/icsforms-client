@@ -235,10 +235,10 @@ public final class OutboxReviewPanel extends JPanel {
 		details.setWrapStyleWord(true);
 		details.getAccessibleContext().setAccessibleName("Outbox operation details");
 		JPanel center = new JPanel(new BorderLayout(4, 4));
-		center.add(new JLabel("<html>An edit could not be applied because the copy stored on the host differs from what your edit "
+		center.add(new JLabel("<html><body style='width: 560px'>An edit could not be applied because the copy stored on the host differs from what your edit "
 				+ "started from. This is not always another person's change; it can be an older stored copy. For each "
 				+ "row, keep your edit or the stored copy (click the Choice cell, or use the buttons below), then "
-				+ "apply. Nothing is lost until you apply.</html>"),
+				+ "apply. Nothing is lost until you apply.</body></html>"),
 				BorderLayout.NORTH);
 		center.add(new JScrollPane(table), BorderLayout.CENTER);
 		center.add(new JScrollPane(details), BorderLayout.SOUTH);
@@ -251,7 +251,18 @@ public final class OutboxReviewPanel extends JPanel {
 		buttons.add(refresh);
 		buttons.add(reviewed);
 		buttons.add(confirm);
-		add(new JScrollPane(list), BorderLayout.WEST);
+		java.awt.Rectangle screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+				.getMaximumWindowBounds();
+		setPreferredSize(new java.awt.Dimension(Math.min(960, Math.max(400, screen.width - 120)),
+				Math.min(560, Math.max(300, screen.height - 160))));
+		addHierarchyListener(event -> {
+			if (getTopLevelAncestor() instanceof java.awt.Dialog dialog && !dialog.isResizable()) {
+				dialog.setResizable(true);
+			}
+		});
+		JScrollPane listScroll = new JScrollPane(list);
+		listScroll.setPreferredSize(new java.awt.Dimension(190, 100));
+		add(listScroll, BorderLayout.WEST);
 		add(center, BorderLayout.CENTER);
 		add(buttons, BorderLayout.SOUTH);
 		list.addListSelectionListener(event -> {
@@ -323,6 +334,9 @@ public final class OutboxReviewPanel extends JPanel {
 		}
 		choices.clear();
 		choices.putAll(retained);
+		if (selectedIndex < 0 && !entries.isEmpty()) {
+			selectedIndex = 0;
+		}
 		if (selectedIndex >= 0) {
 			list.setSelectedIndex(selectedIndex);
 		}
@@ -347,7 +361,7 @@ public final class OutboxReviewPanel extends JPanel {
 				fields.addRow(new Object[] {conflict.key().type() + " / " + conflict.key().id(), conflict.field(),
 						display(conflict.base()), display(conflict.mine()), display(conflict.theirs()), choice});
 			}
-			if (entry.status() == Status.REVIEW_REQUIRED) {
+			if (entry.status() == Status.PENDING || entry.status() == Status.REVIEW_REQUIRED) {
 				showChanges(entry.before(), entry.draft());
 			}
 		}
