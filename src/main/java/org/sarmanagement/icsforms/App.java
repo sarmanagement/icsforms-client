@@ -57,6 +57,7 @@ public final class App {
 	 */
 	public static void main(String[] args) {
 		SwingUtilities.invokeLater(() -> {
+			org.sarmanagement.icsforms.ui.ScreenFit.install();
 			try {
 				UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 			} catch (Exception ignored) {

@@ -772,6 +772,10 @@ conflict, nor are two instances filling separate empty fields.
   certificate fingerprint are in a collapsed "Advanced" section, with a copy
   button once an invitation exists. The window opens larger so the first view
   needs no scroll bars on a screen of 800 px height or more.
+- **Dialogs fit the screen.** `ScreenFit` makes every dialog resizable, clamps
+  it to the usable screen area (so buttons stay visible at `uiScale=2`), and
+  scrolls content that cannot fit. It is installed at startup for all dialogs
+  and used by the `UiSupport` resizable option and confirm dialogs.
 
 Still open: the disconnected-entry follow-ups in issue #72 (including using
 `REMOVE` for oversized-edit recovery), the stuck-tab report whose cause was

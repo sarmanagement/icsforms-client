@@ -579,7 +579,8 @@ final class UiSupport {
 		if (preferredSize != null) {
 			component.setPreferredSize(preferredSize);
 		}
-		JOptionPane optionPane = new JOptionPane(component, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
+		JOptionPane optionPane = new JOptionPane(ScreenFit.bounded(component, parent), JOptionPane.PLAIN_MESSAGE,
+				JOptionPane.OK_CANCEL_OPTION);
 		JDialog dialog = optionPane.createDialog(parent, title);
 		dialog.setModalityType(java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
 		dialog.setResizable(true);
@@ -588,6 +589,7 @@ final class UiSupport {
 			dialog.setSize(new Dimension(Math.max(dialog.getWidth(), preferredSize.width),
 					Math.max(dialog.getHeight(), preferredSize.height)));
 		}
+		ScreenFit.fit(dialog);
 		dialog.setVisible(true);
 		Object value = optionPane.getValue();
 		dialog.dispose();
@@ -629,7 +631,8 @@ final class UiSupport {
 		if (preferredSize != null) {
 			component.setPreferredSize(preferredSize);
 		}
-		JOptionPane optionPane = new JOptionPane(component, JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION);
+		JOptionPane optionPane = new JOptionPane(ScreenFit.bounded(component, parent), JOptionPane.PLAIN_MESSAGE,
+				JOptionPane.DEFAULT_OPTION);
 		optionPane.setOptions(options);
 		optionPane.setInitialValue(initialValue);
 		JDialog dialog = optionPane.createDialog(parent, title);
@@ -640,6 +643,7 @@ final class UiSupport {
 			dialog.setSize(new Dimension(Math.max(dialog.getWidth(), preferredSize.width),
 					Math.max(dialog.getHeight(), preferredSize.height)));
 		}
+		ScreenFit.fit(dialog);
 		dialog.setVisible(true);
 		Object value = optionPane.getValue();
 		dialog.dispose();
