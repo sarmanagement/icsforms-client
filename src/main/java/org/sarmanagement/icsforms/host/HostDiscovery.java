@@ -43,10 +43,14 @@ public interface HostDiscovery {
 	/**
 	 * Returns the discovery implementation for this platform, falling back to one that finds nothing.
 	 *
-	 * @return discovery implementation
+	 * @return discovery implementation; one that finds and advertises nothing when the system property
+	 *         {@code icsforms.discovery} is {@code none}
 	 */
 	static HostDiscovery create() {
 		try {
+			if ("none".equals(System.getProperty("icsforms.discovery"))) {
+				throw new IllegalStateException("Discovery disabled");
+			}
 			return new JmdnsDiscovery();
 		} catch (LinkageError | RuntimeException failure) {
 			return new HostDiscovery() {

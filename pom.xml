@@ -129,6 +129,8 @@
                     <reuseForks>false</reuseForks>
                     <systemPropertyVariables>
                         <icsforms.testMode>true</icsforms.testMode>
+                        <!-- Real multicast DNS registration and teardown costs seconds per host session. -->
+                        <icsforms.discovery>none</icsforms.discovery>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
