@@ -588,7 +588,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 		RecordDiff diff = RecordDiff.between(base.document(), data);
 		if (!diff.removed().isEmpty()) {
 			throw new StoreValidationException("The host cannot remove records; strike them out instead ("
-					+ diff.removed().size() + " removed)");
+					+ diff.removed().size() + " removed: " + describeRemoved(diff) + ")");
 		}
 		List<IncidentService.RecordSubmission> submissions = submissions(base, data, diff);
 		if (submissions.isEmpty()) {
@@ -1325,6 +1325,17 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
+	 * Lists up to ten removed record keys for diagnostics.
+	 *
+	 * @param diff diff containing removals
+	 * @return comma-separated record keys
+	 */
+	private static String describeRemoved(RecordDiff diff) {
+		return diff.removed().stream().limit(10).map(Object::toString)
+				.collect(java.util.stream.Collectors.joining(", "));
+	}
+
+	/**
 	 * Saves a local edit and queue atomically before reporting success.
 	 *
 	 * @param data edited local document
@@ -1348,7 +1359,8 @@ public final class RemoteIncidentStore implements IncidentStore {
 		}
 		RecordDiff diff = RecordDiff.between(before, data);
 		if (!diff.removed().isEmpty()) {
-			throw new StoreValidationException("The host cannot remove records; strike them out instead");
+			throw new StoreValidationException("The host cannot remove records; strike them out instead ("
+					+ diff.removed().size() + " removed: " + describeRemoved(diff) + ")");
 		}
 		if (!state.revision().equals(expected) && diff.created().isEmpty() && diff.changed().isEmpty()
 				&& RecordJson.same(RootSettings.snapshot(before), RootSettings.snapshot(data))) {
