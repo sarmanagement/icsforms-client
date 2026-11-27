@@ -4116,6 +4116,8 @@ public class MainFrame extends JFrame {
 		}
 	}
 
+	private String closeFailure;
+
 	/**
 	 * Saves pending edits before switching or managing incidents so rejected edits
 	 * and failed saves cannot discard them or expose stale management backups.
@@ -4123,6 +4125,17 @@ public class MainFrame extends JFrame {
 	 * @return {@code true} if it is safe to switch incidents.
 	 */
 	private boolean saveBeforeSwitch() {
+		return saveBeforeSwitch(true);
+	}
+
+	/**
+	 * Saves pending edits before switching or closing.
+	 *
+	 * @param reportFailure whether a failed save opens its own dialog; closing reports it in the unsaved-incident
+	 *            prompt instead so the operator sees one dialog, not a chain
+	 * @return {@code true} if it is safe to continue.
+	 */
+	private boolean saveBeforeSwitch(boolean reportFailure) {
 		if (!resolveOutstandingEditors()) {
 			return false;
 		}
@@ -4134,7 +4147,11 @@ public class MainFrame extends JFrame {
 			controller.save(source);
 			return !controller.hasUnsavedChanges();
 		} catch (RuntimeException exception) {
-			showSaveError(exception);
+			if (reportFailure) {
+				showSaveError(exception);
+			} else {
+				closeFailure = exception.getMessage();
+			}
 			return false;
 		}
 	}
@@ -4183,10 +4200,14 @@ public class MainFrame extends JFrame {
 			}
 			return;
 		}
-		if (!saveBeforeSwitch()) {
+		closeFailure = null;
+		autosaveRetry.stop();
+		if (!saveBeforeSwitch(false)) {
 			Object[] choices = {"Keep editing", "Export unsaved changes and close", "Discard changes and close"};
 			int selected = JOptionPane.showOptionDialog(this,
-					"The incident has not been saved. Export a recovery copy of your current edits "
+					"The incident has not been saved"
+							+ (closeFailure == null ? "" : " (" + closeFailure + ")")
+							+ ". Export a recovery copy of your current edits "
 							+ "before closing, or keep this window open.",
 					"Unsaved incident", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE,
 					null, choices, choices[0]);
@@ -4205,7 +4226,9 @@ public class MainFrame extends JFrame {
 					"Discard unsaved incident changes?", "Discard changes", JOptionPane.YES_NO_OPTION,
 					JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION) {
 				finishClose();
+				return;
 			}
+			autosaveRetry.restart();
 			return;
 		}
 		finishClose();
@@ -4213,6 +4236,7 @@ public class MainFrame extends JFrame {
 
 	/** Closes resources only after save, recovery export, or explicit discard has resolved pending edits. */
 	private void finishClose() {
+		autosaveRetry.stop();
 		if (hostSharingDialog != null) {
 			hostSharingDialog.dispose();
 		}

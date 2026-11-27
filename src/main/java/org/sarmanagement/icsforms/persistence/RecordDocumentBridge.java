@@ -316,7 +316,7 @@ final class RecordDocumentBridge {
 		for (Field field : fields(target.getClass())) {
 			JsonProperty property = field.getAnnotation(JsonProperty.class);
 			String name = property == null || property.value().isBlank() ? field.getName() : property.value();
-			if (isRecordLink(field)) {
+			if (isRecordLink(field) || isDerivedLegacyMirror(target, name)) {
 				writable.remove(name);
 			} else if (RecordJson.same(current.get(name), content.get(name))) {
 				writable.remove(name);
@@ -330,6 +330,18 @@ final class RecordDocumentBridge {
 		} catch (IOException | RuntimeException exception) {
 			throw new StoreValidationException("Cannot apply record snapshot", exception);
 		}
+	}
+
+	/**
+	 * Tells whether a property is the legacy text mirror of child records. Applying it would make the model
+	 * invent objectives with random identities that clash with the real child records.
+	 *
+	 * @param target model record being updated
+	 * @param name serialized property name
+	 * @return true for the ICS 202 legacy objective text list
+	 */
+	private static boolean isDerivedLegacyMirror(Object target, String name) {
+		return target instanceof org.sarmanagement.icsforms.model.Ics202Form && "objectives".equals(name);
 	}
 
 	/**
