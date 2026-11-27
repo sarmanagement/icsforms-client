@@ -28,7 +28,8 @@ and copied-record identity boundaries. The current #57 review follow-up adds
 copy/reuse coverage, schema-17 compatibility, and write-once identity setters;
 adjacent controller shutdown hardening restores retryability after a failed
 save drain. Issue #58 adds the in-process versioned service and file-backed
-record history; #59 and #60 add host transport and connected operation. Issue
+record history; the #74 branch adds a history-preserving `REMOVE` and
+field-level merging of independent creates; #59 and #60 add host transport and connected operation. Issue
 #61's disconnected workflow remains WIP, pending Windows-host verification,
 CodeQL and acceptance. Issue #62 implements administrator-approved renewal and
 revoked-device replacement with request limits and operations documentation;
@@ -129,7 +130,7 @@ PR closure alone.
 | Live local role panels (ten phases): live multi-view, objectives and linkage, review tracking, medical references, Safety/MUL, Operations, Incident Command, Communications and console | #33, #46, #49 | Implementation delivered; automated coverage recorded. Manual assistive-technology review is not recorded (optional). |
 | Stage 1 persistence foundation: deterministic Swing tests, store contract suite, backend-neutral semantics, legacy import migration, UTC time, provenance seam, asynchronous snapshot persistence, and live refresh without flicker | #37, #39–#44, PR #56 | Complete; substitute-store evidence accepted |
 | Host-mode Part 1: stable record identity, schema 18 migration, index and diff | #57 | Delivered as local model/persistence groundwork; rollover/copy regressions, schema-17 compatibility, and write-once setter evidence recorded in [`docs/completed-work.md`](docs/completed-work.md); no host service |
-| In-person pairing: Bouncy Castle FIPS ECDH with a typed 6-character confirmation number behind swappable SAS and channel interfaces, pairing window, fingerprint QR, mDNS discovery | #74, PR #75 | In progress; host-start projection failure after standalone record replacement remains open; details in [`docs/completed-work.md`](docs/completed-work.md#in-person-pairing--issue-74) |
+| In-person pairing: Bouncy Castle FIPS ECDH with a typed 6-character confirmation number behind swappable SAS and channel interfaces, pairing window, fingerprint QR, mDNS discovery | #74, PR #75 | In progress; host start after record replacement is fixed, and history-preserving removal, independent-create merging, quiet saving and remote-only edit gating are delivered on the branch (CodeQL outstanding); details in [`docs/completed-work.md`](docs/completed-work.md#in-person-pairing--issue-74) |
 
 Role-panel work is independent of the persistence roadmap and must not
 introduce network, authentication or remote persistence features.

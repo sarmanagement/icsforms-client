@@ -15,6 +15,7 @@ Contents:
   ID audit, T-card history rules and exit assessment
 - Live refresh and flicker work (PR #56)
 - Host-mode series Part 1 — stable record identity and record diff (issue #57)
+- Sharing reliability and data safety (PR #75 for issue #74)
 
 Note: the Stage 1 "T1" and "T2" gates are time gates (UTC and provenance) and
 are unrelated to the deployment topologies of the same names.
@@ -42,8 +43,9 @@ Tabs label edits the host accepted in the current window
 (`MainFrame.acceptedSnapshot`, `MainFrameSyncIndicatorsTest`).
 This is not a claim of overall replay safety or acceptance. Still open: the
 ACL branch has been exercised only through unit tests on Linux, not on a real
-Windows host; an oversized edit cannot be corrected, because records cannot be
-removed and batches are not split; per-view acceptance is not persisted across
+Windows host; an oversized edit cannot yet be corrected: records can now be removed (`REMOVE`,
+see "Sharing reliability and data safety") but `replaceRejected` does not use
+that and batches are not split; per-view acceptance is not persisted across
 restarts; the acceptance scenarios rebuild stores and windows in one JVM (only
 the journal commit is exercised across real process kills); and CodeQL on the
 final commit is outstanding.
@@ -692,3 +694,60 @@ button that keeps sharing running. `NetworkInfo` supplies the network details.
 - Detected addresses are de-duplicated (`NetworkInfo.distinct`): all IPv4 addresses plus one global IPv6 address per interface.
 - A "waiting device" list shows the device (host and user) wanting to join; sharing opens the pairing window automatically.
 - Revoke is enabled only when a paired device is selected, and is also in a right-click menu.
+
+## Sharing reliability and data safety (PR #75 for issue #74)
+
+Work on the `short-code-pairing` branch while making host sharing and two-machine
+LAN synchronisation dependable. The governing rules: every entry is saved
+immediately, silently and in the background; nothing a user types is lost or
+blocked; and one instance making a sequence of edits to a data object is not a
+conflict, nor are two instances filling separate empty fields.
+
+- **Typed input is never lost.** Autosave is deferred while a field is being
+  edited, a recovery copy of unsaved drafts is kept, and an editor flush
+  failure no longer stops saving (`AppController.captureSave`). Nothing takes
+  focus unless it is an explicit workflow step.
+- **Legacy objective text** no longer invents phantom objective records.
+- **Stable default identity.** Default T-card rack headers have stable IDs and
+  the rack shows one column per label (`AppController.defaultHeaderId`). The
+  ICS 203 assignment list (`Ics203Form`) is now `Identified`, following the
+  `MedicalPlan` pattern, because its agency representatives and divisions
+  could not be created through the host (a record nested under a non-record
+  parent is a data-model defect). Legacy files get a random id until saved.
+- **History-preserving removal.** `IncidentService.Operation.REMOVE` retires a
+  record at a new cursor and keeps every version for audit; a record changed
+  since the submitter's base version becomes a `$record` conflict. Retired
+  histories are not projected (`RecordDocumentBridge.remove`). The client
+  (`RemoteIncidentStore`) emits REMOVE for removed records, no longer rejects
+  removals, and handles it in replay and conflict review. Documented in
+  `docs/host-api-contract.md`; `HostApiHandler` maps it to the delete
+  permission.
+- **Independent creates merge.** Two writers creating the same stable-ID
+  record merge field by field (`IncidentService.mergeIndependentCreates`); only
+  a field both filled with different non-empty values conflicts. The same merge
+  applies in `RemoteIncidentStore.dependentConflicts` and `resolvePending`.
+- **Editor revision gate limited to remote-backed stores.** A local store has
+  one writer, so `AppController.revisionCurrent` never rejects a commit there;
+  against a remote store a full editor commit after a newer shared commit is
+  still rejected. Binding-identity checks continue to protect replaced models.
+- **Event-thread interruption.** `AppController.awaitOwner` keeps waiting for
+  the persistence worker when the event thread is interrupted; previously
+  `workerIo` returned null and the controller threw a `NullPointerException`
+  (regression test in `AppControllerAsyncPersistenceTest`). What interrupted
+  the thread in the original local failure is unknown.
+- **Tests and CI speed.** Real mDNS registration cost seconds per host session;
+  surefire now sets `icsforms.discovery=none` (`HostDiscovery.create`), cutting
+  `HostSharingDialogTest` from about 76 s to 4 s and `ShortPairingTest` from
+  45 s to 10 s. The dialog tests use a 50 ms stop grace
+  (`HostSharingDialog.setStopGrace`) and a shared `@BeforeEach` harness, and
+  `stopKeepsHostingWhenFlushOrLocalSwitchFails` no longer depends on an exact
+  message count (the host start also requests an invitation that can report
+  its own failure). A full displayed local build runs in about 6.5 minutes,
+  down from 8.5.
+
+Still open: the disconnected-entry follow-ups in issue #72 (including using
+`REMOVE` for oversized-edit recovery), the stuck-tab report whose cause was
+never pinned down (diagnostic logging was added in `MainFrame.pushToModel`),
+auditing other panels for direct deletes and random-id defaults in shared mode,
+whether the displayed CI lane still needs sharding, an in-app font scale
+setting, and CodeQL on the final commit.

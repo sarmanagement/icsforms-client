@@ -228,7 +228,7 @@ incident mode, time zone and similar) are synchronised as a virtual singleton
 and conflicts, and are included in `loadSnapshot`, refresh and the file
 projection.
 
-*Known limits.* Records cannot be removed remotely (strike-out is used). If the
+*Known limits.* Removal is a `REMOVE` operation that retires the record at a new cursor and keeps its versions (see the host API contract); a record changed since the submitter's base version is reported as a conflict instead. If the
 host's file projection fails after the durable commit the client sees the
 distinct `StoreCommittedException` (`committed_not_projected`, "committed; retry
 is safe"), and retrying the same save succeeds without double application.
@@ -408,8 +408,9 @@ limits, export, restart and dependent drafts. Other limitations remain open:
 
 - Oversized edits can still be queued before preparation. A rejected head
   blocks later replay; retrying unchanged oversized work rejects it again.
-  Records cannot be removed and batches are not split, so an oversized edit
-  has no in-place correction; exports retain the draft and dependent edits.
+  Batches are not split. Removal now exists (`REMOVE`), so the
+  rejected-edit replacement can be extended to drop records; an oversized edit
+  still has no in-place correction until then; exports retain the draft and dependent edits.
   For other rejections, once the operator has saved a correcting edit,
   `RemoteIncidentStore.replaceRejected` archives the rejected operations
   exactly (an owner-only `.rejected-<id>.json` file beside the journal) and
