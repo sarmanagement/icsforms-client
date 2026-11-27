@@ -10,6 +10,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Ics202Form;
@@ -105,5 +107,34 @@ class RecordDocumentBridgeObjectivesTest {
 		new RecordDocumentBridge().apply(data, after, false);
 		assertEquals("list-new", data.getOrganizationalChart().getAssignmentList().getId());
 		assertEquals("new", data.getOrganizationalChart().getAssignmentList().getPreparedByName());
+	}
+
+	@Test
+	void twoLiveRecordsInOneSingleValuedFieldKeepTheLaterAndSupersedeTheEarlier() throws Exception {
+		RecordKey chartKey = new RecordKey(OrganizationalChart.class.getName(), "chart-1");
+		RecordKey firstKey = new RecordKey(Ics203Form.class.getName(), "list-first");
+		RecordKey secondKey = new RecordKey(Ics203Form.class.getName(), "list-second");
+		JsonNode firstChart = MAPPER.readTree("{\"incidentCommanders\":[],\"assignmentList\":\"list-first\"}");
+		JsonNode chart = MAPPER.readTree("{\"incidentCommanders\":[],\"assignmentList\":\"list-second\"}");
+		JsonNode firstList = MAPPER.readTree("{\"preparedByName\":\"first\"}");
+		JsonNode secondList = MAPPER.readTree("{\"preparedByName\":\"second\"}");
+		AppData data = new AppData();
+		new RecordDocumentBridge().apply(data, List.of(
+				new RecordHistory(chartKey, null, "organizationalChart",
+						List.of(new RecordVersion(1, 1, Instant.now(), firstChart))),
+				new RecordHistory(firstKey, chartKey, "assignmentList",
+						List.of(new RecordVersion(1, 2, Instant.now(), firstList)))), true);
+		Set<RecordKey> superseded = new TreeSet<>();
+
+		new RecordDocumentBridge().apply(data, List.of(
+				new RecordHistory(chartKey, null, "organizationalChart",
+						List.of(new RecordVersion(2, 6, Instant.now(), chart))),
+				new RecordHistory(firstKey, chartKey, "assignmentList",
+						List.of(new RecordVersion(1, 2, Instant.now(), firstList))),
+				new RecordHistory(secondKey, chartKey, "assignmentList",
+						List.of(new RecordVersion(1, 6, Instant.now(), secondList)))), false, superseded);
+
+		assertEquals("list-second", data.getOrganizationalChart().getAssignmentList().getId());
+		assertEquals(Set.of(firstKey), superseded);
 	}
 }

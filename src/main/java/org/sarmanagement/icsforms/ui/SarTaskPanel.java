@@ -2538,6 +2538,7 @@ public class SarTaskPanel extends JPanel {
 		private final JScrollPane hazardsObservedField;
 		private final List<TCard> availableTCards;
 		private final AppController controller;
+		private final SarTaskAssignment editedRow;
 		private String debriefingSupervisorResourceId = "";
 		private String initialLifecycleStatus;
 		private final Set<String> initialClueIds = new java.util.HashSet<>();
@@ -2587,6 +2588,7 @@ public class SarTaskPanel extends JPanel {
 				AppController controller) {
 			this.mode = mode;
 			this.controller = controller;
+			this.editedRow = row;
 			initialLifecycleStatus = row.getTaskLifecycleStatus();
 			for (ClueLogEntry clue : cluesForTask(row, clueLogEntries == null ? List.of() : clueLogEntries)) {
 				initialClueIds.add(clue.getEntryId());
@@ -3086,6 +3088,13 @@ public class SarTaskPanel extends JPanel {
 			}
 			if (assignmentTeamNumberField.getText().trim().isBlank()) {
 				errors.add("Assignment/Team # is required.");
+			} else if (controller != null) {
+				List<SarTaskAssignment> all = controller.getData().getSarTaskAssignments();
+				String entered = assignmentTeamNumberField.getText().trim();
+				if (SarTaskSupport.findNumberConflict(all, editedRow, entered) != null) {
+					errors.add("Assignment/Team # " + entered + " is already used by another task (perhaps entered on"
+							+ " another device). Try " + SarTaskSupport.nextFreeNumber(all, editedRow, entered) + ".");
+				}
 			}
 			Set<String> seenResourceIds = new HashSet<>();
 			Set<String> seenResourceNames = new HashSet<>();

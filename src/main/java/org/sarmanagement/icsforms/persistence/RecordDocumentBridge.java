@@ -37,6 +37,8 @@ import static org.sarmanagement.icsforms.persistence.RecordVersionStore.*;
  * Applies versioned record snapshots to the existing incident object graph.
  */
 final class RecordDocumentBridge {
+	private static final java.util.logging.Logger LOGGER = java.util.logging.Logger
+			.getLogger(RecordDocumentBridge.class.getName());
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 			.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -138,6 +140,7 @@ final class RecordDocumentBridge {
 				}
 				Object created = create(history.key(), latest(history).content());
 				clearRetiredOccupant(parent, history, byId);
+				displaceOlderOccupant(parent, history, byId, histories, superseded);
 				attach(parent, history.parentField(), created, replaceDefaults);
 				values.put(history.key(), created);
 				missing.remove(indexPosition);
@@ -430,6 +433,55 @@ final class RecordDocumentBridge {
 			return false;
 		} catch (IllegalAccessException exception) {
 			return false;
+		}
+	}
+
+	/**
+	 * Resolves two live records competing for one single-valued field, as when two devices each created the
+	 * child independently. The record whose history began later wins; the earlier occupant and its descendants
+	 * are reported as superseded so the host retires them, keeping every version. Without this the projection
+	 * would fail and the host could not finish writing its incident file.
+	 *
+	 * @param parent parent model object
+	 * @param history live history about to be attached
+	 * @param byId all histories keyed by type and ID
+	 * @param live every live history, used to find the occupant's descendants
+	 * @param superseded receives the displaced occupant and its descendants
+	 */
+	private void displaceOlderOccupant(Object parent, RecordHistory history, Map<String, RecordHistory> byId,
+			List<RecordHistory> live, Set<RecordKey> superseded) {
+		String fieldName = history.parentField();
+		Field field = fieldName == null ? null : field(parent.getClass(), fieldName);
+		if (field == null) {
+			return;
+		}
+		try {
+			field.setAccessible(true);
+			Object existing = field.get(parent);
+			if (!(existing instanceof Identified identified) || existing instanceof Collection<?>) {
+				return;
+			}
+			RecordHistory current = byId.get(existing.getClass().getName() + ":" + identified.getId());
+			if (current == null || current.retired() || current.key().equals(history.key())) {
+				return;
+			}
+			LOGGER.log(java.util.logging.Level.WARNING,
+					"Two devices created {0} in the same field; keeping the later record {1}",
+					new Object[] {current.key(), history.key()});
+			field.set(parent, null);
+			superseded.add(current.key());
+			boolean grew = true;
+			while (grew) {
+				grew = false;
+				for (RecordHistory candidate : live) {
+					if (candidate.parent() != null && superseded.contains(candidate.parent())
+							&& superseded.add(candidate.key())) {
+						grew = true;
+					}
+				}
+			}
+		} catch (IllegalAccessException exception) {
+			// Leave the field alone; attach reports the conflict.
 		}
 	}
 

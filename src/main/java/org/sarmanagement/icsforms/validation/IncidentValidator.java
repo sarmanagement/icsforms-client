@@ -210,6 +210,13 @@ public class IncidentValidator {
 				messages.add(new ValidationMessage("sarTaskAssignments[" + i + "].assignmentTeamNumber",
 						"Assignment/Team Number is required on each SAR task assignment form."));
 			}
+			SarTaskAssignment clash = SarTaskSupport.findNumberConflict(tasks.subList(0, i), task,
+					task.getAssignmentTeamNumber());
+			if (clash != null) {
+				messages.add(new ValidationMessage("sarTaskAssignments[" + i + "].assignmentTeamNumber",
+						"Assignment/Team Number " + task.getAssignmentTeamNumber().trim()
+								+ " is used by more than one SAR task; renumber one of them."));
+			}
 			// Canine tasks must include at least one canine (EQUIPMENT T-card) resource in
 			// the resources-assigned list.
 			if (SarTaskSupport.usesCanineFactors(task.getResourceType())) {

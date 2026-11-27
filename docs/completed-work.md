@@ -788,3 +788,16 @@ never pinned down (diagnostic logging was added in `MainFrame.pushToModel`),
 auditing other panels for direct deletes and random-id defaults in shared mode,
 whether the displayed CI lane still needs sharding, an in-app font scale
 setting, and CodeQL on the final commit.
+
+## Concurrent creation conflicts
+
+- Two devices that each create the child of a single-valued field (for example
+  the organizational chart's assignment list) no longer make the host fail its
+  projection with "Parent field already contains a record". The record whose
+  history began later is kept and the earlier one, with its descendants, is
+  retired with all versions kept.
+- Two devices that give different SAR tasks the same Assignment/Team number:
+  the task editor refuses a number another task already uses and suggests the
+  next free one, and `IncidentValidator` flags the later of any duplicates that
+  still arrive through sync so a person can renumber one. Neither task is
+  discarded.
