@@ -251,8 +251,9 @@ public final class OutboxReviewPanel extends JPanel {
 		buttons.add(refresh);
 		buttons.add(reviewed);
 		buttons.add(confirm);
-		java.awt.Rectangle screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
-				.getMaximumWindowBounds();
+		java.awt.Rectangle screen = java.awt.GraphicsEnvironment.isHeadless()
+				? new java.awt.Rectangle(0, 0, 1280, 800)
+				: java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
 		setPreferredSize(new java.awt.Dimension(Math.min(960, Math.max(400, screen.width - 120)),
 				Math.min(560, Math.max(300, screen.height - 160))));
 		addHierarchyListener(event -> {
