@@ -415,17 +415,22 @@ class HostSharingDialogTest {
 		assertTrue(harness.prompts.messages.get(0).contains("flush failed"));
 
 		harness.flush.set(() -> { });
+		// Observations are recorded rather than asserted: an AssertionError escaping the hook would skip the dialog's
+		// completion handling and leave the transition guard set, turning a failure into a hang.
+		AtomicReference<String> observed = new AtomicReference<>();
 		harness.switchLocal.set(() -> {
-			assertTrue(SwingUtilities.isEventDispatchThread());
-			assertTrue(harness.transitioning.get());
-			assertEquals(HostState.STOPPING, harness.dialog.session().state());
+			observed.set("edt=" + SwingUtilities.isEventDispatchThread() + " transitioning="
+					+ harness.transitioning.get() + " state=" + harness.dialog.session().state());
 			throw new IllegalStateException("switch failed");
 		});
 		harness.edt(() -> harness.dialog.stopAsync(stopped::countDown));
-		harness.await(() -> !harness.transitioning.get() && harness.prompts.messages.size() == 2);
+		// The start also requests an invitation in the background, which can report its own failure once stopping begins.
+		harness.await(() -> !harness.transitioning.get()
+				&& harness.prompts.messages.stream().anyMatch(message -> message.contains("switch failed")));
+		assertEquals("edt=true transitioning=true state=STOPPING", observed.get(),
+				"messages: " + harness.prompts.messages);
 		assertTrue(harness.dialog.isSharing());
 		assertEquals(HostState.RUNNING, harness.dialog.session().state());
-		assertTrue(harness.prompts.messages.get(1).contains("switch failed"));
 		assertEquals(1, stopped.getCount());
 	}
 
