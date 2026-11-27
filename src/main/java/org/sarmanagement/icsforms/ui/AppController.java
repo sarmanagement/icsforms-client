@@ -3445,6 +3445,18 @@ public class AppController implements AutoCloseable {
 	private static final String ORDERED_HEADER_LABEL = "Ordered";
 
 	/**
+	 * Derives the identity of a default rack column so that independently created defaults, for example on the host
+	 * and a client of one shared incident, are the same record rather than duplicates.
+	 *
+	 * @param label default column label.
+	 * @return stable card identifier for that label.
+	 */
+	static String defaultHeaderId(String label) {
+		return java.util.UUID.nameUUIDFromBytes(("icsforms-default-header:" + label)
+				.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+	}
+
+	/**
 	 * Ensures the default HEADER (219-1) rack columns exist in the card list.
 	 *
 	 * <p>
@@ -3467,13 +3479,13 @@ public class AppController implements AutoCloseable {
 		}
 		List<TCard> headers = new ArrayList<>();
 		for (String label : DEFAULT_HEADER_LABELS) {
-			TCard h = new TCard();
+			TCard h = new TCard(defaultHeaderId(label));
 			h.setCardType(TCardType.HEADER);
 			h.setResourceIdentifier(label);
 			headers.add(h);
 			// Insert "Ordered" after "ICP" in pre-op mode.
 			if ("ICP".equals(label) && phase == org.sarmanagement.icsforms.model.IapPhase.PRE_OP) {
-				TCard ordered = new TCard();
+				TCard ordered = new TCard(defaultHeaderId(ORDERED_HEADER_LABEL));
 				ordered.setCardType(TCardType.HEADER);
 				ordered.setResourceIdentifier(ORDERED_HEADER_LABEL);
 				headers.add(ordered);
