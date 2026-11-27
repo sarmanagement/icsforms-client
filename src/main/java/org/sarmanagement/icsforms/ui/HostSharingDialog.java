@@ -141,6 +141,8 @@ public class HostSharingDialog extends JDialog {
 	private transient HostSession session;
 	private transient RemoteIncidentStore loopbackStore;
 	private volatile boolean starting;
+	/** Test-only stop grace applied to the next start, or null. */
+	private java.time.Duration stopGraceOverride;
 	private boolean stopping;
 	private boolean refreshingDevices;
 	private boolean reviewingRequests;
@@ -337,6 +339,15 @@ public class HostSharingDialog extends JDialog {
 		hostField.setText(host);
 		portSpinner.setValue(port);
 		enrollmentSpinner.setValue(enrollmentPort);
+	}
+
+	/**
+	 * Shortens the time stopping hosts keep reporting the stopping state, for tests.
+	 *
+	 * @param grace stop grace period used on the next start, or null for the default
+	 */
+	void setStopGrace(java.time.Duration grace) {
+		stopGraceOverride = grace;
 	}
 
 	/**
@@ -744,6 +755,9 @@ public class HostSharingDialog extends JDialog {
 		try {
 			config = HostConfig.defaults(hostField.getText().strip(), (Integer) portSpinner.getValue(),
 					(Integer) enrollmentSpinner.getValue());
+			if (stopGraceOverride != null) {
+				config = config.withStopTiming(stopGraceOverride, config.drainTimeout());
+			}
 			transitionGuard.accept(true);
 			flushEditors.run();
 			candidate = new HostSession(store, incident, config, null);

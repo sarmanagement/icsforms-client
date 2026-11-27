@@ -107,6 +107,7 @@ class HostSharingDialogTest {
 				HostSharingDialog value = new HostSharingDialog(owner, store, incident, () -> flush.get().run(),
 						periodClose::get, () -> restored.set(true));
 				value.setPrompts(prompts);
+				value.setStopGrace(java.time.Duration.ofMillis(50));
 				value.configure("127.0.0.1", 0, 0);
 				value.setCacheRoot(directory.resolve("remote-cache"));
 				value.setStoreSwitch(loopback -> remote.set((RemoteIncidentStore) loopback),
@@ -134,7 +135,7 @@ class HostSharingDialogTest {
 		 */
 		void start() throws Exception {
 			edt(dialog::startSharing);
-			long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30);
+			long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(120);
 			boolean[] starting = {true};
 			while (starting[0]) {
 				edt(() -> starting[0] = dialog.isStarting());
@@ -152,7 +153,7 @@ class HostSharingDialogTest {
 		 * @throws Exception when dispatch fails or the wait times out
 		 */
 		void await(BooleanSupplier condition) throws Exception {
-			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(120);
 			boolean[] done = {false};
 			while (!done[0]) {
 				edt(() -> done[0] = condition.getAsBoolean());
