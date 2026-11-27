@@ -43,6 +43,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Frame;
 import java.awt.GraphicsConfiguration;
+import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
@@ -143,6 +144,8 @@ public class HostSharingDialog extends JDialog {
 	private volatile boolean starting;
 	/** Whether the dialog is showing an open in-person pairing window. */
 	private boolean pairingOpen;
+	/** Every device the host reported on the last refresh, including revoked ones. */
+	private transient java.util.List<DeviceInfo> shownAll = java.util.List.of();
 	/** Test-only stop grace applied to the next start, or null. */
 	private java.time.Duration stopGraceOverride;
 	private boolean stopping;
@@ -153,6 +156,8 @@ public class HostSharingDialog extends JDialog {
 	private transient java.util.function.Consumer<IncidentStore> onLoopback = loopback -> { };
 	private transient Runnable onLocal = () -> { };
 	private transient java.util.function.Consumer<Boolean> transitionGuard = active -> { };
+	private static final String PAIR_IDLE_LABEL = "Allow devices to join";
+	private static final String PAIR_OPEN_LABEL = "Devices can join";
 	private final JLabel stateLabel = new JLabel("Not sharing");
 	private final JTextField hostField = new JTextField(defaultHost(), 18);
 	private final JSpinner portSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_PORT, 0, 65535, 1));
@@ -163,7 +168,13 @@ public class HostSharingDialog extends JDialog {
 	private final JLabel fingerprintLabel = new JLabel(" ");
 	private final javax.swing.JComboBox<String> addressChoice = new javax.swing.JComboBox<>(detectedAddresses());
 	private final JButton inviteButton = new JButton("Create long invitation");
-	private final JButton pairButton = new JButton("Allow a device to join");
+	private final JButton pairButton = new JButton(PAIR_IDLE_LABEL);
+	private final javax.swing.JCheckBox showRevoked = new javax.swing.JCheckBox("Show revoked devices");
+	private final JButton copyInvitationButton = new JButton("Copy to clipboard");
+	private final javax.swing.JToggleButton advancedToggle = new javax.swing.JToggleButton("Advanced \u25B8");
+	private final JPanel advancedPanel = new JPanel();
+	/** The "This Host: address:port" text of the open or last pairing window. */
+	private String hostPortText = "";
 	private final JLabel pairingCodeLabel = new JLabel(" ");
 	private final JTextField entryField = new JTextField(8);
 	private final JButton entryButton = new JButton("Confirm number");
@@ -237,7 +248,7 @@ public class HostSharingDialog extends JDialog {
 		refresh();
 		refreshTimer.start();
 		pack();
-		setSize(Math.max(getWidth(), 900), getHeight());
+		setSize(Math.max(getWidth(), 900) + 40, getHeight() + 30);
 		GraphicsConfiguration screen = getGraphicsConfiguration();
 		Rectangle bounds = screen.getBounds();
 		Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(screen);
@@ -502,14 +513,22 @@ public class HostSharingDialog extends JDialog {
 		fingerprintLabel.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 0));
 		JPanel start = column("2. Start sharing");
 		start.add(left(buttons));
-		start.add(left(fingerprintLabel));
 
 		invitationArea.setEditable(false);
 		invitationArea.setLineWrap(true);
 		JPanel invitePanel = new JPanel(new BorderLayout());
-		invitePanel.setBorder(BorderFactory.createTitledBorder("Long invitation (advanced; a secret)"));
+		invitePanel.setBorder(BorderFactory.createTitledBorder("Long invitation (a secret)"));
 		invitePanel.add(new JScrollPane(invitationArea), BorderLayout.CENTER);
-		invitePanel.add(inviteButton, BorderLayout.SOUTH);
+		JPanel inviteButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		inviteButtons.add(inviteButton);
+		inviteButtons.add(copyInvitationButton);
+		copyInvitationButton.setEnabled(false);
+		invitePanel.add(inviteButtons, BorderLayout.SOUTH);
+		advancedPanel.setLayout(new BoxLayout(advancedPanel, BoxLayout.Y_AXIS));
+		advancedPanel.add(left(fingerprintLabel));
+		advancedPanel.add(left(invitePanel));
+		advancedPanel.setVisible(false);
+		advancedToggle.addActionListener(event -> toggleAdvanced());
 
 		waitingTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		waitingTable.setPreferredScrollableViewportSize(new Dimension(450, waitingTable.getRowHeight() * 2));
@@ -519,11 +538,18 @@ public class HostSharingDialog extends JDialog {
 		entryRow.add(entryButton);
 		entryField.setEnabled(false);
 		entryButton.setEnabled(false);
+		pairingDetailLabel.setText("This Host: ");
+		JPanel pairingLines = new JPanel(new GridLayout(2, 1));
+		pairingLines.add(pairingDetailLabel);
+		pairingLines.add(pairingCodeLabel);
+		JPanel pairingHeader = new JPanel(new BorderLayout(8, 0));
+		JPanel pairButtonHolder = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+		pairButtonHolder.add(pairButton);
+		pairingHeader.add(pairButtonHolder, BorderLayout.WEST);
+		pairingHeader.add(pairingLines, BorderLayout.CENTER);
 		JPanel codeText = new JPanel();
 		codeText.setLayout(new BoxLayout(codeText, BoxLayout.Y_AXIS));
-		codeText.add(left(pairButton));
-		codeText.add(left(pairingDetailLabel));
-		codeText.add(left(pairingCodeLabel));
+		codeText.add(left(pairingHeader));
 		codeText.add(left(new JScrollPane(waitingTable)));
 		codeText.add(left(entryRow));
 		JPanel pairPanel = new JPanel(new BorderLayout(8, 0));
@@ -579,6 +605,8 @@ public class HostSharingDialog extends JDialog {
 		devices.setBorder(BorderFactory.createTitledBorder("Paired devices"));
 		devices.add(new JScrollPane(deviceTable), BorderLayout.CENTER);
 		JPanel deviceButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		deviceButtons.add(showRevoked);
+		showRevoked.addActionListener(event -> showDevices(shownAll));
 		deviceButtons.add(revokeButton);
 		deviceButtons.add(reviewRequestsButton);
 		deviceButtons.add(backupButton);
@@ -591,7 +619,10 @@ public class HostSharingDialog extends JDialog {
 		center.add(left(start));
 		center.add(left(pairPanel));
 		center.add(left(devices));
-		center.add(left(invitePanel));
+		JPanel advancedHeader = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		advancedHeader.add(advancedToggle);
+		center.add(left(advancedHeader));
+		center.add(left(advancedPanel));
 		JPanel contents = new JPanel(new BorderLayout());
 		contents.add(center, BorderLayout.NORTH);
 		add(new JScrollPane(contents), BorderLayout.CENTER);
@@ -599,6 +630,7 @@ public class HostSharingDialog extends JDialog {
 		startButton.addActionListener(event -> startSharing());
 		stopButton.addActionListener(event -> stopSharing());
 		inviteButton.addActionListener(event -> issueInvitation());
+		copyInvitationButton.addActionListener(event -> copyInvitation());
 		pairButton.addActionListener(event -> openPairing());
 		entryButton.addActionListener(event -> enterPairingCode());
 		revokeButton.addActionListener(event -> revokeSelected());
@@ -1052,6 +1084,9 @@ public class HostSharingDialog extends JDialog {
 					String invitation = get();
 					if (session == current && !stopping) {
 						invitationArea.setText(invitation);
+						copyInvitationButton.setEnabled(true);
+						advancedToggle.setSelected(true);
+						toggleAdvanced();
 						copyInvitation();
 					}
 				} catch (Exception failure) {
@@ -1075,6 +1110,7 @@ public class HostSharingDialog extends JDialog {
 			return;
 		}
 		pairButton.setEnabled(false);
+		pairButton.setText(PAIR_OPEN_LABEL);
 		pairingCodeLabel.setText("Opening the pairing window…");
 		new SwingWorker<org.sarmanagement.icsforms.host.HostClient.PairingOffer, Void>() {
 			/** {@inheritDoc} */
@@ -1112,13 +1148,15 @@ public class HostSharingDialog extends JDialog {
 	 */
 	private void showPairing(org.sarmanagement.icsforms.host.HostClient.PairingOffer offer) {
 		pairingCodeLabel.setText("Waiting for a device. On it choose Connect and enter this host.");
-		pairingDetailLabel.setText("Host " + offer.host() + ":" + offer.enrollmentPort() + " until "
+		hostPortText = "This Host: " + offer.host() + ":" + offer.enrollmentPort();
+		pairingDetailLabel.setText(hostPortText + " until "
 				+ java.time.LocalTime.ofInstant(offer.expiresAt(), java.time.ZoneId.systemDefault())
 						.truncatedTo(java.time.temporal.ChronoUnit.MINUTES));
 		pairingPayloadText = offer.payload().toText();
 		qrLabel.setIcon(new javax.swing.ImageIcon(QrImages.render(pairingPayloadText, 200)));
 		pairingOpen = true;
-		pairButton.setToolTipText("The pairing window is already open.");
+		pairButton.setText(PAIR_OPEN_LABEL);
+		pairButton.setToolTipText("Devices can join until the time shown. The button re-enables when the window closes.");
 		pairingTimer.start();
 	}
 
@@ -1204,7 +1242,7 @@ public class HostSharingDialog extends JDialog {
 					}
 					message = "Could not check the number: " + failure.getMessage();
 				}
-				pairingDetailLabel.setText(message);
+				pairingCodeLabel.setText(message);
 				refresh();
 			}
 		}.execute();
@@ -1215,8 +1253,9 @@ public class HostSharingDialog extends JDialog {
 		pairingTimer.stop();
 		pairingOpen = false;
 		pairButton.setToolTipText(null);
-		pairingCodeLabel.setText(" ");
-		pairingDetailLabel.setText(" ");
+		pairButton.setText(PAIR_IDLE_LABEL);
+		pairingCodeLabel.setText(session == null ? " " : "No device can join now.");
+		pairingDetailLabel.setText(session == null || hostPortText.isEmpty() ? "This Host: " : hostPortText);
 		waitingModel.setRowCount(0);
 		entryField.setText("");
 		entryField.setEnabled(false);
@@ -1240,6 +1279,33 @@ public class HostSharingDialog extends JDialog {
 	void copyInvitation() {
 		invitationArea.selectAll();
 		invitationArea.copy();
+	}
+
+	/**
+	 * Returns the button that opens the pairing window.
+	 *
+	 * @return pairing button
+	 */
+	JButton pairButton() {
+		return pairButton;
+	}
+
+	/**
+	 * Returns the check box that reveals revoked devices.
+	 *
+	 * @return revoked-device filter
+	 */
+	javax.swing.JCheckBox showRevokedBox() {
+		return showRevoked;
+	}
+
+	/**
+	 * Returns the "This Host" line of the pairing area.
+	 *
+	 * @return host address and expiry text
+	 */
+	String pairingHostText() {
+		return pairingDetailLabel.getText();
 	}
 
 	/**
@@ -1418,6 +1484,40 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
+	 * Fills the paired devices table, leaving out revoked devices unless the operator asked to see them.
+	 *
+	 * @param devices every known device
+	 */
+	private void showDevices(List<DeviceInfo> devices) {
+		shownAll = devices;
+		boolean includeRevoked = showRevoked.isSelected();
+		shownDevices = devices.stream()
+				.filter(device -> includeRevoked || device.state() != org.sarmanagement.icsforms.host.CredentialState.REVOKED)
+				.toList();
+		deviceModel.setRowCount(0);
+		for (DeviceInfo device : shownDevices) {
+			deviceModel.addRow(new Object[] {device.name(), device.state(), minutes(device.expiresAt()),
+					device.lastContact() == null ? "not since host started" : minutes(device.lastContact()),
+					connectionText(device)});
+		}
+	}
+
+	/** Shows or hides the advanced section, growing the window when it would otherwise need scrolling. */
+	private void toggleAdvanced() {
+		boolean open = advancedToggle.isSelected();
+		advancedToggle.setText(open ? "Advanced \u25BE" : "Advanced \u25B8");
+		advancedPanel.setVisible(open);
+		if (open) {
+			Rectangle bounds = getGraphicsConfiguration().getBounds();
+			Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(getGraphicsConfiguration());
+			int room = bounds.height - insets.top - insets.bottom;
+			setSize(getWidth(), Math.min(room, getHeight() + advancedPanel.getPreferredSize().height));
+		}
+		revalidate();
+		repaint();
+	}
+
+	/**
 	 * Refreshes the status line, buttons and device list.
 	 */
 	void refresh() {
@@ -1430,6 +1530,7 @@ public class HostSharingDialog extends JDialog {
 		stopButton.setEnabled(current != null && !stopping && current.state() != HostState.STOPPING);
 		inviteButton.setEnabled(running && !stopping);
 		pairButton.setEnabled(running && !stopping && !pairingOpen);
+		startButton.setText(current == null ? "Start sharing" : "Sharing");
 		revokeButton.setEnabled(running && !stopping && deviceTable.getSelectedRow() >= 0);
 		reviewRequestsButton.setEnabled(running && !stopping && !reviewingRequests);
 		hideButton.setEnabled(current != null);
@@ -1442,6 +1543,7 @@ public class HostSharingDialog extends JDialog {
 		}
 		if (current == null) {
 			stateLabel.setText("Not sharing");
+			hostPortText = "";
 			fingerprintLabel.setText(" ");
 			shownDevices = List.of();
 			deviceModel.setRowCount(0);
@@ -1473,15 +1575,10 @@ public class HostSharingDialog extends JDialog {
 						String selectedId = deviceTable.getSelectedRow() >= 0
 								&& deviceTable.getSelectedRow() < shownDevices.size()
 										? shownDevices.get(deviceTable.getSelectedRow()).deviceId() : null;
-						shownDevices = devices;
-						deviceModel.setRowCount(0);
-						for (DeviceInfo device : devices) {
-							deviceModel.addRow(new Object[] {device.name(), device.state(), minutes(device.expiresAt()),
-									device.lastContact() == null ? "not since host started" : minutes(device.lastContact()),
-									connectionText(device)});
-						}
-						for (int i = 0; selectedId != null && i < devices.size(); i++) {
-							if (selectedId.equals(devices.get(i).deviceId())) {
+						shownAll = devices;
+						showDevices(devices);
+						for (int i = 0; selectedId != null && i < shownDevices.size(); i++) {
+							if (selectedId.equals(shownDevices.get(i).deviceId())) {
 								deviceTable.setRowSelectionInterval(i, i);
 							}
 						}

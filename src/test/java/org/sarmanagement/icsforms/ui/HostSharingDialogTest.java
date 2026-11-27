@@ -324,10 +324,43 @@ class HostSharingDialogTest {
 		harness.await(() -> harness.dialog.deviceTable().getRowCount() == 1);
 		harness.edt(() -> harness.dialog.deviceTable().setRowSelectionInterval(0, 0));
 		harness.edt(harness.dialog::revokeSelected);
-		harness.await(() -> harness.dialog.deviceTable().getRowCount() == 1
-				&& CredentialState.REVOKED.toString().equals(harness.dialog.deviceTable().getValueAt(0, 1).toString()));
+		harness.await(() -> harness.dialog.deviceTable().getRowCount() == 0);
 		assertEquals(CredentialState.REVOKED, harness.dialog.session().devices().get(0).state());
+		harness.edt(() -> harness.dialog.showRevokedBox().doClick());
 		assertEquals(CredentialState.REVOKED.toString(), harness.dialog.deviceTable().getValueAt(0, 1).toString());
+	}
+
+	@Test
+	void opensLargeEnoughToNeedNoScrollBarsWhenTheScreenAllows() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		harness.edt(() -> {
+			harness.dialog.validate();
+			JScrollPane scroll = (JScrollPane) harness.dialog.getContentPane().getComponent(0);
+			Rectangle bounds = harness.dialog.getGraphicsConfiguration().getBounds();
+			if (bounds.height >= 800) {
+				assertTrue(scroll.getViewport().getView().getPreferredSize().height
+						<= scroll.getViewport().getHeight());
+				assertTrue(scroll.getViewport().getView().getPreferredSize().width
+						<= scroll.getViewport().getWidth());
+			}
+		});
+	}
+
+	@Test
+	void pairingButtonShowsWhenDevicesCanJoinAndReturnsOnceTheWindowCloses() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		assertEquals("Allow devices to join", harness.dialog.pairButton().getText());
+		harness.start();
+		harness.edt(harness.dialog::openPairing);
+		harness.await(() -> harness.dialog.pairingHostText().contains(" until "));
+		harness.edt(() -> {
+			assertEquals("Devices can join", harness.dialog.pairButton().getText());
+			assertFalse(harness.dialog.pairButton().isEnabled());
+			assertTrue(harness.dialog.pairingHostText().startsWith("This Host: "));
+		});
+		harness.dialog.session().closePairing();
+		harness.await(() -> harness.dialog.pairButton().isEnabled());
+		harness.edt(() -> assertEquals("Allow devices to join", harness.dialog.pairButton().getText()));
 	}
 
 	@Test

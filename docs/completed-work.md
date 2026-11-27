@@ -744,6 +744,26 @@ conflict, nor are two instances filling separate empty fields.
   message count (the host start also requests an invitation that can report
   its own failure). A full displayed local build runs in about 6.5 minutes,
   down from 8.5.
+- **Stable identity for default children.** A child stored inline by an earlier
+  build (the organizational chart's ICS 203 assignment list) and any default
+  single-valued child the host holds no record for now get an identity derived
+  from the parent and field (`RecordDocumentBridge.adoptInlineChild`,
+  `stabilizeDefaults`, called after a full client projection in
+  `RemoteIncidentStore.build`). Previously every rebuild minted a random id,
+  which looked like a replaced child and produced a self-conflict in the host's
+  own journal. Merging duplicate T-cards now repoints SAR task and ICS 215
+  links to the retained card (`AppController.repointTCardLinks`).
+- **Outbox review wording.** Choices read "Keep my edit" / "Keep the stored
+  copy", with keep-all buttons, and the list no longer shows the internal
+  `offline-` operation prefix.
+- **Host dialog pairing flow.** The pairing button sits beside the
+  "This Host: address:port until hh:mm" and waiting lines, reads "Devices can
+  join" (disabled) while the window is open and "Allow devices to join" once it
+  closes; the start button reads "Sharing" while hosting. Revoked devices are
+  hidden unless "Show revoked devices" is ticked. The long invitation and the
+  certificate fingerprint are in a collapsed "Advanced" section, with a copy
+  button once an invitation exists. The window opens larger so the first view
+  needs no scroll bars on a screen of 800 px height or more.
 
 Still open: the disconnected-entry follow-ups in issue #72 (including using
 `REMOVE` for oversized-edit recovery), the stuck-tab report whose cause was
