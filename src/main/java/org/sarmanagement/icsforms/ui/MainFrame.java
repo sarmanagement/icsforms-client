@@ -155,7 +155,8 @@ public class MainFrame extends JFrame {
 	private transient java.util.function.BiFunction<String, String,
 			org.sarmanagement.icsforms.persistence.RemoteIncidentStore> invitationRedeemer =
 					(text, name) -> org.sarmanagement.icsforms.host.HostGateway.pair(text, name,
-							PairingCodeWindow.listener());
+							code -> this.pairingListener.showCode(code));
+	private volatile org.sarmanagement.icsforms.host.PairingListener pairingListener = PairingCodeWindow.listener();
 	private JMenuItem newItem;
 	private JMenuItem duplicateItem;
 	private JMenuItem importIncidentItem;
@@ -398,9 +399,9 @@ public class MainFrame extends JFrame {
 		});
 		KeyboardFocusManager.getCurrentKeyboardFocusManager()
 				.addPropertyChangeListener("focusOwner", focusOwnerListener);
-		setPreferredSize(new Dimension(1120, 820));
 		java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(entryListener,
 				java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.ACTION_EVENT_MASK);
+		setPreferredSize(new Dimension(1120, 820));
 		setJMenuBar(createMenuBar(defaultDirectory));
 		setLayout(new BorderLayout(8, 8));
 
@@ -466,9 +467,8 @@ public class MainFrame extends JFrame {
 		}
 		KeyboardFocusManager.getCurrentKeyboardFocusManager()
 				.removePropertyChangeListener("focusOwner", focusOwnerListener);
+		java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(entryListener);
 		clearPendingDraft();
-		java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(entryListener);
-		java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(entryListener);
 		editorTextBaselines.clear();
 		super.dispose();
 	}
@@ -1075,11 +1075,24 @@ public class MainFrame extends JFrame {
 	 * run on a background worker so the event thread never waits on the network.
 	 */
 	private void showConnect() {
-		ConnectForm entry = ConnectForm.ask(this);
-		if (entry == null) {
+		Object[] connection;
+		try {
+			connection = ConnectDialog.show(this, (text, name, listener) -> {
+				pairingListener = listener;
+				try {
+					return pairAndLoad(invitationRedeemer, text, name, homeDirectory);
+				} finally {
+					pairingListener = PairingCodeWindow.listener();
+				}
+			});
+		} catch (RuntimeException failure) {
+			showError("Could not connect to the host", failure);
 			return;
 		}
-		connectWithInvitation(entry.pairingText(), entry.deviceName());
+		if (connection != null) {
+			openConnectedWindow((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) connection[0],
+					(org.sarmanagement.icsforms.persistence.StoredIncident) connection[1]);
+		}
 	}
 
 	/**
@@ -1921,9 +1934,22 @@ public class MainFrame extends JFrame {
 	 * @return the connected store and first snapshot, to pass to {@link #openConnected}.
 	 */
 	public static Object[] connectFromStartup(String invitationText, String deviceName, Path home) {
+		return connectFromStartup(invitationText, deviceName, home, PairingCodeWindow.listener());
+	}
+
+	/**
+	 * Like {@link #connectFromStartup(String, String, Path)}, showing the pairing number through the given listener.
+	 *
+	 * @param invitationText invitation text.
+	 * @param deviceName name shown to the host operator.
+	 * @param home directory holding the application's private state.
+	 * @param listener receives the number the host operator must type.
+	 * @return the connected store and first snapshot, to pass to {@link #openConnected}.
+	 */
+	static Object[] connectFromStartup(String invitationText, String deviceName, Path home,
+			org.sarmanagement.icsforms.host.PairingListener listener) {
 		return pairAndLoad(
-				(text, name) -> org.sarmanagement.icsforms.host.HostGateway.pair(text, name,
-						PairingCodeWindow.listener()),
+				(text, name) -> org.sarmanagement.icsforms.host.HostGateway.pair(text, name, listener),
 				invitationText, deviceName, home);
 	}
 

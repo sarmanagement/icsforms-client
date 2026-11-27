@@ -68,6 +68,7 @@ public class StartupDialog extends JDialog {
 	private boolean promotePlannedIcs215;
 	private String chosenInvitation = "";
 	private String chosenDeviceName = "";
+	private Object[] chosenConnection;
 
 	/**
 	 * Creates the startup dialog.
@@ -273,18 +274,31 @@ public class StartupDialog extends JDialog {
 	}
 
 	/**
-	 * Asks for the host address and pairing code, or a pasted invitation, and a device name.
+	 * Runs the connect dialog, which pairs with the host and loads the first snapshot while showing progress.
 	 *
-	 * @return true when the operator supplied pairing details and confirmed.
+	 * @return true when a connection was made.
 	 */
 	private boolean askInvitation() {
-		ConnectForm entry = ConnectForm.ask(this);
-		if (entry == null) {
+		java.nio.file.Path home = java.nio.file.Path.of(System.getProperty("user.home"));
+		Object[] connection = ConnectDialog.show(this, (text, name, listener) -> {
+			chosenInvitation = text;
+			chosenDeviceName = name;
+			return MainFrame.connectFromStartup(text, name, home, listener);
+		});
+		if (connection == null) {
 			return false;
 		}
-		chosenInvitation = entry.pairingText();
-		chosenDeviceName = entry.deviceName();
+		chosenConnection = connection;
 		return true;
+	}
+
+	/**
+	 * Returns the connection made by the connect dialog for {@link StartupAction#CONNECT_TO_HOST}.
+	 *
+	 * @return the store and first snapshot, or null when none was made.
+	 */
+	public Object[] getChosenConnection() {
+		return chosenConnection;
 	}
 
 	/**
