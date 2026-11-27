@@ -31,6 +31,28 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 class UiSupportDesktopIntegrationTest {
 
 	@Test
+	void flushSavesWindowsThroughTheirRegisteredHookAndNeverFlushesModalDialogs() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		AtomicBoolean saved = new AtomicBoolean();
+		SwingUtilities.invokeAndWait(() -> {
+			JFrame log = new JFrame("Detached log");
+			javax.swing.JDialog modal = new javax.swing.JDialog(log, true);
+			try {
+				UiSupport.registerIncidentWindowFlush(log, () -> {
+					saved.set(true);
+					return true;
+				});
+				assertTrue(UiSupport.flushIncidentWindow(log));
+				assertTrue(saved.get());
+				assertTrue(!UiSupport.flushIncidentWindow(modal));
+			} finally {
+				modal.dispose();
+				log.dispose();
+			}
+		});
+	}
+
+	@Test
 	void detachedLogReceivesMouseInputWhileMainEditorIsOpen() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		java.awt.Robot robot = new java.awt.Robot();

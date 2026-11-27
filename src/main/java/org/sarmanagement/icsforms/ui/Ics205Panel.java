@@ -594,7 +594,15 @@ public final class Ics205Panel extends JPanel {
 		while (UiSupport.showResizableConfirmDialog(this, create ? "Add radio channel" : "Edit radio channel",
 				editor, new Dimension(960, 620))) {
 			try {
-				applyChannel(index, editor.editedChannel());
+				RadioChannel edited = editor.editedChannel();
+				java.util.List<RadioChannel> others = new java.util.ArrayList<>(controller.getData().getForm205().getChannels());
+				if (index >= 0) {
+					others.remove(index);
+				}
+				if (!RadioChannelPicker.confirmChannelNumber(this, others, edited)) {
+					continue;
+				}
+				applyChannel(index, edited);
 				return;
 			} catch (IllegalArgumentException exception) {
 				RadioChannelPicker.showError(this, exception.getMessage());
@@ -629,6 +637,13 @@ public final class Ics205Panel extends JPanel {
 						|| RadioChannel.TX_POLICY_TRANSMIT.equals(channel.getTxPolicy())
 						&& !validFrequency(channel.getTxFrequency()))
 				.count();
+		java.util.List<String> repeated = org.sarmanagement.icsforms.model.RadioChannelNumbers
+				.repeated(controller.getData().getForm205().getChannels());
+		if (!repeated.isEmpty()) {
+			validation.setText("Channel number used more than once: " + String.join(", ", repeated)
+					+ ". Edit one of them if they are not the same channel.");
+			return;
+		}
 		validation.setText(incomplete == 0 ? "Verify radio programming with the Communications Unit Leader."
 				: incomplete + " channel(s) need programming review (missing or unrecognized details). Values are retained.");
 	}

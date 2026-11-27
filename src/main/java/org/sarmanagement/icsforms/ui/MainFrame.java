@@ -4199,8 +4199,16 @@ public class MainFrame extends JFrame {
 	 * @return true when no outstanding editor can still modify the old incident.
 	 */
 	private boolean resolveOutstandingEditors() {
-		List<java.awt.Window> outstanding = UiSupport.outstandingIncidentWindows(this, controller.getData());
-		if (!outstanding.isEmpty()) {
+		List<java.awt.Window> outstanding = new ArrayList<>(
+				UiSupport.outstandingIncidentWindows(this, controller.getData()));
+		for (java.awt.Window window : new ArrayList<>(outstanding)) {
+			if (UiSupport.flushIncidentWindow(window)) {
+				outstanding.remove(window);
+			}
+		}
+		if (outstanding.isEmpty()) {
+			UiSupport.disposeIncidentWindows(controller.getData());
+		} else {
 			Object[] options = {"Return to editors to save", "Discard open editors", "Cancel"};
 			int choice = JOptionPane.showOptionDialog(this,
 					"Editors or detached logs are still open. Return to them to save pending edits before "

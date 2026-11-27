@@ -289,12 +289,18 @@ final class RadioChannelPicker {
 			RadioChannel channel = new RadioChannel();
 			channel.setChannelName(filter.getText());
 			RadioChannelEditorPanel editor = new RadioChannelEditorPanel(channel, legacyLabels(controller));
-			if (UiSupport.showResizableConfirmDialog(dialog, "Create radio channel", editor, new Dimension(780, 680))) {
+			while (UiSupport.showResizableConfirmDialog(dialog, "Create radio channel", editor,
+					new Dimension(780, 680))) {
 				try {
-					result[0] = editor.editedChannel();
-					controller.getData().getForm205().getChannels().add(result[0]);
+					RadioChannel edited = editor.editedChannel();
+					if (!confirmChannelNumber(dialog, controller.getData().getForm205().getChannels(), edited)) {
+						continue;
+					}
+					result[0] = edited;
+					controller.getData().getForm205().getChannels().add(edited);
 					controller.markDirty();
 					dialog.dispose();
+					return;
 				} catch (IllegalArgumentException exception) {
 					showError(dialog, exception.getMessage());
 				}
@@ -316,6 +322,36 @@ final class RadioChannelPicker {
 		dialog.setLocationRelativeTo(parent);
 		dialog.setVisible(true);
 		return result[0];
+	}
+
+	/**
+	 * Brings a repeated channel number to the editor's attention and offers the next free number, keeping both,
+	 * or going back to edit.
+	 *
+	 * @param parent dialog parent
+	 * @param existing channels already in the plan
+	 * @param edited channel about to be saved; its number is changed when the suggestion is accepted
+	 * @return true when the channel may be saved, false when the person chose to keep editing
+	 */
+	static boolean confirmChannelNumber(Component parent, List<RadioChannel> existing, RadioChannel edited) {
+		RadioChannel clash = org.sarmanagement.icsforms.model.RadioChannelNumbers.findConflict(existing, edited,
+				edited.getZoneGroup(), edited.getChannelNumber());
+		if (clash == null) {
+			return true;
+		}
+		String free = org.sarmanagement.icsforms.model.RadioChannelNumbers.nextFree(existing, edited,
+				edited.getZoneGroup(), edited.getChannelNumber());
+		String name = clash.getChannelName().isBlank() ? "another channel" : "\"" + clash.getChannelName() + "\"";
+		int choice = UiSupport.showResizableOptionDialog(parent, "Channel number already used",
+				new JLabel("<html>Channel number " + edited.getChannelNumber().trim() + " is already used by " + name
+						+ (edited.getZoneGroup().isBlank() ? "" : " in " + edited.getZoneGroup().trim())
+						+ ".<br>Another person may have added it. Use " + free + " instead, or keep both.</html>"),
+				new Dimension(560, 160), new Object[]{"Use " + free, "Keep both", "Keep editing"}, "Use " + free);
+		if (choice == 0) {
+			edited.setChannelNumber(free);
+			return true;
+		}
+		return choice == 1;
 	}
 
 	/**

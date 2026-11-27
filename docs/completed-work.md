@@ -801,3 +801,20 @@ setting, and CodeQL on the final commit.
   next free one, and `IncidentValidator` flags the later of any duplicates that
   still arrive through sync so a person can renumber one. Neither task is
   discarded.
+
+## Parallel-entry conflicts, continued
+
+- A task editor that is open when another device saves the same Assignment/Team
+  number now shows the conflict live and offers the next free number in the same
+  pattern (`G1` becomes `G2`).
+- Objectives added at the same position by two devices are settled silently and
+  identically on every device (`Ics202Form`).
+- ICS 204 rows linked to a SAR task show the task's number read-only, since the
+  task already overwrote it on sync; unlinked 204 rows reusing a task number are
+  flagged by the validator.
+- Radio channel numbers repeated within a zone are flagged on the ICS 205 tab
+  and by the validator, and saving one prompts to use the next free number, keep
+  both, or keep editing (`RadioChannelNumbers`).
+- Closing, switching or stopping sharing now saves open detached editors first
+  and warns only when one cannot be saved automatically (for example a modal
+  dialog).

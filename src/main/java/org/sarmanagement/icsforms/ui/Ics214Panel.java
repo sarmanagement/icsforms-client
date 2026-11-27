@@ -816,6 +816,13 @@ public class Ics214Panel extends JPanel {
 		frame.setLocationByPlatform(true);
 		POP_OUT_WINDOWS.put(form, frame);
 		UiSupport.registerIncidentWindow(frame, data);
+		UiSupport.registerIncidentWindowFlush(frame, () -> {
+			if (popOut.controller.getData() == data && !popOut.saveToModel()) {
+				return false;
+			}
+			popOut.controller.markDirty();
+			return true;
+		});
 		frame.setVisible(true);
 		return frame;
 	}

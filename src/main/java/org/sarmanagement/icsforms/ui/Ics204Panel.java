@@ -1095,6 +1095,13 @@ public class Ics204Panel extends JPanel {
 			UiSupport.configureDialogComboBox(resourceTypeField, 170);
 			UiSupport.configureDialogComboBox(taskTypeField, 170);
 			assignmentTeamNumberField.setText(row.getAssignmentTeamNumber());
+			boolean taskOwnsNumber = row.getAssignmentId() != null && !row.getAssignmentId().isBlank()
+					&& controller.getData().getSarTaskAssignments().stream()
+							.anyMatch(task -> row.getAssignmentId().equals(task.getAssignmentId()));
+			if (taskOwnsNumber) {
+				assignmentTeamNumberField.setEditable(false);
+				assignmentTeamNumberField.setToolTipText("Set on the linked SAR task; change it there.");
+			}
 			resourceTypeField.setSelectedItem(row.getResourceType());
 			taskTypeField.setSelectedItem(row.getTaskType());
 			resourceField.setText(row.getResourceIdentifier());
