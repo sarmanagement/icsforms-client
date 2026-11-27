@@ -776,6 +776,11 @@ conflict, nor are two instances filling separate empty fields.
   it to the usable screen area (so buttons stay visible at `uiScale=2`), and
   scrolls content that cannot fit. It is installed at startup for all dialogs
   and used by the `UiSupport` resizable option and confirm dialogs.
+- **Plan reviews reach every view.** Role panels re-bind to the latest incident
+  on each change event (they ignored events after the first remote refresh), and
+  the review strips embedded in the ICS 205, ICS 206, canine medical and safety
+  tabs refresh with their panel. Review assertions are covered by the
+  host-and-client sync tests.
 
 Still open: the disconnected-entry follow-ups in issue #72 (including using
 `REMOVE` for oversized-edit recovery), the stuck-tab report whose cause was

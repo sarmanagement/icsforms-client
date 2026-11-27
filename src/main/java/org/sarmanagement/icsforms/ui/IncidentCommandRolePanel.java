@@ -86,7 +86,7 @@ public class IncidentCommandRolePanel extends JPanel {
 	private final UiRefreshState refreshState = new UiRefreshState();
 	private final Consumer<WorkspaceDestination> navigator;
 	private final AssignmentActions assignmentActions;
-	private final AppController.IncidentBinding binding;
+	private volatile AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
 	private final IncidentClockPanel clockPanel;
 	private final JComboBox<IapPlanningStage> planningStage = new JComboBox<>(IapPlanningStage.values());
@@ -152,7 +152,8 @@ public class IncidentCommandRolePanel extends JPanel {
 		resourceGrouping.addActionListener(event -> rebuildResources(controller.getData()));
 		refreshFromModel();
 		subscription = controller.addIncidentChangeListener(change -> {
-			if (controller.isCurrent(binding)) {
+			if (controller.isCurrent(change.binding())) {
+				binding = change.binding();
 				refreshFromModel();
 			}
 		});

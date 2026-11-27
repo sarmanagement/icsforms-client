@@ -200,9 +200,11 @@ class RemoteIncidentStoreHostTest {
 		edits.put("clueLogIcs233Enabled", data -> data.setClueLogIcs233Enabled(true));
 		edits.put("canineRoutingBaseLocationId", data -> data.setCanineRoutingBaseLocationId("base-1"));
 		edits.put("safetyReview", data -> data.getSafetyReview().setReviewedBy("Safety Officer"));
+		edits.put("communicationsReview", data -> recordReview(data.getCommunicationsReview()));
+		edits.put("humanMedicalReview", data -> recordReview(data.getHumanMedicalReview()));
+		edits.put("canineMedicalReview", data -> recordReview(data.getCanineMedicalReview()));
 		assertTrue(edits.keySet().containsAll(RootSettings.propertyNames().stream()
-				.filter(name -> !name.equals("humanMedicalReview") && !name.equals("canineMedicalReview")
-						&& !name.equals("communicationsReview") && !name.equals("medicalUnitLeaderAssignment"))
+				.filter(name -> !name.equals("medicalUnitLeaderAssignment"))
 				.toList()));
 		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
 			for (Map.Entry<String, Consumer<AppData>> edit : edits.entrySet()) {
@@ -219,6 +221,17 @@ class RemoteIncidentStoreHostTest {
 				assertEquals(expected, RootSettings.snapshot(backing.loadSnapshot(id).data()), edit.getKey());
 			}
 		}
+	}
+
+	/**
+	 * Records a complete review assertion.
+	 *
+	 * @param review assertion to fill
+	 */
+	private static void recordReview(org.sarmanagement.icsforms.model.PlanReviewAssertion review) {
+		review.setReviewedBy("Communications Unit Leader");
+		review.setReviewedAt(java.time.LocalDateTime.of(2026, 1, 2, 3, 4));
+		review.setReviewedContentDigest("abc123");
 	}
 
 	@Test

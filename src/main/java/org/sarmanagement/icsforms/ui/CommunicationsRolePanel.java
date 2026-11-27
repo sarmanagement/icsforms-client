@@ -47,7 +47,7 @@ public class CommunicationsRolePanel extends JPanel {
 	private final Runnable importCsv;
 	private final Runnable exportCsv;
 	private final Runnable addIcpLogEntry;
-	private final AppController.IncidentBinding binding;
+	private volatile AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
 	private final RolePlanStatusBadges planBadges;
 	private final JTextField filter = new JTextField(22);
@@ -120,7 +120,8 @@ public class CommunicationsRolePanel extends JPanel {
 		installListeners();
 		refreshFromModel();
 		subscription = controller.addIncidentChangeListener(change -> {
-			if (controller.isCurrent(binding)) {
+			if (controller.isCurrent(change.binding())) {
+				binding = change.binding();
 				refreshFromModel();
 			}
 		});

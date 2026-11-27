@@ -171,6 +171,7 @@ public class SafetyPanel extends JPanel {
 	 * Loads safety form values into the panel.
 	 */
 	public void refreshFromModel() {
+		PlanReviewStrip.refreshAll(this);
 		bringForward.setEnabled(controller.canReusePlans());
 		AppData data = controller.getData();
 		Ics215aForm analysis = data.getForm215a();

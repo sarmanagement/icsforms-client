@@ -120,6 +120,7 @@ public class Ics206Panel extends JPanel {
 	 * Refreshes editor controls from the active incident without marking it dirty.
 	 */
 	public void refreshFromModel() {
+		PlanReviewStrip.refreshAll(this);
 		bringForward.setEnabled(controller.canReusePlans());
 		loading = true;
 		try {

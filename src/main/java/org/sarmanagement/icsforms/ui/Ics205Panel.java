@@ -159,6 +159,7 @@ public final class Ics205Panel extends JPanel {
 
 	/** Reloads the active document without creating preparation details or dirtying it. */
 	public void refreshFromModel() {
+		PlanReviewStrip.refreshAll(this);
 		bringForward.setEnabled(controller.canReusePlans());
 		loading = true;
 		try {

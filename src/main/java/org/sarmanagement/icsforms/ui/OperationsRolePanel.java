@@ -53,7 +53,7 @@ public class OperationsRolePanel extends JPanel {
 	private final Runnable humanReference;
 	private final Runnable canineReference;
 	private final Runnable openOperationalPlanning;
-	private final AppController.IncidentBinding binding;
+	private volatile AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
 	private final IncidentClockPanel clockPanel;
 	private final RolePlanStatusBadges planBadges;
@@ -149,7 +149,8 @@ public class OperationsRolePanel extends JPanel {
 				.setAccessibleName("Recorded available resources for a new assignment");
 		refreshFromModel();
 		subscription = controller.addIncidentChangeListener(change -> {
-			if (controller.isCurrent(binding)) {
+			if (controller.isCurrent(change.binding())) {
+				binding = change.binding();
 				refreshFromModel();
 			}
 		});

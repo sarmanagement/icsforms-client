@@ -289,6 +289,7 @@ public class CanineMedicalPanel extends JPanel {
 	 * Refreshes the editor while retaining the model's directory and accepted snapshots.
 	 */
 	public void refreshFromModel() {
+		PlanReviewStrip.refreshAll(this);
 		bringForward.setEnabled(controller.canReusePlans());
 		loading = true;
 		try {
