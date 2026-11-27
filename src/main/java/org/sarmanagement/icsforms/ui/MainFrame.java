@@ -199,6 +199,7 @@ public class MainFrame extends JFrame {
 			confirmPendingDraft(event.getComponent());
 		}
 	};
+	private final javax.swing.Timer autosaveRetry = createAutosaveRetry();
 	private boolean restoringEditorState;
 	private boolean restoringTabSelection;
 	private boolean pendingEditorConflict;
@@ -306,7 +307,7 @@ public class MainFrame extends JFrame {
 				throw new IllegalStateException("Unexpected autosave persistence failure", exception);
 			});
 		} else {
-			this.controller.setAutosaveErrorHandler(exception -> showSaveError(exception));
+			this.controller.setAutosaveErrorHandler(this::autosaveFailed);
 		}
 		this.incidentContextPanel = new IncidentContextPanel(controller);
 		this.organizationalChartPanel = new OrganizationalChartPanel(controller);
@@ -468,6 +469,7 @@ public class MainFrame extends JFrame {
 		KeyboardFocusManager.getCurrentKeyboardFocusManager()
 				.removePropertyChangeListener("focusOwner", focusOwnerListener);
 		java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(entryListener);
+		autosaveRetry.stop();
 		clearPendingDraft();
 		editorTextBaselines.clear();
 		super.dispose();
@@ -3226,6 +3228,12 @@ public class MainFrame extends JFrame {
 					}
 				}
 			}
+			List<List<String>> signatures = new ArrayList<>();
+			for (int row : selectedRows) {
+				if (row >= 0 && row < table.getRowCount()) {
+					signatures.add(rowSignature(table, row));
+				}
+			}
 			int editingRow = table.isEditing() ? table.getEditingRow() : -1;
 			int editingColumn = table.isEditing() ? table.getEditingColumn() : -1;
 			Component editorComponent = table.isEditing() ? table.getEditorComponent() : null;
@@ -3237,7 +3245,8 @@ public class MainFrame extends JFrame {
 			boolean edited = table.isEditing() && editorText != null
 					&& !java.util.Objects.equals(editorText, String.valueOf(table.getValueAt(editingRow, editingColumn)));
 			tables.add(new TableViewState(table, selectedRows, selectedColumns, editingRow, editingColumn,
-					editorText, edited, selectionStart, selectionEnd, caretPosition, editorFocused, locationIds));
+					editorText, edited, selectionStart, selectionEnd, caretPosition, editorFocused, locationIds,
+					signatures));
 			if (table.isEditing() && table.getCellEditor() != null) {
 				table.getCellEditor().cancelCellEditing();
 			}
@@ -3278,6 +3287,7 @@ public class MainFrame extends JFrame {
 					}
 				} else if (ics214Panels.stream().noneMatch(panel -> panel.resourcesTable() == table)) {
 					table.clearSelection();
+					reselectMatchingRows(table, tableState.rowSignatures());
 				}
 				continue;
 			}
@@ -3597,10 +3607,49 @@ public class MainFrame extends JFrame {
 	 * @param caretPosition caret location.
 	 * @param focused whether this cell editor owned focus before refresh.
 	 * @param locationIds selected stable incident-location identifiers.
+	 * @param rowSignatures cell text of each selected row, used to find the same rows after a reload.
 	 */
 	private record TableViewState(JTable table, int[] selectedRows, int[] selectedColumns, int editingRow,
 			int editingColumn, String editorText, boolean edited, int selectionStart, int selectionEnd,
-			int caretPosition, boolean focused, List<String> locationIds) {
+			int caretPosition, boolean focused, List<String> locationIds, List<List<String>> rowSignatures) {
+	}
+
+	/**
+	 * Reselects rows whose cell text matches a previously selected row exactly once, so a refresh that reloads
+	 * the model does not drop the operator's selection while another row's data is unchanged.
+	 *
+	 * @param table table to update.
+	 * @param signatures cell text of the rows that were selected.
+	 */
+	static void reselectMatchingRows(JTable table, List<List<String>> signatures) {
+		for (List<String> signature : signatures) {
+			int match = -1;
+			int count = 0;
+			for (int row = 0; row < table.getRowCount(); row++) {
+				if (rowSignature(table, row).equals(signature)) {
+					match = row;
+					count++;
+				}
+			}
+			if (count == 1) {
+				table.addRowSelectionInterval(match, match);
+			}
+		}
+	}
+
+	/**
+	 * Captures the cell text of a table row so the row can be found again after the model reloads.
+	 *
+	 * @param table table holding the row.
+	 * @param viewRow row in view coordinates.
+	 * @return cell text of every column.
+	 */
+	static List<String> rowSignature(JTable table, int viewRow) {
+		List<String> cells = new ArrayList<>();
+		for (int column = 0; column < table.getColumnCount(); column++) {
+			cells.add(String.valueOf(table.getValueAt(viewRow, column)));
+		}
+		return cells;
 	}
 
 	/**
@@ -4179,6 +4228,35 @@ public class MainFrame extends JFrame {
 		detachMonitor();
 		canineMedicalPanel.dispose();
 		controller.close();
+	}
+
+	/**
+	 * Creates the single-shot timer that retries a failed background save.
+	 *
+	 * @return the timer.
+	 */
+	private javax.swing.Timer createAutosaveRetry() {
+		javax.swing.Timer timer = new javax.swing.Timer(15_000, event -> controller.retryPersistence());
+		timer.setRepeats(false);
+		return timer;
+	}
+
+	/**
+	 * Handles a failed background save without interrupting the operator: the failure is logged and shown on the
+	 * persistence status line, the edits stay in the window, and the save is retried quietly. Explicit save
+	 * actions still report failures in a dialog.
+	 *
+	 * @param exception persistence failure.
+	 */
+	private void autosaveFailed(RuntimeException exception) {
+		java.util.logging.Logger.getLogger(MainFrame.class.getName()).log(java.util.logging.Level.WARNING,
+				"Background save failed; will retry", exception);
+		persistenceLabel.setToolTipText(exception.getMessage());
+		retryPersistenceButton.setEnabled(true);
+		if (exception instanceof StoreConflictException) {
+			return;
+		}
+		autosaveRetry.restart();
 	}
 
 	/**

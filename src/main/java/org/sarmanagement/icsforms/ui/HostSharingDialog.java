@@ -1346,7 +1346,7 @@ public class HostSharingDialog extends JDialog {
 						deviceModel.setRowCount(0);
 						for (DeviceInfo device : devices) {
 							deviceModel.addRow(new Object[] {device.name(), device.state(), minutes(device.expiresAt()),
-									device.lastContact() == null ? "never" : minutes(device.lastContact()),
+									device.lastContact() == null ? "not since host started" : minutes(device.lastContact()),
 									connectionText(device)});
 						}
 					} catch (InterruptedException failure) {
