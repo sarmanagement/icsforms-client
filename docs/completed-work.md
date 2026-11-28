@@ -857,7 +857,7 @@ The branch adds outbox retry, archive-before-discard and split controls, durable
 per-view receipt attribution, and the host sharing storage notice. It also adds
 child-JVM replay and duplicate-review coverage, and retains and offers export
 of queued work after a credential cutoff. Validation is still in progress.
-Large dependent groups, provenance for resolved approved work and interrupted
-approvals remain open; see the
+Large dependent groups, safe recovery of an inaccessible existing journal,
+provenance for resolved approved work and interrupted approvals remain open; see the
 [issue status table](host-mode-plan.md#issue-72--closing-the-disconnected-entry-limits).
 Human platform verification remains unrun.

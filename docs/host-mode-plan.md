@@ -560,7 +560,7 @@ This table tracks the remaining work and its validation.
 | 1 | Correct oversized rejected edits | In progress. Splitting archives the original queue, but dependent groups that exceed a batch limit still need a general recovery path. |
 | 2 | Rejected-edit controls in the UI | Implemented: explicit retry, archive-before-discard and split actions; ambiguous submissions remain protected. Validation pending. |
 | 3 | Persist the per-view "accepted" label | Implemented using durable attribution to host receipts. Validation pending. |
-| 4 | Degraded-storage notice in `HostSharingDialog` | Implemented and tested for connected-only and protected-fallback storage, including reopening a fallback journal. |
+| 4 | Degraded-storage notice in `HostSharingDialog` | Notice implemented and tested for connected-only and protected-fallback storage, including reopening a fallback journal. Existing fallback selection can still hide an inaccessible journal with pending work; safe recovery remains open. |
 | 5 | Real-process acceptance tests | In progress: killed-client restart/replay coverage added; full lane validation pending. |
 | 6 | Manual platform verification | Open (human testing). Record results here. |
 | 7 | Duplicate review end to end | Two-client offline replay and duplicate-review coverage added and tested in the displayed lane. |
