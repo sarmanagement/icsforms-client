@@ -51,6 +51,7 @@ jobs:
         run: .github/scripts/platform-filesystem-windows.ps1 mount
       - name: Run tagged filesystem test
         id: test
+        shell: bash
         run: mvn -B -ntp test -Dgroups=platform-filesystem -Dicsforms.excludedTestGroups= -Dicsforms.platformFilesystemTests=true
       - name: Create results summary
         if: always()

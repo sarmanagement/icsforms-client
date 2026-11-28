@@ -8,8 +8,8 @@ case_name="${PLATFORM_FILESYSTEM_CASE:?}"
 
 if [[ "${1:-mount}" == cleanup ]]; then
     if [[ "$case_name" == macos-exfat ]]; then
-        if mount | grep -F " on $volume " >/dev/null; then
-            hdiutil detach "$volume"
+        if [[ -f platform-volume.device ]]; then
+            hdiutil detach "$(cat platform-volume.device)" -force || true
         fi
     elif [[ "$case_name" == linux-* ]]; then
         if mountpoint -q "$volume"; then
@@ -40,8 +40,14 @@ case "$case_name" in
         truncate -s 256M "$image"
         mkfs.ntfs -F -Q "$image"
         sudo mount -t ntfs-3g -o "loop,uid=$(id -u),gid=$(id -g),permissions" "$image" "$volume"
+        probe="$volume/permission-probe"
+        touch "$probe"
+        chmod 600 "$probe"
+        stat -c 'ntfs-3g probe mode=%a owner=%U' "$probe"
+        rm "$probe"
         ;;
     linux-nfs)
+        sudo mkdir -p /etc/exports.d
         mkdir -p platform-export
         chmod 777 platform-export
         printf '%s 127.0.0.1(rw,sync,no_subtree_check,no_root_squash)\n' "$PWD/platform-export" |
@@ -51,9 +57,11 @@ case "$case_name" in
         sudo mount -t nfs -o vers=4 127.0.0.1:"$PWD/platform-export" "$volume"
         ;;
     macos-exfat)
-        image="$PWD/platform-volume.dmg"
-        hdiutil create -size 128m -fs ExFAT -volname ICSFormsPlatform "$image"
-        hdiutil attach -nobrowse -mountpoint "$volume" "$image"
+        # hdiutil create is refused on hosted runners, so format a RAM disk instead.
+        device="$(hdiutil attach -nomount ram://262144 | awk '{print $1}')"
+        echo "$device" > platform-volume.device
+        diskutil eraseVolume ExFAT ICSFormsPlatform "$device"
+        volume=/Volumes/ICSFormsPlatform
         ;;
     macos-apfs)
         volume="$PWD"

@@ -69,7 +69,8 @@ class PlatformFilesystemTest {
 			Path selected = fallback ? alternate : preferred;
 			try (RemoteIncidentStore store = RemoteIncidentStore.connect(gateway, incident, roots)) {
 				assertTrue(store.disconnectedStorageEnabled());
-				assertEquals(fallback, store.disconnectedStorageNotice().isPresent());
+				assertEquals(fallback, store.disconnectedStorageNotice().isPresent(),
+						() -> "storage notice: " + store.disconnectedStorageNotice().orElse("none"));
 				StoredIncident snapshot = store.loadSnapshot(incident);
 				String hostName = snapshot.data().getIncidentContext().getIncidentName();
 				store.detachGateway().close();
