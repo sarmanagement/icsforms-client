@@ -846,3 +846,5 @@ setting, and CodeQL on the final commit.
 
 - The Communications footer now reports sharing and database facts instead of a full network list: when hosting, the IPv4 interfaces (wired/wireless) it listens on, whether pairing is open, connected/paired/revoked counts, up to six active devices and the host fingerprint; on a client, the host address and fingerprint. The Communications window is taller (clamped to the screen).
 - The unfinished render-parity oracle test was removed from the repository (it failed CI); it is kept outside the tree until the organizational-chart projection failure is fixed.
+
+- The host's time zone governs the incident: when hosting starts, a "use system time zone" incident is pinned to the host's explicit zone, which reaches clients through the synchronized root settings. A client's Date/Time Zone menu is disabled ("set by the host"), and while hosting, choosing the system zone re-pins the host's zone. The client footer also shows the device's own interfaces and the host-set zone.

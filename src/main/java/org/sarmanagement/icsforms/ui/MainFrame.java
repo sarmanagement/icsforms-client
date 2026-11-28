@@ -902,7 +902,11 @@ public class MainFrame extends JFrame {
 			specifiedTimeZoneItem.setText("Use specified time zone… (" + configured + ")");
 		};
 		systemTimeZoneItem.addActionListener(e -> {
-			controller.getData().setUseSystemTimeZone(true);
+			if (sharingRole() == SharingRole.HOST) {
+				pinIncidentTimeZone(controller.getData());
+			} else {
+				controller.getData().setUseSystemTimeZone(true);
+			}
 			applyConfiguredTimeZone();
 			refreshTimeZoneLabels.run();
 			controller.markDirty();
@@ -937,6 +941,30 @@ public class MainFrame extends JFrame {
 		timeZoneGroup.add(specifiedTimeZoneItem);
 		timeZoneMenu.add(systemTimeZoneItem);
 		timeZoneMenu.add(specifiedTimeZoneItem);
+		timeZoneMenu.addMenuListener(new javax.swing.event.MenuListener() {
+			/** {@inheritDoc} */
+			@Override
+			public void menuSelected(javax.swing.event.MenuEvent event) {
+				boolean client = sharingRole() == SharingRole.CLIENT;
+				systemTimeZoneItem.setEnabled(!client);
+				specifiedTimeZoneItem.setEnabled(!client);
+				timeZoneMenu.setToolTipText(client ? "The host sets the time zone for every device in this incident."
+						: null);
+				refreshTimeZoneLabels.run();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void menuDeselected(javax.swing.event.MenuEvent event) {
+				// Nothing to undo.
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void menuCanceled(javax.swing.event.MenuEvent event) {
+				// Nothing to undo.
+			}
+		});
 		refreshTimeZoneLabels.run();
 		configMenu.addSeparator();
 		configMenu.add(timeZoneMenu);
@@ -1016,6 +1044,22 @@ public class MainFrame extends JFrame {
 		sharingMenu.add(reconnectItem);
 		sharingMenu.add(outboxItem);
 		return sharingMenu;
+	}
+
+	/**
+	 * Makes the incident's time zone explicit so every device that joins displays and enters times in the host's
+	 * zone instead of its own system zone. An already explicit zone is left alone.
+	 *
+	 * @param data incident document
+	 * @return true when the document changed
+	 */
+	static boolean pinIncidentTimeZone(AppData data) {
+		if (!data.isUseSystemTimeZone()) {
+			return false;
+		}
+		data.setUseSystemTimeZone(false);
+		data.setConfiguredTimeZoneId(ZoneId.systemDefault().getId());
+		return true;
 	}
 
 	/** How this window takes part in sharing. */
@@ -1106,7 +1150,10 @@ public class MainFrame extends JFrame {
 				&& ((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) controller.getStore())
 						.gateway() instanceof org.sarmanagement.icsforms.host.HostGateway gateway) {
 			text.append("Database: on the host at ").append(gateway.location()).append(".\nHost fingerprint: ")
-					.append(gateway.authorityFingerprint().orElse("unknown"));
+					.append(gateway.authorityFingerprint().orElse("unknown")).append("\nThis device is on: ")
+					.append(org.sarmanagement.icsforms.host.NetworkInfo.addressSummary(
+							org.sarmanagement.icsforms.host.NetworkInfo.local()))
+					.append("\nTime zone set by the host: ").append(configuredZoneId(controller.getData()).getId());
 		} else {
 			text.append("Database: local file store on this device only.\nThis device is on: ")
 					.append(org.sarmanagement.icsforms.host.NetworkInfo.addressSummary(
@@ -1194,6 +1241,9 @@ public class MainFrame extends JFrame {
 			hostedIncident = incident;
 			hostLocalStore = store;
 			hostSharingDialog = new HostSharingDialog(this, store, incident, () -> {
+				if (pinIncidentTimeZone(controller.getData())) {
+					controller.markDirty();
+				}
 				if (!saveBeforeSwitch()) {
 					throw new IllegalStateException("Pending edits could not be saved");
 				}

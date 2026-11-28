@@ -31,4 +31,15 @@ class SharingMenuStateTest {
 	void hostCanStopSharing() {
 		assertTrue(MainFrame.sharingMenuState(MainFrame.SharingRole.HOST).stopSharing());
 	}
+
+	@Test
+	void hostingPinsTheSystemZoneOnceSoClientsShareIt() {
+		org.sarmanagement.icsforms.model.AppData data = new org.sarmanagement.icsforms.model.AppData();
+		assertTrue(MainFrame.pinIncidentTimeZone(data));
+		assertFalse(data.isUseSystemTimeZone());
+		assertTrue(data.getConfiguredTimeZoneId().equals(java.time.ZoneId.systemDefault().getId()));
+		data.setConfiguredTimeZoneId("America/Denver");
+		assertFalse(MainFrame.pinIncidentTimeZone(data));
+		assertTrue(data.getConfiguredTimeZoneId().equals("America/Denver"));
+	}
 }
