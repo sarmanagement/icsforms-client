@@ -552,7 +552,7 @@ skipped run does not validate native input.
 ## Run
 
 ```bash
-java -jar target/icsforms-client-0.1.3-SNAPSHOT.jar
+java -jar target/icsforms-client-0.1.3.jar
 ```
 
 The Bouncy Castle FIPS cryptographic module verifies its own jar file, so it cannot be merged into the
