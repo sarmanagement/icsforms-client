@@ -848,3 +848,5 @@ setting, and CodeQL on the final commit.
 - The unfinished render-parity oracle test was removed from the repository (it failed CI); it is kept outside the tree until the organizational-chart projection failure is fixed.
 
 - The host's time zone governs the incident: when hosting starts, a "use system time zone" incident is pinned to the host's explicit zone, which reaches clients through the synchronized root settings. A client's Date/Time Zone menu is disabled ("set by the host"), and while hosting, choosing the system zone re-pins the host's zone. The client footer also shows the device's own interfaces and the host-set zone.
+
+- A connected client's Sharing menu no longer offers "Connect to a host…"; it has an enabled "Disconnect from host…" that asks for confirmation (noting unsent outbox changes) and then closes the window through the normal save-and-close path.

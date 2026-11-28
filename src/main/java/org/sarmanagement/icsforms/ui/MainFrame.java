@@ -997,6 +997,8 @@ public class MainFrame extends JFrame {
 				hostSharingDialog.stopAsync(null);
 			}
 		});
+		JMenuItem disconnectItem = new JMenuItem("Disconnect from host...");
+		disconnectItem.addActionListener(event -> disconnectFromHost());
 		JMenuItem hostItem = new JMenuItem("Host this incident...");
 		hostItem.addActionListener(event -> showHostSharing());
 		JMenuItem connectItem = new JMenuItem("Connect to a host...");
@@ -1013,10 +1015,14 @@ public class MainFrame extends JFrame {
 			public void menuSelected(javax.swing.event.MenuEvent event) {
 				SharingMenuState state = sharingMenuState(sharingRole());
 				standaloneItem.setEnabled(state.stopSharing());
+				disconnectItem.setEnabled(state.disconnect());
+				disconnectItem.setToolTipText(state.disconnect() ? null : "This window is not connected to a host.");
 				hostItem.setEnabled(state.host());
 				hostItem.setToolTipText(state.host() ? null
 						: "This window is connected to a host. Only the device that holds the incident can host it.");
 				connectItem.setEnabled(state.connect());
+				connectItem.setToolTipText(state.connect() ? null
+						: "This window is already connected to a host. Disconnect first to connect elsewhere.");
 				offlineItem.setEnabled(state.offline());
 				reconnectItem.setEnabled(state.repair());
 				reconnectItem.setToolTipText(state.repair() ? null : "Only a connected device can be re-paired.");
@@ -1042,6 +1048,7 @@ public class MainFrame extends JFrame {
 		sharingMenu.add(connectItem);
 		sharingMenu.add(offlineItem);
 		sharingMenu.add(reconnectItem);
+		sharingMenu.add(disconnectItem);
 		sharingMenu.add(outboxItem);
 		return sharingMenu;
 	}
@@ -1076,29 +1083,30 @@ public class MainFrame extends JFrame {
 	 * Which Sharing menu items apply to a role.
 	 *
 	 * @param stopSharing stop hosting
+	 * @param disconnect disconnect this window from its host
 	 * @param host open the host window
 	 * @param connect connect to a host in a new window
 	 * @param offline open a cached incident in a new window
 	 * @param repair re-pair this connected incident
 	 * @param outbox review queued changes
 	 */
-	record SharingMenuState(boolean stopSharing, boolean host, boolean connect, boolean offline, boolean repair,
+	record SharingMenuState(boolean stopSharing, boolean disconnect, boolean host, boolean connect, boolean offline, boolean repair,
 			boolean outbox) {
 	}
 
 	/**
 	 * Decides which Sharing menu items are enabled. Connecting and opening a cached incident each open a new
-	 * window, so they stay available in every role; hosting is not offered to a connected client, and re-pairing
-	 * is offered only to one.
+	 * window, so they are offered except to a connected client, which instead may disconnect or re-pair; hosting is
+	 * not offered to a client.
 	 *
 	 * @param role this window's sharing role
 	 * @return item states
 	 */
 	static SharingMenuState sharingMenuState(SharingRole role) {
 		return switch (role) {
-			case STANDALONE -> new SharingMenuState(false, true, true, true, false, false);
-			case HOST -> new SharingMenuState(true, true, true, true, false, true);
-			case CLIENT -> new SharingMenuState(false, false, true, true, true, true);
+			case STANDALONE -> new SharingMenuState(false, false, true, true, true, false, false);
+			case HOST -> new SharingMenuState(true, false, true, true, true, false, true);
+			case CLIENT -> new SharingMenuState(false, true, false, false, true, true, true);
 		};
 	}
 
@@ -4427,6 +4435,26 @@ public class MainFrame extends JFrame {
 			UiSupport.disposeIncidentWindows(controller.getData());
 		}
 		return true;
+	}
+
+	/**
+	 * Asks for confirmation, then closes this connected window, which ends its connection to the host. Edits not yet
+	 * sent stay in this device's cache and outbox and are sent when the incident is connected again.
+	 */
+	private void disconnectFromHost() {
+		if (sharingRole() != SharingRole.CLIENT) {
+			return;
+		}
+		String pending = outbox.isEmpty() ? ""
+				: "\n\n" + outbox.size() + " change(s) have not reached the host yet. They stay in this device's "
+						+ "outbox and are sent the next time you reconnect.";
+		if (JOptionPane.showConfirmDialog(this,
+				"Disconnect from the host and close this incident window? The incident stays on the host, and "
+						+ "other devices are not affected." + pending,
+				"Disconnect from host", JOptionPane.YES_NO_OPTION,
+				JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION) {
+			closeAfterSave();
+		}
 	}
 
 	/**

@@ -13,6 +13,8 @@ class SharingMenuStateTest {
 	void clientCannotHostButCanRepair() {
 		MainFrame.SharingMenuState state = MainFrame.sharingMenuState(MainFrame.SharingRole.CLIENT);
 		assertFalse(state.host());
+		assertFalse(state.connect());
+		assertTrue(state.disconnect());
 		assertFalse(state.stopSharing());
 		assertTrue(state.repair());
 		assertTrue(state.outbox());
@@ -22,6 +24,8 @@ class SharingMenuStateTest {
 	void standaloneCanHostButNotStopOrRepair() {
 		MainFrame.SharingMenuState state = MainFrame.sharingMenuState(MainFrame.SharingRole.STANDALONE);
 		assertTrue(state.host());
+		assertTrue(state.connect());
+		assertFalse(state.disconnect());
 		assertFalse(state.stopSharing());
 		assertFalse(state.repair());
 		assertFalse(state.outbox());
