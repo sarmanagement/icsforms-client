@@ -12,7 +12,6 @@ import javax.swing.JPanel;
 import javax.swing.JTextArea;
 import javax.swing.SwingWorker;
 import javax.swing.Timer;
-import org.sarmanagement.icsforms.host.NetworkInfo;
 
 /**
  * A footer that tells the Communications Unit which networks this device is on, whether each is wireless or wired,
@@ -25,11 +24,11 @@ final class NetworkStatusPanel extends JPanel {
 	private static final int REFRESH_MILLIS = 5000;
 
 	private final transient SharingControls sharing;
-	private final JTextArea networks = new JTextArea(2, 60);
+	private final JTextArea networks = new JTextArea(4, 60);
 	private final JTextArea sharingLine = new JTextArea(1, 40);
 	private final JButton hostButton = new JButton("Host this incident...");
 	private final Timer timer = new Timer(REFRESH_MILLIS, event -> refresh());
-	private String shownNetworks = "";
+	private String shownDetails = "";
 
 	/**
 	 * Creates the footer and starts refreshing it.
@@ -39,7 +38,7 @@ final class NetworkStatusPanel extends JPanel {
 	NetworkStatusPanel(SharingControls sharing) {
 		super(new BorderLayout(8, 0));
 		this.sharing = sharing;
-		setBorder(BorderFactory.createTitledBorder("Network and sharing"));
+		setBorder(BorderFactory.createTitledBorder("Sharing and database"));
 		for (JTextArea area : List.of(networks, sharingLine)) {
 			area.setEditable(false);
 			area.setOpaque(false);
@@ -48,8 +47,8 @@ final class NetworkStatusPanel extends JPanel {
 			area.setFocusable(false);
 		}
 		JPanel text = new JPanel(new BorderLayout());
+		text.add(sharingLine, BorderLayout.NORTH);
 		text.add(networks, BorderLayout.CENTER);
-		text.add(sharingLine, BorderLayout.SOUTH);
 		add(text, BorderLayout.CENTER);
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
 		hostButton.addActionListener(event -> sharing.showHostDialog());
@@ -65,46 +64,46 @@ final class NetworkStatusPanel extends JPanel {
 		timer.stop();
 	}
 
-	/** Re-reads the sharing state and, off the event thread, the network list. */
+	/** Re-reads the sharing state and, off the event thread, the details. */
 	void refresh() {
 		showSharing();
 		new SwingWorker<String, Void>() {
 			/** {@inheritDoc} */
 			@Override
 			protected String doInBackground() {
-				return NetworkInfo.summary(NetworkInfo.distinct(NetworkInfo.local()));
+				return sharing.details();
 			}
 
 			/** {@inheritDoc} */
 			@Override
 			protected void done() {
 				try {
-					showNetworks(get());
+					showDetails(get());
 				} catch (InterruptedException interrupted) {
 					Thread.currentThread().interrupt();
 				} catch (java.util.concurrent.ExecutionException failure) {
-					showNetworks("The networks this device is on could not be determined.");
+					showDetails("The sharing details could not be determined.");
 				}
 			}
 		}.execute();
 	}
 
 	/**
-	 * Shows the network list when it changed.
+	 * Shows the details when they changed.
 	 *
-	 * @param summary one line per network
+	 * @param text one fact per line
 	 */
-	private void showNetworks(String summary) {
-		if (!summary.equals(shownNetworks)) {
-			shownNetworks = summary;
-			networks.setText("This device is on (interface: address on network):\n" + summary);
+	void showDetails(String text) {
+		if (!text.equals(shownDetails)) {
+			shownDetails = text;
+			networks.setText(text);
 			revalidate();
 		}
 	}
 
 	/** Shows the sharing state and the host button. */
 	private void showSharing() {
-		sharingLine.setText("Sharing: " + sharing.status());
+		sharingLine.setText(sharing.status());
 		hostButton.setVisible(sharing.canHost());
 		hostButton.setText(sharing.hosting() ? "Show host window..." : "Host this incident...");
 	}

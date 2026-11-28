@@ -88,4 +88,14 @@ class HostReachabilityTest {
 		assertTrue(text.contains("network is fine"));
 		assertEquals("", HostReachability.explainFailure(null));
 	}
+
+	@Test
+	void addressSummaryListsOnlyUsableIpv4Networks() throws Exception {
+		java.util.List<NetworkInfo.Network> networks = java.util.List.of(
+				new NetworkInfo.Network("lo", java.net.InetAddress.getLoopbackAddress(), 8, ""),
+				new NetworkInfo.Network("wlan0", java.net.InetAddress.getByName("192.168.1.5"), 24, "wireless"),
+				new NetworkInfo.Network("eth0", java.net.InetAddress.getByName("fe80::1"), 64, "wired"));
+		assertEquals("wlan0 (wireless) 192.168.1.5", NetworkInfo.addressSummary(networks));
+		assertEquals("no network connection", NetworkInfo.addressSummary(java.util.List.of()));
+	}
 }

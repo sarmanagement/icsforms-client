@@ -18,6 +18,12 @@ interface SharingControls {
 
 		/** {@inheritDoc} */
 		@Override
+		public String details() {
+			return "";
+		}
+
+		/** {@inheritDoc} */
+		@Override
 		public boolean canHost() {
 			return false;
 		}
@@ -41,6 +47,14 @@ interface SharingControls {
 	 * @return text such as "Not sharing" or "Hosting this incident"
 	 */
 	String status();
+
+	/**
+	 * Describes where the incident database is and who is connected, one fact per line. This may inspect network
+	 * interfaces, so call it off the event thread.
+	 *
+	 * @return multi-line description
+	 */
+	String details();
 
 	/**
 	 * Tells whether this window can host its incident, or already does.

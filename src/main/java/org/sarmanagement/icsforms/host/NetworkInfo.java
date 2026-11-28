@@ -164,6 +164,23 @@ public final class NetworkInfo {
 	}
 
 	/**
+	 * Summarizes the usable IPv4 addresses on one line, such as "wlan0 (wireless) 192.168.1.5".
+	 *
+	 * @param networks networks to summarize
+	 * @return interface, kind and address for each non-loopback IPv4 network, or a note when there are none
+	 */
+	public static String addressSummary(List<Network> networks) {
+		List<String> parts = new ArrayList<>();
+		for (Network network : networks) {
+			if (network.address() instanceof java.net.Inet4Address && !network.address().isLoopbackAddress()) {
+				parts.add(network.interfaceName() + (network.kind().isEmpty() ? "" : " (" + network.kind() + ")") + " "
+						+ network.address().getHostAddress());
+			}
+		}
+		return parts.isEmpty() ? "no network connection" : String.join(", ", parts);
+	}
+
+	/**
 	 * Reduces a list to the addresses worth showing an operator: every IPv4 address, and for IPv6 only one
 	 * stable global address per interface (no link-local, temporary-looking duplicates or zone suffixes).
 	 *

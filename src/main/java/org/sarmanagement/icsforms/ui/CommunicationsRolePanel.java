@@ -290,7 +290,7 @@ public class CommunicationsRolePanel extends JPanel {
 
 		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, inventory, new JScrollPane(details));
 		split.setResizeWeight(0.55);
-		split.setPreferredSize(new Dimension(1120, 680));
+		split.setPreferredSize(new Dimension(1120, 760));
 		return split;
 	}
 

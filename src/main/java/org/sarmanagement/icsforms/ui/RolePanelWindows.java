@@ -307,7 +307,13 @@ final class RolePanelWindows {
 		ApplicationIcon.install(frame, variant);
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.setContentPane(panel);
-		frame.setSize(1220, 820);
+		java.awt.Dimension size = new java.awt.Dimension(1280, 900);
+		if (!java.awt.GraphicsEnvironment.isHeadless()) {
+			java.awt.Rectangle screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+					.getMaximumWindowBounds();
+			size.setSize(Math.min(size.width, screen.width), Math.min(size.height, screen.height));
+		}
+		frame.setSize(size);
 		frame.setMinimumSize(new java.awt.Dimension(860, 620));
 		frame.setLocationByPlatform(true);
 		return frame;

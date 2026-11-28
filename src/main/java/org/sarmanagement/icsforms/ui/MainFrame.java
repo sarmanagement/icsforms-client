@@ -1072,6 +1072,50 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
+	 * Describes the database and the connected devices for the Communications panel footer.
+	 *
+	 * @return one fact per line
+	 */
+	private String sharingDetails() {
+		StringBuilder text = new StringBuilder();
+		SharingRole role = sharingRole();
+		HostSharingDialog dialog = hostSharingDialog;
+		if (role == SharingRole.HOST && dialog != null && dialog.session() != null) {
+			org.sarmanagement.icsforms.host.HostSession host = dialog.session();
+			org.sarmanagement.icsforms.host.HostStatus status = host.status();
+			text.append("Database: local file store on this device, shared from port ").append(status.port())
+					.append(".\nListening on: ")
+					.append(org.sarmanagement.icsforms.host.NetworkInfo.addressSummary(
+							org.sarmanagement.icsforms.host.NetworkInfo.local()))
+					.append('\n');
+			text.append(host.pairingState().open()
+					? "Accepting new devices now (pairing is open).\n"
+					: "Not accepting new devices; open \"Devices can join\" to add one.\n");
+			java.util.List<org.sarmanagement.icsforms.host.DeviceInfo> devices = host.devices();
+			long revoked = devices.stream()
+					.filter(d -> d.state() == org.sarmanagement.icsforms.host.CredentialState.REVOKED).count();
+			long connected = devices.stream().filter(org.sarmanagement.icsforms.host.DeviceInfo::connected).count();
+			text.append(connected).append(" connected, ").append(devices.size()).append(" paired, ").append(revoked)
+					.append(" revoked.");
+			devices.stream().filter(d -> d.state() == org.sarmanagement.icsforms.host.CredentialState.ACTIVE)
+					.limit(6).forEach(d -> text.append("\n  ").append(d.name()).append(d.connected()
+							? " (connected" : " (not connected")
+							.append(d.lastAddress() == null ? ")" : ", " + d.lastAddress() + ")"));
+			text.append("\nHost fingerprint: ").append(status.hostFingerprint());
+		} else if (role == SharingRole.CLIENT
+				&& ((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) controller.getStore())
+						.gateway() instanceof org.sarmanagement.icsforms.host.HostGateway gateway) {
+			text.append("Database: on the host at ").append(gateway.location()).append(".\nHost fingerprint: ")
+					.append(gateway.authorityFingerprint().orElse("unknown"));
+		} else {
+			text.append("Database: local file store on this device only.\nThis device is on: ")
+					.append(org.sarmanagement.icsforms.host.NetworkInfo.addressSummary(
+							org.sarmanagement.icsforms.host.NetworkInfo.local()));
+		}
+		return text.toString();
+	}
+
+	/**
 	 * Builds the sharing view that the Communications panel shows and uses to open the host window.
 	 *
 	 * @return controls bound to this window
@@ -1082,10 +1126,16 @@ public class MainFrame extends JFrame {
 			@Override
 			public String status() {
 				return switch (sharingRole()) {
-					case HOST -> "hosting this incident for other devices.";
-					case CLIENT -> "connected to a host; this device cannot host this incident.";
-					case STANDALONE -> "not shared. Host this incident to let other devices join.";
+					case HOST -> "This device is hosting this incident for other devices.";
+					case CLIENT -> "This device is connected to a host and cannot host this incident.";
+					case STANDALONE -> "This incident is not shared. Host it to let other devices join.";
 				};
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public String details() {
+				return sharingDetails();
 			}
 
 			/** {@inheritDoc} */
