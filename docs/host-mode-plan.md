@@ -215,8 +215,10 @@ clean views refresh in place; dirty views keep the draft and its *old* token,
 so the draft can only conflict, never overwrite newer data. The host dialog's
 device table marks active devices that lost contact.
 
-*Connected operation.* *Sharing → Connect to a host…* redeems an invitation,
-pins the host, and opens the shared incident in a new window. PDFs and exports
+*Connected operation.* *Sharing → Connect to a host…* redeems an invitation or
+an in-person confirmation number (issue #74), pins the host, and opens the shared
+incident in a new window. A connected window cannot host or connect elsewhere;
+*Sharing → Disconnect from host…* confirms and closes it. PDFs and exports
 are produced locally. If the host is unreachable, edits stay in the open editors
 and unsaved state stays visible (the durable outbox is part 5). Credentials are
 session-only; reconnecting after a restart needs a new invitation (persistence
@@ -226,7 +228,8 @@ is part 6).
 incident mode, time zone and similar) are synchronised as a virtual singleton
 `RootSettings` record (`incident-root-settings`) with per-field versions, merge
 and conflicts, and are included in `loadSnapshot`, refresh and the file
-projection.
+projection. The host governs the time zone: starting to share pins a "system
+time zone" incident to the host's explicit zone, and clients cannot change it.
 
 *Known limits.* Removal is a `REMOVE` operation that retires the record at a new cursor and keeps its versions (see the host API contract); a record changed since the submitter's base version is reported as a conflict instead. If the
 host's file projection fails after the durable commit the client sees the
@@ -470,8 +473,11 @@ is moved later), and invitations are refused after it. With no period end the
 indicator, so demobilisation does not yet set a cutoff; until it does, set the
 operational period end to demobilise credentials.
 
-**Admitting.** Press *Create invitation* (copied to the clipboard) and send the
-text to the device operator over a trusted channel. It works once and expires
+**Admitting.** Devices in the same room use *Devices can join* and the typed
+confirmation number (see `host-operations.md`). Otherwise, in *Advanced*, press
+*Create invitation*; the dialog shows only the `ICSFORMS-INVITE-n:` prefix and
+*Copy* puts the full text on the clipboard. Send it to the device operator over a
+trusted channel. It works once and expires
 quickly. Confirm the fingerprint shown in the dialog when the client pins it.
 
 **Revoking.** Select a device in the list and *Revoke*. Revocation persists
