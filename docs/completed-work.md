@@ -856,7 +856,11 @@ setting, and CodeQL on the final commit.
 The branch adds outbox retry, archive-before-discard and split controls, durable
 per-view receipt attribution, and the host sharing storage notice. It also adds
 child-JVM replay and duplicate-review coverage, and retains and offers export
-of queued work after a credential cutoff. Validation is still in progress.
+of queued work after a credential cutoff. The displayed Maven verification passed
+(1,512 tests, 5 skipped), as did Spotless and Checkstyle. The headless run had
+one failure caused by a `JAVA_TOOL_OPTIONS` banner in child-process output; that
+test passed with the variable unset, but the complete headless lane needs a
+clean rerun.
 Large dependent groups, safe recovery of an inaccessible existing journal,
 provenance for resolved approved work and interrupted approvals remain open; see the
 [issue status table](host-mode-plan.md#issue-72--closing-the-disconnected-entry-limits).
