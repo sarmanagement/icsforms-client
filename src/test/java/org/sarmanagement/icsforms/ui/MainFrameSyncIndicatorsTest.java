@@ -12,7 +12,9 @@ import java.awt.GraphicsEnvironment;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -120,6 +122,65 @@ class MainFrameSyncIndicatorsTest {
 	}
 
 	@Test
+	void durableReceiptsAreAttributedToOnlyTheirWorkspacesAndLogIdentities() {
+		Instant first = Instant.parse("2026-01-01T10:00:00Z");
+		Instant later = first.plusSeconds(60);
+		var result = MainFrame.acceptedWorkspaceSnapshot(Map.of(
+				"root/form202", new RemoteIncidentStore.AcceptedReceipt("one", 1, first),
+				"history/form202", new RemoteIncidentStore.AcceptedReceipt("two", 2, later),
+				"log/team", new RemoteIncidentStore.AcceptedReceipt("three", 3, first),
+				"root/revision", new RemoteIncidentStore.AcceptedReceipt("four", 4, later)));
+		assertEquals(Map.of(WorkspaceId.ICS_202, later), result.workspaces());
+		assertEquals(Map.of("team", first), result.logs());
+	}
+
+	@Test
+	void acceptedTooltipIsRestoredInANewWindow() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("host"), "Shared")) {
+			RemoteIncidentStore paired = host.pair();
+			var gateway = paired.detachGateway();
+			paired.close();
+			String fingerprint = gateway.authorityFingerprint().orElseThrow();
+			Path cache = directory.resolve("cache");
+			try (RemoteIncidentStore remote = new RemoteIncidentStore(gateway, host.incident(), cache)) {
+				var initial = remote.loadSnapshot(host.incident());
+				initial.data().getIncidentContext().setIncidentName("Accepted");
+				remote.save(host.incident(), initial.data(), initial.revision());
+				remote.replayPending();
+			}
+			RemoteIncidentStore restored = RemoteIncidentStore.openOffline(cache, fingerprint, host.incident());
+			var local = restored.loadSnapshot(host.incident());
+			AtomicReference<MainFrame> frame = new AtomicReference<>();
+			SwingUtilities.invokeAndWait(() -> {
+				frame.set(new MainFrame(local.data(), restored, host.incident(), new PdfExportService(),
+						new IncidentValidator(), directory));
+				invokeRefresh(frame.get(), restored);
+			});
+			try {
+				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+				AtomicReference<String> tooltip = new AtomicReference<>("");
+				while (!tooltip.get().contains("Queue: accepted") && System.nanoTime() < deadline) {
+					SwingUtilities.invokeAndWait(() -> tooltip.set(
+							((JTabbedPane) field(frame.get(), "tabs")).getToolTipTextAt(0)));
+					Thread.sleep(20);
+				}
+				assertTrue(tooltip.get().contains("Queue: accepted"), tooltip.get());
+				assertFalse(tooltip.get().contains("Last accepted by the host: none"));
+				SwingUtilities.invokeAndWait(() -> assertFalse(
+						((JTabbedPane) field(frame.get(), "tabs")).getToolTipTextAt(1).contains("Queue: accepted")));
+			} finally {
+				SwingUtilities.invokeAndWait(() -> {
+					AppController controller = (AppController) field(frame.get(), "controller");
+					controller.close();
+					controller.closeStore();
+					frame.get().dispose();
+				});
+			}
+		}
+	}
+
+	@Test
 	void queuedStatusUpdatesTabsWithoutReplacingAnEditorDraft() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("host"), "Shared")) {
@@ -151,7 +212,7 @@ class MainFrameSyncIndicatorsTest {
 				SwingUtilities.invokeAndWait(() -> {
 					JTabbedPane tabs = (JTabbedPane) field(frame.get(), "tabs");
 					assertEquals("Uncommitted typing", draft.get().getText());
-					assertTrue(tabs.getToolTipTextAt(0).contains("Last accepted by the host in this window: none"));
+					assertTrue(tabs.getToolTipTextAt(0).contains("Last accepted by the host: none"));
 					assertTrue(tabs.getToolTipTextAt(0).contains("Last successful sync: "));
 					assertTrue(frame.get().connectionStatusText().contains("last successful sync "));
 					assertFalse(tabs.getTitleAt(1).contains("accepted"));

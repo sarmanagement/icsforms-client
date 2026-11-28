@@ -171,7 +171,7 @@ class RemoteIncidentStoreRejectionTest {
 			String fingerprint = gateway.authorityFingerprint().orElseThrow();
 			try (RemoteIncidentStore store = RemoteIncidentStore.connect(gateway, incident, List.of(fat, secure))) {
 				assertTrue(store.disconnectedStorageEnabled());
-				assertTrue(store.disconnectedStorageNotice().isEmpty());
+				assertTrue(store.disconnectedStorageNotice().orElseThrow().contains(secure.toString()));
 				StoredIncident snapshot = store.loadSnapshot(incident);
 				snapshot.data().getIncidentContext().setIncidentName("kept offline");
 				store.save(incident, snapshot.data(), snapshot.revision());

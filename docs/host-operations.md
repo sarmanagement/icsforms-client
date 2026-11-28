@@ -64,9 +64,13 @@ not require internet access.
    out of band.
 2. The device operator pairs the workstation. Confirm the new device appears
    in the host's paired-device list before treating it as admitted.
-3. If a device is lost or compromised, select it and choose **Revoke selected
-   device**. The host rejects that identity immediately and after restart.
-   Never attempt to make a revoked key valid again.
+3. If a device is demobilised, lost or compromised, select it and choose
+   **Revoke / demobilise selected device**. This immediately and persistently
+   revokes its credential, not other devices or the incident. Ask the device
+   operator to export its outbox via **Review outbox…** before release, and
+   retain the device's private cache until its work has been reconciled. The
+   host cannot see or export work that remains offline on the device. Never
+   attempt to make a revoked key valid again.
 
 ## Re-authorization
 
@@ -86,6 +90,16 @@ not replayed. Keep the client open until it reports the decision.
   new identity; replay occurs only after approval. Accepted record provenance
   identifies both the submitting device and the revoked device on which the
   work was queued.
+- Before requesting repair and again before approved replay, the client exports
+  any pending work to a uniquely named owner-only `.cutoff-` file beside the
+  journal in its actual protected cache location, including a fallback cache.
+  The files remain after replay and contain incident data; protect them,
+  transfer them only through trusted channels and manage deletion explicitly.
+  They share the journal's storage and are not an independent backup: export
+  another copy via **Review outbox…** before releasing or clearing the device.
+  If a protected export cannot be written, repair or replay stops and the outbox
+  stays on the device. Resolve the storage problem and retry. A failed replay
+  after approval may require a new invitation and approval.
 - A denial does not delete the client's outbox. The operator can export it from
   **Review outbox…** for recovery. Resolve the cause and submit a new request
   only after the pending request has been decided.
@@ -146,7 +160,10 @@ remove host files during this drain.
 - **Expired credential:** submit renewal and wait for an administrator
   decision; do not delete the outbox.
 - **Revoked credential:** ask the administrator for a new invitation and submit
-  a repair request; the old identity remains revoked.
+  a repair request; the old identity remains revoked. A device that is offline
+  cannot learn of the cutoff until it reconnects. An offline cache opened
+  without the original device session cannot request repair; export its outbox
+  for manual recovery and preserve the cache.
 - **Waiting or denied:** ask an available administrator to inspect the queue.
   A denial leaves the local outbox available for export; do not send its
   contents through an untrusted channel.

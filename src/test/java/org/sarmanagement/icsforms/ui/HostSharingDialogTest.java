@@ -299,6 +299,21 @@ class HostSharingDialogTest {
 	}
 
 	@Test
+	void storageNoticeTracksLoopbackAndClearsAfterStopping() throws Exception {
+		try (var volume = java.nio.file.FileSystems.newFileSystem(
+				java.net.URI.create("jar:" + directory.resolve("volume.zip").toUri()), java.util.Map.of("create", "true"))) {
+			harness.edt(() -> harness.dialog.setCacheRoot(volume.getPath("/cache")));
+			harness.start();
+			assertTrue(harness.dialog.isSharing());
+			assertTrue(harness.dialog.storageNoticeText().contains("Offline editing is unavailable"));
+			CountDownLatch stopped = new CountDownLatch(1);
+			harness.edt(() -> harness.dialog.stopAsync(stopped::countDown));
+			assertTrue(stopped.await(15, TimeUnit.SECONDS));
+			harness.edt(() -> assertEquals("", harness.dialog.storageNoticeText()));
+		}
+	}
+
+	@Test
 	void stopWithConnectedDevicesWarnsFirst() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		harness.start();
@@ -324,6 +339,8 @@ class HostSharingDialogTest {
 		harness.await(() -> harness.dialog.deviceTable().getRowCount() == 1);
 		harness.edt(() -> harness.dialog.deviceTable().setRowSelectionInterval(0, 0));
 		harness.edt(harness.dialog::revokeSelected);
+		assertTrue(harness.prompts.confirmations.get(harness.prompts.confirmations.size() - 1)
+				.contains("offline work remains on that device"));
 		harness.await(() -> harness.dialog.deviceTable().getRowCount() == 0);
 		assertEquals(CredentialState.REVOKED, harness.dialog.session().devices().get(0).state());
 		harness.edt(() -> harness.dialog.showRevokedBox().doClick());

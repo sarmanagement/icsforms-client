@@ -47,6 +47,7 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.10.2</junit.version>
+        <icsforms.excludedTestGroups>platform-filesystem</icsforms.excludedTestGroups>
         <bc-fips.version>2.1.3</bc-fips.version>
         <bcpkix-fips.version>2.1.13</bcpkix-fips.version>
         <pdfbox.version>3.0.3</pdfbox.version>
@@ -124,6 +125,7 @@
                 <version>3.2.5</version>
                 <configuration>
                     <trimStackTrace>false</trimStackTrace>
+                    <excludedGroups>${icsforms.excludedTestGroups}</excludedGroups>
                     <!-- Isolate static Swing state between test classes. -->
                     <forkCount>1</forkCount>
                     <reuseForks>false</reuseForks>

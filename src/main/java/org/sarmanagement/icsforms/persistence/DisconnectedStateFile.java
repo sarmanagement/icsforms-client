@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.time.Instant;
 
@@ -40,16 +41,37 @@ final class DisconnectedStateFile implements AutoCloseable {
 	 * @param confirmedAt last successful host confirmation, or null
 	 * @param acceptedReceipts number of applied submission receipts recorded locally
 	 * @param pending ordered operations
+	 * @param acceptedChanges most recent receipt for each changed document component
 	 */
 	record State(AppData base, List<IncidentService.VersionedRecord> records, long cursor, AppData draft,
 			RevisionToken revision, Instant confirmedAt, long acceptedReceipts,
-			List<RemoteIncidentStore.PendingOperation> pending) {
+			List<RemoteIncidentStore.PendingOperation> pending,
+			Map<String, RemoteIncidentStore.AcceptedReceipt> acceptedChanges) {
 		/**
 		 * Copies collections on construction.
 		 */
 		State {
 			records = List.copyOf(records);
 			pending = List.copyOf(pending);
+			acceptedChanges = acceptedChanges == null ? Map.of() : Map.copyOf(acceptedChanges);
+		}
+
+		/**
+		 * Creates a state without recorded component receipts.
+		 *
+		 * @param base acknowledged document
+		 * @param records acknowledged record versions
+		 * @param cursor last acknowledged host cursor
+		 * @param draft local document
+		 * @param revision local snapshot token
+		 * @param confirmedAt last successful confirmation
+		 * @param acceptedReceipts number of applied receipts
+		 * @param pending ordered operations
+		 */
+		State(AppData base, List<IncidentService.VersionedRecord> records, long cursor, AppData draft,
+				RevisionToken revision, Instant confirmedAt, long acceptedReceipts,
+				List<RemoteIncidentStore.PendingOperation> pending) {
+			this(base, records, cursor, draft, revision, confirmedAt, acceptedReceipts, pending, Map.of());
 		}
 	}
 
@@ -202,6 +224,44 @@ final class DisconnectedStateFile implements AutoCloseable {
 	 */
 	void export(Path target, List<RemoteIncidentStore.PendingOperation> pending) throws IOException {
 		MAPPER.writerWithDefaultPrettyPrinter().writeValue(target.toFile(), pending);
+	}
+
+	/**
+	 * Writes a uniquely named, owner-only recovery export alongside the protected journal.
+	 *
+	 * @param pending ordered operations to preserve
+	 * @return the retained export path
+	 * @throws IOException when the export cannot be safely written
+	 */
+	Path exportCutoff(List<RemoteIncidentStore.PendingOperation> pending) throws IOException {
+		Path target = directory.resolve(file.getFileName() + ".cutoff-" + java.util.UUID.randomUUID() + ".json");
+		ensureNoSymlinks(directory);
+		ensureNoSymlinks(target);
+		PrivateFiles.secure(directory, true);
+		boolean created = false;
+		try {
+			try (FileChannel output = PrivateFiles.openPrivate(target,
+					Set.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE))) {
+				created = true;
+				java.nio.ByteBuffer buffer = java.nio.ByteBuffer
+						.wrap(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(pending));
+				while (buffer.hasRemaining()) {
+					output.write(buffer);
+				}
+				output.force(true);
+			}
+			PrivateFiles.syncDirectory(directory);
+			return target;
+		} catch (IOException | RuntimeException failure) {
+			if (created) {
+				try {
+					Files.deleteIfExists(target);
+				} catch (IOException cleanupFailure) {
+					failure.addSuppressed(cleanupFailure);
+				}
+			}
+			throw failure;
+		}
 	}
 
 	/**

@@ -188,6 +188,22 @@ public final class OutboxReviewPanel extends JPanel {
 		 */
 		default void replaceRejected(Entry entry) {
 		}
+
+		/**
+		 * Requests retry of the rejected head without changing its identity or submitted batch.
+		 *
+		 * @param entry rejected head operation
+		 */
+		default void retryRejected(Entry entry) {
+		}
+
+		/**
+		 * Requests archival and discard of the sole unsubmitted operation.
+		 *
+		 * @param entry sole pending operation
+		 */
+		default void discardPending(Entry entry) {
+		}
 	}
 
 	private final Actions actions;
@@ -209,6 +225,8 @@ public final class OutboxReviewPanel extends JPanel {
 	private final JButton keepShared = new JButton("Keep all stored copies");
 	private final JButton resolve = new JButton("Apply my choices");
 	private final JButton replace = new JButton("Replace rejected edit with corrected draft");
+	private final JButton retry = new JButton("Retry rejected edit");
+	private final JButton discard = new JButton("Archive and discard edit");
 	private final JButton refresh = new JButton("Refresh conflict values");
 	private final JCheckBox reviewed = new JCheckBox("I reviewed the rebased changes");
 	private final JButton confirm = new JButton("Approve reviewed changes for sync");
@@ -248,6 +266,8 @@ public final class OutboxReviewPanel extends JPanel {
 		buttons.add(keepShared);
 		buttons.add(resolve);
 		buttons.add(replace);
+		buttons.add(retry);
+		buttons.add(discard);
 		buttons.add(refresh);
 		buttons.add(reviewed);
 		buttons.add(confirm);
@@ -288,6 +308,8 @@ public final class OutboxReviewPanel extends JPanel {
 		keepShared.addActionListener(event -> chooseAll(Choice.THEIRS));
 		resolve.addActionListener(event -> requestResolution());
 		replace.addActionListener(event -> actions.replaceRejected(list.getSelectedValue()));
+		retry.addActionListener(event -> actions.retryRejected(list.getSelectedValue()));
+		discard.addActionListener(event -> actions.discardPending(list.getSelectedValue()));
 		refresh.addActionListener(event -> actions.refreshConflict(list.getSelectedValue()));
 		confirm.addActionListener(event -> {
 			Entry selected = list.getSelectedValue();
@@ -355,6 +377,12 @@ public final class OutboxReviewPanel extends JPanel {
 			details.setText("Select an operation to review.");
 		} else {
 			details.setText(entry.rejection() == null ? entry.status().toString() : entry.rejection());
+			if (entry.status() == Status.REJECTED && entry.batch() == null) {
+				details.append("\nTo reduce an oversized edit, correct it in the editors and save, then replace "
+						+ "the rejected edit. Some editors do not allow newly added records to be removed; "
+						+ "striking out a record does not reduce the count. Deleting an existing record also "
+						+ "deletes it on the host. The original queue is archived first.");
+			}
 			SavedChoices saved = choices.get(entry.operationId());
 			for (int i = 0; i < entry.conflicts().size(); i++) {
 				FieldConflict conflict = entry.conflicts().get(i);
@@ -445,6 +473,9 @@ public final class OutboxReviewPanel extends JPanel {
 		keepShared.setEnabled(deciding);
 		replace.setEnabled(entry != null && entry.status() == Status.REJECTED && entries.size() > 1
 				&& entries.getElementAt(0).operationId().equals(entry.operationId()));
+		retry.setEnabled(entry != null && entry.status() == Status.REJECTED
+				&& entries.getElementAt(0).operationId().equals(entry.operationId()));
+		discard.setEnabled(entry != null && entries.size() == 1 && entry.batch() == null);
 		reviewed.setEnabled(entry != null && entry.status() == Status.REVIEW_REQUIRED);
 		confirm.setEnabled(reviewed.isEnabled() && reviewed.isSelected());
 		boolean complete = entry != null && entry.batch() != null

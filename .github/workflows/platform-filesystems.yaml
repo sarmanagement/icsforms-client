@@ -1,0 +1,77 @@
+name: Platform filesystem verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  filesystem:
+    name: ${{ matrix.case }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, case: linux-fat-default }
+          - { os: ubuntu-latest, case: linux-fat-owner }
+          - { os: ubuntu-latest, case: linux-ntfs }
+          - { os: ubuntu-latest, case: linux-nfs }
+          - { os: windows-latest, case: windows-ntfs }
+          - { os: windows-latest, case: windows-exfat }
+          - { os: macos-latest, case: macos-apfs }
+          - { os: macos-latest, case: macos-exfat }
+    env:
+      PLATFORM_FILESYSTEM_CASE: ${{ matrix.case }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Install Linux filesystem utilities
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dosfstools ntfs-3g nfs-kernel-server
+      - name: Mount test filesystem
+        id: mount
+        shell: bash
+        if: runner.os != 'Windows'
+        run: bash .github/scripts/platform-filesystem-mount.sh
+      - name: Mount Windows test filesystem
+        id: mount_windows
+        shell: pwsh
+        if: runner.os == 'Windows'
+        run: .github/scripts/platform-filesystem-windows.ps1 mount
+      - name: Run tagged filesystem test
+        id: test
+        run: mvn -B -ntp test -Dgroups=platform-filesystem -Dicsforms.excludedTestGroups= -Dicsforms.platformFilesystemTests=true
+      - name: Create results summary
+        if: always()
+        env:
+          MOUNT_RESULT: ${{ runner.os == 'Windows' && steps.mount_windows.outcome || steps.mount.outcome }}
+          TEST_RESULT: ${{ steps.test.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python .github/scripts/platform-filesystem-summary.py
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: filesystem-${{ matrix.case }}
+          path: |
+            platform-results.txt
+            target/surefire-reports/TEST-org.sarmanagement.icsforms.persistence.PlatformFilesystemTest.xml
+            target/surefire-reports/org.sarmanagement.icsforms.persistence.PlatformFilesystemTest.txt
+          if-no-files-found: warn
+      - name: Unmount test filesystem
+        if: always() && runner.os != 'Windows'
+        shell: bash
+        run: bash .github/scripts/platform-filesystem-mount.sh cleanup
+      - name: Unmount Windows test filesystem
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: .github/scripts/platform-filesystem-windows.ps1 cleanup

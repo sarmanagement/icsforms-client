@@ -553,20 +553,20 @@ disk-exhaustion and platform validation still outstanding.
 
 ## Issue #72 — closing the disconnected-entry limits
 
-Status audited on `master` after PR #75. #61 (PR #71) and #62 are merged, so the
-work can start. The store-level pieces exist; nothing in the issue's list is
-complete.
+Status audited on `master` after PR #75. #61 (PR #71) and #62 are merged.
+The follow-up implementation is in progress; the entries below distinguish
+implemented coverage from outstanding acceptance.
 
-| # | Item | Status on master |
+| # | Item | Status in this follow-up |
 |---|---|---|
-| 1 | Correct oversized rejected edits | Open. `RemoteIncidentStore.replaceRejected` cannot remove records and batches are not split. |
-| 2 | Rejected-edit controls in the UI | Open. `retryRejected` and `discardPending` exist in `RemoteIncidentStore` and are tested, but only `replaceRejected` is reachable from `OutboxReviewPanel` / `MainFrame`. |
-| 3 | Persist the per-view "accepted" label | Open. The accepted-receipt count is persisted (`DisconnectedStateFile`), but the per-view labels (`acceptedWorkspaces`, `acceptedLogs`) live in `MainFrame` memory. |
-| 4 | Degraded-storage notice in `HostSharingDialog` | Open. `MainFrame` shows the notice for a client window; `HostSharingDialog` does not. |
-| 5 | Real-process acceptance tests | Open. `DisconnectedStateFileTest` and `HostSessionTest` start a child process for narrow checks; the restart and replay scenarios are not run with a killed and restarted client JVM. |
-| 6 | Automated platform verification | Open. A `workflow_dispatch` matrix workflow (Linux, Windows, macOS) with opt-in tests on runner-created filesystems; residual real-hardware cases stay manual. Record results here. |
-| 7 | Duplicate review end to end | Open. `ClueDuplicateReview` and `ClueLogPanelTest` cover the review in one JVM; there is no two-client offline replay test. |
-| 8 | Demobilisation credential cutoff | Open. Re-authorization (#62) is delivered; queued offline work on revocation or demobilisation is not specified or implemented. |
+| 1 | Correct oversized rejected edits | In progress. Corrected drafts can be archived and resubmitted; operator recovery across all record types still needs verification. |
+| 2 | Rejected-edit controls in the UI | In progress. Outbox review adds retry and archive-before-discard actions; acceptance remains pending. |
+| 3 | Persist the per-view "accepted" label | In progress. Receipt-backed component attribution is persisted; final validation remains pending. |
+| 4 | Degraded-storage notice in `HostSharingDialog` | In progress. The dialog displays the loopback notice, including fallback; final validation remains pending. |
+| 5 | Real-process acceptance tests | In progress. Killed-client restart covers dependent edits, clues, activity logs, T-cards, ICS planning data and a lost response. Two clients conflicting on the same record still need real-process coverage. |
+| 6 | Automated platform verification | In progress. An opt-in matrix and tagged filesystem test are added; runner results have not yet been recorded. |
+| 7 | Duplicate review end to end | In progress. Two-client offline duplicate review coverage is added; final validation remains pending. |
+| 8 | Demobilisation credential cutoff | In progress. Revocation retains an owner-only outbox export at the journal location before repair and replay; final validation remains pending. |
 
 ### Platform verification results (item 6)
 
@@ -575,6 +575,10 @@ images (not physical drives). Record each case with date, runner image,
 filesystem, whether the journal was created owner-only or failed over (with the
 notice shown), and whether offline edits survived a restart. Open a bug for any
 failure instead of expanding #72.
+Disk images approximate removable drives; physical devices and the Linux
+kernel NTFS driver where unavailable remain manual checks.
+Linux `vfat` rejects `gmask`; the restrictive FAT case instead uses supported
+`uid`, `gid`, `dmask` and `fmask` options and checks permission read-back.
 
 | Case | Result | Run and date |
 |---|---|---|

@@ -56,6 +56,22 @@ class DisconnectedStateFileTest {
 	}
 
 	@Test
+	void journalWithoutComponentReceiptsRemainsReadable() throws Exception {
+		Path root = directory.resolve("cache");
+		IncidentId incident = IncidentId.newId();
+		Path journal = root.resolve("authority").resolve(incident.value() + ".json");
+		try (DisconnectedStateFile file = new DisconnectedStateFile(root, "authority", incident)) {
+			file.save(state("legacy"));
+			var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+			var json = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(journal.toFile());
+			json.remove("acceptedChanges");
+			mapper.writeValue(journal.toFile(), json);
+			assertEquals("legacy", file.load().draft().getIncidentContext().getIncidentName());
+			assertTrue(file.load().acceptedChanges().isEmpty());
+		}
+	}
+
+	@Test
 	void secondWriterIsExcludedUntilFirstCloses() throws Exception {
 		assumeTrue(Files.getFileStore(directory).supportsFileAttributeView("posix"));
 		Path root = directory.resolve("cache");

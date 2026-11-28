@@ -226,8 +226,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 * Enables durable disconnected operation, failing over between candidate cache locations. A location that
 	 * already holds this incident's journal is preferred; otherwise the first location whose file system can be
 	 * restricted to the owner is used, so that a FAT or exFAT drive does not cost the operator offline editing.
-	 * Only when no candidate can be secured does the store continue connected-only, with
-	 * {@link #disconnectedStorageNotice()} explaining why.
+	 * A fallback or connected-only operation is reported by {@link #disconnectedStorageNotice()}.
 	 *
 	 * @param gateway authenticated host transport
 	 * @param incident shared incident
@@ -243,7 +242,12 @@ public final class RemoteIncidentStore implements IncidentStore {
 		StorageNotSecurableException last = null;
 		for (Path root : ordered) {
 			try {
-				return new RemoteIncidentStore(gateway, incident, root);
+				RemoteIncidentStore connected = new RemoteIncidentStore(gateway, incident, root);
+				if (last != null) {
+					connected.storageNotice = "Offline storage moved to " + root.toAbsolutePath().normalize()
+							+ " because a previous location could not be protected: " + last.getMessage();
+				}
+				return connected;
 			} catch (StorageNotSecurableException failure) {
 				last = failure;
 			}
@@ -311,7 +315,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
-	 * Explains why disconnected storage was not enabled, if it was refused.
+	 * Explains when disconnected storage moved or was not enabled.
 	 *
 	 * @return operator-facing notice, or empty
 	 */
@@ -431,6 +435,27 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
+	 * Identifies an applied host receipt and its host-assigned timestamp.
+	 *
+	 * @param operationId accepted operation identifier
+	 * @param cursor host receipt cursor
+	 * @param receivedAt host-assigned receipt time
+	 */
+	public record AcceptedReceipt(String operationId, long cursor, Instant receivedAt) {
+	}
+
+	/**
+	 * Returns the latest host receipt for each changed root property, history field, or activity log.
+	 * Keys use the prefixes {@code root/}, {@code history/}, and {@code log/}, respectively.
+	 *
+	 * @return immutable component-to-receipt index, empty for an older or connected-only cache
+	 */
+	public synchronized Map<String, AcceptedReceipt> acceptedChanges() {
+		ensureOpen();
+		return state == null ? Map.of() : state.acceptedChanges();
+	}
+
+	/**
 	 * Opens and verifies the local journal namespace.
 	 *
 	 * @param root cache root
@@ -544,7 +569,8 @@ public final class RemoteIncidentStore implements IncidentStore {
 				AppData built = build(read);
 				RevisionToken revision = token(read.cursor(), recordMap(read));
 				commitState(new DisconnectedStateFile.State(built, read.records(), read.cursor(), built, revision,
-						Instant.now(), state == null ? 0 : state.acceptedReceipts(), List.of()));
+						Instant.now(), state == null ? 0 : state.acceptedReceipts(), List.of(),
+						state == null ? Map.of() : state.acceptedChanges()));
 				return localSnapshot();
 			} catch (RemoteAccessException failure) {
 				throw failure;
@@ -560,6 +586,22 @@ public final class RemoteIncidentStore implements IncidentStore {
 		AppData built = build(read);
 		RevisionToken token = token(read.cursor(), records);
 		return remember(token, built, records, read.cursor());
+	}
+
+	/**
+	 * Loads the durable local snapshot without contacting the host.
+	 *
+	 * @param id identity of the shared incident
+	 * @return detached cached document and local revision
+	 * @throws StoreValidationException when no durable cached state is available
+	 */
+	public synchronized StoredIncident loadCachedSnapshot(IncidentId id) {
+		ensureOpen();
+		requireShared(id);
+		if (stateFile == null || state == null) {
+			throw new StoreValidationException("No disconnected incident snapshot is available");
+		}
+		return localSnapshot();
 	}
 
 	/**
@@ -723,6 +765,26 @@ public final class RemoteIncidentStore implements IncidentStore {
 			stateFile.export(validateLocalExportTarget(target), state.pending());
 		} catch (IOException failure) {
 			throw new StorePersistenceException("Cannot export the disconnected outbox", failure);
+		}
+	}
+
+	/**
+	 * Preserves the complete outbox in an owner-only export beside its protected journal.
+	 *
+	 * @return the retained export path, or null if no work is pending
+	 */
+	public synchronized Path exportCutoffOutbox() {
+		ensureOpen();
+		if (state == null || state.pending().isEmpty()) {
+			return null;
+		}
+		if (stateFile == null) {
+			throw new StorePersistenceException("Cannot preserve the cutoff outbox without a journal", null);
+		}
+		try {
+			return stateFile.exportCutoff(state.pending());
+		} catch (IOException failure) {
+			throw new StorePersistenceException("Cannot preserve the cutoff outbox export", failure);
 		}
 	}
 
@@ -903,7 +965,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 					return;
 				}
 				if (edits.isEmpty()) {
-					removeAcknowledged(operation, state.records(), state.cursor(), false);
+					removeAcknowledged(operation, state.records(), state.cursor(), null);
 					continue;
 				}
 				operation = new PendingOperation(operation.operationId(), operation.before(), operation.draft(), exact,
@@ -934,7 +996,8 @@ public final class RemoteIncidentStore implements IncidentStore {
 				return;
 			}
 			List<IncidentService.VersionedRecord> accepted = acceptedRecords(operation, result, transport);
-			removeAcknowledged(operation, accepted, result.cursor(), true);
+			removeAcknowledged(operation, accepted, result.cursor(),
+					new AcceptedReceipt(result.operationId(), result.cursor(), result.receivedAt()));
 		}
 	}
 
@@ -1090,7 +1153,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
-	 * Discards the sole pending edit after explicit user confirmation.
+	 * Archives and discards the sole unsubmitted pending edit after explicit user confirmation.
 	 *
 	 * @param operationId identifier of the edit to discard
 	 */
@@ -1103,9 +1166,10 @@ public final class RemoteIncidentStore implements IncidentStore {
 		if (state.pending().get(0).batch() != null) {
 			throw new StoreValidationException("An ambiguously submitted edit cannot be discarded");
 		}
+		archivePending(operationId);
 		RevisionToken revision = new RevisionToken("local/" + UUID.randomUUID());
 		commitState(new DisconnectedStateFile.State(state.base(), state.records(), state.cursor(), state.base(),
-				revision, state.confirmedAt(), state.acceptedReceipts(), List.of()));
+				revision, state.confirmedAt(), state.acceptedReceipts(), List.of(), state.acceptedChanges()));
 	}
 
 	/**
@@ -1151,17 +1215,27 @@ public final class RemoteIncidentStore implements IncidentStore {
 			throw new StoreValidationException("Correct the cause in the editors and save before replacing the "
 					+ "rejected edit");
 		}
-		try {
-			stateFile.archive(operationId, state.pending());
-		} catch (IOException failure) {
-			throw new StorePersistenceException("Cannot archive the rejected operations", failure);
-		}
+		archivePending(operationId);
 		String replacementId = "offline-" + UUID.randomUUID();
 		PendingOperation replacement = new PendingOperation(replacementId, head.before(), state.draft(), null,
 				PendingStatus.PENDING, List.of(), null, head.reviewBase());
 		commitState(new DisconnectedStateFile.State(state.base(), state.records(), state.cursor(), state.draft(),
-				state.revision(), state.confirmedAt(), state.acceptedReceipts(), List.of(replacement)));
+				state.revision(), state.confirmedAt(), state.acceptedReceipts(), List.of(replacement),
+				state.acceptedChanges()));
 		return replacementId;
+	}
+
+	/**
+	 * Archives the complete queue under a unique name before changing it.
+	 *
+	 * @param operationId identity of the operation being recovered
+	 */
+	private void archivePending(String operationId) {
+		try {
+			stateFile.archive(operationId + "-" + UUID.randomUUID(), state.pending());
+		} catch (IOException failure) {
+			throw new StorePersistenceException("Cannot archive the pending operations", failure);
+		}
 	}
 
 	/**
@@ -1301,7 +1375,8 @@ public final class RemoteIncidentStore implements IncidentStore {
 			draft = next;
 		}
 		commitState(new DisconnectedStateFile.State(base, read.records(), read.cursor(), draft,
-				new RevisionToken("local/" + UUID.randomUUID()), Instant.now(), state.acceptedReceipts(), pending));
+				new RevisionToken("local/" + UUID.randomUUID()), Instant.now(), state.acceptedReceipts(), pending,
+				state.acceptedChanges()));
 	}
 
 	/**
@@ -1383,8 +1458,10 @@ public final class RemoteIncidentStore implements IncidentStore {
 			before = held.document();
 		}
 		RecordDiff diff = RecordDiff.between(before, data);
-		if (!state.revision().equals(expected) && diff.created().isEmpty() && diff.changed().isEmpty()
-				&& diff.removed().isEmpty() && RecordJson.same(RootSettings.snapshot(before), RootSettings.snapshot(data))) {
+		if (EXPORT_MAPPER.valueToTree(before).equals(EXPORT_MAPPER.valueToTree(data))
+				|| (!state.revision().equals(expected) && diff.created().isEmpty() && diff.changed().isEmpty()
+						&& diff.removed().isEmpty()
+						&& RecordJson.same(RootSettings.snapshot(before), RootSettings.snapshot(data)))) {
 			synchronized (cacheLock) {
 				issued.put(data, expected);
 			}
@@ -1395,7 +1472,8 @@ public final class RemoteIncidentStore implements IncidentStore {
 		pending.add(new PendingOperation("offline-" + UUID.randomUUID(), before, data, null,
 				PendingStatus.PENDING, List.of(), null));
 		commitState(new DisconnectedStateFile.State(state.base(), state.records(), state.cursor(),
-				FullDocumentSnapshot.detach(data), revision, state.confirmedAt(), state.acceptedReceipts(), pending));
+				FullDocumentSnapshot.detach(data), revision, state.confirmedAt(), state.acceptedReceipts(), pending,
+				state.acceptedChanges()));
 		synchronized (cacheLock) {
 			latestSavedRevision = revision;
 			cacheBase(revision, new Base(FullDocumentSnapshot.detach(data), indexRecords(state.records()),
@@ -1443,7 +1521,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 		List<PendingOperation> pending = new ArrayList<>(state.pending());
 		pending.set(0, operation);
 		commitState(new DisconnectedStateFile.State(state.base(), state.records(), state.cursor(), state.draft(),
-				state.revision(), state.confirmedAt(), state.acceptedReceipts(), pending));
+				state.revision(), state.confirmedAt(), state.acceptedReceipts(), pending, state.acceptedChanges()));
 	}
 
 	/**
@@ -1452,15 +1530,17 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 * @param operation acknowledged edit
 	 * @param records accepted record versions
 	 * @param cursor receipt cursor
-	 * @param confirmed whether the host acknowledged this operation
+	 * @param receipt host receipt, or null for a local no-op
 	 */
 	private void removeAcknowledged(PendingOperation operation, List<IncidentService.VersionedRecord> records,
-			long cursor, boolean confirmed) {
+			long cursor, AcceptedReceipt receipt) {
 		List<PendingOperation> pending = new ArrayList<>(state.pending());
 		pending.remove(0);
+		Map<String, AcceptedReceipt> changes = receipt == null ? state.acceptedChanges()
+				: AcceptedChangeIndex.update(state.acceptedChanges(), operation.before(), operation.draft(), receipt);
 		commitState(new DisconnectedStateFile.State(operation.draft(), records, cursor, state.draft(),
-				state.revision(), confirmed ? Instant.now() : state.confirmedAt(),
-				state.acceptedReceipts() + (confirmed ? 1 : 0), pending));
+				state.revision(), receipt == null ? state.confirmedAt() : Instant.now(),
+				state.acceptedReceipts() + (receipt == null ? 0 : 1), pending, changes));
 	}
 
 	/**

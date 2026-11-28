@@ -182,6 +182,37 @@ class OutboxReviewPanelTest {
 	}
 
 	@Test
+	void rejectedHeadOffersRetryAndOnlySoleUnsubmittedEditOffersDiscard() throws Exception {
+		Entry rejected = new Entry("rejected", new AppData(), new AppData(), null, Status.REJECTED,
+				List.of(), "Too many records");
+		Entry later = new Entry("later", new AppData(), new AppData(), null, Status.PENDING, List.of(), null);
+		var submitted = new IncidentService.RecordBatch(IncidentId.newId(), "rejected", List.of());
+		Entry ambiguous = new Entry("rejected", new AppData(), new AppData(), submitted, Status.REJECTED,
+				List.of(), "Rejected after submission");
+		SwingUtilities.invokeAndWait(() -> {
+			Recorder recorder = new Recorder();
+			OutboxReviewPanel panel = new OutboxReviewPanel(recorder);
+			panel.setEntries(List.of(rejected));
+			assertTrue(button(panel, "Retry rejected edit").isEnabled());
+			assertTrue(button(panel, "Archive and discard edit").isEnabled());
+			assertFalse(button(panel, "Replace rejected edit with corrected draft").isEnabled());
+			assertTrue(find(panel, JTextArea.class).getText().contains("striking out a record does not reduce"));
+			button(panel, "Retry rejected edit").doClick();
+			button(panel, "Archive and discard edit").doClick();
+			assertEquals(rejected, recorder.retried);
+			assertEquals(rejected, recorder.discarded);
+			panel.setEntries(List.of(rejected, later));
+			assertTrue(button(panel, "Replace rejected edit with corrected draft").isEnabled());
+			assertFalse(button(panel, "Archive and discard edit").isEnabled());
+			find(panel, JList.class).setSelectedIndex(1);
+			assertFalse(button(panel, "Retry rejected edit").isEnabled());
+			panel.setEntries(List.of(ambiguous));
+			assertTrue(button(panel, "Retry rejected edit").isEnabled());
+			assertFalse(button(panel, "Archive and discard edit").isEnabled());
+		});
+	}
+
+	@Test
 	void pendingEditShowsItsChangesAndTheFirstEntryIsSelectedWithABoundedSize() throws Exception {
 		AppData before = new AppData();
 		before.getIncidentContext().setIncidentName("Old");
@@ -401,6 +432,8 @@ class OutboxReviewPanelTest {
 		private Entry resolved;
 		private Entry refreshed;
 		private Entry confirmed;
+		private Entry retried;
+		private Entry discarded;
 		private List<OutboxReviewPanel.Decision> decisions;
 		private int resolutions;
 
@@ -428,6 +461,18 @@ class OutboxReviewPanelTest {
 		@Override
 		public void confirm(Entry entry) {
 			confirmed = entry;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void retryRejected(Entry entry) {
+			retried = entry;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void discardPending(Entry entry) {
+			discarded = entry;
 		}
 	}
 }

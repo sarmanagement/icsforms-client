@@ -20,7 +20,16 @@ Contents:
 Note: the Stage 1 "T1" and "T2" gates are time gates (UTC and provenance) and
 are unrelated to the deployment topologies of the same names.
 
-## Work in progress — issue #61 disconnected workflow
+## Work in progress — issue #72 disconnected-entry follow-up
+
+Issue #61 (PR #71) and #62 are merged. The #72 follow-up adds receipt-backed
+view indicators, host storage notices, outbox controls, cutoff exports, and
+additional acceptance and platform-test scaffolding. These are not a claim of
+issue or stage acceptance: the platform matrix still needs an actual run, and
+the requested real-process scenarios are not all covered. See the current
+[status table](host-mode-plan.md#issue-72--closing-the-disconnected-entry-limits).
+
+## Historical status — issue #61 disconnected workflow
 
 This is a status note, **not a delivery or stage-completion record**. A local
 per-authority, per-incident journal, stable queue ordering, replay, and conflict

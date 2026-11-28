@@ -24,6 +24,8 @@ import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.ActivityLogEntry;
 import org.sarmanagement.icsforms.model.IapPhase;
 import org.sarmanagement.icsforms.model.Ics214Form;
+import org.sarmanagement.icsforms.model.OperatorContext;
+import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentGateway;
@@ -34,6 +36,183 @@ import org.sarmanagement.icsforms.validation.IncidentValidator;
 class ConnectedWorkflowAcceptanceTest {
 	@TempDir
 	Path directory;
+
+	@Test
+	void offlineDuplicateCluesAreReviewedAndDecisionPropagatesToBothClients() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("host"), "Shared")) {
+			initialize(host);
+			RemoteIncidentGateway gatewayA = pairGateway(host);
+			RemoteIncidentGateway gatewayB = pairGateway(host);
+			String fingerprint = gatewayA.authorityFingerprint().orElseThrow();
+			Path cacheA = directory.resolve("duplicate-a");
+			Path cacheB = directory.resolve("duplicate-b");
+			AtomicReference<String> idA = new AtomicReference<>();
+			AtomicReference<String> idB = new AtomicReference<>();
+			RemoteIncidentStore a = new RemoteIncidentStore(gatewayA, host.incident(), cacheA);
+			RemoteIncidentStore b = new RemoteIncidentStore(gatewayB, host.incident(), cacheB);
+			MainFrame first = window(a, host);
+			MainFrame second = window(b, host);
+			try {
+				a.detachGateway().close();
+				b.detachGateway().close();
+				SwingUtilities.invokeAndWait(() -> {
+					idA.set(addOfflineClue(first, "Ridge North", "Blue pack", "Team A"));
+					idB.set(addOfflineClue(second, " ridge  north ", " blue PACK ", "Team B"));
+				});
+				controller(first).save();
+				controller(second).save();
+				assertEquals(1, a.pendingOperations().size());
+				assertEquals(1, b.pendingOperations().size());
+				assertTrue(host.backing().load(host.incident()).getClueLogEntries().isEmpty());
+				a.attachGateway(pairGateway(host));
+				b.attachGateway(pairGateway(host));
+				a.replayPending();
+				b.replayPending();
+				assertTrue(a.pendingOperations().isEmpty());
+				assertTrue(b.pendingOperations().isEmpty());
+				assertEquals(AppController.RemoteRefreshOutcome.REFRESHED, controller(first).refreshFromRemote());
+				var reviewRefresh = controller(second).refreshFromRemote();
+				assertTrue(reviewRefresh == AppController.RemoteRefreshOutcome.REFRESHED
+						|| reviewRefresh == AppController.RemoteRefreshOutcome.UNCHANGED);
+				SwingUtilities.invokeAndWait(() -> {
+					controller(first).setOperatorContext(new OperatorContext("Reviewer", "station-review"));
+					assertEquals(2, table(first).getRowCount());
+					assertEquals(1, ClueDuplicateReview.candidates(controller(first).getData().getClueLogEntries()).size());
+				});
+				review(first, false, idB.get());
+				SwingUtilities.invokeAndWait(() -> assertTrue(controller(first).getData().getClueLogEntries().stream()
+						.noneMatch(ClueLogEntry::isStruckOut)));
+				assertTrue(host.backing().load(host.incident()).getClueLogEntries().stream()
+						.noneMatch(ClueLogEntry::isStruckOut));
+				review(first, true, idB.get());
+				SwingUtilities.invokeAndWait(() -> assertDuplicateDecision(
+						controller(first).getData().getClueLogEntries(), idA.get(), idB.get()));
+				controller(first).save();
+				a.replayPending();
+				assertTrue(a.pendingOperations().isEmpty());
+				assertDuplicateDecision(host.backing().load(host.incident()).getClueLogEntries(), idA.get(), idB.get());
+				var decisionRefresh = controller(second).refreshFromRemote();
+				assertTrue(decisionRefresh == AppController.RemoteRefreshOutcome.REFRESHED
+						|| decisionRefresh == AppController.RemoteRefreshOutcome.UNCHANGED);
+				SwingUtilities.invokeAndWait(() -> {
+					assertEquals(2, table(second).getRowCount());
+					assertEquals(1, java.util.stream.IntStream.range(0, table(second).getRowCount())
+							.filter(row -> "Struck out: duplicate".equals(table(second).getValueAt(row, 8))).count());
+					assertTrue(ClueDuplicateReview.candidates(controller(second).getData().getClueLogEntries()).isEmpty());
+				});
+				assertDuplicateDecision(host.backing().load(host.incident()).getClueLogEntries(), idA.get(), idB.get());
+			} finally {
+				close(first);
+				close(second);
+			}
+			try (RemoteIncidentStore reopened = RemoteIncidentStore.openOffline(cacheB, fingerprint, host.incident())) {
+				List<ClueLogEntry> clues = reopened.loadSnapshot(host.incident()).data().getClueLogEntries();
+				assertDuplicateDecision(clues, idA.get(), idB.get());
+			}
+		}
+	}
+
+	/**
+	 * Adds one independently reported clue to a disconnected client.
+	 * @param frame editing window
+	 * @param location reported location
+	 * @param description reported description
+	 * @param source detecting task
+	 * @return stable clue identity
+	 */
+	private static String addOfflineClue(MainFrame frame, String location, String description, String source) {
+		ClueLogEntry clue = new ClueLogEntry();
+		clue.setLocation(location);
+		clue.setDescription(description);
+		clue.setDetectingTask(source);
+		clue.setFollowUp("Evidence from " + source);
+		clue.setProvenance(Provenance.local(source, "field", java.time.Instant.parse("2026-01-01T00:00:00Z")));
+		controller(frame).getData().getClueLogEntries().add(clue);
+		controller(frame).markDirty();
+		return clue.getEntryId();
+	}
+
+	/**
+	 * Exercises the review and confirmation dialogs through their actual buttons.
+	 * @param frame reviewing window
+	 * @param confirm whether to confirm the selected clue as duplicate
+	 * @param duplicateId identity of the clue to strike out
+	 * @throws Exception if the dialog interaction fails or times out
+	 */
+	private static void review(MainFrame frame, boolean confirm, String duplicateId) throws Exception {
+		java.util.concurrent.CompletableFuture<Void> finished = new java.util.concurrent.CompletableFuture<>();
+		SwingUtilities.invokeLater(() -> {
+			ClueDuplicateReview.Candidate candidate = ClueDuplicateReview.candidates(
+					controller(frame).getData().getClueLogEntries()).get(0);
+			String choice = candidate.first().getEntryId().equals(duplicateId) ? "Strike out first" : "Strike out second";
+			javax.swing.Timer timer = new javax.swing.Timer(50, null);
+			timer.addActionListener(event -> {
+				for (java.awt.Window window : java.awt.Window.getWindows()) {
+					if (window instanceof javax.swing.JDialog dialog && dialog.isShowing()) {
+						javax.swing.JOptionPane pane = findOptionPane(dialog);
+						if (pane != null && dialog.getTitle().equals("Review suspected duplicates")) {
+							pane.setValue(confirm ? choice : "Cancel");
+						} else if (pane != null && dialog.getTitle().equals("Confirm duplicate")) {
+							pane.setValue(javax.swing.JOptionPane.YES_OPTION);
+						}
+					}
+				}
+			});
+			timer.start();
+			try {
+				ClueLogPanel panel = (ClueLogPanel) Ics205PanelTest.field(frame, "clueLogPanel");
+				javax.swing.JPanel buttons = (javax.swing.JPanel) panel.getComponent(1);
+				((javax.swing.JButton) buttons.getComponent(1)).doClick();
+				finished.complete(null);
+			} catch (Throwable failure) {
+				finished.completeExceptionally(failure);
+			} finally {
+				timer.stop();
+			}
+		});
+		finished.get(20, java.util.concurrent.TimeUnit.SECONDS);
+	}
+
+	/**
+	 * Finds the option pane inside a modal dialog.
+	 * @param component component to inspect
+	 * @return option pane, or null if absent
+	 */
+	private static javax.swing.JOptionPane findOptionPane(java.awt.Component component) {
+		if (component instanceof javax.swing.JOptionPane pane) {
+			return pane;
+		}
+		if (component instanceof java.awt.Container container) {
+			for (java.awt.Component child : container.getComponents()) {
+				javax.swing.JOptionPane found = findOptionPane(child);
+				if (found != null) {
+					return found;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Checks both retained reports and the attributed review decision.
+	 * @param clues persisted clue records
+	 * @param retainedId original clue identity
+	 * @param duplicateId struck-out clue identity
+	 */
+	private static void assertDuplicateDecision(List<ClueLogEntry> clues, String retainedId, String duplicateId) {
+		assertEquals(2, clues.size());
+		ClueLogEntry retained = clues.stream().filter(clue -> retainedId.equals(clue.getEntryId())).findFirst().orElseThrow();
+		ClueLogEntry duplicate = clues.stream().filter(clue -> duplicateId.equals(clue.getEntryId())).findFirst().orElseThrow();
+		assertFalse(retained.isStruckOut());
+		assertTrue(duplicate.isStruckOut());
+		assertEquals("Evidence from Team B", duplicate.getFollowUp());
+		assertEquals("Team B", duplicate.getProvenance().operatorName());
+		assertEquals(retainedId, duplicate.getDuplicateConfirmation().duplicateOfId());
+		assertEquals("Reviewer", duplicate.getDuplicateConfirmation().provenance().operatorName());
+		assertEquals("station-review", duplicate.getDuplicateConfirmation().provenance().stationId());
+		assertTrue(duplicate.getDuplicateConfirmation().confirmedAt() != null);
+	}
 
 	@Test
 	void twoDisplayedClientsMergeClueEditsAndRefreshTheirTables() throws Exception {

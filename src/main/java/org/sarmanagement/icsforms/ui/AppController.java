@@ -716,11 +716,36 @@ public class AppController implements AutoCloseable {
 	 * @throws RuntimeException when the store cannot be read; the controller is unchanged.
 	 */
 	public RemoteRefreshOutcome refreshFromRemote() {
+		return refreshFromStore(null);
+	}
+
+	/**
+	 * Rebinds the active incident to its durable local snapshot without contacting the host.
+	 * This must run off the event-dispatch thread and preserves the same draft and race checks as remote refresh.
+	 *
+	 * @param remote store whose cached snapshot is to be applied
+	 * @return what the controller did with the snapshot
+	 * @throws IllegalStateException when called on the event-dispatch thread
+	 * @throws RuntimeException when the cached snapshot cannot be read; the controller is unchanged
+	 */
+	public RemoteRefreshOutcome refreshFromCached(
+			org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote) {
+		return refreshFromStore(Objects.requireNonNull(remote, "remote"));
+	}
+
+	/**
+	 * Loads and conditionally applies a remote or cached snapshot with the same binding checks.
+	 *
+	 * @param cachedStore specific store to read locally, or null to read the active store normally
+	 * @return result of the guarded refresh
+	 */
+	private RemoteRefreshOutcome refreshFromStore(
+			org.sarmanagement.icsforms.persistence.RemoteIncidentStore cachedStore) {
 		if (SwingUtilities.isEventDispatchThread()) {
 			throw new IllegalStateException("Remote refresh performs network I/O and must not run on the event thread.");
 		}
 		RemoteRefreshBinding binding = onOwner(() -> {
-			if (store == null || activeIncidentId == null || closed) {
+			if (store == null || activeIncidentId == null || closed || (cachedStore != null && store != cachedStore)) {
 				return null;
 			}
 			return new RemoteRefreshBinding(store, activeIncidentId, incidentGeneration, storedRevision, editVersion,
@@ -729,7 +754,8 @@ public class AppController implements AutoCloseable {
 		if (binding == null) {
 			return RemoteRefreshOutcome.IGNORED;
 		}
-		StoredIncident remote = binding.source().loadSnapshot(binding.id());
+		StoredIncident remote = cachedStore == null ? binding.source().loadSnapshot(binding.id())
+				: cachedStore.loadCachedSnapshot(binding.id());
 		return onOwner(() -> applyRemoteSnapshot(binding, remote));
 	}
 

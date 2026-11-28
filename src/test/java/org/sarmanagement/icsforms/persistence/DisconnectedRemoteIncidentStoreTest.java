@@ -113,8 +113,48 @@ class DisconnectedRemoteIncidentStoreTest {
 			local.replayPending();
 			assertTrue(local.pendingOperations().isEmpty());
 			assertEquals(1, local.acceptedReceiptCount());
+			assertEquals(operation, local.acceptedChanges().get("root/incidentContext").operationId());
 		}
 		assertEquals("once", backing.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+	}
+
+	@Test
+	void componentReceiptsSurviveRestartAndSubsequentJournalUpdates() {
+		RemoteIncidentGateway gateway = pair();
+		String fingerprint = gateway.authorityFingerprint().orElseThrow();
+		String firstId;
+		String secondId;
+		Map<String, RemoteIncidentStore.AcceptedReceipt> receipts;
+		try (RemoteIncidentStore local = new RemoteIncidentStore(gateway, incident, cache)) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			snapshot.data().getIncidentContext().setIncidentName("first");
+			RevisionToken revision = local.save(incident, snapshot.data(), snapshot.revision());
+			firstId = local.pendingOperations().get(0).operationId();
+			snapshot.data().getForm202().setCommandEmphasis("second");
+			local.save(incident, snapshot.data(), revision);
+			secondId = local.pendingOperations().get(1).operationId();
+			assertTrue(local.acceptedChanges().isEmpty());
+			local.replayPending();
+			receipts = local.acceptedChanges();
+			assertEquals(firstId, receipts.get("root/incidentContext").operationId());
+			assertEquals(secondId, receipts.get("root/form202").operationId());
+			assertNotNull(receipts.get("root/form202").receivedAt());
+		}
+		try (RemoteIncidentStore local = RemoteIncidentStore.openOffline(cache, fingerprint, incident)) {
+			assertEquals(receipts, local.acceptedChanges());
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			snapshot.data().getIncidentContext().setIncidentName("unsubmitted");
+			local.save(incident, snapshot.data(), snapshot.revision());
+			assertEquals(receipts, local.acceptedChanges());
+			local.discardPending(local.pendingOperations().get(0).operationId());
+			assertEquals(receipts, local.acceptedChanges());
+			local.attachGateway(pair());
+			local.loadSnapshot(incident);
+			assertEquals(receipts, local.acceptedChanges());
+		}
+		try (RemoteIncidentStore local = RemoteIncidentStore.openOffline(cache, fingerprint, incident)) {
+			assertEquals(receipts, local.acceptedChanges());
+		}
 	}
 
 	@Test
