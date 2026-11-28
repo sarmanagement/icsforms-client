@@ -983,7 +983,17 @@ public class MainFrame extends JFrame {
 			/** {@inheritDoc} */
 			@Override
 			public void menuSelected(javax.swing.event.MenuEvent event) {
-				standaloneItem.setEnabled(hostSharingDialog != null && hostSharingDialog.isSharing());
+				SharingMenuState state = sharingMenuState(sharingRole());
+				standaloneItem.setEnabled(state.stopSharing());
+				hostItem.setEnabled(state.host());
+				hostItem.setToolTipText(state.host() ? null
+						: "This window is connected to a host. Only the device that holds the incident can host it.");
+				connectItem.setEnabled(state.connect());
+				offlineItem.setEnabled(state.offline());
+				reconnectItem.setEnabled(state.repair());
+				reconnectItem.setToolTipText(state.repair() ? null : "Only a connected device can be re-paired.");
+				outboxItem.setEnabled(state.outbox());
+				outboxItem.setToolTipText(state.outbox() ? null : "Only a shared incident has an outbox.");
 			}
 
 			/** {@inheritDoc} */
@@ -1006,6 +1016,97 @@ public class MainFrame extends JFrame {
 		sharingMenu.add(reconnectItem);
 		sharingMenu.add(outboxItem);
 		return sharingMenu;
+	}
+
+	/** How this window takes part in sharing. */
+	enum SharingRole {
+		/** The incident is edited in the local file store and not shared. */
+		STANDALONE,
+		/** This device hosts the incident for others. */
+		HOST,
+		/** This window is connected to another device's host. */
+		CLIENT
+	}
+
+	/**
+	 * Which Sharing menu items apply to a role.
+	 *
+	 * @param stopSharing stop hosting
+	 * @param host open the host window
+	 * @param connect connect to a host in a new window
+	 * @param offline open a cached incident in a new window
+	 * @param repair re-pair this connected incident
+	 * @param outbox review queued changes
+	 */
+	record SharingMenuState(boolean stopSharing, boolean host, boolean connect, boolean offline, boolean repair,
+			boolean outbox) {
+	}
+
+	/**
+	 * Decides which Sharing menu items are enabled. Connecting and opening a cached incident each open a new
+	 * window, so they stay available in every role; hosting is not offered to a connected client, and re-pairing
+	 * is offered only to one.
+	 *
+	 * @param role this window's sharing role
+	 * @return item states
+	 */
+	static SharingMenuState sharingMenuState(SharingRole role) {
+		return switch (role) {
+			case STANDALONE -> new SharingMenuState(false, true, true, true, false, false);
+			case HOST -> new SharingMenuState(true, true, true, true, false, true);
+			case CLIENT -> new SharingMenuState(false, false, true, true, true, true);
+		};
+	}
+
+	/**
+	 * Works out how this window takes part in sharing.
+	 *
+	 * @return host while sharing, client when connected to a host, otherwise standalone
+	 */
+	private SharingRole sharingRole() {
+		if (hostSharingDialog != null && hostSharingDialog.isSharing()) {
+			return SharingRole.HOST;
+		}
+		return controller.getStore() instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore
+				? SharingRole.CLIENT : SharingRole.STANDALONE;
+	}
+
+	/**
+	 * Builds the sharing view that the Communications panel shows and uses to open the host window.
+	 *
+	 * @return controls bound to this window
+	 */
+	private SharingControls communicationsSharing() {
+		return new SharingControls() {
+			/** {@inheritDoc} */
+			@Override
+			public String status() {
+				return switch (sharingRole()) {
+					case HOST -> "hosting this incident for other devices.";
+					case CLIENT -> "connected to a host; this device cannot host this incident.";
+					case STANDALONE -> "not shared. Host this incident to let other devices join.";
+				};
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public boolean canHost() {
+				return sharingMenuState(sharingRole()).host() && (hosting()
+						|| controller.getStore() != null && "File".equals(controller.getStore().describe().type()));
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public boolean hosting() {
+				return sharingRole() == SharingRole.HOST;
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void showHostDialog() {
+				showHostSharing();
+			}
+		};
 	}
 
 	/**
@@ -2383,7 +2484,7 @@ public class MainFrame extends JFrame {
 		RolePanelWindows.openCommunications(this, controller, this::openWorkspace,
 				() -> new RadioChannelCsvDialogs(ics205Panel, controller).importCsv(),
 				() -> new RadioChannelCsvDialogs(ics205Panel, controller).exportCsv(false),
-				() -> showAddLogEntry(new LogEntryContext(this, "", "", "")));
+				() -> showAddLogEntry(new LogEntryContext(this, "", "", "")), communicationsSharing());
 	}
 
 	/**

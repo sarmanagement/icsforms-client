@@ -71,6 +71,7 @@ public class CommunicationsRolePanel extends JPanel {
 	private final CardLayout viewLayout = new CardLayout();
 	private final JPanel views = new JPanel(viewLayout);
 	private final CommunicationsConsolePanel console;
+	private final NetworkStatusPanel networkStatus;
 	private final IncidentClockPanel clock;
 	private RadioChannel baseline;
 	private String loadedChannelId = "";
@@ -102,6 +103,21 @@ public class CommunicationsRolePanel extends JPanel {
 	 */
 	public CommunicationsRolePanel(AppController controller, Consumer<WorkspaceDestination> navigator,
 			Runnable importCsv, Runnable exportCsv, Runnable addIcpLogEntry) {
+		this(controller, navigator, importCsv, exportCsv, addIcpLogEntry, SharingControls.NONE);
+	}
+
+	/**
+	 * Creates the Communications Unit panel with an ICP activity-log action and this window's sharing controls.
+	 *
+	 * @param controller incident controller.
+	 * @param navigator typed full-workspace navigator.
+	 * @param importCsv established native/CHIRP import workflow.
+	 * @param exportCsv established native export workflow.
+	 * @param addIcpLogEntry opens the shared ICP 214 entry workflow.
+	 * @param sharing sharing state shown in the footer and the host action.
+	 */
+	CommunicationsRolePanel(AppController controller, Consumer<WorkspaceDestination> navigator, Runnable importCsv,
+			Runnable exportCsv, Runnable addIcpLogEntry, SharingControls sharing) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
 		this.navigator = navigator;
@@ -117,6 +133,8 @@ public class CommunicationsRolePanel extends JPanel {
 		views.add(buildBody(), "Plan");
 		views.add(console, "Console");
 		add(views, BorderLayout.CENTER);
+		networkStatus = new NetworkStatusPanel(sharing);
+		add(networkStatus, BorderLayout.SOUTH);
 		installListeners();
 		refreshFromModel();
 		subscription = controller.addIncidentChangeListener(change -> {
@@ -132,6 +150,7 @@ public class CommunicationsRolePanel extends JPanel {
 		subscription.close();
 		console.dispose();
 		clock.dispose();
+		networkStatus.dispose();
 	}
 
 	/**

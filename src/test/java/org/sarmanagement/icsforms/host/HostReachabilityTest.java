@@ -80,4 +80,12 @@ class HostReachabilityTest {
 				"wireless");
 		assertTrue(network.describe().startsWith("wlan0 (wireless): "));
 	}
+
+	@Test
+	void busyConflictIsExplainedAsNotANetworkProblem() {
+		String text = HostReachability.explainFailure("Another device is pairing with the host right now.");
+		assertTrue(text.contains("busy"));
+		assertTrue(text.contains("network is fine"));
+		assertEquals("", HostReachability.explainFailure(null));
+	}
 }

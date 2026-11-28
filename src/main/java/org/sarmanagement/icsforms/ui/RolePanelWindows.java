@@ -251,6 +251,25 @@ final class RolePanelWindows {
 	 */
 	static JFrame openCommunications(Window owner, AppController controller,
 			Consumer<WorkspaceDestination> navigator, Runnable importCsv, Runnable exportCsv, Runnable addIcpLogEntry) {
+		return openCommunications(owner, controller, navigator, importCsv, exportCsv, addIcpLogEntry,
+				SharingControls.NONE);
+	}
+
+	/**
+	 * Opens or focuses the Communications Unit panel with an ICP log-entry action and sharing controls.
+	 *
+	 * @param owner parent window.
+	 * @param controller incident controller.
+	 * @param navigator typed workspace navigator.
+	 * @param importCsv established communications import workflow.
+	 * @param exportCsv established communications export workflow.
+	 * @param addIcpLogEntry opens the shared ICP 214 entry workflow.
+	 * @param sharing sharing state and host action shown in the panel footer.
+	 * @return role window.
+	 */
+	static JFrame openCommunications(Window owner, AppController controller,
+			Consumer<WorkspaceDestination> navigator, Runnable importCsv, Runnable exportCsv, Runnable addIcpLogEntry,
+			SharingControls sharing) {
 		AppData incident = controller.getData();
 		JFrame existing = COMMUNICATIONS_WINDOWS.get(incident);
 		if (existing != null && existing.isDisplayable()) {
@@ -258,7 +277,7 @@ final class RolePanelWindows {
 			return existing;
 		}
 		CommunicationsRolePanel panel = new CommunicationsRolePanel(controller, navigator, importCsv, exportCsv,
-				addIcpLogEntry);
+				addIcpLogEntry, sharing);
 		JFrame frame = createFrame("Communications Unit — " + incident.getIncidentContext().getIncidentName(), panel,
 				ApplicationIcon.Variant.COMMUNICATIONS);
 		frame.addWindowListener(new java.awt.event.WindowAdapter() {

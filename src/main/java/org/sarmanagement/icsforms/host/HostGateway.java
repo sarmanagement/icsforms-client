@@ -367,8 +367,14 @@ public final class HostGateway implements RemoteIncidentGateway {
 		if (status == 423) {
 			return new StoreLockConflictException("The incident is locked by another editor on the host");
 		}
+		if (status == 409 && "busy".equals(failure.code())) {
+			return new StoreUnavailableException("Another device is pairing with the host right now. "
+					+ "Wait a minute for it to finish, then try again.", failure);
+		}
 		if (status == 409) {
-			return new StoreConflictException("The host reports a conflict", null, null);
+			String reason = failure.getMessage() == null || failure.getMessage().isBlank() ? ""
+					: ": " + failure.getMessage();
+			return new StoreConflictException("The host reports a conflict" + reason, null, null);
 		}
 		if (status == 400 || status == 413) {
 			return new StoreValidationException("The host rejected the request: " + failure.getMessage());

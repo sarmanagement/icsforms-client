@@ -836,3 +836,10 @@ setting, and CodeQL on the final commit.
   pairing and data ports (`HostReachability`).
 - Canine medical plan: linked veterinary personnel lists only the linked people,
   with an Add T-cards picker and Remove; links to missing cards are kept.
+
+## Connection conflict messages, Communications network footer, Sharing menu roles
+
+- A host 409 "busy" (another device is pairing) now reaches the client as a clear "try again" message, and other 409s include the host's reason.
+- Connect > Troubleshoot explains the last failed attempt (`HostReachability.explainFailure`) before the network checks.
+- The Communications panel (Plan and Console) has a footer listing networks (wired/wireless), the sharing state, and a Host this incident / Show host window button when this device can host.
+- Sharing menu items are enabled per role (standalone, host, client) via `MainFrame.sharingMenuState`.

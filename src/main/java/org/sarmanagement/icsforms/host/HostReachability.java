@@ -118,6 +118,46 @@ public final class HostReachability {
 	}
 
 	/**
+	 * Explains what a failed connection attempt means and what to do, in terms an operator can act on, because
+	 * the network checks cannot see problems that happen after the host has been reached.
+	 *
+	 * @param message the failure shown for the last attempt, possibly null
+	 * @return an explanation, or an empty string when there is no failure to explain
+	 */
+	public static String explainFailure(String message) {
+		if (message == null || message.isBlank()) {
+			return "";
+		}
+		String text = message.toLowerCase(java.util.Locale.ROOT);
+		String meaning;
+		if (text.contains("another device is pairing") || text.contains("conflict")) {
+			meaning = "The host was reached, so the network is fine. It is busy: only one device can pair at a "
+					+ "time, and either another device is pairing now or an earlier attempt from this or another "
+					+ "device has not timed out. Wait a minute and try again, and ask the host operator whether "
+					+ "another device is waiting for its number to be entered.";
+		} else if (text.contains("not accept this device") || text.contains("revoked")) {
+			meaning = "The host was reached but does not accept this device. Ask the host operator to open "
+					+ "\"Devices can join\" again, or to check that this device was not revoked.";
+		} else if (text.contains("expired")) {
+			meaning = "The host was reached but this device's access has expired. Pair the device again.";
+		} else if (text.contains("identity changed")) {
+			meaning = "The host's certificate is not the one this device remembers. Confirm with the host operator "
+					+ "that this is the right host before pairing again.";
+		} else if (text.contains("incompatible")) {
+			meaning = "This device and the host run incompatible versions. Update the older one.";
+		} else if (text.contains("not serving") || text.contains("not share")) {
+			meaning = "The host was reached but is not sharing an incident right now. Ask the host operator to "
+					+ "start sharing.";
+		} else if (text.contains("cannot be reached") || text.contains("unreachable")) {
+			meaning = "The host could not be reached; the checks below show where it stops.";
+		} else {
+			meaning = "The host was reached, so this is not a network problem. Read the message above, and check the "
+					+ "host's status line.";
+		}
+		return "Last attempt: " + message + "\nWhat it means: " + meaning + "\n\n";
+	}
+
+	/**
 	 * Tells whether every checked step passed.
 	 *
 	 * @param steps outcomes from {@link #check}

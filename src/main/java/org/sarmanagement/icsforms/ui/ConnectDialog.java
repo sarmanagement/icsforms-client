@@ -104,6 +104,8 @@ final class ConnectDialog extends JDialog {
 	private final JTextArea instructions = new JTextArea();
 	/** Networks this device is on. */
 	private final List<NetworkInfo.Network> networks = NetworkInfo.distinct(NetworkInfo.local());
+	/** Message of the last failed attempt, shown with the troubleshooting results. */
+	private String lastFailure;
 	/** Connection produced by a successful attempt. */
 	private Object[] result;
 	/** Set when the operator cancelled, so a late success is released rather than used. */
@@ -452,9 +454,9 @@ final class ConnectDialog extends JDialog {
 							.map(network -> "This device and the host are both on " + network.networkText() + " ("
 									+ network.interfaceName() + ").\n")
 							.orElse("");
-					report.setText(sameNetwork + HostReachability.describe(steps) + (HostReachability.allPassed(steps)
-							? "\nThe host can be reached. If connecting still fails, make sure the host is sharing "
-									+ "and devices can join, then try again."
+					report.setText(HostReachability.explainFailure(lastFailure) + sameNetwork
+							+ HostReachability.describe(steps) + (HostReachability.allPassed(steps)
+							? "\nThe network checks passed: the host can be reached."
 							: "\nFix the failed step first; the host cannot be paired with until it passes."));
 				} catch (InterruptedException interrupted) {
 					Thread.currentThread().interrupt();
@@ -558,6 +560,7 @@ final class ConnectDialog extends JDialog {
 	 */
 	private void failed(Throwable cause) {
 		String message = cause == null || cause.getMessage() == null ? String.valueOf(cause) : cause.getMessage();
+		lastFailure = message;
 		formMessage.setText("Could not connect: " + message);
 		cards.show(content, FORM);
 	}
