@@ -2,6 +2,8 @@ name: Platform filesystem verification
 
 on:
   workflow_dispatch:
+  push: 
+    branches: [disconnected-entry-limits-72]
 
 permissions:
   contents: read
