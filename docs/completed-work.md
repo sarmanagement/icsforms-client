@@ -30,8 +30,8 @@ implementations (the first branch's platform workflow and T-card link repointing
 with the second's split, approval-safeguard and acceptance work); see the
 [Disconnected-entry follow-up](#disconnected-entry-follow-up-in-progress-issue-72)
 below for the validation record. These are not a claim of
-issue or stage acceptance: the platform matrix still needs an actual run, and
-the requested real-process scenarios are not all covered. See the current
+issue or stage acceptance: the platform matrix has run (all eight cases pass; the run also
+fixed host storage on Windows), and the requested real-process scenarios are not all covered. See the current
 [status table](host-mode-plan.md#issue-72--closing-the-disconnected-entry-limits).
 
 The T-card merge follow-up now repoints active activity-log, veterinary-personnel

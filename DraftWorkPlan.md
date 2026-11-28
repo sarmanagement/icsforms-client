@@ -34,7 +34,7 @@ field-level merging of independent creates; #59 and #60 add host transport and c
 platform verification and acceptance work. Issue #62 implements administrator-approved renewal and
 revoked-device replacement with request limits and operations documentation;
 full Stage 2 acceptance and durable client credential/ticket recovery remain
-open. Issue #72's follow-up is in progress; platform runner results, T-card merge
+open. Issue #72's follow-up is in progress; T-card merge
 provenance and reference coverage, and the remaining real-process acceptance
 scenarios are still outstanding. Stage 2/T1
 is not complete. Delivery evidence is in
@@ -576,7 +576,7 @@ defects have targeted fixes and regression tests. A rejected head can be
 replaced by a corrected draft (originals archived), the journal supports
 Windows-style ACLs, and tabs show per-view accepted labels for the current
 window. The follow-up adds durable receipt attribution and further recovery
-controls, but platform results and full acceptance remain outstanding. See the
+controls and hosted-runner platform results (all eight cases pass), but full acceptance remains outstanding. See the
 [#72 status table](docs/host-mode-plan.md#issue-72--closing-the-disconnected-entry-limits).
 Part 6 (#62) includes a durable host approval queue and decision audit,
 same-key expired renewal, invitation-backed new identity for revoked devices,
@@ -584,7 +584,7 @@ pending-outbox review, client waiting/preservation and post-approval replay,
 plus operational and security documentation. The polling ticket and credentials
 are still session-memory-only. The client flow, bounded outbox description,
 queued-work-only attribution and a one-JVM multi-instance scenario are now
-automated; #72 acceptance and platform verification remain outstanding. See
+automated; #72 acceptance remains outstanding; hosted-runner platform verification passes. See
 [host-mode validation](docs/host-mode-validation.md) and the
 [security review](docs/host-mode-security-review.md).
 The connected-operation CI follow-up uses the saved host baseline and tests

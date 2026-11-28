@@ -549,7 +549,7 @@ focused `ReauthorizationTest` covers approval, denial, same-key renewal,
 revoked-key rejection, identity attribution, request rate limiting and backup
 restore; `ReauthorizationFlowTest` and `HostReleaseExerciseTest` add the client
 flow and a multi-instance scenario. Neither replaces the multi-window, real
-disk-exhaustion and platform validation still outstanding.
+disk-exhaustion validation still outstanding.
 
 ## Issue #72 — closing the disconnected-entry limits
 
@@ -564,7 +564,7 @@ implemented coverage from outstanding acceptance.
 | 3 | Persist the per-view "accepted" label | In progress. Receipt-backed component attribution is persisted; final validation remains pending. |
 | 4 | Degraded-storage notice in `HostSharingDialog` | In progress. The dialog displays the loopback notice, including fallback; final validation remains pending. |
 | 5 | Real-process acceptance tests | In progress. Killed-client restart covers dependent edits, clues, activity logs, T-cards, ICS planning data and a lost response. Two clients conflicting on the same record still need real-process coverage. |
-| 6 | Automated platform verification | In progress. An opt-in matrix and tagged filesystem test are added; runner results have not yet been recorded. |
+| 6 | Automated platform verification | Done for hosted runners. All eight cases pass (run 46153305646); physical media remain a manual check. |
 | 7 | Duplicate review end to end | In progress. Two-client offline duplicate review coverage is added; final validation remains pending. |
 | 8 | T-card merge end to end | In progress. Active activity-log, veterinary-personnel and debriefing-supervisor links are repointed and covered by a local persistence test. Two-client offline merge, complete reference coverage, merge provenance and concurrent-edit acceptance remain outstanding. |
 | 9 | Demobilisation credential cutoff | In progress. Revocation retains an owner-only outbox export at the journal location before repair and again before replay; edits saved while an approval is pending are held for manual recovery. Provenance after conflict resolution and interrupted approvals remain open. |
@@ -578,16 +578,18 @@ notice shown), and whether offline edits survived a restart. Open a bug for any
 failure instead of expanding #72.
 Disk images approximate removable drives; physical devices and the Linux
 kernel NTFS driver where unavailable remain manual checks.
-Linux `vfat` rejects `gmask`; the restrictive FAT case instead uses supported
+The first runs found and fixed three defects: host storage could not be
+secured on Windows (it now uses an owner-only ACL), and two workflow script
+issues. Linux `vfat` rejects `gmask`; the restrictive FAT case instead uses supported
 `uid`, `gid`, `dmask` and `fmask` options and checks permission read-back.
 
 | Case | Result | Run and date |
 |---|---|---|
-| Windows, NTFS (owner-only ACL, inherited entries removed) | Not yet run | |
-| Windows, FAT32/exFAT removable drive as cache location (failover to per-user location) | Not yet run | |
-| macOS, APFS (owner-only modes) | Not yet run | |
-| macOS, FAT32/exFAT volume (failover) | Not yet run | |
-| Linux, FAT32/exFAT mount with default `umask`/`fmask` (read-back detects ignored `chmod`, fails over) | Not yet run | |
-| Linux, FAT32/exFAT mount with explicit `uid`/`gmask` that yields owner-only modes | Not yet run | |
-| Linux, NTFS via ntfs-3g or the kernel driver | Not yet run | |
-| Linux, network mount (NFS/SMB) | Not yet run | |
+| Windows, NTFS (owner-only ACL, inherited entries removed) | Pass: owner-only; offline edit survived reopening (windows-2025, NTFS) | [run 46153305646](https://github.com/sarmanagement/icsforms-client/actions/runs/46153305646), 2026-11-28 |
+| Windows, FAT32/exFAT removable drive as cache location (failover to per-user location) | Pass: notified fallback; offline edit survived reopening (exFAT image, `R:`) | [run 46153305646](https://github.com/sarmanagement/icsforms-client/actions/runs/46153305646), 2026-11-28 |
+| macOS, APFS (owner-only modes) | Pass: owner-only; offline edit survived reopening (macOS 26, arm64) | [run 46153305646](https://github.com/sarmanagement/icsforms-client/actions/runs/46153305646), 2026-11-28 |
+| macOS, FAT32/exFAT volume (failover) | Pass: notified fallback; offline edit survived reopening (exFAT RAM disk) | [run 46153305646](https://github.com/sarmanagement/icsforms-client/actions/runs/46153305646), 2026-11-28 |
+| Linux, FAT32/exFAT mount with default `umask`/`fmask` (read-back detects ignored `chmod`, fails over) | Pass: notified fallback; offline edit survived reopening (vfat) | [run 46153305646](https://github.com/sarmanagement/icsforms-client/actions/runs/46153305646), 2026-11-28 |
+| Linux, FAT32/exFAT mount with explicit `uid`/`gmask` that yields owner-only modes | Pass: notified fallback (vfat reports `rwx------` after `chmod 0600`, still treated as unsecured); offline edit survived reopening | [run 46153305646](https://github.com/sarmanagement/icsforms-client/actions/runs/46153305646), 2026-11-28 |
+| Linux, NTFS via ntfs-3g or the kernel driver | Pass: notified fallback (ntfs-3g without a user mapping ignores `chmod`); offline edit survived reopening | [run 46153305646](https://github.com/sarmanagement/icsforms-client/actions/runs/46153305646), 2026-11-28 |
+| Linux, network mount (NFS/SMB) | Pass: owner-only; offline edit survived reopening (NFSv4 loopback; SMB not covered) | [run 46153305646](https://github.com/sarmanagement/icsforms-client/actions/runs/46153305646), 2026-11-28 |
