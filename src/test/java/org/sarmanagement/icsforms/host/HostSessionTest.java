@@ -633,6 +633,7 @@ class HostSessionTest {
 			DeviceInfo info = fixture.session.devices().get(0);
 			assertEquals(CredentialState.ACTIVE, info.state());
 			assertTrue(info.connected());
+			assertEquals("127.0.0.1", info.lastAddress());
 			assertTrue(info.lastContact().isBefore(Instant.now().plusSeconds(1)));
 			fixture.clock.advance(Duration.ofMinutes(5));
 			assertFalse(fixture.session.devices().get(0).connected());

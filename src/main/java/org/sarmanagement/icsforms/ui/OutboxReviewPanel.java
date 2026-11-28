@@ -57,11 +57,28 @@ public final class OutboxReviewPanel extends JPanel {
 	/** An explicit choice for a conflicting field. */
 	public enum Choice {
 		/** No decision has been made. */
-		UNDECIDED,
+		UNDECIDED("Choose…"),
 		/** Retain the submitted value. */
-		MINE,
+		MINE("Keep my edit"),
 		/** Use the host value. */
-		THEIRS
+		THEIRS("Keep the stored copy");
+
+		private final String label;
+
+		/**
+		 * Creates a choice with its display label.
+		 *
+		 * @param label text shown to the operator
+		 */
+		Choice(String label) {
+			this.label = label;
+		}
+
+		/** @return the operator-facing label */
+		@Override
+		public String toString() {
+			return label;
+		}
 	}
 
 	/**
@@ -104,7 +121,9 @@ public final class OutboxReviewPanel extends JPanel {
 		/** @return a concise list label without exposing draft contents */
 		@Override
 		public String toString() {
-			return status + " — " + operationId;
+			String shortId = operationId.startsWith("offline-") ? operationId.substring("offline-".length())
+					: operationId;
+			return status + " — edit " + shortId.substring(0, Math.min(8, shortId.length()));
 		}
 	}
 
@@ -175,7 +194,7 @@ public final class OutboxReviewPanel extends JPanel {
 	private final DefaultListModel<Entry> entries = new DefaultListModel<>();
 	private final JList<Entry> list = new JList<>(entries);
 	private final DefaultTableModel fields = new DefaultTableModel(
-			new Object[] {"Record", "Field", "Base", "Mine", "Host", "Choice"}, 0) {
+			new Object[] {"Record", "Field", "Original", "My edit", "Stored on host", "Choice"}, 0) {
 		/** {@inheritDoc} */
 		@Override
 		public boolean isCellEditable(int row, int column) {
@@ -186,7 +205,9 @@ public final class OutboxReviewPanel extends JPanel {
 	private final JTable table = new JTable(fields);
 	private final JTextArea details = new JTextArea(3, 30);
 	private final JButton export = new JButton("Export / recover draft");
-	private final JButton resolve = new JButton("Request resolution");
+	private final JButton keepMine = new JButton("Keep all my edits");
+	private final JButton keepShared = new JButton("Keep all stored copies");
+	private final JButton resolve = new JButton("Apply my choices");
 	private final JButton replace = new JButton("Replace rejected edit with corrected draft");
 	private final JButton refresh = new JButton("Refresh conflict values");
 	private final JCheckBox reviewed = new JCheckBox("I reviewed the rebased changes");
@@ -214,18 +235,35 @@ public final class OutboxReviewPanel extends JPanel {
 		details.setWrapStyleWord(true);
 		details.getAccessibleContext().setAccessibleName("Outbox operation details");
 		JPanel center = new JPanel(new BorderLayout(4, 4));
-		center.add(new JLabel("Choose Mine or Host for every conflict. Drafts remain until explicitly resolved."),
+		center.add(new JLabel("<html><body style='width: 560px'>An edit could not be applied because the copy stored on the host differs from what your edit "
+				+ "started from. This is not always another person's change; it can be an older stored copy. For each "
+				+ "row, keep your edit or the stored copy (click the Choice cell, or use the buttons below), then "
+				+ "apply. Nothing is lost until you apply.</body></html>"),
 				BorderLayout.NORTH);
 		center.add(new JScrollPane(table), BorderLayout.CENTER);
 		center.add(new JScrollPane(details), BorderLayout.SOUTH);
 		JPanel buttons = new JPanel(new GridLayout(0, 1, 2, 2));
 		buttons.add(export);
+		buttons.add(keepMine);
+		buttons.add(keepShared);
 		buttons.add(resolve);
 		buttons.add(replace);
 		buttons.add(refresh);
 		buttons.add(reviewed);
 		buttons.add(confirm);
-		add(new JScrollPane(list), BorderLayout.WEST);
+		java.awt.Rectangle screen = java.awt.GraphicsEnvironment.isHeadless()
+				? new java.awt.Rectangle(0, 0, 1280, 800)
+				: java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+		setPreferredSize(new java.awt.Dimension(Math.min(960, Math.max(400, screen.width - 120)),
+				Math.min(560, Math.max(300, screen.height - 160))));
+		addHierarchyListener(event -> {
+			if (getTopLevelAncestor() instanceof java.awt.Dialog dialog && !dialog.isResizable()) {
+				dialog.setResizable(true);
+			}
+		});
+		JScrollPane listScroll = new JScrollPane(list);
+		listScroll.setPreferredSize(new java.awt.Dimension(190, 100));
+		add(listScroll, BorderLayout.WEST);
 		add(center, BorderLayout.CENTER);
 		add(buttons, BorderLayout.SOUTH);
 		list.addListSelectionListener(event -> {
@@ -246,6 +284,8 @@ public final class OutboxReviewPanel extends JPanel {
 		});
 		reviewed.addActionListener(event -> updateButtons());
 		export.addActionListener(event -> actions.exportDraft(list.getSelectedValue()));
+		keepMine.addActionListener(event -> chooseAll(Choice.MINE));
+		keepShared.addActionListener(event -> chooseAll(Choice.THEIRS));
 		resolve.addActionListener(event -> requestResolution());
 		replace.addActionListener(event -> actions.replaceRejected(list.getSelectedValue()));
 		refresh.addActionListener(event -> actions.refreshConflict(list.getSelectedValue()));
@@ -295,6 +335,9 @@ public final class OutboxReviewPanel extends JPanel {
 		}
 		choices.clear();
 		choices.putAll(retained);
+		if (selectedIndex < 0 && !entries.isEmpty()) {
+			selectedIndex = 0;
+		}
 		if (selectedIndex >= 0) {
 			list.setSelectedIndex(selectedIndex);
 		}
@@ -319,7 +362,7 @@ public final class OutboxReviewPanel extends JPanel {
 				fields.addRow(new Object[] {conflict.key().type() + " / " + conflict.key().id(), conflict.field(),
 						display(conflict.base()), display(conflict.mine()), display(conflict.theirs()), choice});
 			}
-			if (entry.status() == Status.REVIEW_REQUIRED) {
+			if (entry.status() == Status.PENDING || entry.status() == Status.REVIEW_REQUIRED) {
 				showChanges(entry.before(), entry.draft());
 			}
 		}
@@ -363,8 +406,8 @@ public final class OutboxReviewPanel extends JPanel {
 		if (row < 0 || row >= fields.getRowCount()) {
 			return;
 		}
-		details.setText("Base:\n" + fields.getValueAt(row, 2) + "\n\nDraft:\n" + fields.getValueAt(row, 3)
-				+ "\n\nHost:\n" + fields.getValueAt(row, 4));
+		details.setText("Original:\n" + fields.getValueAt(row, 2) + "\n\nMy edit:\n" + fields.getValueAt(row, 3)
+				+ "\n\nStored on host:\n" + fields.getValueAt(row, 4));
 		details.setCaretPosition(0);
 	}
 
@@ -397,6 +440,9 @@ public final class OutboxReviewPanel extends JPanel {
 		Entry entry = list.getSelectedValue();
 		export.setEnabled(entry != null);
 		refresh.setEnabled(entry != null && entry.status() == Status.CONFLICT);
+		boolean deciding = entry != null && entry.status() == Status.CONFLICT && fields.getRowCount() > 0;
+		keepMine.setEnabled(deciding);
+		keepShared.setEnabled(deciding);
 		replace.setEnabled(entry != null && entry.status() == Status.REJECTED && entries.size() > 1
 				&& entries.getElementAt(0).operationId().equals(entry.operationId()));
 		reviewed.setEnabled(entry != null && entry.status() == Status.REVIEW_REQUIRED);
@@ -407,6 +453,20 @@ public final class OutboxReviewPanel extends JPanel {
 			complete = fields.getValueAt(i, 5) instanceof Choice choice && choice != Choice.UNDECIDED;
 		}
 		resolve.setEnabled(complete);
+	}
+
+	/**
+	 * Sets the same choice on every conflicting field of the selected operation.
+	 *
+	 * @param choice choice to apply to all rows
+	 */
+	private void chooseAll(Choice choice) {
+		if (table.isEditing() && !table.getCellEditor().stopCellEditing()) {
+			return;
+		}
+		for (int i = 0; i < fields.getRowCount(); i++) {
+			fields.setValueAt(choice, i, 5);
+		}
 	}
 
 	/** Delivers explicit choices without changing or resubmitting the draft. */

@@ -10,6 +10,7 @@ import org.sarmanagement.icsforms.host.HostSession;
 import org.sarmanagement.icsforms.host.HostState;
 import org.sarmanagement.icsforms.host.HostStatus;
 import org.sarmanagement.icsforms.host.HostStorage;
+import org.sarmanagement.icsforms.host.NetworkInfo;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.persistence.IncidentId;
@@ -17,10 +18,13 @@ import org.sarmanagement.icsforms.persistence.IncidentStore;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -35,9 +39,14 @@ import javax.swing.Timer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Frame;
+import java.awt.GraphicsConfiguration;
 import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Path;
@@ -133,6 +142,12 @@ public class HostSharingDialog extends JDialog {
 	private transient HostSession session;
 	private transient RemoteIncidentStore loopbackStore;
 	private volatile boolean starting;
+	/** Whether the dialog is showing an open in-person pairing window. */
+	private boolean pairingOpen;
+	/** Every device the host reported on the last refresh, including revoked ones. */
+	private transient java.util.List<DeviceInfo> shownAll = java.util.List.of();
+	/** Test-only stop grace applied to the next start, or null. */
+	private java.time.Duration stopGraceOverride;
 	private boolean stopping;
 	private boolean refreshingDevices;
 	private boolean reviewingRequests;
@@ -141,18 +156,42 @@ public class HostSharingDialog extends JDialog {
 	private transient java.util.function.Consumer<IncidentStore> onLoopback = loopback -> { };
 	private transient Runnable onLocal = () -> { };
 	private transient java.util.function.Consumer<Boolean> transitionGuard = active -> { };
+	private static final String PAIR_IDLE_LABEL = "Allow devices to join";
+	private static final String JOIN_BUTTON_CARD = "button";
+	private static final String JOIN_LABEL_CARD = "label";
 	private final JLabel stateLabel = new JLabel("Not sharing");
 	private final JTextField hostField = new JTextField(defaultHost(), 18);
 	private final JSpinner portSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_PORT, 0, 65535, 1));
 	private final JSpinner enrollmentSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_ENROLLMENT_PORT, 0, 65535, 1));
 	private final JButton startButton = new JButton("Start sharing");
 	private final JButton stopButton = new JButton("Stop sharing");
-	private final JButton inviteButton = new JButton("Create invitation");
+	private final JButton hideButton = new JButton("Hide window (sharing continues)");
+	private final JLabel fingerprintLabel = new JLabel(" ");
+	private final javax.swing.JComboBox<String> addressChoice = new javax.swing.JComboBox<>(detectedAddresses());
+	private final JButton inviteButton = new JButton("Create long invitation");
+	private final JButton pairButton = new JButton(PAIR_IDLE_LABEL);
+	private final javax.swing.JCheckBox showRevoked = new javax.swing.JCheckBox("Show revoked devices");
+	private final JButton copyInvitationButton = new JButton("Copy to clipboard");
+	private final javax.swing.JToggleButton advancedToggle = new javax.swing.JToggleButton("Advanced \u25B8");
+	private final JPanel advancedPanel = new JPanel();
+	/** Guidance under the join line: who to wait for, or what to type. */
+	private final JLabel pairingCodeLabel = new JLabel(" ");
+	private final JTextField entryField = new JTextField(8);
+	private final JButton entryButton = new JButton("Confirm number");
+	private final Timer pairingTimer = new Timer(1000, event -> pollPairing());
+	private boolean polling;
+	private final JLabel pairingDetailLabel = new JLabel(" ");
+	private final JLabel qrLabel = new JLabel();
+	private final java.awt.CardLayout joinCards = new java.awt.CardLayout();
+	private final JPanel joinCardPanel = new JPanel(joinCards);
+	private String pairingPayloadText = "";
 	private final JButton revokeButton = new JButton("Revoke selected device");
+	private final JButton detailsButton = new JButton("Details...");
+	private transient String invitationFull = "";
 	private final JButton reviewRequestsButton = new JButton("Review re-authorization requests");
 	private final JButton backupButton = new JButton("Back up host data...");
 	private final JButton restoreButton = new JButton("Restore host data...");
-	private final JTextArea invitationArea = new JTextArea(4, 48);
+	private final JTextArea invitationArea = new JTextArea(2, 48);
 	private final DefaultTableModel deviceModel = new DefaultTableModel(
 			new Object[] {"Device", "State", "Expires", "Last contact", "Connected"}, 0) {
 		private static final long serialVersionUID = 1L;
@@ -170,6 +209,23 @@ public class HostSharingDialog extends JDialog {
 		}
 	};
 	private final JTable deviceTable = new JTable(deviceModel);
+	private final DefaultTableModel waitingModel = new DefaultTableModel(
+			new Object[] {"Device wanting to join (host and user)", "Status"}, 0) {
+		private static final long serialVersionUID = 1L;
+
+		/**
+		 * Keeps the waiting list read-only.
+		 *
+		 * @param row row index
+		 * @param column column index
+		 * @return always false
+		 */
+		@Override
+		public boolean isCellEditable(int row, int column) {
+			return false;
+		}
+	};
+	private final JTable waitingTable = new JTable(waitingModel);
 	private final Timer refreshTimer = new Timer(REFRESH_MILLIS, event -> refresh());
 	private transient List<DeviceInfo> shownDevices = List.of();
 
@@ -196,6 +252,12 @@ public class HostSharingDialog extends JDialog {
 		refresh();
 		refreshTimer.start();
 		pack();
+		setSize(Math.max(getWidth(), 760) + 30, getHeight() + 40);
+		GraphicsConfiguration screen = getGraphicsConfiguration();
+		Rectangle bounds = screen.getBounds();
+		Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(screen);
+		setSize(Math.min(getWidth(), bounds.width - insets.left - insets.right),
+				Math.min(getHeight(), bounds.height - insets.top - insets.bottom));
 		setLocationRelativeTo(owner);
 	}
 
@@ -297,6 +359,15 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
+	 * Shortens the time stopping hosts keep reporting the stopping state, for tests.
+	 *
+	 * @param grace stop grace period used on the next start, or null for the default
+	 */
+	void setStopGrace(java.time.Duration grace) {
+		stopGraceOverride = grace;
+	}
+
+	/**
 	 * Replaces the prompt implementation, for tests.
 	 *
 	 * @param replacement prompt implementation
@@ -311,6 +382,11 @@ public class HostSharingDialog extends JDialog {
 	 * @return local host name or loopback address
 	 */
 	private static String defaultHost() {
+		for (NetworkInfo.Network network : NetworkInfo.local()) {
+			if (network.address() instanceof java.net.Inet4Address) {
+				return network.hostAddress();
+			}
+		}
 		try {
 			return InetAddress.getLocalHost().getHostName();
 		} catch (UnknownHostException failure) {
@@ -319,59 +395,271 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
+	 * Formats an instant in the local zone to the minute.
+	 *
+	 * @param instant time to format
+	 * @return text such as {@code 2026-11-26 17:45}
+	 */
+	private static String minutes(Instant instant) {
+		return java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+				.format(instant.atZone(java.time.ZoneId.systemDefault()));
+	}
+
+	/**
+	 * Lists the addresses and the host name that devices could use to reach this host.
+	 *
+	 * @return choices, starting with a prompt entry
+	 */
+	private static String[] detectedAddresses() {
+		java.util.List<String> choices = new java.util.ArrayList<>();
+		choices.add("Choose a detected address...");
+		for (NetworkInfo.Network network : NetworkInfo.distinct(NetworkInfo.local())) {
+			choices.add(network.hostAddress() + "   (" + network.interfaceName() + ", network " + network.networkText()
+					+ ")");
+		}
+		try {
+			choices.add(InetAddress.getLocalHost().getHostName() + "   (host name; works only if other devices can resolve it)");
+		} catch (UnknownHostException failure) {
+			// No host name is available; addresses are still offered.
+		}
+		return choices.toArray(String[]::new);
+	}
+
+	/**
+	 * Builds a read-only summary of the networks this host is on, with the addresses devices can use.
+	 *
+	 * @return text area listing each network and address
+	 */
+	private static JTextArea networksArea() {
+		JTextArea area = new JTextArea("Networks this host is on (interface: address on network):\n"
+				+ NetworkInfo.summary(NetworkInfo.distinct(NetworkInfo.local()))
+				+ "\nA device can join only if it is on one of these networks (or can route to one) and its "
+				+ "operator enters one of these addresses as the host.");
+		area.setEditable(false);
+		area.setOpaque(false);
+		area.setLineWrap(true);
+		area.setWrapStyleWord(true);
+		return area;
+	}
+
+	/**
+	 * Creates a titled vertical section.
+	 *
+	 * @param title section title
+	 * @return empty section panel
+	 */
+	private static JPanel column(String title) {
+		JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+		panel.setBorder(BorderFactory.createTitledBorder(title));
+		return panel;
+	}
+
+	/**
+	 * Left-aligns a component and lets it fill the width of its section.
+	 *
+	 * @param component component to align
+	 * @param <T> component type
+	 * @return the same component
+	 */
+	private static <T extends javax.swing.JComponent> T left(T component) {
+		component.setAlignmentX(Component.LEFT_ALIGNMENT);
+		return component;
+	}
+
+	/**
+	 * Creates a wrapped, read-only text block that looks like a label.
+	 *
+	 * @param text text to show
+	 * @return text area
+	 */
+	private static JTextArea readOnlyText(String text) {
+		JTextArea area = new JTextArea(text);
+		area.setEditable(false);
+		area.setOpaque(false);
+		area.setLineWrap(true);
+		area.setWrapStyleWord(true);
+		return area;
+	}
+
+	/**
 	 * Builds the dialog contents.
 	 */
 	private void buildLayout() {
-		JPanel top = new JPanel(new GridLayout(0, 1));
 		JPanel settings = new JPanel(new FlowLayout(FlowLayout.LEFT));
-		settings.add(new JLabel("Address clients use:"));
+		settings.add(new JLabel("Host address devices enter:"));
 		settings.add(hostField);
-		settings.add(new JLabel("Port (0 = any free port):"));
-		settings.add(portSpinner);
-		settings.add(new JLabel("Pairing port:"));
-		settings.add(enrollmentSpinner);
+		settings.add(addressChoice);
+		JPanel ports = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		ports.add(new JLabel("Data port (0 = any free port):"));
+		ports.add(portSpinner);
+		ports.add(new JLabel("Pairing port:"));
+		ports.add(enrollmentSpinner);
+		addressChoice.addActionListener(event -> {
+			String chosen = (String) addressChoice.getSelectedItem();
+			if (addressChoice.getSelectedIndex() > 0 && chosen != null) {
+				hostField.setText(chosen.split("\\s", 2)[0]);
+			}
+		});
+		JTextArea firewall = readOnlyText("Both ports must be open in this host's firewall. Devices enter the "
+				+ "address and the pairing port to find this host.");
+		JPanel setup = column("1. Set up (optional)");
+		setup.add(left(networksArea()));
+		setup.add(left(settings));
+		setup.add(left(ports));
+		setup.add(left(firewall));
+
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		buttons.add(startButton);
 		buttons.add(stopButton);
+		buttons.add(hideButton);
 		buttons.add(stateLabel);
-		top.add(settings);
-		top.add(buttons);
-		JTextArea note = new JTextArea("Both ports must be allowed through the host firewall. Invitations are "
-				+ "single-use and short-lived; treat their text as a secret. Only this incident is shared.");
-		note.setEditable(false);
-		note.setLineWrap(true);
-		note.setWrapStyleWord(true);
-		note.setOpaque(false);
-		top.add(note);
+		fingerprintLabel.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 0));
+		JPanel start = column("2. Start sharing");
+		start.add(left(buttons));
 
 		invitationArea.setEditable(false);
 		invitationArea.setLineWrap(true);
+		invitationArea.setRows(1);
 		JPanel invitePanel = new JPanel(new BorderLayout());
-		invitePanel.setBorder(BorderFactory.createTitledBorder("Invitation (copy and send to the device operator)"));
+		invitePanel.setBorder(BorderFactory.createTitledBorder("Long invitation (a secret)"));
+		invitePanel.add(readOnlyText("The QR code and the \"Devices can join\" window let a person at the host "
+				+ "approve each device by typing the number it shows: use those when you are with the device. "
+				+ "A long invitation is different. It contains a single-use secret, and whoever pastes it into "
+				+ "Connect is admitted without anyone typing a number here. Use it only for a device you cannot "
+				+ "reach in person, send it privately, and treat it like a password: it stops working when it "
+				+ "expires or is used once. For that reason only its start is shown; use Copy to clipboard to "
+				+ "take the full text."), BorderLayout.NORTH);
 		invitePanel.add(new JScrollPane(invitationArea), BorderLayout.CENTER);
-		invitePanel.add(inviteButton, BorderLayout.SOUTH);
+		JPanel inviteButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		inviteButtons.add(inviteButton);
+		inviteButtons.add(copyInvitationButton);
+		copyInvitationButton.setEnabled(false);
+		invitePanel.add(inviteButtons, BorderLayout.SOUTH);
+		advancedPanel.setLayout(new BoxLayout(advancedPanel, BoxLayout.Y_AXIS));
+		advancedPanel.add(left(fingerprintLabel));
+		JPanel qrPanel = new JPanel(new BorderLayout(8, 0));
+		qrPanel.setBorder(BorderFactory.createTitledBorder("Pairing QR code (for a future phone app)"));
+		qrPanel.add(qrLabel, BorderLayout.WEST);
+		qrPanel.add(readOnlyText("Shown only while devices can join. It carries this host's address, ports and "
+				+ "certificate fingerprint, not a secret, so a device can check it is talking to this host. "
+				+ "It stops working when the join window closes."), BorderLayout.CENTER);
+		advancedPanel.add(left(qrPanel));
+		advancedPanel.add(left(invitePanel));
+		advancedPanel.setVisible(false);
+		advancedToggle.addActionListener(event -> toggleAdvanced());
+
+		waitingTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		waitingTable.setPreferredScrollableViewportSize(new Dimension(450, waitingTable.getRowHeight() * 2));
+		JPanel entryRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		entryRow.add(new JLabel("Number shown on that device:"));
+		entryRow.add(entryField);
+		entryRow.add(entryButton);
+		entryField.setEnabled(false);
+		entryButton.setEnabled(false);
+		pairingDetailLabel.setText(" ");
+		JPanel pairButtonHolder = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+		pairButtonHolder.add(pairButton);
+		joinCardPanel.add(pairButtonHolder, JOIN_BUTTON_CARD);
+		joinCardPanel.add(pairingDetailLabel, JOIN_LABEL_CARD);
+		JPanel pairingHeader = new JPanel(new GridLayout(2, 1));
+		pairingHeader.add(joinCardPanel);
+		pairingHeader.add(pairingCodeLabel);
+		JPanel codeText = new JPanel();
+		codeText.setLayout(new BoxLayout(codeText, BoxLayout.Y_AXIS));
+		codeText.add(left(pairingHeader));
+		codeText.add(left(new JScrollPane(waitingTable)));
+		codeText.add(left(entryRow));
+		JPanel pairPanel = new JPanel(new BorderLayout(8, 0));
+		pairPanel.setBorder(BorderFactory.createTitledBorder(
+				"3. Add a device: it connects, shows a number, you enter it here"));
+		pairPanel.add(codeText, BorderLayout.CENTER);
+		hideButton.addActionListener(event -> setVisible(false));
+		hideButton.setEnabled(false);
 
 		deviceTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		deviceTable.setPreferredScrollableViewportSize(new Dimension(450, deviceTable.getRowHeight() * 4));
+		deviceTable.getSelectionModel().addListSelectionListener(event -> {
+			if (!event.getValueIsAdjusting()) {
+				refreshButtons();
+			}
+		});
+		JMenuItem revokeItem = new JMenuItem("Revoke selected device");
+		revokeItem.addActionListener(event -> revokeSelected());
+		JMenuItem detailsItem = new JMenuItem("Details...");
+		detailsItem.addActionListener(event -> showSelectedDeviceDetails());
+		JPopupMenu deviceMenu = new JPopupMenu();
+		deviceMenu.add(detailsItem);
+		deviceMenu.add(revokeItem);
+		deviceTable.addMouseListener(new java.awt.event.MouseAdapter() {
+			/** {@inheritDoc} */
+			@Override
+			public void mousePressed(java.awt.event.MouseEvent event) {
+				showDeviceMenu(event);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void mouseReleased(java.awt.event.MouseEvent event) {
+				showDeviceMenu(event);
+			}
+
+			/**
+			 * Selects the row under the pointer and shows the contextual menu.
+			 *
+			 * @param event mouse event
+			 */
+			private void showDeviceMenu(java.awt.event.MouseEvent event) {
+				if (!event.isPopupTrigger()) {
+					return;
+				}
+				int row = deviceTable.rowAtPoint(event.getPoint());
+				if (row >= 0) {
+					deviceTable.setRowSelectionInterval(row, row);
+					revokeItem.setEnabled(revokeButton.isEnabled());
+					deviceMenu.show(deviceTable, event.getX(), event.getY());
+				}
+			}
+		});
 		JPanel devices = new JPanel(new BorderLayout());
 		devices.setBorder(BorderFactory.createTitledBorder("Paired devices"));
 		devices.add(new JScrollPane(deviceTable), BorderLayout.CENTER);
 		JPanel deviceButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		deviceButtons.add(showRevoked);
+		showRevoked.addActionListener(event -> showDevices(shownAll));
+		deviceButtons.add(detailsButton);
 		deviceButtons.add(revokeButton);
 		deviceButtons.add(reviewRequestsButton);
-		deviceButtons.add(backupButton);
-		deviceButtons.add(restoreButton);
-		devices.add(deviceButtons, BorderLayout.SOUTH);
+		JPanel backupButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		backupButtons.add(backupButton);
+		backupButtons.add(restoreButton);
+		JPanel deviceButtonRows = new JPanel(new GridLayout(2, 1));
+		deviceButtonRows.add(deviceButtons);
+		deviceButtonRows.add(backupButtons);
+		devices.add(deviceButtonRows, BorderLayout.SOUTH);
 
-		JPanel center = new JPanel(new GridLayout(0, 1));
-		center.add(invitePanel);
-		center.add(devices);
-		add(top, BorderLayout.NORTH);
-		add(center, BorderLayout.CENTER);
+		JPanel center = new JPanel();
+		center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
+		center.add(left(setup));
+		center.add(left(start));
+		center.add(left(pairPanel));
+		center.add(left(devices));
+		JPanel advancedHeader = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		advancedHeader.add(advancedToggle);
+		center.add(left(advancedHeader));
+		center.add(left(advancedPanel));
+		JPanel contents = new JPanel(new BorderLayout());
+		contents.add(center, BorderLayout.NORTH);
+		add(new JScrollPane(contents), BorderLayout.CENTER);
 
 		startButton.addActionListener(event -> startSharing());
 		stopButton.addActionListener(event -> stopSharing());
 		inviteButton.addActionListener(event -> issueInvitation());
+		copyInvitationButton.addActionListener(event -> copyInvitation());
+		pairButton.addActionListener(event -> openPairing());
+		entryButton.addActionListener(event -> enterPairingCode());
 		revokeButton.addActionListener(event -> revokeSelected());
+		detailsButton.addActionListener(event -> showSelectedDeviceDetails());
 		reviewRequestsButton.addActionListener(event -> reviewReauthorizationRequests());
 		backupButton.addActionListener(event -> backupAction());
 		restoreButton.addActionListener(event -> restoreAction());
@@ -527,6 +815,9 @@ public class HostSharingDialog extends JDialog {
 		try {
 			config = HostConfig.defaults(hostField.getText().strip(), (Integer) portSpinner.getValue(),
 					(Integer) enrollmentSpinner.getValue());
+			if (stopGraceOverride != null) {
+				config = config.withStopTiming(stopGraceOverride, config.drainTimeout());
+			}
 			transitionGuard.accept(true);
 			flushEditors.run();
 			candidate = new HostSession(store, incident, config, null);
@@ -590,7 +881,9 @@ public class HostSharingDialog extends JDialog {
 					}
 					loopbackStore = opened;
 					session = candidate;
-					invitationArea.setText("");
+					setInvitation("");
+					clearPairing();
+					javax.swing.SwingUtilities.invokeLater(HostSharingDialog.this::openPairing);
 				} catch (InterruptedException interrupted) {
 					Thread.currentThread().interrupt();
 					session = null;
@@ -816,7 +1109,10 @@ public class HostSharingDialog extends JDialog {
 				try {
 					String invitation = get();
 					if (session == current && !stopping) {
-						invitationArea.setText(invitation);
+						setInvitation(invitation);
+						copyInvitationButton.setEnabled(true);
+						advancedToggle.setSelected(true);
+						toggleAdvanced();
 						copyInvitation();
 					}
 				} catch (Exception failure) {
@@ -832,11 +1128,263 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
+	 * Opens the in-person pairing window and shows the address, expiry and a fingerprint QR code.
+	 */
+	void openPairing() {
+		HostSession current = session;
+		if (current == null) {
+			return;
+		}
+		pairButton.setEnabled(false);
+		pairingCodeLabel.setText("Opening the pairing window…");
+		new SwingWorker<org.sarmanagement.icsforms.host.HostClient.PairingOffer, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected org.sarmanagement.icsforms.host.HostClient.PairingOffer doInBackground() {
+				return current.openPairing();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					org.sarmanagement.icsforms.host.HostClient.PairingOffer offer = get();
+					if (session == current && !stopping) {
+						showPairing(offer);
+					}
+				} catch (Exception failure) {
+					if (failure instanceof InterruptedException) {
+						Thread.currentThread().interrupt();
+					}
+					clearPairing();
+					prompts.show(HostSharingDialog.this, "Add a device",
+							"Could not open pairing: " + failure.getMessage(), true);
+				}
+				refresh();
+			}
+		}.execute();
+	}
+
+	/**
+	 * Displays a pairing offer: the address and a QR code carrying only the host fingerprint, then starts
+	 * watching for a device that wants to join.
+	 *
+	 * @param offer the open pairing window
+	 */
+	private void showPairing(org.sarmanagement.icsforms.host.HostClient.PairingOffer offer) {
+		pairingCodeLabel.setText("Waiting for a device. On it choose Connect and enter this host.");
+		pairingDetailLabel.setText("Devices can join this Host: " + offer.host() + ":" + offer.enrollmentPort() + " until "
+				+ java.time.LocalTime.ofInstant(offer.expiresAt(), java.time.ZoneId.systemDefault())
+						.truncatedTo(java.time.temporal.ChronoUnit.MINUTES));
+		pairingPayloadText = offer.payload().toText();
+		qrLabel.setIcon(new javax.swing.ImageIcon(QrImages.render(pairingPayloadText, 200)));
+		pairingOpen = true;
+		joinCards.show(joinCardPanel, JOIN_LABEL_CARD);
+		pairingTimer.start();
+	}
+
+	/** Polls the host for a device waiting for its number to be entered. */
+	private void pollPairing() {
+		HostSession current = session;
+		if (current == null || polling) {
+			return;
+		}
+		polling = true;
+		new SwingWorker<org.sarmanagement.icsforms.host.HostClient.PairingState, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected org.sarmanagement.icsforms.host.HostClient.PairingState doInBackground() {
+				return current.pairingState();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				polling = false;
+				try {
+					org.sarmanagement.icsforms.host.HostClient.PairingState state = get();
+					if (session != current) {
+						return;
+					}
+					if (!state.open()) {
+						clearPairing();
+						return;
+					}
+					boolean waiting = state.awaitingDevice() != null;
+					entryField.setEnabled(waiting);
+					entryButton.setEnabled(waiting);
+					waitingModel.setRowCount(0);
+					if (waiting) {
+						waitingModel.addRow(new Object[] {state.awaitingDevice(), "Enter the number it shows"});
+						waitingTable.setRowSelectionInterval(0, 0);
+						pairingCodeLabel.setText("Type the number shown on that device, then press Confirm number.");
+					} else {
+						pairingCodeLabel.setText("Waiting for a device. On it choose Connect and enter this host.");
+					}
+				} catch (Exception failure) {
+					if (failure instanceof InterruptedException) {
+						Thread.currentThread().interrupt();
+					}
+					clearPairing();
+				}
+			}
+		}.execute();
+	}
+
+	/** Sends the number the operator typed and reports the result. */
+	void enterPairingCode() {
+		HostSession current = session;
+		String typed = entryField.getText();
+		if (current == null || typed.isBlank()) {
+			return;
+		}
+		entryButton.setEnabled(false);
+		new SwingWorker<String, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected String doInBackground() {
+				return current.enterPairingCode(typed);
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				String message;
+				try {
+					String result = get();
+					message = switch (result) {
+						case "confirmed" -> "The number matches. The device is being added.";
+						case "burned" -> "Wrong number. Too many attempts; the pairing window is closed.";
+						case "mismatch" -> "That number does not match. Check the device and try again.";
+						default -> "No device is waiting.";
+					};
+					entryField.setText("");
+				} catch (Exception failure) {
+					if (failure instanceof InterruptedException) {
+						Thread.currentThread().interrupt();
+					}
+					message = "Could not check the number: " + failure.getMessage();
+				}
+				pairingCodeLabel.setText(message);
+				refresh();
+			}
+		}.execute();
+	}
+
+	/** Forgets any displayed pairing state and QR image. */
+	private void clearPairing() {
+		pairingTimer.stop();
+		pairingOpen = false;
+		pairButton.setText(PAIR_IDLE_LABEL);
+		joinCards.show(joinCardPanel, JOIN_BUTTON_CARD);
+		pairingCodeLabel.setText(session == null ? " " : "No device can join now.");
+		pairingDetailLabel.setText(" ");
+		waitingModel.setRowCount(0);
+		entryField.setText("");
+		entryField.setEnabled(false);
+		entryButton.setEnabled(false);
+		qrLabel.setIcon(null);
+		pairingPayloadText = "";
+	}
+
+	/**
+	 * Returns the QR and clipboard text of the displayed pairing offer.
+	 *
+	 * @return payload text, empty when none is shown
+	 */
+	String pairingPayload() {
+		return pairingPayloadText;
+	}
+
+	/**
 	 * Copies the displayed invitation text to the clipboard.
 	 */
 	void copyInvitation() {
-		invitationArea.selectAll();
-		invitationArea.copy();
+		if (invitationFull.isEmpty()) {
+			return;
+		}
+		Toolkit.getDefaultToolkit().getSystemClipboard()
+				.setContents(new java.awt.datatransfer.StringSelection(invitationFull), null);
+	}
+
+	/**
+	 * Remembers an invitation and shows only its leading {@code ICSFORMS-INVITE-n:} marker, with the secret part
+	 * masked, because the invitation is a secret that should not be readable from the screen.
+	 *
+	 * @param invitation full invitation text, or empty to clear
+	 */
+	private void setInvitation(String invitation) {
+		invitationFull = invitation == null ? "" : invitation;
+		invitationArea.setText(maskInvitation(invitationFull));
+	}
+
+	/**
+	 * Hides everything after the {@code ICSFORMS-INVITE-n:} marker, without revealing the secret's length.
+	 *
+	 * @param invitation full invitation text
+	 * @return the marker followed by a fixed run of mask characters, or empty when the text is empty
+	 */
+	static String maskInvitation(String invitation) {
+		if (invitation == null || invitation.isEmpty()) {
+			return "";
+		}
+		int colon = invitation.indexOf(':');
+		String marker = colon < 0 ? "" : invitation.substring(0, colon + 1);
+		return marker + "\u2022".repeat(24);
+	}
+
+	/**
+	 * Describes a paired device for the details dialog.
+	 *
+	 * @param device device to describe
+	 * @return one labelled line per fact
+	 */
+	static String deviceDetailsText(DeviceInfo device) {
+		return "Name: " + device.name() + "\nDevice id: " + device.deviceId() + "\nState: " + device.state()
+				+ "\nIP address: "
+				+ (device.lastAddress() == null ? "not seen since the host started" : device.lastAddress())
+				+ "\nPaired: " + (device.issuedAt() == null ? "unknown" : minutes(device.issuedAt()))
+				+ "\nExpires: " + (device.expiresAt() == null ? "unknown" : minutes(device.expiresAt()))
+				+ "\nLast contact: "
+				+ (device.lastContact() == null ? "not since host started" : minutes(device.lastContact()))
+				+ "\nConnected: " + connectionText(device);
+	}
+
+	/** Shows the details of the selected paired device. */
+	void showSelectedDeviceDetails() {
+		int row = deviceTable.getSelectedRow();
+		if (row < 0 || row >= shownDevices.size()) {
+			return;
+		}
+		DeviceInfo device = shownDevices.get(row);
+		prompts.show(this, "Device details: " + device.name(), deviceDetailsText(device), false);
+	}
+
+	/**
+	 * Returns the button that opens the pairing window.
+	 *
+	 * @return pairing button
+	 */
+	JButton pairButton() {
+		return pairButton;
+	}
+
+	/**
+	 * Returns the check box that reveals revoked devices.
+	 *
+	 * @return revoked-device filter
+	 */
+	javax.swing.JCheckBox showRevokedBox() {
+		return showRevoked;
+	}
+
+	/**
+	 * Returns the "Devices can join this Host" line shown while the join window is open.
+	 *
+	 * @return host address and expiry text
+	 */
+	String pairingHostText() {
+		return pairingDetailLabel.getText();
 	}
 
 	/**
@@ -845,7 +1393,7 @@ public class HostSharingDialog extends JDialog {
 	 * @return invitation text, empty when none
 	 */
 	String invitationText() {
-		return invitationArea.getText();
+		return invitationFull;
 	}
 
 	/**
@@ -1007,6 +1555,48 @@ public class HostSharingDialog extends JDialog {
 		}.execute();
 	}
 
+	/** Updates the buttons that depend on the selected device. */
+	private void refreshButtons() {
+		HostSession current = session;
+		boolean running = current != null && current.state() == HostState.RUNNING;
+		revokeButton.setEnabled(running && !stopping && deviceTable.getSelectedRow() >= 0);
+		detailsButton.setEnabled(deviceTable.getSelectedRow() >= 0);
+	}
+
+	/**
+	 * Fills the paired devices table, leaving out revoked devices unless the operator asked to see them.
+	 *
+	 * @param devices every known device
+	 */
+	private void showDevices(List<DeviceInfo> devices) {
+		shownAll = devices;
+		boolean includeRevoked = showRevoked.isSelected();
+		shownDevices = devices.stream()
+				.filter(device -> includeRevoked || device.state() != org.sarmanagement.icsforms.host.CredentialState.REVOKED)
+				.toList();
+		deviceModel.setRowCount(0);
+		for (DeviceInfo device : shownDevices) {
+			deviceModel.addRow(new Object[] {device.name(), device.state(), minutes(device.expiresAt()),
+					device.lastContact() == null ? "not since host started" : minutes(device.lastContact()),
+					connectionText(device)});
+		}
+	}
+
+	/** Shows or hides the advanced section, growing the window when it would otherwise need scrolling. */
+	private void toggleAdvanced() {
+		boolean open = advancedToggle.isSelected();
+		advancedToggle.setText(open ? "Advanced \u25BE" : "Advanced \u25B8");
+		advancedPanel.setVisible(open);
+		if (open) {
+			Rectangle bounds = getGraphicsConfiguration().getBounds();
+			Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(getGraphicsConfiguration());
+			int room = bounds.height - insets.top - insets.bottom;
+			setSize(getWidth(), Math.min(room, getHeight() + advancedPanel.getPreferredSize().height));
+		}
+		revalidate();
+		repaint();
+	}
+
 	/**
 	 * Refreshes the status line, buttons and device list.
 	 */
@@ -1019,8 +1609,13 @@ public class HostSharingDialog extends JDialog {
 		startButton.setEnabled(current == null && !starting);
 		stopButton.setEnabled(current != null && !stopping && current.state() != HostState.STOPPING);
 		inviteButton.setEnabled(running && !stopping);
-		revokeButton.setEnabled(running && !stopping);
+		pairButton.setEnabled(running && !stopping && !pairingOpen);
+		startButton.setText(current == null ? "Start sharing" : "Sharing");
+		revokeButton.setEnabled(running && !stopping && deviceTable.getSelectedRow() >= 0);
+		detailsButton.setEnabled(deviceTable.getSelectedRow() >= 0);
 		reviewRequestsButton.setEnabled(running && !stopping && !reviewingRequests);
+		hideButton.setEnabled(current != null);
+		addressChoice.setEnabled(current == null);
 		hostField.setEnabled(current == null);
 		portSpinner.setEnabled(current == null);
 		enrollmentSpinner.setEnabled(current == null);
@@ -1029,14 +1624,16 @@ public class HostSharingDialog extends JDialog {
 		}
 		if (current == null) {
 			stateLabel.setText("Not sharing");
+			fingerprintLabel.setText(" ");
 			shownDevices = List.of();
 			deviceModel.setRowCount(0);
 			return;
 		}
 		HostStatus status = current.status();
 		stateLabel.setText(status.state() == HostState.FAILED ? "FAILED: " + status.failure()
-				: status.state() + " - " + status.connectedDevices() + " connected; fingerprint "
-						+ status.hostFingerprint());
+				: status.state() + " - " + status.connectedDevices() + " device(s) connected");
+		fingerprintLabel.setText("Host certificate fingerprint (advanced; devices check it when pairing): "
+				+ status.hostFingerprint());
 		if (running && !stopping && !refreshingDevices) {
 			refreshingDevices = true;
 			new SwingWorker<List<DeviceInfo>, Void>() {
@@ -1055,13 +1652,17 @@ public class HostSharingDialog extends JDialog {
 						if (session != current || stopping) {
 							return;
 						}
-						shownDevices = devices;
-						deviceModel.setRowCount(0);
-						for (DeviceInfo device : devices) {
-							deviceModel.addRow(new Object[] {device.name(), device.state(), device.expiresAt(),
-									device.lastContact() == null ? "never" : device.lastContact(),
-									connectionText(device)});
+						String selectedId = deviceTable.getSelectedRow() >= 0
+								&& deviceTable.getSelectedRow() < shownDevices.size()
+										? shownDevices.get(deviceTable.getSelectedRow()).deviceId() : null;
+						shownAll = devices;
+						showDevices(devices);
+						for (int i = 0; selectedId != null && i < shownDevices.size(); i++) {
+							if (selectedId.equals(shownDevices.get(i).deviceId())) {
+								deviceTable.setRowSelectionInterval(i, i);
+							}
 						}
+						refreshButtons();
 					} catch (InterruptedException failure) {
 						Thread.currentThread().interrupt();
 					} catch (java.util.concurrent.ExecutionException failure) {

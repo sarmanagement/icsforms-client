@@ -54,6 +54,22 @@ public class PlanReviewStrip extends JPanel {
 		refreshFromModel();
 	}
 
+	/**
+	 * Refreshes every review strip beneath a container, so a panel that embeds anonymous strips shows review
+	 * assertions that arrived from another device.
+	 *
+	 * @param root container to search.
+	 */
+	static void refreshAll(java.awt.Container root) {
+		for (java.awt.Component child : root.getComponents()) {
+			if (child instanceof PlanReviewStrip strip) {
+				strip.refreshFromModel();
+			} else if (child instanceof java.awt.Container container) {
+				refreshAll(container);
+			}
+		}
+	}
+
 	/** Refreshes status while retaining a reviewer draft currently being typed. */
 	public void refreshFromModel() {
 		PlanReviewStatus reviewStatus = controller.getData().getPlanReviewStatus(area);

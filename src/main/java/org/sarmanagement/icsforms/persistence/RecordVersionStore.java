@@ -56,14 +56,49 @@ public interface RecordVersionStore {
 	 * @param parent parent record, or null for a top-level record
 	 * @param parentField containing Java field name
 	 * @param versions retained versions in ascending order
+	 * @param retiredAtCursor change cursor at which the record was removed or replaced in the incident, or 0 while
+	 *            the record is live; retired histories are kept for audit but are never projected or served
 	 */
 	record RecordHistory(RecordIndex.RecordKey key, RecordIndex.RecordKey parent, String parentField,
-			List<RecordVersion> versions) {
+			List<RecordVersion> versions, long retiredAtCursor) {
 		/**
 		 * Copies retained versions to prevent mutation after persistence.
 		 */
 		public RecordHistory {
 			versions = List.copyOf(versions);
+		}
+
+		/**
+		 * Creates a live history.
+		 *
+		 * @param key record identity
+		 * @param parent parent record, or null for a top-level record
+		 * @param parentField containing Java field name
+		 * @param versions retained versions in ascending order
+		 */
+		RecordHistory(RecordIndex.RecordKey key, RecordIndex.RecordKey parent, String parentField,
+				List<RecordVersion> versions) {
+			this(key, parent, parentField, versions, 0);
+		}
+
+		/**
+		 * Tells whether the record has been removed or replaced.
+		 *
+		 * @return true when retired
+		 */
+		@com.fasterxml.jackson.annotation.JsonIgnore
+		boolean retired() {
+			return retiredAtCursor > 0;
+		}
+
+		/**
+		 * Returns a copy of this history marked as retired.
+		 *
+		 * @param cursor change cursor of the retirement
+		 * @return retired history
+		 */
+		RecordHistory retire(long cursor) {
+			return new RecordHistory(key, parent, parentField, versions, cursor);
 		}
 	}
 

@@ -88,6 +88,84 @@ class RemoteIncidentStoreHostTest {
 	}
 
 	@Test
+	void removalFromOneDeviceReachesTheHostAndASecondClient() {
+		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
+			StoredIncident first = a.loadSnapshot(id);
+			org.sarmanagement.icsforms.model.OpenActionItem entry = new org.sarmanagement.icsforms.model.OpenActionItem();
+			entry.setItem("Check access");
+			first.data().getOpenActionItems().add(entry);
+			a.save(id, first.data(), first.revision());
+
+			StoredIncident withEntry = a.loadSnapshot(id);
+			withEntry.data().getOpenActionItems().clear();
+			a.save(id, withEntry.data(), withEntry.revision());
+
+			assertTrue(b.loadSnapshot(id).data().getOpenActionItems().isEmpty());
+			assertTrue(a.loadSnapshot(id).data().getOpenActionItems().isEmpty());
+		}
+	}
+
+	@Test
+	void mergingDuplicateCardsRemovesTheCopyEverywhereAndKeepsLinksOnTheRetainedCard() {
+		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
+			StoredIncident first = a.loadSnapshot(id);
+			org.sarmanagement.icsforms.model.TCard kept = header("Available");
+			org.sarmanagement.icsforms.model.TCard copy = header("Available");
+			first.data().getTCards().add(kept);
+			first.data().getTCards().add(copy);
+			org.sarmanagement.icsforms.model.SarTaskAssignment task = new org.sarmanagement.icsforms.model.SarTaskAssignment();
+			org.sarmanagement.icsforms.model.SarTaskResource link = new org.sarmanagement.icsforms.model.SarTaskResource();
+			link.setResourceId(copy.getResourceId());
+			task.setResourcesAssigned(new java.util.ArrayList<>(java.util.List.of(link)));
+			first.data().getSarTaskAssignments().add(task);
+			a.save(id, first.data(), first.revision());
+			assertEquals(2, b.loadSnapshot(id).data().getTCards().size());
+
+			StoredIncident merging = a.loadSnapshot(id);
+			merging.data().getTCards().removeIf(card -> card.getResourceId().equals(copy.getResourceId()));
+			merging.data().getSarTaskAssignments().get(0).getResourcesAssigned().get(0)
+					.setResourceId(kept.getResourceId());
+			a.save(id, merging.data(), merging.revision());
+
+			for (RemoteIncidentStore store : java.util.List.of(a, b)) {
+				StoredIncident seen = store.loadSnapshot(id);
+				assertEquals(1, seen.data().getTCards().size());
+				assertEquals(kept.getResourceId(), seen.data().getTCards().get(0).getResourceId());
+				assertEquals(kept.getResourceId(), seen.data().getSarTaskAssignments().get(0).getResourcesAssigned()
+						.get(0).getResourceId());
+			}
+		}
+	}
+
+	/**
+	 * Creates a header card with a random identity.
+	 *
+	 * @param label column label
+	 * @return the card
+	 */
+	private static org.sarmanagement.icsforms.model.TCard header(String label) {
+		org.sarmanagement.icsforms.model.TCard card = new org.sarmanagement.icsforms.model.TCard();
+		card.setCardType(org.sarmanagement.icsforms.model.TCardType.HEADER);
+		card.setResourceIdentifier(label);
+		return card;
+	}
+
+	@Test
+	void agencyRepresentativeAddedOnOneDeviceReachesTheOther() {
+		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
+			StoredIncident first = a.loadSnapshot(id);
+			org.sarmanagement.icsforms.model.OrgChartEntry entry = new org.sarmanagement.icsforms.model.OrgChartEntry();
+			entry.setTitle("Agency Representative");
+			entry.setName("Casey Lee");
+			first.data().getOrganizationalChart().getAssignmentList().getAgencyRepresentatives().add(entry);
+			a.save(id, first.data(), first.revision());
+
+			assertEquals("Casey Lee", b.loadSnapshot(id).data().getOrganizationalChart().getAssignmentList()
+					.getAgencyRepresentatives().get(0).getName());
+		}
+	}
+
+	@Test
 	void sameFieldEditsConflictAndExposeTheCurrentToken() {
 		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
 			StoredIncident first = a.loadSnapshot(id);
@@ -122,9 +200,11 @@ class RemoteIncidentStoreHostTest {
 		edits.put("clueLogIcs233Enabled", data -> data.setClueLogIcs233Enabled(true));
 		edits.put("canineRoutingBaseLocationId", data -> data.setCanineRoutingBaseLocationId("base-1"));
 		edits.put("safetyReview", data -> data.getSafetyReview().setReviewedBy("Safety Officer"));
+		edits.put("communicationsReview", data -> recordReview(data.getCommunicationsReview()));
+		edits.put("humanMedicalReview", data -> recordReview(data.getHumanMedicalReview()));
+		edits.put("canineMedicalReview", data -> recordReview(data.getCanineMedicalReview()));
 		assertTrue(edits.keySet().containsAll(RootSettings.propertyNames().stream()
-				.filter(name -> !name.equals("humanMedicalReview") && !name.equals("canineMedicalReview")
-						&& !name.equals("communicationsReview") && !name.equals("medicalUnitLeaderAssignment"))
+				.filter(name -> !name.equals("medicalUnitLeaderAssignment"))
 				.toList()));
 		try (RemoteIncidentStore a = device("a"); RemoteIncidentStore b = device("b")) {
 			for (Map.Entry<String, Consumer<AppData>> edit : edits.entrySet()) {
@@ -141,6 +221,17 @@ class RemoteIncidentStoreHostTest {
 				assertEquals(expected, RootSettings.snapshot(backing.loadSnapshot(id).data()), edit.getKey());
 			}
 		}
+	}
+
+	/**
+	 * Records a complete review assertion.
+	 *
+	 * @param review assertion to fill
+	 */
+	private static void recordReview(org.sarmanagement.icsforms.model.PlanReviewAssertion review) {
+		review.setReviewedBy("Communications Unit Leader");
+		review.setReviewedAt(java.time.LocalDateTime.of(2026, 1, 2, 3, 4));
+		review.setReviewedContentDigest("abc123");
 	}
 
 	@Test

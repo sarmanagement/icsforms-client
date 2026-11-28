@@ -555,6 +555,11 @@ skipped run does not validate native input.
 java -jar target/icsforms-client-0.1.3-SNAPSHOT.jar
 ```
 
+The Bouncy Castle FIPS cryptographic module verifies its own jar file, so it cannot be merged into the
+application jar. The jar embeds the module unmodified; on first start a small launcher copies it to
+`~/.icsforms/lib/` and runs the application from there. Nothing needs to be installed, and the single jar can
+be copied anywhere.
+
 ## Notes
 
 - PDF output is structured for field use and printing, not a pixel-perfect facsimile of government forms.

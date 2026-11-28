@@ -19,6 +19,7 @@ import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletionException;
@@ -35,6 +36,8 @@ import javax.net.ssl.TrustManager;
  */
 public final class HostClient {
 	private static final Duration TIMEOUT = Duration.ofSeconds(10);
+	private static final Duration CONFIRMATION_WAIT = Duration.ofSeconds(120);
+	private static final Duration POLL_INTERVAL = Duration.ofSeconds(1);
 	private final String host;
 	private final int port;
 	private final int enrollmentPort;
@@ -182,10 +185,24 @@ public final class HostClient {
 		body.put("deviceName", deviceName);
 		body.put("certificateRequest", HostCrypto.createRequest(keys, deviceName));
 		JsonNode response = client.post(client.enrollmentUri("/v1/pairing/redeem"), body.toString());
+		return buildCredential(keys, response, invitation.hostFingerprint());
+	}
+
+	/**
+	 * Builds the device credential from an admission response, requiring the returned authority to be the pinned
+	 * one.
+	 *
+	 * @param keys the device key pair the certificate was issued for
+	 * @param response admission response with certificate, authority certificate, device id and expiry
+	 * @param fingerprint host authority fingerprint the device pins
+	 * @return the device credential
+	 * @throws HostClientException when the response is unusable or names a different authority
+	 */
+	private static DeviceCredential buildCredential(KeyPair keys, JsonNode response, String fingerprint) {
 		try {
 			X509Certificate certificate = HostCrypto.parseCertificate(response.path("certificate").asText(""));
 			X509Certificate authority = HostCrypto.parseCertificate(response.path("caCertificate").asText(""));
-			if (!invitation.hostFingerprint().equalsIgnoreCase(HostCrypto.fingerprint(authority))) {
+			if (!fingerprint.equalsIgnoreCase(HostCrypto.fingerprint(authority))) {
 				throw new HostClientException(HostClientException.Kind.IDENTITY_CHANGED, 0, null,
 						"The host identity does not match the invitation.", null);
 			}
@@ -195,8 +212,8 @@ public final class HostClient {
 			store.setKeyEntry(DeviceCredential.KEY_ALIAS, keys.getPrivate(), password,
 					new X509Certificate[] {certificate, authority});
 			store.setCertificateEntry(DeviceCredential.CA_ALIAS, authority);
-			return new DeviceCredential(store, password, invitation.hostFingerprint(),
-					response.path("deviceId").asText(), Instant.parse(response.path("expiresAt").asText()));
+			return new DeviceCredential(store, password, fingerprint, response.path("deviceId").asText(),
+					Instant.parse(response.path("expiresAt").asText()));
 		} catch (GeneralSecurityException | IOException | RuntimeException exception) {
 			if (exception instanceof HostClientException hostFailure) {
 				throw hostFailure;
@@ -418,6 +435,227 @@ public final class HostClient {
 	public JsonNode submit(String incidentId, String json) {
 		return exchange(HttpRequest.newBuilder(dataUri("/v1/incidents/" + incidentId + "/records:submit"))
 				.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json)), true);
+	}
+
+	/**
+	 * The in-person pairing window as opened by the host.
+	 *
+	 * @param expiresAt when the window closes
+	 * @param host host name or address devices should use
+	 * @param port mutual-TLS port
+	 * @param enrollmentPort enrollment port
+	 * @param fingerprint host authority fingerprint
+	 */
+	public record PairingOffer(Instant expiresAt, String host, int port, int enrollmentPort, String fingerprint) {
+		/**
+		 * Returns the QR and clipboard payload, which carries the fingerprint but no secret.
+		 *
+		 * @return pairing payload
+		 */
+		public org.sarmanagement.icsforms.host.pairing.PairingPayload payload() {
+			return new org.sarmanagement.icsforms.host.pairing.PairingPayload(host, port, enrollmentPort,
+					fingerprint);
+		}
+	}
+
+	/**
+	 * The state of the pairing window.
+	 *
+	 * @param open whether the window is open
+	 * @param expiresAt expiry, or null when closed
+	 * @param awaitingDevice label of the device waiting for its number to be entered, or null
+	 */
+	public record PairingState(boolean open, Instant expiresAt, String awaitingDevice) {
+	}
+
+	/**
+	 * The outcome of an in-person pairing.
+	 *
+	 * @param credential device credential, pinned to the verified host authority
+	 * @param port mutual-TLS port reported by the host
+	 * @param incidentId incident the host shares
+	 */
+	public record ShortPairingResult(DeviceCredential credential, int port, String incidentId) {
+	}
+
+	/**
+	 * Pairs with a host in person. The device commits to a key share, completes a key agreement with the host
+	 * and shows a short number derived from it, which the host operator types in. The number binds the host
+	 * identity this device observed, so a man in the middle presenting a different authority produces a number
+	 * that does not match. When {@code pinnedFingerprint} is known (read from a QR code) the TLS connection is
+	 * pinned to it from the start. This blocks until the operator confirms, the exchange is rejected, or the
+	 * wait times out.
+	 *
+	 * @param host host name or address
+	 * @param enrollmentPort enrollment port
+	 * @param pinnedFingerprint fingerprint obtained out of band, or null when the host was typed
+	 * @param deviceName name shown to the host operator
+	 * @param suites suites this device supports, in order of preference
+	 * @param listener shows the number to this device's operator
+	 * @return the credential and where to connect
+	 * @throws HostClientException when pairing fails, is refused or times out
+	 */
+	public static ShortPairingResult pairInPerson(String host, int enrollmentPort, String pinnedFingerprint,
+			String deviceName, org.sarmanagement.icsforms.host.pairing.PairingSuites suites,
+			PairingListener listener) {
+		CapturingHostTrust capture = null;
+		HostClient client;
+		if (pinnedFingerprint != null) {
+			client = anonymous(host, 0, enrollmentPort, pinnedFingerprint.toLowerCase(Locale.ROOT));
+		} else {
+			capture = new CapturingHostTrust();
+			try {
+				SSLContext context = SSLContext.getInstance("TLS");
+				context.init(null, new TrustManager[] {capture}, null);
+				client = new HostClient(host, 0, enrollmentPort, "", context);
+			} catch (GeneralSecurityException exception) {
+				throw new IllegalStateException("Cannot create TLS context", exception);
+			}
+		}
+		JsonNode status = client.get(client.enrollmentUri("/v1/status"));
+		String sasId = chooseSuite(status.path("pairingSuites").path("sas"), suites.sasIds());
+		String channelId = chooseSuite(status.path("pairingSuites").path("channel"), suites.channelIds());
+		if (sasId == null || channelId == null) {
+			throw new HostClientException(HostClientException.Kind.INCOMPATIBLE, 0, null,
+					"The host does not support a pairing method this device supports.", null);
+		}
+		Base64.Encoder encoder = Base64.getEncoder();
+		try {
+			org.sarmanagement.icsforms.host.pairing.SasSuite.Initiator initiator = suites.sas(sasId).orElseThrow()
+					.initiator();
+			ObjectNode begin = HostHttp.MAPPER.createObjectNode();
+			begin.put("suite", sasId);
+			begin.put("channel", channelId);
+			begin.put("commitment", encoder.encodeToString(initiator.commitment()));
+			begin.put("deviceName", deviceName);
+			JsonNode started = client.post(client.enrollmentUri("/v1/pairing/short/begin"), begin.toString());
+			String sessionId = started.path("sessionId").asText();
+			byte[] opening = initiator.accept(Base64.getDecoder().decode(started.path("share").asText("")));
+			ObjectNode open = HostHttp.MAPPER.createObjectNode();
+			open.put("sessionId", sessionId);
+			open.put("opening", encoder.encodeToString(opening));
+			client.post(client.enrollmentUri("/v1/pairing/short/open"), open.toString());
+			String observed = pinnedFingerprint != null ? pinnedFingerprint.toLowerCase(Locale.ROOT)
+					: capture.observedFingerprint();
+			byte[] identity = observed.getBytes(StandardCharsets.UTF_8);
+			org.sarmanagement.icsforms.host.pairing.SasSuite.Outcome outcome = initiator.outcome(identity);
+			try (java.io.Closeable shown = listener.showCode(
+					org.sarmanagement.icsforms.host.pairing.PairingCode.display(outcome.code()))) {
+				awaitConfirmation(client, sessionId);
+			}
+			org.sarmanagement.icsforms.host.pairing.ChannelSuite.PairingChannel channel = suites.channel(channelId)
+					.orElseThrow().open(outcome.secret(), outcome.transcript());
+			KeyPair keys = HostCrypto.generateKeyPair();
+			ObjectNode request = HostHttp.MAPPER.createObjectNode();
+			request.put("deviceName", deviceName);
+			request.put("certificateRequest", HostCrypto.createRequest(keys, deviceName));
+			ObjectNode finish = HostHttp.MAPPER.createObjectNode();
+			finish.put("sessionId", sessionId);
+			finish.put("confirmation", encoder.encodeToString(channel.confirmation("client", identity)));
+			finish.put("sealed",
+					encoder.encodeToString(channel.seal("request", HostHttp.MAPPER.writeValueAsBytes(request))));
+			JsonNode finished = client.post(client.enrollmentUri("/v1/pairing/short/finish"), finish.toString());
+			if (!channel.verifyConfirmation("server", identity,
+					Base64.getDecoder().decode(finished.path("confirmation").asText("")))) {
+				throw new HostClientException(HostClientException.Kind.REJECTED, 200, null,
+						"The host did not prove that it shares the agreed key.", null);
+			}
+			JsonNode result = HostHttp.MAPPER.readTree(
+					channel.unseal("result", Base64.getDecoder().decode(finished.path("sealed").asText(""))));
+			DeviceCredential credential = buildCredential(keys, result, observed);
+			return new ShortPairingResult(credential, result.path("port").asInt(), result.path("incidentId").asText());
+		} catch (GeneralSecurityException | IOException | IllegalArgumentException failure) {
+			throw new HostClientException(HostClientException.Kind.REJECTED, 200, null,
+					"The pairing exchange with the host failed.", failure);
+		}
+	}
+
+	/**
+	 * Polls until the host operator has confirmed this device's number.
+	 *
+	 * @param client client for the enrollment port
+	 * @param sessionId exchange identifier
+	 * @throws HostClientException when the host drops the exchange or the wait times out
+	 */
+	private static void awaitConfirmation(HostClient client, String sessionId) {
+		ObjectNode body = HostHttp.MAPPER.createObjectNode().put("sessionId", sessionId);
+		long deadline = System.nanoTime() + CONFIRMATION_WAIT.toNanos();
+		while (System.nanoTime() < deadline) {
+			JsonNode state = client.post(client.enrollmentUri("/v1/pairing/short/status"), body.toString());
+			if ("confirmed".equals(state.path("state").asText())) {
+				return;
+			}
+			try {
+				Thread.sleep(POLL_INTERVAL.toMillis());
+			} catch (InterruptedException interrupted) {
+				Thread.currentThread().interrupt();
+				throw new HostClientException(HostClientException.Kind.REJECTED, 0, null, "Pairing was cancelled.",
+						interrupted);
+			}
+		}
+		throw new HostClientException(HostClientException.Kind.REJECTED, 0, null,
+				"The host did not confirm the number in time.", null);
+	}
+
+	/**
+	 * Picks the first identifier this device prefers that the host also supports.
+	 *
+	 * @param hostSupported identifiers the host reports
+	 * @param preferred identifiers this device supports, most preferred first
+	 * @return the identifier, or null when none match
+	 */
+	private static String chooseSuite(JsonNode hostSupported, List<String> preferred) {
+		List<String> offered = new ArrayList<>();
+		for (JsonNode node : hostSupported) {
+			offered.add(node.asText(""));
+		}
+		return preferred.stream().filter(offered::contains).findFirst().orElse(null);
+	}
+
+	/**
+	 * Opens the in-person pairing window (administrator only, loopback only).
+	 *
+	 * @return where devices connect and the host identity
+	 */
+	public PairingOffer openPairing() {
+		JsonNode body = post(dataUri("/v1/admin/pairing"), "{}");
+		return new PairingOffer(Instant.parse(body.path("expiresAt").asText()), body.path("host").asText(),
+				body.path("port").asInt(), body.path("enrollmentPort").asInt(), body.path("fingerprint").asText());
+	}
+
+	/**
+	 * Reads the state of the pairing window (administrator only, loopback only).
+	 *
+	 * @return window state
+	 */
+	public PairingState pairingState() {
+		JsonNode body = get(dataUri("/v1/admin/pairing"));
+		String device = body.path("awaitingDevice").asText(null);
+		return new PairingState(body.path("open").asBoolean(),
+				body.hasNonNull("expiresAt") ? Instant.parse(body.path("expiresAt").asText()) : null, device);
+	}
+
+	/**
+	 * Submits the number the operator typed (administrator only, loopback only).
+	 *
+	 * @param code the typed number
+	 * @return {@code confirmed}, {@code mismatch}, {@code burned} or {@code none}
+	 */
+	public String enterPairingCode(String code) {
+		return post(dataUri("/v1/admin/pairing:enter"), HostHttp.MAPPER.createObjectNode().put("code", code).toString())
+				.path("result").asText();
+	}
+
+	/** Drops the exchange in progress without closing the window (administrator only, loopback only). */
+	public void cancelPairing() {
+		post(dataUri("/v1/admin/pairing:cancel"), "{}");
+	}
+
+	/**
+	 * Closes the pairing window (administrator only, loopback only).
+	 */
+	public void closePairing() {
+		post(dataUri("/v1/admin/pairing:close"), "{}");
 	}
 
 	/**

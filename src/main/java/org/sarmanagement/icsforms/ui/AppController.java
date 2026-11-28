@@ -132,6 +132,7 @@ public class AppController implements AutoCloseable {
 	private final Set<EditorCommitGuard> transactionEditorCommitGuards =
 			Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 	private int editorCommitDepth;
+	private java.util.function.BooleanSupplier autosaveDeferral = () -> false;
 	private java.util.function.Consumer<RuntimeException> autosaveErrorHandler = exception -> {
 		throw exception;
 	};
@@ -323,6 +324,10 @@ public class AppController implements AutoCloseable {
 				this::saveCompleted, this::persistenceStatusChanged, saveStore.saveRetryPolicy());
 		bindPersistence();
 		this.autosaveTimer = new Timer(AUTOSAVE_DELAY_MS, event -> {
+			if (autosaveDeferral.getAsBoolean()) {
+				((Timer) event.getSource()).restart();
+				return;
+			}
 			try {
 				saveAsync(activeLinkSource, failure -> {
 					if (failure != null) {
@@ -438,7 +443,8 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
-	 * Flushes every registered editor once before capturing a detached save request.
+	 * Flushes every registered editor once before capturing a detached save request. A flush failure is logged
+	 * and the already committed model is still captured; closing still warns through the editor draft probe.
 	 *
 	 * @param source authoritative linked-field source.
 	 * @return detached persistence request.
@@ -448,6 +454,10 @@ public class AppController implements AutoCloseable {
 			flushingEditors = true;
 			try {
 				beforePlanReuse.run();
+			} catch (RuntimeException exception) {
+				// A rejected or stale editor must never stop the committed model from being saved.
+				Logger.getLogger(AppController.class.getName()).log(Level.WARNING,
+						"Editor flush failed; saving the committed model without it", exception);
 			} finally {
 				flushingEditors = false;
 			}
@@ -549,12 +559,22 @@ public class AppController implements AutoCloseable {
 		});
 		if (!finished.get()) {
 			synchronousWaitDepth++;
+			boolean interrupted = false;
 			try {
 				persistenceWaitHandler.accept(true);
-				if (!finished.get() && !loop.enter()) {
-					throw new IllegalStateException("Cannot dispatch while waiting for persistence");
+				// An interrupted event thread makes the secondary loop return before its work has finished.
+				while (!finished.get()) {
+					if (!loop.enter()) {
+						throw new IllegalStateException("Cannot dispatch while waiting for persistence");
+					}
+					if (!finished.get() && Thread.interrupted()) {
+						interrupted = true;
+					}
 				}
 			} finally {
+				if (interrupted) {
+					Thread.currentThread().interrupt();
+				}
 				synchronousWaitDepth--;
 				if (synchronousWaitDepth == 0) {
 					persistenceWaitHandler.accept(false);
@@ -963,6 +983,17 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
+	 * Lets the presentation layer hold a scheduled autosave while the operator is still typing in a control, so
+	 * the save, which flushes every editor, never interrupts entry. The save runs once the supplier reports false,
+	 * normally when the control loses focus.
+	 *
+	 * @param deferral supplies true while an automatic save must wait; evaluated on the event thread.
+	 */
+	public void setAutosaveDeferral(java.util.function.BooleanSupplier deferral) {
+		autosaveDeferral = java.util.Objects.requireNonNull(deferral);
+	}
+
+	/**
 	 * Configures how automatic save failures are presented to the operator.
 	 *
 	 * @param handler error handler for autosave exceptions.
@@ -1076,6 +1107,20 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
+	 * Tests whether an editor's loaded model revision still permits its write. The revision gate protects an
+	 * editor from silently overwriting changes a remote writer merged into the model, so it applies only when the
+	 * incident is backed by a remote store. With a local store a single application instance is the only writer,
+	 * and a sequence of its own edits is never a conflict, so the gate never blocks a commit.
+	 *
+	 * @param binding editor's captured commit token.
+	 * @return true when the write may proceed.
+	 */
+	boolean revisionCurrent(EditorCommitBinding binding) {
+		return !(store instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore)
+				|| binding.revision() == modelRevision;
+	}
+
+	/**
 	 * Captures the active incident, period, and model revision for a full editor.
 	 *
 	 * @return token representing the current editable model revision.
@@ -1096,7 +1141,7 @@ public class AppController implements AutoCloseable {
 	public boolean commitEditorIfCurrent(EditorCommitBinding binding, LinkSource source, Runnable edit) {
 		Objects.requireNonNull(edit, "edit");
 		Objects.requireNonNull(source, "source");
-		if (binding == null || !isCurrent(binding.incidentBinding()) || binding.revision() != modelRevision) {
+		if (binding == null || !isCurrent(binding.incidentBinding()) || !revisionCurrent(binding)) {
 			return false;
 		}
 		EditorModelSnapshot snapshot = new EditorModelSnapshot();
@@ -3424,6 +3469,18 @@ public class AppController implements AutoCloseable {
 	private static final String ORDERED_HEADER_LABEL = "Ordered";
 
 	/**
+	 * Derives the identity of a default rack column so that independently created defaults, for example on the host
+	 * and a client of one shared incident, are the same record rather than duplicates.
+	 *
+	 * @param label default column label.
+	 * @return stable card identifier for that label.
+	 */
+	static String defaultHeaderId(String label) {
+		return java.util.UUID.nameUUIDFromBytes(("icsforms-default-header:" + label)
+				.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+	}
+
+	/**
 	 * Ensures the default HEADER (219-1) rack columns exist in the card list.
 	 *
 	 * <p>
@@ -3446,13 +3503,13 @@ public class AppController implements AutoCloseable {
 		}
 		List<TCard> headers = new ArrayList<>();
 		for (String label : DEFAULT_HEADER_LABELS) {
-			TCard h = new TCard();
+			TCard h = new TCard(defaultHeaderId(label));
 			h.setCardType(TCardType.HEADER);
 			h.setResourceIdentifier(label);
 			headers.add(h);
 			// Insert "Ordered" after "ICP" in pre-op mode.
 			if ("ICP".equals(label) && phase == org.sarmanagement.icsforms.model.IapPhase.PRE_OP) {
-				TCard ordered = new TCard();
+				TCard ordered = new TCard(defaultHeaderId(ORDERED_HEADER_LABEL));
 				ordered.setCardType(TCardType.HEADER);
 				ordered.setResourceIdentifier(ORDERED_HEADER_LABEL);
 				headers.add(ordered);
@@ -3647,6 +3704,84 @@ public class AppController implements AutoCloseable {
 			if (deduped.size() < resources.size()) {
 				task.setResourcesAssigned(deduped);
 			}
+		}
+	}
+
+	/**
+	 * Repoints every link to a merged-away T-card at the card that was kept, so no link refers to a removed
+	 * record. Covers SAR task resources and the current and next-period ICS 215 worksheets; archived periods are
+	 * left as recorded. Links that become duplicates of an existing link to the kept card are dropped.
+	 *
+	 * @param removedId resource identity of the card that was merged away.
+	 * @param keptId resource identity of the card that was retained.
+	 */
+	public void repointTCardLinks(String removedId, String keptId) {
+		if (removedId == null || keptId == null || removedId.isBlank() || removedId.equals(keptId)) {
+			return;
+		}
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			for (SarTaskResource res : task.getResourcesAssigned()) {
+				if (removedId.equals(res.getResourceId())) {
+					res.setResourceId(keptId);
+				}
+			}
+		}
+		repointIcs215Links(data.getForm215(), removedId, keptId);
+		repointIcs215Links(data.getNextPeriodForm215(), removedId, keptId);
+	}
+
+	/**
+	 * Repoints the T-card links of one ICS 215 worksheet.
+	 *
+	 * @param form worksheet to update, possibly null.
+	 * @param removedId identity of the removed card.
+	 * @param keptId identity of the retained card.
+	 */
+	private static void repointIcs215Links(org.sarmanagement.icsforms.model.Ics215Form form, String removedId,
+			String keptId) {
+		if (form == null) {
+			return;
+		}
+		for (org.sarmanagement.icsforms.model.Ics215Form.ResourceHeading heading : form.getResourceHeadings()) {
+			repointLinks(heading.linkedResourceIds, heading.linkedResources, removedId, keptId);
+		}
+		for (org.sarmanagement.icsforms.model.Ics215Form.WorkRow row : form.getWorkRows()) {
+			for (org.sarmanagement.icsforms.model.Ics215Form.ResourceAllocation allocation
+					: row.resourceAllocations.values()) {
+				repointLinks(allocation.linkedResourceIds, allocation.linkedResources, removedId, keptId);
+			}
+		}
+	}
+
+	/**
+	 * Replaces one identity in a pair of link collections, keeping a single link per card.
+	 *
+	 * @param ids linked identities, possibly null.
+	 * @param links classified links, possibly null.
+	 * @param removedId identity to replace.
+	 * @param keptId replacement identity.
+	 */
+	private static void repointLinks(List<String> ids,
+			List<org.sarmanagement.icsforms.model.Ics215Form.ResourceLink> links, String removedId, String keptId) {
+		if (ids != null && ids.contains(removedId)) {
+			List<String> updated = new ArrayList<>(new java.util.LinkedHashSet<>(
+					ids.stream().map(id -> removedId.equals(id) ? keptId : id).toList()));
+			ids.clear();
+			ids.addAll(updated);
+		}
+		if (links != null && links.stream().anyMatch(link -> removedId.equals(link.resourceId))) {
+			Set<String> seen = new java.util.HashSet<>();
+			List<org.sarmanagement.icsforms.model.Ics215Form.ResourceLink> updated = new ArrayList<>();
+			for (org.sarmanagement.icsforms.model.Ics215Form.ResourceLink link : links) {
+				if (removedId.equals(link.resourceId)) {
+					link.resourceId = keptId;
+				}
+				if (seen.add(link.resourceId)) {
+					updated.add(link);
+				}
+			}
+			links.clear();
+			links.addAll(updated);
 		}
 	}
 

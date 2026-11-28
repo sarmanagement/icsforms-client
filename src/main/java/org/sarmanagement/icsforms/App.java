@@ -57,6 +57,7 @@ public final class App {
 	 */
 	public static void main(String[] args) {
 		SwingUtilities.invokeLater(() -> {
+			org.sarmanagement.icsforms.ui.ScreenFit.install();
 			try {
 				UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 			} catch (Exception ignored) {
@@ -150,8 +151,7 @@ public final class App {
 	 */
 	private static void connectToHost(StartupDialog startup, Path homeDir) {
 		try {
-			Object[] connection = PersistenceWorker.call(null, () -> MainFrame.connectFromStartup(
-					startup.getChosenInvitation(), startup.getChosenDeviceName(), homeDir));
+			Object[] connection = startup.getChosenConnection();
 			MainFrame.openConnected(connection, createExportService(), new IncidentValidator(), homeDir);
 		} catch (RuntimeException exception) {
 			JOptionPane.showMessageDialog(null, exception.getMessage(), "Could not connect to the host",

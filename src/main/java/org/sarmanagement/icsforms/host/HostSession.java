@@ -51,6 +51,8 @@ import javax.net.ssl.TrustManagerFactory;
  */
 public final class HostSession implements AutoCloseable {
 	private static final Logger LOGGER = Logger.getLogger(HostSession.class.getName());
+	private final HostDiscovery discovery = HostDiscovery.create();
+	private java.io.Closeable advertisement;
 	private static final Duration ADMIN_LIFETIME = Duration.ofDays(30);
 	private static final String[] PROTOCOLS = {"TLSv1.3", "TLSv1.2"};
 	private final IncidentStore store;
@@ -456,6 +458,62 @@ public final class HostSession implements AutoCloseable {
 	}
 
 	/**
+	 * Opens the short-code pairing window through the administrator path over loopback.
+	 *
+	 * @return the code, its expiry and where devices connect; the code is a secret and must not be logged
+	 * @throws HostClientException when the host rejects the request
+	 */
+	public HostClient.PairingOffer openPairing() {
+		HostClient.PairingOffer offer = requireAdmin().openPairing();
+		stopAdvertising();
+		advertisement = discovery.advertise(offer.host(), offer.enrollmentPort());
+		return offer;
+	}
+
+	/** Stops any local-network advertisement of the pairing window. */
+	private synchronized void stopAdvertising() {
+		if (advertisement != null) {
+			try {
+				advertisement.close();
+			} catch (java.io.IOException failure) {
+				LOGGER.log(Level.FINE, "Advertisement close failed", failure);
+			}
+			advertisement = null;
+		}
+	}
+
+	/**
+	 * Closes the in-person pairing window.
+	 *
+	 * @throws HostClientException when the host rejects the request
+	 */
+	public void closePairing() {
+		stopAdvertising();
+		requireAdmin().closePairing();
+	}
+
+	/**
+	 * Reads the pairing window state, including any device waiting for its number to be entered.
+	 *
+	 * @return window state
+	 * @throws HostClientException when the host rejects the request
+	 */
+	public HostClient.PairingState pairingState() {
+		return requireAdmin().pairingState();
+	}
+
+	/**
+	 * Submits the number the operator typed for the waiting device.
+	 *
+	 * @param code the typed number
+	 * @return {@code confirmed}, {@code mismatch}, {@code burned} or {@code none}
+	 * @throws HostClientException when the host rejects the request
+	 */
+	public String enterPairingCode(String code) {
+		return requireAdmin().enterPairingCode(code);
+	}
+
+	/**
 	 * Lists admitted devices through the administrator path.
 	 *
 	 * @return devices
@@ -591,6 +649,7 @@ public final class HostSession implements AutoCloseable {
 	 * listeners, removes the administrator credential and releases the file lock. Safe to call repeatedly.
 	 */
 	public synchronized void stop() {
+		stopAdvertising();
 		HostState current = state.get();
 		if (current == HostState.STOPPED || current == HostState.STARTING) {
 			return;

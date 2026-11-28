@@ -70,6 +70,98 @@ class AppControllerLiveChangeTest {
 	}
 
 	@Test
+	void planReviewRecordedOnAClientReachesTheHostController() throws Exception {
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("review"), "Shared")) {
+			RemoteIncidentStore hostStore = host.pair();
+			AppController hostController = SwingTestLifecycleExtension.track(new AppController(
+					hostStore.loadSnapshot(host.incident()).data(), hostStore, host.incident(), new PdfExportService(),
+					new IncidentValidator()));
+			RemoteIncidentStore clientStore = host.pair();
+			AppController client = SwingTestLifecycleExtension.track(new AppController(
+					clientStore.loadSnapshot(host.incident()).data(), clientStore, host.incident(),
+					new PdfExportService(), new IncidentValidator()));
+			CountDownLatch saved = new CountDownLatch(1);
+			SwingUtilities.invokeAndWait(() -> {
+				client.getData().recordPlanReview(org.sarmanagement.icsforms.model.PlanReviewArea.COMMUNICATIONS,
+						"Communications Leader", null);
+				client.markDirty();
+				client.saveAsync(AppController.LinkSource.NONE, result -> saved.countDown());
+			});
+			assertTrue(saved.await(30, TimeUnit.SECONDS));
+			assertEquals(org.sarmanagement.icsforms.model.PlanReviewStatus.REVIEWED_APPROVED, client.getData()
+					.getPlanReviewStatus(org.sarmanagement.icsforms.model.PlanReviewArea.COMMUNICATIONS));
+
+			assertEquals(AppController.RemoteRefreshOutcome.REFRESHED, hostController.refreshFromRemote());
+			assertEquals(org.sarmanagement.icsforms.model.PlanReviewStatus.REVIEWED_APPROVED, hostController.getData()
+					.getPlanReviewStatus(org.sarmanagement.icsforms.model.PlanReviewArea.COMMUNICATIONS));
+		}
+	}
+
+	@Test
+	void commandPanelOnTheHostShowsAPlanReviewRecordedOnAClientAfterSeveralRemoteRefreshes() throws Exception {
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("panel"), "Shared")) {
+			RemoteIncidentStore hostStore = host.pair();
+			AppController hostController = SwingTestLifecycleExtension.track(new AppController(
+					hostStore.loadSnapshot(host.incident()).data(), hostStore, host.incident(), new PdfExportService(),
+					new IncidentValidator()));
+			IncidentCommandRolePanel[] panel = new IncidentCommandRolePanel[1];
+			Ics205Panel[] ics205 = new Ics205Panel[1];
+			SwingUtilities.invokeAndWait(() -> {
+				panel[0] = new IncidentCommandRolePanel(hostController, ignored -> { });
+				ics205[0] = new Ics205Panel(hostController);
+			});
+			RemoteIncidentStore clientStore = host.pair();
+			AppController client = SwingTestLifecycleExtension.track(new AppController(
+					clientStore.loadSnapshot(host.incident()).data(), clientStore, host.incident(),
+					new PdfExportService(), new IncidentValidator()));
+			for (int round = 0; round < 2; round++) {
+				int current = round;
+				CountDownLatch saved = new CountDownLatch(1);
+				SwingUtilities.invokeAndWait(() -> {
+					client.getData().getIncidentContext().setIncidentName("Round " + current);
+					if (current == 1) {
+						client.getData().recordPlanReview(
+								org.sarmanagement.icsforms.model.PlanReviewArea.COMMUNICATIONS, "Comms", null);
+					}
+					client.markDirty();
+					client.saveAsync(AppController.LinkSource.NONE, result -> saved.countDown());
+				});
+				assertTrue(saved.await(30, TimeUnit.SECONDS));
+				assertEquals(AppController.RemoteRefreshOutcome.REFRESHED, hostController.refreshFromRemote());
+				SwingUtilities.invokeAndWait(() -> { });
+			}
+			SwingUtilities.invokeAndWait(() -> assertTrue(labelTexts(panel[0]).stream()
+					.anyMatch(text -> text.contains("Communications") && text.contains("Reviewed")),
+					labelTexts(panel[0]).toString()));
+			SwingUtilities.invokeAndWait(() -> {
+				ics205[0].refreshFromModel();
+				assertTrue(labelTexts(ics205[0]).stream().anyMatch(text -> text.contains("Reviewed")),
+						labelTexts(ics205[0]).toString());
+			});
+			SwingUtilities.invokeAndWait(panel[0]::dispose);
+		}
+	}
+
+	/**
+	 * Collects the text of every label beneath a component.
+	 *
+	 * @param root component to search
+	 * @return label texts
+	 */
+	private static List<String> labelTexts(java.awt.Container root) {
+		List<String> texts = new ArrayList<>();
+		for (java.awt.Component child : root.getComponents()) {
+			if (child instanceof javax.swing.JLabel label && label.getText() != null) {
+				texts.add(label.getText());
+			}
+			if (child instanceof java.awt.Container container) {
+				texts.addAll(labelTexts(container));
+			}
+		}
+		return texts;
+	}
+
+	@Test
 	void disconnectedSaveRetainsDraftAndOriginalBaseUntilReplayDetectsConflict() throws Exception {
 		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("remote"), "Shared")) {
 			RemoteIncidentStore paired = host.pair();
@@ -262,7 +354,25 @@ class AppControllerLiveChangeTest {
 	}
 
 	@Test
-	void rejectsFullEditorCommitAfterNewerSharedCommit() {
+	void remoteBackedStoreStillRejectsFullEditorCommitAfterNewerSharedCommit() throws Exception {
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("stale"), "Shared")) {
+			RemoteIncidentStore mine = host.pair();
+			var snapshot = mine.loadSnapshot(host.incident());
+			AppController controller = SwingTestLifecycleExtension.track(new AppController(snapshot.data(), mine,
+					host.incident(), new PdfExportService(), new IncidentValidator()));
+			AppController.EditorCommitBinding staleEditor = controller.captureEditorCommitBinding();
+			controller.commitIfCurrent(controller.captureIncidentBinding(),
+					() -> controller.getData().getIncidentContext().setIncidentName("Newer shared value"));
+
+			assertFalse(controller.commitEditorIfCurrent(staleEditor, AppController.LinkSource.SHARED,
+					() -> controller.getData().getIncidentContext().setIncidentName("Stale value")));
+			assertEquals("Newer shared value", controller.getData().getIncidentContext().getIncidentName());
+			((javax.swing.Timer) Ics205PanelTest.field(controller, "autosaveTimer")).stop();
+		}
+	}
+
+	@Test
+	void localStoreAcceptsFullEditorCommitAfterNewerSharedCommit() {
 		AppController controller = controller(new AppData());
 		AppController.EditorCommitBinding staleEditor = controller.captureEditorCommitBinding();
 		controller.commitIfCurrent(controller.captureIncidentBinding(),
@@ -271,8 +381,8 @@ class AppControllerLiveChangeTest {
 		boolean applied = controller.commitEditorIfCurrent(staleEditor, AppController.LinkSource.SHARED,
 				() -> controller.getData().getIncidentContext().setIncidentName("Stale full-editor value"));
 
-		assertFalse(applied);
-		assertEquals("Newer shared value", controller.getData().getIncidentContext().getIncidentName());
+		assertTrue(applied);
+		assertEquals("Stale full-editor value", controller.getData().getIncidentContext().getIncidentName());
 	}
 
 	@Test
@@ -335,25 +445,25 @@ class AppControllerLiveChangeTest {
 	}
 
 	@Test
-	void fullEditorCommitAdvancesRevisionSoTheTokenCannotBeReused() {
+	void localStoreFullEditorCommitIsNeverBlockedByEarlierCommits() {
 		AppController controller = controller(new AppData());
 		AppController.EditorCommitBinding binding = controller.captureEditorCommitBinding();
 
 		assertTrue(controller.commitEditorIfCurrent(binding, AppController.LinkSource.SHARED,
 				() -> controller.getData().getIncidentContext().setIncidentName("Committed")));
-		assertFalse(controller.commitEditorIfCurrent(binding, AppController.LinkSource.SHARED,
-				() -> controller.getData().getIncidentContext().setIncidentName("Reused token")));
-		assertEquals("Committed", controller.getData().getIncidentContext().getIncidentName());
+		assertTrue(controller.commitEditorIfCurrent(binding, AppController.LinkSource.SHARED,
+				() -> controller.getData().getIncidentContext().setIncidentName("Second commit")));
+		assertEquals("Second commit", controller.getData().getIncidentContext().getIncidentName());
 	}
 
 	@Test
-	void registeredEditorGuardRejectsOldRevisionIncidentAndPeriodBindings() {
+	void registeredEditorGuardRejectsOldIncidentAndPeriodBindingsButNotOldRevisionsInLocalStore() {
 		AppController revisionController = controller(new AppData());
 		EditorCommitGuard revisionGuard = revisionController.createEditorCommitGuard();
 		revisionController.markDirty();
-		assertFalse(revisionGuard.commit(AppController.LinkSource.NONE,
-				() -> revisionController.getData().getIncidentContext().setIncidentName("Stale revision")));
-		assertEquals("", revisionController.getData().getIncidentContext().getIncidentName());
+		assertTrue(revisionGuard.commit(AppController.LinkSource.NONE,
+				() -> revisionController.getData().getIncidentContext().setIncidentName("Later revision")));
+		assertEquals("Later revision", revisionController.getData().getIncidentContext().getIncidentName());
 
 		AppController incidentController = controller(new AppData());
 		EditorCommitGuard incidentGuard = incidentController.createEditorCommitGuard();

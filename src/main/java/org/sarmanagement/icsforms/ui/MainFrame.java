@@ -63,6 +63,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyAdapter;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.DateTimeException;
 import java.time.ZoneId;
@@ -154,7 +155,9 @@ public class MainFrame extends JFrame {
 			logQueueStatus = Map.of();
 	private transient java.util.function.BiFunction<String, String,
 			org.sarmanagement.icsforms.persistence.RemoteIncidentStore> invitationRedeemer =
-					org.sarmanagement.icsforms.host.HostGateway::pair;
+					(text, name) -> org.sarmanagement.icsforms.host.HostGateway.pair(text, name,
+							code -> this.pairingListener.showCode(code));
+	private volatile org.sarmanagement.icsforms.host.PairingListener pairingListener = PairingCodeWindow.listener();
 	private JMenuItem newItem;
 	private JMenuItem duplicateItem;
 	private JMenuItem importIncidentItem;
@@ -197,16 +200,76 @@ public class MainFrame extends JFrame {
 			confirmPendingDraft(event.getComponent());
 		}
 	};
+	private final javax.swing.Timer autosaveRetry = createAutosaveRetry();
 	private boolean restoringEditorState;
 	private boolean restoringTabSelection;
 	private boolean pendingEditorConflict;
-	private final PropertyChangeListener focusOwnerListener = event -> {
-		Object owner = event.getNewValue();
-		if (!restoringEditorState && owner instanceof JTextComponent text
-				&& javax.swing.SwingUtilities.isDescendingFrom(text, this)) {
+	private final PropertyChangeListener focusOwnerListener = event -> focusOwnerChanged(event.getOldValue(),
+			event.getNewValue());
+
+	private final java.awt.event.AWTEventListener entryListener = this::entryEvent;
+
+	/**
+	 * Schedules an autosave as soon as the user finishes a keystroke in an edited text field or table cell, or
+	 * toggles a combo box or check box, so entered data is saved without waiting for focus to leave the field.
+	 *
+	 * @param event AWT event observed application-wide.
+	 */
+	void entryEvent(java.awt.AWTEvent event) {
+		if (restoringEditorState || !(event.getSource() instanceof java.awt.Component component)
+				|| !javax.swing.SwingUtilities.isDescendingFrom(component, this)) {
+			return;
+		}
+		if (event instanceof java.awt.event.KeyEvent key && key.getID() == java.awt.event.KeyEvent.KEY_RELEASED
+				&& component instanceof JTextComponent text && text.isEditable()) {
+			if (isTableEditor(text) || (editorTextBaselines.containsKey(text)
+					&& !java.util.Objects.equals(text.getText(), editorTextBaselines.get(text)))) {
+				controller.markEditorDraftDirty();
+			}
+		} else if (event instanceof java.awt.event.ActionEvent
+				&& (component instanceof javax.swing.JComboBox<?> || component instanceof javax.swing.JCheckBox)
+				&& component.isFocusOwner()) {
+			controller.markEditorDraftDirty();
+		}
+	}
+
+	/**
+	 * Tells whether the operator is still typing in a control. Autosave flushes every editor, which can end a
+	 * table cell edit or move focus, so it waits until the control is left and is then saved as finished input.
+	 *
+	 * @return true when the focused control holds edited, uncommitted text.
+	 */
+	boolean entryInProgress() {
+		java.awt.Component owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+		if (!(owner instanceof JTextComponent text) || !text.isEditable()
+				|| !javax.swing.SwingUtilities.isDescendingFrom(text, this)) {
+			return false;
+		}
+		return isTableEditor(text) || (editorTextBaselines.containsKey(text)
+				&& !java.util.Objects.equals(text.getText(), editorTextBaselines.get(text)));
+	}
+
+	/**
+	 * Tracks the focused editor and schedules an autosave when an edited field loses focus, because finished
+	 * input must be committed and saved without an explicit save action.
+	 *
+	 * @param previous component that lost focus, or null.
+	 * @param owner component that gained focus, or null.
+	 */
+	void focusOwnerChanged(Object previous, Object owner) {
+		if (restoringEditorState) {
+			return;
+		}
+		if (owner instanceof JTextComponent text && javax.swing.SwingUtilities.isDescendingFrom(text, this)) {
 			lastFocusedEditor = text;
 		}
-	};
+		if (previous instanceof JTextComponent left && left.isEditable()
+				&& javax.swing.SwingUtilities.isDescendingFrom(left, this) && !isTableEditor(left)
+				&& editorTextBaselines.containsKey(left)
+				&& !java.util.Objects.equals(left.getText(), editorTextBaselines.get(left))) {
+			controller.markEditorDraftDirty();
+		}
+	}
 
 	/**
 	 * Creates the main application frame.
@@ -261,8 +324,9 @@ public class MainFrame extends JFrame {
 				throw new IllegalStateException("Unexpected autosave persistence failure", exception);
 			});
 		} else {
-			this.controller.setAutosaveErrorHandler(exception -> showSaveError(exception));
+			this.controller.setAutosaveErrorHandler(this::autosaveFailed);
 		}
+		this.controller.setAutosaveDeferral(this::entryInProgress);
 		this.incidentContextPanel = new IncidentContextPanel(controller);
 		this.organizationalChartPanel = new OrganizationalChartPanel(controller);
 		this.ics201Panel = new Ics201Panel(controller);
@@ -354,6 +418,8 @@ public class MainFrame extends JFrame {
 		});
 		KeyboardFocusManager.getCurrentKeyboardFocusManager()
 				.addPropertyChangeListener("focusOwner", focusOwnerListener);
+		java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(entryListener,
+				java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.ACTION_EVENT_MASK);
 		setPreferredSize(new Dimension(1120, 820));
 		setJMenuBar(createMenuBar(defaultDirectory));
 		setLayout(new BorderLayout(8, 8));
@@ -420,6 +486,8 @@ public class MainFrame extends JFrame {
 		}
 		KeyboardFocusManager.getCurrentKeyboardFocusManager()
 				.removePropertyChangeListener("focusOwner", focusOwnerListener);
+		java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(entryListener);
+		autosaveRetry.stop();
 		clearPendingDraft();
 		editorTextBaselines.clear();
 		super.dispose();
@@ -834,7 +902,11 @@ public class MainFrame extends JFrame {
 			specifiedTimeZoneItem.setText("Use specified time zone… (" + configured + ")");
 		};
 		systemTimeZoneItem.addActionListener(e -> {
-			controller.getData().setUseSystemTimeZone(true);
+			if (sharingRole() == SharingRole.HOST) {
+				pinIncidentTimeZone(controller.getData());
+			} else {
+				controller.getData().setUseSystemTimeZone(true);
+			}
 			applyConfiguredTimeZone();
 			refreshTimeZoneLabels.run();
 			controller.markDirty();
@@ -869,6 +941,30 @@ public class MainFrame extends JFrame {
 		timeZoneGroup.add(specifiedTimeZoneItem);
 		timeZoneMenu.add(systemTimeZoneItem);
 		timeZoneMenu.add(specifiedTimeZoneItem);
+		timeZoneMenu.addMenuListener(new javax.swing.event.MenuListener() {
+			/** {@inheritDoc} */
+			@Override
+			public void menuSelected(javax.swing.event.MenuEvent event) {
+				boolean client = sharingRole() == SharingRole.CLIENT;
+				systemTimeZoneItem.setEnabled(!client);
+				specifiedTimeZoneItem.setEnabled(!client);
+				timeZoneMenu.setToolTipText(client ? "The host sets the time zone for every device in this incident."
+						: null);
+				refreshTimeZoneLabels.run();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void menuDeselected(javax.swing.event.MenuEvent event) {
+				// Nothing to undo.
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void menuCanceled(javax.swing.event.MenuEvent event) {
+				// Nothing to undo.
+			}
+		});
 		refreshTimeZoneLabels.run();
 		configMenu.addSeparator();
 		configMenu.add(timeZoneMenu);
@@ -901,6 +997,8 @@ public class MainFrame extends JFrame {
 				hostSharingDialog.stopAsync(null);
 			}
 		});
+		JMenuItem disconnectItem = new JMenuItem("Disconnect from host...");
+		disconnectItem.addActionListener(event -> disconnectFromHost());
 		JMenuItem hostItem = new JMenuItem("Host this incident...");
 		hostItem.addActionListener(event -> showHostSharing());
 		JMenuItem connectItem = new JMenuItem("Connect to a host...");
@@ -915,7 +1013,21 @@ public class MainFrame extends JFrame {
 			/** {@inheritDoc} */
 			@Override
 			public void menuSelected(javax.swing.event.MenuEvent event) {
-				standaloneItem.setEnabled(hostSharingDialog != null && hostSharingDialog.isSharing());
+				SharingMenuState state = sharingMenuState(sharingRole());
+				standaloneItem.setEnabled(state.stopSharing());
+				disconnectItem.setEnabled(state.disconnect());
+				disconnectItem.setToolTipText(state.disconnect() ? null : "This window is not connected to a host.");
+				hostItem.setEnabled(state.host());
+				hostItem.setToolTipText(state.host() ? null
+						: "This window is connected to a host. Only the device that holds the incident can host it.");
+				connectItem.setEnabled(state.connect());
+				connectItem.setToolTipText(state.connect() ? null
+						: "This window is already connected to a host. Disconnect first to connect elsewhere.");
+				offlineItem.setEnabled(state.offline());
+				reconnectItem.setEnabled(state.repair());
+				reconnectItem.setToolTipText(state.repair() ? null : "Only a connected device can be re-paired.");
+				outboxItem.setEnabled(state.outbox());
+				outboxItem.setToolTipText(state.outbox() ? null : "Only a shared incident has an outbox.");
 			}
 
 			/** {@inheritDoc} */
@@ -936,8 +1048,170 @@ public class MainFrame extends JFrame {
 		sharingMenu.add(connectItem);
 		sharingMenu.add(offlineItem);
 		sharingMenu.add(reconnectItem);
+		sharingMenu.add(disconnectItem);
 		sharingMenu.add(outboxItem);
 		return sharingMenu;
+	}
+
+	/**
+	 * Makes the incident's time zone explicit so every device that joins displays and enters times in the host's
+	 * zone instead of its own system zone. An already explicit zone is left alone.
+	 *
+	 * @param data incident document
+	 * @return true when the document changed
+	 */
+	static boolean pinIncidentTimeZone(AppData data) {
+		if (!data.isUseSystemTimeZone()) {
+			return false;
+		}
+		data.setUseSystemTimeZone(false);
+		data.setConfiguredTimeZoneId(ZoneId.systemDefault().getId());
+		return true;
+	}
+
+	/** How this window takes part in sharing. */
+	enum SharingRole {
+		/** The incident is edited in the local file store and not shared. */
+		STANDALONE,
+		/** This device hosts the incident for others. */
+		HOST,
+		/** This window is connected to another device's host. */
+		CLIENT
+	}
+
+	/**
+	 * Which Sharing menu items apply to a role.
+	 *
+	 * @param stopSharing stop hosting
+	 * @param disconnect disconnect this window from its host
+	 * @param host open the host window
+	 * @param connect connect to a host in a new window
+	 * @param offline open a cached incident in a new window
+	 * @param repair re-pair this connected incident
+	 * @param outbox review queued changes
+	 */
+	record SharingMenuState(boolean stopSharing, boolean disconnect, boolean host, boolean connect, boolean offline, boolean repair,
+			boolean outbox) {
+	}
+
+	/**
+	 * Decides which Sharing menu items are enabled. Connecting and opening a cached incident each open a new
+	 * window, so they are offered except to a connected client, which instead may disconnect or re-pair; hosting is
+	 * not offered to a client.
+	 *
+	 * @param role this window's sharing role
+	 * @return item states
+	 */
+	static SharingMenuState sharingMenuState(SharingRole role) {
+		return switch (role) {
+			case STANDALONE -> new SharingMenuState(false, false, true, true, true, false, false);
+			case HOST -> new SharingMenuState(true, false, true, true, true, false, true);
+			case CLIENT -> new SharingMenuState(false, true, false, false, true, true, true);
+		};
+	}
+
+	/**
+	 * Works out how this window takes part in sharing.
+	 *
+	 * @return host while sharing, client when connected to a host, otherwise standalone
+	 */
+	private SharingRole sharingRole() {
+		if (hostSharingDialog != null && hostSharingDialog.isSharing()) {
+			return SharingRole.HOST;
+		}
+		return controller.getStore() instanceof org.sarmanagement.icsforms.persistence.RemoteIncidentStore
+				? SharingRole.CLIENT : SharingRole.STANDALONE;
+	}
+
+	/**
+	 * Describes the database and the connected devices for the Communications panel footer.
+	 *
+	 * @return one fact per line
+	 */
+	private String sharingDetails() {
+		StringBuilder text = new StringBuilder();
+		SharingRole role = sharingRole();
+		HostSharingDialog dialog = hostSharingDialog;
+		if (role == SharingRole.HOST && dialog != null && dialog.session() != null) {
+			org.sarmanagement.icsforms.host.HostSession host = dialog.session();
+			org.sarmanagement.icsforms.host.HostStatus status = host.status();
+			text.append("Database: local file store on this device, shared from port ").append(status.port())
+					.append(".\nListening on: ")
+					.append(org.sarmanagement.icsforms.host.NetworkInfo.addressSummary(
+							org.sarmanagement.icsforms.host.NetworkInfo.local()))
+					.append('\n');
+			text.append(host.pairingState().open()
+					? "Accepting new devices now (pairing is open).\n"
+					: "Not accepting new devices; open \"Devices can join\" to add one.\n");
+			java.util.List<org.sarmanagement.icsforms.host.DeviceInfo> devices = host.devices();
+			long revoked = devices.stream()
+					.filter(d -> d.state() == org.sarmanagement.icsforms.host.CredentialState.REVOKED).count();
+			long connected = devices.stream().filter(org.sarmanagement.icsforms.host.DeviceInfo::connected).count();
+			text.append(connected).append(" connected, ").append(devices.size()).append(" paired, ").append(revoked)
+					.append(" revoked.");
+			devices.stream().filter(d -> d.state() == org.sarmanagement.icsforms.host.CredentialState.ACTIVE)
+					.limit(6).forEach(d -> text.append("\n  ").append(d.name()).append(d.connected()
+							? " (connected" : " (not connected")
+							.append(d.lastAddress() == null ? ")" : ", " + d.lastAddress() + ")"));
+			text.append("\nHost fingerprint: ").append(status.hostFingerprint());
+		} else if (role == SharingRole.CLIENT
+				&& ((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) controller.getStore())
+						.gateway() instanceof org.sarmanagement.icsforms.host.HostGateway gateway) {
+			text.append("Database: on the host at ").append(gateway.location()).append(".\nHost fingerprint: ")
+					.append(gateway.authorityFingerprint().orElse("unknown")).append("\nThis device is on: ")
+					.append(org.sarmanagement.icsforms.host.NetworkInfo.addressSummary(
+							org.sarmanagement.icsforms.host.NetworkInfo.local()))
+					.append("\nTime zone set by the host: ").append(configuredZoneId(controller.getData()).getId());
+		} else {
+			text.append("Database: local file store on this device only.\nThis device is on: ")
+					.append(org.sarmanagement.icsforms.host.NetworkInfo.addressSummary(
+							org.sarmanagement.icsforms.host.NetworkInfo.local()));
+		}
+		return text.toString();
+	}
+
+	/**
+	 * Builds the sharing view that the Communications panel shows and uses to open the host window.
+	 *
+	 * @return controls bound to this window
+	 */
+	private SharingControls communicationsSharing() {
+		return new SharingControls() {
+			/** {@inheritDoc} */
+			@Override
+			public String status() {
+				return switch (sharingRole()) {
+					case HOST -> "This device is hosting this incident for other devices.";
+					case CLIENT -> "This device is connected to a host and cannot host this incident.";
+					case STANDALONE -> "This incident is not shared. Host it to let other devices join.";
+				};
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public String details() {
+				return sharingDetails();
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public boolean canHost() {
+				return sharingMenuState(sharingRole()).host() && (hosting()
+						|| controller.getStore() != null && "File".equals(controller.getStore().describe().type()));
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public boolean hosting() {
+				return sharingRole() == SharingRole.HOST;
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void showHostDialog() {
+				showHostSharing();
+			}
+		};
 	}
 
 	/**
@@ -975,6 +1249,9 @@ public class MainFrame extends JFrame {
 			hostedIncident = incident;
 			hostLocalStore = store;
 			hostSharingDialog = new HostSharingDialog(this, store, incident, () -> {
+				if (pinIncidentTimeZone(controller.getData())) {
+					controller.markDirty();
+				}
 				if (!saveBeforeSwitch()) {
 					throw new IllegalStateException("Pending edits could not be saved");
 				}
@@ -1023,19 +1300,28 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Asks for an invitation and opens the shared incident in a new connected window. Pairing and the first load
+	 * Asks for the host address and pairing code and opens the shared incident in a new connected window. Pairing and the first load
 	 * run on a background worker so the event thread never waits on the network.
 	 */
 	private void showConnect() {
-		JTextArea invitation = new JTextArea(4, 48);
-		invitation.setLineWrap(true);
-		JTextField device = new JTextField(System.getProperty("user.name", "device"), 20);
-		Object[] form = {"Invitation from the host:", new JScrollPane(invitation), "Device name:", device};
-		if (JOptionPane.showConfirmDialog(this, form, "Connect to a host", JOptionPane.OK_CANCEL_OPTION,
-				JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
+		Object[] connection;
+		try {
+			connection = ConnectDialog.show(this, (text, name, listener) -> {
+				pairingListener = listener;
+				try {
+					return pairAndLoad(invitationRedeemer, text, name, homeDirectory);
+				} finally {
+					pairingListener = PairingCodeWindow.listener();
+				}
+			});
+		} catch (RuntimeException failure) {
+			showError("Could not connect to the host", failure);
 			return;
 		}
-		connectWithInvitation(invitation.getText(), device.getText().strip());
+		if (connection != null) {
+			openConnectedWindow((org.sarmanagement.icsforms.persistence.RemoteIncidentStore) connection[0],
+					(org.sarmanagement.icsforms.persistence.StoredIncident) connection[1]);
+		}
 	}
 
 	/**
@@ -1805,7 +2091,23 @@ public class MainFrame extends JFrame {
 								org.sarmanagement.icsforms.persistence.RemoteIncidentStore.ConflictChoice
 										.valueOf(decision.choice().name()));
 					}
-					remote.resolvePending(entry.operationId(), choices);
+					try {
+						remote.resolvePending(entry.operationId(), choices);
+					} catch (org.sarmanagement.icsforms.persistence.StoreValidationException stale) {
+						if (!org.sarmanagement.icsforms.persistence.RemoteIncidentStore.HOST_CHANGED
+								.equals(stale.getMessage())) {
+							throw stale;
+						}
+						// The stored host value moved on (for example the host rewrote a record after
+						// an upgrade); show the current values instead of leaving the review stuck.
+						remote.refreshConflict(entry.operationId());
+						if (remote.pendingOperations().stream()
+								.anyMatch(item -> item.operationId().equals(entry.operationId()))) {
+							throw new IllegalStateException("The host changed since this review was opened. "
+									+ "The stored values have been refreshed; check your choices and apply "
+									+ "them again.");
+						}
+					}
 				}
 				return controller.refreshFromRemote();
 			}
@@ -1877,7 +2179,23 @@ public class MainFrame extends JFrame {
 	 * @return the connected store and first snapshot, to pass to {@link #openConnected}.
 	 */
 	public static Object[] connectFromStartup(String invitationText, String deviceName, Path home) {
-		return pairAndLoad(org.sarmanagement.icsforms.host.HostGateway::pair, invitationText, deviceName, home);
+		return connectFromStartup(invitationText, deviceName, home, PairingCodeWindow.listener());
+	}
+
+	/**
+	 * Like {@link #connectFromStartup(String, String, Path)}, showing the pairing number through the given listener.
+	 *
+	 * @param invitationText invitation text.
+	 * @param deviceName name shown to the host operator.
+	 * @param home directory holding the application's private state.
+	 * @param listener receives the number the host operator must type.
+	 * @return the connected store and first snapshot, to pass to {@link #openConnected}.
+	 */
+	static Object[] connectFromStartup(String invitationText, String deviceName, Path home,
+			org.sarmanagement.icsforms.host.PairingListener listener) {
+		return pairAndLoad(
+				(text, name) -> org.sarmanagement.icsforms.host.HostGateway.pair(text, name, listener),
+				invitationText, deviceName, home);
 	}
 
 	/**
@@ -2274,7 +2592,7 @@ public class MainFrame extends JFrame {
 		RolePanelWindows.openCommunications(this, controller, this::openWorkspace,
 				() -> new RadioChannelCsvDialogs(ics205Panel, controller).importCsv(),
 				() -> new RadioChannelCsvDialogs(ics205Panel, controller).exportCsv(false),
-				() -> showAddLogEntry(new LogEntryContext(this, "", "", "")));
+				() -> showAddLogEntry(new LogEntryContext(this, "", "", "")), communicationsSharing());
 	}
 
 	/**
@@ -2719,11 +3037,13 @@ public class MainFrame extends JFrame {
 		if (!pendingDraftComponents.isEmpty()) {
 			validationLabel.setText("A shared value changed while this editor had a partial draft. Edit that draft "
 					+ "again before saving or navigating.");
+			java.util.logging.Logger.getLogger(MainFrame.class.getName()).log(java.util.logging.Level.WARNING, "Editor commit blocked: retained partial draft in {0}", pendingDraftComponents);
 			return false;
 		}
 		boolean committed;
 		try {
 			if (!controller.editorCommitBindingsCurrent()) {
+				java.util.logging.Logger.getLogger(MainFrame.class.getName()).warning("Editor commit blocked: an editor commit guard is stale");
 				validationLabel.setText("An editor is stale after another workspace changed the incident. "
 						+ "Refresh it before saving or navigating.");
 				return false;
@@ -2767,6 +3087,7 @@ public class MainFrame extends JFrame {
 				tCardPanel.pushToModel();
 			});
 		} catch (RuntimeException exception) {
+			java.util.logging.Logger.getLogger(MainFrame.class.getName()).log(java.util.logging.Level.WARNING, "Editor commit failed", exception);
 			validationLabel.setText("Editor changes were not committed: " + exception.getMessage()
 					+ " Correct the draft before retrying.");
 			return false;
@@ -3153,6 +3474,12 @@ public class MainFrame extends JFrame {
 					}
 				}
 			}
+			List<List<String>> signatures = new ArrayList<>();
+			for (int row : selectedRows) {
+				if (row >= 0 && row < table.getRowCount()) {
+					signatures.add(rowSignature(table, row));
+				}
+			}
 			int editingRow = table.isEditing() ? table.getEditingRow() : -1;
 			int editingColumn = table.isEditing() ? table.getEditingColumn() : -1;
 			Component editorComponent = table.isEditing() ? table.getEditorComponent() : null;
@@ -3164,7 +3491,8 @@ public class MainFrame extends JFrame {
 			boolean edited = table.isEditing() && editorText != null
 					&& !java.util.Objects.equals(editorText, String.valueOf(table.getValueAt(editingRow, editingColumn)));
 			tables.add(new TableViewState(table, selectedRows, selectedColumns, editingRow, editingColumn,
-					editorText, edited, selectionStart, selectionEnd, caretPosition, editorFocused, locationIds));
+					editorText, edited, selectionStart, selectionEnd, caretPosition, editorFocused, locationIds,
+					signatures));
 			if (table.isEditing() && table.getCellEditor() != null) {
 				table.getCellEditor().cancelCellEditing();
 			}
@@ -3205,6 +3533,7 @@ public class MainFrame extends JFrame {
 					}
 				} else if (ics214Panels.stream().noneMatch(panel -> panel.resourcesTable() == table)) {
 					table.clearSelection();
+					reselectMatchingRows(table, tableState.rowSignatures());
 				}
 				continue;
 			}
@@ -3241,8 +3570,6 @@ public class MainFrame extends JFrame {
 					if (editor instanceof JTextComponent text) {
 						lastFocusedEditor = text;
 					}
-				} else if (focusTarget == null) {
-					focusTarget = editor;
 				}
 			}
 		}
@@ -3269,7 +3596,8 @@ public class MainFrame extends JFrame {
 				&& javax.swing.SwingUtilities.isDescendingFrom(state.focused(), this) && state.focused().isShowing()) {
 			focusTarget = state.focused();
 		}
-		if (focusTarget != null) {
+		if (focusTarget != null && KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() != focusTarget
+				&& isActive()) {
 			focusTarget.requestFocusInWindow();
 		}
 		javax.swing.SwingUtilities.invokeLater(() -> {
@@ -3524,10 +3852,49 @@ public class MainFrame extends JFrame {
 	 * @param caretPosition caret location.
 	 * @param focused whether this cell editor owned focus before refresh.
 	 * @param locationIds selected stable incident-location identifiers.
+	 * @param rowSignatures cell text of each selected row, used to find the same rows after a reload.
 	 */
 	private record TableViewState(JTable table, int[] selectedRows, int[] selectedColumns, int editingRow,
 			int editingColumn, String editorText, boolean edited, int selectionStart, int selectionEnd,
-			int caretPosition, boolean focused, List<String> locationIds) {
+			int caretPosition, boolean focused, List<String> locationIds, List<List<String>> rowSignatures) {
+	}
+
+	/**
+	 * Reselects rows whose cell text matches a previously selected row exactly once, so a refresh that reloads
+	 * the model does not drop the operator's selection while another row's data is unchanged.
+	 *
+	 * @param table table to update.
+	 * @param signatures cell text of the rows that were selected.
+	 */
+	static void reselectMatchingRows(JTable table, List<List<String>> signatures) {
+		for (List<String> signature : signatures) {
+			int match = -1;
+			int count = 0;
+			for (int row = 0; row < table.getRowCount(); row++) {
+				if (rowSignature(table, row).equals(signature)) {
+					match = row;
+					count++;
+				}
+			}
+			if (count == 1) {
+				table.addRowSelectionInterval(match, match);
+			}
+		}
+	}
+
+	/**
+	 * Captures the cell text of a table row so the row can be found again after the model reloads.
+	 *
+	 * @param table table holding the row.
+	 * @param viewRow row in view coordinates.
+	 * @return cell text of every column.
+	 */
+	static List<String> rowSignature(JTable table, int viewRow) {
+		List<String> cells = new ArrayList<>();
+		for (int column = 0; column < table.getColumnCount(); column++) {
+			cells.add(String.valueOf(table.getValueAt(viewRow, column)));
+		}
+		return cells;
 	}
 
 	/**
@@ -3994,6 +4361,8 @@ public class MainFrame extends JFrame {
 		}
 	}
 
+	private String closeFailure;
+
 	/**
 	 * Saves pending edits before switching or managing incidents so rejected edits
 	 * and failed saves cannot discard them or expose stale management backups.
@@ -4001,6 +4370,17 @@ public class MainFrame extends JFrame {
 	 * @return {@code true} if it is safe to switch incidents.
 	 */
 	private boolean saveBeforeSwitch() {
+		return saveBeforeSwitch(true);
+	}
+
+	/**
+	 * Saves pending edits before switching or closing.
+	 *
+	 * @param reportFailure whether a failed save opens its own dialog; closing reports it in the unsaved-incident
+	 *            prompt instead so the operator sees one dialog, not a chain
+	 * @return {@code true} if it is safe to continue.
+	 */
+	private boolean saveBeforeSwitch(boolean reportFailure) {
 		if (!resolveOutstandingEditors()) {
 			return false;
 		}
@@ -4012,7 +4392,11 @@ public class MainFrame extends JFrame {
 			controller.save(source);
 			return !controller.hasUnsavedChanges();
 		} catch (RuntimeException exception) {
-			showSaveError(exception);
+			if (reportFailure) {
+				showSaveError(exception);
+			} else {
+				closeFailure = exception.getMessage();
+			}
 			return false;
 		}
 	}
@@ -4024,8 +4408,16 @@ public class MainFrame extends JFrame {
 	 * @return true when no outstanding editor can still modify the old incident.
 	 */
 	private boolean resolveOutstandingEditors() {
-		List<java.awt.Window> outstanding = UiSupport.outstandingIncidentWindows(this, controller.getData());
-		if (!outstanding.isEmpty()) {
+		List<java.awt.Window> outstanding = new ArrayList<>(
+				UiSupport.outstandingIncidentWindows(this, controller.getData()));
+		for (java.awt.Window window : new ArrayList<>(outstanding)) {
+			if (UiSupport.flushIncidentWindow(window)) {
+				outstanding.remove(window);
+			}
+		}
+		if (outstanding.isEmpty()) {
+			UiSupport.disposeIncidentWindows(controller.getData());
+		} else {
 			Object[] options = {"Return to editors to save", "Discard open editors", "Cancel"};
 			int choice = JOptionPane.showOptionDialog(this,
 					"Editors or detached logs are still open. Return to them to save pending edits before "
@@ -4046,6 +4438,26 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
+	 * Asks for confirmation, then closes this connected window, which ends its connection to the host. Edits not yet
+	 * sent stay in this device's cache and outbox and are sent when the incident is connected again.
+	 */
+	private void disconnectFromHost() {
+		if (sharingRole() != SharingRole.CLIENT) {
+			return;
+		}
+		String pending = outbox.isEmpty() ? ""
+				: "\n\n" + outbox.size() + " change(s) have not reached the host yet. They stay in this device's "
+						+ "outbox and are sent the next time you reconnect.";
+		if (JOptionPane.showConfirmDialog(this,
+				"Disconnect from the host and close this incident window? The incident stays on the host, and "
+						+ "other devices are not affected." + pending,
+				"Disconnect from host", JOptionPane.YES_NO_OPTION,
+				JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION) {
+			closeAfterSave();
+		}
+	}
+
+	/**
 	 * Closes the editor only after its active incident has been saved successfully.
 	 */
 	private void closeAfterSave() {
@@ -4061,10 +4473,14 @@ public class MainFrame extends JFrame {
 			}
 			return;
 		}
-		if (!saveBeforeSwitch()) {
+		closeFailure = null;
+		autosaveRetry.stop();
+		if (!saveBeforeSwitch(false)) {
 			Object[] choices = {"Keep editing", "Export unsaved changes and close", "Discard changes and close"};
 			int selected = JOptionPane.showOptionDialog(this,
-					"The incident has not been saved. Export a recovery copy of your current edits "
+					"The incident has not been saved"
+							+ (closeFailure == null ? "" : " (" + closeFailure + ")")
+							+ ". Export a recovery copy of your current edits "
 							+ "before closing, or keep this window open.",
 					"Unsaved incident", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE,
 					null, choices, choices[0]);
@@ -4083,7 +4499,9 @@ public class MainFrame extends JFrame {
 					"Discard unsaved incident changes?", "Discard changes", JOptionPane.YES_NO_OPTION,
 					JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION) {
 				finishClose();
+				return;
 			}
+			autosaveRetry.restart();
 			return;
 		}
 		finishClose();
@@ -4091,6 +4509,7 @@ public class MainFrame extends JFrame {
 
 	/** Closes resources only after save, recovery export, or explicit discard has resolved pending edits. */
 	private void finishClose() {
+		autosaveRetry.stop();
 		if (hostSharingDialog != null) {
 			hostSharingDialog.dispose();
 		}
@@ -4106,6 +4525,58 @@ public class MainFrame extends JFrame {
 		detachMonitor();
 		canineMedicalPanel.dispose();
 		controller.close();
+	}
+
+	/**
+	 * Creates the single-shot timer that retries a failed background save.
+	 *
+	 * @return the timer.
+	 */
+	private javax.swing.Timer createAutosaveRetry() {
+		javax.swing.Timer timer = new javax.swing.Timer(15_000, event -> controller.retryPersistence());
+		timer.setRepeats(false);
+		return timer;
+	}
+
+	/**
+	 * Handles a failed background save without interrupting the operator: the failure is logged and shown on the
+	 * persistence status line, the edits stay in the window, and the save is retried quietly. Explicit save
+	 * actions still report failures in a dialog.
+	 *
+	 * @param exception persistence failure.
+	 */
+	private void autosaveFailed(RuntimeException exception) {
+		java.util.logging.Logger.getLogger(MainFrame.class.getName()).log(java.util.logging.Level.WARNING,
+				"Background save failed; will retry", exception);
+		persistenceLabel.setToolTipText(exception.getMessage());
+		retryPersistenceButton.setEnabled(true);
+		writeRecoveryCopy();
+		if (exception instanceof StoreConflictException) {
+			return;
+		}
+		autosaveRetry.restart();
+	}
+
+	/**
+	 * Writes the current, unsaved edits to a recovery file under the user's data directory so that a failing
+	 * save, a forced kill or a crash can never lose what was typed. The file is overwritten on each failure.
+	 */
+	private void writeRecoveryCopy() {
+		if (entryInProgress()) {
+			return;
+		}
+		try {
+			String id = controller.getData().getIncidentId();
+			Path directory = Path.of(System.getProperty("user.home"), ".icsforms", "recovery");
+			Files.createDirectories(directory);
+			Path target = directory.resolve((id == null || id.isBlank() ? "incident" : id) + "-unsaved.json");
+			controller.exportUnsavedIncident(target, linkSourceForTab(tabs.getSelectedIndex()));
+			persistenceLabel.setToolTipText(persistenceLabel.getToolTipText() + " (recovery copy: " + target + ")");
+			java.util.logging.Logger.getLogger(MainFrame.class.getName()).warning("Unsaved edits copied to " + target);
+		} catch (java.io.IOException | RuntimeException failure) {
+			java.util.logging.Logger.getLogger(MainFrame.class.getName()).log(java.util.logging.Level.WARNING,
+					"Could not write recovery copy", failure);
+		}
 	}
 
 	/**

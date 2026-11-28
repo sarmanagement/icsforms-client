@@ -36,6 +36,42 @@ penetration test or a Stage 2 release approval.
 
 ## Findings and residual risks
 
+### In-person pairing (#74)
+
+* The number carries about 22.5 bits (10,000 x 24 x 24). The device commits to
+  its key share first, so an interposed attacker cannot search for a matching
+  share; each attempt succeeds with probability about 1 in 5.76 million. The
+  window is burned after 3 failures, expires after the invitation lifetime, is
+  closed by a successful pairing, and the existing per-address and global
+  pairing rate limits apply. Retyping a number gives no extra guess.
+* Because the operator types the number, the check cannot be reduced to
+  clicking approve. The exchange assumes the two people are together.
+* A network attacker can deliberately burn the window or occupy the single
+  awaiting slot (denial of service); the operator opens a new window. This is
+  accepted, because the alternative is to let guesses accumulate.
+* Without a QR the device has no fingerprint. TLS validates against the chain's
+  own authority, and the number binds the fingerprint the device saw, so an
+  interposed authority yields a number that does not match.
+* Cryptography is the Bouncy Castle FIPS module (ECDH, SHA-256, HMAC, HKDF,
+  AES-GCM); none is hand-written. The module runs in its default (general)
+  mode, not approved-only mode, and mutual TLS still uses the JDK stack, so
+  this is not a claim of FIPS-validated operation end to end. Discovery (mDNS)
+  advertises only the host name and port.
+* The long invitation contains a single-use secret, so the host window shows
+  only its prefix and masks the rest; **Copy** writes it to the system
+  clipboard. The QR text contains no secret. Anyone with clipboard access can
+  read a copied invitation, so it should be pasted promptly and the window
+  closed.
+* The host remembers the address each device last contacted it from, in memory
+  only, to show in the device **Details**; it is cleared with the contact
+  state and never persisted.
+* **Troubleshoot…** on the client only resolves, pings and opens TCP
+  connections to the host the operator named or pasted, and sends no incident
+  data. It reports TCP reachability, not identity; the fingerprint pin is still
+  enforced when connecting.
+* A host 409 `busy` is reported as a retry message; other 409 reasons are shown
+  as text from the host and contain no incident contents.
+
 1. **Client credentials and approval tickets are session-memory-only.** The
    existing connection flow does not persist credentials across application
    restarts, and a pending re-authorization ticket holds its status token and

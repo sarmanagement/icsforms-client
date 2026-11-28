@@ -193,6 +193,55 @@ public final class SarTaskSupport {
 		return value == null ? "" : value.trim();
 	}
 
+	/**
+	 * Finds another task already using an assignment/team number, ignoring case and surrounding spaces.
+	 *
+	 * @param tasks all tasks in the incident
+	 * @param self task being edited, which never conflicts with itself
+	 * @param number candidate assignment/team number
+	 * @return the conflicting task, or null when the number is blank or free
+	 */
+	public static SarTaskAssignment findNumberConflict(List<SarTaskAssignment> tasks, SarTaskAssignment self,
+			String number) {
+		String key = number == null ? "" : number.trim();
+		if (key.isEmpty() || tasks == null) {
+			return null;
+		}
+		for (SarTaskAssignment task : tasks) {
+			boolean same = task == self || (self != null && task.getAssignmentId() != null
+					&& !task.getAssignmentId().isBlank() && task.getAssignmentId().equals(self.getAssignmentId()));
+			if (!same && key.equalsIgnoreCase(task.getAssignmentTeamNumber() == null ? ""
+					: task.getAssignmentTeamNumber().trim())) {
+				return task;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Suggests the nearest free number after a conflicting one by appending or incrementing a numeric suffix.
+	 *
+	 * @param tasks all tasks in the incident
+	 * @param self task being edited
+	 * @param number conflicting number
+	 * @return a number no other task uses
+	 */
+	public static String nextFreeNumber(List<SarTaskAssignment> tasks, SarTaskAssignment self, String number) {
+		String base = number == null ? "" : number.trim();
+		int end = base.length();
+		int start = end;
+		while (start > 0 && Character.isDigit(base.charAt(start - 1))) {
+			start--;
+		}
+		String prefix = start == end ? base + "-" : base.substring(0, start);
+		int next = start == end ? 2 : Integer.parseInt(base.substring(start)) + 1;
+		String candidate = prefix + next;
+		while (findNumberConflict(tasks, self, candidate) != null) {
+			candidate = prefix + (++next);
+		}
+		return candidate;
+	}
+
 	private record PodFactorTemplate(String name, int maxScore, boolean allowDescription) {
 	}
 }

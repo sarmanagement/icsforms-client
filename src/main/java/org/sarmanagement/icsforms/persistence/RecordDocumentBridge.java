@@ -26,8 +26,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.sarmanagement.icsforms.persistence.RecordVersionStore.*;
 
@@ -35,6 +37,8 @@ import static org.sarmanagement.icsforms.persistence.RecordVersionStore.*;
  * Applies versioned record snapshots to the existing incident object graph.
  */
 final class RecordDocumentBridge {
+	private static final java.util.logging.Logger LOGGER = java.util.logging.Logger
+			.getLogger(RecordDocumentBridge.class.getName());
 	private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 			.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -86,6 +90,24 @@ final class RecordDocumentBridge {
 	 * @return true when the document was changed
 	 */
 	boolean apply(AppData data, List<RecordHistory> histories, boolean replaceDefaults) {
+		return apply(data, histories, replaceDefaults, new HashSet<>());
+	}
+
+	/**
+	 * Projects latest record snapshots into a detached incident document, reporting superseded histories.
+	 *
+	 * @param data detached incident document
+	 * @param histories retained record histories
+	 * @param replaceDefaults whether a single-valued parent field holding another record is replaced rather
+	 *            than rejected
+	 * @param superseded receives live histories not projected because the document already holds a newer record
+	 *            in the same single-valued field, together with their descendants
+	 * @return true when the document was changed
+	 */
+	boolean apply(AppData data, List<RecordHistory> histories, boolean replaceDefaults, Set<RecordKey> superseded) {
+		Map<String, RecordHistory> byId = new HashMap<>();
+		histories.forEach(history -> byId.put(history.key().type() + ":" + history.key().id(), history));
+		histories = histories.stream().filter(history -> !history.retired()).toList();
 		JsonNode before = MAPPER.valueToTree(data);
 		RecordIndex index = RecordIndex.of(data);
 		Map<RecordKey, Object> values = new HashMap<>();
@@ -100,11 +122,25 @@ final class RecordDocumentBridge {
 			for (int indexPosition = 0; indexPosition < missing.size();) {
 				RecordHistory history = missing.get(indexPosition);
 				Object parent = history.parent() == null ? data : values.get(history.parent());
+				if (history.parent() != null && superseded.contains(history.parent())) {
+					superseded.add(history.key());
+					missing.remove(indexPosition);
+					attached = true;
+					continue;
+				}
 				if (parent == null) {
 					indexPosition++;
 					continue;
 				}
+				if (supersededByDocument(parent, history, byId)) {
+					superseded.add(history.key());
+					missing.remove(indexPosition);
+					attached = true;
+					continue;
+				}
 				Object created = create(history.key(), latest(history).content());
+				clearRetiredOccupant(parent, history, byId);
+				displaceOlderOccupant(parent, history, byId, histories, superseded);
 				attach(parent, history.parentField(), created, replaceDefaults);
 				values.put(history.key(), created);
 				missing.remove(indexPosition);
@@ -129,6 +165,135 @@ final class RecordDocumentBridge {
 			}
 		}
 		return !RecordJson.same(before, MAPPER.valueToTree(data));
+	}
+
+	/**
+	 * Gives the default children of a document built entirely from host records a stable identity. Call only
+	 * after projecting the complete record set into a fresh document; a partial projection would rename children
+	 * that earlier projections attached.
+	 *
+	 * @param data fully projected document
+	 * @param histories every record history that was projected
+	 */
+	void stabilizeDefaults(AppData data, List<RecordHistory> histories) {
+		if (data.getIncidentId() == null || data.getIncidentId().isBlank()) {
+			return;
+		}
+		Set<String> known = new HashSet<>();
+		histories.forEach(history -> known.add(history.key().type() + ":" + history.key().id()));
+		stabilizeDefaults(data, data.getIncidentId(), known, new HashSet<>());
+	}
+
+	/**
+	 * Gives single-valued child records that no host history supplies an identity derived from their parent and
+	 * field. A freshly constructed document carries random default children, so without this every projection of
+	 * the same host state would hold different identities for them and each rebuild would look like an edit that
+	 * replaced the child.
+	 *
+	 * @param parent model record whose children are examined
+	 * @param parentId identity of the parent record
+	 * @param known keys of records the host supplied, as {@code type:id}
+	 * @param visited records already examined
+	 */
+	private void stabilizeDefaults(Object parent, String parentId, Set<String> known, Set<Object> visited) {
+		if (!visited.add(parent)) {
+			return;
+		}
+		for (Field field : fields(parent.getClass())) {
+			if (!Identified.class.isAssignableFrom(field.getType()) || Modifier.isStatic(field.getModifiers())) {
+				continue;
+			}
+			try {
+				field.setAccessible(true);
+				Object child = field.get(parent);
+				Field identity = child == null ? null : identityField(child.getClass());
+				if (identity == null) {
+					continue;
+				}
+				identity.setAccessible(true);
+				String current = String.valueOf(identity.get(child));
+				if (!known.contains(child.getClass().getName() + ":" + current)) {
+					String seed = parentId + "/" + field.getName();
+					current = java.util.UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8)).toString();
+					identity.set(child, current);
+				}
+				stabilizeDefaults(child, current, known, visited);
+			} catch (IllegalAccessException exception) {
+				throw new StoreValidationException("Cannot stabilize default record identity", exception);
+			}
+		}
+	}
+
+	/**
+	 * Removes records from a detached incident document, together with the records nested inside them.
+	 *
+	 * @param data detached incident document
+	 * @param removed identities of the records to remove
+	 * @return true when the document was changed
+	 */
+	boolean remove(AppData data, Set<RecordKey> removed) {
+		if (removed.isEmpty()) {
+			return false;
+		}
+		RecordIndex index = RecordIndex.of(data);
+		Set<Object> targets = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		for (RecordKey key : removed) {
+			Object value = index.value(key);
+			if (value != null) {
+				targets.add(value);
+			}
+		}
+		if (targets.isEmpty()) {
+			return false;
+		}
+		return detach(data, targets, java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()));
+	}
+
+	/**
+	 * Detaches target objects from every collection or field reachable from a model object.
+	 *
+	 * @param node model object to search
+	 * @param targets identity set of objects to detach
+	 * @param visited objects already searched
+	 * @return true when anything was detached
+	 */
+	private boolean detach(Object node, Set<Object> targets, Set<Object> visited) {
+		if (node == null || !visited.add(node)) {
+			return false;
+		}
+		boolean changed = false;
+		if (node instanceof Collection<?> collection) {
+			changed |= collection.removeIf(targets::contains);
+			for (Object item : new ArrayList<>(collection)) {
+				changed |= detach(item, targets, visited);
+			}
+		} else if (node instanceof Map<?, ?> map) {
+			changed |= map.values().removeIf(targets::contains);
+			for (Object item : new ArrayList<>(map.values())) {
+				changed |= detach(item, targets, visited);
+			}
+		} else if (!(node instanceof Enum<?>)
+				&& node.getClass().getPackageName().equals(AppData.class.getPackageName())) {
+			for (Field field : fields(node.getClass())) {
+				if (field.getType().isPrimitive() || java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+					continue;
+				}
+				try {
+					field.setAccessible(true);
+					Object value = field.get(node);
+					if (targets.contains(value)) {
+						field.set(node, null);
+						changed = true;
+					} else {
+						changed |= detach(value, targets, visited);
+					}
+				} catch (IllegalAccessException | RuntimeException exception) {
+					throw new StoreValidationException("Cannot remove record from field: " + field.getName(),
+							exception);
+				}
+			}
+		}
+		return changed;
 	}
 
 	/**
@@ -244,6 +409,111 @@ final class RecordDocumentBridge {
 	}
 
 	/**
+	 * Checks whether the document already holds a newer record in the single-valued field a history targets.
+	 *
+	 * @param parent parent model object
+	 * @param history history that would be attached
+	 * @param byId all histories keyed by type and ID
+	 * @return true when the existing record's history began after the candidate's
+	 */
+	private boolean supersededByDocument(Object parent, RecordHistory history, Map<String, RecordHistory> byId) {
+		String fieldName = history.parentField();
+		Field field = fieldName == null ? null : field(parent.getClass(), fieldName);
+		if (field == null) {
+			return false;
+		}
+		try {
+			field.setAccessible(true);
+			Object existing = field.get(parent);
+			if (existing instanceof Identified identified && !(existing instanceof Collection<?>)) {
+				RecordHistory current = byId.get(existing.getClass().getName() + ":" + identified.getId());
+				return current != null && !current.retired() && !current.key().equals(history.key())
+						&& current.versions().get(0).cursor() > history.versions().get(0).cursor();
+			}
+			return false;
+		} catch (IllegalAccessException exception) {
+			return false;
+		}
+	}
+
+	/**
+	 * Resolves two live records competing for one single-valued field, as when two devices each created the
+	 * child independently. The record whose history began later wins; the earlier occupant and its descendants
+	 * are reported as superseded so the host retires them, keeping every version. Without this the projection
+	 * would fail and the host could not finish writing its incident file.
+	 *
+	 * @param parent parent model object
+	 * @param history live history about to be attached
+	 * @param byId all histories keyed by type and ID
+	 * @param live every live history, used to find the occupant's descendants
+	 * @param superseded receives the displaced occupant and its descendants
+	 */
+	private void displaceOlderOccupant(Object parent, RecordHistory history, Map<String, RecordHistory> byId,
+			List<RecordHistory> live, Set<RecordKey> superseded) {
+		String fieldName = history.parentField();
+		Field field = fieldName == null ? null : field(parent.getClass(), fieldName);
+		if (field == null) {
+			return;
+		}
+		try {
+			field.setAccessible(true);
+			Object existing = field.get(parent);
+			if (!(existing instanceof Identified identified) || existing instanceof Collection<?>) {
+				return;
+			}
+			RecordHistory current = byId.get(existing.getClass().getName() + ":" + identified.getId());
+			if (current == null || current.retired() || current.key().equals(history.key())) {
+				return;
+			}
+			LOGGER.log(java.util.logging.Level.WARNING,
+					"Two devices created {0} in the same field; keeping the later record {1}",
+					new Object[] {current.key(), history.key()});
+			field.set(parent, null);
+			superseded.add(current.key());
+			boolean grew = true;
+			while (grew) {
+				grew = false;
+				for (RecordHistory candidate : live) {
+					if (candidate.parent() != null && superseded.contains(candidate.parent())
+							&& superseded.add(candidate.key())) {
+						grew = true;
+					}
+				}
+			}
+		} catch (IllegalAccessException exception) {
+			// Leave the field alone; attach reports the conflict.
+		}
+	}
+
+	/**
+	 * Empties a single-valued field whose current occupant is a record the host has since retired, so the live
+	 * replacement can take its place instead of failing the whole projection.
+	 *
+	 * @param parent parent model object
+	 * @param history live history about to be attached
+	 * @param byId all histories keyed by type and ID
+	 */
+	private void clearRetiredOccupant(Object parent, RecordHistory history, Map<String, RecordHistory> byId) {
+		String fieldName = history.parentField();
+		Field field = fieldName == null ? null : field(parent.getClass(), fieldName);
+		if (field == null) {
+			return;
+		}
+		try {
+			field.setAccessible(true);
+			Object existing = field.get(parent);
+			if (existing instanceof Identified identified && !(existing instanceof Collection<?>)) {
+				RecordHistory current = byId.get(existing.getClass().getName() + ":" + identified.getId());
+				if (current != null && current.retired()) {
+					field.set(parent, null);
+				}
+			}
+		} catch (IllegalAccessException exception) {
+			// Leave the field alone; attach reports the conflict.
+		}
+	}
+
+	/**
 	 * Updates scalar and value-object properties while retaining child record links.
 	 *
 	 * @param target existing model record
@@ -256,7 +526,10 @@ final class RecordDocumentBridge {
 		for (Field field : fields(target.getClass())) {
 			JsonProperty property = field.getAnnotation(JsonProperty.class);
 			String name = property == null || property.value().isBlank() ? field.getName() : property.value();
-			if (isRecordLink(field)) {
+			if (isRecordLink(field) && content.get(name) != null && content.get(name).isObject()) {
+				adoptInlineChild(target, field, content.get(name));
+				writable.remove(name);
+			} else if (isRecordLink(field) || isDerivedLegacyMirror(target, name)) {
 				writable.remove(name);
 			} else if (RecordJson.same(current.get(name), content.get(name))) {
 				writable.remove(name);
@@ -268,6 +541,46 @@ final class RecordDocumentBridge {
 		try {
 			MAPPER.readerForUpdating(target).readValue(writable.toString().getBytes(StandardCharsets.UTF_8));
 		} catch (IOException | RuntimeException exception) {
+			throw new StoreValidationException("Cannot apply record snapshot", exception);
+		}
+	}
+
+	/**
+	 * Tells whether a property is the legacy text mirror of child records. Applying it would make the model
+	 * invent objectives with random identities that clash with the real child records.
+	 *
+	 * @param target model record being updated
+	 * @param name serialized property name
+	 * @return true for the ICS 202 legacy objective text list
+	 */
+	private static boolean isDerivedLegacyMirror(Object target, String name) {
+		return target instanceof org.sarmanagement.icsforms.model.Ics202Form && "objectives".equals(name);
+	}
+
+	/**
+	 * Adopts a child stored inline by an earlier build, where the parent record holds the child's content instead
+	 * of a link to it. The child keeps a deterministic identity derived from its parent and field, so that every
+	 * projection of the same host state yields the same identity rather than a fresh random one that would
+	 * register as a conflicting edit.
+	 *
+	 * @param owner parent model record
+	 * @param field single-valued field holding the child
+	 * @param inline stored inline content of the child
+	 */
+	private void adoptInlineChild(Object owner, Field field, JsonNode inline) {
+		try {
+			field.setAccessible(true);
+			Object child = field.get(owner);
+			Field parentIdentity = identityField(owner.getClass());
+			if (child == null || parentIdentity == null || identityField(child.getClass()) == null
+					|| !Identified.class.isAssignableFrom(field.getType())) {
+				return;
+			}
+			parentIdentity.setAccessible(true);
+			String seed = parentIdentity.get(owner) + "/" + field.getName();
+			setIdentity(child, java.util.UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8)).toString());
+			update(child, inline);
+		} catch (ReflectiveOperationException exception) {
 			throw new StoreValidationException("Cannot apply record snapshot", exception);
 		}
 	}

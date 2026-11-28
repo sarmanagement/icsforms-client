@@ -26,6 +26,9 @@ import static org.sarmanagement.icsforms.persistence.RecordVersionStore.*;
  * In-process, per-record versioned incident service with durable operation receipts.
  */
 public final class IncidentService {
+	private static final java.util.logging.Logger LOGGER = java.util.logging.Logger
+			.getLogger(IncidentService.class.getName());
+
 	private final IncidentStore incidents;
 	private final RecordVersionStore versions;
 	private final RecordDocumentBridge documentBridge = new RecordDocumentBridge();
@@ -89,7 +92,10 @@ public final class IncidentService {
 			if (cursor < 0 || cursor > state.cursor()) {
 				throw new StoreValidationException("Change cursor is outside the incident history");
 			}
-			List<RecordChange> changes = state.changes().stream().filter(change -> change.cursor() > cursor).toList();
+			java.util.Set<RecordKey> retired = new java.util.HashSet<>();
+			state.histories().stream().filter(RecordHistory::retired).forEach(history -> retired.add(history.key()));
+			List<RecordChange> changes = state.changes().stream()
+					.filter(change -> change.cursor() > cursor && !retired.contains(change.key())).toList();
 			return new ChangeResult(state.cursor(), changes);
 		});
 	}
@@ -132,10 +138,11 @@ public final class IncidentService {
 		validateParents(batch, histories);
 		Map<RecordKey, JsonNode> working = currentRecords(histories);
 		List<FieldConflict> conflicts = new ArrayList<>();
+		java.util.Set<RecordKey> removals = new java.util.HashSet<>();
 		List<RecordSubmission> ordered = batch.records().stream()
 				.sorted(Comparator.comparing(RecordSubmission::key)).toList();
 		for (RecordSubmission submission : ordered) {
-			applySubmission(submission, histories, working, conflicts);
+			applySubmission(submission, histories, working, conflicts, removals);
 		}
 
 		Instant receivedAt = Instant.now();
@@ -153,6 +160,14 @@ public final class IncidentService {
 		for (RecordSubmission submission : ordered) {
 			JsonNode result = working.get(submission.key());
 			RecordHistory history = histories.get(submission.key());
+			if (removals.contains(submission.key())) {
+				cursor++;
+				RecordHistory retired = history.retire(cursor);
+				histories.put(submission.key(), retired);
+				replaceHistory(updatedHistories, retired);
+				newVersions.add(new VersionAssignment(submission.key(), latest(history).version()));
+				continue;
+			}
 			if (history != null && RecordJson.same(latest(history).content(), result)) {
 				newVersions.add(new VersionAssignment(submission.key(), latest(history).version()));
 				continue;
@@ -177,7 +192,7 @@ public final class IncidentService {
 				appendReceipt(current.receipts(), new OperationReceipt(batch.operationId(), batch, result)));
 		versions.save(batch.incident(), updated);
 		try {
-			project(batch.incident(), updated);
+			project(batch.incident(), updated, removals);
 		} catch (RuntimeException projectionFailure) {
 			throw new StoreCommittedException(projectionFailure);
 		}
@@ -243,6 +258,15 @@ public final class IncidentService {
 			changed.addAll(diff.changed().keySet());
 			changed.addAll(diff.struckOut());
 		}
+		if (previous != null) {
+			for (RecordKey removed : RecordDiff.between(previous, data).removed()) {
+				RecordHistory history = histories.get(removed);
+				if (history != null && !history.retired()) {
+					cursor++;
+					histories.put(removed, history.retire(cursor));
+				}
+			}
+		}
 		for (Map.Entry<RecordKey, JsonNode> entry : index.records().entrySet()) {
 			if (!changed.contains(entry.getKey())) {
 				continue;
@@ -291,12 +315,17 @@ public final class IncidentService {
 		Objects.requireNonNull(incident, "incident");
 		StoredIncident stored = incidents.loadSnapshot(incident);
 		IncidentState state = versions.load(incident);
+		LOGGER.log(java.util.logging.Level.INFO,
+				"Incident {0}: document revision {1}; record history sidecar {2}; document records {3}",
+				new Object[] { incident.value(), stored.revision(),
+						state == null ? "absent" : state.histories().size() + " histories, cursor " + state.cursor(),
+						RecordIndex.of(stored.data()).records().size() });
 		if (state == null) {
 			state = initialState(stored.data());
 			versions.save(incident, state);
 			return state;
 		}
-		project(stored, state);
+		project(stored, state, java.util.Set.of());
 		IncidentState projected = versions.load(incident);
 		IncidentState current = projected == null ? state : projected;
 		IncidentState seeded = withRoot(current, stored.data());
@@ -313,7 +342,18 @@ public final class IncidentService {
 	 * @param state authoritative versioned state
 	 */
 	private void project(IncidentId incident, IncidentState state) {
-		project(incidents.loadSnapshot(incident), state);
+		project(incidents.loadSnapshot(incident), state, java.util.Set.of());
+	}
+
+	/**
+	 * Projects the service state after a batch, also removing the records that batch removed.
+	 *
+	 * @param incident incident identity
+	 * @param state authoritative versioned state
+	 * @param removed records removed by the batch, which the stored document must no longer hold
+	 */
+	private void project(IncidentId incident, IncidentState state, java.util.Set<RecordKey> removed) {
+		project(incidents.loadSnapshot(incident), state, removed);
 	}
 
 	/**
@@ -321,9 +361,29 @@ public final class IncidentService {
 	 *
 	 * @param stored current document and matching revision
 	 * @param state authoritative versioned state
+	 * @param removed records removed by the batch being projected
 	 */
-	private void project(StoredIncident stored, IncidentState state) {
-		if (documentBridge.apply(stored.data(), state.histories())) {
+	private void project(StoredIncident stored, IncidentState state, java.util.Set<RecordKey> removed) {
+		java.util.Set<RecordKey> superseded = new java.util.TreeSet<>();
+		boolean changed = documentBridge.apply(stored.data(), state.histories(), false, superseded);
+		changed |= documentBridge.remove(stored.data(), removed);
+		if (!superseded.isEmpty()) {
+			IncidentId incident = IncidentId.of(stored.data().getIncidentId());
+			long cursor = state.cursor();
+			List<RecordHistory> updated = new ArrayList<>();
+			for (RecordHistory history : state.histories()) {
+				if (superseded.contains(history.key()) && !history.retired()) {
+					cursor++;
+					LOGGER.log(java.util.logging.Level.WARNING,
+							"Retiring {0}: the incident document holds a newer record in the same single-valued field",
+							history.key());
+					history = history.retire(cursor);
+				}
+				updated.add(history);
+			}
+			versions.save(incident, new IncidentState(cursor, updated, state.changes(), state.receipts()));
+		}
+		if (changed) {
 			incidents.save(IncidentId.of(stored.data().getIncidentId()), stored.data(), stored.revision());
 		}
 	}
@@ -480,14 +540,25 @@ public final class IncidentService {
 	 * @param histories known versions
 	 * @param working tentative current content
 	 * @param conflicts field-level conflict accumulator
+	 * @param removals receives records that this batch removes
 	 */
 	private void applySubmission(RecordSubmission submission, Map<RecordKey, RecordHistory> histories,
-			Map<RecordKey, JsonNode> working, List<FieldConflict> conflicts) {
+			Map<RecordKey, JsonNode> working, List<FieldConflict> conflicts, java.util.Set<RecordKey> removals) {
 		RecordHistory history = histories.get(submission.key());
+		if (submission.operation() == Operation.REMOVE) {
+			applyRemoval(submission, history, conflicts, removals);
+			return;
+		}
 		if (submission.operation() == Operation.CREATE) {
 			if (history != null) {
-				conflicts.add(new FieldConflict(submission.key(), "$record", null, submission.content(),
-						latest(history).content()));
+				ObjectNode merged = history.retired() ? null
+						: mergeIndependentCreates(submission.content(), latest(history).content());
+				if (merged == null) {
+					conflicts.add(new FieldConflict(submission.key(), "$record", null, submission.content(),
+							latest(history).content()));
+				} else {
+					working.put(submission.key(), merged);
+				}
 				return;
 			}
 			if (submission.baseVersion() != 0) {
@@ -537,13 +608,95 @@ public final class IncidentService {
 	}
 
 	/**
+	 * Merges two independent creations of the same record, such as two devices each filling in a default record
+	 * that carries a stable identity. Neither writer saw the other's record, so only a field that both filled in
+	 * with different values is a conflict; a field one writer left empty takes the other writer's value.
+	 *
+	 * @param mine content being created
+	 * @param theirs content already held for the same record
+	 * @return merged content, or null when both writers filled in the same field differently
+	 */
+	static ObjectNode mergeIndependentCreates(JsonNode mine, JsonNode theirs) {
+		if (!mine.isObject() || !theirs.isObject()) {
+			return same(mine, theirs) ? (ObjectNode) theirs.deepCopy() : null;
+		}
+		ObjectNode merged = ((ObjectNode) theirs).deepCopy();
+		java.util.Set<String> names = new java.util.TreeSet<>();
+		mine.fieldNames().forEachRemaining(names::add);
+		for (String name : names) {
+			JsonNode mineValue = mine.get(name);
+			JsonNode theirsValue = theirs.get(name);
+			if (same(mineValue, theirsValue) || isEmptyValue(mineValue)) {
+				continue;
+			}
+			if (isEmptyValue(theirsValue)) {
+				merged.set(name, mineValue.deepCopy());
+			} else {
+				return null;
+			}
+		}
+		return merged;
+	}
+
+	/**
+	 * Tests whether a field value carries no entered data.
+	 *
+	 * @param value field value, or null when absent
+	 * @return true for an absent, null, blank-string, false, zero, empty-array or empty-object value
+	 */
+	private static boolean isEmptyValue(JsonNode value) {
+		if (value == null || value.isNull()) {
+			return true;
+		}
+		if (value.isTextual()) {
+			return value.asText().isBlank();
+		}
+		if (value.isBoolean()) {
+			return !value.asBoolean();
+		}
+		if (value.isNumber()) {
+			return value.asDouble() == 0;
+		}
+		return value.isContainerNode() && value.isEmpty();
+	}
+
+	/**
+	 * Applies a removal. A record someone else changed after the submitter last saw it is not removed: the removal
+	 * is reported as a whole-record conflict so the change and the removal can be reviewed together. Removing a
+	 * record that is already gone is accepted without effect. The record's versions stay in the history.
+	 *
+	 * @param submission removal request carrying the version the submitter last observed
+	 * @param history current history, or null when unknown
+	 * @param conflicts field-level conflict accumulator
+	 * @param removals receives the record when the removal can proceed
+	 */
+	private void applyRemoval(RecordSubmission submission, RecordHistory history, List<FieldConflict> conflicts,
+			java.util.Set<RecordKey> removals) {
+		if (history == null) {
+			throw new StoreValidationException("Unknown record");
+		}
+		if (history.retired()) {
+			return;
+		}
+		RecordVersion base = history.versions().stream()
+				.filter(version -> version.version() == submission.baseVersion()).findFirst()
+				.orElseThrow(() -> new StoreValidationException("Unknown base record version"));
+		JsonNode theirs = latest(history).content();
+		if (!same(base.content(), theirs)) {
+			conflicts.add(new FieldConflict(submission.key(), "$record", base.content(), null, theirs));
+			return;
+		}
+		removals.add(submission.key());
+	}
+
+	/**
 	 * Compares JSON values while distinguishing absent fields from explicit null.
 	 *
 	 * @param first first value
 	 * @param second second value
 	 * @return true when values are semantically identical
 	 */
-	private boolean same(JsonNode first, JsonNode second) {
+	private static boolean same(JsonNode first, JsonNode second) {
 		return RecordJson.same(first, second);
 	}
 
@@ -556,7 +709,8 @@ public final class IncidentService {
 	 */
 	private ReadResult readResult(IncidentId incident, IncidentState state) {
 		List<VersionedRecord> records = new ArrayList<>();
-		histories(state).entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+		histories(state).entrySet().stream().filter(entry -> !entry.getValue().retired())
+				.sorted(Map.Entry.comparingByKey()).forEach(entry -> {
 			RecordVersion version = latest(entry.getValue());
 			records.add(new VersionedRecord(entry.getKey(), version.version(), version.cursor(),
 					version.receivedAt(), version.content(), entry.getValue().parent(),
@@ -660,7 +814,9 @@ public final class IncidentService {
 	 * Record mutation kind.
 	 */
 	public enum Operation {
-		CREATE, UPDATE, STRIKE_OUT
+		CREATE, UPDATE, STRIKE_OUT,
+		/** Removes a record from the live incident while its full version history is kept for audit. */
+		REMOVE
 	}
 
 	/**

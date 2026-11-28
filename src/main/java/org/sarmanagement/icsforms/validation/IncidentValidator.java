@@ -37,6 +37,7 @@ public class IncidentValidator {
 		validateContext(data.getIncidentContext(), messages);
 		validate202(data.getForm202(), messages);
 		validate204(data.getForm204(), messages);
+		validateNumbersAcrossForms(data, messages);
 		validateSarTasks(data.getSarTaskAssignments(), data.getTCards(), messages);
 		return messages;
 	}
@@ -106,6 +107,43 @@ public class IncidentValidator {
 		if (form.getApprovedDateTime() == null) {
 			messages.add(new ValidationMessage("ics202.approvedDateTime",
 					"Incident commander approval date/time is required."));
+		}
+	}
+
+	/**
+	 * Flags channel numbers used twice in a zone and ICS 204 assignments that are not linked to a SAR task but
+	 * reuse another task's number, which two people entering data in parallel could produce.
+	 *
+	 * @param data incident to check.
+	 * @param messages collector for validation messages.
+	 */
+	private void validateNumbersAcrossForms(AppData data, List<ValidationMessage> messages) {
+		for (String repeated : org.sarmanagement.icsforms.model.RadioChannelNumbers
+				.repeated(data.getForm205().getChannels())) {
+			messages.add(new ValidationMessage("ics205.channels", "Radio channel number " + repeated
+					+ " is used by more than one channel; edit one if they are not the same channel."));
+		}
+		if (data.getForm204() == null) {
+			return;
+		}
+		java.util.Set<String> taskIds = new java.util.HashSet<>();
+		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			taskIds.add(task.getAssignmentId());
+		}
+		List<ResourceAssignment> rows = data.getForm204().getResourcesAssigned();
+		for (int i = 0; i < rows.size(); i++) {
+			ResourceAssignment row = rows.get(i);
+			if (taskIds.contains(row.getAssignmentId()) || blank(row.getAssignmentTeamNumber())) {
+				continue;
+			}
+			String number = row.getAssignmentTeamNumber().trim();
+			boolean clash = data.getSarTaskAssignments().stream()
+					.anyMatch(task -> number.equalsIgnoreCase(task.getAssignmentTeamNumber() == null ? ""
+							: task.getAssignmentTeamNumber().trim()));
+			if (clash) {
+				messages.add(new ValidationMessage("ics204.resourcesAssigned[" + i + "].assignmentTeamNumber",
+						"ICS 204 assignment " + number + " reuses the number of a different SAR task."));
+			}
 		}
 	}
 
@@ -209,6 +247,13 @@ public class IncidentValidator {
 			if (blank(task.getAssignmentTeamNumber())) {
 				messages.add(new ValidationMessage("sarTaskAssignments[" + i + "].assignmentTeamNumber",
 						"Assignment/Team Number is required on each SAR task assignment form."));
+			}
+			SarTaskAssignment clash = SarTaskSupport.findNumberConflict(tasks.subList(0, i), task,
+					task.getAssignmentTeamNumber());
+			if (clash != null) {
+				messages.add(new ValidationMessage("sarTaskAssignments[" + i + "].assignmentTeamNumber",
+						"Assignment/Team Number " + task.getAssignmentTeamNumber().trim()
+								+ " is used by more than one SAR task; renumber one of them."));
 			}
 			// Canine tasks must include at least one canine (EQUIPMENT T-card) resource in
 			// the resources-assigned list.

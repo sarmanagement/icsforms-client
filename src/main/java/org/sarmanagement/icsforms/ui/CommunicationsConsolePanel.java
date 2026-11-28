@@ -59,7 +59,7 @@ public final class CommunicationsConsolePanel extends JPanel {
 			.withResolverStyle(java.time.format.ResolverStyle.STRICT);
 	private final AppController controller;
 	private final UiRefreshState logRefreshState = new UiRefreshState();
-	private final AppController.IncidentBinding binding;
+	private volatile AppController.IncidentBinding binding;
 	private final AppController.IncidentChangeSubscription subscription;
 	private final DefaultListModel<TaskChoice> taskModel = new DefaultListModel<>();
 	private final JList<TaskChoice> tasks = new JList<>(taskModel);
@@ -161,7 +161,8 @@ public final class CommunicationsConsolePanel extends JPanel {
 		});
 		refreshFromModel();
 		subscription = controller.addIncidentChangeListener(change -> {
-			if (!disposed && controller.isCurrent(binding)) {
+			if (!disposed && controller.isCurrent(change.binding())) {
+				binding = change.binding();
 				refreshFromModel();
 			}
 		});

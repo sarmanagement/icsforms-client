@@ -12,16 +12,15 @@
   "iapPlanningStage" : "OPERATIONAL_PERIOD_ACTIVE",
   "operationalPeriodHistory" : [ ],
   "incidentContext" : {
-    "id" : "4c278bac-d694-34e8-810f-2c9a41339412",
     "incidentName" : "FICTIONAL EXERCISE - Maple Ridge missing adult with dementia",
     "operationalPeriodStart" : "2026-07-18T11:00:00",
     "operationalPeriodEnd" : "2026-07-18T23:00:00",
     "currentUser" : "Rowan Ellis",
     "currentUserPositionTitle" : "Planning Section Chief - fictional exercise",
-    "taskMap" : "MR-EX-01: fictional residence IPP, separate staging and ICP, spokes A/B/C, rim R1/R2, zones K1-K4"
+    "taskMap" : "MR-EX-01: fictional residence IPP, separate staging and ICP, spokes A/B/C, rim R1/R2, zones K1-K4",
+    "id" : "4c278bac-d694-34e8-810f-2c9a41339412"
   },
   "organizationalChart" : {
-    "id" : "a5678abf-febf-3069-a8cc-f1715bc845ff",
     "incidentCommanders" : [ "Avery Wren" ],
     "incidentCommanderRadio" : "MR SAR 1",
     "incidentCommanderPhone" : "",
@@ -106,8 +105,10 @@
       "preparedByName" : "Rowan Ellis",
       "preparedByPositionTitle" : "Planning Section Chief",
       "preparedBySignature" : "",
-      "preparedDateTime" : "2026-07-18T10:45:00"
-    }
+      "preparedDateTime" : "2026-07-18T10:45:00",
+      "id" : "112d04a6-17c2-388b-b041-e436ae34f450"
+    },
+    "id" : "a5678abf-febf-3069-a8cc-f1715bc845ff"
   },
   "medicalUnitLeaderAssignment" : {
     "name" : "Quinn Alder",
@@ -116,7 +117,6 @@
     "preservedLegacyConflicts" : [ ]
   },
   "form201" : {
-    "id" : "ddda9b8b-968d-31c6-ae5a-d25fef1d8d25",
     "incidentName" : "FICTIONAL EXERCISE - Maple Ridge missing adult with dementia",
     "incidentNumber" : "EXERCISE-MR-2026-01",
     "dateInitiated" : null,
@@ -130,10 +130,10 @@
     "preparedByPositionTitle" : "",
     "preparedDateTime" : null,
     "preparedBySignature" : "",
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "ddda9b8b-968d-31c6-ae5a-d25fef1d8d25"
   },
   "form202" : {
-    "id" : "5d2ec5af-e264-3c64-a30c-2303242c7fda",
     "objectives" : [ "Mitigate all hazards to responders and the general public to an acceptable level, with particular attention to heat stress and tick exposure, throughout the entire duration of the incident.", "By 1000, complete hasty searches of the three most likely travel corridors from IPP to containment boundary at least once.", "By 0800, establish containment of both likely egress points and maintain it through 1900.", "By 1700, search the high-probability inner 25% zone to a coverage target of approximately 1.", "By 1200, search all three familiar attractors and associated hazard points within 1 km of IPP." ],
     "structuredObjectives" : [ {
       "text" : "Mitigate all hazards to responders and the general public to an acceptable level, with particular attention to heat stress and tick exposure, throughout the entire duration of the incident.",
@@ -193,10 +193,10 @@
     "approvedDateTime" : "2026-07-18T10:55:00",
     "approvedObjectivesDigest" : "38b5a366472ef99da95de739e7bc3d9027889cc80f7c084ffdf6a7a062a2d4e0",
     "formNumber" : "ICS 202",
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "5d2ec5af-e264-3c64-a30c-2303242c7fda"
   },
   "form215a" : {
-    "id" : "77765501-f8a2-3cda-93fb-61979fee30a9",
     "incidentNumber" : "EXERCISE-MR-2026-01",
     "preparedDateTime" : "2026-07-18T10:40:00",
     "safetyOfficerName" : "Jordan Reed",
@@ -224,7 +224,8 @@
       "id" : "80546642-d7b4-3256-b0d4-f6e2c334a503"
     } ],
     "includeInIap" : true,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "77765501-f8a2-3cda-93fb-61979fee30a9"
   },
   "form215" : {
     "targetPeriodStart" : null,
@@ -268,33 +269,32 @@
   },
   "ics215Enabled" : false,
   "form208" : {
-    "id" : "f1179723-5df5-395c-9b7a-e64237740a2a",
     "messageType" : "SAFETY_MESSAGE_PLAN",
     "authorRole" : "SAFETY_OFFICER",
     "messageMode" : "HAZARD_PRECAUTIONS",
     "freeText" : "",
     "generalRequirements" : "FICTIONAL EXERCISE ONLY. All personnel briefed at 0700. Stop work for unsafe conditions; immediately notify Ops and Safety. 30-minute radio/accountability checks. MEDL coordinates from ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP); human aid supplies and heat rehab at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP). The aid-supply cache is unstaffed; no dedicated medical post. Emergency traffic takes priority.",
     "hazardBlocks" : [ {
-      "id" : "9c393353-4eb5-334f-8fbf-8970b7a10747",
       "hazard" : "Ticks / tick-borne illness",
       "incidentArea" : "All Maple Ridge field assignments",
       "precautions" : "Use repellent per label, long trousers and buddy tick checks at 1000 and ; promptly remove attached ticks with proper tool and report exposures to MEDL.",
       "sourceEntryIds" : [ "b92e5c56-38cd-347c-a55d-2c00e9663f32" ],
-      "needsReview" : false
+      "needsReview" : false,
+      "id" : "9c393353-4eb5-334f-8fbf-8970b7a10747"
     }, {
-      "id" : "c2817f36-0a7f-3666-8755-4ed252507c00",
       "hazard" : "Falls / uneven terrain / creek edges",
       "incidentArea" : "All Maple Ridge field assignments",
       "precautions" : "Maintain buddy contact, deliberate footing and suitable boots; avoid unstable banks and water entry. Stop and report unsafe crossings; use an alternate route authorized by Ops.",
       "sourceEntryIds" : [ "2d4f6ece-3a16-3ed2-b47d-751df1dbd8dc" ],
-      "needsReview" : false
+      "needsReview" : false,
+      "id" : "c2817f36-0a7f-3666-8755-4ed252507c00"
     }, {
-      "id" : "58239982-1b26-3bd4-a82e-ca193723d84e",
       "hazard" : "Summer heat / dehydration / canine heat stress",
       "incidentArea" : "All Maple Ridge field assignments",
       "precautions" : "Water resupply at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) by 0900; hourly hydration/electrolyte checks for all field teams. Mandatory heat rehab with shaded rest and heat-illness checks from 1300 at Base, plus rest as needed; Ops staggers search-team returns to Base. Containment posts remain staffed: observation buddies alternate 1300-1320/1320-1340 in adjacent shade, retaining buddy contact and uninterrupted observation; repeat at least hourly. Ops must arrange qualified relief before either post pair travels to Base; never send both observers away without relief. Canine 20-minute work/cooling cycles; handlers monitor dogs continuously. Stop work for heat illness signs; notify MEDL, cool safely and request assistance.",
       "sourceEntryIds" : [ "80546642-d7b4-3256-b0d4-f6e2c334a503" ],
-      "needsReview" : false
+      "needsReview" : false,
+      "id" : "58239982-1b26-3bd4-a82e-ca193723d84e"
     } ],
     "siteSafetyPlanRequired" : null,
     "siteSafetyPlan" : {
@@ -312,15 +312,16 @@
     "preparedBySignature" : "",
     "preparedDateTime" : "2026-07-18T10:45:00",
     "includeInIap" : true,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "f1179723-5df5-395c-9b7a-e64237740a2a"
   },
   "form205aIapPage" : "",
   "form207" : {
-    "id" : "5bf732c4-ad65-352b-addc-017f76dd215d",
     "preparedByName" : "",
     "preparedByPositionTitle" : "",
     "preparedDateTime" : null,
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "5bf732c4-ad65-352b-addc-017f76dd215d"
   },
   "form204" : {
     "managementContext" : "stagingArea",
@@ -561,17 +562,17 @@
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "f0e5684b-6256-374a-9a18-03b38d0d0986",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "f0e5684b-6256-374a-9a18-03b38d0d0986"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "9c70ac5e-6043-3dcd-899b-bafcc36312d8",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "9c70ac5e-6043-3dcd-899b-bafcc36312d8"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -627,285 +628,285 @@
     "icsPosition" : "Operations Section Chief",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
     "resourcesAssigned" : [ {
-      "id" : "d2f133c4-2c0f-3bab-b4ac-3095af555c16",
       "function" : "ICP overhead",
       "icsPosition" : "ICP overhead",
       "homeAgency" : "Fictional Pine County Sheriff's Office",
       "name" : "Avery Wren",
       "cardType" : "PERSONNEL",
-      "resourceId" : "a7d7fc5f-9fd4-36be-b474-0d3b377720b9"
+      "resourceId" : "a7d7fc5f-9fd4-36be-b474-0d3b377720b9",
+      "id" : "d2f133c4-2c0f-3bab-b4ac-3095af555c16"
     }, {
-      "id" : "a47afee6-f8cd-39fc-814a-7efb42a4a465",
       "function" : "ICP overhead",
       "icsPosition" : "ICP overhead",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Morgan Vale",
       "cardType" : "PERSONNEL",
-      "resourceId" : "f52f18dc-2c17-3a7e-9662-21f3259cec85"
+      "resourceId" : "f52f18dc-2c17-3a7e-9662-21f3259cec85",
+      "id" : "a47afee6-f8cd-39fc-814a-7efb42a4a465"
     }, {
-      "id" : "2b442d74-179c-3f97-a30f-a599bcb9c11f",
       "function" : "ICP overhead",
       "icsPosition" : "ICP overhead",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Rowan Ellis",
       "cardType" : "PERSONNEL",
-      "resourceId" : "d8eeb297-9d98-37fd-8541-3f8135bc8d65"
+      "resourceId" : "d8eeb297-9d98-37fd-8541-3f8135bc8d65",
+      "id" : "2b442d74-179c-3f97-a30f-a599bcb9c11f"
     }, {
-      "id" : "14c9de6e-c6b3-3ce1-9293-6e1539b38d48",
       "function" : "ICP overhead",
       "icsPosition" : "ICP overhead",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Jordan Reed",
       "cardType" : "PERSONNEL",
-      "resourceId" : "64302216-a2b8-341f-9a17-96d17f27fe36"
+      "resourceId" : "64302216-a2b8-341f-9a17-96d17f27fe36",
+      "id" : "14c9de6e-c6b3-3ce1-9293-6e1539b38d48"
     }, {
-      "id" : "33d847a3-2d94-335f-82d3-c0794d3b7c0f",
       "function" : "ICP overhead",
       "icsPosition" : "ICP overhead",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Taylor Brook",
       "cardType" : "PERSONNEL",
-      "resourceId" : "d577d03d-7a7d-356a-930e-98f83b157b3c"
+      "resourceId" : "d577d03d-7a7d-356a-930e-98f83b157b3c",
+      "id" : "33d847a3-2d94-335f-82d3-c0794d3b7c0f"
     }, {
-      "id" : "f9257388-3e54-3765-bbb8-b3967a872898",
       "function" : "ICP overhead",
       "icsPosition" : "ICP overhead",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Quinn Alder",
       "cardType" : "PERSONNEL",
-      "resourceId" : "1c9e6db6-da51-3b02-9003-1af9b9066e66"
+      "resourceId" : "1c9e6db6-da51-3b02-9003-1af9b9066e66",
+      "id" : "f9257388-3e54-3765-bbb8-b3967a872898"
     }, {
-      "id" : "4c927a9d-1dac-3b17-9f8e-1b7d57c477f1",
       "function" : "Team S1 — Leader",
       "icsPosition" : "Team S1 — Leader",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Casey Finch",
       "cardType" : "PERSONNEL",
-      "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6"
+      "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6",
+      "id" : "4c927a9d-1dac-3b17-9f8e-1b7d57c477f1"
     }, {
-      "id" : "8d6e3e96-c914-3f98-a3f7-295df28a4b89",
       "function" : "Team S1 — Ground Searcher",
       "icsPosition" : "Team S1 — Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Alex Fern",
       "cardType" : "PERSONNEL",
-      "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb"
+      "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb",
+      "id" : "8d6e3e96-c914-3f98-a3f7-295df28a4b89"
     }, {
-      "id" : "ba31e2d1-b52c-3981-b1d3-ea114a6a8fa2",
       "function" : "Team S1 — Ground Searcher",
       "icsPosition" : "Team S1 — Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Blair Moss",
       "cardType" : "PERSONNEL",
-      "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153"
+      "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153",
+      "id" : "ba31e2d1-b52c-3981-b1d3-ea114a6a8fa2"
     }, {
-      "id" : "6657de32-c3d4-3641-bff4-8740a2910ac8",
       "function" : "Team S1 — Ground Searcher",
       "icsPosition" : "Team S1 — Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Cameron Lark",
       "cardType" : "PERSONNEL",
-      "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697"
+      "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697",
+      "id" : "6657de32-c3d4-3641-bff4-8740a2910ac8"
     }, {
-      "id" : "933d325e-a638-3182-b0ad-6b46bff55fac",
       "function" : "Team S2 — Leader",
       "icsPosition" : "Team S2 — Leader",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Dana Birch",
       "cardType" : "PERSONNEL",
-      "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717"
+      "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717",
+      "id" : "933d325e-a638-3182-b0ad-6b46bff55fac"
     }, {
-      "id" : "16926789-2af3-3991-aa90-fb8aa9a65a9c",
       "function" : "Team S2 — Ground Searcher",
       "icsPosition" : "Team S2 — Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Elliot Pine",
       "cardType" : "PERSONNEL",
-      "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527"
+      "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527",
+      "id" : "16926789-2af3-3991-aa90-fb8aa9a65a9c"
     }, {
-      "id" : "c6aee8a3-8c52-3b51-a12e-1d2a8cb9036e",
       "function" : "Team S2 — Ground Searcher",
       "icsPosition" : "Team S2 — Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Frankie Cove",
       "cardType" : "PERSONNEL",
-      "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3"
+      "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3",
+      "id" : "c6aee8a3-8c52-3b51-a12e-1d2a8cb9036e"
     }, {
-      "id" : "95847229-d471-3164-9fc9-08d696127ab0",
       "function" : "Team S2 — Ground Searcher",
       "icsPosition" : "Team S2 — Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Gray Rowan",
       "cardType" : "PERSONNEL",
-      "resourceId" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e"
+      "resourceId" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e",
+      "id" : "95847229-d471-3164-9fc9-08d696127ab0"
     }, {
-      "id" : "8b1350dc-f8ec-31a8-98cd-ccb0ef0723af",
       "function" : "Team S3 — Leader",
       "icsPosition" : "Team S3 — Leader",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Harper Glen",
       "cardType" : "PERSONNEL",
-      "resourceId" : "bdedd84f-dd65-3b83-937b-10617106c57a"
+      "resourceId" : "bdedd84f-dd65-3b83-937b-10617106c57a",
+      "id" : "8b1350dc-f8ec-31a8-98cd-ccb0ef0723af"
     }, {
-      "id" : "c20d9fb0-68f6-3773-999f-c66f290a2718",
       "function" : "Team S3 — Ground Searcher",
       "icsPosition" : "Team S3 — Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Indigo Lake",
       "cardType" : "PERSONNEL",
-      "resourceId" : "d2da7418-90c7-3427-b463-f884113e2279"
+      "resourceId" : "d2da7418-90c7-3427-b463-f884113e2279",
+      "id" : "c20d9fb0-68f6-3773-999f-c66f290a2718"
     }, {
-      "id" : "13a09920-6c67-36eb-9941-008b92288bf2",
       "function" : "Team S3 — Ground Searcher",
       "icsPosition" : "Team S3 — Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Jules Meadow",
       "cardType" : "PERSONNEL",
-      "resourceId" : "ac05e257-0729-3cde-81bf-88f82cc760e5"
+      "resourceId" : "ac05e257-0729-3cde-81bf-88f82cc760e5",
+      "id" : "13a09920-6c67-36eb-9941-008b92288bf2"
     }, {
-      "id" : "f4ea6d2d-8a15-394f-9c0d-e9c79967f43b",
       "function" : "Team S3 — Ground Searcher",
       "icsPosition" : "Team S3 — Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Kai Willow",
       "cardType" : "PERSONNEL",
-      "resourceId" : "7c0a05fe-39f8-3691-91e7-97d259b854b8"
+      "resourceId" : "7c0a05fe-39f8-3691-91e7-97d259b854b8",
+      "id" : "f4ea6d2d-8a15-394f-9c0d-e9c79967f43b"
     }, {
-      "id" : "be6af481-1aa9-3225-af0e-a6cf15597dda",
       "function" : "Team R1 — Leader",
       "icsPosition" : "Team R1 — Leader",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Parker Elm",
       "cardType" : "PERSONNEL",
-      "resourceId" : "d450225e-9ba5-3fda-bdee-64dfcd332418"
+      "resourceId" : "d450225e-9ba5-3fda-bdee-64dfcd332418",
+      "id" : "be6af481-1aa9-3225-af0e-a6cf15597dda"
     }, {
-      "id" : "6674dac9-796c-3c74-9c52-e63c0bb93d95",
       "function" : "Team R1 — Ground Searcher",
       "icsPosition" : "Team R1 — Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Remy Shore",
       "cardType" : "PERSONNEL",
-      "resourceId" : "60b0d207-257e-32c3-aee7-f1b54a5d1194"
+      "resourceId" : "60b0d207-257e-32c3-aee7-f1b54a5d1194",
+      "id" : "6674dac9-796c-3c74-9c52-e63c0bb93d95"
     }, {
-      "id" : "9f9b6a35-6246-3b89-93b8-6f57088251c4",
       "function" : "Team R2 — Leader",
       "icsPosition" : "Team R2 — Leader",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Sage Linden",
       "cardType" : "PERSONNEL",
-      "resourceId" : "3f18ee65-4e2c-3baf-8b3a-8d743ade9cc6"
+      "resourceId" : "3f18ee65-4e2c-3baf-8b3a-8d743ade9cc6",
+      "id" : "9f9b6a35-6246-3b89-93b8-6f57088251c4"
     }, {
-      "id" : "4b490fb0-4ac1-393d-9686-1f963f45c2ac",
       "function" : "Team R2 — Ground Searcher",
       "icsPosition" : "Team R2 — Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Toby Flint",
       "cardType" : "PERSONNEL",
-      "resourceId" : "45cf31f7-b054-351b-9443-ee072f9bb4ff"
+      "resourceId" : "45cf31f7-b054-351b-9443-ee072f9bb4ff",
+      "id" : "4b490fb0-4ac1-393d-9686-1f963f45c2ac"
     }, {
-      "id" : "4193cb50-efe1-3c10-aede-be31e19a9cd0",
       "function" : "Team K1 — Leader/Handler",
       "icsPosition" : "Team K1 — Leader/Handler",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Val Aspen",
       "cardType" : "PERSONNEL",
-      "resourceId" : "53912e25-ff2a-3bcc-8534-867d769eb113"
+      "resourceId" : "53912e25-ff2a-3bcc-8534-867d769eb113",
+      "id" : "4193cb50-efe1-3c10-aede-be31e19a9cd0"
     }, {
-      "id" : "b1af40eb-a026-360d-837d-534d5e7ecfcf",
       "function" : "Team K1 — Communications",
       "icsPosition" : "Team K1 — Communications",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Winter Dell",
       "cardType" : "PERSONNEL",
-      "resourceId" : "5e479160-5830-3a9e-95f0-42a8939dcdbe"
+      "resourceId" : "5e479160-5830-3a9e-95f0-42a8939dcdbe",
+      "id" : "b1af40eb-a026-360d-837d-534d5e7ecfcf"
     }, {
-      "id" : "8909c804-c6b2-3b06-8c5f-7ee96bf1bcb6",
       "function" : "Team K1 — Navigation",
       "icsPosition" : "Team K1 — Navigation",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Wynn Hazel",
       "cardType" : "PERSONNEL",
-      "resourceId" : "b2d669bd-8189-3993-bc42-8efcdd1f905d"
+      "resourceId" : "b2d669bd-8189-3993-bc42-8efcdd1f905d",
+      "id" : "8909c804-c6b2-3b06-8c5f-7ee96bf1bcb6"
     }, {
-      "id" : "316dc448-ea7e-32e4-9c33-45377b2f5520",
       "function" : "Team K1 — Ground Searcher",
       "icsPosition" : "Team K1 — Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Yael Frost",
       "cardType" : "PERSONNEL",
-      "resourceId" : "6d073402-f21d-36f8-93a5-bc3fa00ebaa3"
+      "resourceId" : "6d073402-f21d-36f8-93a5-bc3fa00ebaa3",
+      "id" : "316dc448-ea7e-32e4-9c33-45377b2f5520"
     }, {
-      "id" : "93e3dd53-c55e-30e3-b838-469ca181d9bb",
       "function" : "Team K1 — Live Find K9",
       "icsPosition" : "Team K1 — Live Find K9",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "MR-K9-1",
       "cardType" : "EQUIPMENT",
-      "resourceId" : "3f3a976b-91f1-3903-a0c3-7bd7e567c001"
+      "resourceId" : "3f3a976b-91f1-3903-a0c3-7bd7e567c001",
+      "id" : "93e3dd53-c55e-30e3-b838-469ca181d9bb"
     }, {
-      "id" : "725664f5-e2a5-3709-8bab-0dd9d1e44147",
       "function" : "Team K2 — Leader/Handler",
       "icsPosition" : "Team K2 — Leader/Handler",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Zion Clover",
       "cardType" : "PERSONNEL",
-      "resourceId" : "f9378e49-56da-3217-bdbd-d904bbb683cc"
+      "resourceId" : "f9378e49-56da-3217-bdbd-d904bbb683cc",
+      "id" : "725664f5-e2a5-3709-8bab-0dd9d1e44147"
     }, {
-      "id" : "5b3fcc20-af6e-3852-8d27-753c710d7c95",
       "function" : "Team K2 — Communications",
       "icsPosition" : "Team K2 — Communications",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Robin Field",
       "cardType" : "PERSONNEL",
-      "resourceId" : "01f6a5aa-3edc-3131-b0c0-d3886bb1dc39"
+      "resourceId" : "01f6a5aa-3edc-3131-b0c0-d3886bb1dc39",
+      "id" : "5b3fcc20-af6e-3852-8d27-753c710d7c95"
     }, {
-      "id" : "4830be11-a5a0-3577-916d-2ba4e457f6ea",
       "function" : "Team K2 — Navigation",
       "icsPosition" : "Team K2 — Navigation",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Arden Fox",
       "cardType" : "PERSONNEL",
-      "resourceId" : "56634ec9-5293-3129-8b90-628cfa2089fb"
+      "resourceId" : "56634ec9-5293-3129-8b90-628cfa2089fb",
+      "id" : "4830be11-a5a0-3577-916d-2ba4e457f6ea"
     }, {
-      "id" : "54f27a6b-84a9-3dcf-8dfa-c42b681076d2",
       "function" : "Team K2 — Ground Searcher",
       "icsPosition" : "Team K2 — Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Briar Snow",
       "cardType" : "PERSONNEL",
-      "resourceId" : "45826bda-f44a-3194-9808-f1b0f407e067"
+      "resourceId" : "45826bda-f44a-3194-9808-f1b0f407e067",
+      "id" : "54f27a6b-84a9-3dcf-8dfa-c42b681076d2"
     }, {
-      "id" : "8ebdbc29-5486-3112-a707-9c413ed2d6d4",
       "function" : "Team K2 — Live Find K9",
       "icsPosition" : "Team K2 — Live Find K9",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "MR-K9-2",
       "cardType" : "EQUIPMENT",
-      "resourceId" : "eb1de76e-f8eb-3bb2-a409-e87d98cdc934"
+      "resourceId" : "eb1de76e-f8eb-3bb2-a409-e87d98cdc934",
+      "id" : "8ebdbc29-5486-3112-a707-9c413ed2d6d4"
     }, {
-      "id" : "2c06f8e3-81d8-38d5-96d8-b0f1c48699cc",
       "function" : "Team T1 — Leader",
       "icsPosition" : "Team T1 — Leader",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Lane Cedar",
       "cardType" : "PERSONNEL",
-      "resourceId" : "152379a5-1884-3538-822c-9254139d9dad"
+      "resourceId" : "152379a5-1884-3538-822c-9254139d9dad",
+      "id" : "2c06f8e3-81d8-38d5-96d8-b0f1c48699cc"
     }, {
-      "id" : "3e61f2d9-43e8-3a00-8b66-498c0347ee1b",
       "function" : "Team T1 — Ground Searcher",
       "icsPosition" : "Team T1 — Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Micah Ash",
       "cardType" : "PERSONNEL",
-      "resourceId" : "39c9e0e7-5877-35fa-b1e1-ab1458037071"
+      "resourceId" : "39c9e0e7-5877-35fa-b1e1-ab1458037071",
+      "id" : "3e61f2d9-43e8-3a00-8b66-498c0347ee1b"
     }, {
-      "id" : "8ff49a43-1afa-3488-820b-9a880b3cea02",
       "function" : "Team T1 — Ground Searcher",
       "icsPosition" : "Team T1 — Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Noel Spruce",
       "cardType" : "PERSONNEL",
-      "resourceId" : "fc761268-10f8-34db-b17e-9fc96a6f6769"
+      "resourceId" : "fc761268-10f8-34db-b17e-9fc96a6f6769",
+      "id" : "8ff49a43-1afa-3488-820b-9a880b3cea02"
     } ],
     "activityLog" : [ {
       "timestamp" : "2026-07-18T10:30:00",
@@ -1113,59 +1114,60 @@
     "preparedBySignature" : "",
     "preparedDateTime" : "2026-07-18T12:15:00",
     "iapPage" : "",
-    "id" : "d9292380-3fed-3d2f-bc5a-bfce5c438ee5",
-    "logScope" : "ICP"
+    "logScope" : "ICP",
+    "id" : "d9292380-3fed-3d2f-bc5a-bfce5c438ee5"
   } ],
   "activityEventTypes" : [ {
-    "id" : "FREE_TEXT",
     "label" : "Note",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "FREE_TEXT"
   }, {
-    "id" : "COMMUNICATIONS_CHECK",
     "label" : "Communications Check",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "COMMUNICATIONS_CHECK"
   }, {
-    "id" : "COMMUNICATIONS_PROBLEM",
     "label" : "Communications Problem",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "COMMUNICATIONS_PROBLEM"
   }, {
-    "id" : "RESPONDER_MEDICAL_EVENT",
     "label" : "Responder medical event",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "RESPONDER_MEDICAL_EVENT"
   }, {
-    "id" : "RESPONSE_CANINE_MEDICAL_EVENT",
     "label" : "Response canine medical event",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "RESPONSE_CANINE_MEDICAL_EVENT"
   }, {
-    "id" : "CLUE_DETECTED",
     "label" : "Clue Detected",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "CLUE_DETECTED"
   }, {
-    "id" : "CLUE_REPORTED",
     "label" : "Clue Reported",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "CLUE_REPORTED"
   }, {
-    "id" : "SUBJECT_FOUND",
     "label" : "Subject Found",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "SUBJECT_FOUND"
   }, {
-    "id" : "RESOURCE_ON_TASK",
     "label" : "Resource Going on Task",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "RESOURCE_ON_TASK"
   }, {
-    "id" : "TASK_COMPLETED",
     "label" : "Task Completed",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "TASK_COMPLETED"
   }, {
-    "id" : "RESOURCE_DEPARTED_STAGING",
     "label" : "Resource Departed Staging",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "RESOURCE_DEPARTED_STAGING"
   }, {
-    "id" : "RESOURCE_RETURNED_STAGING",
     "label" : "Resource Returned to Staging",
-    "builtIn" : true
+    "builtIn" : true,
+    "id" : "RESOURCE_RETURNED_STAGING"
   } ],
   "sarTaskAssignments" : [ {
+    "id" : "b8f63755-5e44-38b4-ac44-98adbc42cb70",
     "assignmentId" : "66f31202-4151-3cb9-9f78-32960ef8c534",
     "assignmentTeamNumber" : "S1",
     "resourceType" : "Ground",
@@ -1187,54 +1189,54 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "af895028-b99f-3dcc-83a6-01ccd6139035",
       "function" : "Leader",
       "icsPosition" : "Leader",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Casey Finch",
       "cardType" : "PERSONNEL",
-      "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6"
+      "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6",
+      "id" : "af895028-b99f-3dcc-83a6-01ccd6139035"
     }, {
-      "id" : "9b5ce280-3e79-3796-89cc-3ba96a6ef09f",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Alex Fern",
       "cardType" : "PERSONNEL",
-      "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb"
+      "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb",
+      "id" : "9b5ce280-3e79-3796-89cc-3ba96a6ef09f"
     }, {
-      "id" : "7152f9eb-a0b3-3620-bb31-13302c932789",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Blair Moss",
       "cardType" : "PERSONNEL",
-      "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153"
+      "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153",
+      "id" : "7152f9eb-a0b3-3620-bb31-13302c932789"
     }, {
-      "id" : "17eb6f2b-fa8f-3a08-8c53-0c1dc1887d38",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Cameron Lark",
       "cardType" : "PERSONNEL",
-      "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697"
+      "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697",
+      "id" : "17eb6f2b-fa8f-3a08-8c53-0c1dc1887d38"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Radio, map, GPS, first-aid kit",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "f361133a-8ffc-3617-9b9d-5b77d795078b",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "f361133a-8ffc-3617-9b9d-5b77d795078b"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "699f48e1-1398-3fe2-966e-503c53cb9fc4",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "699f48e1-1398-3fe2-966e-503c53cb9fc4"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -1263,9 +1265,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "b8f63755-5e44-38b4-ac44-98adbc42cb70"
+    "iapPage" : ""
   }, {
+    "id" : "5a303a6d-17ee-3e0d-a1cb-6513edfc38ac",
     "assignmentId" : "6db03356-9c41-3d65-980d-bf901ff49f86",
     "assignmentTeamNumber" : "S2",
     "resourceType" : "Ground",
@@ -1287,54 +1289,54 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "bffd6509-ed13-3f54-baad-a514ac991a0f",
       "function" : "Leader",
       "icsPosition" : "Leader",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Dana Birch",
       "cardType" : "PERSONNEL",
-      "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717"
+      "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717",
+      "id" : "bffd6509-ed13-3f54-baad-a514ac991a0f"
     }, {
-      "id" : "2bf4a066-2772-388b-9397-8fb4e0e68b4c",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Elliot Pine",
       "cardType" : "PERSONNEL",
-      "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527"
+      "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527",
+      "id" : "2bf4a066-2772-388b-9397-8fb4e0e68b4c"
     }, {
-      "id" : "5e789abf-02e4-393a-9595-10c7d36f6535",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Frankie Cove",
       "cardType" : "PERSONNEL",
-      "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3"
+      "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3",
+      "id" : "5e789abf-02e4-393a-9595-10c7d36f6535"
     }, {
-      "id" : "31f272c4-2d1e-34d2-87d4-84210a3edd76",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Gray Rowan",
       "cardType" : "PERSONNEL",
-      "resourceId" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e"
+      "resourceId" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e",
+      "id" : "31f272c4-2d1e-34d2-87d4-84210a3edd76"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Radio, map, GPS, first-aid kit",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "41d199ed-2713-303e-b58a-5d95238611a6",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "41d199ed-2713-303e-b58a-5d95238611a6"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "a0e34f45-95b3-33a1-9c46-28c084cb0f2c",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "a0e34f45-95b3-33a1-9c46-28c084cb0f2c"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -1363,9 +1365,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "5a303a6d-17ee-3e0d-a1cb-6513edfc38ac"
+    "iapPage" : ""
   }, {
+    "id" : "93c31bb9-f862-3191-850b-26809cf36699",
     "assignmentId" : "eed3e57a-36b3-3c4c-b829-6d07c54a5f6a",
     "assignmentTeamNumber" : "S3",
     "resourceType" : "Ground",
@@ -1387,54 +1389,54 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "606d705a-f332-32a1-bcd8-a8e3bdee2f01",
       "function" : "Leader",
       "icsPosition" : "Leader",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Harper Glen",
       "cardType" : "PERSONNEL",
-      "resourceId" : "bdedd84f-dd65-3b83-937b-10617106c57a"
+      "resourceId" : "bdedd84f-dd65-3b83-937b-10617106c57a",
+      "id" : "606d705a-f332-32a1-bcd8-a8e3bdee2f01"
     }, {
-      "id" : "c39cd39d-9de5-3d91-be1f-337518311a43",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Indigo Lake",
       "cardType" : "PERSONNEL",
-      "resourceId" : "d2da7418-90c7-3427-b463-f884113e2279"
+      "resourceId" : "d2da7418-90c7-3427-b463-f884113e2279",
+      "id" : "c39cd39d-9de5-3d91-be1f-337518311a43"
     }, {
-      "id" : "9106a00e-19a4-30fe-8343-98f7fb8c4bdf",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Jules Meadow",
       "cardType" : "PERSONNEL",
-      "resourceId" : "ac05e257-0729-3cde-81bf-88f82cc760e5"
+      "resourceId" : "ac05e257-0729-3cde-81bf-88f82cc760e5",
+      "id" : "9106a00e-19a4-30fe-8343-98f7fb8c4bdf"
     }, {
-      "id" : "a626d6eb-afa8-30cd-92ab-5fb0ccdcfb82",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Kai Willow",
       "cardType" : "PERSONNEL",
-      "resourceId" : "7c0a05fe-39f8-3691-91e7-97d259b854b8"
+      "resourceId" : "7c0a05fe-39f8-3691-91e7-97d259b854b8",
+      "id" : "a626d6eb-afa8-30cd-92ab-5fb0ccdcfb82"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Radio, map, GPS, first-aid kit",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "c94729ac-5c39-3468-a1fb-4d4f8adfe1f7",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "c94729ac-5c39-3468-a1fb-4d4f8adfe1f7"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "4eebd88f-e9db-39b2-84e4-02ff1576aa4f",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "4eebd88f-e9db-39b2-84e4-02ff1576aa4f"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -1463,9 +1465,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "93c31bb9-f862-3191-850b-26809cf36699"
+    "iapPage" : ""
   }, {
+    "id" : "8c3e3e91-3018-327e-b909-c6477012186d",
     "assignmentId" : "0742c0fb-deae-388a-8da4-f7dbacf4e5dc",
     "assignmentTeamNumber" : "R1",
     "resourceType" : "Ground",
@@ -1487,38 +1489,38 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "b09d4408-301a-3f67-a98a-2aff05bad8d2",
       "function" : "Leader",
       "icsPosition" : "Leader",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Parker Elm",
       "cardType" : "PERSONNEL",
-      "resourceId" : "d450225e-9ba5-3fda-bdee-64dfcd332418"
+      "resourceId" : "d450225e-9ba5-3fda-bdee-64dfcd332418",
+      "id" : "b09d4408-301a-3f67-a98a-2aff05bad8d2"
     }, {
-      "id" : "a27b0986-c245-31c1-8596-a16916d6c600",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Remy Shore",
       "cardType" : "PERSONNEL",
-      "resourceId" : "60b0d207-257e-32c3-aee7-f1b54a5d1194"
+      "resourceId" : "60b0d207-257e-32c3-aee7-f1b54a5d1194",
+      "id" : "a27b0986-c245-31c1-8596-a16916d6c600"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Radio, map, GPS, first-aid kit",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "17d74de8-42ed-3f2d-9010-ceb3030d4514",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "17d74de8-42ed-3f2d-9010-ceb3030d4514"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "7105f235-9019-3c51-a2a4-9441949def3a",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "7105f235-9019-3c51-a2a4-9441949def3a"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -1547,9 +1549,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "8c3e3e91-3018-327e-b909-c6477012186d"
+    "iapPage" : ""
   }, {
+    "id" : "009f5f6d-174b-382d-b4ec-59026eef020f",
     "assignmentId" : "a9f45271-df3c-358c-86e1-d7571f439cd5",
     "assignmentTeamNumber" : "R2",
     "resourceType" : "Ground",
@@ -1571,38 +1573,38 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "8f89d012-a8f1-340f-86f3-51b29ea1725f",
       "function" : "Leader",
       "icsPosition" : "Leader",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Sage Linden",
       "cardType" : "PERSONNEL",
-      "resourceId" : "3f18ee65-4e2c-3baf-8b3a-8d743ade9cc6"
+      "resourceId" : "3f18ee65-4e2c-3baf-8b3a-8d743ade9cc6",
+      "id" : "8f89d012-a8f1-340f-86f3-51b29ea1725f"
     }, {
-      "id" : "b61cfed3-a0bd-306d-ad50-8699474df43a",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Toby Flint",
       "cardType" : "PERSONNEL",
-      "resourceId" : "45cf31f7-b054-351b-9443-ee072f9bb4ff"
+      "resourceId" : "45cf31f7-b054-351b-9443-ee072f9bb4ff",
+      "id" : "b61cfed3-a0bd-306d-ad50-8699474df43a"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Radio, map, GPS, first-aid kit",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "1fc12094-67be-3206-b7c1-831be342e4a3",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "1fc12094-67be-3206-b7c1-831be342e4a3"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "258161be-1a03-3068-8936-fbf179680013",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "258161be-1a03-3068-8936-fbf179680013"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -1631,9 +1633,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "009f5f6d-174b-382d-b4ec-59026eef020f"
+    "iapPage" : ""
   }, {
+    "id" : "74c3d608-020e-3b00-b129-277d86f351bb",
     "assignmentId" : "ae28f7f2-ea1e-3605-afa5-854db77e537a",
     "assignmentTeamNumber" : "K1",
     "resourceType" : "Canine",
@@ -1655,62 +1657,62 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "0980aaeb-880a-3f50-a771-a61c7ceb8ca8",
       "function" : "Leader/Handler",
       "icsPosition" : "Leader/Handler",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Val Aspen",
       "cardType" : "PERSONNEL",
-      "resourceId" : "53912e25-ff2a-3bcc-8534-867d769eb113"
+      "resourceId" : "53912e25-ff2a-3bcc-8534-867d769eb113",
+      "id" : "0980aaeb-880a-3f50-a771-a61c7ceb8ca8"
     }, {
-      "id" : "55e53ea2-c80f-359a-bcbe-c7514e74f0c1",
       "function" : "Communications",
       "icsPosition" : "Communications",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Winter Dell",
       "cardType" : "PERSONNEL",
-      "resourceId" : "5e479160-5830-3a9e-95f0-42a8939dcdbe"
+      "resourceId" : "5e479160-5830-3a9e-95f0-42a8939dcdbe",
+      "id" : "55e53ea2-c80f-359a-bcbe-c7514e74f0c1"
     }, {
-      "id" : "9c9c634b-82fa-3b91-9816-053af7bb47cd",
       "function" : "Navigation",
       "icsPosition" : "Navigation",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Wynn Hazel",
       "cardType" : "PERSONNEL",
-      "resourceId" : "b2d669bd-8189-3993-bc42-8efcdd1f905d"
+      "resourceId" : "b2d669bd-8189-3993-bc42-8efcdd1f905d",
+      "id" : "9c9c634b-82fa-3b91-9816-053af7bb47cd"
     }, {
-      "id" : "68ebacf7-ad51-3575-b0ce-cc1f19382a32",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Yael Frost",
       "cardType" : "PERSONNEL",
-      "resourceId" : "6d073402-f21d-36f8-93a5-bc3fa00ebaa3"
+      "resourceId" : "6d073402-f21d-36f8-93a5-bc3fa00ebaa3",
+      "id" : "68ebacf7-ad51-3575-b0ce-cc1f19382a32"
     }, {
-      "id" : "65485e03-8ed7-3da9-956f-d85b66714335",
       "function" : "Live Find K9",
       "icsPosition" : "Live Find K9",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "MR-K9-1",
       "cardType" : "EQUIPMENT",
-      "resourceId" : "3f3a976b-91f1-3903-a0c3-7bd7e567c001"
+      "resourceId" : "3f3a976b-91f1-3903-a0c3-7bd7e567c001",
+      "id" : "65485e03-8ed7-3da9-956f-d85b66714335"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Live-find canine, radio, GPS, canine water",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "c2dd66eb-86e1-3c4b-962c-d09ff4a996dc",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "c2dd66eb-86e1-3c4b-962c-d09ff4a996dc"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "193d6916-1f63-3db1-8846-3bf542381b20",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "193d6916-1f63-3db1-8846-3bf542381b20"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -1739,9 +1741,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "74c3d608-020e-3b00-b129-277d86f351bb"
+    "iapPage" : ""
   }, {
+    "id" : "b27f41fd-c552-39ab-9131-205fdb4c6b86",
     "assignmentId" : "ac274954-b5aa-3b4d-9851-5bbc7141beb4",
     "assignmentTeamNumber" : "K2",
     "resourceType" : "Canine",
@@ -1763,62 +1765,62 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "e5c4c238-1530-3d1f-9d8f-1f6881e9409d",
       "function" : "Leader/Handler",
       "icsPosition" : "Leader/Handler",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Zion Clover",
       "cardType" : "PERSONNEL",
-      "resourceId" : "f9378e49-56da-3217-bdbd-d904bbb683cc"
+      "resourceId" : "f9378e49-56da-3217-bdbd-d904bbb683cc",
+      "id" : "e5c4c238-1530-3d1f-9d8f-1f6881e9409d"
     }, {
-      "id" : "4d7b83ef-3e7e-36f0-ac65-1501365c1440",
       "function" : "Communications",
       "icsPosition" : "Communications",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Robin Field",
       "cardType" : "PERSONNEL",
-      "resourceId" : "01f6a5aa-3edc-3131-b0c0-d3886bb1dc39"
+      "resourceId" : "01f6a5aa-3edc-3131-b0c0-d3886bb1dc39",
+      "id" : "4d7b83ef-3e7e-36f0-ac65-1501365c1440"
     }, {
-      "id" : "c1b08a12-30d9-3d4c-b504-bcb91916e5b4",
       "function" : "Navigation",
       "icsPosition" : "Navigation",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Arden Fox",
       "cardType" : "PERSONNEL",
-      "resourceId" : "56634ec9-5293-3129-8b90-628cfa2089fb"
+      "resourceId" : "56634ec9-5293-3129-8b90-628cfa2089fb",
+      "id" : "c1b08a12-30d9-3d4c-b504-bcb91916e5b4"
     }, {
-      "id" : "a4d11b91-a45f-3e40-83c1-dbd823c016f9",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Briar Snow",
       "cardType" : "PERSONNEL",
-      "resourceId" : "45826bda-f44a-3194-9808-f1b0f407e067"
+      "resourceId" : "45826bda-f44a-3194-9808-f1b0f407e067",
+      "id" : "a4d11b91-a45f-3e40-83c1-dbd823c016f9"
     }, {
-      "id" : "6e8eb25b-90c4-311b-a58e-c40836906127",
       "function" : "Live Find K9",
       "icsPosition" : "Live Find K9",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "MR-K9-2",
       "cardType" : "EQUIPMENT",
-      "resourceId" : "eb1de76e-f8eb-3bb2-a409-e87d98cdc934"
+      "resourceId" : "eb1de76e-f8eb-3bb2-a409-e87d98cdc934",
+      "id" : "6e8eb25b-90c4-311b-a58e-c40836906127"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Live-find canine, radio, GPS, canine water",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "14188fea-9b4c-3940-b383-8c1e3e9d9220",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "14188fea-9b4c-3940-b383-8c1e3e9d9220"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "a090f9f9-04c7-3f73-a9fa-e24e82cfe699",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "a090f9f9-04c7-3f73-a9fa-e24e82cfe699"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -1847,9 +1849,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "assigned - on task",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "b27f41fd-c552-39ab-9131-205fdb4c6b86"
+    "iapPage" : ""
   }, {
+    "id" : "200f3d46-b1c4-3c25-bc16-00335e332cec",
     "assignmentId" : "47ebf0c0-cd26-3432-bcb1-937a1c8fc630",
     "assignmentTeamNumber" : "K3",
     "resourceType" : "Canine",
@@ -1871,62 +1873,62 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "62e37c68-f59c-3811-8748-e26d68a07524",
       "function" : "Leader/Handler",
       "icsPosition" : "Leader/Handler",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Devon Heath",
       "cardType" : "PERSONNEL",
-      "resourceId" : "fbdae1f9-eed0-37fc-b88d-8779f9b2110e"
+      "resourceId" : "fbdae1f9-eed0-37fc-b88d-8779f9b2110e",
+      "id" : "62e37c68-f59c-3811-8748-e26d68a07524"
     }, {
-      "id" : "0ad84a25-54ac-3773-a4a2-8894095f3c21",
       "function" : "Communications",
       "icsPosition" : "Communications",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Lane Cedar",
       "cardType" : "PERSONNEL",
-      "resourceId" : "152379a5-1884-3538-822c-9254139d9dad"
+      "resourceId" : "152379a5-1884-3538-822c-9254139d9dad",
+      "id" : "0ad84a25-54ac-3773-a4a2-8894095f3c21"
     }, {
-      "id" : "fe8ad23c-f0f9-389b-8482-9ac0251ba7fa",
       "function" : "Navigation",
       "icsPosition" : "Navigation",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Micah Ash",
       "cardType" : "PERSONNEL",
-      "resourceId" : "39c9e0e7-5877-35fa-b1e1-ab1458037071"
+      "resourceId" : "39c9e0e7-5877-35fa-b1e1-ab1458037071",
+      "id" : "fe8ad23c-f0f9-389b-8482-9ac0251ba7fa"
     }, {
-      "id" : "80f7c617-adf6-3539-ae24-29b78e2f045f",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Noel Spruce",
       "cardType" : "PERSONNEL",
-      "resourceId" : "fc761268-10f8-34db-b17e-9fc96a6f6769"
+      "resourceId" : "fc761268-10f8-34db-b17e-9fc96a6f6769",
+      "id" : "80f7c617-adf6-3539-ae24-29b78e2f045f"
     }, {
-      "id" : "1dea9e4f-dfc2-3ae1-aba4-14cba5c04d24",
       "function" : "Live Find K9",
       "icsPosition" : "Live Find K9",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "MR-K9-3",
       "cardType" : "EQUIPMENT",
-      "resourceId" : "e627fa02-c306-3a4f-8682-752b6ece7432"
+      "resourceId" : "e627fa02-c306-3a4f-8682-752b6ece7432",
+      "id" : "1dea9e4f-dfc2-3ae1-aba4-14cba5c04d24"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Live-find canine, radio, GPS, canine water",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "d560c84d-6178-3995-a203-a1318539046d",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "d560c84d-6178-3995-a203-a1318539046d"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "18139fb3-17e2-3487-a74d-09c7edfec064",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "18139fb3-17e2-3487-a74d-09c7edfec064"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -1955,9 +1957,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "planned",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "200f3d46-b1c4-3c25-bc16-00335e332cec"
+    "iapPage" : ""
   }, {
+    "id" : "641de392-6659-3a8d-84fd-48b37b283e43",
     "assignmentId" : "d0efad2c-9292-3d70-b671-8515a3eaaf28",
     "assignmentTeamNumber" : "K4",
     "resourceType" : "Canine",
@@ -1979,62 +1981,62 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "6d3b20aa-90df-3394-b8bc-846f04e896fd",
       "function" : "Leader/Handler",
       "icsPosition" : "Leader/Handler",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Kit Laurel",
       "cardType" : "PERSONNEL",
-      "resourceId" : "dbf4b6f9-c060-3b93-8def-01164c39aaaa"
+      "resourceId" : "dbf4b6f9-c060-3b93-8def-01164c39aaaa",
+      "id" : "6d3b20aa-90df-3394-b8bc-846f04e896fd"
     }, {
-      "id" : "ffa3a9f2-2e73-3d8c-b6a7-977f9eceb4fc",
       "function" : "Communications",
       "icsPosition" : "Communications",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Linden Gale",
       "cardType" : "PERSONNEL",
-      "resourceId" : "f8e8ec98-e32a-3dac-abdb-26d203cdfbe0"
+      "resourceId" : "f8e8ec98-e32a-3dac-abdb-26d203cdfbe0",
+      "id" : "ffa3a9f2-2e73-3d8c-b6a7-977f9eceb4fc"
     }, {
-      "id" : "3cbb0dbb-171d-3307-9bb3-b51ebde847f1",
       "function" : "Navigation",
       "icsPosition" : "Navigation",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Marin Coast",
       "cardType" : "PERSONNEL",
-      "resourceId" : "e4180476-0446-3bcf-b92a-7873b3734af0"
+      "resourceId" : "e4180476-0446-3bcf-b92a-7873b3734af0",
+      "id" : "3cbb0dbb-171d-3307-9bb3-b51ebde847f1"
     }, {
-      "id" : "7f848bb0-9b42-3044-b67f-8c854784789a",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Nico Dawn",
       "cardType" : "PERSONNEL",
-      "resourceId" : "039c97fc-1cef-3ffd-860a-b549a0b66164"
+      "resourceId" : "039c97fc-1cef-3ffd-860a-b549a0b66164",
+      "id" : "7f848bb0-9b42-3044-b67f-8c854784789a"
     }, {
-      "id" : "788558c9-2502-350a-a53b-54b39c0ea6ea",
       "function" : "Live Find K9",
       "icsPosition" : "Live Find K9",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "MR-K9-4",
       "cardType" : "EQUIPMENT",
-      "resourceId" : "e0dfac9d-810f-3a0d-abb8-fb1c173dec9a"
+      "resourceId" : "e0dfac9d-810f-3a0d-abb8-fb1c173dec9a",
+      "id" : "788558c9-2502-350a-a53b-54b39c0ea6ea"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Live-find canine, radio, GPS, canine water",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "065361de-2a6c-39df-83d9-9c2885e5ca68",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "065361de-2a6c-39df-83d9-9c2885e5ca68"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "76a69342-b7c4-3bcb-9848-7968f062ad94",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "76a69342-b7c4-3bcb-9848-7968f062ad94"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -2063,9 +2065,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "planned",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "641de392-6659-3a8d-84fd-48b37b283e43"
+    "iapPage" : ""
   }, {
+    "id" : "15e65f7b-7899-304e-a72d-376df5fbad90",
     "assignmentId" : "6d92a88c-89c0-3183-8f90-dbebf71751a3",
     "assignmentTeamNumber" : "P1",
     "resourceType" : "Ground",
@@ -2087,86 +2089,86 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "73ce205e-3fd4-3645-9a90-b1210d316de1",
       "function" : "Leader",
       "icsPosition" : "Leader",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Casey Finch",
       "cardType" : "PERSONNEL",
-      "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6"
+      "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6",
+      "id" : "73ce205e-3fd4-3645-9a90-b1210d316de1"
     }, {
-      "id" : "8f247098-127f-3139-8b16-7680d4500a3d",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Alex Fern",
       "cardType" : "PERSONNEL",
-      "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb"
+      "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb",
+      "id" : "8f247098-127f-3139-8b16-7680d4500a3d"
     }, {
-      "id" : "a0207ece-fba4-3852-be4b-73ebf5f65cd4",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Blair Moss",
       "cardType" : "PERSONNEL",
-      "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153"
+      "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153",
+      "id" : "a0207ece-fba4-3852-be4b-73ebf5f65cd4"
     }, {
-      "id" : "2b7fa49e-9d83-36ce-adb6-b1e69b6f289c",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Cameron Lark",
       "cardType" : "PERSONNEL",
-      "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697"
+      "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697",
+      "id" : "2b7fa49e-9d83-36ce-adb6-b1e69b6f289c"
     }, {
-      "id" : "75927e24-e79f-32ae-9be8-710ee6ddb472",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Dana Birch",
       "cardType" : "PERSONNEL",
-      "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717"
+      "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717",
+      "id" : "75927e24-e79f-32ae-9be8-710ee6ddb472"
     }, {
-      "id" : "cd7cfa8d-fd09-32db-af54-3357c2ad687a",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Elliot Pine",
       "cardType" : "PERSONNEL",
-      "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527"
+      "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527",
+      "id" : "cd7cfa8d-fd09-32db-af54-3357c2ad687a"
     }, {
-      "id" : "300093ae-dd5d-38d6-8e28-2726ba6c757f",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Frankie Cove",
       "cardType" : "PERSONNEL",
-      "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3"
+      "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3",
+      "id" : "300093ae-dd5d-38d6-8e28-2726ba6c757f"
     }, {
-      "id" : "ddc93fd3-bad6-3588-869d-6c90fd6a68ed",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Gray Rowan",
       "cardType" : "PERSONNEL",
-      "resourceId" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e"
+      "resourceId" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e",
+      "id" : "ddc93fd3-bad6-3588-869d-6c90fd6a68ed"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Radio, map, GPS, first-aid kit",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "3f863547-8718-30b2-bf23-8a0d181d87a6",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "3f863547-8718-30b2-bf23-8a0d181d87a6"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "3e06a71c-db8e-3c7c-9d7d-1f60f18416ce",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "3e06a71c-db8e-3c7c-9d7d-1f60f18416ce"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -2195,9 +2197,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "planned",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "15e65f7b-7899-304e-a72d-376df5fbad90"
+    "iapPage" : ""
   }, {
+    "id" : "d0d441d6-0fea-39bd-826c-c38b705dd3bc",
     "assignmentId" : "65978672-3964-322d-9f7d-94d17b7f996e",
     "assignmentTeamNumber" : "G1-AREA",
     "resourceType" : "Ground",
@@ -2219,86 +2221,86 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "0acee591-dfa4-35b8-b82b-5df6ecc1a7c2",
       "function" : "Leader",
       "icsPosition" : "Leader",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Casey Finch",
       "cardType" : "PERSONNEL",
-      "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6"
+      "resourceId" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6",
+      "id" : "0acee591-dfa4-35b8-b82b-5df6ecc1a7c2"
     }, {
-      "id" : "7f72049e-0495-3413-9667-794392894997",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Alex Fern",
       "cardType" : "PERSONNEL",
-      "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb"
+      "resourceId" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb",
+      "id" : "7f72049e-0495-3413-9667-794392894997"
     }, {
-      "id" : "03e1e3fe-2987-3cee-8e6b-3dfbee0bef15",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Blair Moss",
       "cardType" : "PERSONNEL",
-      "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153"
+      "resourceId" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153",
+      "id" : "03e1e3fe-2987-3cee-8e6b-3dfbee0bef15"
     }, {
-      "id" : "cf228b1b-8974-3c71-ba43-aa42aa24a779",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Cameron Lark",
       "cardType" : "PERSONNEL",
-      "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697"
+      "resourceId" : "73440a1c-ddbf-3010-8bf9-266b7e475697",
+      "id" : "cf228b1b-8974-3c71-ba43-aa42aa24a779"
     }, {
-      "id" : "10537c15-2641-3992-b2ee-929978c5218f",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Dana Birch",
       "cardType" : "PERSONNEL",
-      "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717"
+      "resourceId" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717",
+      "id" : "10537c15-2641-3992-b2ee-929978c5218f"
     }, {
-      "id" : "fa3e7727-3f9f-3aca-b4c2-3d835fb5eaee",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Elliot Pine",
       "cardType" : "PERSONNEL",
-      "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527"
+      "resourceId" : "4bba7dd3-29b5-36f1-a960-42b40912c527",
+      "id" : "fa3e7727-3f9f-3aca-b4c2-3d835fb5eaee"
     }, {
-      "id" : "2c6c9bdf-8e56-3e99-9db0-3e8f3e9871a1",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Frankie Cove",
       "cardType" : "PERSONNEL",
-      "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3"
+      "resourceId" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3",
+      "id" : "2c6c9bdf-8e56-3e99-9db0-3e8f3e9871a1"
     }, {
-      "id" : "2c45cadd-eb3b-3aac-a363-834273a5d90c",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Cedar Valley SAR",
       "name" : "Gray Rowan",
       "cardType" : "PERSONNEL",
-      "resourceId" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e"
+      "resourceId" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e",
+      "id" : "2c45cadd-eb3b-3aac-a363-834273a5d90c"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Radio, map, GPS, first-aid kit",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "4fbdec8b-7fcd-35eb-b2d1-ee2f0878b4c6",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "4fbdec8b-7fcd-35eb-b2d1-ee2f0878b4c6"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "9e812f91-06c9-3c06-9b3f-5b5a6c198f8a",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "9e812f91-06c9-3c06-9b3f-5b5a6c198f8a"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -2327,9 +2329,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "planned",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "d0d441d6-0fea-39bd-826c-c38b705dd3bc"
+    "iapPage" : ""
   }, {
+    "id" : "30459180-75e7-35a3-a14a-f14b4d314be9",
     "assignmentId" : "5986a474-8c51-3969-894a-19e69417f70e",
     "assignmentTeamNumber" : "G2-AREA",
     "resourceType" : "Ground",
@@ -2351,86 +2353,86 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "18cfe594-e4a1-306d-a6ef-bdbcebacdc95",
       "function" : "Leader",
       "icsPosition" : "Leader",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Harper Glen",
       "cardType" : "PERSONNEL",
-      "resourceId" : "bdedd84f-dd65-3b83-937b-10617106c57a"
+      "resourceId" : "bdedd84f-dd65-3b83-937b-10617106c57a",
+      "id" : "18cfe594-e4a1-306d-a6ef-bdbcebacdc95"
     }, {
-      "id" : "51853c8f-1b25-34d4-8b6d-b66f42753827",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Indigo Lake",
       "cardType" : "PERSONNEL",
-      "resourceId" : "d2da7418-90c7-3427-b463-f884113e2279"
+      "resourceId" : "d2da7418-90c7-3427-b463-f884113e2279",
+      "id" : "51853c8f-1b25-34d4-8b6d-b66f42753827"
     }, {
-      "id" : "7889f9e5-bc0d-39e2-8b7a-136c5c4247d6",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Jules Meadow",
       "cardType" : "PERSONNEL",
-      "resourceId" : "ac05e257-0729-3cde-81bf-88f82cc760e5"
+      "resourceId" : "ac05e257-0729-3cde-81bf-88f82cc760e5",
+      "id" : "7889f9e5-bc0d-39e2-8b7a-136c5c4247d6"
     }, {
-      "id" : "bb99658c-2e64-3507-b1cf-b6b1f0fa087c",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Kai Willow",
       "cardType" : "PERSONNEL",
-      "resourceId" : "7c0a05fe-39f8-3691-91e7-97d259b854b8"
+      "resourceId" : "7c0a05fe-39f8-3691-91e7-97d259b854b8",
+      "id" : "bb99658c-2e64-3507-b1cf-b6b1f0fa087c"
     }, {
-      "id" : "5c1f815b-e3bf-34ad-953d-fbc56c2ade02",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Oakley Rain",
       "cardType" : "PERSONNEL",
-      "resourceId" : "53228caf-ae83-3650-8b4b-d171dd44aea5"
+      "resourceId" : "53228caf-ae83-3650-8b4b-d171dd44aea5",
+      "id" : "5c1f815b-e3bf-34ad-953d-fbc56c2ade02"
     }, {
-      "id" : "df3a2bcc-85a2-315d-9b5f-abfab8ead339",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Emery Reed",
       "cardType" : "PERSONNEL",
-      "resourceId" : "d4e8580a-6603-3608-bf9a-043b56ca6654"
+      "resourceId" : "d4e8580a-6603-3608-bf9a-043b56ca6654",
+      "id" : "df3a2bcc-85a2-315d-9b5f-abfab8ead339"
     }, {
-      "id" : "03fbb03e-15a5-34b9-9506-8be1e087d893",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Finley Stone",
       "cardType" : "PERSONNEL",
-      "resourceId" : "a10b3686-aecf-303d-8665-a49e45d2af3e"
+      "resourceId" : "a10b3686-aecf-303d-8665-a49e45d2af3e",
+      "id" : "03fbb03e-15a5-34b9-9506-8be1e087d893"
     }, {
-      "id" : "5ebb9fb4-482b-367f-bef8-448da82f0ab7",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
       "name" : "Hayden Marsh",
       "cardType" : "PERSONNEL",
-      "resourceId" : "483aec20-c914-3706-aab8-cf1f9ef68e49"
+      "resourceId" : "483aec20-c914-3706-aab8-cf1f9ef68e49",
+      "id" : "5ebb9fb4-482b-367f-bef8-448da82f0ab7"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Radio, map, GPS, first-aid kit",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "b0aaa0f0-4038-34e6-b93b-f278b9e789ab",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "b0aaa0f0-4038-34e6-b93b-f278b9e789ab"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "23ff2563-5e2b-30c2-a6a4-1af5fb735d9b",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "23ff2563-5e2b-30c2-a6a4-1af5fb735d9b"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -2459,9 +2461,9 @@
     "debriefPreparedDateTime" : null,
     "taskLifecycleStatus" : "planned",
     "debriefingCompleted" : false,
-    "iapPage" : "",
-    "id" : "30459180-75e7-35a3-a14a-f14b4d314be9"
+    "iapPage" : ""
   }, {
+    "id" : "8b906cce-16ec-390a-8560-7156e3d783ac",
     "assignmentId" : "32beef48-9239-3481-8dcf-22f924c8022f",
     "assignmentTeamNumber" : "T1",
     "resourceType" : "Ground",
@@ -2483,46 +2485,46 @@
     "secondaryManagementName" : "",
     "secondaryManagementContact" : "",
     "resourcesAssigned" : [ {
-      "id" : "6b3d8e7d-ab90-33ed-9cff-8a041a4ed748",
       "function" : "Leader",
       "icsPosition" : "Leader",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Lane Cedar",
       "cardType" : "PERSONNEL",
-      "resourceId" : "152379a5-1884-3538-822c-9254139d9dad"
+      "resourceId" : "152379a5-1884-3538-822c-9254139d9dad",
+      "id" : "6b3d8e7d-ab90-33ed-9cff-8a041a4ed748"
     }, {
-      "id" : "e4add3b3-2561-3a18-afe4-5b48f18ee96f",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Micah Ash",
       "cardType" : "PERSONNEL",
-      "resourceId" : "39c9e0e7-5877-35fa-b1e1-ab1458037071"
+      "resourceId" : "39c9e0e7-5877-35fa-b1e1-ab1458037071",
+      "id" : "e4add3b3-2561-3a18-afe4-5b48f18ee96f"
     }, {
-      "id" : "055ae2c2-bf30-330a-9a7f-4bccd99048e1",
       "function" : "Ground Searcher",
       "icsPosition" : "Ground Searcher",
       "homeAgency" : "Fictional Lake Hollow SAR",
       "name" : "Noel Spruce",
       "cardType" : "PERSONNEL",
-      "resourceId" : "fc761268-10f8-34db-b17e-9fc96a6f6769"
+      "resourceId" : "fc761268-10f8-34db-b17e-9fc96a6f6769",
+      "id" : "055ae2c2-bf30-330a-9a7f-4bccd99048e1"
     } ],
     "transportationInstructions" : "Walk from staging or drive a personal vehicle from staging. No ground support unit or aircraft is assigned.",
     "specialEquipment" : "Radio, map, GPS, first-aid kit",
     "communications" : [ {
       "primaryContact" : "202-555-0101",
       "radioChannelId" : "",
-      "id" : "79745f48-a8e2-3d59-8848-3434d4f0179d",
       "name" : "Avery Wren",
       "function" : "IC",
-      "nameOrFunction" : "Avery Wren / IC"
+      "nameOrFunction" : "Avery Wren / IC",
+      "id" : "79745f48-a8e2-3d59-8848-3434d4f0179d"
     }, {
       "primaryContact" : "MR SAR 1 / 155.160 MHz",
       "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
-      "id" : "b37bd0ac-f459-3eb7-b515-ac1be7afbe18",
       "name" : "Morgan Vale",
       "function" : "Ops",
-      "nameOrFunction" : "Morgan Vale / Ops"
+      "nameOrFunction" : "Morgan Vale / Ops",
+      "id" : "b37bd0ac-f459-3eb7-b515-ac1be7afbe18"
     } ],
     "preparedByName" : "Rowan Ellis",
     "preparedByPositionTitle" : "Planning Section Chief",
@@ -2551,8 +2553,7 @@
     "debriefPreparedDateTime" : "2026-07-18T12:10:00",
     "taskLifecycleStatus" : "returned",
     "debriefingCompleted" : true,
-    "iapPage" : "",
-    "id" : "8b906cce-16ec-390a-8560-7156e3d783ac"
+    "iapPage" : ""
   } ],
   "archivedSafetyHazardReports" : [ ],
   "commonSafetyHazards" : [ ],
@@ -2574,7 +2575,6 @@
     "id" : "8707d3a9-bb81-3941-adeb-54d9435274a3"
   } ],
   "openActionItems" : [ {
-    "id" : "cff5fb45-5b54-3cd5-a699-7e838444bb4b",
     "number" : 1,
     "item" : "First tick check: ALL teams complete and report buddy tick checks by 1000; Safety verifies completion; MEDL tracks exposures.",
     "poc" : "Jordan Reed (Safety)",
@@ -2582,9 +2582,9 @@
     "startDate" : "2026-07-18T11:00:00",
     "targetDate" : "2026-07-18T14:00:00",
     "actualDate" : null,
-    "status" : "Open"
+    "status" : "Open",
+    "id" : "cff5fb45-5b54-3cd5-a699-7e838444bb4b"
   }, {
-    "id" : "ed4c2c87-abbd-3545-9dd6-a3dfed3c737d",
     "number" : 2,
     "item" : "Hourly hydration/electrolyte checks for all field teams; replenish drinking water at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) by 0900 and arrange field/canine water delivery requests through simulated support service. Planning and Safety verify every team.",
     "poc" : "Rowan Ellis (Planning) / Jordan Reed (Safety)",
@@ -2592,9 +2592,9 @@
     "startDate" : "2026-07-18T11:00:00",
     "targetDate" : "2026-07-18T13:00:00",
     "actualDate" : null,
-    "status" : "Open"
+    "status" : "Open",
+    "id" : "ed4c2c87-abbd-3545-9dd6-a3dfed3c737d"
   }, {
-    "id" : "b9b54a46-542d-335d-a28c-41a9befd146e",
     "number" : 3,
     "item" : "MANDATORY heat rehab with shaded rest and heat-illness checks from 1300 at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP); Ops staggers search-team returns, coordinated by Safety/MEDL at ICP. Observation buddies alternate rest 1300-1320/1320-1340 in adjacent shade with continuous observation and buddy contact; Ops arranges qualified relief before post pairs travel to Base. Never leave a containment post unstaffed for rehab.",
     "poc" : "Jordan Reed (Safety) / Quinn Alder (MEDL)",
@@ -2602,9 +2602,9 @@
     "startDate" : "2026-07-18T11:00:00",
     "targetDate" : "2026-07-18T17:00:00",
     "actualDate" : null,
-    "status" : "Open"
+    "status" : "Open",
+    "id" : "b9b54a46-542d-335d-a28c-41a9befd146e"
   }, {
-    "id" : "19828c41-603d-3577-891e-5843061985c9",
     "number" : 4,
     "item" : "End-shift : Safety begins tick/hydration checks at 1830 and verifies completion before release; account for all 42 people and four canines, complete task debriefs, equipment return and safe-travel checks. Maintain paired containment posts through 1900; verify continuing containment/relief needs with Ops before releasing anyone.",
     "poc" : "Jordan Reed (Safety)",
@@ -2612,18 +2612,18 @@
     "startDate" : "2026-07-18T11:00:00",
     "targetDate" : "2026-07-18T22:30:00",
     "actualDate" : null,
-    "status" : "Open"
+    "status" : "Open",
+    "id" : "19828c41-603d-3577-891e-5843061985c9"
   } ],
   "openActionTrackerEnabled" : true,
   "ics233Portrait" : false,
   "clueLogIcs233Enabled" : false,
   "pdfLayoutSettings" : {
-    "id" : "026a98a4-46f1-3241-a0de-222098b5e24a",
     "paperSize" : "LETTER",
-    "pageMarginPoints" : 18.0
+    "pageMarginPoints" : 18.0,
+    "id" : "026a98a4-46f1-3241-a0de-222098b5e24a"
   },
   "medicalPlan" : {
-    "id" : "34c53136-d99a-35eb-95b8-97f9df3a41ca",
     "active" : true,
     "simpleMode" : false,
     "call911Procedure" : "Call 911",
@@ -2631,24 +2631,23 @@
     "designatedMedicalUnitName" : "Quinn Alder",
     "designatedMedicalUnitContact" : "MR SAR 1; 202-555-0107 (fictional)",
     "aidStations" : [ {
-      "id" : "d5b64989-66de-3b07-abec-bb562ea87ada",
       "name" : "Exercise Base human first-aid supplies/cache (fictional, unstaffed)",
       "location" : "Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP)",
       "contactNumbers" : "202-555-0107 (fictional)",
       "frequency" : "MR SAR 1 / 155.160 simplex",
-      "paramedicsOnSite" : false
+      "paramedicsOnSite" : false,
+      "id" : "d5b64989-66de-3b07-abec-bb562ea87ada"
     } ],
     "transportServices" : [ {
-      "id" : "7513f310-5631-3d52-903e-34313fdfff77",
       "service" : "Fictional Maple Ridge Ambulance",
       "location" : "Exercise station, 2 Illustration Lane (fictional)",
       "contactNumbers" : "202-555-0110 (fictional, non-operational)",
       "frequency" : "Request through MEDL/Ops on MR SAR 1",
       "airOrGround" : "Ground",
-      "levelOfService" : "BLS - simulated requested service; not a confirmed operational resource"
+      "levelOfService" : "BLS - simulated requested service; not a confirmed operational resource",
+      "id" : "7513f310-5631-3d52-903e-34313fdfff77"
     } ],
     "hospitals" : [ {
-      "id" : "0817a7da-1f7a-33b1-b9dd-c484eea9c8c8",
       "name" : "Fictional Maple Ridge Community Hospital",
       "address" : "100 Illustration Avenue, fictional Maple Ridge, MA",
       "contactNumbers" : "202-555-0111 (fictional, non-operational)",
@@ -2664,9 +2663,9 @@
       "traumaCenter" : false,
       "traumaLevel" : "",
       "burnCenter" : false,
-      "helipad" : false
+      "helipad" : false,
+      "id" : "0817a7da-1f7a-33b1-b9dd-c484eea9c8c8"
     }, {
-      "id" : "263f9588-017f-3ed6-a1e8-b401c46779b9",
       "name" : "Fictional Pine County Regional Trauma Center",
       "address" : "200 Example Boulevard, fictional Pine County, MA",
       "contactNumbers" : "202-555-0112 (fictional, non-operational)",
@@ -2682,7 +2681,8 @@
       "traumaCenter" : true,
       "traumaLevel" : "",
       "burnCenter" : false,
-      "helipad" : false
+      "helipad" : false,
+      "id" : "263f9588-017f-3ed6-a1e8-b401c46779b9"
     } ],
     "emergencyProcedures" : "FICTIONAL EXERCISE ONLY; do not call example numbers. For a real emergency use the actual local emergency number. Exercise: announce emergency traffic on MR SAR 1, give task/location, injury and access; MEDL coordinates from ICP; the human aid station at Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP) is an unstaffed supplies/cache, not an additional staffed medical team. Ops alerts MEDL, pauses nearby work, requests the simulated BLS service and arranges ground extraction and ambulance rendezvous at staging. No aircraft assigned. Do not move a patient unless needed for immediate safety.",
     "aviationAssetsUsed" : false,
@@ -2693,10 +2693,10 @@
     "reviewedBySafetyOfficer" : "Jordan Reed",
     "safetyOfficerSignature" : "",
     "reviewStatus" : "Reviewed - fictional exercise only",
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "34c53136-d99a-35eb-95b8-97f9df3a41ca"
   },
   "canineMedicalPlan" : {
-    "id" : "493b68ed-81e8-37c9-aa32-6de26d4ef773",
     "active" : true,
     "aidStationInformation" : "",
     "transportServices" : "",
@@ -2709,7 +2709,6 @@
     "emergencyProcedures" : "FICTIONAL EXERCISE ONLY; do not call example numbers. Provide canine first aid only within training and contact Ops on MR SAR 1. Ops contacts Zion Clover, the onsite DVM tasked on K2, releases or retasks the handler as necessary, then arranges veterinary care and transport. No dedicated canine transport service or aid station; no aircraft assigned.",
     "aviationAssetsUsed" : false,
     "selectedFacilities" : [ {
-      "id" : "d16b5d2d-4813-3aaa-9bb2-304724f84bbf",
       "name" : "Fictional Cedar Vale Emergency Veterinary Hospital",
       "town" : "Fictional Cedar Vale",
       "state" : "MA",
@@ -2732,9 +2731,9 @@
       "calculatedAt" : null,
       "stagingGeneration" : 1,
       "sourceName" : "Maple Ridge fictional exercise",
-      "sourceFacilityId" : ""
+      "sourceFacilityId" : "",
+      "id" : "d16b5d2d-4813-3aaa-9bb2-304724f84bbf"
     }, {
-      "id" : "d41667b7-ca6d-3591-aa0f-72cbb75a8998",
       "name" : "Fictional Oak Hollow Veterinary Emergency Center",
       "town" : "Fictional Oak Hollow",
       "state" : "MA",
@@ -2757,7 +2756,8 @@
       "calculatedAt" : null,
       "stagingGeneration" : 1,
       "sourceName" : "Maple Ridge fictional exercise",
-      "sourceFacilityId" : ""
+      "sourceFacilityId" : "",
+      "id" : "d41667b7-ca6d-3591-aa0f-72cbb75a8998"
     } ],
     "preparedByMedicalUnitLeader" : "Quinn Alder",
     "preparerSignature" : "",
@@ -2765,15 +2765,15 @@
     "reviewedBySafetyOfficer" : "Jordan Reed",
     "safetyOfficerSignature" : "",
     "reviewStatus" : "Reviewed - fictional exercise only",
-    "iapPage" : ""
+    "iapPage" : "",
+    "id" : "493b68ed-81e8-37c9-aa32-6de26d4ef773"
   },
   "vetDirectory" : {
-    "id" : "fe2c639d-2582-39b9-9357-34d808e01b57",
     "facilities" : [ ],
-    "sources" : [ ]
+    "sources" : [ ],
+    "id" : "fe2c639d-2582-39b9-9357-34d808e01b57"
   },
   "stagingLocation" : {
-    "id" : "899cf130-b7ee-35bc-8b09-36f618546763",
     "label" : "Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP)",
     "address" : "20 Park Road, fictional Maple Ridge, MA",
     "resolvedAddress" : "",
@@ -2782,28 +2782,29 @@
     "geocodingProvider" : "",
     "geocodingProvenance" : "",
     "resolvedAt" : null,
-    "generation" : 1
+    "generation" : 1,
+    "id" : "899cf130-b7ee-35bc-8b09-36f618546763"
   },
   "incidentLocations" : [ {
-    "id" : "0255324a-2b5c-3e1a-a4b2-7e6ab12bd355",
     "type" : "ICP",
     "name" : "ICP, county community center, 50 Civic Road, fictional Maple Ridge, MA (1.5 km west of IPP)",
-    "address" : "50 Civic Road, fictional Maple Ridge, MA"
+    "address" : "50 Civic Road, fictional Maple Ridge, MA",
+    "id" : "0255324a-2b5c-3e1a-a4b2-7e6ab12bd355"
   }, {
-    "id" : "2ed20374-9329-3f37-bf22-7fa3cb6c30b3",
     "type" : "Staging Area",
     "name" : "Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP)",
-    "address" : "20 Park Road, fictional Maple Ridge, MA"
+    "address" : "20 Park Road, fictional Maple Ridge, MA",
+    "id" : "2ed20374-9329-3f37-bf22-7fa3cb6c30b3"
   }, {
-    "id" : "4393af13-8694-389a-a095-2eb9f7a0dc45",
     "type" : "Base",
     "name" : "Base (supply and rehab) colocated with Community park pavilion staging, 20 Park Road, fictional Maple Ridge, MA (0.8 km west of IPP)",
-    "address" : "20 Park Road, fictional Maple Ridge, MA"
+    "address" : "20 Park Road, fictional Maple Ridge, MA",
+    "id" : "4393af13-8694-389a-a095-2eb9f7a0dc45"
   }, {
-    "id" : "968271a6-f043-3d40-b059-826cc79289f1",
     "type" : "Other",
     "name" : "Residence / IPP, 1 Trail Lane, fictional Maple Ridge, MA",
-    "address" : "1 Trail Lane, fictional Maple Ridge, MA"
+    "address" : "1 Trail Lane, fictional Maple Ridge, MA",
+    "id" : "968271a6-f043-3d40-b059-826cc79289f1"
   } ],
   "canineRoutingBaseLocationId" : "",
   "safetyReview" : {
@@ -2829,6 +2830,7 @@
   "tcards" : [ {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6",
     "cardType" : "PERSONNEL",
     "personName" : "Casey Finch",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2842,13 +2844,13 @@
     "sourceRef" : "sar:66f31202-4151-3cb9-9f78-32960ef8c534:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "da485cba-8c3b-3f3c-a70d-7ee6fabc36e6",
     "canineResourceCard" : false,
     "displayLabel" : "Casey Finch",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb",
     "cardType" : "PERSONNEL",
     "personName" : "Alex Fern",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2862,13 +2864,13 @@
     "sourceRef" : "sar:66f31202-4151-3cb9-9f78-32960ef8c534:resource:a82dcae7-1a4e-320b-84c0-e09c81d4badb",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "a82dcae7-1a4e-320b-84c0-e09c81d4badb",
     "canineResourceCard" : false,
     "displayLabel" : "Alex Fern",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153",
     "cardType" : "PERSONNEL",
     "personName" : "Blair Moss",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2882,13 +2884,13 @@
     "sourceRef" : "sar:66f31202-4151-3cb9-9f78-32960ef8c534:resource:264407d6-e0fb-3b9f-9fa0-60ba5f962153",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "264407d6-e0fb-3b9f-9fa0-60ba5f962153",
     "canineResourceCard" : false,
     "displayLabel" : "Blair Moss",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "73440a1c-ddbf-3010-8bf9-266b7e475697",
     "cardType" : "PERSONNEL",
     "personName" : "Cameron Lark",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2902,13 +2904,13 @@
     "sourceRef" : "sar:66f31202-4151-3cb9-9f78-32960ef8c534:resource:73440a1c-ddbf-3010-8bf9-266b7e475697",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "73440a1c-ddbf-3010-8bf9-266b7e475697",
     "canineResourceCard" : false,
     "displayLabel" : "Cameron Lark",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717",
     "cardType" : "PERSONNEL",
     "personName" : "Dana Birch",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2922,13 +2924,13 @@
     "sourceRef" : "sar:6db03356-9c41-3d65-980d-bf901ff49f86:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "a74eb2dc-2dda-3b5b-8ba5-7be25325b717",
     "canineResourceCard" : false,
     "displayLabel" : "Dana Birch",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "4bba7dd3-29b5-36f1-a960-42b40912c527",
     "cardType" : "PERSONNEL",
     "personName" : "Elliot Pine",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2942,13 +2944,13 @@
     "sourceRef" : "sar:6db03356-9c41-3d65-980d-bf901ff49f86:resource:4bba7dd3-29b5-36f1-a960-42b40912c527",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "4bba7dd3-29b5-36f1-a960-42b40912c527",
     "canineResourceCard" : false,
     "displayLabel" : "Elliot Pine",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3",
     "cardType" : "PERSONNEL",
     "personName" : "Frankie Cove",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2962,13 +2964,13 @@
     "sourceRef" : "sar:6db03356-9c41-3d65-980d-bf901ff49f86:resource:cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "cb47cf8b-ffbf-3701-b6d3-ce43354bf4b3",
     "canineResourceCard" : false,
     "displayLabel" : "Frankie Cove",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e",
     "cardType" : "PERSONNEL",
     "personName" : "Gray Rowan",
     "homeAgency" : "Fictional Cedar Valley SAR",
@@ -2982,13 +2984,13 @@
     "sourceRef" : "sar:6db03356-9c41-3d65-980d-bf901ff49f86:resource:0716e022-f2d5-354b-8591-4b39ed0a7a1e",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "0716e022-f2d5-354b-8591-4b39ed0a7a1e",
     "canineResourceCard" : false,
     "displayLabel" : "Gray Rowan",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "bdedd84f-dd65-3b83-937b-10617106c57a",
     "cardType" : "PERSONNEL",
     "personName" : "Harper Glen",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3002,13 +3004,13 @@
     "sourceRef" : "sar:eed3e57a-36b3-3c4c-b829-6d07c54a5f6a:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "bdedd84f-dd65-3b83-937b-10617106c57a",
     "canineResourceCard" : false,
     "displayLabel" : "Harper Glen",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "d2da7418-90c7-3427-b463-f884113e2279",
     "cardType" : "PERSONNEL",
     "personName" : "Indigo Lake",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3022,13 +3024,13 @@
     "sourceRef" : "sar:eed3e57a-36b3-3c4c-b829-6d07c54a5f6a:resource:d2da7418-90c7-3427-b463-f884113e2279",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "d2da7418-90c7-3427-b463-f884113e2279",
     "canineResourceCard" : false,
     "displayLabel" : "Indigo Lake",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "ac05e257-0729-3cde-81bf-88f82cc760e5",
     "cardType" : "PERSONNEL",
     "personName" : "Jules Meadow",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3042,13 +3044,13 @@
     "sourceRef" : "sar:eed3e57a-36b3-3c4c-b829-6d07c54a5f6a:resource:ac05e257-0729-3cde-81bf-88f82cc760e5",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "ac05e257-0729-3cde-81bf-88f82cc760e5",
     "canineResourceCard" : false,
     "displayLabel" : "Jules Meadow",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "7c0a05fe-39f8-3691-91e7-97d259b854b8",
     "cardType" : "PERSONNEL",
     "personName" : "Kai Willow",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3062,13 +3064,13 @@
     "sourceRef" : "sar:eed3e57a-36b3-3c4c-b829-6d07c54a5f6a:resource:7c0a05fe-39f8-3691-91e7-97d259b854b8",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "7c0a05fe-39f8-3691-91e7-97d259b854b8",
     "canineResourceCard" : false,
     "displayLabel" : "Kai Willow",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "152379a5-1884-3538-822c-9254139d9dad",
     "cardType" : "PERSONNEL",
     "personName" : "Lane Cedar",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3082,13 +3084,13 @@
     "sourceRef" : "sar:47ebf0c0-cd26-3432-bcb1-937a1c8fc630:resource:152379a5-1884-3538-822c-9254139d9dad",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "152379a5-1884-3538-822c-9254139d9dad",
     "canineResourceCard" : false,
     "displayLabel" : "Lane Cedar",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "39c9e0e7-5877-35fa-b1e1-ab1458037071",
     "cardType" : "PERSONNEL",
     "personName" : "Micah Ash",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3102,13 +3104,13 @@
     "sourceRef" : "sar:47ebf0c0-cd26-3432-bcb1-937a1c8fc630:resource:39c9e0e7-5877-35fa-b1e1-ab1458037071",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "39c9e0e7-5877-35fa-b1e1-ab1458037071",
     "canineResourceCard" : false,
     "displayLabel" : "Micah Ash",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "fc761268-10f8-34db-b17e-9fc96a6f6769",
     "cardType" : "PERSONNEL",
     "personName" : "Noel Spruce",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3122,13 +3124,13 @@
     "sourceRef" : "sar:47ebf0c0-cd26-3432-bcb1-937a1c8fc630:resource:fc761268-10f8-34db-b17e-9fc96a6f6769",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "fc761268-10f8-34db-b17e-9fc96a6f6769",
     "canineResourceCard" : false,
     "displayLabel" : "Noel Spruce",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "53228caf-ae83-3650-8b4b-d171dd44aea5",
     "cardType" : "PERSONNEL",
     "personName" : "Oakley Rain",
     "homeAgency" : "Fictional Lake Hollow SAR",
@@ -3142,13 +3144,13 @@
     "sourceRef" : "sar:5986a474-8c51-3969-894a-19e69417f70e:resource:53228caf-ae83-3650-8b4b-d171dd44aea5",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "53228caf-ae83-3650-8b4b-d171dd44aea5",
     "canineResourceCard" : false,
     "displayLabel" : "Oakley Rain",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "d450225e-9ba5-3fda-bdee-64dfcd332418",
     "cardType" : "PERSONNEL",
     "personName" : "Parker Elm",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3162,13 +3164,13 @@
     "sourceRef" : "sar:0742c0fb-deae-388a-8da4-f7dbacf4e5dc:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "d450225e-9ba5-3fda-bdee-64dfcd332418",
     "canineResourceCard" : false,
     "displayLabel" : "Parker Elm",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "60b0d207-257e-32c3-aee7-f1b54a5d1194",
     "cardType" : "PERSONNEL",
     "personName" : "Remy Shore",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3182,13 +3184,13 @@
     "sourceRef" : "sar:0742c0fb-deae-388a-8da4-f7dbacf4e5dc:resource:60b0d207-257e-32c3-aee7-f1b54a5d1194",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "60b0d207-257e-32c3-aee7-f1b54a5d1194",
     "canineResourceCard" : false,
     "displayLabel" : "Remy Shore",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "3f18ee65-4e2c-3baf-8b3a-8d743ade9cc6",
     "cardType" : "PERSONNEL",
     "personName" : "Sage Linden",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3202,13 +3204,13 @@
     "sourceRef" : "sar:a9f45271-df3c-358c-86e1-d7571f439cd5:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "3f18ee65-4e2c-3baf-8b3a-8d743ade9cc6",
     "canineResourceCard" : false,
     "displayLabel" : "Sage Linden",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "45cf31f7-b054-351b-9443-ee072f9bb4ff",
     "cardType" : "PERSONNEL",
     "personName" : "Toby Flint",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3222,13 +3224,13 @@
     "sourceRef" : "sar:a9f45271-df3c-358c-86e1-d7571f439cd5:resource:45cf31f7-b054-351b-9443-ee072f9bb4ff",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "45cf31f7-b054-351b-9443-ee072f9bb4ff",
     "canineResourceCard" : false,
     "displayLabel" : "Toby Flint",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "53912e25-ff2a-3bcc-8534-867d769eb113",
     "cardType" : "PERSONNEL",
     "personName" : "Val Aspen",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3242,13 +3244,13 @@
     "sourceRef" : "sar:ae28f7f2-ea1e-3605-afa5-854db77e537a:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "53912e25-ff2a-3bcc-8534-867d769eb113",
     "canineResourceCard" : false,
     "displayLabel" : "Val Aspen",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "5e479160-5830-3a9e-95f0-42a8939dcdbe",
     "cardType" : "PERSONNEL",
     "personName" : "Winter Dell",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3262,13 +3264,13 @@
     "sourceRef" : "sar:ae28f7f2-ea1e-3605-afa5-854db77e537a:resource:5e479160-5830-3a9e-95f0-42a8939dcdbe",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "5e479160-5830-3a9e-95f0-42a8939dcdbe",
     "canineResourceCard" : false,
     "displayLabel" : "Winter Dell",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "b2d669bd-8189-3993-bc42-8efcdd1f905d",
     "cardType" : "PERSONNEL",
     "personName" : "Wynn Hazel",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3282,13 +3284,13 @@
     "sourceRef" : "sar:ae28f7f2-ea1e-3605-afa5-854db77e537a:resource:b2d669bd-8189-3993-bc42-8efcdd1f905d",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "b2d669bd-8189-3993-bc42-8efcdd1f905d",
     "canineResourceCard" : false,
     "displayLabel" : "Wynn Hazel",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "6d073402-f21d-36f8-93a5-bc3fa00ebaa3",
     "cardType" : "PERSONNEL",
     "personName" : "Yael Frost",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3302,13 +3304,13 @@
     "sourceRef" : "sar:ae28f7f2-ea1e-3605-afa5-854db77e537a:resource:6d073402-f21d-36f8-93a5-bc3fa00ebaa3",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "6d073402-f21d-36f8-93a5-bc3fa00ebaa3",
     "canineResourceCard" : false,
     "displayLabel" : "Yael Frost",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "f9378e49-56da-3217-bdbd-d904bbb683cc",
     "cardType" : "PERSONNEL",
     "personName" : "Zion Clover",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3322,13 +3324,13 @@
     "sourceRef" : "sar:ac274954-b5aa-3b4d-9851-5bbc7141beb4:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "f9378e49-56da-3217-bdbd-d904bbb683cc",
     "canineResourceCard" : false,
     "displayLabel" : "Zion Clover",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "01f6a5aa-3edc-3131-b0c0-d3886bb1dc39",
     "cardType" : "PERSONNEL",
     "personName" : "Robin Field",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3342,13 +3344,13 @@
     "sourceRef" : "sar:ac274954-b5aa-3b4d-9851-5bbc7141beb4:resource:01f6a5aa-3edc-3131-b0c0-d3886bb1dc39",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "01f6a5aa-3edc-3131-b0c0-d3886bb1dc39",
     "canineResourceCard" : false,
     "displayLabel" : "Robin Field",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "56634ec9-5293-3129-8b90-628cfa2089fb",
     "cardType" : "PERSONNEL",
     "personName" : "Arden Fox",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3362,13 +3364,13 @@
     "sourceRef" : "sar:ac274954-b5aa-3b4d-9851-5bbc7141beb4:resource:56634ec9-5293-3129-8b90-628cfa2089fb",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "56634ec9-5293-3129-8b90-628cfa2089fb",
     "canineResourceCard" : false,
     "displayLabel" : "Arden Fox",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "45826bda-f44a-3194-9808-f1b0f407e067",
     "cardType" : "PERSONNEL",
     "personName" : "Briar Snow",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3382,13 +3384,13 @@
     "sourceRef" : "sar:ac274954-b5aa-3b4d-9851-5bbc7141beb4:resource:45826bda-f44a-3194-9808-f1b0f407e067",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "45826bda-f44a-3194-9808-f1b0f407e067",
     "canineResourceCard" : false,
     "displayLabel" : "Briar Snow",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "fbdae1f9-eed0-37fc-b88d-8779f9b2110e",
     "cardType" : "PERSONNEL",
     "personName" : "Devon Heath",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3402,13 +3404,13 @@
     "sourceRef" : "sar:47ebf0c0-cd26-3432-bcb1-937a1c8fc630:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "fbdae1f9-eed0-37fc-b88d-8779f9b2110e",
     "canineResourceCard" : false,
     "displayLabel" : "Devon Heath",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "d4e8580a-6603-3608-bf9a-043b56ca6654",
     "cardType" : "PERSONNEL",
     "personName" : "Emery Reed",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3422,13 +3424,13 @@
     "sourceRef" : "sar:5986a474-8c51-3969-894a-19e69417f70e:resource:d4e8580a-6603-3608-bf9a-043b56ca6654",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "d4e8580a-6603-3608-bf9a-043b56ca6654",
     "canineResourceCard" : false,
     "displayLabel" : "Emery Reed",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "a10b3686-aecf-303d-8665-a49e45d2af3e",
     "cardType" : "PERSONNEL",
     "personName" : "Finley Stone",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3442,13 +3444,13 @@
     "sourceRef" : "sar:5986a474-8c51-3969-894a-19e69417f70e:resource:a10b3686-aecf-303d-8665-a49e45d2af3e",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "a10b3686-aecf-303d-8665-a49e45d2af3e",
     "canineResourceCard" : false,
     "displayLabel" : "Finley Stone",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "483aec20-c914-3706-aab8-cf1f9ef68e49",
     "cardType" : "PERSONNEL",
     "personName" : "Hayden Marsh",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3462,13 +3464,13 @@
     "sourceRef" : "sar:5986a474-8c51-3969-894a-19e69417f70e:resource:483aec20-c914-3706-aab8-cf1f9ef68e49",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "483aec20-c914-3706-aab8-cf1f9ef68e49",
     "canineResourceCard" : false,
     "displayLabel" : "Hayden Marsh",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "dbf4b6f9-c060-3b93-8def-01164c39aaaa",
     "cardType" : "PERSONNEL",
     "personName" : "Kit Laurel",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3482,13 +3484,13 @@
     "sourceRef" : "sar:d0efad2c-9292-3d70-b671-8515a3eaaf28:leader",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "dbf4b6f9-c060-3b93-8def-01164c39aaaa",
     "canineResourceCard" : false,
     "displayLabel" : "Kit Laurel",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "f8e8ec98-e32a-3dac-abdb-26d203cdfbe0",
     "cardType" : "PERSONNEL",
     "personName" : "Linden Gale",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3502,13 +3504,13 @@
     "sourceRef" : "sar:d0efad2c-9292-3d70-b671-8515a3eaaf28:resource:f8e8ec98-e32a-3dac-abdb-26d203cdfbe0",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "f8e8ec98-e32a-3dac-abdb-26d203cdfbe0",
     "canineResourceCard" : false,
     "displayLabel" : "Linden Gale",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "e4180476-0446-3bcf-b92a-7873b3734af0",
     "cardType" : "PERSONNEL",
     "personName" : "Marin Coast",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3522,13 +3524,13 @@
     "sourceRef" : "sar:d0efad2c-9292-3d70-b671-8515a3eaaf28:resource:e4180476-0446-3bcf-b92a-7873b3734af0",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "e4180476-0446-3bcf-b92a-7873b3734af0",
     "canineResourceCard" : false,
     "displayLabel" : "Marin Coast",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "039c97fc-1cef-3ffd-860a-b549a0b66164",
     "cardType" : "PERSONNEL",
     "personName" : "Nico Dawn",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3542,13 +3544,13 @@
     "sourceRef" : "sar:d0efad2c-9292-3d70-b671-8515a3eaaf28:resource:039c97fc-1cef-3ffd-860a-b549a0b66164",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "039c97fc-1cef-3ffd-860a-b549a0b66164",
     "canineResourceCard" : false,
     "displayLabel" : "Nico Dawn",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "a7d7fc5f-9fd4-36be-b474-0d3b377720b9",
     "cardType" : "PERSONNEL",
     "personName" : "Avery Wren",
     "homeAgency" : "Fictional Pine County Sheriff's Office",
@@ -3562,13 +3564,13 @@
     "sourceRef" : "org:ic:0",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "a7d7fc5f-9fd4-36be-b474-0d3b377720b9",
     "canineResourceCard" : false,
     "displayLabel" : "Avery Wren",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "f52f18dc-2c17-3a7e-9662-21f3259cec85",
     "cardType" : "PERSONNEL",
     "personName" : "Morgan Vale",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3582,13 +3584,13 @@
     "sourceRef" : "org:operationsChief",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "f52f18dc-2c17-3a7e-9662-21f3259cec85",
     "canineResourceCard" : false,
     "displayLabel" : "Morgan Vale",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "d8eeb297-9d98-37fd-8541-3f8135bc8d65",
     "cardType" : "PERSONNEL",
     "personName" : "Rowan Ellis",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3602,13 +3604,13 @@
     "sourceRef" : "org:planningChief",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "d8eeb297-9d98-37fd-8541-3f8135bc8d65",
     "canineResourceCard" : false,
     "displayLabel" : "Rowan Ellis",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "64302216-a2b8-341f-9a17-96d17f27fe36",
     "cardType" : "PERSONNEL",
     "personName" : "Jordan Reed",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3622,13 +3624,13 @@
     "sourceRef" : "org:safetyOfficer",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "64302216-a2b8-341f-9a17-96d17f27fe36",
     "canineResourceCard" : false,
     "displayLabel" : "Jordan Reed",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "d577d03d-7a7d-356a-930e-98f83b157b3c",
     "cardType" : "PERSONNEL",
     "personName" : "Taylor Brook",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3642,13 +3644,13 @@
     "sourceRef" : "org:commUnitLeader",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "d577d03d-7a7d-356a-930e-98f83b157b3c",
     "canineResourceCard" : false,
     "displayLabel" : "Taylor Brook",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "1c9e6db6-da51-3b02-9003-1af9b9066e66",
     "cardType" : "PERSONNEL",
     "personName" : "Quinn Alder",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3662,13 +3664,13 @@
     "sourceRef" : "",
     "handlerName" : "",
     "numberOfPersons" : 1,
-    "id" : "1c9e6db6-da51-3b02-9003-1af9b9066e66",
     "canineResourceCard" : false,
     "displayLabel" : "Quinn Alder",
     "canineResource" : false
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "3f3a976b-91f1-3903-a0c3-7bd7e567c001",
     "cardType" : "EQUIPMENT",
     "personName" : "",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3682,13 +3684,13 @@
     "sourceRef" : "",
     "handlerName" : "Val Aspen",
     "numberOfPersons" : 0,
-    "id" : "3f3a976b-91f1-3903-a0c3-7bd7e567c001",
     "canineResourceCard" : true,
     "displayLabel" : "MR-K9-1",
     "canineResource" : true
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "eb1de76e-f8eb-3bb2-a409-e87d98cdc934",
     "cardType" : "EQUIPMENT",
     "personName" : "",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3702,13 +3704,13 @@
     "sourceRef" : "",
     "handlerName" : "Zion Clover",
     "numberOfPersons" : 0,
-    "id" : "eb1de76e-f8eb-3bb2-a409-e87d98cdc934",
     "canineResourceCard" : true,
     "displayLabel" : "MR-K9-2",
     "canineResource" : true
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "e627fa02-c306-3a4f-8682-752b6ece7432",
     "cardType" : "EQUIPMENT",
     "personName" : "",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3722,13 +3724,13 @@
     "sourceRef" : "",
     "handlerName" : "Devon Heath",
     "numberOfPersons" : 0,
-    "id" : "e627fa02-c306-3a4f-8682-752b6ece7432",
     "canineResourceCard" : true,
     "displayLabel" : "MR-K9-3",
     "canineResource" : true
   }, {
     "radioChannel" : "MR SAR 1",
     "radioChannelId" : "af140be6-b4cd-364b-93f5-a67c42603f4e",
+    "id" : "e0dfac9d-810f-3a0d-abb8-fb1c173dec9a",
     "cardType" : "EQUIPMENT",
     "personName" : "",
     "homeAgency" : "Fictional Maple Ridge Volunteer SAR",
@@ -3742,7 +3744,6 @@
     "sourceRef" : "",
     "handlerName" : "Kit Laurel",
     "numberOfPersons" : 0,
-    "id" : "e0dfac9d-810f-3a0d-abb8-fb1c173dec9a",
     "canineResourceCard" : true,
     "displayLabel" : "MR-K9-4",
     "canineResource" : true

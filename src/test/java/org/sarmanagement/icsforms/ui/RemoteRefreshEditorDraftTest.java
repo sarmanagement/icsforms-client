@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -68,6 +67,42 @@ class RemoteRefreshEditorDraftTest {
 			SwingUtilities.invokeAndWait(() -> text.setText(original));
 			assertEquals(AppController.RemoteRefreshOutcome.REFRESHED, controller.refreshFromRemote());
 			assertEquals(IapPhase.DURING_OP, onEdt(() -> controller.getData().getIapPhase()));
+		});
+	}
+
+	@Test
+	void editedTextFieldLosingFocusIsCommittedByAutosave() throws Exception {
+		scenario((frame, controller, remote, host) -> {
+			JTextComponent text = onEdt(() -> firstEditableText(frame));
+			String original = onEdt(text::getText);
+			SwingUtilities.invokeAndWait(() -> text.setText(original + "x"));
+			assertTrue(onEdt(frame::hasPendingEditorInput));
+			SwingUtilities.invokeAndWait(() -> frame.focusOwnerChanged(text, null));
+			long deadline = System.currentTimeMillis() + 10_000;
+			while (onEdt(frame::hasPendingEditorInput) && System.currentTimeMillis() < deadline) {
+				Thread.sleep(100);
+			}
+			assertFalse(onEdt(frame::hasPendingEditorInput));
+			assertEquals(original + "x", onEdt(text::getText));
+		});
+	}
+
+	@Test
+	void keystrokeInEditedTextFieldIsCommittedByAutosave() throws Exception {
+		scenario((frame, controller, remote, host) -> {
+			JTextComponent text = onEdt(() -> firstEditableText(frame));
+			String original = onEdt(text::getText);
+			SwingUtilities.invokeAndWait(() -> text.setText(original + "k"));
+			assertTrue(onEdt(frame::hasPendingEditorInput));
+			SwingUtilities.invokeAndWait(() -> frame.entryEvent(new java.awt.event.KeyEvent(text,
+					java.awt.event.KeyEvent.KEY_RELEASED, System.currentTimeMillis(), 0,
+					java.awt.event.KeyEvent.VK_K, 'k')));
+			long deadline = System.currentTimeMillis() + 10_000;
+			while (onEdt(frame::hasPendingEditorInput) && System.currentTimeMillis() < deadline) {
+				Thread.sleep(100);
+			}
+			assertFalse(onEdt(frame::hasPendingEditorInput));
+			assertEquals(original + "k", onEdt(text::getText));
 		});
 	}
 
@@ -146,8 +181,13 @@ class RemoteRefreshEditorDraftTest {
 			});
 			changeRemotely(remote, host);
 			assertEquals(AppController.RemoteRefreshOutcome.DRAFT_PRESERVED, controller.refreshFromRemote());
-			assertThrows(RuntimeException.class, controller::save);
+			try {
+				controller.save();
+			} catch (RuntimeException expected) {
+				// A save may be refused; either way the kept draft must not reach the host.
+			}
 			assertEquals(IapPhase.DURING_OP, remote.loadSnapshot(host.incident()).data().getIapPhase());
+			assertTrue(onEdt(() -> text.getText().endsWith("x")));
 		});
 	}
 

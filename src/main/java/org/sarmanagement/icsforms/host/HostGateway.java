@@ -33,6 +33,9 @@ public final class HostGateway implements RemoteIncidentGateway {
 	private final HostClient client;
 	private final DeviceCredential credential;
 	private final String location;
+	/** Prefix of typed short-code entry. */
+	public static final String TYPED_PREFIX = "ICSFORMS-PAIR-1:";
+	private static final int DEFAULT_ENROLLMENT_PORT = 8444;
 
 	/**
 	 * Creates a gateway.
@@ -60,6 +63,32 @@ public final class HostGateway implements RemoteIncidentGateway {
 	 * @throws StoreUnavailableException when the host cannot be reached
 	 */
 	public static RemoteIncidentStore pair(String invitationText, String deviceName) {
+		return pair(invitationText, deviceName, PairingListener.NONE);
+	}
+
+	/**
+	 * Like {@link #pair(String, String)}, and for in-person pairing shows the confirmation number through the
+	 * listener while the host operator types it in.
+	 *
+	 * @param invitationText invitation, pairing payload or typed host address
+	 * @param deviceName name shown to the host operator
+	 * @param listener shows the number to this device's operator
+	 * @return remote store for the shared incident
+	 * @throws IllegalArgumentException when the text is malformed
+	 * @throws RemoteAccessException when the host rejects the exchange or its identity differs
+	 * @throws StoreUnavailableException when the host cannot be reached
+	 */
+	public static RemoteIncidentStore pair(String invitationText, String deviceName, PairingListener listener) {
+		String trimmed = invitationText == null ? "" : invitationText.trim();
+		if (org.sarmanagement.icsforms.host.pairing.PairingPayload.isPayload(trimmed)) {
+			org.sarmanagement.icsforms.host.pairing.PairingPayload payload = org.sarmanagement.icsforms.host.pairing.PairingPayload
+					.parse(trimmed);
+			return pairInPerson(payload.host(), payload.enrollmentPort(), payload.fingerprint(), deviceName,
+					listener);
+		}
+		if (trimmed.startsWith(TYPED_PREFIX)) {
+			return pairTyped(trimmed, deviceName, listener);
+		}
 		HostInvitation invitation = HostInvitation.parse(invitationText);
 		try {
 			DeviceCredential credential = HostClient.pair(invitation, deviceName);
@@ -68,6 +97,64 @@ public final class HostGateway implements RemoteIncidentGateway {
 			return new RemoteIncidentStore(
 					new HostGateway(client, credential, invitation.host() + ":" + invitation.port()),
 					new IncidentId(invitation.incidentId()));
+		} catch (HostClientException failure) {
+			throw map(failure);
+		}
+	}
+
+	/**
+	 * Pairs from typed entry of the form {@code ICSFORMS-PAIR-1:host[:enrollmentPort]}, where an IPv6 host is
+	 * written in brackets. The device has no fingerprint, so the exchange itself authenticates the host.
+	 *
+	 * @param text typed entry
+	 * @param deviceName name shown to the host operator
+	 * @param listener shows the number to this device's operator
+	 * @return remote store for the shared incident
+	 * @throws IllegalArgumentException when the entry is malformed
+	 */
+	private static RemoteIncidentStore pairTyped(String text, String deviceName, PairingListener listener) {
+		String body = text.substring(TYPED_PREFIX.length());
+		String address = body.trim();
+		int port = DEFAULT_ENROLLMENT_PORT;
+		boolean bracketed = address.startsWith("[");
+		int colon = bracketed ? address.indexOf("]:") + 1 : address.indexOf(':');
+		boolean hasPort = bracketed ? colon > 0 : colon > 0 && colon == address.lastIndexOf(':');
+		if (hasPort) {
+			try {
+				port = Integer.parseInt(address.substring(colon + 1));
+			} catch (NumberFormatException failure) {
+				throw new IllegalArgumentException("The port is not a number.", failure);
+			}
+			address = address.substring(0, colon);
+		}
+		if (address.startsWith("[") && address.endsWith("]")) {
+			address = address.substring(1, address.length() - 1);
+		}
+		if (address.isBlank()) {
+			throw new IllegalArgumentException("Enter the host address.");
+		}
+		return pairInPerson(address, port, null, deviceName, listener);
+	}
+
+	/**
+	 * Pairs in person and returns the remote store.
+	 *
+	 * @param host host name or address
+	 * @param enrollmentPort enrollment port
+	 * @param fingerprint fingerprint read out of band, or null
+	 * @param deviceName name shown to the host operator
+	 * @param listener shows the number to this device's operator
+	 * @return remote store for the shared incident
+	 */
+	private static RemoteIncidentStore pairInPerson(String host, int enrollmentPort, String fingerprint,
+			String deviceName, PairingListener listener) {
+		try {
+			HostClient.ShortPairingResult result = HostClient.pairInPerson(host, enrollmentPort, fingerprint,
+					deviceName, org.sarmanagement.icsforms.host.pairing.PairingSuites.defaults(), listener);
+			HostClient client = HostClient.forDevice(host, result.port(), enrollmentPort, result.credential());
+			return new RemoteIncidentStore(
+					new HostGateway(client, result.credential(), host + ":" + result.port()),
+					new IncidentId(result.incidentId()));
 		} catch (HostClientException failure) {
 			throw map(failure);
 		}
@@ -280,8 +367,14 @@ public final class HostGateway implements RemoteIncidentGateway {
 		if (status == 423) {
 			return new StoreLockConflictException("The incident is locked by another editor on the host");
 		}
+		if (status == 409 && "busy".equals(failure.code())) {
+			return new StoreUnavailableException("Another device is pairing with the host right now. "
+					+ "Wait a minute for it to finish, then try again.", failure);
+		}
 		if (status == 409) {
-			return new StoreConflictException("The host reports a conflict", null, null);
+			String reason = failure.getMessage() == null || failure.getMessage().isBlank() ? ""
+					: ": " + failure.getMessage();
+			return new StoreConflictException("The host reports a conflict" + reason, null, null);
 		}
 		if (status == 400 || status == 413) {
 			return new StoreValidationException("The host rejected the request: " + failure.getMessage());

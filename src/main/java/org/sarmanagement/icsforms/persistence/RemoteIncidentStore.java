@@ -62,6 +62,8 @@ import java.util.UUID;
  * event-dispatch thread.
  */
 public final class RemoteIncidentStore implements IncidentStore {
+	/** Message of the validation failure raised when the host moved on after a conflict was recorded. */
+	public static final String HOST_CHANGED = "The host changed since conflict review; review again";
 	private static final int MAX_CACHED_BASES = 16;
 	private static final int MAX_BATCH_RECORDS = 100;
 	private static final int MAX_BATCH_BYTES = 900_000;
@@ -586,10 +588,6 @@ public final class RemoteIncidentStore implements IncidentStore {
 		}
 		Base base = baseFor(expected);
 		RecordDiff diff = RecordDiff.between(base.document(), data);
-		if (!diff.removed().isEmpty()) {
-			throw new StoreValidationException("The host cannot remove records; strike them out instead ("
-					+ diff.removed().size() + " removed)");
-		}
 		List<IncidentService.RecordSubmission> submissions = submissions(base, data, diff);
 		if (submissions.isEmpty()) {
 			IncidentService.ChangeResult state = gateway.changesSince(incident, base.cursor());
@@ -958,8 +956,17 @@ public final class RemoteIncidentStore implements IncidentStore {
 		for (IncidentService.RecordSubmission edit : edits) {
 			IncidentService.VersionedRecord current = accepted.get(edit.key());
 			if (edit.operation() == IncidentService.Operation.CREATE) {
-				if (current != null) {
+				if (current != null
+						&& IncidentService.mergeIndependentCreates(edit.content(), current.content()) == null) {
 					conflicts.add(new IncidentService.FieldConflict(edit.key(), "$record", null, edit.content(),
+							current.content()));
+				}
+				continue;
+			}
+			if (edit.operation() == IncidentService.Operation.REMOVE) {
+				JsonNode seen = observed.record(edit.key());
+				if (current != null && seen != null && !RecordJson.same(seen, current.content())) {
+					conflicts.add(new IncidentService.FieldConflict(edit.key(), "$record", seen, null,
 							current.content()));
 				}
 				continue;
@@ -1214,9 +1221,28 @@ public final class RemoteIncidentStore implements IncidentStore {
 								current.parentField(), current.version(), IncidentService.Operation.UPDATE,
 								item.content()));
 					}
+				} else if (IncidentService.mergeIndependentCreates(item.content(), current.content()) != null) {
+					resolved.add(item);
 				} else {
-					throw new StoreValidationException("The host changed since conflict review; review again");
+					throw new StoreValidationException(HOST_CHANGED);
 				}
+				continue;
+			}
+			if (item.operation() == IncidentService.Operation.REMOVE) {
+				if (current == null) {
+					continue;
+				}
+				if (conflicts.containsKey(collision)) {
+					verifyConflict(conflicts.get(collision), current.content());
+					if (choices.get(collision) == ConflictChoice.THEIRS) {
+						continue;
+					}
+				} else if (old == null || !RecordJson.same(old.content(), current.content())) {
+					throw new StoreValidationException(HOST_CHANGED);
+				}
+				resolved.add(new IncidentService.RecordSubmission(item.key(), current.parent(),
+						current.parentField(), current.version(), IncidentService.Operation.REMOVE,
+						current.content()));
 				continue;
 			}
 			if (old == null || current == null) {
@@ -1240,7 +1266,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 					}
 				} else if (!RecordJson.same(before, local) && !RecordJson.same(before, theirs)
 						&& !RecordJson.same(local, theirs)) {
-					throw new StoreValidationException("The host changed since conflict review; review again");
+					throw new StoreValidationException(HOST_CHANGED);
 				}
 				if (!RecordJson.same(before, local)) {
 					if (local == null) {
@@ -1286,7 +1312,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 */
 	private static void verifyConflict(IncidentService.FieldConflict conflict, JsonNode current) {
 		if (!RecordJson.same(conflict.theirs(), current)) {
-			throw new StoreValidationException("The host changed since conflict review; review again");
+			throw new StoreValidationException(HOST_CHANGED);
 		}
 	}
 
@@ -1300,11 +1326,17 @@ public final class RemoteIncidentStore implements IncidentStore {
 	private AppData applyLocal(AppData source, List<IncidentService.RecordSubmission> edits) {
 		AppData result = FullDocumentSnapshot.detach(source);
 		List<RecordVersionStore.RecordHistory> histories = new ArrayList<>();
+		java.util.Set<RecordKey> removed = new java.util.HashSet<>();
 		for (IncidentService.RecordSubmission edit : edits) {
+			if (edit.operation() == IncidentService.Operation.REMOVE) {
+				removed.add(edit.key());
+				continue;
+			}
 			histories.add(new RecordVersionStore.RecordHistory(edit.key(), edit.parent(), edit.parentField(),
 					List.of(new RecordVersionStore.RecordVersion(1, 0, Instant.now(), edit.content()))));
 		}
 		bridge.apply(result, histories, true);
+		bridge.remove(result, removed);
 		return result;
 	}
 
@@ -1318,6 +1350,10 @@ public final class RemoteIncidentStore implements IncidentStore {
 	private static void updateWorkingRecords(Map<RecordKey, IncidentService.VersionedRecord> records,
 			List<IncidentService.RecordSubmission> edits, long cursor) {
 		for (IncidentService.RecordSubmission edit : edits) {
+			if (edit.operation() == IncidentService.Operation.REMOVE) {
+				records.remove(edit.key());
+				continue;
+			}
 			IncidentService.VersionedRecord old = records.get(edit.key());
 			records.put(edit.key(), new IncidentService.VersionedRecord(edit.key(), old == null ? 1 : old.version(),
 					cursor, Instant.now(), edit.content(), edit.parent(), edit.parentField()));
@@ -1347,11 +1383,8 @@ public final class RemoteIncidentStore implements IncidentStore {
 			before = held.document();
 		}
 		RecordDiff diff = RecordDiff.between(before, data);
-		if (!diff.removed().isEmpty()) {
-			throw new StoreValidationException("The host cannot remove records; strike them out instead");
-		}
 		if (!state.revision().equals(expected) && diff.created().isEmpty() && diff.changed().isEmpty()
-				&& RecordJson.same(RootSettings.snapshot(before), RootSettings.snapshot(data))) {
+				&& diff.removed().isEmpty() && RecordJson.same(RootSettings.snapshot(before), RootSettings.snapshot(data))) {
 			synchronized (cacheLock) {
 				issued.put(data, expected);
 			}
@@ -1553,6 +1586,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 		}
 		try {
 			bridge.apply(data, histories, true);
+			bridge.stabilizeDefaults(data, histories);
 		} catch (StoreValidationException failure) {
 			throw new StorePersistenceException("The host returned records that cannot form a document", failure);
 		}
@@ -1628,6 +1662,13 @@ public final class RemoteIncidentStore implements IncidentStore {
 					? IncidentService.Operation.STRIKE_OUT : IncidentService.Operation.UPDATE;
 			result.add(new IncidentService.RecordSubmission(key, held.parent(), held.parentField(), held.version(),
 					operation, content));
+		}
+		for (RecordKey key : diff.removed()) {
+			IncidentService.VersionedRecord held = base.records().get(key);
+			if (held != null) {
+				result.add(new IncidentService.RecordSubmission(key, held.parent(), held.parentField(),
+						held.version(), IncidentService.Operation.REMOVE, held.content()));
+			}
 		}
 		rootSubmission(base, edited).ifPresent(result::add);
 		result.sort(Comparator.comparing(IncidentService.RecordSubmission::key));

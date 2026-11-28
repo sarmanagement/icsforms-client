@@ -64,6 +64,7 @@ final class UiSupport {
 	private static ZoneId dateTimeDisplayZone = ZoneId.systemDefault();
 	private static final java.util.Map<Window, AppData> INCIDENT_WINDOWS = new java.util.WeakHashMap<>();
 	private static final java.util.Map<Window, Boolean> INCIDENT_WINDOW_BLOCKING = new java.util.WeakHashMap<>();
+	private static final java.util.Map<Window, java.util.function.BooleanSupplier> INCIDENT_WINDOW_FLUSH = new java.util.WeakHashMap<>();
 
 	private UiSupport() {
 	}
@@ -335,6 +336,9 @@ final class UiSupport {
 		updateBottomSpacer(panel, row + 1);
 	}
 
+	/** Client property naming the inner field a composite row component's label and required marking apply to. */
+	static final String LABEL_TARGET_PROPERTY = "icsforms.labelTarget";
+
 	private static void addRow(JPanel panel, int row, String label, JComponent component, boolean required) {
 		JLabel fieldLabel = new JLabel(required ? label + " (required)" : label);
 		fieldLabel.setLabelFor(labelTarget(component));
@@ -379,6 +383,9 @@ final class UiSupport {
 	}
 
 	private static JComponent labelTarget(JComponent component) {
+		if (component.getClientProperty(LABEL_TARGET_PROPERTY) instanceof JComponent target) {
+			return target;
+		}
 		if (component instanceof JScrollPane scrollPane
 				&& scrollPane.getViewport().getView() instanceof JComponent child) {
 			return child;
@@ -389,6 +396,9 @@ final class UiSupport {
 	private static void markRequired(JComponent component, String label) {
 		applyRequiredBackground(component);
 		JComponent accessibleTarget = labelTarget(component);
+		if (accessibleTarget != component && component.getClientProperty(LABEL_TARGET_PROPERTY) != null) {
+			applyRequiredBackground(accessibleTarget);
+		}
 		String existingDescription = accessibleTarget.getAccessibleContext().getAccessibleDescription();
 		String requiredDescription = label + " is a required field.";
 		accessibleTarget.getAccessibleContext()
@@ -579,7 +589,8 @@ final class UiSupport {
 		if (preferredSize != null) {
 			component.setPreferredSize(preferredSize);
 		}
-		JOptionPane optionPane = new JOptionPane(component, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
+		JOptionPane optionPane = new JOptionPane(ScreenFit.bounded(component, parent), JOptionPane.PLAIN_MESSAGE,
+				JOptionPane.OK_CANCEL_OPTION);
 		JDialog dialog = optionPane.createDialog(parent, title);
 		dialog.setModalityType(java.awt.Dialog.ModalityType.DOCUMENT_MODAL);
 		dialog.setResizable(true);
@@ -588,6 +599,7 @@ final class UiSupport {
 			dialog.setSize(new Dimension(Math.max(dialog.getWidth(), preferredSize.width),
 					Math.max(dialog.getHeight(), preferredSize.height)));
 		}
+		ScreenFit.fit(dialog);
 		dialog.setVisible(true);
 		Object value = optionPane.getValue();
 		dialog.dispose();
@@ -629,7 +641,8 @@ final class UiSupport {
 		if (preferredSize != null) {
 			component.setPreferredSize(preferredSize);
 		}
-		JOptionPane optionPane = new JOptionPane(component, JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION);
+		JOptionPane optionPane = new JOptionPane(ScreenFit.bounded(component, parent), JOptionPane.PLAIN_MESSAGE,
+				JOptionPane.DEFAULT_OPTION);
 		optionPane.setOptions(options);
 		optionPane.setInitialValue(initialValue);
 		JDialog dialog = optionPane.createDialog(parent, title);
@@ -640,6 +653,7 @@ final class UiSupport {
 			dialog.setSize(new Dimension(Math.max(dialog.getWidth(), preferredSize.width),
 					Math.max(dialog.getHeight(), preferredSize.height)));
 		}
+		ScreenFit.fit(dialog);
 		dialog.setVisible(true);
 		Object value = optionPane.getValue();
 		dialog.dispose();
@@ -1012,6 +1026,60 @@ final class UiSupport {
 	static void registerIncidentWindow(Window window, AppData data, boolean blocksSwitch) {
 		INCIDENT_WINDOWS.put(window, data);
 		INCIDENT_WINDOW_BLOCKING.put(window, blocksSwitch);
+	}
+
+	/**
+	 * Registers how an independent incident window saves its pending edits without user input.
+	 *
+	 * @param window independent document root registered for the incident.
+	 * @param flush saves pending edits and returns true only when nothing is left unsaved.
+	 */
+	static void registerIncidentWindowFlush(Window window, java.util.function.BooleanSupplier flush) {
+		INCIDENT_WINDOW_FLUSH.put(window, flush);
+	}
+
+	/**
+	 * Saves a window's pending edits so it can be closed without asking. Modal dialogs cannot be flushed.
+	 * Windows without a registered flush have their in-progress table cells committed.
+	 *
+	 * @param window outstanding incident window.
+	 * @return true when the window holds no unsaved edit afterwards.
+	 */
+	static boolean flushIncidentWindow(Window window) {
+		if (window instanceof java.awt.Dialog dialog && dialog.isModal()) {
+			return false;
+		}
+		try {
+			java.util.function.BooleanSupplier flush = INCIDENT_WINDOW_FLUSH.get(window);
+			if (flush != null) {
+				return flush.getAsBoolean();
+			}
+			for (JTable table : descendantTables(window)) {
+				commitTableEdits(table);
+			}
+			return true;
+		} catch (RuntimeException exception) {
+			return false;
+		}
+	}
+
+	/**
+	 * Collects every table below a container.
+	 *
+	 * @param container root to search.
+	 * @return tables found, in component order.
+	 */
+	private static List<JTable> descendantTables(java.awt.Container container) {
+		List<JTable> tables = new java.util.ArrayList<>();
+		for (Component child : container.getComponents()) {
+			if (child instanceof JTable table) {
+				tables.add(table);
+			}
+			if (child instanceof java.awt.Container nested) {
+				tables.addAll(descendantTables(nested));
+			}
+		}
+		return tables;
 	}
 
 	/**

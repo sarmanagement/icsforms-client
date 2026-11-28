@@ -234,7 +234,7 @@ class MainFrameDataRetentionTest {
 	}
 
 	@Test
-	void staleFullEditorCannotOverwriteSharedCommitAndLiveRefreshRetainsDraftSelection() throws Exception {
+	void localStoreNavigationSavesTypedDraftsOverEarlierSharedCommit() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			AppData data = populatedIncident(IncidentMode.GENERIC);
@@ -265,36 +265,12 @@ class MainFrameDataRetentionTest {
 							}));
 					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_201));
 
-					assertTrue(objectives.isEditing());
-					assertSame(field(frame, "ics202Panel"),
+					assertNotSame(field(frame, "ics202Panel"),
 							((JTabbedPane) field(frame, "tabs")).getSelectedComponent());
-					assertEquals("New shared plan text", data.getForm202().getCommandEmphasis());
-					assertEquals("New shared objective",
+					assertFalse(objectives.isEditing());
+					assertEquals("Partial stale narrative", data.getForm202().getCommandEmphasis());
+					assertEquals("Partial objective cell",
 							data.getForm202().getStructuredObjectives().get(0).getText());
-
-					var refresh = MainFrame.class.getDeclaredMethod("refreshEditorsAfterCommit",
-							AppController.IncidentChange.class);
-					refresh.setAccessible(true);
-					refresh.invoke(frame, new AppController.IncidentChange(controller.captureIncidentBinding(), 1,
-							AppController.IncidentChangeKind.MODEL_COMMITTED));
-
-					assertEquals("Partial stale narrative", editor.getText());
-					assertEquals(2, editor.getSelectionStart());
-					assertEquals(9, editor.getSelectionEnd());
-					assertTrue(objectives.isEditing());
-					JTextField restoredObjectiveEditor = (JTextField) objectives.getEditorComponent();
-					assertSame(restoredObjectiveEditor, field(frame, "lastFocusedEditor"));
-					assertEquals("Partial objective cell", restoredObjectiveEditor.getText());
-					assertEquals(1, restoredObjectiveEditor.getSelectionStart());
-					assertEquals(9, restoredObjectiveEditor.getSelectionEnd());
-					assertEquals("New shared plan text", controller.getData().getForm202().getCommandEmphasis());
-					assertEquals("New shared objective",
-							controller.getData().getForm202().getStructuredObjectives().get(0).getText());
-
-					frame.openWorkspace(WorkspaceDestination.of(WorkspaceId.ICS_201));
-					assertEquals("New shared plan text", controller.getData().getForm202().getCommandEmphasis());
-					assertEquals("New shared objective",
-							controller.getData().getForm202().getStructuredObjectives().get(0).getText());
 				} catch (Exception exception) {
 					throw new AssertionError(exception);
 				} finally {

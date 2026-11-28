@@ -121,7 +121,9 @@ public class CanineMedicalPanel extends JPanel {
 	private final JTextArea aidStations = new JTextArea(2, 70);
 	private final JTextArea transportServices = new JTextArea(2, 40);
 	private final JTextField onsiteVet = new JTextField();
-	private final JList<PersonChoice> veterinaryPersonnel = new JList<>();
+	private final javax.swing.DefaultListModel<PersonChoice> linkedPersonnel = new javax.swing.DefaultListModel<>();
+	private final JList<PersonChoice> veterinaryPersonnel = new JList<>(linkedPersonnel);
+	private transient List<PersonChoice> personnelCards = List.of();
 	private final JTextArea capabilityNotes = new JTextArea(3, 50);
 	private final JTextArea procedures = new JTextArea(2, 70);
 	private final JCheckBox aviationUsed = new JCheckBox("Aviation assets are used; coordinate with Air Operations");
@@ -289,6 +291,7 @@ public class CanineMedicalPanel extends JPanel {
 	 * Refreshes the editor while retaining the model's directory and accepted snapshots.
 	 */
 	public void refreshFromModel() {
+		PlanReviewStrip.refreshAll(this);
 		bringForward.setEnabled(controller.canReusePlans());
 		loading = true;
 		try {
@@ -379,7 +382,7 @@ public class CanineMedicalPanel extends JPanel {
 			data.getCanineMedicalPlan().setPoisonControlContact(poisonContact.getText());
 			data.getCanineMedicalPlan().setOnsiteVeterinarian(onsiteVet.getText());
 			data.getCanineMedicalPlan().setVeterinaryPersonnelResourceIds(
-					veterinaryPersonnel.getSelectedValuesList().stream().map(PersonChoice::resourceId).toList());
+					java.util.Collections.list(linkedPersonnel.elements()).stream().map(PersonChoice::resourceId).toList());
 			data.getCanineMedicalPlan().setVeterinaryCapabilityNotes(capabilityNotes.getText());
 			data.getCanineMedicalPlan().setEmergencyProcedures(procedures.getText());
 			data.getCanineMedicalPlan().setAviationAssetsUsed(aviationUsed.isSelected());
@@ -681,7 +684,17 @@ public class CanineMedicalPanel extends JPanel {
 		details.add(new JLabel("Linked veterinary personnel (recorded status/location only)"));
 		veterinaryPersonnel.setVisibleRowCount(4);
 		veterinaryPersonnel.getAccessibleContext().setAccessibleName("Linked veterinary personnel T-cards");
-		details.add(new JScrollPane(veterinaryPersonnel));
+		JPanel linkedPanel = new JPanel(new BorderLayout(4, 4));
+		linkedPanel.add(new JScrollPane(veterinaryPersonnel), BorderLayout.CENTER);
+		JButton addPersonnel = new JButton("Add personnel T-cards...");
+		addPersonnel.addActionListener(event -> addVeterinaryPersonnel());
+		JButton removePersonnel = new JButton("Remove selected");
+		removePersonnel.addActionListener(event -> removeVeterinaryPersonnel());
+		JPanel personnelButtons = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 0));
+		personnelButtons.add(addPersonnel);
+		personnelButtons.add(removePersonnel);
+		linkedPanel.add(personnelButtons, BorderLayout.SOUTH);
+		details.add(linkedPanel);
 		details.add(new JLabel("Veterinary capabilities / notes"));
 		details.add(new JScrollPane(capabilityNotes));
 		hospitals.add(details, BorderLayout.NORTH);
@@ -705,23 +718,60 @@ public class CanineMedicalPanel extends JPanel {
 	}
 
 	/**
-	 * Loads all personnel cards and selects the plan's stable veterinary links.
+	 * Loads the personnel T-cards available to link, and lists only the people the plan already links. A link to a
+	 * card that no longer exists stays listed, marked missing, so it is not silently dropped.
 	 *
 	 * @param data active incident.
 	 * @param plan canine medical plan.
 	 */
 	private void loadVeterinaryPersonnel(AppData data, CanineMedicalPlan plan) {
-		List<PersonChoice> people = data.getTCards().stream()
+		personnelCards = data.getTCards().stream()
 				.filter(card -> card.getCardType() == null
 						|| card.getCardType() == org.sarmanagement.icsforms.model.TCardType.PERSONNEL)
 				.map(card -> new PersonChoice(card.getResourceId(), card.getPersonName(), card.getStatus(),
 						card.getLocation()))
 				.toList();
-		veterinaryPersonnel.setListData(people.toArray(PersonChoice[]::new));
-		int[] selected = java.util.stream.IntStream.range(0, people.size())
-				.filter(index -> plan.getVeterinaryPersonnelResourceIds().contains(people.get(index).resourceId()))
-				.toArray();
-		veterinaryPersonnel.setSelectedIndices(selected);
+		linkedPersonnel.clear();
+		for (String id : plan.getVeterinaryPersonnelResourceIds()) {
+			PersonChoice card = personnelCards.stream().filter(candidate -> candidate.resourceId().equals(id))
+					.findFirst().orElse(new PersonChoice(id, "(missing personnel T-card " + id + ")", "", ""));
+			linkedPersonnel.addElement(card);
+		}
+	}
+
+	/** Lets the operator pick personnel T-cards that are not yet linked and links them to the plan. */
+	private void addVeterinaryPersonnel() {
+		java.util.Set<String> linked = new java.util.HashSet<>();
+		java.util.Collections.list(linkedPersonnel.elements()).forEach(choice -> linked.add(choice.resourceId()));
+		List<PersonChoice> candidates = personnelCards.stream().filter(card -> !linked.contains(card.resourceId()))
+				.toList();
+		if (candidates.isEmpty()) {
+			JOptionPane.showMessageDialog(this, personnelCards.isEmpty()
+					? "There are no personnel T-cards yet. Add the person on the T-Cards tab first."
+					: "Every personnel T-card is already linked.", "Link veterinary personnel",
+					JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		JList<PersonChoice> picker = new JList<>(candidates.toArray(PersonChoice[]::new));
+		picker.getAccessibleContext().setAccessibleName("Personnel T-cards available to link");
+		JScrollPane scroll = new JScrollPane(picker);
+		scroll.setPreferredSize(new java.awt.Dimension(520, 220));
+		if (JOptionPane.showConfirmDialog(this, scroll, "Link veterinary personnel T-cards",
+				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
+			return;
+		}
+		picker.getSelectedValuesList().forEach(linkedPersonnel::addElement);
+		inputChanged(false);
+	}
+
+	/** Unlinks the selected people from the plan; their T-cards are untouched. */
+	private void removeVeterinaryPersonnel() {
+		List<PersonChoice> selected = veterinaryPersonnel.getSelectedValuesList();
+		if (selected.isEmpty()) {
+			return;
+		}
+		selected.forEach(linkedPersonnel::removeElement);
+		inputChanged(false);
 	}
 
 	/**

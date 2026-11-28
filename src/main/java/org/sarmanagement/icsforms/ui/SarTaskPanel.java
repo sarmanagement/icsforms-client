@@ -2538,6 +2538,7 @@ public class SarTaskPanel extends JPanel {
 		private final JScrollPane hazardsObservedField;
 		private final List<TCard> availableTCards;
 		private final AppController controller;
+		private final SarTaskAssignment editedRow;
 		private String debriefingSupervisorResourceId = "";
 		private String initialLifecycleStatus;
 		private final Set<String> initialClueIds = new java.util.HashSet<>();
@@ -2587,6 +2588,7 @@ public class SarTaskPanel extends JPanel {
 				AppController controller) {
 			this.mode = mode;
 			this.controller = controller;
+			this.editedRow = row;
 			initialLifecycleStatus = row.getTaskLifecycleStatus();
 			for (ClueLogEntry clue : cluesForTask(row, clueLogEntries == null ? List.of() : clueLogEntries)) {
 				initialClueIds.add(clue.getEntryId());
@@ -2702,7 +2704,7 @@ public class SarTaskPanel extends JPanel {
 					event -> rebuildPodFactorFields(selectedComboValue(resourceTypeField), existingFactorValues()));
 
 			int rowIndex = 0;
-			UiSupport.addRequiredRow(panel, rowIndex++, "Assignment/Team #", assignmentTeamNumberField);
+			UiSupport.addRequiredRow(panel, rowIndex++, "Assignment/Team #", numberFieldWithHint());
 			UiSupport.addRow(panel, rowIndex++, "Inherited task data", assignmentSummaryField);
 			UiSupport.addRow(panel, rowIndex++, "Task setup",
 					inlineFieldPanel(new LabeledComponent("Resource type", resourceTypeField),
@@ -3086,6 +3088,13 @@ public class SarTaskPanel extends JPanel {
 			}
 			if (assignmentTeamNumberField.getText().trim().isBlank()) {
 				errors.add("Assignment/Team # is required.");
+			} else if (controller != null) {
+				List<SarTaskAssignment> all = controller.getData().getSarTaskAssignments();
+				String entered = assignmentTeamNumberField.getText().trim();
+				if (SarTaskSupport.findNumberConflict(all, editedRow, entered) != null) {
+					errors.add("Assignment/Team # " + entered + " is already used by another task (perhaps entered on"
+							+ " another device). Try " + SarTaskSupport.nextFreeNumber(all, editedRow, entered) + ".");
+				}
 			}
 			Set<String> seenResourceIds = new HashSet<>();
 			Set<String> seenResourceNames = new HashSet<>();
@@ -3107,6 +3116,74 @@ public class SarTaskPanel extends JPanel {
 				}
 			}
 			return errors;
+		}
+
+		/**
+		 * Wraps the number field with a hint that appears when another task, possibly saved by another device
+		 * while this editor is open, already uses the entered number. The hint offers the next free number in
+		 * the same pattern (G1 becomes G2).
+		 *
+		 * @return the field together with its live conflict hint.
+		 */
+		private JComponent numberFieldWithHint() {
+			JLabel hint = new JLabel();
+			hint.setForeground(new Color(0xB00020));
+			JButton use = new JButton();
+			use.setVisible(false);
+			use.addActionListener(event -> {
+				assignmentTeamNumberField.setText(use.getActionCommand());
+				assignmentTeamNumberField.requestFocusInWindow();
+			});
+			Runnable refresh = () -> {
+				String entered = assignmentTeamNumberField.getText().trim();
+				List<SarTaskAssignment> all = controller == null ? List.of()
+						: controller.getData().getSarTaskAssignments();
+				boolean clash = mode == EditorMode.ASSIGNMENT && SarTaskSupport.findNumberConflict(all, editedRow,
+						entered) != null;
+				hint.setText(clash ? "Another task already uses " + entered + "." : "");
+				use.setVisible(clash);
+				if (clash) {
+					String free = SarTaskSupport.nextFreeNumber(all, editedRow, entered);
+					use.setText("Use " + free);
+					use.setActionCommand(free);
+				}
+			};
+			assignmentTeamNumberField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+				@Override
+				public void insertUpdate(javax.swing.event.DocumentEvent event) {
+					refresh.run();
+				}
+
+				@Override
+				public void removeUpdate(javax.swing.event.DocumentEvent event) {
+					refresh.run();
+				}
+
+				@Override
+				public void changedUpdate(javax.swing.event.DocumentEvent event) {
+					refresh.run();
+				}
+			});
+			JPanel box = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 0));
+			box.setOpaque(false);
+			box.putClientProperty(UiSupport.LABEL_TARGET_PROPERTY, assignmentTeamNumberField);
+			box.add(assignmentTeamNumberField);
+			box.add(hint);
+			box.add(use);
+			if (controller != null && mode == EditorMode.ASSIGNMENT) {
+				AppController.IncidentChangeSubscription[] subscription = new AppController.IncidentChangeSubscription[1];
+				boolean[] wasShown = new boolean[1];
+				subscription[0] = controller.addIncidentChangeListener(change -> {
+					wasShown[0] |= box.isDisplayable();
+					if (wasShown[0] && !box.isDisplayable()) {
+						subscription[0].close();
+						return;
+					}
+					refresh.run();
+				});
+			}
+			refresh.run();
+			return box;
 		}
 
 		/**

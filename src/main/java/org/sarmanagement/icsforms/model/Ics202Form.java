@@ -150,6 +150,7 @@ public class Ics202Form implements Identified {
 		if (structuredObjectives == null) {
 			structuredObjectives = new ArrayList<>();
 		}
+		resolveDuplicateObjectiveOrder();
 		objectives = new ArrayList<>();
 		for (int index = 0; index < structuredObjectives.size(); index++) {
 			IncidentObjective objective = structuredObjectives.get(index);
@@ -160,6 +161,27 @@ public class Ics202Form implements Identified {
 			objective.getObjectiveId();
 			objective.setDisplayOrder(index);
 			objectives.add(objective.getText());
+		}
+	}
+
+	/**
+	 * Silently settles objectives that two devices added at the same position: when any display orders repeat,
+	 * the list is stably ordered by display order and then by objective id, so every device ends with the same
+	 * sequence and the later-ordered objective moves to the next position. Lists without repeats keep their
+	 * list order, which is how an operator reorders objectives.
+	 */
+	private void resolveDuplicateObjectiveOrder() {
+		java.util.Set<Integer> seen = new java.util.HashSet<>();
+		boolean repeated = false;
+		for (IncidentObjective objective : structuredObjectives) {
+			if (objective != null && !seen.add(objective.getDisplayOrder())) {
+				repeated = true;
+			}
+		}
+		if (repeated) {
+			structuredObjectives.removeIf(java.util.Objects::isNull);
+			structuredObjectives.sort(java.util.Comparator.comparingInt(IncidentObjective::getDisplayOrder)
+					.thenComparing(IncidentObjective::getObjectiveId));
 		}
 	}
 

@@ -29,6 +29,9 @@ final class HostContext {
 	final RateLimiter statusPerAddress;
 	final RateLimiter reauthorizationPerAddress;
 	final RateLimiter reauthorizationGlobal;
+	final ShortPairing shortPairing;
+	final org.sarmanagement.icsforms.host.pairing.PairingSuites suites =
+			org.sarmanagement.icsforms.host.pairing.PairingSuites.defaults();
 	private volatile Instant periodClose;
 	private volatile int port;
 	private volatile int enrollmentPort;
@@ -56,6 +59,7 @@ final class HostContext {
 		this.statusPerAddress = new RateLimiter(config.statusRequestsPerAddress(), RATE_WINDOW, config.clock());
 		this.reauthorizationPerAddress = new RateLimiter(3, RATE_WINDOW, config.clock());
 		this.reauthorizationGlobal = new RateLimiter(20, RATE_WINDOW, config.clock());
+		this.shortPairing = new ShortPairing(config.clock());
 	}
 
 	/**

@@ -57,6 +57,46 @@ class IncidentServiceTest {
 	}
 
 	@Test
+	void readsIncidentAfterVetDirectoryIsReplacedWithoutLosingHistory() {
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			IncidentId incident = store.create(new AppData());
+			IncidentService service = service(store);
+			service.read(incident);
+			StoredIncident stored = store.loadSnapshot(incident);
+			String original = stored.data().getVetDirectory().getId();
+			org.sarmanagement.icsforms.model.VetDirectory imported = new org.sarmanagement.icsforms.model.VetDirectory();
+			VetFacility facility = new VetFacility();
+			facility.setName("Imported clinic");
+			imported.getFacilities().add(facility);
+			stored.data().setVetDirectory(imported);
+			store.save(incident, stored.data(), stored.revision());
+
+			IncidentService.ReadResult read = service.read(incident);
+			assertEquals(1, read.records().stream()
+					.filter(record -> record.key().type().endsWith(".VetDirectory")).count());
+			assertTrue(read.records().stream().noneMatch(record -> record.key().id().equals(original)));
+			assertEquals(imported.getId(), store.loadSnapshot(incident).data().getVetDirectory().getId());
+			assertTrue(service.changesSince(incident, 0).changes().stream()
+					.noneMatch(change -> change.key().id().equals(original)));
+			RecordVersionStore.IncidentState state = new FileRecordVersionStore(directory.resolve("incidents")).load(incident);
+			assertTrue(state.histories().stream().anyMatch(history -> history.key().id().equals(original)
+					&& history.retired()));
+
+			FileRecordVersionStore versions = new FileRecordVersionStore(directory.resolve("incidents"));
+			List<RecordVersionStore.RecordHistory> unretired = state.histories().stream()
+					.map(history -> new RecordVersionStore.RecordHistory(history.key(), history.parent(),
+							history.parentField(), history.versions()))
+					.toList();
+			versions.save(incident, new RecordVersionStore.IncidentState(state.cursor(), unretired,
+					state.changes(), state.receipts()));
+			assertEquals(1, service.read(incident).records().stream()
+					.filter(record -> record.key().type().endsWith(".VetDirectory")).count());
+			assertTrue(versions.load(incident).histories().stream()
+					.anyMatch(history -> history.key().id().equals(original) && history.retired()));
+		}
+	}
+
+	@Test
 	void rereadsIncidentWhoseOrgChartListsAgencyRepresentatives() {
 		AppData data = new AppData();
 		OrgChartEntry representative = new OrgChartEntry();
@@ -112,6 +152,101 @@ class IncidentServiceTest {
 				IncidentService.ChangeResult replayChanges = restarted.changesSince(incident, initial.cursor());
 				assertEquals(secondResult.cursor(), replayChanges.cursor(), replayChanges.changes().toString());
 			}
+		}
+	}
+
+	@Test
+	void independentCreationsOfTheSameRecordMergeUnlessBothFillTheSameField() {
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			IncidentId incident = store.create(new AppData());
+			IncidentService service = service(store);
+			OpenActionItem first = new OpenActionItem();
+			first.setItem("Check access");
+			AppData firstDocument = new AppData();
+			firstDocument.getOpenActionItems().add(first);
+			RecordIndex firstIndex = RecordIndex.of(firstDocument);
+			RecordIndex.RecordKey key = firstIndex.records().keySet().stream()
+					.filter(recordKey -> recordKey.type().equals(OpenActionItem.class.getName())).findFirst()
+					.orElseThrow();
+			IncidentService.RecordSubmission one = new IncidentService.RecordSubmission(key, null,
+					firstIndex.parentFieldOf(key), 0, IncidentService.Operation.CREATE, firstIndex.record(key));
+			assertTrue(service.submit(batch(incident, "device-one", one)).applied());
+
+			ObjectNode emptySameRecord = (ObjectNode) firstIndex.record(key).deepCopy();
+			emptySameRecord.put("item", "");
+			emptySameRecord.put("poc", "Added by device two");
+			IncidentService.RecordSubmission two = new IncidentService.RecordSubmission(key, null,
+					firstIndex.parentFieldOf(key), 0, IncidentService.Operation.CREATE, emptySameRecord);
+			assertTrue(service.submit(batch(incident, "device-two", two)).applied());
+			JsonNode merged = record(service.read(incident), key).content();
+			assertEquals("Check access", merged.path("item").asText());
+			assertEquals("Added by device two", merged.path("poc").asText());
+
+			ObjectNode clashing = (ObjectNode) firstIndex.record(key).deepCopy();
+			clashing.put("item", "Different item");
+			IncidentService.RecordSubmission three = new IncidentService.RecordSubmission(key, null,
+					firstIndex.parentFieldOf(key), 0, IncidentService.Operation.CREATE, clashing);
+			IncidentService.SubmissionResult result = service.submit(batch(incident, "device-three", three));
+			assertFalse(result.applied());
+			assertEquals("$record", result.conflicts().get(0).field());
+		}
+	}
+
+	@Test
+	void removalRetiresRecordKeepsHistoryAndLeavesDocument() {
+		AppData data = new AppData();
+		OrgChartEntry entry = new OrgChartEntry();
+		entry.setSection(OrgChartEntry.Section.COMMAND_STAFF);
+		entry.setTitle("Agency Representative");
+		entry.setName("Casey Lee");
+		data.getOrganizationalChart().getAssignmentList().getAgencyRepresentatives().add(entry);
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			IncidentId incident = store.create(data);
+			IncidentService service = service(store);
+			IncidentService.ReadResult initial = service.read(incident);
+			IncidentService.VersionedRecord target = initial.records().stream()
+					.filter(record -> record.key().id().equals(entry.getId())).findFirst().orElseThrow();
+			IncidentService.RecordSubmission removal = new IncidentService.RecordSubmission(target.key(),
+					target.parent(), target.parentField(), target.version(), IncidentService.Operation.REMOVE,
+					target.content());
+			IncidentService.SubmissionResult result = service.submit(batch(incident, "remove-one", removal));
+			assertTrue(result.applied());
+			assertTrue(service.read(incident).records().stream()
+					.noneMatch(record -> record.key().equals(target.key())));
+			assertTrue(store.loadSnapshot(incident).data().getOrganizationalChart().getAssignmentList()
+					.getAgencyRepresentatives().isEmpty());
+			RecordVersionStore.IncidentState state = new FileRecordVersionStore(directory.resolve("incidents"))
+					.load(incident);
+			assertTrue(state.histories().stream()
+					.anyMatch(history -> history.key().equals(target.key()) && history.retired()
+							&& "Casey Lee".equals(history.versions().get(0).content().path("name").asText())));
+			assertTrue(service.submit(batch(incident, "remove-two", removal)).applied());
+		}
+	}
+
+	@Test
+	void removalOfConcurrentlyEditedRecordIsReportedAsConflict() {
+		AppData data = new AppData();
+		OrgChartEntry entry = new OrgChartEntry();
+		entry.setSection(OrgChartEntry.Section.COMMAND_STAFF);
+		entry.setTitle("Agency Representative");
+		entry.setName("Casey Lee");
+		data.getOrganizationalChart().getAssignmentList().getAgencyRepresentatives().add(entry);
+		try (FileIncidentStore store = new FileIncidentStore(directory)) {
+			IncidentId incident = store.create(data);
+			IncidentService service = service(store);
+			IncidentService.ReadResult initial = service.read(incident);
+			IncidentService.VersionedRecord target = initial.records().stream()
+					.filter(record -> record.key().id().equals(entry.getId())).findFirst().orElseThrow();
+			service.submit(batch(incident, "edit", updateRecord(initial, target.key(), "name", "Sam Roe")));
+			IncidentService.RecordSubmission removal = new IncidentService.RecordSubmission(target.key(),
+					target.parent(), target.parentField(), target.version(), IncidentService.Operation.REMOVE,
+					target.content());
+			IncidentService.SubmissionResult result = service.submit(batch(incident, "remove", removal));
+			assertFalse(result.applied());
+			assertEquals("$record", result.conflicts().get(0).field());
+			assertTrue(service.read(incident).records().stream()
+					.anyMatch(record -> record.key().equals(target.key())));
 		}
 	}
 
@@ -461,7 +596,7 @@ class IncidentServiceTest {
 	}
 
 	@Test
-	void rejectsImmutableIdentityChangesAndCreateOfExistingRecord() {
+	void rejectsImmutableIdentityChangesAndTreatsIdenticalCreateOfExistingRecordAsSatisfied() {
 		try (FileIncidentStore store = new FileIncidentStore(directory)) {
 			IncidentId incident = store.create(new AppData());
 			IncidentService service = service(store);
@@ -478,8 +613,8 @@ class IncidentServiceTest {
 			IncidentService.RecordSubmission duplicate = new IncidentService.RecordSubmission(contextKey, null,
 					"incidentContext", 0, IncidentService.Operation.CREATE, existing);
 			IncidentService.SubmissionResult result = service.submit(batch(incident, "duplicate-create", duplicate));
-			assertFalse(result.applied());
-			assertEquals("$record", result.conflicts().get(0).field());
+			assertTrue(result.applied());
+			assertEquals(record(initial, contextKey).version(), record(service.read(incident), contextKey).version());
 		}
 	}
 

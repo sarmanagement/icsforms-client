@@ -152,7 +152,7 @@ class Ics206PanelTest {
 	}
 
 	@Test
-	void staleEditorFlushCannotOverwriteNewerMedicalPlanValue() throws Exception {
+	void localStoreEditorFlushKeepsTypedTextOverEarlierPanelValue() throws Exception {
 		AppData data = new AppData();
 		AppController controller = controller(data);
 		Ics206Panel panel = new Ics206Panel(controller);
@@ -162,12 +162,10 @@ class Ics206PanelTest {
 			AppController.EditorCommitBinding newer = controller.captureEditorCommitBinding();
 			assertTrue(controller.commitEditorIfCurrent(newer, AppController.LinkSource.NONE,
 					() -> data.getMedicalPlan().setEmergencyProcedures("Newer role-panel value")));
-			assertFalse(panel.pushToModel());
+			assertTrue(panel.pushToModel());
 		});
 
-		assertEquals("Newer role-panel value", data.getMedicalPlan().getEmergencyProcedures());
-		assertEquals("This medical plan editor is stale. Keep the draft and refresh before retrying.",
-				((javax.swing.JLabel) fieldValue(panel, "validation")).getText());
+		assertEquals("Older editor draft", data.getMedicalPlan().getEmergencyProcedures());
 	}
 
 	@Test

@@ -154,7 +154,9 @@ final class HostApiHandler implements HttpHandler {
 				}
 			}
 		}
-		context.registry.recordContact(device.deviceId());
+		java.net.InetSocketAddress remote = exchange.getRemoteAddress();
+		context.registry.recordContact(device.deviceId(),
+				remote == null || remote.getAddress() == null ? null : remote.getAddress().getHostAddress());
 		return device;
 	}
 
@@ -325,7 +327,7 @@ final class HostApiHandler implements HttpHandler {
 			HostPermission needed = switch (submission.operation()) {
 				case CREATE -> HostPermission.WRITE;
 				case UPDATE -> HostPermission.UPDATE;
-				case STRIKE_OUT -> HostPermission.DELETE;
+				case STRIKE_OUT, REMOVE -> HostPermission.DELETE;
 			};
 			if (!require(exchange, device, needed)) {
 				return;
@@ -413,6 +415,18 @@ final class HostApiHandler implements HttpHandler {
 		String method = exchange.getRequestMethod();
 		if ("/v1/admin/invitations".equals(path) && "POST".equals(method)) {
 			invitation(exchange);
+		} else if ("/v1/admin/pairing".equals(path) && "POST".equals(method)) {
+			openPairing(exchange);
+		} else if ("/v1/admin/pairing".equals(path) && "GET".equals(method)) {
+			pairingState(exchange);
+		} else if ("/v1/admin/pairing:enter".equals(path) && "POST".equals(method)) {
+			enterPairingCode(exchange);
+		} else if ("/v1/admin/pairing:cancel".equals(path) && "POST".equals(method)) {
+			context.shortPairing.cancel();
+			HostHttp.send(exchange, 200, HostHttp.MAPPER.createObjectNode().put("cancelled", true));
+		} else if ("/v1/admin/pairing:close".equals(path) && "POST".equals(method)) {
+			context.shortPairing.close();
+			HostHttp.send(exchange, 200, HostHttp.MAPPER.createObjectNode().put("open", false));
 		} else if (DEVICES.equals(path) && "GET".equals(method)) {
 			devices(exchange);
 		} else if ("/v1/admin/reauthorizations".equals(path) && "GET".equals(method)) {
@@ -546,6 +560,74 @@ final class HostApiHandler implements HttpHandler {
 	}
 
 	/**
+	 * Opens the in-person pairing window and returns where devices connect and the host identity to pin.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void openPairing(HttpExchange exchange) throws IOException {
+		Instant close = context.periodClose();
+		if (close != null && !context.config.clock().instant().isBefore(close)) {
+			HostHttp.error(exchange, 409, "period_closed",
+					"The operational period has closed; credentials cannot be issued.", false);
+			return;
+		}
+		Instant expiresAt = context.shortPairing.open(context.config.invitationLifetime());
+		ObjectNode body = HostHttp.MAPPER.createObjectNode();
+		body.put("expiresAt", expiresAt.toString());
+		body.put("host", context.config.advertisedHost());
+		body.put("port", context.port());
+		body.put("enrollmentPort", context.enrollmentPort());
+		body.put("fingerprint", context.authority.fingerprint());
+		HostHttp.send(exchange, 201, body);
+	}
+
+	/**
+	 * Reports whether the window is open and which device, if any, is waiting for its number to be entered.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void pairingState(HttpExchange exchange) throws IOException {
+		ObjectNode body = HostHttp.MAPPER.createObjectNode();
+		Instant expires = context.shortPairing.expiresAt();
+		body.put("open", expires != null);
+		if (expires != null) {
+			body.put("expiresAt", expires.toString());
+		}
+		String device = context.shortPairing.awaitingDevice();
+		if (device != null) {
+			body.put("awaitingDevice", device);
+		}
+		body.put("busy", context.shortPairing.busy());
+		HostHttp.send(exchange, 200, body);
+	}
+
+	/**
+	 * Checks the number the operator typed against the waiting device's number.
+	 *
+	 * @param exchange exchange to answer
+	 * @throws IOException when the response cannot be written
+	 */
+	private void enterPairingCode(HttpExchange exchange) throws IOException {
+		byte[] raw = HostHttp.readBody(exchange, HostProtocol.MAX_REQUEST_BYTES);
+		JsonNode request = raw == null ? null : HostHttp.parseObject(exchange, raw);
+		if (request == null) {
+			return;
+		}
+		String code;
+		try {
+			code = org.sarmanagement.icsforms.host.pairing.PairingCode.normalize(request.path("code").asText(""));
+		} catch (IllegalArgumentException malformed) {
+			HostHttp.error(exchange, 400, "invalid_request", malformed.getMessage(), false);
+			return;
+		}
+		ShortPairing.Entry entry = context.shortPairing.enter(code);
+		HostHttp.send(exchange, 200,
+				HostHttp.MAPPER.createObjectNode().put("result", entry.name().toLowerCase(java.util.Locale.ROOT)));
+	}
+
+	/**
 	 * Lists admitted devices with credential state and last contact.
 	 *
 	 * @param exchange exchange to answer
@@ -560,7 +642,8 @@ final class HostApiHandler implements HttpHandler {
 			CredentialState state = context.effectiveState(record);
 			array.add(HostHttp.MAPPER.valueToTree(new DeviceInfo(record.deviceId(), record.name(), record.issuedAt(),
 					record.expiresAt(), state, contact,
-					state == CredentialState.ACTIVE && contact != null && contact.isAfter(cutoff))));
+					state == CredentialState.ACTIVE && contact != null && contact.isAfter(cutoff),
+					context.registry.lastAddress(record.deviceId()).orElse(null))));
 		}
 		ObjectNode body = HostHttp.MAPPER.createObjectNode();
 		body.set("devices", array);

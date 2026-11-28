@@ -19,6 +19,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Verifies stable objectives, authoritative assignment links, and period history. */
 class IncidentObjectiveTest {
 	@Test
+	void objectivesAddedAtTheSamePositionByTwoDevicesAreSettledIdentically() {
+		IncidentObjective a = new IncidentObjective("A", 0);
+		IncidentObjective first = new IncidentObjective("Mine", 1);
+		IncidentObjective second = new IncidentObjective("Theirs", 1);
+		IncidentObjective[] byId = first.getObjectiveId().compareTo(second.getObjectiveId()) < 0
+				? new IncidentObjective[] {first, second}
+				: new IncidentObjective[] {second, first};
+		for (List<IncidentObjective> arrival : List.of(List.of(a, first, second), List.of(second, a, first))) {
+			a.setDisplayOrder(0);
+			first.setDisplayOrder(1);
+			second.setDisplayOrder(1);
+			Ics202Form form = new Ics202Form();
+			form.setStructuredObjectives(new ArrayList<>(arrival));
+
+			assertEquals(List.of(a, byId[0], byId[1]), form.getStructuredObjectives());
+			assertEquals(List.of(0, 1, 2), form.getStructuredObjectives().stream()
+					.map(IncidentObjective::getDisplayOrder).toList());
+		}
+	}
+
+	@Test
 	void migratesLegacyStringsWithoutGuessingLinks() throws Exception {
 		String json = """
 				{"objectives":["Protect responders","Search sector"],"commandEmphasis":""}

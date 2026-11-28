@@ -15,6 +15,7 @@ Contents:
   ID audit, T-card history rules and exit assessment
 - Live refresh and flicker work (PR #56)
 - Host-mode series Part 1 — stable record identity and record diff (issue #57)
+- Sharing reliability and data safety (PR #75 for issue #74)
 
 Note: the Stage 1 "T1" and "T2" gates are time gates (UTC and provenance) and
 are unrelated to the deployment topologies of the same names.
@@ -42,8 +43,9 @@ Tabs label edits the host accepted in the current window
 (`MainFrame.acceptedSnapshot`, `MainFrameSyncIndicatorsTest`).
 This is not a claim of overall replay safety or acceptance. Still open: the
 ACL branch has been exercised only through unit tests on Linux, not on a real
-Windows host; an oversized edit cannot be corrected, because records cannot be
-removed and batches are not split; per-view acceptance is not persisted across
+Windows host; an oversized edit cannot yet be corrected: records can now be removed (`REMOVE`,
+see "Sharing reliability and data safety") but `replaceRejected` does not use
+that and batches are not split; per-view acceptance is not persisted across
 restarts; the acceptance scenarios rebuild stores and windows in one JVM (only
 the journal commit is exercised across real process kills); and CodeQL on the
 final commit is outstanding.
@@ -621,3 +623,230 @@ connected windows, polling, failed-save recovery and local PDFs. The sharing
 tests arm slow transport before connecting and assert their bounded start wait.
 The [host plan](host-mode-plan.md#4-implement-the-production-remote-store-and-wire-both-uis)
 clarifies the numeric revision placeholder in remote JSON exports.
+
+## In-person pairing — issue #74
+
+Replaces copying a roughly 560-character invitation with a short number the
+device shows and the host operator types in (PR #75, in progress).
+
+* `host/pairing` holds the swappable `SasSuite` (`ecdh-p256-sha256-sas`: ECDH
+  P-256 with a hash commitment, giving a 6-character number of 4 digits and 2
+  letters, I and O excluded, about 22.5 bits) and `ChannelSuite` (HKDF-SHA-256
+  with AES-256-GCM) behind `PairingSuites`, plus `PairingCode`,
+  `PairingPayload` and `PairingTranscript`. All cryptography is the Bouncy
+  Castle FIPS module (`bc-fips`, `bcpkix-fips`) via `crypto/Fips`; nothing is
+  hand-written. The finite-field J-PAKE first draft was replaced because the
+  FIPS module has no PAKE and the exchange is in person.
+* `ShortPairing` is the single in-memory window (expiry, one awaiting device at
+  a time, burned after three failures). `EnrollmentHandler` serves
+  `/v1/pairing/short/begin`, `/open`, `/status` and `/finish`; `HostApiHandler`
+  serves `/v1/admin/pairing` (open, `GET` state), `:enter`, `:cancel` and
+  `:close`. Admission reuses the invitation path.
+* `HostClient.pairInPerson` supports typed entry (capturing trust) and a QR
+  payload (pinned fingerprint). `HostGateway.pair` accepts a long invitation,
+  `ICSFORMS-PAIR-3` QR text or `ICSFORMS-PAIR-1:host[:port]` typed entry, and a
+  `PairingListener` shows the number.
+* UI: **Start adding a device** in the Sharing dialog (address, fingerprint
+  QR, number entry); one connect form (address, advanced paste, find hosts)
+  and a `PairingCodeWindow` showing the number. mDNS discovery
+  (`HostDiscovery`, JmDNS with `slf4j-jdk14`) advertises only while a window is
+  open.
+* Packaging: the FIPS module checks its own jar, so it is not merged into the
+  shaded jar. It is embedded unmodified under `fips/`, and `Launcher` (the jar's
+  main class) extracts it to `~/.icsforms/lib/` and starts `App` through a
+  class loader over the extracted jars, so the release stays a single jar.
+* Tests: `PairingCoreTest`, `ShortPairingTest`, `QrImagesTest`.
+* Camera scanning, in-person re-pairing of revoked devices and approved-only FIPS mode and
+  bctls-fips are out of scope.
+
+The host dialog now fits the usable screen and scrolls on smaller displays.
+Host start no longer fails when a standalone edit replaces a single-valued
+record, such as importing a vet directory over the default one. The record
+history (`<incident>.records.json`) now marks a removed or replaced record as
+retired (`retiredAtCursor`) instead of leaving it live. Retired histories keep
+their versions and receipts for audit but are not projected into the document
+or served in reads and change feeds. Existing histories that already hold a
+stale record are repaired on the next read: a live history whose single-valued
+slot is occupied by a newer record is retired, along with its descendants.
+Remote reconstruction through the change feed does not yet receive explicit
+retirement entries.
+
+Entered data is saved without an explicit save action. An edited text field
+schedules the autosave when it loses focus and on each key release, and
+combo-box and check-box actions do the same, so remote devices see edits
+promptly and a pending edit no longer blocks remote refresh. Multi-field record
+dialogs (for example a T-card) still save when the dialog completes.
+
+The connect and host dialogs were reworked. `ConnectDialog` replaces the old
+form and the separate pairing-number window: it finds hosts on the network,
+offers advanced options (typed address, pasted invitation), shows the networks
+this device is on, reports progress, and shows the pairing number in large print
+with instructions in the same dialog. A device is identified by its host name
+and user name. The host dialog is wider, lists the networks the host is on and
+detected addresses, labels the address and ports clearly, formats times to the
+minute, labels the host certificate fingerprint as advanced, and has a Hide
+button that keeps sharing running. `NetworkInfo` supplies the network details.
+
+## Host dialog workflow polish and quiet autosave
+
+- Autosave failures are logged and retried quietly instead of opening a modal; remote refreshes keep table row selections by content.
+- The Host this incident dialog is now laid out as numbered steps (1 set up, 2 start sharing, 3 add a device), left-aligned, with the firewall remark beside the ports.
+- Detected addresses are de-duplicated (`NetworkInfo.distinct`): all IPv4 addresses plus one global IPv6 address per interface.
+- A "waiting device" list shows the device (host and user) wanting to join; sharing opens the pairing window automatically.
+- Revoke is enabled only when a paired device is selected, and is also in a right-click menu.
+
+## Sharing reliability and data safety (PR #75 for issue #74)
+
+Work on the `short-code-pairing` branch while making host sharing and two-machine
+LAN synchronisation dependable. The governing rules: every entry is saved
+immediately, silently and in the background; nothing a user types is lost or
+blocked; and one instance making a sequence of edits to a data object is not a
+conflict, nor are two instances filling separate empty fields.
+
+- **Typed input is never lost.** Autosave is deferred while a field is being
+  edited, a recovery copy of unsaved drafts is kept, and an editor flush
+  failure no longer stops saving (`AppController.captureSave`). Nothing takes
+  focus unless it is an explicit workflow step.
+- **Legacy objective text** no longer invents phantom objective records.
+- **Stable default identity.** Default T-card rack headers have stable IDs and
+  the rack shows one column per label (`AppController.defaultHeaderId`). The
+  ICS 203 assignment list (`Ics203Form`) is now `Identified`, following the
+  `MedicalPlan` pattern, because its agency representatives and divisions
+  could not be created through the host (a record nested under a non-record
+  parent is a data-model defect). Legacy files get a random id until saved.
+- **History-preserving removal.** `IncidentService.Operation.REMOVE` retires a
+  record at a new cursor and keeps every version for audit; a record changed
+  since the submitter's base version becomes a `$record` conflict. Retired
+  histories are not projected (`RecordDocumentBridge.remove`). The client
+  (`RemoteIncidentStore`) emits REMOVE for removed records, no longer rejects
+  removals, and handles it in replay and conflict review. Documented in
+  `docs/host-api-contract.md`; `HostApiHandler` maps it to the delete
+  permission.
+- **Independent creates merge.** Two writers creating the same stable-ID
+  record merge field by field (`IncidentService.mergeIndependentCreates`); only
+  a field both filled with different non-empty values conflicts. The same merge
+  applies in `RemoteIncidentStore.dependentConflicts` and `resolvePending`.
+- **Editor revision gate limited to remote-backed stores.** A local store has
+  one writer, so `AppController.revisionCurrent` never rejects a commit there;
+  against a remote store a full editor commit after a newer shared commit is
+  still rejected. Binding-identity checks continue to protect replaced models.
+- **Event-thread interruption.** `AppController.awaitOwner` keeps waiting for
+  the persistence worker when the event thread is interrupted; previously
+  `workerIo` returned null and the controller threw a `NullPointerException`
+  (regression test in `AppControllerAsyncPersistenceTest`). What interrupted
+  the thread in the original local failure is unknown.
+- **Tests and CI speed.** Real mDNS registration cost seconds per host session;
+  surefire now sets `icsforms.discovery=none` (`HostDiscovery.create`), cutting
+  `HostSharingDialogTest` from about 76 s to 4 s and `ShortPairingTest` from
+  45 s to 10 s. The dialog tests use a 50 ms stop grace
+  (`HostSharingDialog.setStopGrace`) and a shared `@BeforeEach` harness, and
+  `stopKeepsHostingWhenFlushOrLocalSwitchFails` no longer depends on an exact
+  message count (the host start also requests an invitation that can report
+  its own failure). A full displayed local build runs in about 6.5 minutes,
+  down from 8.5.
+- **Stable identity for default children.** A child stored inline by an earlier
+  build (the organizational chart's ICS 203 assignment list) and any default
+  single-valued child the host holds no record for now get an identity derived
+  from the parent and field (`RecordDocumentBridge.adoptInlineChild`,
+  `stabilizeDefaults`, called after a full client projection in
+  `RemoteIncidentStore.build`). Previously every rebuild minted a random id,
+  which looked like a replaced child and produced a self-conflict in the host's
+  own journal. Merging duplicate T-cards now repoints SAR task and ICS 215
+  links to the retained card (`AppController.repointTCardLinks`).
+- **Retired single-valued children.** When the host retires a record held in a
+  single-valued field (for example the ICS 203 assignment list replaced during
+  conflict resolution) and the stored document still holds it, projection now
+  empties the field before attaching the live replacement
+  (`RecordDocumentBridge.clearRetiredOccupant`). Previously the host failed to
+  read its own incident ("Parent field already contains a record"), so the
+  loopback journal could not acknowledge the accepted batch and its queue never
+  drained. A stale conflict now refreshes itself instead of failing.
+- **Outbox review wording.** Choices read "Keep my edit" / "Keep the stored
+  copy", with keep-all buttons, and the list no longer shows the internal
+  `offline-` operation prefix.
+- **Host dialog pairing flow.** The pairing button sits beside the
+  "This Host: address:port until hh:mm" and waiting lines, reads "Devices can
+  join" (disabled) while the window is open and "Allow devices to join" once it
+  closes; the start button reads "Sharing" while hosting. Revoked devices are
+  hidden unless "Show revoked devices" is ticked. The long invitation and the
+  certificate fingerprint are in a collapsed "Advanced" section, with a copy
+  button once an invitation exists. The window opens larger so the first view
+  needs no scroll bars on a screen of 800 px height or more.
+- **Dialogs fit the screen.** `ScreenFit` makes every dialog resizable, clamps
+  it to the usable screen area (so buttons stay visible at `uiScale=2`), and
+  scrolls content that cannot fit. It is installed at startup for all dialogs
+  and used by the `UiSupport` resizable option and confirm dialogs.
+- **Plan reviews reach every view.** Role panels re-bind to the latest incident
+  on each change event (they ignored events after the first remote refresh), and
+  the review strips embedded in the ICS 205, ICS 206, canine medical and safety
+  tabs refresh with their panel. Review assertions are covered by the
+  host-and-client sync tests.
+
+Still open: the disconnected-entry follow-ups in issue #72 (including using
+`REMOVE` for oversized-edit recovery), the stuck-tab report whose cause was
+never pinned down (diagnostic logging was added in `MainFrame.pushToModel`),
+auditing other panels for direct deletes and random-id defaults in shared mode,
+whether the displayed CI lane still needs sharding, an in-app font scale
+setting, and CodeQL on the final commit.
+
+## Concurrent creation conflicts
+
+- Two devices that each create the child of a single-valued field (for example
+  the organizational chart's assignment list) no longer make the host fail its
+  projection with "Parent field already contains a record". The record whose
+  history began later is kept and the earlier one, with its descendants, is
+  retired with all versions kept.
+- Two devices that give different SAR tasks the same Assignment/Team number:
+  the task editor refuses a number another task already uses and suggests the
+  next free one, and `IncidentValidator` flags the later of any duplicates that
+  still arrive through sync so a person can renumber one. Neither task is
+  discarded.
+
+## Parallel-entry conflicts, continued
+
+- A task editor that is open when another device saves the same Assignment/Team
+  number now shows the conflict live and offers the next free number in the same
+  pattern (`G1` becomes `G2`).
+- Objectives added at the same position by two devices are settled silently and
+  identically on every device (`Ics202Form`).
+- ICS 204 rows linked to a SAR task show the task's number read-only, since the
+  task already overwrote it on sync; unlinked 204 rows reusing a task number are
+  flagged by the validator.
+- Radio channel numbers repeated within a zone are flagged on the ICS 205 tab
+  and by the validator, and saving one prompts to use the next free number, keep
+  both, or keep editing (`RadioChannelNumbers`).
+- Closing, switching or stopping sharing now saves open detached editors first
+  and warns only when one cannot be saved automatically (for example a modal
+  dialog).
+
+## Host dialog tuning and connection troubleshooting
+
+- While devices can join, the host dialog shows "Devices can join this Host:
+  address:port until hh:mm" in place of the disabled button, and the button
+  returns when the window closes. The QR code moved to Advanced, with guidance.
+- The long invitation is a secret: only its `ICSFORMS-INVITE-n:` marker is shown
+  and the rest is masked. "Copy to clipboard" copies the full text. Advanced
+  explains when to use it instead of the QR / join window.
+- Paired devices have a Details button and context-menu item. The host records
+  the address of each device's last authenticated request (in memory only,
+  `DeviceInfo.lastAddress`).
+- The networks list marks each interface wireless or wired where the operating
+  system says so (`NetworkInfo.kindOf`).
+- The Connect dialog has Troubleshoot, which checks name resolution, ping and the
+  pairing and data ports (`HostReachability`).
+- Canine medical plan: linked veterinary personnel lists only the linked people,
+  with an Add T-cards picker and Remove; links to missing cards are kept.
+
+## Connection conflict messages, Communications network footer, Sharing menu roles
+
+- A host 409 "busy" (another device is pairing) now reaches the client as a clear "try again" message, and other 409s include the host's reason.
+- Connect > Troubleshoot explains the last failed attempt (`HostReachability.explainFailure`) before the network checks.
+- The Communications panel (Plan and Console) has a footer listing networks (wired/wireless), the sharing state, and a Host this incident / Show host window button when this device can host.
+- Sharing menu items are enabled per role (standalone, host, client) via `MainFrame.sharingMenuState`.
+
+- The Communications footer now reports sharing and database facts instead of a full network list: when hosting, the IPv4 interfaces (wired/wireless) it listens on, whether pairing is open, connected/paired/revoked counts, up to six active devices and the host fingerprint; on a client, the host address and fingerprint. The Communications window is taller (clamped to the screen).
+- The unfinished render-parity oracle test was removed from the repository (it failed CI); it is kept outside the tree until the organizational-chart projection failure is fixed.
+
+- The host's time zone governs the incident: when hosting starts, a "use system time zone" incident is pinned to the host's explicit zone, which reaches clients through the synchronized root settings. A client's Date/Time Zone menu is disabled ("set by the host"), and while hosting, choosing the system zone re-pins the host's zone. The client footer also shows the device's own interfaces and the host-set zone.
+
+- A connected client's Sharing menu no longer offers "Connect to a host…"; it has an enabled "Disconnect from host…" that asks for confirmation (noting unsent outbox changes) and then closes the window through the normal save-and-close path.

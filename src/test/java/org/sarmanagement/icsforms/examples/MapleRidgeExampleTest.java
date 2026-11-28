@@ -764,6 +764,7 @@ class MapleRidgeExampleTest {
 		data.setIncidentId(id("incident"));
 		data.setOriginNodeId(id("origin"));
 		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getOrganizationalChart(), id("organizational-chart"));
+		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getOrganizationalChart().getAssignmentList(), id("assignment-list"));
 		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getForm201(), id("ics201"));
 		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getForm202(), id("ics202"));
 		org.sarmanagement.icsforms.TestIdentitySupport.assign(data.getMedicalPlan(), id("medical-plan"));

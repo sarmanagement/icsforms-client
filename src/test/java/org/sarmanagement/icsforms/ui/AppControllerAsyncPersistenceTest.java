@@ -29,6 +29,45 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Detached persistence must keep Swing responsive without losing concurrent local edits. */
 class AppControllerAsyncPersistenceTest {
 	@Test
+	void interruptedEventThreadStillWaitsForTheWorkerResult() throws Exception {
+		try (BlockingStore store = new BlockingStore(directory()) {
+			/** {@inheritDoc} */
+			@Override
+			public synchronized java.util.List<org.sarmanagement.icsforms.persistence.IncidentSummary> list() {
+				try {
+					Thread.sleep(400);
+				} catch (InterruptedException exception) {
+					Thread.currentThread().interrupt();
+				}
+				return super.list();
+			}
+		}) {
+			AppData live = new AppData();
+			IncidentId id = store.create(live);
+			try (AppController controller = controller(store, id, live)) {
+				Thread[] edt = new Thread[1];
+				SwingUtilities.invokeAndWait(() -> edt[0] = Thread.currentThread());
+				Thread interrupter = new Thread(() -> {
+					try {
+						Thread.sleep(150);
+					} catch (InterruptedException exception) {
+						return;
+					}
+					edt[0].interrupt();
+				});
+				boolean[] result = new boolean[1];
+				interrupter.start();
+				SwingUtilities.invokeAndWait(() -> {
+					result[0] = controller.canReusePlans();
+					Thread.interrupted();
+				});
+				interrupter.join();
+				assertFalse(result[0]);
+			}
+		}
+	}
+
+	@Test
 	void queuedSnapshotRebasesOnTheAcceptedTokenAndPersistsTheNewestEdit() throws Exception {
 		try (BlockingStore store = new BlockingStore(directory())) {
 			AppData live = new AppData();
@@ -55,6 +94,57 @@ class AppControllerAsyncPersistenceTest {
 				assertEquals("Second snapshot", store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
 				assertEquals(store.loadSnapshot(id).revision(), controller.getPersistenceStatus().revision());
 				assertFalse(controller.isDirty());
+			}
+		}
+	}
+
+	@Test
+	void failedEditorFlushStillSavesCommittedModel() throws Exception {
+		try (BlockingStore store = new BlockingStore(directory())) {
+			AppData live = new AppData();
+			IncidentId id = store.create(live);
+			try (AppController controller = controller(store, id, live)) {
+				controller.setPlanReuseEditorCallbacks(() -> {
+					throw new IllegalStateException("editor is stale");
+				}, () -> { });
+				CountDownLatch completed = new CountDownLatch(1);
+				SwingUtilities.invokeAndWait(() -> {
+					live.getIncidentContext().setIncidentName("Committed before flush failed");
+					controller.markDirty();
+					controller.saveAsync(AppController.LinkSource.NONE, failure -> {
+						assertNull(failure);
+						completed.countDown();
+					});
+				});
+				await(completed);
+				assertEquals("Committed before flush failed",
+						store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
+			}
+		}
+	}
+
+	@Test
+	void autosaveWaitsWhileEntryIsInProgressAndThenSaves() throws Exception {
+		try (BlockingStore store = new BlockingStore(directory())) {
+			AppData live = new AppData();
+			IncidentId id = store.create(live);
+			try (AppController controller = controller(store, id, live)) {
+				java.util.concurrent.atomic.AtomicBoolean typing = new java.util.concurrent.atomic.AtomicBoolean(true);
+				SwingUtilities.invokeAndWait(() -> {
+					controller.setAutosaveDeferral(typing::get);
+					live.getIncidentContext().setIncidentName("Typed while focused");
+					controller.markDirty();
+				});
+				Thread.sleep(2_500);
+				assertNotEquals("Typed while focused",
+						store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
+				typing.set(false);
+				long deadline = System.currentTimeMillis() + 10_000;
+				while (System.currentTimeMillis() < deadline && !"Typed while focused"
+						.equals(store.loadSnapshot(id).data().getIncidentContext().getIncidentName())) {
+					Thread.sleep(100);
+				}
+				assertEquals("Typed while focused", store.loadSnapshot(id).data().getIncidentContext().getIncidentName());
 			}
 		}
 	}
@@ -842,7 +932,7 @@ class AppControllerAsyncPersistenceTest {
 	}
 
 	/** Real local store with a controllable worker write boundary. */
-	static final class BlockingStore extends FileIncidentStore {
+	static class BlockingStore extends FileIncidentStore {
 		private CountDownLatch entered = new CountDownLatch(0);
 		private CountDownLatch release = new CountDownLatch(0);
 		private volatile AppData savedDocument;

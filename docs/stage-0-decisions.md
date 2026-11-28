@@ -89,7 +89,7 @@ demonstrate a network-backed store. See the
 
 ## Credential and admission decisions (issue #59)
 
-- Mutual TLS with a host-run CA; the device generates its key pair and the host signs its certificate. The JDK TLS/HTTP server and Jackson are used. BouncyCastle (`bcpkix`/`bcprov` 1.87) is added solely because the JDK has no public API to build X.509 certificates or parse PKCS#10 requests; no custom cryptography is written.
+- Mutual TLS with a host-run CA; the device generates its key pair and the host signs its certificate. The JDK TLS/HTTP server and Jackson are used. The Bouncy Castle FIPS module (`bc-fips`/`bcpkix-fips`) is added because the JDK has no public API to build X.509 certificates or parse PKCS#10 requests, and for the in-person pairing exchange (#74); no custom cryptography is written. The module checks its own jar, so it is embedded unmodified in the application jar and extracted by `Launcher` at first start.
 - Invitations are short-lived, single-use, scoped to the shared incident, and carry host address plus the CA fingerprint so the client pins the host.
 - Credentials last 72 hours by default and also expire at period close/demobilisation when a cutoff is set. They are individually revocable and revocations persist across restarts.
 - Pilot permissions: connect, read, write, update, delete at incident granularity only. No roles or operator claim.

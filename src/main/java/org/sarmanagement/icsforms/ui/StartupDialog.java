@@ -68,6 +68,7 @@ public class StartupDialog extends JDialog {
 	private boolean promotePlannedIcs215;
 	private String chosenInvitation = "";
 	private String chosenDeviceName = "";
+	private Object[] chosenConnection;
 
 	/**
 	 * Creates the startup dialog.
@@ -273,24 +274,31 @@ public class StartupDialog extends JDialog {
 	}
 
 	/**
-	 * Asks for the host invitation and a device name.
+	 * Runs the connect dialog, which pairs with the host and loads the first snapshot while showing progress.
 	 *
-	 * @return true when the operator supplied an invitation and confirmed.
+	 * @return true when a connection was made.
 	 */
 	private boolean askInvitation() {
-		javax.swing.JTextArea invitation = new javax.swing.JTextArea(4, 48);
-		invitation.setLineWrap(true);
-		javax.swing.JTextField device = new javax.swing.JTextField(System.getProperty("user.name", "device"), 20);
-		Object[] form = {"Invitation from the host:", new javax.swing.JScrollPane(invitation), "Device name:",
-				device};
-		if (javax.swing.JOptionPane.showConfirmDialog(this, form, "Connect to a host",
-				javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE)
-				!= javax.swing.JOptionPane.OK_OPTION || invitation.getText().isBlank()) {
+		java.nio.file.Path home = java.nio.file.Path.of(System.getProperty("user.home"));
+		Object[] connection = ConnectDialog.show(this, (text, name, listener) -> {
+			chosenInvitation = text;
+			chosenDeviceName = name;
+			return MainFrame.connectFromStartup(text, name, home, listener);
+		});
+		if (connection == null) {
 			return false;
 		}
-		chosenInvitation = invitation.getText();
-		chosenDeviceName = device.getText().strip();
+		chosenConnection = connection;
 		return true;
+	}
+
+	/**
+	 * Returns the connection made by the connect dialog for {@link StartupAction#CONNECT_TO_HOST}.
+	 *
+	 * @return the store and first snapshot, or null when none was made.
+	 */
+	public Object[] getChosenConnection() {
+		return chosenConnection;
 	}
 
 	/**

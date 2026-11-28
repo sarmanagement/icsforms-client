@@ -47,7 +47,7 @@ public class CommunicationsRolePanel extends JPanel {
 	private final Runnable importCsv;
 	private final Runnable exportCsv;
 	private final Runnable addIcpLogEntry;
-	private final AppController.IncidentBinding binding;
+	private volatile AppController.IncidentBinding binding;
 	private final JLabel banner = new JLabel();
 	private final RolePlanStatusBadges planBadges;
 	private final JTextField filter = new JTextField(22);
@@ -71,6 +71,7 @@ public class CommunicationsRolePanel extends JPanel {
 	private final CardLayout viewLayout = new CardLayout();
 	private final JPanel views = new JPanel(viewLayout);
 	private final CommunicationsConsolePanel console;
+	private final NetworkStatusPanel networkStatus;
 	private final IncidentClockPanel clock;
 	private RadioChannel baseline;
 	private String loadedChannelId = "";
@@ -102,6 +103,21 @@ public class CommunicationsRolePanel extends JPanel {
 	 */
 	public CommunicationsRolePanel(AppController controller, Consumer<WorkspaceDestination> navigator,
 			Runnable importCsv, Runnable exportCsv, Runnable addIcpLogEntry) {
+		this(controller, navigator, importCsv, exportCsv, addIcpLogEntry, SharingControls.NONE);
+	}
+
+	/**
+	 * Creates the Communications Unit panel with an ICP activity-log action and this window's sharing controls.
+	 *
+	 * @param controller incident controller.
+	 * @param navigator typed full-workspace navigator.
+	 * @param importCsv established native/CHIRP import workflow.
+	 * @param exportCsv established native export workflow.
+	 * @param addIcpLogEntry opens the shared ICP 214 entry workflow.
+	 * @param sharing sharing state shown in the footer and the host action.
+	 */
+	CommunicationsRolePanel(AppController controller, Consumer<WorkspaceDestination> navigator, Runnable importCsv,
+			Runnable exportCsv, Runnable addIcpLogEntry, SharingControls sharing) {
 		super(new BorderLayout(8, 8));
 		this.controller = controller;
 		this.navigator = navigator;
@@ -117,10 +133,13 @@ public class CommunicationsRolePanel extends JPanel {
 		views.add(buildBody(), "Plan");
 		views.add(console, "Console");
 		add(views, BorderLayout.CENTER);
+		networkStatus = new NetworkStatusPanel(sharing);
+		add(networkStatus, BorderLayout.SOUTH);
 		installListeners();
 		refreshFromModel();
 		subscription = controller.addIncidentChangeListener(change -> {
-			if (controller.isCurrent(binding)) {
+			if (controller.isCurrent(change.binding())) {
+				binding = change.binding();
 				refreshFromModel();
 			}
 		});
@@ -131,6 +150,7 @@ public class CommunicationsRolePanel extends JPanel {
 		subscription.close();
 		console.dispose();
 		clock.dispose();
+		networkStatus.dispose();
 	}
 
 	/**
@@ -270,7 +290,7 @@ public class CommunicationsRolePanel extends JPanel {
 
 		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, inventory, new JScrollPane(details));
 		split.setResizeWeight(0.55);
-		split.setPreferredSize(new Dimension(1120, 680));
+		split.setPreferredSize(new Dimension(1120, 760));
 		return split;
 	}
 

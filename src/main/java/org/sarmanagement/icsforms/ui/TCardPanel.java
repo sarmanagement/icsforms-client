@@ -637,6 +637,34 @@ public class TCardPanel extends JPanel {
 		rackScroll.repaint();
 	}
 
+	/** Canonical left-to-right order of the standard rack columns. */
+	private static final List<String> STANDARD_HEADER_ORDER = List.of("icp", "ordered", "available", "assigned",
+			"out of service", "enroute");
+
+	/**
+	 * Collects the HEADER cards that become rack columns. Duplicate labels, which independent default creation can
+	 * leave behind in a shared incident, collapse to the first card without altering the stored cards. The standard
+	 * columns come first in canonical order, because a shared incident does not preserve card order; any other
+	 * columns follow in stored order.
+	 *
+	 * @param cards all T-cards in stored order.
+	 * @return one HEADER card per distinct label, in display order.
+	 */
+	static List<TCard> distinctRackHeaders(List<TCard> cards) {
+		java.util.Map<String, TCard> byLabel = new java.util.LinkedHashMap<>();
+		for (TCard card : cards) {
+			if (card.getCardType() == TCardType.HEADER) {
+				byLabel.putIfAbsent(card.getDisplayLabel().trim().toLowerCase(java.util.Locale.ROOT), card);
+			}
+		}
+		List<TCard> headers = new ArrayList<>(byLabel.values());
+		headers.sort(java.util.Comparator.comparingInt(card -> {
+			int index = STANDARD_HEADER_ORDER.indexOf(card.getDisplayLabel().trim().toLowerCase(java.util.Locale.ROOT));
+			return index < 0 ? STANDARD_HEADER_ORDER.size() : index;
+		}));
+		return headers;
+	}
+
 	/**
 	 * Builds a rack panel where each HEADER card is a column heading and resource
 	 * cards are placed into the column whose label best matches the card's status
@@ -650,12 +678,7 @@ public class TCardPanel extends JPanel {
 	 */
 	private JPanel buildHeaderBasedRack(List<TCard> cards) {
 		// Collect HEADER cards in order.
-		List<TCard> sectionHeaders = new ArrayList<>();
-		for (TCard card : cards) {
-			if (card.getCardType() == TCardType.HEADER) {
-				sectionHeaders.add(card);
-			}
-		}
+		List<TCard> sectionHeaders = distinctRackHeaders(cards);
 
 		// For each HEADER build a mutable child list.
 		List<List<TCard>> sectionCards = new ArrayList<>();
@@ -1565,6 +1588,7 @@ public class TCardPanel extends JPanel {
 					// Replace a with the merged card and remove b.
 					tableModel.replaceCard(i, merged);
 					tableModel.removeCard(j);
+					controller.repointTCardLinks(b.getResourceId(), merged.getResourceId());
 					mergedCount++;
 					continue outer; // restart after structural change
 				}

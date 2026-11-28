@@ -54,7 +54,30 @@ class CanineMedicalPanelTest {
 	}
 
 	@Test
-	void staleCanineEditorInputCannotOverwriteNewerModelRevision() throws Exception {
+	void linkedVeterinaryPersonnelListsOnlyLinkedPeopleAndKeepsMissingLinks() throws Exception {
+		AppData data = new AppData();
+		org.sarmanagement.icsforms.model.TCard linked = new org.sarmanagement.icsforms.model.TCard();
+		linked.setPersonName("Linked Vet");
+		org.sarmanagement.icsforms.model.TCard other = new org.sarmanagement.icsforms.model.TCard();
+		other.setPersonName("Unlinked Person");
+		data.getTCards().addAll(List.of(linked, other));
+		data.getCanineMedicalPlan().setVeterinaryPersonnelResourceIds(List.of(linked.getResourceId(), "gone"));
+		AppController controller = IncidentStoreTestFixtures.controller(data);
+		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
+
+		SwingUtilities.invokeAndWait(() -> {
+			javax.swing.DefaultListModel<?> model = (javax.swing.DefaultListModel<?>) fieldValue(panel,
+					"linkedPersonnel");
+			assertEquals(2, model.size());
+			assertTrue(model.get(0).toString().startsWith("Linked Vet"));
+			assertTrue(model.get(1).toString().contains("missing personnel T-card gone"));
+			assertEquals(List.of(linked.getResourceId(), "gone"),
+					data.getCanineMedicalPlan().getVeterinaryPersonnelResourceIds());
+		});
+	}
+
+	@Test
+	void localStoreCanineEditorInputIsNeverBlockedByNewerModelRevision() throws Exception {
 		AppData data = new AppData();
 		AppController controller = IncidentStoreTestFixtures.controller(data);
 		CanineMedicalPanel panel = new CanineMedicalPanel(controller, tempDirectory);
@@ -65,8 +88,8 @@ class CanineMedicalPanelTest {
 			controller.markDirty();
 			data.getCanineMedicalPlan().setEmergencyProcedures("Newer role-panel value");
 			procedures.setText("Stale full-editor value");
-			assertEquals("Newer role-panel value", data.getCanineMedicalPlan().getEmergencyProcedures());
-			assertTrue(status.getText().contains("is stale"));
+			assertEquals("Stale full-editor value", data.getCanineMedicalPlan().getEmergencyProcedures());
+			assertFalse(status.getText().contains("is stale"));
 			controller.close();
 		});
 	}
