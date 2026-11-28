@@ -559,15 +559,15 @@ implemented coverage from outstanding acceptance.
 
 | # | Item | Status in this follow-up |
 |---|---|---|
-| 1 | Correct oversized rejected edits | In progress. Corrected drafts can be archived and resubmitted; operator recovery across all record types still needs verification. |
-| 2 | Rejected-edit controls in the UI | In progress. Outbox review adds retry and archive-before-discard actions; acceptance remains pending. |
+| 1 | Correct oversized rejected edits | In progress. Rejected heads can be corrected and replaced, or split automatically into bounded edits that keep cross-referenced records together; the original queue is archived first. Dependent groups that cannot be split safely are left intact, so a general recovery path for them remains open. |
+| 2 | Rejected-edit controls in the UI | Implemented and tested: retry, archive-before-discard (the queue is rechecked after editor drafts are saved) and split; ambiguous submissions remain protected. |
 | 3 | Persist the per-view "accepted" label | In progress. Receipt-backed component attribution is persisted; final validation remains pending. |
 | 4 | Degraded-storage notice in `HostSharingDialog` | In progress. The dialog displays the loopback notice, including fallback; final validation remains pending. |
 | 5 | Real-process acceptance tests | In progress. Killed-client restart covers dependent edits, clues, activity logs, T-cards, ICS planning data and a lost response. Two clients conflicting on the same record still need real-process coverage. |
 | 6 | Automated platform verification | In progress. An opt-in matrix and tagged filesystem test are added; runner results have not yet been recorded. |
 | 7 | Duplicate review end to end | In progress. Two-client offline duplicate review coverage is added; final validation remains pending. |
 | 8 | T-card merge end to end | In progress. Active activity-log, veterinary-personnel and debriefing-supervisor links are repointed and covered by a local persistence test. Two-client offline merge, complete reference coverage, merge provenance and concurrent-edit acceptance remain outstanding. |
-| 9 | Demobilisation credential cutoff | In progress. Revocation retains an owner-only outbox export at the journal location before repair and replay; final validation remains pending. |
+| 9 | Demobilisation credential cutoff | In progress. Revocation retains an owner-only outbox export at the journal location before repair and again before replay; edits saved while an approval is pending are held for manual recovery. Provenance after conflict resolution and interrupted approvals remain open. |
 
 ### Platform verification results (item 6)
 

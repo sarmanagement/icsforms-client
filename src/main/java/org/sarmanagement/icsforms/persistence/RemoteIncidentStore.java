@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.sarmanagement.icsforms.host.HostProtocol;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.model.RecordDiff;
@@ -56,10 +57,9 @@ import java.util.UUID;
  * Network and local journal operations are synchronized and must run off the Swing event-dispatch thread.
  *
  * <p>The store serves one shared incident. Creating, deleting and importing incidents are administrative actions on
- * the host and fail explicitly with {@link UnsupportedOperationException}. Records cannot be physically removed
- * through the service, so a save that removes a record fails with {@link StoreValidationException}; strike out
- * instead. Every method that talks to the host performs blocking network I/O and must not be called on the Swing
- * event-dispatch thread.
+ * the host and fail explicitly with {@link UnsupportedOperationException}. Removed records are submitted as
+ * record removals to the host. Every method that talks to the host performs blocking network I/O and must not be
+ * called on the Swing event-dispatch thread.
  */
 public final class RemoteIncidentStore implements IncidentStore {
 	/** Message of the validation failure raised when the host moved on after a conflict was recorded. */
@@ -73,6 +73,8 @@ public final class RemoteIncidentStore implements IncidentStore {
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 			.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 			.addMixIn(Provenance.class, Provenance.LocalStorageMixin.class);
+	private static final ObjectMapper WIRE_MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
+			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
 	/**
 	 * The snapshot a token names: the document handed to the caller, the host records it was built from and the
@@ -125,10 +127,11 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 * @param conflicts retained field conflicts
 	 * @param rejection rejection explanation, or null
 	 * @param reviewBase original operator-observed base for detecting unseen remote changes
+	 * @param definitivelyRejected a first-attempt validation rejection with no earlier ambiguous submission
 	 */
 	public record PendingOperation(String operationId, AppData before, AppData draft,
 			IncidentService.RecordBatch batch, PendingStatus status, List<IncidentService.FieldConflict> conflicts,
-			String rejection, AppData reviewBase) {
+			String rejection, AppData reviewBase, boolean definitivelyRejected) {
 		/**
 		 * Detaches mutable documents and conflict collection.
 		 */
@@ -153,7 +156,25 @@ public final class RemoteIncidentStore implements IncidentStore {
 		public PendingOperation(String operationId, AppData before, AppData draft,
 				IncidentService.RecordBatch batch, PendingStatus status, List<IncidentService.FieldConflict> conflicts,
 				String rejection) {
-			this(operationId, before, draft, batch, status, conflicts, rejection, before);
+			this(operationId, before, draft, batch, status, conflicts, rejection, before, false);
+		}
+
+		/**
+		 * Creates an operation without a definitive first-attempt rejection.
+		 *
+		 * @param operationId stable operation identifier
+		 * @param before document preceding the edit
+		 * @param draft edited document
+		 * @param batch materialized batch, or null
+		 * @param status replay status
+		 * @param conflicts retained conflicts
+		 * @param rejection rejection explanation, or null
+		 * @param reviewBase original operator-observed base
+		 */
+		public PendingOperation(String operationId, AppData before, AppData draft,
+				IncidentService.RecordBatch batch, PendingStatus status, List<IncidentService.FieldConflict> conflicts,
+				String rejection, AppData reviewBase) {
+			this(operationId, before, draft, batch, status, conflicts, rejection, reviewBase, false);
 		}
 
 		/** @return detached document preceding the edit */
@@ -188,6 +209,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	private final IncidentId incident;
 	private DisconnectedStateFile stateFile;
 	private DisconnectedStateFile.State state;
+	private DisconnectedStateFile.Cutoff cutoff = new DisconnectedStateFile.Cutoff(null, List.of(), List.of());
 	private String authorityFingerprint;
 	private String storageNotice;
 	private final RecordDocumentBridge bridge = new RecordDocumentBridge();
@@ -226,7 +248,8 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 * Enables durable disconnected operation, failing over between candidate cache locations. A location that
 	 * already holds this incident's journal is preferred; otherwise the first location whose file system can be
 	 * restricted to the owner is used, so that a FAT or exFAT drive does not cost the operator offline editing.
-	 * A fallback or connected-only operation is reported by {@link #disconnectedStorageNotice()}.
+	 * When a candidate cannot be secured, {@link #disconnectedStorageNotice()} reports use of a protected fallback.
+	 * Only when no candidate can be secured does the store continue connected-only.
 	 *
 	 * @param gateway authenticated host transport
 	 * @param incident shared incident
@@ -242,12 +265,17 @@ public final class RemoteIncidentStore implements IncidentStore {
 		StorageNotSecurableException last = null;
 		for (Path root : ordered) {
 			try {
-				RemoteIncidentStore connected = new RemoteIncidentStore(gateway, incident, root);
-				if (last != null) {
-					connected.storageNotice = "Offline storage moved to " + root.toAbsolutePath().normalize()
-							+ " because a previous location could not be protected: " + last.getMessage();
+				RemoteIncidentStore store = new RemoteIncidentStore(gateway, incident, root);
+				boolean fallback = !root.toAbsolutePath().normalize()
+						.equals(roots.get(0).toAbsolutePath().normalize());
+				if (fallback) {
+					store.storageNotice = "Offline storage is using a protected fallback location instead of the "
+							+ "preferred location.";
+				} else if (last != null) {
+					store.storageNotice = "Another offline storage location could not be secured; a different "
+							+ "protected location is in use.";
 				}
-				return connected;
+				return store;
 			} catch (StorageNotSecurableException failure) {
 				last = failure;
 			}
@@ -315,7 +343,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
-	 * Explains when disconnected storage moved or was not enabled.
+	 * Explains a storage fallback or why disconnected storage was not enabled, if applicable.
 	 *
 	 * @return operator-facing notice, or empty
 	 */
@@ -392,13 +420,76 @@ public final class RemoteIncidentStore implements IncidentStore {
 	public synchronized void attachGateway(RemoteIncidentGateway replacement) {
 		ensureOpen();
 		Objects.requireNonNull(replacement, "replacement");
-		if (stateFile == null || !authorityFingerprint.equals(replacement.authorityFingerprint().orElse(""))) {
+		String expectedAuthority = stateFile == null
+				? gateway == null ? "" : gateway.authorityFingerprint().orElse("")
+				: authorityFingerprint;
+		if (expectedAuthority.isEmpty() || !expectedAuthority.equals(replacement.authorityFingerprint().orElse(""))) {
 			throw new StoreValidationException("Gateway authority does not match the disconnected cache");
 		}
 		if (gateway != null && gateway != replacement) {
 			gateway.close();
 		}
 		gateway = replacement;
+	}
+
+	/**
+	 * Records an observed credential cutoff without changing or discarding local work.
+	 *
+	 * @param reason observed access failure
+	 */
+	public synchronized void recordCredentialCutoff(RemoteAccessException.Reason reason) {
+		ensureOpen();
+		if (reason != RemoteAccessException.Reason.CREDENTIAL_EXPIRED
+				&& reason != RemoteAccessException.Reason.CREDENTIAL_REVOKED) {
+			return;
+		}
+		if (cutoff.reason() == reason) {
+			return;
+		}
+		DisconnectedStateFile.Cutoff next = new DisconnectedStateFile.Cutoff(reason, cutoff.blocked(),
+				cutoff.reviewed());
+		cutoff = next;
+		if (stateFile != null) {
+			stateFile.saveCutoff(next);
+		}
+	}
+
+	/**
+	 * Freezes replay and snapshots the operations presented for administrator approval.
+	 *
+	 * @param reason expired or revoked credential
+	 * @return detached operations in order
+	 */
+	public synchronized List<PendingOperation> beginReauthorization(RemoteAccessException.Reason reason) {
+		if (reason != RemoteAccessException.Reason.CREDENTIAL_EXPIRED
+				&& reason != RemoteAccessException.Reason.CREDENTIAL_REVOKED) {
+			throw new IllegalArgumentException("Expected an expired or revoked credential");
+		}
+		recordCredentialCutoff(reason);
+		return pendingOperations();
+	}
+
+	/**
+	 * Attaches an approved credential and releases only work included in the approval request.
+	 * Edits made while the administrator was reviewing remain locally blocked and exportable.
+	 *
+	 * @param replacement approved replacement transport
+	 * @param reviewed operation identifiers submitted for approval
+	 */
+	public synchronized void completeReauthorization(RemoteIncidentGateway replacement, List<String> reviewed) {
+		ensureOpen();
+		if (cutoff.reason() == null) {
+			throw new StoreValidationException("No credential cutoff awaits approval");
+		}
+		Objects.requireNonNull(reviewed, "reviewed");
+		List<String> blocked = state == null ? List.of() : state.pending().stream()
+				.map(PendingOperation::operationId).filter(id -> !reviewed.contains(id)).toList();
+		attachGateway(replacement);
+		DisconnectedStateFile.Cutoff next = new DisconnectedStateFile.Cutoff(null, blocked, reviewed);
+		if (stateFile != null) {
+			stateFile.saveCutoff(next);
+		}
+		cutoff = next;
 	}
 
 	/**
@@ -435,24 +526,13 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
-	 * Identifies an applied host receipt and its host-assigned timestamp.
+	 * Returns durable attribution from exact applied host receipts.
 	 *
-	 * @param operationId accepted operation identifier
-	 * @param cursor host receipt cursor
-	 * @param receivedAt host-assigned receipt time
+	 * @return latest receipt for each changed property, historical field and log
 	 */
-	public record AcceptedReceipt(String operationId, long cursor, Instant receivedAt) {
-	}
-
-	/**
-	 * Returns the latest host receipt for each changed root property, history field, or activity log.
-	 * Keys use the prefixes {@code root/}, {@code history/}, and {@code log/}, respectively.
-	 *
-	 * @return immutable component-to-receipt index, empty for an older or connected-only cache
-	 */
-	public synchronized Map<String, AcceptedReceipt> acceptedChanges() {
+	public synchronized AcceptedChanges acceptedChanges() {
 		ensureOpen();
-		return state == null ? Map.of() : state.acceptedChanges();
+		return state == null ? AcceptedChanges.empty() : state.acceptedChanges();
 	}
 
 	/**
@@ -469,6 +549,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 		stateFile = new DisconnectedStateFile(root, fingerprint, incident);
 		try {
 			state = stateFile.load();
+			cutoff = stateFile.loadCutoff();
 		} catch (RuntimeException failure) {
 			stateFile.close();
 			throw failure;
@@ -569,10 +650,11 @@ public final class RemoteIncidentStore implements IncidentStore {
 				AppData built = build(read);
 				RevisionToken revision = token(read.cursor(), recordMap(read));
 				commitState(new DisconnectedStateFile.State(built, read.records(), read.cursor(), built, revision,
-						Instant.now(), state == null ? 0 : state.acceptedReceipts(), List.of(),
-						state == null ? Map.of() : state.acceptedChanges()));
+						Instant.now(), state == null ? 0 : state.acceptedReceipts(),
+						state == null ? AcceptedChanges.empty() : state.acceptedChanges(), List.of()));
 				return localSnapshot();
 			} catch (RemoteAccessException failure) {
+				recordCredentialCutoff(failure.reason());
 				throw failure;
 			} catch (StoreUnavailableException failure) {
 				if (state == null) {
@@ -612,7 +694,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 * @param expected token of the snapshot the edit was based on
 	 * @return token of the state the caller now holds
 	 * @throws StoreConflictException when the host holds conflicting or newer data for the edit
-	 * @throws StoreValidationException when the document or token is invalid, or records were removed
+	 * @throws StoreValidationException when the document or token is invalid
 	 * @throws StoreUnavailableException when the host cannot be reached
 	 */
 	@Override
@@ -752,23 +834,6 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
-	 * Exports every pending edit, including bases, drafts, conflict details and exact materialized batches.
-	 *
-	 * @param target external recovery destination
-	 */
-	public synchronized void exportOutbox(Path target) {
-		ensureOpen();
-		if (stateFile == null || state == null) {
-			throw new StoreValidationException("No disconnected outbox is available");
-		}
-		try {
-			stateFile.export(validateLocalExportTarget(target), state.pending());
-		} catch (IOException failure) {
-			throw new StorePersistenceException("Cannot export the disconnected outbox", failure);
-		}
-	}
-
-	/**
 	 * Preserves the complete outbox in an owner-only export beside its protected journal.
 	 *
 	 * @return the retained export path, or null if no work is pending
@@ -785,6 +850,23 @@ public final class RemoteIncidentStore implements IncidentStore {
 			return stateFile.exportCutoff(state.pending());
 		} catch (IOException failure) {
 			throw new StorePersistenceException("Cannot preserve the cutoff outbox export", failure);
+		}
+	}
+
+	/**
+	 * Exports every pending edit, including bases, drafts, conflict details and exact materialized batches.
+	 *
+	 * @param target external recovery destination
+	 */
+	public synchronized void exportOutbox(Path target) {
+		ensureOpen();
+		if (stateFile == null || state == null) {
+			throw new StoreValidationException("No disconnected outbox is available");
+		}
+		try {
+			stateFile.export(validateLocalExportTarget(target), state.pending());
+		} catch (IOException failure) {
+			throw new StorePersistenceException("Cannot export the disconnected outbox", failure);
 		}
 	}
 
@@ -933,19 +1015,70 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
+	 * Reports whether edits made during an approval request remain locally blocked.
+	 *
+	 * @return true when unreviewed work remains in the queue
+	 */
+	public synchronized boolean hasUnreviewedPending() {
+		ensureOpen();
+		return state != null && state.pending().stream()
+				.anyMatch(operation -> cutoff.blocked().contains(operation.operationId()));
+	}
+
+	/**
+	 * Prevents edits to the submitted approval snapshot while a decision is pending.
+	 */
+	private void requireApprovalNotPending() {
+		if (cutoff.reason() != null) {
+			throw new StoreValidationException("Approval is required before changing queued operations; export "
+					+ "the outbox for recovery");
+		}
+	}
+
+	/**
+	 * Prevents a rewrite from assigning unapproved identifiers to held work.
+	 */
+	private void requireSafeQueueRewrite() {
+		requireApprovalNotPending();
+		if (hasUnreviewedPending()) {
+			throw new StoreValidationException("This queue contains held work and cannot be rewritten "
+					+ "safely; export the outbox for manual recovery");
+		}
+	}
+
+	/**
+	 * Protects an unreviewed head while allowing reviewed conflicts to be resolved.
+	 */
+	private void requireSafeHeadRewrite() {
+		requireApprovalNotPending();
+		if (state != null && !state.pending().isEmpty()
+				&& cutoff.blocked().contains(state.pending().get(0).operationId())) {
+			throw new StoreValidationException("This work was not reviewed; export it for manual recovery");
+		}
+	}
+
+	/**
 	 * Submits pending work in order. This method performs blocking I/O and must not run on the Swing event thread.
 	 * A conflict or rejection remains durable and blocks later operations. Ambiguous failures leave the exact batch
 	 * and operation ID intact for the next replay.
 	 */
 	public synchronized void replayPending() {
 		ensureOpen();
+		if (state != null && !state.pending().isEmpty() && cutoff.reason() != null) {
+			throw new RemoteAccessException(cutoff.reason(),
+					"Credential requires administrator approval; pending work is retained for export", null);
+		}
 		RemoteIncidentGateway transport = requireGateway();
 		while (state != null && !state.pending().isEmpty()) {
 			PendingOperation operation = state.pending().get(0);
+			if (cutoff.blocked().contains(operation.operationId())) {
+				return;
+			}
 			if (operation.status() != PendingStatus.PENDING) {
 				return;
 			}
-			if (operation.batch() == null) {
+			boolean firstAttempt = operation.batch() == null;
+			if (firstAttempt) {
 				List<IncidentService.RecordSubmission> edits;
 				IncidentService.RecordBatch exact = null;
 				List<IncidentService.FieldConflict> conflicts = List.of();
@@ -980,11 +1113,12 @@ public final class RemoteIncidentStore implements IncidentStore {
 			try {
 				result = transport.submit(operation.batch());
 			} catch (RemoteAccessException failure) {
+				recordCredentialCutoff(failure.reason());
 				throw failure;
 			} catch (StoreValidationException failure) {
 				replaceHead(new PendingOperation(operation.operationId(), operation.before(), operation.draft(),
 						operation.batch(), PendingStatus.REJECTED, List.of(), failure.getMessage(),
-						operation.reviewBase()));
+						operation.reviewBase(), firstAttempt));
 				return;
 			}
 			if (!operation.operationId().equals(result.operationId())) {
@@ -995,9 +1129,17 @@ public final class RemoteIncidentStore implements IncidentStore {
 						operation.batch(), PendingStatus.CONFLICT, result.conflicts(), null, operation.reviewBase()));
 				return;
 			}
-			List<IncidentService.VersionedRecord> accepted = acceptedRecords(operation, result, transport);
-			removeAcknowledged(operation, accepted, result.cursor(),
-					new AcceptedReceipt(result.operationId(), result.cursor(), result.receivedAt()));
+			List<IncidentService.VersionedRecord> accepted;
+			try {
+				accepted = acceptedRecords(operation, result, transport);
+			} catch (RemoteAccessException failure) {
+				recordCredentialCutoff(failure.reason());
+				throw failure;
+			}
+			if (result.receivedAt() == null) {
+				throw new StorePersistenceException("Host receipt has no receipt time", null);
+			}
+			removeAcknowledged(operation, accepted, result.cursor(), result.receivedAt());
 		}
 	}
 
@@ -1074,6 +1216,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 */
 	public synchronized PendingOperation refreshConflict(String operationId) {
 		ensureOpen();
+		requireSafeHeadRewrite();
 		if (state == null || state.pending().isEmpty()) {
 			throw new StoreValidationException("No conflicting operation exists");
 		}
@@ -1085,6 +1228,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 		IncidentService.ReadResult read = requireGateway().read(incident);
 		List<IncidentService.FieldConflict> conflicts = dependentConflicts(operation, operation.batch().records(),
 				read.records());
+		archivePending(operationId);
 		if (conflicts.isEmpty()) {
 			replaceHead(new PendingOperation(operation.operationId(), operation.before(), operation.draft(),
 					operation.batch(), PendingStatus.CONFLICT, List.of(), null, operation.reviewBase()));
@@ -1104,6 +1248,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 */
 	public synchronized void confirmPending(String operationId) {
 		ensureOpen();
+		requireApprovalNotPending();
 		if (state == null || state.pending().isEmpty()) {
 			throw new StoreValidationException("No operation awaits confirmation");
 		}
@@ -1137,6 +1282,10 @@ public final class RemoteIncidentStore implements IncidentStore {
 			if (item == null) {
 				throw new StorePersistenceException("Host receipt contains unexpected record versions", null);
 			}
+			if (item.operation() == IncidentService.Operation.REMOVE) {
+				records.remove(item.key());
+				continue;
+			}
 			IncidentService.VersionedRecord existing = records.get(assignment.key());
 			if (existing != null && existing.version() == assignment.version()) {
 				continue;
@@ -1153,23 +1302,26 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
-	 * Archives and discards the sole unsubmitted pending edit after explicit user confirmation.
+	 * Archives and discards the sole pending edit after explicit user confirmation.
 	 *
 	 * @param operationId identifier of the edit to discard
 	 */
 	public synchronized void discardPending(String operationId) {
 		ensureOpen();
+		requireApprovalNotPending();
 		if (state == null || state.pending().size() != 1
 				|| !state.pending().get(0).operationId().equals(operationId)) {
 			throw new StoreValidationException("Only a sole pending edit can be discarded safely");
 		}
-		if (state.pending().get(0).batch() != null) {
+		PendingOperation operation = state.pending().get(0);
+		if (operation.batch() != null && !(operation.status() == PendingStatus.REJECTED
+				&& operation.definitivelyRejected())) {
 			throw new StoreValidationException("An ambiguously submitted edit cannot be discarded");
 		}
 		archivePending(operationId);
 		RevisionToken revision = new RevisionToken("local/" + UUID.randomUUID());
 		commitState(new DisconnectedStateFile.State(state.base(), state.records(), state.cursor(), state.base(),
-				revision, state.confirmedAt(), state.acceptedReceipts(), List.of(), state.acceptedChanges()));
+				revision, state.confirmedAt(), state.acceptedReceipts(), state.acceptedChanges(), List.of()));
 	}
 
 	/**
@@ -1179,6 +1331,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 */
 	public synchronized void retryRejected(String operationId) {
 		ensureOpen();
+		requireApprovalNotPending();
 		if (state == null || state.pending().isEmpty()) {
 			throw new StoreValidationException("No rejected operation exists");
 		}
@@ -1194,9 +1347,9 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 * Replaces a rejected queue with one new edit built from the current local draft, so that an operator who has
 	 * corrected the cause in the editors can unblock synchronization. The rejected operations are first archived,
 	 * exactly, in owner-only storage next to the journal, and remain available through {@link #exportOutbox(Path)}
-	 * until then. The host's explicit rejection means the head was not applied; if the host had in fact applied
-	 * it, the replacement is detected as a conflict or creation collision rather than duplicated. At least one
-	 * later edit (the correction) must exist. The new operation has a fresh identity and the head's original base.
+	 * until then. A materialized head can be replaced only after a definitive first-attempt rejection; otherwise an
+	 * earlier submission may have succeeded. At least one later edit (the correction) must exist. The new operation
+	 * has a fresh identity and the head's original base.
 	 *
 	 * @param operationId identifier of the rejected head operation
 	 * @return identifier of the replacement operation
@@ -1204,12 +1357,16 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 */
 	public synchronized String replaceRejected(String operationId) {
 		ensureOpen();
+		requireSafeQueueRewrite();
 		if (state == null || state.pending().isEmpty()) {
 			throw new StoreValidationException("No rejected operation exists");
 		}
 		PendingOperation head = state.pending().get(0);
 		if (!head.operationId().equals(operationId) || head.status() != PendingStatus.REJECTED) {
 			throw new StoreValidationException("The selected operation is not rejected");
+		}
+		if (head.batch() != null && !head.definitivelyRejected()) {
+			throw new StoreValidationException("An ambiguously submitted edit cannot be replaced");
 		}
 		if (state.pending().size() < 2) {
 			throw new StoreValidationException("Correct the cause in the editors and save before replacing the "
@@ -1220,15 +1377,130 @@ public final class RemoteIncidentStore implements IncidentStore {
 		PendingOperation replacement = new PendingOperation(replacementId, head.before(), state.draft(), null,
 				PendingStatus.PENDING, List.of(), null, head.reviewBase());
 		commitState(new DisconnectedStateFile.State(state.base(), state.records(), state.cursor(), state.draft(),
-				state.revision(), state.confirmedAt(), state.acceptedReceipts(), List.of(replacement),
-				state.acceptedChanges()));
+				state.revision(), state.confirmedAt(), state.acceptedReceipts(), state.acceptedChanges(),
+				List.of(replacement)));
 		return replacementId;
 	}
 
 	/**
-	 * Archives the complete queue under a unique name before changing it.
+	 * Splits a safely rejected head into independently bounded operations, preserving dependent edits.
+	 * Records related through changed parents or explicit record IDs remain together. If the original edit cannot
+	 * be projected exactly, or a dependency group exceeds a limit, the queue is left untouched for correction or
+	 * export.
 	 *
-	 * @param operationId identity of the operation being recovered
+	 * @param operationId identifier of the rejected head
+	 * @return identifiers of the replacement operations in replay order
+	 * @throws StoreValidationException when the head is unsafe to split or cannot be split without loss
+	 */
+	public synchronized List<String> splitRejected(String operationId) {
+		ensureOpen();
+		requireSafeHeadRewrite();
+		if (state == null || state.pending().isEmpty()) {
+			throw new StoreValidationException("No rejected operation exists");
+		}
+		PendingOperation head = state.pending().get(0);
+		if (!head.operationId().equals(operationId) || head.status() != PendingStatus.REJECTED
+				|| (head.batch() != null && !head.definitivelyRejected())) {
+			throw new StoreValidationException("Only a safely rejected edit can be split");
+		}
+		AppData before = head.before();
+		AppData target = head.draft();
+		RecordIndex oldIndex = RecordIndex.of(before);
+		RecordIndex newIndex = RecordIndex.of(target);
+		RecordDiff diff = RecordDiff.between(before, target);
+		java.util.Set<RecordKey> changed = new java.util.TreeSet<>(diff.created());
+		changed.addAll(diff.changed().keySet());
+		changed.addAll(diff.removed());
+		if (!RecordJson.same(RootSettings.snapshot(before), RootSettings.snapshot(target))) {
+			changed.add(RootSettings.key());
+		}
+		Map<String, java.util.Set<RecordKey>> byId = new HashMap<>();
+		for (RecordKey key : changed) {
+			byId.computeIfAbsent(key.id(), ignored -> new java.util.HashSet<>()).add(key);
+		}
+		Map<RecordKey, java.util.Set<RecordKey>> references = new HashMap<>();
+		for (RecordKey key : changed) {
+			java.util.Set<RecordKey> linked = new java.util.HashSet<>();
+			collectSplitReferences(RootSettings.isRoot(key) ? RootSettings.snapshot(before) : oldIndex.record(key),
+					byId, linked);
+			collectSplitReferences(RootSettings.isRoot(key) ? RootSettings.snapshot(target) : newIndex.record(key),
+					byId, linked);
+			linked.remove(key);
+			references.put(key, linked);
+		}
+		Map<RecordKey, java.util.Set<RecordKey>> groups = new TreeMap<>();
+		for (RecordKey key : changed) {
+			RecordKey group = key;
+			for (RecordIndex index : List.of(oldIndex, newIndex)) {
+				RecordKey parent = index.parentOf(key);
+				while (parent != null) {
+					if (changed.contains(parent) && parent.compareTo(group) < 0) {
+						group = parent;
+					}
+					parent = index.parentOf(parent);
+				}
+			}
+			groups.computeIfAbsent(group, ignored -> new java.util.TreeSet<>()).add(key);
+		}
+		// Merge transitively related groups, including cases where lexical ordering differs from the tree.
+		boolean merged;
+		do {
+			merged = false;
+			List<java.util.Set<RecordKey>> values = new ArrayList<>(groups.values());
+			outer: for (int i = 0; i < values.size(); i++) {
+				for (int j = i + 1; j < values.size(); j++) {
+					if (relatedGroups(values.get(i), values.get(j), oldIndex, newIndex, references)) {
+						values.get(i).addAll(values.get(j));
+						groups.values().remove(values.get(j));
+						merged = true;
+						break outer;
+					}
+				}
+			}
+		} while (merged);
+
+		List<PendingOperation> replacements = new ArrayList<>();
+		AppData chunkBefore = before;
+		AppData projected = before;
+		int groupIndex = 0;
+		for (java.util.Set<RecordKey> group : groups.values()) {
+			AppData candidate = projectSplit(projected, target, group, newIndex);
+			boolean lastGroup = ++groupIndex == groups.size();
+			boolean forceSplit = lastGroup && replacements.isEmpty()
+					&& !changedKeys(chunkBefore, projected).isEmpty();
+			if (forceSplit || !splitFits(chunkBefore, candidate)) {
+				if (changedKeys(chunkBefore, projected).isEmpty()) {
+					throw new StoreValidationException("A record or dependent group exceeds the batch limits");
+				}
+				replacements.add(splitOperation(chunkBefore, projected, head.reviewBase()));
+				chunkBefore = projected;
+				if (!splitFits(chunkBefore, candidate)) {
+					throw new StoreValidationException("A record or dependent group exceeds the batch limits");
+				}
+			}
+			projected = candidate;
+		}
+		if (!changedKeys(projected, target).isEmpty() || !sameParents(projected, target)) {
+			throw new StoreValidationException("This edit cannot be split without changing its records");
+		}
+		if (!changedKeys(chunkBefore, projected).isEmpty()) {
+			replacements.add(splitOperation(chunkBefore, target, head.reviewBase()));
+		}
+		if (replacements.size() < 2) {
+			throw new StoreValidationException("This rejected edit cannot be split into smaller batches");
+		}
+		archivePending(operationId);
+		List<PendingOperation> pending = new ArrayList<>(replacements);
+		pending.addAll(state.pending().subList(1, state.pending().size()));
+		commitState(new DisconnectedStateFile.State(state.base(), state.records(), state.cursor(), state.draft(),
+				state.revision(), state.confirmedAt(), state.acceptedReceipts(), state.acceptedChanges(), pending));
+		return replacements.stream().map(PendingOperation::operationId).toList();
+	}
+
+	/**
+	 * Archives the complete current queue before superseding any work.
+	 *
+	 * @param operationId safe operation identifier used as archive label
 	 */
 	private void archivePending(String operationId) {
 		try {
@@ -1239,7 +1511,180 @@ public final class RemoteIncidentStore implements IncidentStore {
 	}
 
 	/**
+	 * Checks whether two sets contain related records in either document.
+	 *
+	 * @param first first group
+	 * @param second second group
+	 * @param oldIndex index before the edit
+	 * @param newIndex index after the edit
+	 * @param references explicit links between changed records
+	 * @return true when the groups must remain together
+	 */
+	private static boolean relatedGroups(java.util.Set<RecordKey> first, java.util.Set<RecordKey> second,
+			RecordIndex oldIndex, RecordIndex newIndex, Map<RecordKey, java.util.Set<RecordKey>> references) {
+		for (RecordKey key : first) {
+			if (references.get(key).stream().anyMatch(second::contains)) {
+				return true;
+			}
+			for (RecordIndex index : List.of(oldIndex, newIndex)) {
+				RecordKey parent = index.parentOf(key);
+				while (parent != null) {
+					if (second.contains(parent)) {
+						return true;
+					}
+					parent = index.parentOf(parent);
+				}
+			}
+		}
+		for (RecordKey key : second) {
+			if (references.get(key).stream().anyMatch(first::contains)) {
+				return true;
+			}
+			for (RecordIndex index : List.of(oldIndex, newIndex)) {
+				RecordKey parent = index.parentOf(key);
+				while (parent != null) {
+					if (first.contains(parent)) {
+						return true;
+					}
+					parent = index.parentOf(parent);
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Finds textual record IDs anywhere in a record snapshot, conservatively treating each as a dependency.
+	 *
+	 * @param value snapshot subtree
+	 * @param byId changed keys indexed by ID
+	 * @param result receives referenced keys
+	 */
+	private static void collectSplitReferences(JsonNode value, Map<String, java.util.Set<RecordKey>> byId,
+			java.util.Set<RecordKey> result) {
+		if (value == null) {
+			return;
+		}
+		if (value.isTextual()) {
+			result.addAll(byId.getOrDefault(value.textValue(), java.util.Set.of()));
+		} else if (value.isContainerNode()) {
+			value.elements().forEachRemaining(child -> collectSplitReferences(child, byId, result));
+		}
+	}
+
+	/**
+	 * Projects one dependent group into a detached intermediate document.
+	 *
+	 * @param source preceding intermediate document
+	 * @param target original edited document
+	 * @param group record keys to apply together
+	 * @param targetIndex indexed target
+	 * @return intermediate document
+	 */
+	private AppData projectSplit(AppData source, AppData target, java.util.Set<RecordKey> group,
+			RecordIndex targetIndex) {
+		AppData result = FullDocumentSnapshot.detach(source);
+		java.util.Set<RecordKey> removed = new java.util.HashSet<>();
+		List<RecordVersionStore.RecordHistory> histories = new ArrayList<>();
+		for (RecordKey key : group) {
+			if (RootSettings.isRoot(key)) {
+				RootSettings.apply(result, RootSettings.snapshot(target));
+			} else if (targetIndex.record(key) == null) {
+				removed.add(key);
+			} else {
+				histories.add(new RecordVersionStore.RecordHistory(key, targetIndex.parentOf(key),
+						targetIndex.parentFieldOf(key), List.of(new RecordVersionStore.RecordVersion(1, 0,
+								Instant.EPOCH, targetIndex.record(key)))));
+			}
+		}
+		bridge.remove(result, removed);
+		bridge.apply(result, histories, true);
+		java.util.Set<RecordKey> actual = changedKeys(source, result);
+		if (!actual.equals(group)) {
+			throw new StoreValidationException("This edit has dependencies that cannot be split safely");
+		}
+		return result;
+	}
+
+	/**
+	 * Returns record and root-setting differences between two intermediate documents.
+	 *
+	 * @param before preceding document
+	 * @param after subsequent document
+	 * @return changed keys
+	 */
+	private static java.util.Set<RecordKey> changedKeys(AppData before, AppData after) {
+		RecordDiff diff = RecordDiff.between(before, after);
+		java.util.Set<RecordKey> keys = new java.util.TreeSet<>(diff.created());
+		keys.addAll(diff.changed().keySet());
+		keys.addAll(diff.removed());
+		if (!RecordJson.same(RootSettings.snapshot(before), RootSettings.snapshot(after))) {
+			keys.add(RootSettings.key());
+		}
+		return keys;
+	}
+
+	/**
+	 * Checks that projection retained every record's containing relationship.
+	 *
+	 * @param first projected document
+	 * @param second original draft
+	 * @return true when all parent keys and fields match
+	 */
+	private static boolean sameParents(AppData first, AppData second) {
+		RecordIndex left = RecordIndex.of(first);
+		RecordIndex right = RecordIndex.of(second);
+		if (!left.records().keySet().equals(right.records().keySet())) {
+			return false;
+		}
+		for (RecordKey key : left.records().keySet()) {
+			if (!Objects.equals(left.parentOf(key), right.parentOf(key))
+					|| !Objects.equals(left.parentFieldOf(key), right.parentFieldOf(key))) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Tests the same count and byte limits used by replay for a projected chunk.
+	 *
+	 * @param before chunk base
+	 * @param after chunk draft
+	 * @return whether the chunk fits
+	 */
+	private boolean splitFits(AppData before, AppData after) {
+		try {
+			List<IncidentService.RecordSubmission> edits = submissions(
+					new Base(before, indexRecords(state.records()), state.cursor()), after,
+					RecordDiff.between(before, after));
+			batch(state.revision(), edits);
+			ObjectNode request = WIRE_MAPPER.createObjectNode();
+			request.put("operationId", "offline-" + "0".repeat(36));
+			ArrayNode records = request.putArray("records");
+			edits.forEach(edit -> records.add(WIRE_MAPPER.valueToTree(edit)));
+			return request.toString().getBytes(StandardCharsets.UTF_8).length <= HostProtocol.MAX_REQUEST_BYTES;
+		} catch (StoreValidationException failure) {
+			return false;
+		}
+	}
+
+	/**
+	 * Creates one unmaterialized replacement while retaining the operator's original conflict base.
+	 *
+	 * @param before preceding document
+	 * @param after projected document
+	 * @param reviewBase original observed document
+	 * @return new pending operation
+	 */
+	private static PendingOperation splitOperation(AppData before, AppData after, AppData reviewBase) {
+		return new PendingOperation("offline-" + UUID.randomUUID(), before, after, null,
+				PendingStatus.PENDING, List.of(), null, reviewBase);
+	}
+
+	/**
 	 * Resolves the head conflict against a freshly read host state and preserves dependent local edits.
+	 * The original queue is archived before any local values are superseded.
 	 * Each recorded conflict must have an explicit choice. If a reviewed field has changed since the conflict,
 	 * or another locally edited field now conflicts, resolution fails without changing the journal.
 	 * This method performs blocking host I/O and must not run on the Swing event thread.
@@ -1261,6 +1706,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 	private void resolvePending(String operationId, Map<ConflictField, ConflictChoice> choices,
 			boolean requireConfirmation) {
 		ensureOpen();
+		requireSafeHeadRewrite();
 		Objects.requireNonNull(choices, "choices");
 		if (state == null || state.pending().isEmpty()) {
 			throw new StoreValidationException("No conflicting operation exists");
@@ -1374,9 +1820,10 @@ public final class RemoteIncidentStore implements IncidentStore {
 			updateWorkingRecords(working, edits, read.cursor());
 			draft = next;
 		}
+		archivePending(operationId);
 		commitState(new DisconnectedStateFile.State(base, read.records(), read.cursor(), draft,
-				new RevisionToken("local/" + UUID.randomUUID()), Instant.now(), state.acceptedReceipts(), pending,
-				state.acceptedChanges()));
+				new RevisionToken("local/" + UUID.randomUUID()), Instant.now(), state.acceptedReceipts(),
+				state.acceptedChanges(), pending));
 	}
 
 	/**
@@ -1458,10 +1905,8 @@ public final class RemoteIncidentStore implements IncidentStore {
 			before = held.document();
 		}
 		RecordDiff diff = RecordDiff.between(before, data);
-		if (EXPORT_MAPPER.valueToTree(before).equals(EXPORT_MAPPER.valueToTree(data))
-				|| (!state.revision().equals(expected) && diff.created().isEmpty() && diff.changed().isEmpty()
-						&& diff.removed().isEmpty()
-						&& RecordJson.same(RootSettings.snapshot(before), RootSettings.snapshot(data)))) {
+		if (!state.revision().equals(expected) && diff.created().isEmpty() && diff.changed().isEmpty()
+				&& diff.removed().isEmpty() && RecordJson.same(RootSettings.snapshot(before), RootSettings.snapshot(data))) {
 			synchronized (cacheLock) {
 				issued.put(data, expected);
 			}
@@ -1469,11 +1914,20 @@ public final class RemoteIncidentStore implements IncidentStore {
 		}
 		List<PendingOperation> pending = new ArrayList<>(state.pending());
 		RevisionToken revision = new RevisionToken("local/" + UUID.randomUUID());
-		pending.add(new PendingOperation("offline-" + UUID.randomUUID(), before, data, null,
+		String operationId = "offline-" + UUID.randomUUID();
+		if (hasUnreviewedPending()) {
+			List<String> blocked = new ArrayList<>(cutoff.blocked());
+			blocked.add(operationId);
+			DisconnectedStateFile.Cutoff next = new DisconnectedStateFile.Cutoff(cutoff.reason(), blocked,
+					cutoff.reviewed());
+			stateFile.saveCutoff(next);
+			cutoff = next;
+		}
+		pending.add(new PendingOperation(operationId, before, data, null,
 				PendingStatus.PENDING, List.of(), null));
 		commitState(new DisconnectedStateFile.State(state.base(), state.records(), state.cursor(),
-				FullDocumentSnapshot.detach(data), revision, state.confirmedAt(), state.acceptedReceipts(), pending,
-				state.acceptedChanges()));
+				FullDocumentSnapshot.detach(data), revision, state.confirmedAt(), state.acceptedReceipts(),
+				state.acceptedChanges(), pending));
 		synchronized (cacheLock) {
 			latestSavedRevision = revision;
 			cacheBase(revision, new Base(FullDocumentSnapshot.detach(data), indexRecords(state.records()),
@@ -1521,7 +1975,7 @@ public final class RemoteIncidentStore implements IncidentStore {
 		List<PendingOperation> pending = new ArrayList<>(state.pending());
 		pending.set(0, operation);
 		commitState(new DisconnectedStateFile.State(state.base(), state.records(), state.cursor(), state.draft(),
-				state.revision(), state.confirmedAt(), state.acceptedReceipts(), pending, state.acceptedChanges()));
+				state.revision(), state.confirmedAt(), state.acceptedReceipts(), state.acceptedChanges(), pending));
 	}
 
 	/**
@@ -1530,17 +1984,17 @@ public final class RemoteIncidentStore implements IncidentStore {
 	 * @param operation acknowledged edit
 	 * @param records accepted record versions
 	 * @param cursor receipt cursor
-	 * @param receipt host receipt, or null for a local no-op
+	 * @param receivedAt host receipt time, or null when no host submission was necessary
 	 */
 	private void removeAcknowledged(PendingOperation operation, List<IncidentService.VersionedRecord> records,
-			long cursor, AcceptedReceipt receipt) {
+			long cursor, Instant receivedAt) {
 		List<PendingOperation> pending = new ArrayList<>(state.pending());
 		pending.remove(0);
-		Map<String, AcceptedReceipt> changes = receipt == null ? state.acceptedChanges()
-				: AcceptedChangeIndex.update(state.acceptedChanges(), operation.before(), operation.draft(), receipt);
+		Instant confirmedAt = receivedAt != null ? Instant.now() : state.confirmedAt();
 		commitState(new DisconnectedStateFile.State(operation.draft(), records, cursor, state.draft(),
-				state.revision(), receipt == null ? state.confirmedAt() : Instant.now(),
-				state.acceptedReceipts() + (receipt == null ? 0 : 1), pending, changes));
+				state.revision(), confirmedAt, state.acceptedReceipts() + (receivedAt != null ? 1 : 0),
+				receivedAt != null ? state.acceptedChanges().withReceipt(operation, receivedAt) : state.acceptedChanges(),
+				pending));
 	}
 
 	/**

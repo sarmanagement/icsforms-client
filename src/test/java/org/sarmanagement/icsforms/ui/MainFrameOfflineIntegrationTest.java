@@ -17,6 +17,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -24,10 +25,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.List;
 
 import javax.swing.SwingUtilities;
+import javax.swing.JOptionPane;
+import javax.swing.Timer;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.AppData;
+import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentGateway;
@@ -341,6 +345,276 @@ class MainFrameOfflineIntegrationTest {
 				});
 			}
 		}
+	}
+
+	@Test
+	void confirmedRetryAndDiscardAreExplicitAndRefreshTheController() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("host"), "Shared")) {
+			RemoteIncidentStore paired = host.pair();
+			RemoteIncidentGateway gateway = paired.detachGateway();
+			paired.close();
+			String fingerprint = gateway.authorityFingerprint().orElseThrow();
+			RemoteIncidentStore remote = new RemoteIncidentStore(gateway, host.incident(), directory.resolve("cache"));
+			var snapshot = remote.loadSnapshot(host.incident());
+			for (int index = 0; index < 101; index++) {
+				ClueLogEntry clue = new ClueLogEntry();
+				clue.setDescription("clue " + index);
+				snapshot.data().getClueLogEntries().add(clue);
+			}
+			remote.save(host.incident(), snapshot.data(), snapshot.revision());
+			remote.replayPending();
+			var rejected = remote.pendingOperations().get(0);
+			assertEquals(RemoteIncidentStore.PendingStatus.REJECTED, rejected.status());
+			remote.detachGateway().close();
+			var local = remote.loadSnapshot(host.incident());
+			AtomicReference<MainFrame> frame = new AtomicReference<>();
+			SwingUtilities.invokeAndWait(() -> frame.set(new MainFrame(local.data(), remote, host.incident(),
+					new PdfExportService(), new IncidentValidator(), directory)));
+			try {
+				var entry = new OutboxReviewPanel.Entry(rejected.operationId(), rejected.before(), rejected.draft(),
+						rejected.batch(), OutboxReviewPanel.Status.REJECTED, rejected.conflicts(), rejected.rejection());
+				recover(frame.get(), remote, entry, false, JOptionPane.NO_OPTION);
+				assertEquals(RemoteIncidentStore.PendingStatus.REJECTED, remote.pendingOperations().get(0).status());
+				recover(frame.get(), remote, entry, false, JOptionPane.YES_OPTION);
+				await(() -> remote.pendingOperations().get(0).status() == RemoteIncidentStore.PendingStatus.PENDING);
+				recover(frame.get(), remote, entry, false, JOptionPane.YES_OPTION);
+				awaitDialog("Could not retry the rejected edit");
+				assertEquals(RemoteIncidentStore.PendingStatus.PENDING, remote.pendingOperations().get(0).status());
+				var stale = new OutboxReviewPanel.Entry("stale", rejected.before(), rejected.draft(), null,
+						OutboxReviewPanel.Status.PENDING, List.of(), null);
+				recover(frame.get(), remote, stale, true, JOptionPane.YES_OPTION);
+				awaitDialog("Could not discard the pending edit");
+				assertEquals(1, remote.pendingOperations().size());
+				Path authority = directory.resolve("cache").resolve(fingerprint);
+				Path moved = directory.resolve("cache").resolve("moved-authority");
+				Files.move(authority, moved);
+				try {
+					Files.createSymbolicLink(authority, moved);
+					recover(frame.get(), remote, entry, true, JOptionPane.YES_OPTION);
+					awaitDialog("Could not discard the pending edit");
+					assertEquals(1, remote.pendingOperations().size());
+					assertEquals(101, remote.loadSnapshot(host.incident()).data().getClueLogEntries().size());
+				} finally {
+					Files.deleteIfExists(authority);
+					Files.move(moved, authority);
+				}
+				recover(frame.get(), remote, entry, true, JOptionPane.NO_OPTION);
+				assertEquals(1, remote.pendingOperations().size());
+				recover(frame.get(), remote, entry, true, JOptionPane.YES_OPTION);
+				await(() -> remote.pendingOperations().isEmpty());
+				try (var archives = Files.list(authority)) {
+					assertTrue(archives.anyMatch(path -> path.getFileName().toString()
+							.contains(".rejected-" + rejected.operationId() + "-")));
+				}
+				await(() -> {
+					AtomicReference<Boolean> refreshed = new AtomicReference<>(false);
+					SwingUtilities.invokeAndWait(() -> refreshed.set(
+							controller(frame.get()).getData().getClueLogEntries().isEmpty()));
+					return refreshed.get();
+				});
+			} finally {
+				SwingUtilities.invokeAndWait(() -> {
+					controller(frame.get()).close();
+					controller(frame.get()).closeStore();
+					frame.get().dispose();
+				});
+			}
+		}
+	}
+
+	@Test
+	void splitRequiresConfirmationAndReportsBackendFailure() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("host"), "Shared")) {
+			RemoteIncidentStore paired = host.pair();
+			RemoteIncidentGateway gateway = paired.detachGateway();
+			paired.close();
+			RemoteIncidentStore remote = new RemoteIncidentStore(gateway, host.incident(), directory.resolve("cache"));
+			var snapshot = remote.loadSnapshot(host.incident());
+			for (int index = 0; index < 101; index++) {
+				ClueLogEntry clue = new ClueLogEntry();
+				clue.setDescription("clue " + index);
+				snapshot.data().getClueLogEntries().add(clue);
+			}
+			remote.save(host.incident(), snapshot.data(), snapshot.revision());
+			remote.replayPending();
+			var rejected = remote.pendingOperations().get(0);
+			remote.detachGateway().close();
+			var local = remote.loadSnapshot(host.incident());
+			AtomicReference<MainFrame> frame = new AtomicReference<>();
+			SwingUtilities.invokeAndWait(() -> frame.set(new MainFrame(local.data(), remote, host.incident(),
+					new PdfExportService(), new IncidentValidator(), directory)));
+			try {
+				var entry = new OutboxReviewPanel.Entry(rejected.operationId(), rejected.before(), rejected.draft(),
+						rejected.batch(), OutboxReviewPanel.Status.REJECTED, rejected.conflicts(), rejected.rejection());
+				split(frame.get(), remote, entry, JOptionPane.NO_OPTION);
+				assertEquals(rejected.operationId(), remote.pendingOperations().get(0).operationId());
+				split(frame.get(), remote, entry, JOptionPane.YES_OPTION);
+				await(() -> remote.pendingOperations().size() > 1);
+				assertTrue(remote.pendingOperations().stream().allMatch(item -> !item.operationId().equals(entry.operationId())));
+				split(frame.get(), remote, entry, JOptionPane.YES_OPTION);
+				awaitDialog("Could not split the rejected edit");
+				assertTrue(remote.pendingOperations().size() > 1);
+			} finally {
+				SwingUtilities.invokeAndWait(() -> {
+					controller(frame.get()).close();
+					controller(frame.get()).closeStore();
+					frame.get().dispose();
+				});
+			}
+		}
+	}
+
+	/**
+	 * Invokes a split action and answers its confirmation dialog.
+	 *
+	 * @param frame owning frame
+	 * @param remote active store
+	 * @param entry reviewed entry
+	 * @param response confirmation response
+	 * @throws Exception if invocation fails
+	 */
+	private static void split(MainFrame frame, RemoteIncidentStore remote, OutboxReviewPanel.Entry entry,
+			int response) throws Exception {
+		Method method = MainFrame.class.getDeclaredMethod("splitOutboxOperation", RemoteIncidentStore.class,
+				OutboxReviewPanel.Entry.class, OutboxReviewPanel.class);
+		method.setAccessible(true);
+		SwingUtilities.invokeAndWait(() -> {
+			Timer timer = answerDialog("Split rejected edit", response);
+			try {
+				method.invoke(frame, remote, entry, emptyPanel());
+			} catch (ReflectiveOperationException failure) {
+				throw new AssertionError(failure);
+			} finally {
+				timer.stop();
+			}
+		});
+	}
+
+	/**
+	 * Waits for and dismisses a recovery error.
+	 *
+	 * @param title expected dialog title
+	 * @throws Exception if the dialog cannot be inspected
+	 */
+	private static void awaitDialog(String title) throws Exception {
+		AtomicReference<Boolean> shown = new AtomicReference<>(false);
+		await(() -> {
+			SwingUtilities.invokeAndWait(() -> {
+				for (Window window : Window.getWindows()) {
+					if (window instanceof javax.swing.JDialog dialog && dialog.isShowing()
+							&& dialog.getTitle().equals(title)) {
+						shown.set(true);
+						dialog.dispose();
+					}
+				}
+			});
+			return shown.get();
+		});
+	}
+
+	/**
+	 * Invokes a recovery action and answers its confirmation dialog.
+	 *
+	 * @param frame owning frame
+	 * @param remote active store
+	 * @param entry reviewed entry
+	 * @param discard whether to discard
+	 * @param response confirmation response
+	 * @throws Exception if invocation fails
+	 */
+	private static void recover(MainFrame frame, RemoteIncidentStore remote, OutboxReviewPanel.Entry entry,
+			boolean discard, int response) throws Exception {
+		Method method = MainFrame.class.getDeclaredMethod("recoverOutboxOperation", RemoteIncidentStore.class,
+				OutboxReviewPanel.Entry.class, OutboxReviewPanel.class, boolean.class);
+		method.setAccessible(true);
+		SwingUtilities.invokeAndWait(() -> {
+			Timer timer = answerDialog(discard ? "Discard pending edit" : "Retry rejected edit", response);
+			try {
+				method.invoke(frame, remote, entry, emptyPanel(), discard);
+			} catch (ReflectiveOperationException failure) {
+				throw new AssertionError(failure);
+			} finally {
+				timer.stop();
+			}
+		});
+	}
+
+	/**
+	 * Answers the next matching confirmation on the event thread.
+	 *
+	 * @param title confirmation title
+	 * @param response response to select
+	 * @return running timer
+	 */
+	private static Timer answerDialog(String title, int response) {
+		Timer timer = new Timer(20, event -> {
+			for (Window window : Window.getWindows()) {
+				if (window instanceof javax.swing.JDialog dialog && dialog.isShowing()
+						&& dialog.getTitle().equals(title)) {
+					((Timer) event.getSource()).stop();
+					((JOptionPane) dialog.getContentPane().getComponent(0)).setValue(response);
+				}
+			}
+		});
+		timer.start();
+		return timer;
+	}
+
+	/**
+	 * Creates an unattached panel for invoking frame recovery methods.
+	 *
+	 * @return panel with inert callbacks
+	 */
+	private static OutboxReviewPanel emptyPanel() {
+		return new OutboxReviewPanel(new OutboxReviewPanel.Actions() {
+			/** {@inheritDoc} */
+			@Override
+			public void exportDraft(OutboxReviewPanel.Entry value) {
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void resolve(OutboxReviewPanel.Entry value, List<OutboxReviewPanel.Decision> decisions) {
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void refreshConflict(OutboxReviewPanel.Entry value) {
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			public void confirm(OutboxReviewPanel.Entry value) {
+			}
+		});
+	}
+
+	/**
+	 * Waits for asynchronous Swing work to complete.
+	 *
+	 * @param condition completion condition
+	 * @throws Exception if the condition cannot be evaluated
+	 */
+	private static void await(CheckedCondition condition) throws Exception {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+		while (!condition.test() && System.nanoTime() < deadline) {
+			Thread.sleep(20);
+		}
+		assertTrue(condition.test(), "Recovery did not complete");
+	}
+
+	/** Condition evaluated while waiting for an asynchronous recovery. */
+	@FunctionalInterface
+	private interface CheckedCondition {
+		/**
+		 * Evaluates the condition.
+		 *
+		 * @return whether the condition is satisfied
+		 * @throws Exception if evaluation fails
+		 */
+		boolean test() throws Exception;
 	}
 
 	/**

@@ -186,7 +186,7 @@ public class HostSharingDialog extends JDialog {
 	private final java.awt.CardLayout joinCards = new java.awt.CardLayout();
 	private final JPanel joinCardPanel = new JPanel(joinCards);
 	private String pairingPayloadText = "";
-	private final JButton revokeButton = new JButton("Revoke / demobilise selected device");
+	private final JButton revokeButton = new JButton("Revoke selected device");
 	private final JButton detailsButton = new JButton("Details...");
 	private transient String invitationFull = "";
 	private final JButton reviewRequestsButton = new JButton("Review re-authorization requests");
@@ -518,6 +518,7 @@ public class HostSharingDialog extends JDialog {
 		fingerprintLabel.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 0));
 		JPanel start = column("2. Start sharing");
 		start.add(left(buttons));
+		storageNotice.setVisible(false);
 		start.add(left(storageNotice));
 
 		invitationArea.setEditable(false);
@@ -586,7 +587,7 @@ public class HostSharingDialog extends JDialog {
 				refreshButtons();
 			}
 		});
-		JMenuItem revokeItem = new JMenuItem("Revoke / demobilise selected device");
+		JMenuItem revokeItem = new JMenuItem("Revoke selected device");
 		revokeItem.addActionListener(event -> revokeSelected());
 		JMenuItem detailsItem = new JMenuItem("Details...");
 		detailsItem.addActionListener(event -> showSelectedDeviceDetails());
@@ -1408,12 +1409,12 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
-	 * Returns the current disconnected-storage notice.
+	 * Returns the disconnected-storage notice shown while sharing.
 	 *
-	 * @return notice text, or an empty string when storage is not degraded
+	 * @return notice text area
 	 */
-	String storageNoticeText() {
-		return storageNotice.getText();
+	JTextArea storageNoticeArea() {
+		return storageNotice;
 	}
 
 	/**
@@ -1528,7 +1529,7 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
-	 * Revokes or demobilises the selected device after confirmation.
+	 * Revokes the selected device after confirmation.
 	 */
 	void revokeSelected() {
 		HostSession current = session;
@@ -1537,10 +1538,7 @@ public class HostSharingDialog extends JDialog {
 			return;
 		}
 		DeviceInfo device = shownDevices.get(row);
-		if (!prompts.confirm(this, "Revoke / demobilise device",
-				"Revoke access for \"" + device.name() + "\"? This also cuts off a demobilised device. "
-						+ "Its offline work remains on that device; ask its operator to export the outbox "
-						+ "before release. Rejoining requires a new invitation and administrator approval.")) {
+		if (!prompts.confirm(this, "Revoke device", "Revoke access for \"" + device.name() + "\"?")) {
 			return;
 		}
 		revokeButton.setEnabled(false);
@@ -1616,8 +1614,10 @@ public class HostSharingDialog extends JDialog {
 	 */
 	void refresh() {
 		HostSession current = session;
-		storageNotice.setText(loopbackStore == null ? "" : loopbackStore.disconnectedStorageNotice().orElse(""));
-		storageNotice.setVisible(!storageNotice.getText().isEmpty());
+		String notice = current == null || loopbackStore == null ? null
+				: loopbackStore.disconnectedStorageNotice().orElse(null);
+		storageNotice.setText(notice == null ? "" : notice);
+		storageNotice.setVisible(notice != null);
 		boolean running = current != null && current.state() == HostState.RUNNING;
 		if (running) {
 			current.setPeriodCloseCutoff(periodCloseSource.get());

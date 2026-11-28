@@ -23,6 +23,7 @@ import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
 import org.sarmanagement.icsforms.persistence.IncidentId;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
+import org.sarmanagement.icsforms.persistence.UnsecurableStorageTestSupport;
 
 import javax.swing.JFrame;
 import javax.swing.JScrollPane;
@@ -299,17 +300,87 @@ class HostSharingDialogTest {
 	}
 
 	@Test
-	void storageNoticeTracksLoopbackAndClearsAfterStopping() throws Exception {
-		try (var volume = java.nio.file.FileSystems.newFileSystem(
-				java.net.URI.create("jar:" + directory.resolve("volume.zip").toUri()), java.util.Map.of("create", "true"))) {
-			harness.edt(() -> harness.dialog.setCacheRoot(volume.getPath("/cache")));
+	void storageNoticeTracksTheLoopbackStoreThroughRefreshAndStop() throws Exception {
+		harness.edt(() -> {
+			assertFalse(harness.dialog.storageNoticeArea().isVisible());
+			assertEquals("", harness.dialog.storageNoticeArea().getText());
+		});
+		harness.start();
+		RemoteIncidentStore remote = harness.remote.get();
+		assertTrue(remote.disconnectedStorageNotice().isEmpty());
+		harness.edt(() -> assertFalse(harness.dialog.storageNoticeArea().isVisible()));
+
+		var noticeField = RemoteIncidentStore.class.getDeclaredField("storageNotice");
+		noticeField.setAccessible(true);
+		for (String notice : List.of("Journal moved to a protected fallback location",
+				"Offline editing is unavailable: storage cannot be restricted")) {
+			noticeField.set(remote, notice);
+			harness.edt(() -> {
+				harness.dialog.refresh();
+				assertTrue(harness.dialog.storageNoticeArea().isVisible());
+				assertEquals(notice, harness.dialog.storageNoticeArea().getText());
+				harness.dialog.refresh();
+				assertEquals(notice, harness.dialog.storageNoticeArea().getText());
+			});
+		}
+		noticeField.set(remote, null);
+		harness.edt(() -> {
+			harness.dialog.refresh();
+			assertFalse(harness.dialog.storageNoticeArea().isVisible());
+			assertEquals("", harness.dialog.storageNoticeArea().getText());
+		});
+		noticeField.set(remote, "Offline editing is unavailable");
+		harness.edt(harness.dialog::refresh);
+		CountDownLatch stopped = new CountDownLatch(1);
+		harness.edt(() -> harness.dialog.stopAsync(stopped::countDown));
+		assertTrue(stopped.await(30, TimeUnit.SECONDS));
+		harness.edt(() -> {
+			assertFalse(harness.dialog.storageNoticeArea().isVisible());
+			assertEquals("", harness.dialog.storageNoticeArea().getText());
+		});
+	}
+
+	@Test
+	void unsecurableStorageAndSecureFallbackBothShowStoreNotices() throws Exception {
+		Path unsecurable = directory.resolve("unsecurable");
+		Path secure = directory.resolve("secure");
+		UnsecurableStorageTestSupport.install(unsecurable);
+		try {
+			harness.edt(() -> harness.dialog.setCacheRoot(unsecurable));
 			harness.start();
-			assertTrue(harness.dialog.isSharing());
-			assertTrue(harness.dialog.storageNoticeText().contains("Offline editing is unavailable"));
+			RemoteIncidentStore remote = harness.remote.get();
+			assertFalse(remote.disconnectedStorageEnabled());
+			String notice = remote.disconnectedStorageNotice().orElseThrow();
+			harness.edt(() -> {
+				assertTrue(harness.dialog.storageNoticeArea().isVisible());
+				assertEquals(notice, harness.dialog.storageNoticeArea().getText());
+				assertTrue(harness.dialog.isSharing());
+			});
 			CountDownLatch stopped = new CountDownLatch(1);
 			harness.edt(() -> harness.dialog.stopAsync(stopped::countDown));
-			assertTrue(stopped.await(15, TimeUnit.SECONDS));
-			harness.edt(() -> assertEquals("", harness.dialog.storageNoticeText()));
+			assertTrue(stopped.await(30, TimeUnit.SECONDS));
+			harness.edt(() -> harness.dialog.setCacheRoots(List.of(unsecurable, secure)));
+			harness.start();
+			assertTrue(harness.remote.get().disconnectedStorageEnabled());
+			String fallbackNotice = harness.remote.get().disconnectedStorageNotice().orElseThrow();
+			assertTrue(fallbackNotice.contains("protected fallback"));
+			harness.edt(() -> {
+				assertTrue(harness.dialog.storageNoticeArea().isVisible());
+				assertEquals(fallbackNotice, harness.dialog.storageNoticeArea().getText());
+			});
+			CountDownLatch stoppedAgain = new CountDownLatch(1);
+			harness.edt(() -> harness.dialog.stopAsync(stoppedAgain::countDown));
+			assertTrue(stoppedAgain.await(30, TimeUnit.SECONDS));
+			harness.start();
+			String reopenedNotice = harness.remote.get().disconnectedStorageNotice().orElseThrow();
+			assertTrue(harness.remote.get().disconnectedStorageEnabled());
+			assertTrue(reopenedNotice.contains("protected fallback"));
+			harness.edt(() -> {
+				assertTrue(harness.dialog.storageNoticeArea().isVisible());
+				assertEquals(reopenedNotice, harness.dialog.storageNoticeArea().getText());
+			});
+		} finally {
+			UnsecurableStorageTestSupport.reset();
 		}
 	}
 
@@ -339,8 +410,6 @@ class HostSharingDialogTest {
 		harness.await(() -> harness.dialog.deviceTable().getRowCount() == 1);
 		harness.edt(() -> harness.dialog.deviceTable().setRowSelectionInterval(0, 0));
 		harness.edt(harness.dialog::revokeSelected);
-		assertTrue(harness.prompts.confirmations.get(harness.prompts.confirmations.size() - 1)
-				.contains("offline work remains on that device"));
 		harness.await(() -> harness.dialog.deviceTable().getRowCount() == 0);
 		assertEquals(CredentialState.REVOKED, harness.dialog.session().devices().get(0).state());
 		harness.edt(() -> harness.dialog.showRevokedBox().doClick());

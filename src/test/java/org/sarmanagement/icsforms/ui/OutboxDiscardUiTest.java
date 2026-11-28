@@ -88,6 +88,7 @@ class OutboxDiscardUiTest {
 				frame.set(new MainFrame(local.data(), remote, host.incident(), new PdfExportService(),
 						new IncidentValidator(), directory));
 				frame.get().setVisible(true);
+				java.util.concurrent.atomic.AtomicBoolean clicked = new java.util.concurrent.atomic.AtomicBoolean();
 				Timer timer = new Timer(25, null);
 				timer.addActionListener(event -> {
 					for (java.awt.Window window : java.awt.Window.getWindows()) {
@@ -97,11 +98,11 @@ class OutboxDiscardUiTest {
 								continue;
 							}
 							if (dialog.getTitle().equals("Outbox review")) {
-								JButton button = button(dialog, "Archive and discard edit");
-								if (button != null && button.isEnabled()) {
-									button.doClick();
+								JButton button = button(dialog, "Discard pending edit");
+								if (button != null && button.isEnabled() && clicked.compareAndSet(false, true)) {
+									SwingUtilities.invokeLater(button::doClick);
 								}
-							} else if (dialog.getTitle().equals("Archive and discard edit")) {
+							} else if (dialog.getTitle().equals("Discard pending edit")) {
 								pane.setValue(JOptionPane.YES_OPTION);
 								confirmed.complete(null);
 								timer.stop();
@@ -172,6 +173,7 @@ class OutboxDiscardUiTest {
 				frame.get().setVisible(true);
 				var contextPanel = (IncidentContextPanel) Ics205PanelTest.field(frame.get(), "incidentContextPanel");
 				((javax.swing.JTextField) Ics205PanelTest.field(contextPanel, "incidentNameField")).setText("later edit");
+				java.util.concurrent.atomic.AtomicBoolean clicked = new java.util.concurrent.atomic.AtomicBoolean();
 				Timer timer = new Timer(25, null);
 				timer.addActionListener(event -> {
 					for (java.awt.Window window : java.awt.Window.getWindows()) {
@@ -179,9 +181,9 @@ class OutboxDiscardUiTest {
 							JOptionPane pane = optionPane(dialog);
 							if (pane != null) {
 								if (dialog.getTitle().equals("Outbox review")) {
-									JButton action = button(dialog, "Archive and discard edit");
-									if (action != null && action.isEnabled()) {
-										action.doClick();
+									JButton action = button(dialog, "Discard pending edit");
+									if (action != null && action.isEnabled() && clicked.compareAndSet(false, true)) {
+										SwingUtilities.invokeLater(action::doClick);
 									}
 								} else {
 									message.complete(String.valueOf(pane.getMessage()));

@@ -182,33 +182,65 @@ class OutboxReviewPanelTest {
 	}
 
 	@Test
-	void rejectedHeadOffersRetryAndOnlySoleUnsubmittedEditOffersDiscard() throws Exception {
-		Entry rejected = new Entry("rejected", new AppData(), new AppData(), null, Status.REJECTED,
-				List.of(), "Too many records");
-		Entry later = new Entry("later", new AppData(), new AppData(), null, Status.PENDING, List.of(), null);
-		var submitted = new IncidentService.RecordBatch(IncidentId.newId(), "rejected", List.of());
-		Entry ambiguous = new Entry("rejected", new AppData(), new AppData(), submitted, Status.REJECTED,
-				List.of(), "Rejected after submission");
+	void retryAndDiscardRespectQueueStateAndDeliverOnlySelectedEntry() throws Exception {
+		Entry pending = new Entry("pending", new AppData(), new AppData(), null, Status.PENDING, List.of(), null);
+		Entry rejected = new Entry("rejected", new AppData(), new AppData(), null, Status.REJECTED, List.of(), "Rejected");
+		var batch = new IncidentService.RecordBatch(IncidentId.newId(), "materialized", List.of());
+		Entry materialized = new Entry("materialized", new AppData(), new AppData(), batch, Status.REJECTED,
+				List.of(), "Rejected");
+		Entry definitive = new Entry("materialized", new AppData(), new AppData(), batch, Status.REJECTED,
+				List.of(), "Rejected", true);
+		Entry conflict = new Entry("conflict", new AppData(), new AppData(), null, Status.CONFLICT, List.of(), null);
 		SwingUtilities.invokeAndWait(() -> {
 			Recorder recorder = new Recorder();
 			OutboxReviewPanel panel = new OutboxReviewPanel(recorder);
+			JButton retry = button(panel, "Retry rejected edit");
+			JButton discard = button(panel, "Discard pending edit");
+			JButton replace = button(panel, "Replace rejected edit with corrected draft");
+			JButton split = button(panel, "Split rejected edit");
+			assertFalse(retry.isEnabled());
+			assertFalse(discard.isEnabled());
+			assertFalse(split.isEnabled());
 			panel.setEntries(List.of(rejected));
-			assertTrue(button(panel, "Retry rejected edit").isEnabled());
-			assertTrue(button(panel, "Archive and discard edit").isEnabled());
-			assertFalse(button(panel, "Replace rejected edit with corrected draft").isEnabled());
-			assertTrue(find(panel, JTextArea.class).getText().contains("striking out a record does not reduce"));
-			button(panel, "Retry rejected edit").doClick();
-			button(panel, "Archive and discard edit").doClick();
+			assertTrue(retry.isEnabled());
+			assertTrue(discard.isEnabled());
+			assertFalse(replace.isEnabled());
+			assertTrue(split.isEnabled());
+			retry.doClick();
+			discard.doClick();
+			split.doClick();
 			assertEquals(rejected, recorder.retried);
 			assertEquals(rejected, recorder.discarded);
-			panel.setEntries(List.of(rejected, later));
-			assertTrue(button(panel, "Replace rejected edit with corrected draft").isEnabled());
-			assertFalse(button(panel, "Archive and discard edit").isEnabled());
+			assertEquals(rejected, recorder.split);
+			panel.setEntries(List.of(rejected, pending));
+			assertTrue(retry.isEnabled());
+			assertFalse(discard.isEnabled());
+			assertTrue(replace.isEnabled());
+			assertTrue(split.isEnabled());
 			find(panel, JList.class).setSelectedIndex(1);
-			assertFalse(button(panel, "Retry rejected edit").isEnabled());
-			panel.setEntries(List.of(ambiguous));
-			assertTrue(button(panel, "Retry rejected edit").isEnabled());
-			assertFalse(button(panel, "Archive and discard edit").isEnabled());
+			assertFalse(retry.isEnabled());
+			assertFalse(discard.isEnabled());
+			assertFalse(split.isEnabled());
+			panel.setEntries(List.of(materialized, pending));
+			find(panel, JList.class).setSelectedIndex(0);
+			assertTrue(retry.isEnabled());
+			assertFalse(discard.isEnabled());
+			assertFalse(replace.isEnabled());
+			assertFalse(split.isEnabled());
+			panel.setEntries(List.of(definitive, pending));
+			assertTrue(replace.isEnabled());
+			assertFalse(discard.isEnabled());
+			assertTrue(split.isEnabled());
+			panel.setEntries(List.of(definitive));
+			assertTrue(discard.isEnabled());
+			assertFalse(replace.isEnabled());
+			assertTrue(split.isEnabled());
+			panel.setEntries(List.of(materialized));
+			assertTrue(retry.isEnabled());
+			assertFalse(discard.isEnabled());
+			panel.setEntries(List.of(conflict));
+			assertFalse(retry.isEnabled());
+			assertTrue(discard.isEnabled());
 		});
 	}
 
@@ -434,6 +466,7 @@ class OutboxReviewPanelTest {
 		private Entry confirmed;
 		private Entry retried;
 		private Entry discarded;
+		private Entry split;
 		private List<OutboxReviewPanel.Decision> decisions;
 		private int resolutions;
 
@@ -473,6 +506,12 @@ class OutboxReviewPanelTest {
 		@Override
 		public void discardPending(Entry entry) {
 			discarded = entry;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void splitRejected(Entry entry) {
+			split = entry;
 		}
 	}
 }

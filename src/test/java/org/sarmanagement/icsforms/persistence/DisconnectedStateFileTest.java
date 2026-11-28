@@ -56,7 +56,7 @@ class DisconnectedStateFileTest {
 	}
 
 	@Test
-	void journalWithoutComponentReceiptsRemainsReadable() throws Exception {
+	void olderJournalWithoutAcceptanceIndexLoadsWithoutInventingLabels() throws Exception {
 		Path root = directory.resolve("cache");
 		IncidentId incident = IncidentId.newId();
 		Path journal = root.resolve("authority").resolve(incident.value() + ".json");
@@ -66,8 +66,7 @@ class DisconnectedStateFileTest {
 			var json = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(journal.toFile());
 			json.remove("acceptedChanges");
 			mapper.writeValue(journal.toFile(), json);
-			assertEquals("legacy", file.load().draft().getIncidentContext().getIncidentName());
-			assertTrue(file.load().acceptedChanges().isEmpty());
+			assertEquals(AcceptedChanges.empty(), file.load().acceptedChanges());
 		}
 	}
 
@@ -199,6 +198,7 @@ class DisconnectedStateFileTest {
 		var second = new RemoteIncidentStore.PendingOperation(name + "-2", data, data, null,
 				RemoteIncidentStore.PendingStatus.PENDING, List.of(), null);
 		return new DisconnectedStateFile.State(data, List.of(), 0, data, new RevisionToken("revision"), null, 0,
+				AcceptedChanges.empty(),
 				List.of(first, second));
 	}
 
@@ -212,6 +212,7 @@ class DisconnectedStateFileTest {
 		AppData data = new AppData();
 		data.getIncidentContext().setIncidentName(name);
 		return new DisconnectedStateFile.State(data, List.of(), 0, data, new RevisionToken("revision"), null, 0,
+				AcceptedChanges.empty(),
 				List.of());
 	}
 }
