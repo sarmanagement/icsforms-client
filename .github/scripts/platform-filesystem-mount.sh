@@ -60,8 +60,8 @@ case "$case_name" in
         # hdiutil create is refused on hosted runners, so format a RAM disk instead.
         device="$(hdiutil attach -nomount ram://262144 | awk '{print $1}')"
         echo "$device" > platform-volume.device
-        diskutil eraseVolume ExFAT ICSFormsPlatform "$device"
-        volume=/Volumes/ICSFormsPlatform
+        diskutil eraseVolume ExFAT ICSPLATFORM "$device"
+        volume=/Volumes/ICSPLATFORM
         ;;
     macos-apfs)
         volume="$PWD"

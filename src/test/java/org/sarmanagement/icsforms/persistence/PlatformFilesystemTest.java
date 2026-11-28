@@ -45,7 +45,8 @@ class PlatformFilesystemTest {
 		if (scenario.equals("linux-fat-owner")) {
 			assertRestrictiveFatReadback(volume);
 		}
-		boolean fallback = scenario.contains("fat");
+		// ntfs-3g without a user mapping ignores chmod, so the client must report its protected fallback.
+		boolean fallback = scenario.contains("fat") || scenario.equals("linux-ntfs");
 		Path home = volume.resolve("icsforms-" + UUID.randomUUID());
 		Path profile = directory.resolve("profile");
 		Files.createDirectories(profile);
