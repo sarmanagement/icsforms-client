@@ -1,5 +1,7 @@
 # icsforms-client
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24618312.svg)](https://doi.org/10.5281/zenodo.24618312)
+
 `icsforms-client` is a Java Swing desktop application for authoring Incident Command System (ICS) incident forms and supporting the management of an incident with local JSON persistence and PDF export. Development is ongoing and the application is still evolving as additional forms and functionality are added.
 
 This project supports all hazards incident response under ICS with extensions to support SAR (Search and Rescue) incidents. It can author and export PDFs for ICS 201, 202, 203, 204, 205, 205A, 206, adapted canine ICS 206, 207, 208, 214, 215, 215A, and 233-CG, as well as SAR task assignment forms and a SAR clue log. T-cards and an organizational chart help manage personnel and structure. Shared incident data populates form headers, while individual PDFs and selected-form IAP bundles provide legible outputs. The adapted canine medical plan and clue-log ICS 233 layout are local adaptations, not official FEMA variants.
@@ -566,6 +568,15 @@ be copied anywhere.
 - Date/time entry currently uses validated text or spinner inputs in `yyyy-MM-dd`, `HH:mm`, or `yyyy-MM-dd HH:mm` formats depending on the form.
 - Development is ongoing; workflows, form coverage, and export behavior will continue to expand.
 - ORS official references: [services](https://openrouteservice.org/services/), [geocoder endpoint](https://giscience.github.io/openrouteservice/api-reference/endpoints/geocoder/), and [matrix endpoint](https://github.com/GIScience/openrouteservice/blob/main/docs/api-reference/endpoints/matrix/index.md). OSRM's table API is an alternative routing service but needs a separate geocoder and coordinates: [OSRM API](https://project-osrm.org/docs/v5.5.1/api/).
+
+## Citation
+
+To cite this software, use the Zenodo record for the version you used. For v0.1.3:
+
+> Morris, P. J. (2026). sarmanagement/icsforms-client: v0.1.3 (Version v0.1.3) [Computer software]. Zenodo. <https://doi.org/10.5281/zenodo.24618313>
+
+To cite the project without specifying a version, use the concept DOI that always resolves to the latest
+release: <https://doi.org/10.5281/zenodo.24618312>.
 
 ## Generative AI
 
