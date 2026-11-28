@@ -110,6 +110,11 @@ state that predates it, so older hosts' data keep working; clients only ever
 `UPDATE` it. The change is additive: clients that ignore it simply do not see
 those values.
 
+The time-zone settings are how the host governs the incident's time zone: when
+hosting starts, an incident that uses the system zone is changed to the host's
+explicit zone, so every client displays and enters times in it. Clients must
+not change these two properties.
+
 ### Create, update, and strike-out
 
 `POST /v1/incidents/{incidentId}/records:submit` accepts an atomic batch.
@@ -467,3 +472,9 @@ fingerprint from the QR code additionally pins TLS to it from the first
 connection. The QR/clipboard text is
 `ICSFORMS-PAIR-3:HOST:PORT:ENROLLPORT:FINGERPRINT`; typed entry is
 `ICSFORMS-PAIR-1:host[:enrollmentPort]`.
+
+The administrator device list also returns `lastAddress` (the remote address of
+the device's most recent authenticated request, held in memory only and null
+when unknown; absent from older hosts). A client maps `409 busy` to a
+"try again shortly" message and any other 409 to a conflict message that
+includes the host's reason.

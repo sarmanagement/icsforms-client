@@ -57,6 +57,20 @@ penetration test or a Stage 2 release approval.
   mode, not approved-only mode, and mutual TLS still uses the JDK stack, so
   this is not a claim of FIPS-validated operation end to end. Discovery (mDNS)
   advertises only the host name and port.
+* The long invitation contains a single-use secret, so the host window shows
+  only its prefix and masks the rest; **Copy** writes it to the system
+  clipboard. The QR text contains no secret. Anyone with clipboard access can
+  read a copied invitation, so it should be pasted promptly and the window
+  closed.
+* The host remembers the address each device last contacted it from, in memory
+  only, to show in the device **Details**; it is cleared with the contact
+  state and never persisted.
+* **Troubleshoot…** on the client only resolves, pings and opens TCP
+  connections to the host the operator named or pasted, and sends no incident
+  data. It reports TCP reachability, not identity; the fingerprint pin is still
+  enforced when connecting.
+* A host 409 `busy` is reported as a retry message; other 409 reasons are shown
+  as text from the host and contain no incident contents.
 
 1. **Client credentials and approval tickets are session-memory-only.** The
    existing connection flow does not persist credentials across application

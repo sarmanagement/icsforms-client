@@ -18,6 +18,35 @@ not require internet access.
    to reliable power. Remote workstations connect to this host, not to the
    incident files.
 
+## Host window, sharing roles and time zone
+
+- **Roles.** A window is standalone (local file only), a host (sharing), or a
+  client (connected to another device's host). The **Sharing** menu enables
+  only what applies: a client cannot host or connect elsewhere and instead has
+  **Disconnect from host…** (with confirmation; unsent changes stay in the
+  outbox) and **Re-pair**; a standalone or host window can host and connect.
+- **Joining.** While devices can join, the host window shows "Devices can join
+  this Host: address:port until hh:mm" and the waiting-device guidance; when
+  the window expires the **Devices can join** button returns. The pairing QR
+  code and the long invitation are in **Advanced**. The QR carries only the
+  address, ports and fingerprint (no secret) and is for a future phone app. The
+  invitation is single-use and secret, so only its `ICSFORMS-INVITE-n:` prefix
+  is shown; **Copy** places the whole text on the clipboard.
+- **Devices.** **Details…** (button or context menu) shows a device's row
+  information plus the address it last contacted the host from. Setup lists
+  each network interface with wired or wireless where it can be determined.
+- **Communications footer.** The Communications role panel (Plan and Console)
+  shows, when hosting: listening interfaces and IPv4 addresses, whether devices
+  can join, connected, paired and revoked counts, active devices and the host
+  fingerprint. On a client it shows the host address and fingerprint, this
+  device's own addresses and the host-set zone. A **Host this incident…** /
+  **Show host window…** button appears when this device can host.
+- **Time zone.** The host's time zone governs the incident. Starting to share
+  pins a "system time zone" incident to the host's explicit zone, which clients
+  receive in the synchronized settings. A client's Date/Time Zone menu is
+  disabled. A host already sharing keeps the old zone until sharing is stopped
+  and restarted.
+
 ## Admission and revocation
 
 1. From the host's **Sharing** dialog, either add a device in person or create
@@ -106,6 +135,12 @@ remove host files during this drain.
   firewall rules. A host stop or network interruption does not imply a save
   succeeded; the client outbox and last-confirmed status are the recovery
   source.
+- **Client shows "Another device is pairing with the host":** the host was
+  reached and the network is fine. Only one device pairs at a time; wait a
+  minute, or ask the host operator whether another device is waiting for its
+  number. In the connect dialog **Troubleshoot…** repeats the last failure with
+  this explanation and then checks name resolution, ping, and the pairing and
+  data ports (a typed address has no known data port, so that check is skipped).
 - **Host identity changed:** stop and verify the host and backup generation
   with the operator. Do not bypass the fingerprint warning.
 - **Expired credential:** submit renewal and wait for an administrator
