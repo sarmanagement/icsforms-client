@@ -566,7 +566,8 @@ complete.
 | 5 | Real-process acceptance tests | Open. `DisconnectedStateFileTest` and `HostSessionTest` start a child process for narrow checks; the restart and replay scenarios are not run with a killed and restarted client JVM. |
 | 6 | Automated platform verification | Open. A `workflow_dispatch` matrix workflow (Linux, Windows, macOS) with opt-in tests on runner-created filesystems; residual real-hardware cases stay manual. Record results here. |
 | 7 | Duplicate review end to end | Open. `ClueDuplicateReview` and `ClueLogPanelTest` cover the review in one JVM; there is no two-client offline replay test. |
-| 8 | Demobilisation credential cutoff | Open. Re-authorization (#62) is delivered; queued offline work on revocation or demobilisation is not specified or implemented. |
+| 8 | T-card merge end to end | Open. `TCardPanel.mergeDuplicates` combines fields and events; there is no two-client offline replay test, and reference switching (assignments, ICS 204/205/215 rows, linked personnel) is not asserted. |
+| 9 | Demobilisation credential cutoff | Open. Re-authorization (#62) is delivered; queued offline work on revocation or demobilisation is not specified or implemented. |
 
 ### Platform verification results (item 6)
 
