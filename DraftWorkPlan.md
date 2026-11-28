@@ -34,8 +34,9 @@ field-level merging of independent creates; #59 and #60 add host transport and c
 platform verification and acceptance work. Issue #62 implements administrator-approved renewal and
 revoked-device replacement with request limits and operations documentation;
 full Stage 2 acceptance and durable client credential/ticket recovery remain
-open. Issue #72's follow-up is in progress; platform runner results and the
-remaining real-process acceptance scenarios are still outstanding. Stage 2/T1
+open. Issue #72's follow-up is in progress; platform runner results, T-card merge
+provenance and reference coverage, and the remaining real-process acceptance
+scenarios are still outstanding. Stage 2/T1
 is not complete. Delivery evidence is in
 [`docs/completed-work.md`](docs/completed-work.md). Work to make
 open views refresh without flicker or stale content is merged

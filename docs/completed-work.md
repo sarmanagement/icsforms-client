@@ -29,6 +29,11 @@ issue or stage acceptance: the platform matrix still needs an actual run, and
 the requested real-process scenarios are not all covered. See the current
 [status table](host-mode-plan.md#issue-72--closing-the-disconnected-entry-limits).
 
+The T-card merge follow-up now repoints active activity-log, veterinary-personnel
+and debriefing-supervisor links, with local save/reload and idempotence coverage.
+This does not establish end-to-end merge acceptance: merge provenance, complete
+reference handling and concurrent offline edits still need work.
+
 ## Historical status — issue #61 disconnected workflow
 
 This is a status note, **not a delivery or stage-completion record**. A local

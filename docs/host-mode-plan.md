@@ -566,7 +566,7 @@ implemented coverage from outstanding acceptance.
 | 5 | Real-process acceptance tests | In progress. Killed-client restart covers dependent edits, clues, activity logs, T-cards, ICS planning data and a lost response. Two clients conflicting on the same record still need real-process coverage. |
 | 6 | Automated platform verification | In progress. An opt-in matrix and tagged filesystem test are added; runner results have not yet been recorded. |
 | 7 | Duplicate review end to end | In progress. Two-client offline duplicate review coverage is added; final validation remains pending. |
-| 8 | T-card merge end to end | Open. `TCardPanel.mergeDuplicates` combines fields and events; there is no two-client offline replay test, and reference switching (assignments, ICS 204/205/215 rows, linked personnel) is not asserted. |
+| 8 | T-card merge end to end | In progress. Active activity-log, veterinary-personnel and debriefing-supervisor links are repointed and covered by a local persistence test. Two-client offline merge, complete reference coverage, merge provenance and concurrent-edit acceptance remain outstanding. |
 | 9 | Demobilisation credential cutoff | In progress. Revocation retains an owner-only outbox export at the journal location before repair and replay; final validation remains pending. |
 
 ### Platform verification results (item 6)
