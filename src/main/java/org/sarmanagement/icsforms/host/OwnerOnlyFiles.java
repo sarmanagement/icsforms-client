@@ -7,10 +7,18 @@ import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryFlag;
+import java.nio.file.attribute.AclEntryPermission;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -79,7 +87,8 @@ final class OwnerOnlyFiles {
 	}
 
 	/**
-	 * Applies owner-only permissions to an existing path.
+	 * Applies owner-only permissions to an existing path, using POSIX bits where available and otherwise a single
+	 * owner-only access control entry.
 	 *
 	 * @param path file or directory
 	 * @param directory whether the path is a directory
@@ -90,15 +99,16 @@ final class OwnerOnlyFiles {
 			Files.setPosixFilePermissions(path, directory ? DIRECTORY_PERMISSIONS : FILE_PERMISSIONS);
 			return;
 		}
-		java.io.File file = path.toFile();
-		boolean applied = file.setReadable(false, false) & file.setWritable(false, false)
-				& file.setExecutable(false, false);
-		applied &= file.setReadable(true, true) & file.setWritable(true, true);
-		if (directory) {
-			applied &= file.setExecutable(true, true);
-		}
-		if (!applied) {
+		AclFileAttributeView view = Files.getFileAttributeView(path, AclFileAttributeView.class,
+				LinkOption.NOFOLLOW_LINKS);
+		if (view == null) {
 			throw new IOException("Cannot restrict file to its owner: " + path.getFileName());
 		}
+		AclEntry.Builder entry = AclEntry.newBuilder().setType(AclEntryType.ALLOW).setPrincipal(view.getOwner())
+				.setPermissions(EnumSet.allOf(AclEntryPermission.class));
+		if (directory) {
+			entry.setFlags(AclEntryFlag.FILE_INHERIT, AclEntryFlag.DIRECTORY_INHERIT);
+		}
+		view.setAcl(List.of(entry.build()));
 	}
 }

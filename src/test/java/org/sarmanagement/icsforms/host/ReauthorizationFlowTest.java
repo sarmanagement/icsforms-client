@@ -7,16 +7,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
 import org.sarmanagement.icsforms.model.Provenance;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
+import org.sarmanagement.icsforms.persistence.RemoteAccessException;
+import org.sarmanagement.icsforms.persistence.StoreValidationException;
 import org.sarmanagement.icsforms.persistence.StoredIncident;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -51,15 +56,24 @@ class ReauthorizationFlowTest {
 				List<String> queued = remote.pendingOperations().stream()
 						.map(RemoteIncidentStore.PendingOperation::operationId).toList();
 				assertEquals(1, queued.size());
+				Path expectedExport = directory.resolve("expected.json");
+				remote.exportOutbox(expectedExport);
+				JsonNode expected = new ObjectMapper().readTree(expectedExport.toFile());
 
 				AtomicBoolean cancelled = new AtomicBoolean();
 				String invitation = fixture.session.issueInvitation();
+				String originalHome = System.getProperty("user.home");
+				Path unusableHome = directory.resolve("unusable-home");
+				Files.writeString(unusableHome, "not a directory");
 				CompletableFuture<ReauthorizationFlow.Outcome> flow = CompletableFuture.supplyAsync(() -> {
+					System.setProperty("user.home", unusableHome.toString());
 					try {
 						return ReauthorizationFlow.run(remote, gateway, invitation, "Field phone 2",
 								cancelled::get, Duration.ofMillis(50), null);
 					} catch (InterruptedException interrupted) {
 						throw new IllegalStateException(interrupted);
+					} finally {
+						System.setProperty("user.home", originalHome);
 					}
 				});
 				JsonNode request = awaitRequest(fixture);
@@ -73,7 +87,18 @@ class ReauthorizationFlowTest {
 				fixture.session.approveReauthorization(request.path("requestId").asText());
 				assertEquals(ReauthorizationFlow.Outcome.APPROVED, flow.get(20, TimeUnit.SECONDS));
 				assertTrue(remote.pendingOperations().isEmpty());
-
+				try (var exports = Files.walk(directory.resolve("cache"))) {
+					List<Path> retained = exports.filter(path -> path.getFileName().toString().contains(".cutoff-"))
+							.toList();
+					assertEquals(2, retained.size());
+					for (Path export : retained) {
+						JsonNode saved = new ObjectMapper().readTree(export.toFile());
+						assertEquals(expected, saved);
+						assertEquals(queued.get(0), saved.get(0).path("operationId").asText());
+						assertEquals("Blue glove", saved.get(0).path("draft").path("clueLogEntries")
+								.get(0).path("description").asText());
+					}
+				}
 				ClueLogEntry replayed = fixture.store.loadSnapshot(fixture.incident).data().getClueLogEntries().get(0);
 				assertNotEquals(revoked.deviceId(), replayed.getProvenance().deviceId());
 				assertEquals(revoked.deviceId(), replayed.getProvenance().originalDeviceId());
@@ -87,6 +112,50 @@ class ReauthorizationFlowTest {
 						.filter(entry -> entry.getEntryId().equals(second.getEntryId())).findFirst().orElseThrow();
 				assertNotEquals(revoked.deviceId(), fresh.getProvenance().deviceId());
 				assertNull(fresh.getProvenance().originalDeviceId());
+			}
+		}
+	}
+
+	@Test
+	void revokedWorkSurvivesDenialAndRestart() throws Exception {
+		try (HostFixture fixture = new HostFixture(directory.resolve("host"))) {
+			fixture.start();
+			DeviceCredential device = fixture.pair("Demobilised tablet");
+			HostGateway gateway = new HostGateway(fixture.client(device), device, "test-host");
+			Path cache = directory.resolve("cache");
+			String operationId;
+			try (RemoteIncidentStore remote = new RemoteIncidentStore(gateway, fixture.incident, cache)) {
+				StoredIncident draft = remote.loadSnapshot(fixture.incident);
+				fixture.session.revoke(device.deviceId());
+				draft.data().getClueLogEntries().add(clue("Retained after cutoff"));
+				try {
+					remote.save(fixture.incident, draft.data(), draft.revision());
+				} catch (RuntimeException expected) {
+					// Revocation prevents submission, not local retention.
+				}
+				operationId = remote.pendingOperations().get(0).operationId();
+				assertEquals(operationId, remote.pendingOperations().get(0).operationId());
+			}
+			try (RemoteIncidentStore reopened = new RemoteIncidentStore(gateway, fixture.incident, cache)) {
+				assertEquals(operationId, reopened.pendingOperations().get(0).operationId());
+				CompletableFuture<ReauthorizationFlow.Outcome> flow = CompletableFuture.supplyAsync(() -> {
+					try {
+						return ReauthorizationFlow.run(reopened, gateway, fixture.session.issueInvitation(), "Tablet",
+								() -> false, Duration.ofMillis(50), null);
+					} catch (InterruptedException interrupted) {
+						throw new IllegalStateException(interrupted);
+					}
+				});
+				JsonNode request = awaitRequest(fixture);
+				fixture.session.denyReauthorization(request.path("requestId").asText());
+				assertEquals(ReauthorizationFlow.Outcome.DENIED, flow.get(20, TimeUnit.SECONDS));
+				assertEquals(operationId, reopened.pendingOperations().get(0).operationId());
+				try (var exports = Files.walk(cache)) {
+					Path export = exports.filter(path -> path.getFileName().toString().contains(".cutoff-"))
+							.findFirst().orElseThrow();
+					assertEquals(operationId, new ObjectMapper().readTree(export.toFile()).get(0)
+							.path("operationId").asText());
+				}
 			}
 		}
 	}
@@ -107,6 +176,7 @@ class ReauthorizationFlowTest {
 				} catch (RuntimeException expectedExpiry) {
 					// Expired credential; the edit stays queued.
 				}
+
 				assertEquals(1, remote.pendingOperations().size());
 
 				AtomicBoolean cancelled = new AtomicBoolean();
@@ -134,6 +204,87 @@ class ReauthorizationFlowTest {
 				assertEquals(ReauthorizationFlow.Outcome.DENIED, deniedFlow.get(20, TimeUnit.SECONDS));
 				assertEquals(1, remote.pendingOperations().size());
 				assertTrue(fixture.store.loadSnapshot(fixture.incident).data().getClueLogEntries().isEmpty());
+			}
+		}
+	}
+
+
+	@Test
+	void postRequestEditsStayBlockedAcrossRestartAndCanBeExported() throws Exception {
+		try (HostFixture fixture = new HostFixture(directory.resolve("host"))) {
+			fixture.start();
+			DeviceCredential revoked = fixture.pair("Field phone");
+			HostGateway gateway = new HostGateway(fixture.client(revoked), revoked, "test-host");
+			Path cache = directory.resolve("cache");
+			try (RemoteIncidentStore remote = new RemoteIncidentStore(gateway, fixture.incident, cache)) {
+				StoredIncident initial = remote.loadSnapshot(fixture.incident);
+				initial.data().getClueLogEntries().add(clue("Reviewed"));
+				remote.save(fixture.incident, initial.data(), initial.revision());
+				fixture.session.revoke(revoked.deviceId());
+				assertThrows(RemoteAccessException.class, remote::replayPending);
+				String invitation = fixture.session.issueInvitation();
+				CompletableFuture<ReauthorizationFlow.Outcome> flow = CompletableFuture.supplyAsync(() -> {
+					try {
+						return ReauthorizationFlow.run(remote, gateway, invitation, "Replacement", () -> false,
+								Duration.ofMillis(50), null);
+					} catch (InterruptedException interrupted) {
+						throw new IllegalStateException(interrupted);
+					}
+				});
+				JsonNode request = awaitRequest(fixture);
+				StoredIncident later = remote.loadSnapshot(fixture.incident);
+				later.data().getClueLogEntries().add(clue("Not reviewed"));
+				remote.save(fixture.incident, later.data(), later.revision());
+				fixture.session.approveReauthorization(request.path("requestId").asText());
+				assertEquals(ReauthorizationFlow.Outcome.APPROVED, flow.get(20, TimeUnit.SECONDS));
+				assertEquals(1, fixture.store.loadSnapshot(fixture.incident).data().getClueLogEntries().size());
+				assertTrue(remote.hasUnreviewedPending());
+				assertEquals(1, remote.pendingOperations().size());
+				Path export = directory.resolve("recovery.json");
+				remote.exportOutbox(export);
+				assertTrue(java.nio.file.Files.readString(export).contains("Not reviewed"));
+				StoreValidationException replace = assertThrows(StoreValidationException.class,
+						() -> remote.replaceRejected(remote.pendingOperations().get(0).operationId()));
+				assertTrue(replace.getMessage().contains("held work"));
+				StoreValidationException split = assertThrows(StoreValidationException.class,
+						() -> remote.splitRejected(remote.pendingOperations().get(0).operationId()));
+				assertTrue(split.getMessage().contains("not reviewed"));
+				StoredIncident further = remote.loadSnapshot(fixture.incident);
+				further.data().getClueLogEntries().add(clue("Also held"));
+				remote.save(fixture.incident, further.data(), further.revision());
+			}
+			try (RemoteIncidentStore reopened = RemoteIncidentStore.openOffline(List.of(cache),
+					gateway.authorityFingerprint().orElseThrow(), fixture.incident)) {
+				assertTrue(reopened.hasUnreviewedPending());
+				assertEquals(2, reopened.pendingOperations().size());
+				reopened.exportOutbox(directory.resolve("reopened-recovery.json"));
+				assertTrue(java.nio.file.Files.readString(directory.resolve("reopened-recovery.json"))
+						.contains("Also held"));
+			}
+		}
+	}
+
+	@Test
+	void connectedOnlyStoreCanAttachAnApprovedReplacement() throws Exception {
+		try (HostFixture fixture = new HostFixture(directory.resolve("host"))) {
+			fixture.start();
+			DeviceCredential revoked = fixture.pair("Phone");
+			HostGateway gateway = new HostGateway(fixture.client(revoked), revoked, "test-host");
+			try (RemoteIncidentStore remote = new RemoteIncidentStore(gateway, fixture.incident)) {
+				fixture.session.revoke(revoked.deviceId());
+				String invitation = fixture.session.issueInvitation();
+				CompletableFuture<ReauthorizationFlow.Outcome> flow = CompletableFuture.supplyAsync(() -> {
+					try {
+						return ReauthorizationFlow.run(remote, gateway, invitation, "Replacement", () -> false,
+								Duration.ofMillis(50), null);
+					} catch (InterruptedException interrupted) {
+						throw new IllegalStateException(interrupted);
+					}
+				});
+				JsonNode request = awaitRequest(fixture);
+				fixture.session.approveReauthorization(request.path("requestId").asText());
+				assertEquals(ReauthorizationFlow.Outcome.APPROVED, flow.get(20, TimeUnit.SECONDS));
+				assertEquals(fixture.incident.value(), remote.loadSnapshot(fixture.incident).data().getIncidentId());
 			}
 		}
 	}

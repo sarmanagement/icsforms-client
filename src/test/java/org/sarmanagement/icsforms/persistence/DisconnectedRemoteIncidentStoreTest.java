@@ -16,6 +16,7 @@ import org.sarmanagement.icsforms.model.ClueLogEntry;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -106,15 +107,71 @@ class DisconnectedRemoteIncidentStoreTest {
 			gateway.lose = true;
 			assertThrows(StoreUnavailableException.class, local::replayPending);
 			operation = local.pendingOperations().get(0).batch().operationId();
+			assertTrue(local.acceptedChanges().properties().isEmpty());
 		}
 		try (RemoteIncidentStore local = RemoteIncidentStore.openOffline(cache, fingerprint, incident)) {
+			assertTrue(local.acceptedChanges().properties().isEmpty());
 			assertEquals(operation, local.pendingOperations().get(0).batch().operationId());
 			local.attachGateway(pair());
 			local.replayPending();
 			assertTrue(local.pendingOperations().isEmpty());
 			assertEquals(1, local.acceptedReceiptCount());
+			assertEquals(operation, local.acceptedChanges().properties().get("incidentContext").operationId());
+			assertEquals(gateway.receivedAt, local.acceptedChanges().properties().get("incidentContext").confirmedAt());
+		}
+		try (RemoteIncidentStore restored = RemoteIncidentStore.openOffline(cache, fingerprint, incident)) {
+			assertEquals(operation, restored.acceptedChanges().properties().get("incidentContext").operationId());
 		}
 		assertEquals("once", backing.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+	}
+
+	@Test
+	void acceptanceTracksExactOperationsAndIgnoresDiscardedEditsAcrossRestarts() {
+		RemoteIncidentGateway gateway = pair();
+		String fingerprint = gateway.authorityFingerprint().orElseThrow();
+		String first;
+		String second;
+		try (RemoteIncidentStore local = new RemoteIncidentStore(gateway, incident, cache)) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			snapshot.data().getForm202().setCommandEmphasis("Safety");
+			RevisionToken revision = local.save(incident, snapshot.data(), snapshot.revision());
+			first = local.pendingOperations().get(0).operationId();
+			snapshot.data().getIncidentContext().setIncidentName("Shared");
+			local.save(incident, snapshot.data(), revision);
+			second = local.pendingOperations().get(1).operationId();
+			local.replayPending();
+			assertEquals(first, local.acceptedChanges().properties().get("form202").operationId());
+			assertEquals(second, local.acceptedChanges().properties().get("incidentContext").operationId());
+			assertFalse(local.acceptedChanges().properties().containsKey("form204"));
+			StoredIncident next = local.loadSnapshot(incident);
+			next.data().getForm204().setBranch("Discarded");
+			local.save(incident, next.data(), next.revision());
+			local.discardPending(local.pendingOperations().get(0).operationId());
+			assertFalse(local.acceptedChanges().properties().containsKey("form204"));
+		}
+		try (RemoteIncidentStore restored = RemoteIncidentStore.openOffline(cache, fingerprint, incident)) {
+			assertEquals(first, restored.acceptedChanges().properties().get("form202").operationId());
+			assertEquals(second, restored.acceptedChanges().properties().get("incidentContext").operationId());
+			assertFalse(restored.acceptedChanges().properties().containsKey("form204"));
+		}
+	}
+
+	@Test
+	void mismatchedReceiptNeverAttributesAcceptance() {
+		LosingGateway gateway = new LosingGateway(pair());
+		try (RemoteIncidentStore local = new RemoteIncidentStore(gateway, incident, cache)) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			snapshot.data().getForm202().setCommandEmphasis("Safety");
+			local.save(incident, snapshot.data(), snapshot.revision());
+			String operation = local.pendingOperations().get(0).operationId();
+			gateway.wrongReceipt = true;
+			assertThrows(StorePersistenceException.class, local::replayPending);
+			assertTrue(local.acceptedChanges().properties().isEmpty());
+			assertEquals(0, local.acceptedReceiptCount());
+			assertEquals(operation, local.pendingOperations().get(0).operationId());
+			local.replayPending();
+			assertEquals(operation, local.acceptedChanges().properties().get("form202").operationId());
+		}
 	}
 
 	@Test
@@ -221,11 +278,12 @@ class DisconnectedRemoteIncidentStoreTest {
 			local.save(incident, draft.data(), draft.revision());
 			gateway.rejectValidation = true;
 			local.replayPending();
+			assertTrue(local.acceptedChanges().properties().isEmpty());
 			RemoteIncidentStore.PendingOperation rejected = local.pendingOperations().get(0);
 			assertEquals(RemoteIncidentStore.PendingStatus.REJECTED, rejected.status());
 			assertNotNull(rejected.rejection());
 			operation = rejected.operationId();
-			assertThrows(StoreValidationException.class, () -> local.discardPending(operation));
+			assertTrue(rejected.definitivelyRejected());
 		}
 		try (RemoteIncidentStore local = RemoteIncidentStore.openOffline(cache, fingerprint, incident)) {
 			assertEquals(RemoteIncidentStore.PendingStatus.REJECTED, local.pendingOperations().get(0).status());
@@ -235,6 +293,33 @@ class DisconnectedRemoteIncidentStoreTest {
 			local.retryRejected(operation);
 			local.replayPending();
 			assertTrue(local.pendingOperations().isEmpty());
+		}
+	}
+
+	@Test
+	void definitiveRejectionCanBeArchivedAndDiscardedAfterRestart() throws Exception {
+		LosingGateway gateway = new LosingGateway(pair());
+		String fingerprint = gateway.authorityFingerprint().orElseThrow();
+		String operation;
+		try (RemoteIncidentStore local = new RemoteIncidentStore(gateway, incident, cache)) {
+			StoredIncident draft = local.loadSnapshot(incident);
+			draft.data().getIncidentContext().setIncidentName("retained for archive");
+			local.save(incident, draft.data(), draft.revision());
+			gateway.rejectValidation = true;
+			local.replayPending();
+			operation = local.pendingOperations().get(0).operationId();
+		}
+		try (RemoteIncidentStore local = RemoteIncidentStore.openOffline(cache, fingerprint, incident)) {
+			assertTrue(local.pendingOperations().get(0).definitivelyRejected());
+			Path exported = directory.resolve("rejected-before-discard.json");
+			local.exportOutbox(exported);
+			local.discardPending(operation);
+			assertTrue(local.pendingOperations().isEmpty());
+			try (var files = Files.walk(cache)) {
+				Path archive = files.filter(path -> path.getFileName().toString().contains(".rejected-"))
+						.findFirst().orElseThrow();
+				assertEquals(Files.readString(exported), Files.readString(archive));
+			}
 		}
 	}
 
@@ -383,6 +468,34 @@ class DisconnectedRemoteIncidentStoreTest {
 		try (RemoteIncidentStore local = RemoteIncidentStore.openOffline(cache, fingerprint, incident)) {
 			assertEquals("durable", local.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
 			assertEquals(1, local.pendingOperations().size());
+		}
+	}
+
+	@Test
+	void approvedQueuedConflictCanStillBeReviewedAndResolved() {
+		try (RemoteIncidentStore local = new RemoteIncidentStore(pair(), incident, cache);
+				RemoteIncidentStore other = new RemoteIncidentStore(pair(), incident)) {
+			StoredIncident draft = local.loadSnapshot(incident);
+			StoredIncident host = other.loadSnapshot(incident);
+			draft.data().getIncidentContext().setIncidentName("mine");
+			local.save(incident, draft.data(), draft.revision());
+			host.data().getIncidentContext().setIncidentName("theirs");
+			other.save(incident, host.data(), host.revision());
+			List<RemoteIncidentStore.PendingOperation> reviewed = local.beginReauthorization(
+					RemoteAccessException.Reason.CREDENTIAL_REVOKED);
+			local.completeReauthorization(pair(), reviewed.stream()
+					.map(RemoteIncidentStore.PendingOperation::operationId).toList());
+			local.replayPending();
+			RemoteIncidentStore.PendingOperation conflict = local.pendingOperations().get(0);
+			assertEquals(RemoteIncidentStore.PendingStatus.CONFLICT, conflict.status());
+			RemoteIncidentStore.PendingOperation refreshed = local.refreshConflict(conflict.operationId());
+			IncidentService.FieldConflict field = refreshed.conflicts().get(0);
+			local.resolvePending(refreshed.operationId(), Map.of(
+					new RemoteIncidentStore.ConflictField(field.key(), field.field()),
+					RemoteIncidentStore.ConflictChoice.MINE));
+			local.replayPending();
+			assertTrue(local.pendingOperations().isEmpty());
+			assertEquals("mine", backing.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
 		}
 	}
 
@@ -594,6 +707,8 @@ class DisconnectedRemoteIncidentStoreTest {
 		private boolean denyReads;
 		private boolean loseHistory;
 		private boolean rejectValidation;
+		private boolean wrongReceipt;
+		private java.time.Instant receivedAt;
 
 		/**
 		 * Wraps an authenticated gateway.
@@ -649,6 +764,12 @@ class DisconnectedRemoteIncidentStoreTest {
 				throw new RemoteAccessException(RemoteAccessException.Reason.CREDENTIAL_REVOKED, "revoked", null);
 			}
 			IncidentService.SubmissionResult result = delegate.submit(batch);
+			receivedAt = result.receivedAt();
+			if (wrongReceipt) {
+				wrongReceipt = false;
+				return new IncidentService.SubmissionResult("different", result.applied(), result.cursor(),
+						result.receivedAt(), result.versions(), result.conflicts());
+			}
 			if (lose) {
 				lose = false;
 				throw new StoreUnavailableException("Simulated lost response");

@@ -5,17 +5,21 @@ package org.sarmanagement.icsforms.host;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.sarmanagement.icsforms.persistence.ReauthorizationOutbox;
+import org.sarmanagement.icsforms.persistence.RemoteAccessException;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
 
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
  * Client side of administrator-approved re-authorization for one cached incident.
  *
- * <p>The flow never changes the durable outbox while waiting or after a denial. Pending work is replayed only
- * after the host approves a credential and the replacement gateway has been attached.
+ * <p>Revoked-device work is also exported to protected recovery storage before repair is requested and again before replay. The flow never
+ * changes the durable outbox while waiting or after a denial. Pending work is replayed only after the host approves a
+ * credential and the replacement gateway has been attached.
  */
 public final class ReauthorizationFlow {
 	/** Final result of one request. */
@@ -51,7 +55,19 @@ public final class ReauthorizationFlow {
 			String deviceName, BooleanSupplier cancelled, Duration pollInterval, Consumer<String> status)
 			throws InterruptedException {
 		String state = gateway.credentialState();
-		JsonNode outbox = ReauthorizationOutbox.describe(remote.pendingOperations());
+		RemoteAccessException.Reason reason = switch (state) {
+			case "expired" -> RemoteAccessException.Reason.CREDENTIAL_EXPIRED;
+			case "revoked" -> RemoteAccessException.Reason.CREDENTIAL_REVOKED;
+			default -> throw new IllegalStateException("The host does not report an expired or revoked credential");
+		};
+		List<RemoteIncidentStore.PendingOperation> reviewed = remote.beginReauthorization(reason);
+		if ("revoked".equals(state)) {
+			Path exported = remote.exportCutoffOutbox();
+			if (exported != null && status != null) {
+				status.accept("Outbox recovery export retained at " + exported);
+			}
+		}
+		JsonNode outbox = ReauthorizationOutbox.describe(reviewed);
 		HostClient.ReauthorizationTicket ticket;
 		if ("expired".equals(state)) {
 			ticket = gateway.requestRenewal(deviceName, outbox);
@@ -70,7 +86,14 @@ public final class ReauthorizationFlow {
 		while (!cancelled.getAsBoolean()) {
 			HostClient.ReauthorizationResult result = gateway.pollReauthorization(ticket);
 			if ("approved".equals(result.state())) {
-				remote.attachGateway(gateway.withCredential(result.credential()));
+				if ("revoked".equals(state)) {
+					Path exported = remote.exportCutoffOutbox();
+					if (exported != null && status != null) {
+						status.accept("Outbox recovery export retained at " + exported);
+					}
+				}
+				remote.completeReauthorization(gateway.withCredential(result.credential()),
+						reviewed.stream().map(RemoteIncidentStore.PendingOperation::operationId).toList());
 				remote.replayPending();
 				return Outcome.APPROVED;
 			}

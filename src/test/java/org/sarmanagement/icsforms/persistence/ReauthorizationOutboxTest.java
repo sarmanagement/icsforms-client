@@ -42,6 +42,20 @@ class ReauthorizationOutboxTest {
 		}
 	}
 
+	@Test
+	void describesUnpreparedRootSettingsChanges() {
+		AppData before = new AppData();
+		AppData draft = FullDocumentSnapshot.detach(before);
+		draft.setIapPhase(org.sarmanagement.icsforms.model.IapPhase.DURING_OP);
+		RemoteIncidentStore.PendingOperation operation = new RemoteIncidentStore.PendingOperation("root", before,
+				draft, null, RemoteIncidentStore.PendingStatus.PENDING, List.of(), null);
+		JsonNode item = ReauthorizationOutbox.describe(List.of(operation)).get(0);
+		assertEquals(1, item.path("recordCount").asInt());
+		assertEquals(org.sarmanagement.icsforms.model.RootSettings.ID,
+				item.path("records").get(0).path("id").asText());
+		assertEquals("DURING_OP", item.path("records").get(0).path("content").path("iapPhase").asText());
+	}
+
 	/**
 	 * Builds an edit that creates one clue and has no prepared batch yet.
 	 *

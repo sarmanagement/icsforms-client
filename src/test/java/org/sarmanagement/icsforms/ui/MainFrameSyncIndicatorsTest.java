@@ -12,7 +12,9 @@ import java.awt.GraphicsEnvironment;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -29,6 +31,7 @@ import org.sarmanagement.icsforms.model.Ics214Form;
 import org.sarmanagement.icsforms.model.TCard;
 import org.sarmanagement.icsforms.pdf.PdfExportService;
 import org.sarmanagement.icsforms.persistence.FileIncidentStore;
+import org.sarmanagement.icsforms.persistence.AcceptedChanges;
 import org.sarmanagement.icsforms.persistence.FullDocumentSnapshot;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentStore;
 import org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingOperation;
@@ -120,6 +123,20 @@ class MainFrameSyncIndicatorsTest {
 	}
 
 	@Test
+	void durableReceiptsAreProjectedOnlyToTheirOwnWorkspaces() {
+		Instant first = Instant.parse("2026-01-01T00:00:00Z");
+		Instant second = first.plusSeconds(5);
+		var changes = new AcceptedChanges(Map.of("form202", new AcceptedChanges.Receipt("a", first)),
+				Map.of("form205", new AcceptedChanges.Receipt("b", second)),
+				Map.of("log", new AcceptedChanges.Receipt("c", second)));
+		var times = MainFrame.acceptedWorkspaceTimes(changes);
+		assertEquals(Map.of(WorkspaceId.ICS_202, first, WorkspaceId.ICS_205, second), times);
+		var cards = new AcceptedChanges(Map.of("tcards", new AcceptedChanges.Receipt("card", first)),
+				Map.of(), Map.of());
+		assertEquals(Map.of(WorkspaceId.TCARDS, first), MainFrame.acceptedWorkspaceTimes(cards));
+	}
+
+	@Test
 	void queuedStatusUpdatesTabsWithoutReplacingAnEditorDraft() throws Exception {
 		assumeFalse(GraphicsEnvironment.isHeadless());
 		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("host"), "Shared")) {
@@ -151,11 +168,58 @@ class MainFrameSyncIndicatorsTest {
 				SwingUtilities.invokeAndWait(() -> {
 					JTabbedPane tabs = (JTabbedPane) field(frame.get(), "tabs");
 					assertEquals("Uncommitted typing", draft.get().getText());
-					assertTrue(tabs.getToolTipTextAt(0).contains("Last accepted by the host in this window: none"));
+					assertTrue(tabs.getToolTipTextAt(0).contains("Last accepted by the host: none"));
 					assertTrue(tabs.getToolTipTextAt(0).contains("Last successful sync: "));
 					assertTrue(frame.get().connectionStatusText().contains("last successful sync "));
 					assertFalse(tabs.getTitleAt(1).contains("accepted"));
 					assertFalse(tabs.getTitleAt(1).endsWith("\u2022"));
+				});
+			} finally {
+				SwingUtilities.invokeAndWait(() -> {
+					AppController controller = (AppController) field(frame.get(), "controller");
+					controller.close();
+					controller.closeStore();
+					frame.get().dispose();
+				});
+			}
+		}
+	}
+
+	@Test
+	void acceptedLabelsSurviveRestartWithoutMarkingOtherWorkspaces() throws Exception {
+		assumeFalse(GraphicsEnvironment.isHeadless());
+		try (HostedIncidentFixture host = new HostedIncidentFixture(directory.resolve("host"), "Shared")) {
+			RemoteIncidentStore paired = host.pair();
+			var gateway = paired.detachGateway();
+			paired.close();
+			String fingerprint = gateway.authorityFingerprint().orElseThrow();
+			Path cache = directory.resolve("cache");
+			try (RemoteIncidentStore remote = new RemoteIncidentStore(gateway, host.incident(), cache)) {
+				var initial = remote.loadSnapshot(host.incident());
+				initial.data().getIncidentContext().setIncidentName("Accepted");
+				remote.save(host.incident(), initial.data(), initial.revision());
+				remote.replayPending();
+			}
+			RemoteIncidentStore restored = RemoteIncidentStore.openOffline(cache, fingerprint, host.incident());
+			var snapshot = restored.loadSnapshot(host.incident());
+			AtomicReference<MainFrame> frame = new AtomicReference<>();
+			SwingUtilities.invokeAndWait(() -> {
+				frame.set(new MainFrame(snapshot.data(), restored, host.incident(), new PdfExportService(),
+						new IncidentValidator(), directory));
+				invokeRefresh(frame.get(), restored);
+			});
+			try {
+				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+				AtomicReference<String> tooltip = new AtomicReference<>("");
+				while (!tooltip.get().contains("Queue: accepted") && System.nanoTime() < deadline) {
+					SwingUtilities.invokeAndWait(() -> tooltip.set(String.valueOf(
+							((JTabbedPane) field(frame.get(), "tabs")).getToolTipTextAt(0))));
+					Thread.sleep(20);
+				}
+				assertTrue(tooltip.get().contains("Queue: accepted"), tooltip.get());
+				SwingUtilities.invokeAndWait(() -> {
+					JTabbedPane tabs = (JTabbedPane) field(frame.get(), "tabs");
+					assertTrue(tabs.getToolTipTextAt(1).contains("Last accepted by the host: none"));
 				});
 			} finally {
 				SwingUtilities.invokeAndWait(() -> {

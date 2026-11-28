@@ -116,7 +116,7 @@ public final class HostSession implements AutoCloseable {
 		try {
 			return new HostStorage(Path.of(descriptor.location()), config.clock());
 		} catch (HostStorageException failure) {
-			LOGGER.log(Level.WARNING, "Host storage unavailable: {0}", failure.getMessage());
+			LOGGER.log(Level.WARNING, "Host storage unavailable: " + failure.getMessage(), failure);
 			return null;
 		}
 	}

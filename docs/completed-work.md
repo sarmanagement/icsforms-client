@@ -20,7 +20,26 @@ Contents:
 Note: the Stage 1 "T1" and "T2" gates are time gates (UTC and provenance) and
 are unrelated to the deployment topologies of the same names.
 
-## Work in progress — issue #61 disconnected workflow
+## Work in progress — issue #72 disconnected-entry follow-up
+
+Issue #61 (PR #71) and #62 are merged. The #72 follow-up adds receipt-backed
+view indicators, host storage notices, outbox controls (retry, archive-before-discard
+and automatic splitting of oversized rejected edits), cutoff exports, and
+additional acceptance and platform-test scaffolding. It combines two parallel
+implementations (the first branch's platform workflow and T-card link repointing
+with the second's split, approval-safeguard and acceptance work); see the
+[Disconnected-entry follow-up](#disconnected-entry-follow-up-in-progress-issue-72)
+below for the validation record. These are not a claim of
+issue or stage acceptance: the platform matrix has run (all eight cases pass; the run also
+fixed host storage on Windows), and the requested real-process scenarios are not all covered. See the current
+[status table](host-mode-plan.md#issue-72--closing-the-disconnected-entry-limits).
+
+The T-card merge follow-up now repoints active activity-log, veterinary-personnel
+and debriefing-supervisor links, with local save/reload and idempotence coverage.
+This does not establish end-to-end merge acceptance: merge provenance, complete
+reference handling and concurrent offline edits still need work.
+
+## Historical status — issue #61 disconnected workflow
 
 This is a status note, **not a delivery or stage-completion record**. A local
 per-authority, per-incident journal, stable queue ordering, replay, and conflict
@@ -850,3 +869,18 @@ setting, and CodeQL on the final commit.
 - The host's time zone governs the incident: when hosting starts, a "use system time zone" incident is pinned to the host's explicit zone, which reaches clients through the synchronized root settings. A client's Date/Time Zone menu is disabled ("set by the host"), and while hosting, choosing the system zone re-pins the host's zone. The client footer also shows the device's own interfaces and the host-set zone.
 
 - A connected client's Sharing menu no longer offers "Connect to a host…"; it has an enabled "Disconnect from host…" that asks for confirmation (noting unsent outbox changes) and then closes the window through the normal save-and-close path.
+
+## Disconnected-entry follow-up in progress (issue #72)
+
+The branch adds outbox retry, archive-before-discard and split controls, durable
+per-view receipt attribution, and the host sharing storage notice. It also adds
+child-JVM replay and duplicate-review coverage, and retains and offers export
+of queued work after a credential cutoff. The displayed Maven verification passed
+(1,512 tests, 5 skipped), as did Spotless and Checkstyle. The headless run had
+one failure caused by a `JAVA_TOOL_OPTIONS` banner in child-process output; that
+test passed with the variable unset, but the complete headless lane needs a
+clean rerun.
+Large dependent groups, safe recovery of an inaccessible existing journal,
+provenance for resolved approved work and interrupted approvals remain open; see the
+[issue status table](host-mode-plan.md#issue-72--closing-the-disconnected-entry-limits).
+Human platform verification remains unrun.

@@ -12,11 +12,15 @@ import org.sarmanagement.icsforms.host.HostGateway;
 import org.sarmanagement.icsforms.host.HostSession;
 import org.sarmanagement.icsforms.model.AppData;
 import org.sarmanagement.icsforms.model.ClueLogEntry;
+import org.sarmanagement.icsforms.model.PocAssignment;
+import org.sarmanagement.icsforms.model.RecordDiff;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -171,7 +175,7 @@ class RemoteIncidentStoreRejectionTest {
 			String fingerprint = gateway.authorityFingerprint().orElseThrow();
 			try (RemoteIncidentStore store = RemoteIncidentStore.connect(gateway, incident, List.of(fat, secure))) {
 				assertTrue(store.disconnectedStorageEnabled());
-				assertTrue(store.disconnectedStorageNotice().isEmpty());
+				assertTrue(store.disconnectedStorageNotice().orElseThrow().contains("protected fallback"));
 				StoredIncident snapshot = store.loadSnapshot(incident);
 				snapshot.data().getIncidentContext().setIncidentName("kept offline");
 				store.save(incident, snapshot.data(), snapshot.revision());
@@ -181,6 +185,11 @@ class RemoteIncidentStoreRejectionTest {
 			try (RemoteIncidentStore restored = RemoteIncidentStore.openOffline(List.of(fat, secure), fingerprint,
 					incident)) {
 				assertEquals(1, restored.pendingOperations().size());
+			}
+			try (RemoteIncidentStore reconnected = RemoteIncidentStore.connect(pair(), incident, List.of(fat, secure))) {
+				assertEquals(1, reconnected.pendingOperations().size());
+				assertTrue(reconnected.disconnectedStorageNotice().orElseThrow().contains("protected fallback"));
+				assertFalse(Files.exists(fat.resolve(fingerprint).resolve(incident.value() + ".json")));
 			}
 		} finally {
 			PrivateFiles.setStoreResolver(null);
@@ -233,6 +242,375 @@ class RemoteIncidentStoreRejectionTest {
 			assertTrue(local.pendingOperations().isEmpty());
 			assertEquals("corrected name",
 					backing.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+		}
+	}
+
+	@Test
+	void splitsAndArchivesOversizedHeadBeforeReplayingDependentEditsAfterRestart() throws Exception {
+		RemoteIncidentGateway gateway = pair();
+		String fingerprint = gateway.authorityFingerprint().orElseThrow();
+		Path cache = directory.resolve("cache");
+		List<String> ids;
+		try (RemoteIncidentStore local = new RemoteIncidentStore(gateway, incident, cache)) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			for (int index = 0; index < 101; index++) {
+				ClueLogEntry clue = new ClueLogEntry();
+				clue.setDescription("clue " + index);
+				snapshot.data().getClueLogEntries().add(clue);
+			}
+			RevisionToken revision = local.save(incident, snapshot.data(), snapshot.revision());
+			snapshot.data().getIncidentContext().setIncidentName("dependent");
+			local.save(incident, snapshot.data(), revision);
+			local.replayPending();
+			String rejected = local.pendingOperations().get(0).operationId();
+			Path exported = directory.resolve("original.json");
+			local.exportOutbox(exported);
+			ids = local.splitRejected(rejected);
+			assertEquals(2, ids.size());
+			assertEquals(3, local.pendingOperations().size());
+			try (var files = Files.walk(cache)) {
+				Path archive = files.filter(path -> path.getFileName().toString().contains(".rejected-"))
+						.findFirst().orElseThrow();
+				assertEquals(Files.readString(exported), Files.readString(archive));
+			}
+		}
+		try (RemoteIncidentStore restored = RemoteIncidentStore.openOffline(cache, fingerprint, incident)) {
+			assertEquals(ids.get(0), restored.pendingOperations().get(0).operationId());
+			assertEquals(101, restored.loadSnapshot(incident).data().getClueLogEntries().size());
+			restored.attachGateway(pair());
+			restored.replayPending();
+			assertTrue(restored.pendingOperations().isEmpty());
+			assertEquals(101, backing.loadSnapshot(incident).data().getClueLogEntries().size());
+			assertEquals("dependent", backing.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+		}
+	}
+
+	@Test
+	void discardArchivesExactlyAndArchiveFailureKeepsQueueIntact() throws Exception {
+		Path cache = directory.resolve("cache");
+		try (RemoteIncidentStore local = new RemoteIncidentStore(pair(), incident, cache)) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			snapshot.data().getIncidentContext().setIncidentName("preserve this edit");
+			local.save(incident, snapshot.data(), snapshot.revision());
+			String id = local.pendingOperations().get(0).operationId();
+			Path exported = directory.resolve("discard.json");
+			local.exportOutbox(exported);
+			PrivateFiles.setStoreResolver(path -> new PrivateFilesTest.FakeStore(false, false));
+			try {
+				assertThrows(StorePersistenceException.class, () -> local.discardPending(id));
+				assertEquals(id, local.pendingOperations().get(0).operationId());
+				assertEquals("preserve this edit", local.loadSnapshot(incident).data().getIncidentContext()
+						.getIncidentName());
+			} finally {
+				PrivateFiles.setStoreResolver(null);
+			}
+			local.discardPending(id);
+			assertTrue(local.pendingOperations().isEmpty());
+			try (var files = Files.walk(cache)) {
+				List<Path> archives = files.filter(path -> path.getFileName().toString().contains(".rejected-"))
+						.toList();
+				assertEquals(2, archives.size());
+				assertTrue(archives.stream().anyMatch(path -> {
+					try {
+						return Files.readString(path).equals(Files.readString(exported));
+					} catch (java.io.IOException failure) {
+						throw new java.io.UncheckedIOException(failure);
+					}
+				}));
+			}
+		}
+	}
+
+	@Test
+	void definitiveMaterializedRejectionCanBeArchivedAndDiscarded() throws Exception {
+		Path cache = directory.resolve("cache");
+		try (RemoteIncidentStore local = new RemoteIncidentStore(new AmbiguousGateway(pair(), true), incident, cache)) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			snapshot.data().getIncidentContext().setIncidentName("rejected value");
+			local.save(incident, snapshot.data(), snapshot.revision());
+			local.replayPending();
+			var rejected = local.pendingOperations().get(0);
+			assertNotNull(rejected.batch());
+			assertTrue(rejected.definitivelyRejected());
+			Path exported = directory.resolve("materialized.json");
+			local.exportOutbox(exported);
+			local.discardPending(rejected.operationId());
+			assertTrue(local.pendingOperations().isEmpty());
+			try (var files = Files.walk(cache)) {
+				Path archive = files.filter(path -> path.getFileName().toString().contains(".rejected-"))
+						.findFirst().orElseThrow();
+				assertEquals(Files.readString(exported), Files.readString(archive));
+			}
+		}
+	}
+
+	@Test
+	void definitiveMaterializedRejectionCanBeArchivedAndSplit() throws Exception {
+		Path cache = directory.resolve("cache");
+		try (RemoteIncidentStore local = new RemoteIncidentStore(new AmbiguousGateway(pair(), true), incident, cache)) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			snapshot.data().getClueLogEntries().add(new ClueLogEntry());
+			snapshot.data().getClueLogEntries().add(new ClueLogEntry());
+			local.save(incident, snapshot.data(), snapshot.revision());
+			local.replayPending();
+			var rejected = local.pendingOperations().get(0);
+			assertNotNull(rejected.batch());
+			assertTrue(rejected.definitivelyRejected());
+			Path exported = directory.resolve("materialized-split.json");
+			local.exportOutbox(exported);
+			assertEquals(2, local.splitRejected(rejected.operationId()).size());
+			try (var files = Files.walk(cache)) {
+				Path archive = files.filter(path -> path.getFileName().toString().contains(".rejected-"))
+						.findFirst().orElseThrow();
+				assertEquals(Files.readString(exported), Files.readString(archive));
+			}
+			local.replayPending();
+			assertTrue(local.pendingOperations().isEmpty());
+			assertEquals(2, backing.loadSnapshot(incident).data().getClueLogEntries().size());
+		}
+	}
+
+	@Test
+	void choosingHostConflictValueArchivesQueueAndFailsClosedOnArchiveFailure() throws Exception {
+		Path cache = directory.resolve("cache");
+		try (RemoteIncidentStore local = new RemoteIncidentStore(pair(), incident, cache);
+				RemoteIncidentStore other = new RemoteIncidentStore(pair(), incident)) {
+			StoredIncident mine = local.loadSnapshot(incident);
+			StoredIncident theirs = other.loadSnapshot(incident);
+			mine.data().getIncidentContext().setIncidentName("local value");
+			local.save(incident, mine.data(), mine.revision());
+			theirs.data().getIncidentContext().setIncidentName("host value");
+			other.save(incident, theirs.data(), theirs.revision());
+			local.replayPending();
+			var conflict = local.pendingOperations().get(0);
+			var field = conflict.conflicts().get(0);
+			var choices = Map.of(new RemoteIncidentStore.ConflictField(field.key(), field.field()),
+					RemoteIncidentStore.ConflictChoice.THEIRS);
+			Path exported = directory.resolve("conflict.json");
+			local.exportOutbox(exported);
+			Path absoluteCache = cache.toAbsolutePath();
+			PrivateFiles.setStoreResolver(path -> path.startsWith(absoluteCache)
+					? new PrivateFilesTest.FakeStore(false, false) : realStore(path));
+			try {
+				assertThrows(StorePersistenceException.class, () -> local.resolvePending(conflict.operationId(), choices));
+				assertEquals(conflict.operationId(), local.pendingOperations().get(0).operationId());
+				assertEquals("local value", local.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+			} finally {
+				PrivateFiles.setStoreResolver(null);
+			}
+			local.resolvePending(conflict.operationId(), choices);
+			assertEquals("host value", local.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+			try (var files = Files.walk(cache)) {
+				assertTrue(files.filter(path -> path.getFileName().toString().contains(".rejected-")).anyMatch(path -> {
+					try {
+						return Files.readString(path).equals(Files.readString(exported));
+					} catch (java.io.IOException failure) {
+						throw new java.io.UncheckedIOException(failure);
+					}
+				}));
+			}
+		}
+	}
+
+	@Test
+	void conflictRefreshArchivesOriginalBeforeAutomaticRebase() throws Exception {
+		Path cache = directory.resolve("cache");
+		try (RemoteIncidentStore local = new RemoteIncidentStore(pair(), incident, cache);
+				RemoteIncidentStore other = new RemoteIncidentStore(pair(), incident)) {
+			StoredIncident mine = local.loadSnapshot(incident);
+			StoredIncident theirs = other.loadSnapshot(incident);
+			mine.data().getIncidentContext().setIncidentName("local value");
+			local.save(incident, mine.data(), mine.revision());
+			theirs.data().getIncidentContext().setIncidentName("host value");
+			RevisionToken revision = other.save(incident, theirs.data(), theirs.revision());
+			local.replayPending();
+			var conflict = local.pendingOperations().get(0);
+			Path exported = directory.resolve("refresh.json");
+			local.exportOutbox(exported);
+			theirs.data().getIncidentContext().setIncidentName("local value");
+			other.save(incident, theirs.data(), revision);
+			assertEquals(RemoteIncidentStore.PendingStatus.REVIEW_REQUIRED,
+					local.refreshConflict(conflict.operationId()).status());
+			try (var files = Files.walk(cache)) {
+				assertTrue(files.filter(path -> path.getFileName().toString().contains(".rejected-")).anyMatch(path -> {
+					try {
+						return Files.readString(path).equals(Files.readString(exported));
+					} catch (java.io.IOException failure) {
+						throw new java.io.UncheckedIOException(failure);
+					}
+				}));
+			}
+		}
+	}
+
+	@Test
+	void existingArchiveCannotBeTruncatedByRepeatedLabel() throws Exception {
+		try (DisconnectedStateFile file = new DisconnectedStateFile(directory.resolve("other"), "authority",
+				incident)) {
+			file.archive("same", List.of());
+			Path archive = directory.resolve("other/authority/" + incident.value() + ".json.rejected-same.json");
+			String original = Files.readString(archive);
+			assertThrows(java.io.IOException.class, () -> file.archive("same", List.of()));
+			assertEquals(original, Files.readString(archive));
+		}
+	}
+
+	@Test
+	void splitsUtf8ByteLimitedBatchWithoutDroppingRecords() {
+		try (RemoteIncidentStore local = new RemoteIncidentStore(pair(), incident, directory.resolve("cache"))) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			for (int index = 0; index < 2; index++) {
+				ClueLogEntry clue = new ClueLogEntry();
+				clue.setDescription(index + "é".repeat(240_000));
+				snapshot.data().getClueLogEntries().add(clue);
+			}
+
+			local.save(incident, snapshot.data(), snapshot.revision());
+			local.replayPending();
+			assertEquals(RemoteIncidentStore.PendingStatus.REJECTED, local.pendingOperations().get(0).status());
+			assertEquals(2, local.splitRejected(local.pendingOperations().get(0).operationId()).size());
+			local.replayPending();
+			assertTrue(local.pendingOperations().isEmpty());
+			assertEquals(2, backing.loadSnapshot(incident).data().getClueLogEntries().size());
+		}
+	}
+
+	@Test
+	void individualOversizedRecordCannotBeSplitOrLost() {
+		try (RemoteIncidentStore local = new RemoteIncidentStore(pair(), incident, directory.resolve("cache"))) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			String large = "é".repeat(460_000);
+			snapshot.data().getIncidentContext().setIncidentName(large);
+			local.save(incident, snapshot.data(), snapshot.revision());
+			local.replayPending();
+			String id = local.pendingOperations().get(0).operationId();
+			assertThrows(StoreValidationException.class, () -> local.splitRejected(id));
+			assertEquals(id, local.pendingOperations().get(0).operationId());
+			assertEquals(large, local.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+		}
+	}
+
+	@Test
+	void correctedRejectedEditCanRemoveARecordAndReplayLaterEdits() {
+		StoredIncident host = backing.loadSnapshot(incident);
+		ClueLogEntry clue = new ClueLogEntry();
+		clue.setDescription("to remove");
+		host.data().getClueLogEntries().add(clue);
+		backing.save(incident, host.data(), host.revision());
+		try (RemoteIncidentStore local = new RemoteIncidentStore(pair(), incident, directory.resolve("cache"))) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			snapshot.data().getIncidentContext().setIncidentName("é".repeat(460_000));
+			RevisionToken revision = local.save(incident, snapshot.data(), snapshot.revision());
+			local.replayPending();
+			String rejected = local.pendingOperations().get(0).operationId();
+			snapshot.data().getIncidentContext().setIncidentName("corrected");
+			snapshot.data().getClueLogEntries().clear();
+			revision = local.save(incident, snapshot.data(), revision);
+			local.replaceRejected(rejected);
+			snapshot.data().getIncidentContext().setIncidentName("later");
+			local.save(incident, snapshot.data(), revision);
+			local.replayPending();
+			assertTrue(local.pendingOperations().isEmpty());
+			assertTrue(backing.loadSnapshot(incident).data().getClueLogEntries().isEmpty());
+			assertEquals("later", backing.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+		}
+	}
+
+	@Test
+	void firstAttemptRejectionRemainsReplaceableAfterRestart() {
+		RemoteIncidentGateway transport = pair();
+		String fingerprint = transport.authorityFingerprint().orElseThrow();
+		Path cache = directory.resolve("cache");
+		String rejected;
+		try (RemoteIncidentStore local = new RemoteIncidentStore(new AmbiguousGateway(transport, true), incident,
+				cache)) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			snapshot.data().getIncidentContext().setIncidentName("first");
+			local.save(incident, snapshot.data(), snapshot.revision());
+			local.replayPending();
+			assertTrue(local.pendingOperations().get(0).definitivelyRejected());
+			rejected = local.pendingOperations().get(0).operationId();
+		}
+
+		try (RemoteIncidentStore restored = RemoteIncidentStore.openOffline(cache, fingerprint, incident)) {
+			assertTrue(restored.pendingOperations().get(0).definitivelyRejected());
+			StoredIncident snapshot = restored.loadSnapshot(incident);
+			snapshot.data().getIncidentContext().setIncidentName("corrected");
+			restored.save(incident, snapshot.data(), snapshot.revision());
+			restored.replaceRejected(rejected);
+			restored.attachGateway(pair());
+			restored.replayPending();
+			assertEquals("corrected", backing.loadSnapshot(incident).data().getIncidentContext().getIncidentName());
+		}
+	}
+
+	@Test
+	void ambiguousRejectionCannotBeReplacedOrSplitAfterRestart() {
+		RemoteIncidentGateway transport = pair();
+		String fingerprint = transport.authorityFingerprint().orElseThrow();
+		Path cache = directory.resolve("cache");
+		String rejected;
+		try (RemoteIncidentStore local = new RemoteIncidentStore(new AmbiguousGateway(transport), incident, cache)) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			snapshot.data().getIncidentContext().setIncidentName("accepted once");
+			local.save(incident, snapshot.data(), snapshot.revision());
+			assertThrows(StoreUnavailableException.class, local::replayPending);
+			local.replayPending();
+			assertFalse(local.pendingOperations().get(0).definitivelyRejected());
+			rejected = local.pendingOperations().get(0).operationId();
+		}
+		try (RemoteIncidentStore restored = RemoteIncidentStore.openOffline(cache, fingerprint, incident)) {
+			StoredIncident snapshot = restored.loadSnapshot(incident);
+			snapshot.data().getIncidentContext().setIncidentName("later correction");
+			restored.save(incident, snapshot.data(), snapshot.revision());
+			assertThrows(StoreValidationException.class, () -> restored.replaceRejected(rejected));
+			assertThrows(StoreValidationException.class, () -> restored.splitRejected(rejected));
+			assertEquals(rejected, restored.pendingOperations().get(0).operationId());
+		}
+	}
+
+	@Test
+	void crossReferencedChangedRecordsRemainInTheSameSplitBatch() {
+		try (RemoteIncidentStore local = new RemoteIncidentStore(pair(), incident, directory.resolve("cache"))) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			ClueLogEntry first = new ClueLogEntry();
+			ClueLogEntry second = new ClueLogEntry();
+			first.confirmDuplicate(second.getId(), Instant.EPOCH, null);
+			snapshot.data().getClueLogEntries().add(first);
+			snapshot.data().getClueLogEntries().add(second);
+			for (int index = 0; index < 100; index++) {
+				snapshot.data().getClueLogEntries().add(new ClueLogEntry());
+			}
+			local.save(incident, snapshot.data(), snapshot.revision());
+			local.replayPending();
+			local.splitRejected(local.pendingOperations().get(0).operationId());
+			assertTrue(local.pendingOperations().stream().anyMatch(operation -> {
+				var keys = RecordDiff.between(operation.before(), operation.draft()).created();
+				return keys.stream().anyMatch(key -> key.id().equals(first.getId()))
+						&& keys.stream().anyMatch(key -> key.id().equals(second.getId()));
+			}));
+			local.replayPending();
+			assertTrue(local.pendingOperations().isEmpty());
+			assertEquals(102, backing.loadSnapshot(incident).data().getClueLogEntries().size());
+		}
+	}
+
+	@Test
+	void oversizedDependentGroupIsLeftIntactWhenItCannotBeSplitSafely() {
+		try (RemoteIncidentStore local = new RemoteIncidentStore(pair(), incident, directory.resolve("cache"))) {
+			StoredIncident snapshot = local.loadSnapshot(incident);
+			ClueLogEntry clue = new ClueLogEntry();
+			for (int index = 0; index < 101; index++) {
+				clue.getFollowUpAssignments().add(new PocAssignment());
+			}
+			snapshot.data().getClueLogEntries().add(clue);
+			local.save(incident, snapshot.data(), snapshot.revision());
+			local.replayPending();
+			String rejected = local.pendingOperations().get(0).operationId();
+			assertThrows(StoreValidationException.class, () -> local.splitRejected(rejected));
+			assertEquals(rejected, local.pendingOperations().get(0).operationId());
+			assertEquals(101, local.loadSnapshot(incident).data().getClueLogEntries().get(0)
+					.getFollowUpAssignments().size());
 		}
 	}
 

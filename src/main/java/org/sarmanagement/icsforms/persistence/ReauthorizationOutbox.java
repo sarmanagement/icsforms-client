@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.sarmanagement.icsforms.model.RecordDiff;
 import org.sarmanagement.icsforms.model.RecordIndex;
+import org.sarmanagement.icsforms.model.RootSettings;
 
 import java.util.List;
 import java.util.Map;
@@ -121,14 +122,26 @@ public final class ReauthorizationOutbox {
 			item.put("description", "Edit not yet prepared for submission");
 			return;
 		}
+		JsonNode rootBefore = RootSettings.snapshot(operation.before());
+		JsonNode rootAfter = RootSettings.snapshot(operation.draft());
+		boolean rootChanged = !rootBefore.equals(rootAfter);
 		int count = diff.created().size() + diff.changed().size() + diff.removed().size()
-				+ diff.struckOut().size();
+				+ diff.struckOut().size() + (rootChanged ? 1 : 0);
 		item.put("description", count + " record change(s), not yet prepared for submission");
 		item.put("recordCount", count);
 		if (level == IDENTIFIERS) {
 			return;
 		}
 		ArrayNode listed = item.putArray("records");
+		if (rootChanged) {
+			ObjectNode root = listed.addObject();
+			root.put("type", RootSettings.key().type());
+			root.put("id", RootSettings.key().id());
+			root.put("operation", "CHANGE");
+			if (level == FULL) {
+				root.set("content", rootAfter);
+			}
+		}
 		for (RecordIndex.RecordKey key : diff.created()) {
 			addRecord(listed, key, "CREATE", null, index, level);
 		}

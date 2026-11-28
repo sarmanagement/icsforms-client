@@ -716,11 +716,36 @@ public class AppController implements AutoCloseable {
 	 * @throws RuntimeException when the store cannot be read; the controller is unchanged.
 	 */
 	public RemoteRefreshOutcome refreshFromRemote() {
+		return refreshFromStore(null);
+	}
+
+	/**
+	 * Rebinds the active incident to its durable local snapshot without contacting the host.
+	 * This must run off the event-dispatch thread and preserves the same draft and race checks as remote refresh.
+	 *
+	 * @param remote store whose cached snapshot is to be applied
+	 * @return what the controller did with the snapshot
+	 * @throws IllegalStateException when called on the event-dispatch thread
+	 * @throws RuntimeException when the cached snapshot cannot be read; the controller is unchanged
+	 */
+	public RemoteRefreshOutcome refreshFromCached(
+			org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote) {
+		return refreshFromStore(Objects.requireNonNull(remote, "remote"));
+	}
+
+	/**
+	 * Loads and conditionally applies a remote or cached snapshot with the same binding checks.
+	 *
+	 * @param cachedStore specific store to read locally, or null to read the active store normally
+	 * @return result of the guarded refresh
+	 */
+	private RemoteRefreshOutcome refreshFromStore(
+			org.sarmanagement.icsforms.persistence.RemoteIncidentStore cachedStore) {
 		if (SwingUtilities.isEventDispatchThread()) {
 			throw new IllegalStateException("Remote refresh performs network I/O and must not run on the event thread.");
 		}
 		RemoteRefreshBinding binding = onOwner(() -> {
-			if (store == null || activeIncidentId == null || closed) {
+			if (store == null || activeIncidentId == null || closed || (cachedStore != null && store != cachedStore)) {
 				return null;
 			}
 			return new RemoteRefreshBinding(store, activeIncidentId, incidentGeneration, storedRevision, editVersion,
@@ -729,7 +754,8 @@ public class AppController implements AutoCloseable {
 		if (binding == null) {
 			return RemoteRefreshOutcome.IGNORED;
 		}
-		StoredIncident remote = binding.source().loadSnapshot(binding.id());
+		StoredIncident remote = cachedStore == null ? binding.source().loadSnapshot(binding.id())
+				: cachedStore.loadCachedSnapshot(binding.id());
 		return onOwner(() -> applyRemoteSnapshot(binding, remote));
 	}
 
@@ -3708,23 +3734,38 @@ public class AppController implements AutoCloseable {
 	}
 
 	/**
-	 * Repoints every link to a merged-away T-card at the card that was kept, so no link refers to a removed
-	 * record. Covers SAR task resources and the current and next-period ICS 215 worksheets; archived periods are
-	 * left as recorded. Links that become duplicates of an existing link to the kept card are dropped.
+	 * Repoints active links to a merged-away T-card at the card that was kept. Covers SAR task resources
+	 * and debriefing supervisors, activity logs, canine veterinary personnel and the current and next-period
+	 * ICS 215 worksheets; archived periods are left as recorded. Worksheet and veterinary links that become
+	 * duplicates of an existing link to the kept card are dropped.
 	 *
 	 * @param removedId resource identity of the card that was merged away.
 	 * @param keptId resource identity of the card that was retained.
 	 */
 	public void repointTCardLinks(String removedId, String keptId) {
-		if (removedId == null || keptId == null || removedId.isBlank() || removedId.equals(keptId)) {
+		if (removedId == null || keptId == null || removedId.isBlank() || keptId.isBlank()
+				|| removedId.equals(keptId)) {
 			return;
 		}
 		for (SarTaskAssignment task : data.getSarTaskAssignments()) {
+			if (removedId.equals(task.getDebriefingSupervisorResourceId())) {
+				task.setDebriefingSupervisorResourceId(keptId);
+			}
 			for (SarTaskResource res : task.getResourcesAssigned()) {
 				if (removedId.equals(res.getResourceId())) {
 					res.setResourceId(keptId);
 				}
 			}
+		}
+		for (org.sarmanagement.icsforms.model.Ics214Form log : data.getActivityLogs()) {
+			if (removedId.equals(log.getLinkedResourceId())) {
+				log.setLinkedResourceId(keptId);
+			}
+		}
+		org.sarmanagement.icsforms.model.CanineMedicalPlan plan = data.peekCanineMedicalPlan();
+		if (plan != null && plan.getVeterinaryPersonnelResourceIds().contains(removedId)) {
+			plan.setVeterinaryPersonnelResourceIds(plan.getVeterinaryPersonnelResourceIds().stream()
+					.map(id -> removedId.equals(id) ? keptId : id).toList());
 		}
 		repointIcs215Links(data.getForm215(), removedId, keptId);
 		repointIcs215Links(data.getNextPeriodForm215(), removedId, keptId);
