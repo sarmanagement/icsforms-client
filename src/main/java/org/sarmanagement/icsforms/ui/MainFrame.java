@@ -147,6 +147,8 @@ public class MainFrame extends JFrame {
 	private boolean outboxRefreshAgain;
 	private java.time.Instant cachedConfirmation;
 	private long acceptedReceipts;
+	private boolean unreviewedWorkHeld;
+	private org.sarmanagement.icsforms.persistence.RemoteAccessException.Reason promptedCutoff;
 	private final Map<WorkspaceId, java.time.Instant> acceptedWorkspaces = new EnumMap<>(WorkspaceId.class);
 	private final Map<String, java.time.Instant> acceptedLogs = new LinkedHashMap<>();
 	private Map<WorkspaceId, Set<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingStatus>>
@@ -1284,6 +1286,8 @@ public class MainFrame extends JFrame {
 				cachedConfirmation = null;
 				outbox = List.of();
 				outboxKnown = false;
+				unreviewedWorkHeld = false;
+				promptedCutoff = null;
 				acceptedReceipts = 0;
 				acceptedWorkspaces.clear();
 				acceptedLogs.clear();
@@ -1435,7 +1439,8 @@ public class MainFrame extends JFrame {
 		if (remote.gateway() == null && !remote.pendingOperations().isEmpty()) {
 			JOptionPane.showMessageDialog(this,
 					"The saved outbox is intact, but this offline cache has no device identity to request approval. "
-							+ "Reconnect from the original device session; do not discard or export the outbox.");
+							+ "Reconnect from the original device session or export the outbox for manual recovery; "
+							+ "do not discard it.");
 			return;
 		}
 		JTextArea invitation = new JTextArea(4, 48);
@@ -1482,6 +1487,13 @@ public class MainFrame extends JFrame {
 						JOptionPane.showMessageDialog(MainFrame.this,
 								"The request was denied. The local outbox remains available for export.");
 					} else if (controller.getStore() == remote && remote.gateway() != null) {
+						if (remote.hasUnreviewedPending()) {
+							JOptionPane.showMessageDialog(MainFrame.this,
+									"Edits saved while approval was pending were not reviewed and will not sync. "
+											+ "Export the outbox and arrange manual recovery with the administrator. "
+											+ "The local work remains retained.",
+									"Unreviewed work retained", JOptionPane.WARNING_MESSAGE);
+						}
 						attachMonitor(remote, "Connected to " + remote.describe().location());
 					}
 				} catch (InterruptedException interrupted) {
@@ -1610,19 +1622,20 @@ public class MainFrame extends JFrame {
 			long generation) {
 		java.time.Instant confirmation = remote.lastConfirmedAt().orElse(null);
 		long accepted = remote.acceptedReceiptCount();
+		boolean unreviewed = remote.hasUnreviewedPending();
+		var changes = remote.acceptedChanges();
 		WorkspaceQueueSnapshot queueStatus = workspaceQueueSnapshot(snapshot);
 		javax.swing.SwingUtilities.invokeLater(() -> {
 			if (generation == monitorGeneration && controller.getStore() == remote) {
-				if (outboxKnown) {
-					WorkspaceQueueSnapshot done = acceptedSnapshot(outbox, snapshot, acceptedReceipts, accepted);
-					java.time.Instant now = java.time.Instant.now();
-					done.workspaces().keySet().forEach(id -> acceptedWorkspaces.put(id, now));
-					done.logs().keySet().forEach(id -> acceptedLogs.put(id, now));
-				}
+				acceptedWorkspaces.clear();
+				acceptedWorkspaces.putAll(acceptedWorkspaceTimes(changes));
+				acceptedLogs.clear();
+				changes.logs().forEach((id, receipt) -> acceptedLogs.put(id, receipt.confirmedAt()));
 				outbox = snapshot;
 				outboxKnown = true;
 				cachedConfirmation = confirmation;
 				acceptedReceipts = accepted;
+				unreviewedWorkHeld = unreviewed;
 				workspaceQueueStatus = queueStatus.workspaces();
 				logQueueStatus = queueStatus.logs();
 				showConnectionStatus();
@@ -1632,15 +1645,53 @@ public class MainFrame extends JFrame {
 	}
 
 	/**
-	 * Attributes operations the host acknowledged between two outbox snapshots to the workspaces they edited.
-	 * Operations that left the queue without a matching increase in accepted receipts (discarded, superseded or
-	 * resolved into a new operation) are not reported as accepted.
+	 * Projects durable receipt attribution onto the corresponding workspaces.
+	 *
+	 * @param changes exact host receipt attribution
+	 * @return latest acceptance time for each affected workspace
+	 */
+	static Map<WorkspaceId, java.time.Instant> acceptedWorkspaceTimes(
+			org.sarmanagement.icsforms.persistence.AcceptedChanges changes) {
+		Map<WorkspaceId, java.time.Instant> result = new EnumMap<>(WorkspaceId.class);
+		Set<String> mapped = new HashSet<>();
+		workspaceProperties().forEach((workspace, properties) -> {
+			mapped.addAll(properties);
+			properties.forEach(property -> addAcceptedTime(result, workspace, changes.properties().get(property)));
+		});
+		historyProperties().forEach((workspace, properties) -> properties
+				.forEach(property -> addAcceptedTime(result, workspace, changes.history().get(property))));
+		mapped.addAll(Set.of("schemaVersion", "incidentId", "revision", "createdAt", "updatedAt", "originNodeId"));
+		changes.properties().forEach((property, receipt) -> {
+			if (!mapped.contains(property)) {
+				addAcceptedTime(result, WorkspaceId.SHARED, receipt);
+			}
+		});
+		return result;
+	}
+
+	/**
+	 * Retains the latest receipt time for a workspace.
+	 *
+	 * @param result accumulated workspace times
+	 * @param workspace affected workspace
+	 * @param receipt receipt for a changed property, or null
+	 */
+	private static void addAcceptedTime(Map<WorkspaceId, java.time.Instant> result, WorkspaceId workspace,
+			org.sarmanagement.icsforms.persistence.AcceptedChanges.Receipt receipt) {
+		if (receipt != null && receipt.confirmedAt() != null) {
+			result.merge(workspace, receipt.confirmedAt(), (first, second) -> first.isAfter(second) ? first : second);
+		}
+	}
+
+	/**
+	 * Computes the former queue-difference estimate for compatibility with callers.
+	 * The UI does not use this estimate for acceptance because counts do not identify receipts.
 	 *
 	 * @param previous earlier durable queue
 	 * @param current latest durable queue
 	 * @param previousAccepted earlier accepted-receipt count
 	 * @param accepted latest accepted-receipt count
-	 * @return workspaces and logs whose edits were acknowledged, or empty maps when attribution is uncertain
+	 * @return estimated affected workspaces and logs, or empty when counts disagree
 	 */
 	static WorkspaceQueueSnapshot acceptedSnapshot(
 			List<org.sarmanagement.icsforms.persistence.RemoteIncidentStore.PendingOperation> previous,
@@ -1840,7 +1891,7 @@ public class MainFrame extends JFrame {
 			String state = !outboxKnown ? "checking" : names.isEmpty() ? "no queued changes"
 					: String.join(", ", names);
 			tabs.setTitleAt(index, outboxKnown && !states.isEmpty() ? label + QUEUED_MARK : label);
-			tabs.setToolTipTextAt(index, "Queue: " + state + ". Last accepted by the host in this window: "
+			tabs.setToolTipTextAt(index, "Queue: " + state + ". Last accepted by the host: "
 					+ (acceptedAt == null ? "none" : acceptedAt.toString()) + ". Last successful sync: "
 					+ (cachedConfirmation == null ? "unknown" : cachedConfirmation.toString())
 					+ ". Unsaved editor drafts are not queued.");
@@ -1964,6 +2015,24 @@ public class MainFrame extends JFrame {
 
 						/** {@inheritDoc} */
 						@Override
+						public void retryRejected(OutboxReviewPanel.Entry entry) {
+							recoverOutboxOperation(remote, entry, holder[0], false);
+						}
+
+						/** {@inheritDoc} */
+						@Override
+						public void discardPending(OutboxReviewPanel.Entry entry) {
+							recoverOutboxOperation(remote, entry, holder[0], true);
+						}
+
+						/** {@inheritDoc} */
+						@Override
+						public void splitRejected(OutboxReviewPanel.Entry entry) {
+							splitOutboxOperation(remote, entry, holder[0]);
+						}
+
+						/** {@inheritDoc} */
+						@Override
 						public void confirm(OutboxReviewPanel.Entry entry) {
 							if (JOptionPane.showConfirmDialog(MainFrame.this,
 									"Approve this reviewed draft for submission to the host?",
@@ -2004,12 +2073,146 @@ public class MainFrame extends JFrame {
 					holder[0] = panel;
 					panel.setEntries(snapshot.stream().map(item -> new OutboxReviewPanel.Entry(item.operationId(),
 							item.before(), item.draft(), item.batch(), OutboxReviewPanel.Status.valueOf(item.status().name()),
-							item.conflicts(), item.rejection())).toList());
+							item.conflicts(), item.rejection(), item.definitivelyRejected())).toList());
 					JOptionPane.showMessageDialog(MainFrame.this, panel, "Outbox review", JOptionPane.PLAIN_MESSAGE);
 				} catch (InterruptedException interrupted) {
 					Thread.currentThread().interrupt();
 				} catch (java.util.concurrent.ExecutionException failure) {
 					showError("Could not read the outbox", new IllegalStateException(failure.getCause()));
+				}
+			}
+		}.execute();
+	}
+
+	/**
+	 * Confirms and splits a rejected edit without blocking the event thread.
+	 *
+	 * @param remote store holding the rejected edit
+	 * @param entry rejected head
+	 * @param panel review panel whose dialog should close after confirmation
+	 */
+	private void splitOutboxOperation(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
+			OutboxReviewPanel.Entry entry, OutboxReviewPanel panel) {
+		if (controller.getStore() != remote || entry == null) {
+			return;
+		}
+		if (JOptionPane.showConfirmDialog(this, "Split this rejected edit into smaller edits? "
+				+ "The original queue will be archived first; the new edits may be submitted to the host.",
+				"Split rejected edit", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION
+				|| controller.getStore() != remote) {
+			return;
+		}
+		java.awt.Window dialog = javax.swing.SwingUtilities.getWindowAncestor(panel);
+		if (dialog != null) {
+			dialog.dispose();
+		}
+		new javax.swing.SwingWorker<Void, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected Void doInBackground() {
+				remote.splitRejected(entry.operationId());
+				return null;
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					get();
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					showError("Could not split the rejected edit", new IllegalStateException(failure.getCause()));
+				} finally {
+					if (controller.getStore() == remote) {
+						refreshOutbox(remote);
+					}
+				}
+			}
+		}.execute();
+	}
+
+	/**
+	 * Confirms and performs an explicit retry or discard without blocking the event thread.
+	 *
+	 * @param remote store holding the reviewed operation
+	 * @param entry selected operation
+	 * @param panel review panel whose dialog should close after confirmation
+	 * @param discard whether to discard rather than retry
+	 */
+	private void recoverOutboxOperation(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote,
+			OutboxReviewPanel.Entry entry, OutboxReviewPanel panel, boolean discard) {
+		if (controller.getStore() != remote || entry == null) {
+			return;
+		}
+		if (discard && (controller.hasUnsavedChanges() || hasPendingEditorInput()
+				|| controller.getPersistenceStatus().durability()
+						!= org.sarmanagement.icsforms.persistence.PersistenceStatus.Durability.SAVED)
+				&& !saveBeforeSwitch()) {
+			return;
+		}
+		String title = discard ? "Discard pending edit" : "Retry rejected edit";
+		String message = discard
+				? "Discard this sole edit and restore its previous document? "
+						+ "The edit will be archived first. This cannot be undone in the outbox."
+				: "Retry this rejected edit? It may be submitted to the host again with the same operation ID.";
+		if (JOptionPane.showConfirmDialog(this, message, title, JOptionPane.YES_NO_OPTION,
+				JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION) {
+			return;
+		}
+		if (controller.getStore() != remote) {
+			return;
+		}
+		java.awt.Window dialog = javax.swing.SwingUtilities.getWindowAncestor(panel);
+		if (dialog != null) {
+			dialog.dispose();
+		}
+		if (discard) {
+			detachMonitor();
+			setEnabled(false);
+		}
+		new javax.swing.SwingWorker<AppController.RemoteRefreshOutcome, Void>() {
+			private boolean discarded;
+
+			/** {@inheritDoc} */
+			@Override
+			protected AppController.RemoteRefreshOutcome doInBackground() {
+				if (discard) {
+					remote.discardPending(entry.operationId());
+					discarded = true;
+					return controller.refreshFromRemote();
+				}
+				remote.retryRejected(entry.operationId());
+				return null;
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				if (discard) {
+					setEnabled(true);
+				}
+				try {
+					AppController.RemoteRefreshOutcome outcome = get();
+					if (outcome == AppController.RemoteRefreshOutcome.DRAFT_PRESERVED
+							|| outcome == AppController.RemoteRefreshOutcome.RETRY) {
+						JOptionPane.showMessageDialog(MainFrame.this, "The edit was discarded from the outbox, "
+								+ "but the current document could not be refreshed. Save or recover any "
+								+ "editor draft before refreshing.");
+					}
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					showError(discard ? discarded ? "Edit discarded but refresh failed" : "Could not discard the pending edit"
+							: "Could not retry the rejected edit",
+							new IllegalStateException(failure.getCause()));
+				} finally {
+					if (controller.getStore() == remote) {
+						refreshOutbox(remote);
+						if (discard && remote.gateway() != null) {
+							attachMonitor(remote, "Connected to " + remote.describe().location());
+						}
+					}
 				}
 			}
 		}.execute();
@@ -2319,13 +2522,16 @@ public class MainFrame extends JFrame {
 		remoteNewer = false;
 		connectionStatus = null;
 		outboxKnown = false;
+		unreviewedWorkHeld = false;
+		promptedCutoff = null;
 		cachedConfirmation = null;
 		acceptedWorkspaces.clear();
 		acceptedLogs.clear();
 		workspaceQueueStatus = Map.of();
 		logQueueStatus = Map.of();
+		var monitoredGateway = remote.gateway();
 		org.sarmanagement.icsforms.persistence.ConnectionMonitor monitor =
-				org.sarmanagement.icsforms.persistence.ConnectionMonitor.withDefaults(remote.gateway(),
+				org.sarmanagement.icsforms.persistence.ConnectionMonitor.withDefaults(monitoredGateway,
 						remote.incident(), 0, () -> {
 							synchronized (remote) {
 								try {
@@ -2335,12 +2541,36 @@ public class MainFrame extends JFrame {
 								}
 							}
 						}, monitorChangeHandler(controller, newer -> remoteNewer = newer),
-						status -> javax.swing.SwingUtilities.invokeLater(() -> {
-							if (generation == monitorGeneration && controller.getStore() == remote) {
-								connectionStatus = status;
-								showConnectionStatus();
+						status -> {
+							RuntimeException cutoffFailure = null;
+							boolean pending = false;
+							try {
+								synchronized (remote) {
+									if (remote.gateway() == monitoredGateway) {
+										remote.recordCredentialCutoff(status.reason());
+										pending = !remote.pendingOperations().isEmpty();
+									}
+								}
+							} catch (RuntimeException failure) {
+								cutoffFailure = failure;
 							}
-						}));
+							RuntimeException observedFailure = cutoffFailure;
+							boolean hasPending = pending;
+							javax.swing.SwingUtilities.invokeLater(() -> {
+								if (generation == monitorGeneration && controller.getStore() == remote) {
+									connectionStatus = status;
+									showConnectionStatus();
+									if (observedFailure != null) {
+										showError("Could not retain the credential cutoff", observedFailure);
+									} else if (status.reason() != promptedCutoff && hasPending
+											&& (status.reason() == org.sarmanagement.icsforms.persistence.RemoteAccessException.Reason.CREDENTIAL_EXPIRED
+												|| status.reason() == org.sarmanagement.icsforms.persistence.RemoteAccessException.Reason.CREDENTIAL_REVOKED)) {
+										promptedCutoff = status.reason();
+										promptCutoffExport(remote);
+									}
+								}
+							});
+						});
 		connectionMonitor = monitor;
 		showConnectionStatus();
 		updateWorkspaceSyncIndicators();
@@ -2384,6 +2614,12 @@ public class MainFrame extends JFrame {
 		StringBuilder text = new StringBuilder(authorityText);
 		if (status != null) {
 			text.append(" | ").append(status.detail());
+			if (status.reason() == org.sarmanagement.icsforms.persistence.RemoteAccessException.Reason.CREDENTIAL_EXPIRED) {
+				text.append(" — credential expired; request administrator renewal; outbox retained for export");
+			} else if (status.reason()
+					== org.sarmanagement.icsforms.persistence.RemoteAccessException.Reason.CREDENTIAL_REVOKED) {
+				text.append(" — credential revoked; request invitation and administrator repair; outbox retained for export");
+			}
 		}
 		java.time.Instant confirmed = status != null && status.lastConfirmed() != null
 				? status.lastConfirmed() : cachedConfirmation;
@@ -2413,12 +2649,48 @@ public class MainFrame extends JFrame {
 						.append(", rejected ").append(rejected).append(", review required ").append(review)
 						.append(", accepted ").append(acceptedReceipts);
 			}
+			if (unreviewedWorkHeld) {
+				text.append(" | unreviewed work held; export for manual recovery");
+			}
 		}
 		if (remoteNewer) {
 			text.append(" | newer changes on the host; your draft is kept");
 		}
 		connectionLabel.setText(text.toString());
 		connectionLabel.setToolTipText(text.toString());
+	}
+
+	/**
+	 * Offers an explicit external recovery export without removing the durable queue.
+	 *
+	 * @param remote affected cached incident
+	 */
+	private void promptCutoffExport(org.sarmanagement.icsforms.persistence.RemoteIncidentStore remote) {
+		if (JOptionPane.showConfirmDialog(this, "The host no longer accepts this credential. Your queued work "
+				+ "is retained and cannot sync without administrator approval. Export the outbox now?",
+				"Credential cutoff", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION) {
+			return;
+		}
+		chooseFile(homeDirectory, true, path -> new javax.swing.SwingWorker<Void, Void>() {
+			/** {@inheritDoc} */
+			@Override
+			protected Void doInBackground() {
+				remote.exportOutbox(path);
+				return null;
+			}
+
+			/** {@inheritDoc} */
+			@Override
+			protected void done() {
+				try {
+					get();
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+				} catch (java.util.concurrent.ExecutionException failure) {
+					showError("Could not export the retained outbox", new IllegalStateException(failure.getCause()));
+				}
+			}
+		}.execute());
 	}
 
 	/**

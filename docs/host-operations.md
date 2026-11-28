@@ -89,6 +89,10 @@ not replayed. Keep the client open until it reports the decision.
 - A denial does not delete the client's outbox. The operator can export it from
   **Review outbox…** for recovery. Resolve the cause and submit a new request
   only after the pending request has been decided.
+- When a client detects expiry or revocation with queued work, it offers an
+  outbox export. Cancelling the export leaves the work in its protected
+  journal. Edits saved while an approval is pending are held for manual
+  recovery rather than replayed as if the administrator had reviewed them.
 
 Accepted work from a repaired device carries both the replacement and revoked
 device IDs only for operations the administrator saw queued in the approved

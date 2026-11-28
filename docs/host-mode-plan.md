@@ -1,10 +1,9 @@
 # Host mode implementation plan
 
-Status: **Stage 2/T1 incomplete; issue #61 disconnected workflow is work in
-progress and issue #62 re-authorization is implemented but not fully
-validated**. Issues #58–#60 supplied the service, transport and connected
-remote-store slices described below. The #61 implementation is not yet a
-delivered or fully validated offline workflow. The remaining work expands
+Status: **Stage 2/T1 incomplete**. Issues #58–#62 supplied the service,
+transport, connected remote store, disconnected workflow and
+re-authorization slices described below. Issue #72 tracks remaining
+disconnected-entry limits and human platform verification. The remaining work expands
 [Stage 2](../DraftWorkPlan.md#stage-2--incident-api-and-single-local-host-delivers-t1);
 the remaining [Stage 0 decisions](stage-0-decisions.md) still apply.
 See the [host API contract](host-api-contract.md) for version 1 DTOs and
@@ -553,20 +552,19 @@ disk-exhaustion and platform validation still outstanding.
 
 ## Issue #72 — closing the disconnected-entry limits
 
-Status audited on `master` after PR #75. #61 (PR #71) and #62 are merged, so the
-work can start. The store-level pieces exist; nothing in the issue's list is
-complete.
+Status audited on `master` after PR #75. #61 (PR #71) and #62 are merged.
+This table tracks the remaining work and its validation.
 
-| # | Item | Status on master |
+| # | Item | Current status |
 |---|---|---|
-| 1 | Correct oversized rejected edits | Open. `RemoteIncidentStore.replaceRejected` cannot remove records and batches are not split. |
-| 2 | Rejected-edit controls in the UI | Open. `retryRejected` and `discardPending` exist in `RemoteIncidentStore` and are tested, but only `replaceRejected` is reachable from `OutboxReviewPanel` / `MainFrame`. |
-| 3 | Persist the per-view "accepted" label | Open. The accepted-receipt count is persisted (`DisconnectedStateFile`), but the per-view labels (`acceptedWorkspaces`, `acceptedLogs`) live in `MainFrame` memory. |
-| 4 | Degraded-storage notice in `HostSharingDialog` | Open. `MainFrame` shows the notice for a client window; `HostSharingDialog` does not. |
-| 5 | Real-process acceptance tests | Open. `DisconnectedStateFileTest` and `HostSessionTest` start a child process for narrow checks; the restart and replay scenarios are not run with a killed and restarted client JVM. |
+| 1 | Correct oversized rejected edits | In progress. Splitting archives the original queue, but dependent groups that exceed a batch limit still need a general recovery path. |
+| 2 | Rejected-edit controls in the UI | Implemented: explicit retry, archive-before-discard and split actions; ambiguous submissions remain protected. Validation pending. |
+| 3 | Persist the per-view "accepted" label | Implemented using durable attribution to host receipts. Validation pending. |
+| 4 | Degraded-storage notice in `HostSharingDialog` | Implemented and tested for connected-only and protected-fallback storage, including reopening a fallback journal. |
+| 5 | Real-process acceptance tests | In progress: killed-client restart/replay coverage added; full lane validation pending. |
 | 6 | Manual platform verification | Open (human testing). Record results here. |
-| 7 | Duplicate review end to end | Open. `ClueDuplicateReview` and `ClueLogPanelTest` cover the review in one JVM; there is no two-client offline replay test. |
-| 8 | Demobilisation credential cutoff | Open. Re-authorization (#62) is delivered; queued offline work on revocation or demobilisation is not specified or implemented. |
+| 7 | Duplicate review end to end | Two-client offline replay and duplicate-review coverage added and tested in the displayed lane. |
+| 8 | Demobilisation credential cutoff | In progress: retained outbox and export prompt on cutoff, with re-authorization safeguards. Provenance after conflict resolution and interrupted approvals still need a complete recovery path. |
 
 ### Manual platform verification results (item 6)
 

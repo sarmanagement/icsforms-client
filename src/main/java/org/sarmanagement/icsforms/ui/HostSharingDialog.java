@@ -160,6 +160,7 @@ public class HostSharingDialog extends JDialog {
 	private static final String JOIN_BUTTON_CARD = "button";
 	private static final String JOIN_LABEL_CARD = "label";
 	private final JLabel stateLabel = new JLabel("Not sharing");
+	private final JTextArea storageNotice = readOnlyText("");
 	private final JTextField hostField = new JTextField(defaultHost(), 18);
 	private final JSpinner portSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_PORT, 0, 65535, 1));
 	private final JSpinner enrollmentSpinner = new JSpinner(new SpinnerNumberModel(DEFAULT_ENROLLMENT_PORT, 0, 65535, 1));
@@ -517,6 +518,8 @@ public class HostSharingDialog extends JDialog {
 		fingerprintLabel.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 0));
 		JPanel start = column("2. Start sharing");
 		start.add(left(buttons));
+		storageNotice.setVisible(false);
+		start.add(left(storageNotice));
 
 		invitationArea.setEditable(false);
 		invitationArea.setLineWrap(true);
@@ -1406,6 +1409,15 @@ public class HostSharingDialog extends JDialog {
 	}
 
 	/**
+	 * Returns the disconnected-storage notice shown while sharing.
+	 *
+	 * @return notice text area
+	 */
+	JTextArea storageNoticeArea() {
+		return storageNotice;
+	}
+
+	/**
 	 * Returns the device table.
 	 *
 	 * @return table of paired devices
@@ -1602,6 +1614,10 @@ public class HostSharingDialog extends JDialog {
 	 */
 	void refresh() {
 		HostSession current = session;
+		String notice = current == null || loopbackStore == null ? null
+				: loopbackStore.disconnectedStorageNotice().orElse(null);
+		storageNotice.setText(notice == null ? "" : notice);
+		storageNotice.setVisible(notice != null);
 		boolean running = current != null && current.state() == HostState.RUNNING;
 		if (running) {
 			current.setPeriodCloseCutoff(periodCloseSource.get());

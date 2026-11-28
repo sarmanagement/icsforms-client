@@ -39,17 +39,35 @@ final class DisconnectedStateFile implements AutoCloseable {
 	 * @param revision local snapshot token
 	 * @param confirmedAt last successful host confirmation, or null
 	 * @param acceptedReceipts number of applied submission receipts recorded locally
+	 * @param acceptedChanges latest per-property applied receipt attribution
 	 * @param pending ordered operations
 	 */
 	record State(AppData base, List<IncidentService.VersionedRecord> records, long cursor, AppData draft,
 			RevisionToken revision, Instant confirmedAt, long acceptedReceipts,
+			AcceptedChanges acceptedChanges,
 			List<RemoteIncidentStore.PendingOperation> pending) {
 		/**
 		 * Copies collections on construction.
 		 */
 		State {
 			records = List.copyOf(records);
+			acceptedChanges = acceptedChanges == null ? AcceptedChanges.empty() : acceptedChanges;
 			pending = List.copyOf(pending);
+		}
+	}
+
+	/**
+	 * Durable access cutoff and edits excluded from an administrator's approval.
+	 *
+	 * @param reason expired or revoked while approval is required, otherwise null
+	 * @param blocked operation IDs created after the approval request
+	 * @param reviewed operation IDs included in the approval request
+	 */
+	record Cutoff(RemoteAccessException.Reason reason, List<String> blocked, List<String> reviewed) {
+		/** Copies operation identifiers and accepts older marker files without the newer fields. */
+		Cutoff {
+			blocked = blocked == null ? List.of() : List.copyOf(blocked);
+			reviewed = reviewed == null ? List.of() : List.copyOf(reviewed);
 		}
 	}
 
@@ -146,6 +164,50 @@ final class DisconnectedStateFile implements AutoCloseable {
 	}
 
 	/**
+	 * Loads the access cutoff independently of the incident journal.
+	 *
+	 * @return persisted cutoff, or an unrestricted state
+	 */
+	Cutoff loadCutoff() {
+		Path cutoff = directory.resolve(file.getFileName() + ".cutoff");
+		try {
+			ensureNoSymlinks(cutoff);
+			return Files.exists(cutoff) ? MAPPER.readValue(cutoff.toFile(), Cutoff.class)
+					: new Cutoff(null, List.of(), List.of());
+		} catch (IOException | RuntimeException failure) {
+			throw new StorePersistenceException("Cannot read disconnected access cutoff", failure);
+		}
+	}
+
+	/**
+	 * Atomically persists the access cutoff before changing replay permissions.
+	 *
+	 * @param cutoff replacement cutoff
+	 */
+	void saveCutoff(Cutoff cutoff) {
+		Path target = directory.resolve(file.getFileName() + ".cutoff");
+		Path staging = directory.resolve(file.getFileName() + ".cutoff.new");
+		try {
+			ensureNoSymlinks(directory);
+			ensureNoSymlinks(target);
+			ensureNoSymlinks(staging);
+			try (FileChannel output = PrivateFiles.openPrivate(staging, Set.of(StandardOpenOption.CREATE,
+					StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE))) {
+				java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(MAPPER.writeValueAsBytes(cutoff));
+				while (buffer.hasRemaining()) {
+					output.write(buffer);
+				}
+				output.force(true);
+			}
+			Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+			PrivateFiles.syncDirectory(directory);
+		} catch (IOException | UnsupportedOperationException failure) {
+			failed = true;
+			throw new StorePersistenceException("Cannot commit disconnected access cutoff", failure);
+		}
+	}
+
+	/**
 	 * Commits a complete replacement and synchronizes the file and containing directory.
 	 *
 	 * @param state complete replacement
@@ -214,8 +276,8 @@ final class DisconnectedStateFile implements AutoCloseable {
 	void archive(String label, List<RemoteIncidentStore.PendingOperation> operations) throws IOException {
 		Path target = directory.resolve(file.getFileName() + ".rejected-" + label + ".json");
 		ensureNoSymlinks(target);
-		try (FileChannel output = PrivateFiles.openPrivate(target, Set.of(StandardOpenOption.CREATE,
-				StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE))) {
+		try (FileChannel output = PrivateFiles.openPrivate(target, Set.of(StandardOpenOption.CREATE_NEW,
+				StandardOpenOption.WRITE))) {
 			java.nio.ByteBuffer buffer = java.nio.ByteBuffer
 					.wrap(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(operations));
 			while (buffer.hasRemaining()) {

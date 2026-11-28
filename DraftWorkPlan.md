@@ -30,11 +30,10 @@ adjacent controller shutdown hardening restores retryability after a failed
 save drain. Issue #58 adds the in-process versioned service and file-backed
 record history; the #74 branch adds a history-preserving `REMOVE` and
 field-level merging of independent creates; #59 and #60 add host transport and connected operation. Issue
-#61's disconnected workflow remains WIP, pending Windows-host verification,
-CodeQL and acceptance. Issue #62 implements administrator-approved renewal and
-revoked-device replacement with request limits and operations documentation;
-full Stage 2 acceptance and durable client credential/ticket recovery remain
-open. Stage 2/T1 is not complete. Delivery evidence is in
+#61 and #62 are merged. Issue #72 tracks the remaining disconnected-entry
+limits and manual platform verification; durable client credential/ticket
+recovery and full Stage 2 acceptance remain open. Stage 2/T1 is not complete.
+Delivery evidence is in
 [`docs/completed-work.md`](docs/completed-work.md). Work to make
 open views refresh without flicker or stale content is merged
 (PR #56). Production host deployment also depends on the open Stage 0 decisions.
@@ -485,9 +484,9 @@ recoverable standalone application. Completed stages are recorded in
 | --- | --- | --- | --- |
 | 0 | Written decisions and constraints | Not evidenced as complete | 1–2 weeks |
 | 1 | Local persistence foundation, including live refresh without flicker | Complete; substitute-store evidence accepted | done (4–7 weeks) |
-| 2 | Record-level incident API and local host (T1) | Identity/index/diff foundation (#57), service (#58), transport/admission (#59) and connected operation (#60) delivered; #61 **WIP**: Windows-style ACL journal, rejected-head replacement and per-view accepted labels implemented; real-Windows verification, oversized-edit correction, CodeQL and acceptance remain open; re-authorization remains | 7–12 weeks |
+| 2 | Record-level incident API and local host (T1) | #57–#62 delivered; disconnected-entry follow-ups and human platform verification remain in #72; full Stage 2 acceptance remains open | 7–12 weeks |
 | 3 | Device lifecycle, operator claim, roles and attributable audit (T2) | Not started | 4–6 weeks |
-| 4 | Offline replay/conflict recovery and attachments | Not started; #61 remains WIP; scope can be narrowed only after its acceptance | 4–8 weeks |
+| 4 | Offline replay/conflict recovery and attachments | Not started; #72 follow-ups and acceptance remain open | 4–8 weeks |
 | 5 | Field-host packaging and authority transfer | Not started | 4–8 weeks |
 | 6 | Hosted deployment and remote mirrors (T3) | Not started | 4–8 weeks |
 | 7 | Mobile client and hardening | Not started | 6–12 weeks |
@@ -547,7 +546,7 @@ written contract and an in-process service over the file backend. It does not
 include network transport, admission, a remote store, UI changes, or an outbox;
 those were assigned to issues #59–#62. Issue #59 has since delivered the transport,
 admission and host lifecycle (see [completed work](docs/completed-work.md));
-issue #60 has delivered the production remote store, polling and connected operation; issues #61–#62 remain. A persisted record is the
+issue #60 has delivered the production remote store, polling and connected operation; #61 and #62 are merged. A persisted record is the
 unit of submission and versioning: the client supplies the record version it
 edited, and the host compares base, current and proposed values field by field.
 A field changed only by the client is accepted; a field changed only by the host
@@ -567,23 +566,21 @@ open item from it is a demobilisation source for the credential cutoff (the
 operational period end is already wired). Part 4/6 (production remote store,
 polling, connected operation, capability-driven UI and contract suites against
 the real host) is delivered; see [completed work](docs/completed-work.md).
-Part 5 (#61) is **work in progress**, not delivered: the local journal and
-review workflows are under development. The named dependent-edit,
+Part 5 (#61) is merged; issue #72 tracks the remaining disconnected-entry
+limits and human platform verification. The named dependent-edit,
 ambiguous-authorization, stale-refresh/cursor retry and pre-submit rejection
 defects have targeted fixes and regression tests. A rejected head can be
 replaced by a corrected draft (originals archived), the journal supports
-Windows-style ACLs, and tabs show per-view accepted labels for the current
-window. Oversized-edit correction, real-Windows verification, CodeQL and
-acceptance remain outstanding. See the
-[disconnected workflow status](docs/host-mode-plan.md#issue-61-work-in-progress).
+Windows-style ACLs, and tabs show durable per-view accepted labels. See the
+[disconnected-entry follow-ups](docs/host-mode-plan.md#issue-72--closing-the-disconnected-entry-limits).
 Part 6 (#62) includes a durable host approval queue and decision audit,
 same-key expired renewal, invitation-backed new identity for revoked devices,
 pending-outbox review, client waiting/preservation and post-approval replay,
 plus operational and security documentation. The polling ticket and credentials
 are still session-memory-only. The client flow, bounded outbox description,
 queued-work-only attribution and a one-JVM multi-instance scenario are now
-automated; #61 acceptance, real Windows verification, a true multi-process
-exercise and final CodeQL remain outstanding. See
+automated; #72 follow-ups, platform verification and Stage 2 acceptance remain
+outstanding. See
 [host-mode validation](docs/host-mode-validation.md) and the
 [security review](docs/host-mode-security-review.md).
 The connected-operation CI follow-up uses the saved host baseline and tests
@@ -645,8 +642,8 @@ the operator's draft preserved.
 Extend the Stage 2 durable outbox with ordered host change cursors, robust replay,
 reconnect and conflict-resolution workflows, attachment transfer, and
 closed-operational-period behavior. Unsynced work survives client restarts and
-can be exported. Issue #61 is still WIP; it does not narrow this scope or satisfy
-these exit criteria. Any future narrowing depends on #61 acceptance. The intended
+can be exported. Issue #72 remains open; it does not narrow this scope or satisfy
+these exit criteria. Any future narrowing depends on acceptance. The intended
 queue order is stable per incident, not based
 on device clocks; submitted batches retain their exact identity and payload
 through ambiguous retries. Conflict review and duplicate-event review remain

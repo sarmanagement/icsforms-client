@@ -850,3 +850,14 @@ setting, and CodeQL on the final commit.
 - The host's time zone governs the incident: when hosting starts, a "use system time zone" incident is pinned to the host's explicit zone, which reaches clients through the synchronized root settings. A client's Date/Time Zone menu is disabled ("set by the host"), and while hosting, choosing the system zone re-pins the host's zone. The client footer also shows the device's own interfaces and the host-set zone.
 
 - A connected client's Sharing menu no longer offers "Connect to a host…"; it has an enabled "Disconnect from host…" that asks for confirmation (noting unsent outbox changes) and then closes the window through the normal save-and-close path.
+
+## Disconnected-entry follow-up in progress (issue #72)
+
+The branch adds outbox retry, archive-before-discard and split controls, durable
+per-view receipt attribution, and the host sharing storage notice. It also adds
+child-JVM replay and duplicate-review coverage, and retains and offers export
+of queued work after a credential cutoff. Validation is still in progress.
+Large dependent groups, provenance for resolved approved work and interrupted
+approvals remain open; see the
+[issue status table](host-mode-plan.md#issue-72--closing-the-disconnected-entry-limits).
+Human platform verification remains unrun.
