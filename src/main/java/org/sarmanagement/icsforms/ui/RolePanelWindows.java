@@ -280,6 +280,10 @@ final class RolePanelWindows {
 				addIcpLogEntry, sharing);
 		JFrame frame = createFrame("Communications Unit — " + incident.getIncidentContext().getIncidentName(), panel,
 				ApplicationIcon.Variant.COMMUNICATIONS);
+		if (!java.awt.GraphicsEnvironment.isHeadless()) {
+			int screenHeight = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds().height;
+			frame.setSize(frame.getWidth(), Math.min(940, screenHeight));
+		}
 		frame.addWindowListener(new java.awt.event.WindowAdapter() {
 			/** {@inheritDoc} */
 			@Override
@@ -307,13 +311,7 @@ final class RolePanelWindows {
 		ApplicationIcon.install(frame, variant);
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.setContentPane(panel);
-		java.awt.Dimension size = new java.awt.Dimension(1280, 900);
-		if (!java.awt.GraphicsEnvironment.isHeadless()) {
-			java.awt.Rectangle screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
-					.getMaximumWindowBounds();
-			size.setSize(Math.min(size.width, screen.width), Math.min(size.height, screen.height));
-		}
-		frame.setSize(size);
+		frame.setSize(1220, 820);
 		frame.setMinimumSize(new java.awt.Dimension(860, 620));
 		frame.setLocationByPlatform(true);
 		return frame;
