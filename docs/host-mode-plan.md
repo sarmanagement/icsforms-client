@@ -564,18 +564,19 @@ complete.
 | 3 | Persist the per-view "accepted" label | Open. The accepted-receipt count is persisted (`DisconnectedStateFile`), but the per-view labels (`acceptedWorkspaces`, `acceptedLogs`) live in `MainFrame` memory. |
 | 4 | Degraded-storage notice in `HostSharingDialog` | Open. `MainFrame` shows the notice for a client window; `HostSharingDialog` does not. |
 | 5 | Real-process acceptance tests | Open. `DisconnectedStateFileTest` and `HostSessionTest` start a child process for narrow checks; the restart and replay scenarios are not run with a killed and restarted client JVM. |
-| 6 | Manual platform verification | Open (human testing). Record results here. |
+| 6 | Automated platform verification | Open. A `workflow_dispatch` matrix workflow (Linux, Windows, macOS) with opt-in tests on runner-created filesystems; residual real-hardware cases stay manual. Record results here. |
 | 7 | Duplicate review end to end | Open. `ClueDuplicateReview` and `ClueLogPanelTest` cover the review in one JVM; there is no two-client offline replay test. |
 | 8 | Demobilisation credential cutoff | Open. Re-authorization (#62) is delivered; queued offline work on revocation or demobilisation is not specified or implemented. |
 
-### Manual platform verification results (item 6)
+### Platform verification results (item 6)
 
-Record each case with date, operating system and version, filesystem, whether
-the journal was created owner-only or failed over (with the notice shown), and
-whether offline edits survived a restart. Open a bug for any failure instead of
-expanding #72.
+The cases are run by an opt-in workflow on GitHub-hosted runners using disk
+images (not physical drives). Record each case with date, runner image,
+filesystem, whether the journal was created owner-only or failed over (with the
+notice shown), and whether offline edits survived a restart. Open a bug for any
+failure instead of expanding #72.
 
-| Case | Result | Tester and date |
+| Case | Result | Run and date |
 |---|---|---|
 | Windows, NTFS (owner-only ACL, inherited entries removed) | Not yet run | |
 | Windows, FAT32/exFAT removable drive as cache location (failover to per-user location) | Not yet run | |
